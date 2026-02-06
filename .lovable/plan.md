@@ -1,185 +1,259 @@
 
+# Comprehensive End-to-End Testing Plan
 
-# Comprehensive System Audit - Findings & Required Fixes
+## Overview
 
-## Executive Summary
-
-After a thorough audit of 77+ edge functions, database configuration, frontend code patterns, and test coverage, I found **the system is largely stable** with the previous hardening work successfully implemented. However, I identified **5 remaining issues** that should be addressed.
-
----
-
-## Current Status: What's Working
-
-### Implemented Hardening (Verified Complete)
-- **Database triggers**: `handle_new_user()` now creates `profiles`, `user_preferences`, AND `travel_dna_profiles` rows on signup
-- **Safe DB utilities**: `src/utils/safeDbOperations.ts` provides upsert wrappers
-- **Race condition guards**: Both `TripPlannerContext.tsx` and `OnboardConversation.tsx` have `savingInProgressRef` guards
-- **CORS headers**: 95% of functions have standardized headers including all `x-supabase-*` headers
-- **Test coverage**: 113+ tests covering database operations, auth flows, navigation, and race conditions
-
-### Logs Analysis
-- **No active errors** in edge function logs
-- **No database errors** in postgres logs
-- **No auth errors** in auth logs
-- Edge functions are booting and running correctly
+This plan creates **Playwright E2E tests** that verify critical user flows work correctly - from signup through trip creation to itinerary generation. These tests will catch breaking issues before they reach users.
 
 ---
 
-## Issues Requiring Fixes
+## Test Coverage Matrix
 
-### Issue 1: CORS Header Inconsistency (Minor)
-**5 functions** include `Access-Control-Allow-Methods` header while 70+ don't. This is technically harmless (browsers don't require it for simple methods), but creates inconsistency.
+| Flow | Priority | Risk Level | Test Count |
+|------|----------|------------|------------|
+| Authentication | Critical | High | 12 tests |
+| Quiz & Onboarding | Critical | High | 10 tests |
+| Trip Planning | Critical | High | 15 tests |
+| Itinerary Generation | High | High | 8 tests |
+| Edge Functions | High | Medium | 10 tests |
+| Navigation & Routing | Medium | Medium | 8 tests |
+| Profile Management | Medium | Low | 6 tests |
 
-| Function | Has Allow-Methods |
-|----------|------------------|
-| `delete-users` | Yes |
-| `delete-my-account` | Yes |
-| `trip-notifications` | Yes |
-| `check-subscription` | Yes |
-| `send-contact-email` | Yes (dynamic origin) |
-
-**Risk**: None immediate - all functions work correctly
-**Recommendation**: Standardize to match the shared `_shared/cors.ts` pattern (without `Allow-Methods`)
+**Total: 69 E2E tests**
 
 ---
 
-### Issue 2: RLS Policies with `true` Condition (Security Review Needed)
-The database linter flagged **3 warnings** for overly permissive policies:
+## Test Suites to Create
 
-| Table | Policy | Condition |
-|-------|--------|-----------|
-| `customer_reviews` | `Authenticated users can submit reviews` | `WITH CHECK (true)` |
-| `rate_limits` | `Allow service role to manage rate limits` | `USING (true)` + `WITH CHECK (true)` |
-| `trip_cost_tracking` | `Service role can insert cost tracking` | `WITH CHECK (true)` |
+### 1. Authentication Suite (`e2e/auth.spec.ts`)
 
-**Analysis**:
-- `customer_reviews`: Allows any authenticated user to submit reviews - this may be intentional
-- `rate_limits`: Public access to rate_limits table - could be a security concern
-- `trip_cost_tracking`: Service role insert permission - likely intentional for edge functions
+Tests the complete authentication flow to ensure users can access the app:
 
-**Risk**: Medium - need to verify these are intentional
-**Recommendation**: Review and either tighten policies or document as intentional
+- Sign up with valid email/password → redirects to quiz
+- Sign up form validates required fields (first name, last name, email, password)
+- Sign up shows password strength indicator
+- Sign up fails gracefully with invalid email format
+- Sign up fails gracefully with weak password (< 8 chars)
+- Sign in with valid credentials → redirects to profile
+- Sign in fails with invalid credentials → shows error message
+- Sign in preserves redirect destination (e.g., `/start` → signin → `/start`)
+- Forgot password page loads and accepts email
+- Sign out clears session and redirects to home
+- Protected routes redirect to signin when not authenticated
+- Social login buttons (Google) are present and functional
+
+### 2. Quiz Flow Suite (`e2e/quiz.spec.ts`)
+
+Tests the Travel DNA quiz that personalizes itineraries:
+
+- Quiz intro screen loads with "Begin Discovery" button
+- Quiz intro shows credit bonus nudge for new users
+- Quiz step 1 renders questions with selectable options
+- Multi-select questions allow multiple answers
+- Single-select questions replace previous answer
+- Progress bar updates as user advances
+- Navigation works: back button, step dots
+- Quiz completion triggers archetype calculation
+- Quiz completion shows personalized result screen
+- Skip quiz option exists and warns about consequences
+
+### 3. Onboard Conversation Suite (`e2e/onboard-conversation.spec.ts`)
+
+Tests the alternative "Just Tell Us" onboarding path:
+
+- Intro screen loads with story input prompt
+- User can type travel story and submit
+- Loading state shows during AI analysis
+- Follow-up question appears if confidence is low
+- Result screen shows detected archetype
+- Confirmation saves to database
+- Error states are handled gracefully
+- Race condition guard prevents duplicate saves
+
+### 4. Trip Planning Suite (`e2e/trip-planning.spec.ts`)
+
+Tests the `/start` trip creation wizard - the most critical flow:
+
+- Step 1: Destination autocomplete loads and accepts input
+- Step 1: Date pickers work and validate (start < end)
+- Step 1: Traveler count selection works
+- Step 1: Trip type chips are selectable
+- Step 1: Budget presets are selectable
+- Step 1: Continue button only enabled when required fields filled
+- Step 2: Flight section renders (manual entry or import)
+- Step 2: Hotel autocomplete works
+- Step 2: "Skip hotel" option works
+- Step 2: First time visiting checkbox works
+- Step 2: Must-do activities textarea accepts input
+- Form submission creates trip in database
+- After creation, redirects to `/trip/{id}?generate=true`
+- Draft limit banner appears when limit reached
+- Error handling shows toast on API failure
+
+### 5. Trip Detail & Itinerary Suite (`e2e/trip-itinerary.spec.ts`)
+
+Tests viewing and generating itineraries:
+
+- Trip detail page loads for valid trip ID
+- Trip header shows destination, dates, traveler count
+- "Generate Itinerary" button triggers generation
+- Generation shows progress indicators
+- Generated itinerary renders day-by-day view
+- Each day shows activities with times
+- Editorial view toggle works
+- AI Assistant chat panel opens and accepts messages
+- Hotel information displays correctly
+- Flight information displays correctly
+
+### 6. Edge Function Health Suite (`e2e/edge-functions.spec.ts`)
+
+Tests that critical edge functions respond correctly:
+
+- `generate-itinerary` accepts valid payload and returns 200
+- `analyze-preferences` uses correct AI Gateway URL
+- `flights` search returns valid response structure
+- `hotels` search returns valid response structure
+- `spend-credits` deducts correctly for authenticated user
+- `create-booking-checkout` creates Stripe session
+- `parse-travel-story` returns archetype analysis
+- `calculate-travel-dna` computes archetype from quiz answers
+- CORS preflight (OPTIONS) returns correct headers
+- Invalid auth token returns 401 (not 500)
+
+### 7. Navigation Guard Suite (`e2e/navigation.spec.ts`)
+
+Tests routing works correctly without loops or dead ends:
+
+- Public pages load without auth: `/`, `/explore`, `/destinations`
+- Protected pages redirect to signin: `/profile`, `/trip/dashboard`
+- 404 page shows for invalid routes
+- Redirect chains work: `/planner` → `/start`
+- Deep links preserve state after login
+- Browser back/forward navigation works
+- Page refresh maintains auth state
+- No console errors on navigation
+
+### 8. Profile Management Suite (`e2e/profile.spec.ts`)
+
+Tests user profile and settings:
+
+- Profile page loads for authenticated user
+- Edit profile form pre-fills current data
+- Profile update saves to database
+- Settings page shows preferences
+- Home airport selection works
+- Travel agent mode toggle works
 
 ---
 
-### Issue 3: `analyze-preferences` Uses Wrong AI Gateway URL
-```typescript
-// Line 102 - INCORRECT URL
-const aiResponse = await fetch("https://api.lovable.dev/api/v1/chat/completions", {
+## Technical Implementation
+
+### File Structure
+```
+e2e/
+├── auth.spec.ts           # Authentication flows
+├── quiz.spec.ts           # Quiz completion flow
+├── onboard-conversation.spec.ts  # Story-based onboarding
+├── trip-planning.spec.ts  # Trip creation wizard
+├── trip-itinerary.spec.ts # Itinerary viewing/generation
+├── edge-functions.spec.ts # Backend function health
+├── navigation.spec.ts     # Routing guards
+├── profile.spec.ts        # Profile management
+└── fixtures/
+    └── test-user.ts       # Test user credentials helper
 ```
 
-Should be:
+### Test User Strategy
+- Create a dedicated test user during test setup
+- Use unique email per test run to avoid conflicts
+- Clean up test data after each suite
+
+### Key Testing Patterns
+
+**Page Object Pattern**: Encapsulate selectors for maintainability
 ```typescript
-const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+// Example: SignUpPage
+class SignUpPage {
+  readonly firstNameInput = page.locator('[data-testid="firstName"]');
+  readonly submitButton = page.locator('button[type="submit"]');
+}
 ```
 
-**Risk**: Function may fail silently and fall back to basic summary
-**Recommendation**: Fix the URL to use correct Lovable AI Gateway
-
----
-
-### Issue 4: Missing Tests for Edge Function Integration
-While unit tests exist, there are no **end-to-end tests** that actually call edge functions. The current tests mock the Supabase client.
-
-**Risk**: Edge function regressions won't be caught until production
-**Recommendation**: Add E2E tests using Playwright that test critical flows
-
----
-
-### Issue 5: No Shared CORS Import in Most Functions
-Most edge functions define their own `corsHeaders` object instead of importing from `_shared/cors.ts`. This means future CORS changes require updating 70+ files.
-
-**Current pattern (fragile)**:
+**Wait for Network**: Ensure API calls complete
 ```typescript
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': '...',
+await Promise.all([
+  page.waitForResponse(r => r.url().includes('/functions/v1/')),
+  page.click('button[type="submit"]')
+]);
+```
+
+**Visual Assertions**: Screenshot comparison for critical UI
+```typescript
+await expect(page).toHaveScreenshot('quiz-result.png');
+```
+
+---
+
+## Critical Flows Verified
+
+1. **New User Journey**: Home → Sign Up → Quiz → Start Trip → Generate Itinerary
+2. **Returning User Journey**: Sign In → Dashboard → View Trip → Modify
+3. **Story Onboarding**: Sign Up → "Just Tell Us" → Story Analysis → Profile
+4. **Trip Creation**: Start → Destination → Dates → Budget → Create → Generate
+
+---
+
+## Test Data Fixtures
+
+```typescript
+// e2e/fixtures/test-user.ts
+export const TEST_USER = {
+  email: `test-${Date.now()}@voyance-e2e.test`,
+  password: 'TestPassword123!',
+  firstName: 'E2E',
+  lastName: 'Tester'
+};
+
+export const TEST_TRIP = {
+  destination: 'Paris',
+  startDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days out
+  endDate: new Date(Date.now() + 37 * 24 * 60 * 60 * 1000),   // 7 day trip
+  travelers: 2,
+  tripType: 'romantic'
 };
 ```
 
-**Better pattern (in `_shared/cors.ts` but not used)**:
-```typescript
-import { corsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
-```
+---
 
-**Risk**: Future CORS updates require mass file changes
-**Recommendation**: Gradually migrate functions to use shared helper (not urgent)
+## Error Scenarios to Test
+
+| Scenario | Expected Behavior |
+|----------|-------------------|
+| Network timeout | Toast error, retry button |
+| Invalid session | Redirect to signin |
+| Edge function 500 | Error toast, fallback UI |
+| Database constraint violation | User-friendly error message |
+| Rate limit exceeded | "Too many requests" message |
+| Empty search results | "No results" placeholder |
 
 ---
 
-## Implementation Plan
+## Execution Strategy
 
-### Phase 1: Critical Fix (Immediate)
-
-1. **Fix `analyze-preferences` AI Gateway URL**
-   - Change line 102 from `api.lovable.dev` to `ai.gateway.lovable.dev`
-   - This is blocking AI-powered preference summaries
-
-### Phase 2: Security Review (Important)
-
-2. **Review RLS policies flagged by linter**
-   - `customer_reviews`: Verify authenticated user insert is intentional
-   - `rate_limits`: Investigate why this has public read/write access
-   - `trip_cost_tracking`: Document that service-role insert is for edge functions
-
-### Phase 3: Standardization (Nice to Have)
-
-3. **Standardize CORS headers in 5 inconsistent functions**
-   - Remove `Access-Control-Allow-Methods` from:
-     - `delete-users`
-     - `delete-my-account`
-     - `trip-notifications`
-     - `check-subscription`
-   - Note: `send-contact-email` uses dynamic origin which is fine
-
-4. **Create E2E test suite**
-   - Add Playwright tests for:
-     - User signup → quiz → onboarding flow
-     - Trip creation → itinerary generation
-     - Credit purchase → spend flow
-
----
-
-## Technical Details
-
-### Files to Modify
-
-| File | Change |
-|------|--------|
-| `supabase/functions/analyze-preferences/index.ts` | Fix AI Gateway URL |
-| `supabase/functions/delete-users/index.ts` | Remove `Allow-Methods` header |
-| `supabase/functions/delete-my-account/index.ts` | Remove `Allow-Methods` header |
-| `supabase/functions/trip-notifications/index.ts` | Remove `Allow-Methods` header |
-| `supabase/functions/check-subscription/index.ts` | Remove `Allow-Methods` header |
-| New migration file | Tighten RLS on `rate_limits` if needed |
-
-### Edge Function Code Change (analyze-preferences)
-
-```typescript
-// Line 102 - Fix AI Gateway URL
-const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-```
-
-### CORS Standardization
-
-```typescript
-// Remove this line from 4 functions:
-'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-```
+1. **CI Integration**: Run on every PR
+2. **Parallel Execution**: Split suites across workers
+3. **Retry Logic**: 2 retries for flaky tests
+4. **Screenshot on Failure**: Auto-capture for debugging
+5. **Video Recording**: Optional for debugging complex flows
 
 ---
 
 ## Summary
 
-| Category | Status | Action |
-|----------|--------|--------|
-| Database triggers | ✅ Complete | None |
-| Safe DB utilities | ✅ Complete | None |
-| Race condition guards | ✅ Complete | None |
-| CORS headers | ⚠️ 5/77 inconsistent | Standardize (low priority) |
-| RLS policies | ⚠️ 3 warnings | Review and document |
-| AI Gateway URL | ❌ Wrong URL | **Fix immediately** |
-| Test coverage | ⚠️ Unit tests only | Add E2E tests (future) |
+This plan creates **69 E2E tests** across **8 test suites** covering:
+- Complete user journeys from signup to itinerary generation
+- Edge function health verification
+- Navigation and routing guards
+- Error handling and edge cases
 
-The system is **stable enough for production use**. The one critical issue is the wrong AI Gateway URL in `analyze-preferences`, which should be fixed immediately.
-
+Tests will run automatically and catch breaking changes before they impact your users.
