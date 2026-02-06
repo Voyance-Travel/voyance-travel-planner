@@ -165,31 +165,19 @@ const FALLBACK_AI_MODELS = [
   { model: "gemini-2.5-flash", calls: 11, usage: "Fallback" },
 ];
 
-type Scenario = 'A' | 'B' | 'C' | 'D';
+type Scenario = 'A' | 'B';
 
 const SCENARIOS: Record<Scenario, { name: string; description: string; fullDescription: string; caching: boolean; amadeus: boolean; amadeusWithinFree: boolean }> = {
   A: { 
     name: "Current Production", 
     description: "Caching enabled, no Amadeus", 
-    fullDescription: "Current live state: Photo caching is enabled (Google photo URLs are stored and served locally after first fetch), no Amadeus hotel integration. Baseline for comparison.",
+    fullDescription: "Current live state: Photo caching enabled, no Amadeus hotel integration.",
     caching: true, amadeus: false, amadeusWithinFree: true 
   },
   B: { 
-    name: "No Photo Cache (Counterfactual)", 
-    description: "No caching, no Amadeus", 
-    fullDescription: "Counterfactual scenario: Photo caching disabled (every request downloads via Google Places photo endpoint), no Amadeus hotel integration. Useful to visualize savings from caching.",
-    caching: false, amadeus: false, amadeusWithinFree: true 
-  },
-  C: { 
-    name: "Cache + Amadeus (Free)", 
-    description: "Within Amadeus free tier", 
-    fullDescription: "Full feature set within free limits: Caching active + Amadeus hotels. At <400 trips/mo, Amadeus is free (2000 calls/mo quota).",
-    caching: true, amadeus: true, amadeusWithinFree: true 
-  },
-  D: { 
-    name: "Cache + Amadeus (Paid)", 
-    description: "Beyond 400 trips/mo", 
-    fullDescription: "Scale mode: Beyond Amadeus free tier. At 400+ trips/mo, each additional trip costs $0.12 for hotel search (5 API calls × $0.024).",
+    name: "With Amadeus", 
+    description: "Caching + Amadeus hotels (auto free/paid by volume)", 
+    fullDescription: "Future state: Amadeus hotel search enabled. Free tier covers up to 400 trips/mo (2,000 calls). Beyond that, each trip adds ~$0.12.",
     caching: true, amadeus: true, amadeusWithinFree: false 
   },
 };
