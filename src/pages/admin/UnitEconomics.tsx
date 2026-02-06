@@ -1123,7 +1123,7 @@ export default function UnitEconomics() {
               { label: "Paid User Cost", value: `$${blendedCostPerUser.toFixed(3)}`, sub: `${REVENUE_MIX_PRESETS[revenueMix].label} mix weighted`, accent: "#A78BFA", icon: "💳" },
               { label: "Blended / User", value: `$${blendedAllUserCost.toFixed(3)}`, sub: `Break-even at ${breakEven.toFixed(1)}% conversion`, accent: "#34D399", icon: "⚖" },
               { label: "Fixed / Trip", value: `$${costs.fixed.perTrip.toFixed(2)}`, sub: `$${costs.fixed.total.toFixed(0)}/mo at ${volume} trips`, accent: "#F59E0B", icon: "🏗" },
-              { label: "Monthly Burn", value: `$${totalMonthlyCost.toFixed(0)}`, sub: `Free $${freeVarCost.toFixed(0)} + Paid $${paidVarCost.toFixed(0)} + Fixed $${costs.fixed.total.toFixed(0)}`, accent: "#F87171", icon: "🔥" },
+              { label: "Monthly Burn", value: `$${totalMonthlyCost.toFixed(2)}`, sub: `Free $${freeVarCost.toFixed(2)} + Paid $${paidVarCost.toFixed(2)} + Fixed $${costs.fixed.total.toFixed(0)}`, accent: "#F87171", icon: "🔥" },
             ];
           })() : [
             { label: "Blended Margin", value: `${costs.blendedMargin.toFixed(1)}%`, sub: `${conversionRate}% convert @ $${blendedAOV.toFixed(2)} avg`, accent: costs.blendedMargin > 50 ? "#34D399" : costs.blendedMargin > 0 ? "#FBBF24" : "#F87171", icon: "📊" },
