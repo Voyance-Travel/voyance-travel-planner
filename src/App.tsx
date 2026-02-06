@@ -88,6 +88,7 @@ import BulkImport from "./pages/admin/BulkImport";
 import DataCleanup from "./pages/admin/DataCleanup";
 import ImageCuration from "./pages/admin/ImageCuration";
 import UnitEconomics from "./pages/admin/UnitEconomics";
+import TestSuites from "./pages/admin/TestSuites";
 
 // Agent CRM
 import AgentDashboard from "./pages/agent/AgentDashboard";
@@ -227,6 +228,11 @@ function AnimatedRoutes() {
           <Route path="/admin/margins" element={
             <ProtectedRoute>
               <UnitEconomics />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/test-suites" element={
+            <ProtectedRoute>
+              <TestSuites />
             </ProtectedRoute>
           } />
           
