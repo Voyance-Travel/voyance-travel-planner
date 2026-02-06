@@ -103,14 +103,25 @@ export default function UserTracking() {
       entryCounts[e.page_path] = (entryCounts[e.page_path] || 0) + 1;
     }
 
-    // --- Exit pages (last page_view per session) ---
+    // --- Exit pages (last page_view per session) + avg time on exit page ---
     const lastBySession = new Map<string, PageEvent>();
     for (const e of pageViews) {
       lastBySession.set(e.session_id, e);
     }
-    const exitCounts: Record<string, number> = {};
+    // Collect exit page time from page_exit events keyed by session
+    const exitTimeBySession = new Map<string, { path: string; time: number }>();
+    for (const e of pageExits) {
+      exitTimeBySession.set(e.session_id, { path: e.page_path, time: e.time_on_page_ms || 0 });
+    }
+    const exitData: Record<string, { count: number; totalTime: number; timeEntries: number }> = {};
     for (const e of lastBySession.values()) {
-      exitCounts[e.page_path] = (exitCounts[e.page_path] || 0) + 1;
+      if (!exitData[e.page_path]) exitData[e.page_path] = { count: 0, totalTime: 0, timeEntries: 0 };
+      exitData[e.page_path].count++;
+      const exitInfo = exitTimeBySession.get(e.session_id);
+      if (exitInfo && exitInfo.path === e.page_path && exitInfo.time > 0) {
+        exitData[e.page_path].totalTime += exitInfo.time;
+        exitData[e.page_path].timeEntries++;
+      }
     }
 
     // --- Page traffic ---
@@ -156,10 +167,21 @@ export default function UserTracking() {
       }
     }
 
-    // --- Bounce rate per page (single-page sessions where page was entry) ---
+    // --- Bounce: user landed and left the site (single page_view session) ---
+    // A "bounce" = session with only 1 page view (user left without navigating further)
     const bounceSessions = new Set<string>();
+    const bounceTimeByPage: Record<string, { total: number; count: number }> = {};
     for (const [sid, pages] of sessionPages.entries()) {
-      if (pages.length === 1) bounceSessions.add(sid);
+      if (pages.length === 1) {
+        bounceSessions.add(sid);
+        const entryPath = pages[0];
+        if (!bounceTimeByPage[entryPath]) bounceTimeByPage[entryPath] = { total: 0, count: 0 };
+        const exitInfo = exitTimeBySession.get(sid);
+        if (exitInfo && exitInfo.time > 0) {
+          bounceTimeByPage[entryPath].total += exitInfo.time;
+          bounceTimeByPage[entryPath].count++;
+        }
+      }
     }
     const bounceCounts: Record<string, number> = {};
     for (const sid of bounceSessions) {
@@ -188,11 +210,12 @@ export default function UserTracking() {
       totalPageViews: pageViews.length,
       authedSessions: authedSessions.size,
       entryCounts,
-      exitCounts,
+      exitData,
       pageTraffic,
       refCounts,
       transitions,
       bounceCounts,
+      bounceTimeByPage,
       deviceCounts,
       utmCounts,
     };
@@ -271,21 +294,38 @@ export default function UserTracking() {
                 {sorted(analytics.entryCounts).slice(0, 10).map(([path, count]) => {
                   const bounces = analytics.bounceCounts[path] || 0;
                   const bounceRate = Math.round((bounces / count) * 100);
+                  const bTime = analytics.bounceTimeByPage[path];
+                  const avgBounceTime = bTime && bTime.count > 0 ? formatDuration(bTime.total / bTime.count) : null;
                   return (
                     <Row key={path} label={niceName(path)} sublabel={path} value={count} total={analytics.totalSessions}
-                      extra={<span style={{ fontSize: 10, color: bounceRate > 60 ? '#F87171' : '#94A3B8' }}>{bounceRate}% bounce</span>}
+                      extra={
+                        <span style={{ fontSize: 10, color: bounceRate > 60 ? '#F87171' : '#94A3B8' }}>
+                          {bounceRate}% bounce{avgBounceTime ? ` · ${avgBounceTime}` : ''}
+                        </span>
+                      }
                     />
                   );
                 })}
               </Panel>
 
               {/* Exit Pages — "Experience Killers" */}
-              <Panel title="💀 Exit Pages" subtitle="Where users leave">
-                {sorted(analytics.exitCounts).slice(0, 10).map(([path, count]) => (
-                  <Row key={path} label={niceName(path)} sublabel={path} value={count} total={analytics.totalSessions}
-                    extra={<TrendingDown size={12} style={{ color: '#F87171' }} />}
-                  />
-                ))}
+              <Panel title="💀 Exit Pages" subtitle="Where users leave · avg time before exit">
+                {Object.entries(analytics.exitData)
+                  .sort((a, b) => b[1].count - a[1].count)
+                  .slice(0, 10)
+                  .map(([path, data]) => {
+                    const avgTime = data.timeEntries > 0 ? formatDuration(data.totalTime / data.timeEntries) : '—';
+                    return (
+                      <Row key={path} label={niceName(path)} sublabel={path} value={data.count} total={analytics.totalSessions}
+                        extra={
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Clock size={10} style={{ color: '#94A3B8' }} />
+                            <span style={{ fontSize: 10, color: '#94A3B8' }}>{avgTime}</span>
+                          </span>
+                        }
+                      />
+                    );
+                  })}
               </Panel>
             </div>
 
