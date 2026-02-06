@@ -10,11 +10,11 @@ export const CREDIT_COSTS = {
   HOTEL_SEARCH: 40,           // Per city
 
   // Fixed per-action costs
-  UNLOCK_DAY: 150,            // Unlock a full day of details
-  REGENERATE_DAY: 20,         // Regenerate a day
-  SWAP_ACTIVITY: 10,          // Swap an activity
-  RESTAURANT_REC: 15,         // Restaurant recommendation
-  AI_MESSAGE: 10,             // AI companion message
+  UNLOCK_DAY: 90,             // Unlock a full day of details (= day generation cost)
+  REGENERATE_DAY: 90,         // Regenerate a day (same as unlock)
+  SWAP_ACTIVITY: 15,          // Swap an activity (1 Places + 1 Photo call)
+  RESTAURANT_REC: 15,         // Restaurant recommendation (1 Perplexity call)
+  AI_MESSAGE: 10,             // AI companion message (1 Gemini call)
 
   // Free actions
   ROUTE_OPTIMIZATION: 0,

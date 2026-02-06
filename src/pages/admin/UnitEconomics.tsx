@@ -257,13 +257,14 @@ const CREDIT_TIERS = [
   },
 ];
 
-// Cost per action (midpoint estimates from verified data)
+// Cost per action (verified from 41-trip production data, $0.091 avg/trip)
 const ACTION_COSTS = {
-  dayUnlock: 0.065,     // AI generation + Places API for full day
-  swap: 0.0125,         // Light AI call
-  regenerate: 0.05,     // Medium AI call  
-  restaurant: 0.025,    // AI + Places lookup
-  aiMessage: 0.0125,    // Chat interaction
+  dayUnlock: 0.018,     // $0.091 ÷ 5 days avg
+  swap: 0.024,          // 1 Places + 1 Photo call
+  regenerate: 0.018,    // Same as unlock (full day regen)
+  restaurant: 0.015,    // 1 Perplexity call
+  aiMessage: 0.005,     // 1 Gemini call
+  hotelSearch: 0.020,   // ~2 Places calls per city
 };
 
 // Column definitions with tooltips for per-trip scaling table (now includes free user economics)
@@ -1934,13 +1935,14 @@ export default function UnitEconomics() {
             </thead>
             <tbody>
               {[
-                { action: "Unlock 1 Day", credits: 150, costMin: 0.03, costMax: 0.10 },
-                { action: "Swap Activity", credits: 10, costMin: 0.005, costMax: 0.02 },
-                { action: "Regenerate Day", credits: 20, costMin: 0.02, costMax: 0.08 },
-                { action: "Restaurant Rec", credits: 15, costMin: 0.01, costMax: 0.04 },
-                { action: "AI Message", credits: 10, costMin: 0.005, costMax: 0.02 },
+                { action: "Unlock 1 Day", credits: 90, cost: 0.018 },
+                { action: "Swap Activity", credits: 15, cost: 0.024 },
+                { action: "Regenerate Day", credits: 90, cost: 0.018 },
+                { action: "Restaurant Rec", credits: 15, cost: 0.015 },
+                { action: "AI Message", credits: 10, cost: 0.005 },
+                { action: "Hotel Search", credits: 40, cost: 0.020 },
               ].map((row, i) => {
-                const avgCost = (row.costMin + row.costMax) / 2;
+                const avgCost = row.cost;
                 return (
                   <tr key={i} style={{ background: i % 2 === 0 ? "rgba(15, 23, 42, 0.3)" : "transparent" }}>
                     <td style={{ padding: "8px 10px", color: "#E2E8F0", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
