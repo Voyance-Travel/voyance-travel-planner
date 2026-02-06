@@ -506,28 +506,14 @@ export default function UnitEconomics() {
     const margin = ((revenue - fullyLoaded) / revenue) * 100;
     const contributionMargin = ((revenue - variablePerTrip) / revenue) * 100;
 
-    // BLENDED ECONOMICS: Factor in conversion rate and revenue mix
-    // Use DIFFERENT variable costs for free vs paid users (matches scale table)
-    const payingTrips = Math.round(volume * (conversionRate / 100));
+    // BLENDED ECONOMICS: Clean flat-rate model (matches scale table)
+    const PAID_COST_PER_USER = 0.091; // Observed production cost
+    const FREE_COST_PER_USER = FREE_USER_ECONOMICS.blendedCostToUs; // $0.054
+    const payingTrips = volume * (conversionRate / 100);
     const freeTrips = volume - payingTrips;
     
-    // Free users cost $0.10 (Full Preview, No Details model)
-    const freeUserCost = FREE_USER_ECONOMICS.blendedCostToUs;
-    const freeVariableCost = freeTrips * freeUserCost;
-    
-    // Paid users cost = tier-based usage cost + scenario-adjusted variable cost
-    // blendedCostPerUser is the BASE usage pattern cost, but we need to add
-    // the scenario-specific API costs (caching savings, Amadeus state)
-    // 
-    // The tier costs already include a base estimate, but the scenario changes
-    // Google cost (caching) and Amadeus cost (on/off, free tier)
-    // We use variablePerTrip as the scenario-aware cost per paid trip
-    // IMPORTANT: For lifecycle economics we treat "paid users" as purchases,
-    // and use the tier-mix cost model (blendedCostPerUser) rather than per-itinerary COGS.
-    // This keeps blended profit/margin consistent with the scale table.
-    const paidVariableCost = payingTrips * blendedCostPerUser;
-    
-    // Total cost = free variable + paid variable + fixed
+    const freeVariableCost = freeTrips * FREE_COST_PER_USER;
+    const paidVariableCost = payingTrips * PAID_COST_PER_USER;
     const totalVariableCostBlended = freeVariableCost + paidVariableCost;
     const totalCost = totalVariableCostBlended + fixedTotal;
     
@@ -537,11 +523,9 @@ export default function UnitEconomics() {
     const blendedProfit = totalRevenue - totalCost;
     const blendedMargin = totalRevenue > 0 ? (blendedProfit / totalRevenue) * 100 : -100;
     
-    // Revenue per trip (blended across all trips, not just paying)
+    // Per-trip metrics (across ALL trips)
     const revenuePerTrip = totalRevenue / volume;
     const realMarginPerTrip = revenuePerTrip - (totalCost / volume);
-
-    // Blended all-in cost per trip (matches scale table definition)
     const blendedAllInCostPerTrip = totalCost / volume;
 
     const googleShare = variablePerTrip > 0 ? (googlePerTrip / variablePerTrip) * 100 : 0;
