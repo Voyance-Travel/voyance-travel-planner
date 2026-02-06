@@ -1024,38 +1024,53 @@ export default function UnitEconomics() {
         </div>
 
         {/* Hero Metrics - Context-aware based on view mode */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 32 }}>
-          {(viewMode === 'itinerary' ? [
-            // Per-Itinerary View: Real observed costs from tracking data
-            { label: "Full Trip Cost", value: `$${costs.variable.perTrip.toFixed(3)}`, sub: `Actual observed · ${VERIFIED_DATA.trips} trips`, accent: "#38BDF8" },
-            { label: "Preview Cost", value: `$${FREE_USER_ECONOMICS.costs.preview.toFixed(3)}`, sub: "Est. ~30% of full (pre-launch)", accent: "#A78BFA" },
-            { label: "Blended / User", value: `$${((1 - conversionRate/100) * FREE_USER_ECONOMICS.costs.preview + (conversionRate/100) * costs.variable.perTrip).toFixed(3)}`, sub: `${conversionRate}% conversion · break-even ${(FREE_USER_ECONOMICS.costs.preview / (blendedAOV * 0.97) * 100).toFixed(1)}%`, accent: "#34D399" },
-            { label: "Fixed / Trip", value: `$${costs.fixed.perTrip.toFixed(2)}`, sub: `$${costs.fixed.total.toFixed(0)}/mo ÷ ${volume} trips`, accent: "#F59E0B" },
-            { label: "Fully Loaded", value: `$${costs.fullyLoaded.toFixed(2)}`, sub: `Full $${costs.variable.perTrip.toFixed(3)} + Fixed $${costs.fixed.perTrip.toFixed(2)}`, accent: "#E2E8F0" },
-          ] : [
-            // Lifecycle View: Focus on blended economics across all users
-            { label: "Blended Margin", value: `${costs.blendedMargin.toFixed(1)}%`, sub: `${conversionRate}% convert @ $${blendedAOV.toFixed(2)} avg`, accent: costs.blendedMargin > 50 ? "#34D399" : costs.blendedMargin > 0 ? "#FBBF24" : "#F87171" },
-            { label: "Monthly Profit", value: `$${costs.blendedProfit.toFixed(0)}`, sub: `Rev $${costs.totalRevenue.toFixed(0)} – Cost $${costs.totalCost.toFixed(0)} (incl $${costs.fixed.total.toFixed(0)} fixed)`, accent: costs.blendedProfit > 0 ? "#34D399" : "#F87171" },
-            { label: "Revenue / Trip", value: `$${costs.revenuePerTrip.toFixed(2)}`, sub: `${costs.payingTrips.toFixed(0)} paying of ${volume}`, accent: "#38BDF8" },
-            { label: "Cost / Trip", value: `$${costs.blendedAllInCostPerTrip.toFixed(2)}`, sub: `Var + $${costs.fixed.perTrip.toFixed(2)} fixed/trip`, accent: "#A78BFA" },
-            { label: "Margin / Trip", value: `$${costs.realMarginPerTrip.toFixed(2)}`, sub: costs.realMarginPerTrip > 0 ? "Profitable" : "Loss", accent: costs.realMarginPerTrip > 0 ? "#34D399" : "#F87171" },
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 32 }}>
+          {(viewMode === 'itinerary' ? (() => {
+            const totalMonthlyCost = costs.variable.total + costs.fixed.total;
+            const blendedPerUser = (1 - conversionRate/100) * FREE_USER_ECONOMICS.costs.preview + (conversionRate/100) * costs.variable.perTrip;
+            const breakEven = (FREE_USER_ECONOMICS.costs.preview / (blendedAOV * 0.97) * 100);
+            return [
+              { label: "Full Trip Cost", value: `$${costs.variable.perTrip.toFixed(3)}`, sub: `Observed across ${VERIFIED_DATA.trips} trips`, accent: "#38BDF8", icon: "📍" },
+              { label: "Preview Cost", value: `$${FREE_USER_ECONOMICS.costs.preview.toFixed(3)}`, sub: "Est. 30% of full (pre-launch)", accent: "#A78BFA", icon: "👁" },
+              { label: "Blended / User", value: `$${blendedPerUser.toFixed(3)}`, sub: `Break-even at ${breakEven.toFixed(1)}% conversion`, accent: "#34D399", icon: "⚖" },
+              { label: "Fixed / Trip", value: `$${costs.fixed.perTrip.toFixed(2)}`, sub: `$${costs.fixed.total.toFixed(0)}/mo at ${volume} trips`, accent: "#F59E0B", icon: "🏗" },
+              { label: "Fully Loaded", value: `$${costs.fullyLoaded.toFixed(2)}`, sub: `Variable + fixed per trip`, accent: "#E2E8F0", icon: "📦" },
+              { label: "Monthly Burn", value: `$${totalMonthlyCost.toFixed(0)}`, sub: `Var $${costs.variable.total.toFixed(0)} + Fixed $${costs.fixed.total.toFixed(0)}`, accent: "#F87171", icon: "🔥" },
+            ];
+          })() : [
+            { label: "Blended Margin", value: `${costs.blendedMargin.toFixed(1)}%`, sub: `${conversionRate}% convert @ $${blendedAOV.toFixed(2)} avg`, accent: costs.blendedMargin > 50 ? "#34D399" : costs.blendedMargin > 0 ? "#FBBF24" : "#F87171", icon: "📊" },
+            { label: "Monthly Profit", value: `$${costs.blendedProfit.toFixed(0)}`, sub: `Rev $${costs.totalRevenue.toFixed(0)} - Cost $${costs.totalCost.toFixed(0)}`, accent: costs.blendedProfit > 0 ? "#34D399" : "#F87171", icon: "💰" },
+            { label: "Revenue / Trip", value: `$${costs.revenuePerTrip.toFixed(2)}`, sub: `${costs.payingTrips.toFixed(0)} paying of ${volume}`, accent: "#38BDF8", icon: "🎯" },
+            { label: "Cost / Trip", value: `$${costs.blendedAllInCostPerTrip.toFixed(2)}`, sub: `Incl $${costs.fixed.perTrip.toFixed(2)} fixed`, accent: "#A78BFA", icon: "📉" },
+            { label: "Margin / Trip", value: `$${costs.realMarginPerTrip.toFixed(2)}`, sub: costs.realMarginPerTrip > 0 ? "Profitable" : "Loss", accent: costs.realMarginPerTrip > 0 ? "#34D399" : "#F87171", icon: "✅" },
           ]).map((m, i) => (
             <div key={i} style={{
-              background: "rgba(30, 41, 59, 0.5)",
-              borderRadius: 12,
-              padding: "20px 24px",
-              border: "1px solid rgba(100, 116, 139, 0.2)",
+              background: `linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%)`,
+              borderRadius: 16,
+              padding: "22px 24px 18px",
+              border: `1px solid ${m.accent}22`,
               position: "relative",
               overflow: "hidden",
-            }}>
-              <div style={{ position: "absolute", top: 0, left: 0, width: 4, height: "100%", background: m.accent }} />
-              <p style={{ fontSize: 11, color: "#64748B", marginBottom: 6, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                {m.label}
-              </p>
-              <p style={{ fontSize: 28, fontWeight: 700, color: m.accent, marginBottom: 2, fontFamily: "'JetBrains Mono', monospace" }}>
+              transition: "all 0.25s ease",
+              boxShadow: `0 4px 24px -4px ${m.accent}15`,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 8px 32px -4px ${m.accent}25`; }}
+            onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = `0 4px 24px -4px ${m.accent}15`; }}
+            >
+              {/* Accent glow */}
+              <div style={{ position: "absolute", top: -30, right: -30, width: 80, height: 80, borderRadius: "50%", background: `${m.accent}08`, filter: "blur(20px)" }} />
+              <div style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: 3, background: `linear-gradient(90deg, ${m.accent}, ${m.accent}00)` }} />
+              
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                <span style={{ fontSize: 14 }}>{(m as any).icon}</span>
+                <p style={{ fontSize: 10, color: "#64748B", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>
+                  {m.label}
+                </p>
+              </div>
+              <p style={{ fontSize: 26, fontWeight: 800, color: m.accent, margin: "0 0 4px", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "-0.02em" }}>
                 {m.value}
               </p>
-              <p style={{ fontSize: 11, color: "#94A3B8" }}>{m.sub}</p>
+              <p style={{ fontSize: 10, color: "#94A3B8", margin: 0, lineHeight: 1.4 }}>{m.sub}</p>
             </div>
           ))}
         </div>
