@@ -16,6 +16,8 @@ export interface TripDestination {
   timezone?: string;
 }
 
+export type TransitionDayMode = 'half_and_half' | 'skip';
+
 export interface InterCityTransport {
   id: string;
   fromCity: string;
@@ -31,6 +33,8 @@ export interface InterCityTransport {
   isBooked?: boolean;
   confirmationNumber?: string;
   notes?: string;
+  /** How to handle the city-switch day */
+  transitionDay: TransitionDayMode;
 }
 
 export interface MultiCityTrip {

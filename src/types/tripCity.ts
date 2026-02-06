@@ -5,6 +5,7 @@
 
 export type TransportType = 'flight' | 'train' | 'bus' | 'car' | 'ferry';
 export type CityGenerationStatus = 'pending' | 'generating' | 'generated' | 'failed';
+export type TransitionDayMode = 'half_and_half' | 'skip';
 
 export interface TransportDetails {
   carrier?: string;
@@ -40,6 +41,7 @@ export interface TripCity {
   transport_details?: TransportDetails;
   transport_cost_cents: number;
   transport_currency: string;
+  transition_day_mode: TransitionDayMode | null;
 
   // Generation status
   generation_status: CityGenerationStatus;
@@ -73,6 +75,7 @@ export interface TripCityInsert {
   transport_details?: TransportDetails;
   transport_cost_cents?: number;
   transport_currency?: string;
+  transition_day_mode?: TransitionDayMode;
   generation_status?: CityGenerationStatus;
   days_generated?: number;
   days_total?: number;

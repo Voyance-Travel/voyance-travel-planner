@@ -1438,6 +1438,9 @@ export default function Start() {
           transport_details: i > 0 && multiCityTransports[i - 1]
             ? { fromCity: multiCityTransports[i - 1].fromCity, toCity: multiCityTransports[i - 1].toCity }
             : null,
+          transition_day_mode: i > 0 && multiCityTransports[i - 1]
+            ? multiCityTransports[i - 1].transitionDay || 'half_and_half'
+            : null,
           generation_status: 'pending' as const,
           days_total: d.nights,
         }));

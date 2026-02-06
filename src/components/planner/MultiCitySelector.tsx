@@ -6,14 +6,14 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { motion, Reorder, AnimatePresence } from 'framer-motion';
-import { MapPin, Plus, GripVertical, Trash2, Globe, Train, Plane as PlaneIcon, Car, Bus, Sparkles, Clock, ArrowDown } from 'lucide-react';
+import { MapPin, Plus, GripVertical, Trash2, Globe, Train, Plane as PlaneIcon, Car, Bus, Sparkles, Clock, ArrowDown, ArrowRightLeft, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { TripDestination, InterCityTransport, POPULAR_ROUTES, PopularRoute, calculateTotalNights } from '@/types/multiCity';
+import { TripDestination, InterCityTransport, TransitionDayMode, POPULAR_ROUTES, PopularRoute, calculateTotalNights } from '@/types/multiCity';
 import { searchDestinations, Destination } from '@/services/locationSearchAPI';
 
 // Local debounce hook
@@ -91,6 +91,7 @@ export default function MultiCitySelector({
         toCity: city.trim(),
         type: 'train',
         departureDate: '',
+        transitionDay: 'half_and_half',
       };
       onTransportsChange([...transports, newTransport]);
     }
@@ -136,6 +137,7 @@ export default function MultiCitySelector({
         toCity: withOrder[i + 1].city,
         type: 'train',
         departureDate: '',
+        transitionDay: 'half_and_half',
       });
     }
     onTransportsChange(newTransports);
@@ -148,6 +150,12 @@ export default function MultiCitySelector({
     onTransportsChange(updated);
   }, [transports, onTransportsChange]);
 
+  const handleTransitionDayChange = useCallback((index: number, mode: TransitionDayMode) => {
+    const updated = transports.map((t, i) =>
+      i === index ? { ...t, transitionDay: mode } : t
+    );
+    onTransportsChange(updated);
+  }, [transports, onTransportsChange]);
   const handleSelectTemplate = useCallback((route: PopularRoute) => {
     const newDestinations: TripDestination[] = route.destinations.map((d, i) => ({
       id: crypto.randomUUID(),
@@ -165,6 +173,7 @@ export default function MultiCitySelector({
         toCity: newDestinations[i + 1].city,
         type: route.region === 'Europe' ? 'train' : 'flight',
         departureDate: '',
+        transitionDay: 'half_and_half',
       });
     }
 
@@ -344,43 +353,82 @@ export default function MultiCitySelector({
                         </CardContent>
                       </Card>
 
-                      {/* Transport Selector */}
+                      {/* Transport & Transition Day */}
                       {index < destinations.length - 1 && transports[index] && (
-                        <div className="flex items-center gap-2.5 mt-3 ml-4 py-1.5">
-                          <ArrowDown className="h-3 w-3 text-muted-foreground/50" />
-                          <Select
-                            value={transports[index].type}
-                            onValueChange={(value) => handleTransportTypeChange(index, value as InterCityTransport['type'])}
-                          >
-                            <SelectTrigger className="w-auto h-8 text-xs border border-border/50 bg-card hover:bg-muted/50 gap-2 rounded-lg px-3 shadow-sm transition-colors">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="bg-card border-border shadow-lg">
-                              <SelectItem value="train">
-                                <span className="flex items-center gap-2">
-                                  <Train className="h-3.5 w-3.5 text-accent" /> Train
-                                </span>
-                              </SelectItem>
-                              <SelectItem value="flight">
-                                <span className="flex items-center gap-2">
-                                  <PlaneIcon className="h-3.5 w-3.5 text-accent" /> Flight
-                                </span>
-                              </SelectItem>
-                              <SelectItem value="bus">
-                                <span className="flex items-center gap-2">
-                                  <Bus className="h-3.5 w-3.5 text-accent" /> Bus
-                                </span>
-                              </SelectItem>
-                              <SelectItem value="car">
-                                <span className="flex items-center gap-2">
-                                  <Car className="h-3.5 w-3.5 text-accent" /> Car
-                                </span>
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <span className="text-xs text-muted-foreground">
-                            to <span className="font-medium text-foreground/80">{destinations[index + 1].city}</span>
-                          </span>
+                        <div className="mt-3 ml-4 space-y-2">
+                          {/* Transport type row */}
+                          <div className="flex items-center gap-2.5 py-1.5">
+                            <ArrowDown className="h-3 w-3 text-muted-foreground/50" />
+                            <Select
+                              value={transports[index].type}
+                              onValueChange={(value) => handleTransportTypeChange(index, value as InterCityTransport['type'])}
+                            >
+                              <SelectTrigger className="w-auto h-8 text-xs border border-border/50 bg-card hover:bg-muted/50 gap-2 rounded-lg px-3 shadow-sm transition-colors">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="bg-card border-border shadow-lg">
+                                <SelectItem value="train">
+                                  <span className="flex items-center gap-2">
+                                    <Train className="h-3.5 w-3.5 text-accent" /> Train
+                                  </span>
+                                </SelectItem>
+                                <SelectItem value="flight">
+                                  <span className="flex items-center gap-2">
+                                    <PlaneIcon className="h-3.5 w-3.5 text-accent" /> Flight
+                                  </span>
+                                </SelectItem>
+                                <SelectItem value="bus">
+                                  <span className="flex items-center gap-2">
+                                    <Bus className="h-3.5 w-3.5 text-accent" /> Bus
+                                  </span>
+                                </SelectItem>
+                                <SelectItem value="car">
+                                  <span className="flex items-center gap-2">
+                                    <Car className="h-3.5 w-3.5 text-accent" /> Car
+                                  </span>
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <span className="text-xs text-muted-foreground">
+                              to <span className="font-medium text-foreground/80">{destinations[index + 1].city}</span>
+                            </span>
+                          </div>
+
+                          {/* Transition day toggle */}
+                          <div className="flex items-center gap-1.5 ml-5">
+                            <ArrowRightLeft className="h-3 w-3 text-muted-foreground/40" />
+                            <div className="flex items-center bg-muted/50 rounded-md p-0.5 text-[11px]">
+                              <button
+                                type="button"
+                                onClick={() => handleTransitionDayChange(index, 'half_and_half')}
+                                className={cn(
+                                  'px-2.5 py-1 rounded-md transition-all font-medium',
+                                  transports[index].transitionDay === 'half_and_half'
+                                    ? 'bg-background text-foreground shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground'
+                                )}
+                              >
+                                Half-day travel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleTransitionDayChange(index, 'skip')}
+                                className={cn(
+                                  'px-2.5 py-1 rounded-md transition-all font-medium',
+                                  transports[index].transitionDay === 'skip'
+                                    ? 'bg-background text-foreground shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground'
+                                )}
+                              >
+                                Auto
+                              </button>
+                            </div>
+                            <span className="text-[10px] text-muted-foreground">
+                              {transports[index].transitionDay === 'half_and_half'
+                                ? `Morning in ${destinations[index].city}, evening in ${destinations[index + 1].city}`
+                                : 'No dedicated travel time'}
+                            </span>
+                          </div>
                         </div>
                       )}
                     </div>
