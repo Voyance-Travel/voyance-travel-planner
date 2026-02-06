@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { SocialLoginButtons } from '@/components/auth/SocialLoginButtons';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
+import { consumeReturnPath } from '@/utils/authReturnPath';
 
 export function SignInForm() {
   const [email, setEmail] = useState('');
@@ -21,13 +22,14 @@ export function SignInForm() {
   const [searchParams] = useSearchParams();
   const { login } = useAuth();
   
-  // Check for redirect path in: 1) location state, 2) query param, 3) default
-  const stateFrom = (location.state as { from?: string | { pathname?: string } })?.from;
+  // Check for redirect path in: 1) location state, 2) query param, 3) sessionStorage, 4) default
+  const stateFrom = (location.state as { from?: string | { pathname?: string; search?: string } })?.from;
   const queryNext = searchParams.get('next') || searchParams.get('redirect');
-  // Ensure nextPath is always a string
   const nextPath = typeof stateFrom === 'string' 
     ? stateFrom 
-    : (stateFrom?.pathname || queryNext || ROUTES.PROFILE.VIEW);
+    : (stateFrom ? (stateFrom.pathname || '') + (stateFrom.search || '') : null)
+      || queryNext 
+      || null; // null = will use consumeReturnPath at navigation time
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,7 +49,7 @@ export function SignInForm() {
     
     try {
       await login(email, password);
-      navigate(nextPath);
+      navigate(nextPath || consumeReturnPath(ROUTES.PROFILE.VIEW));
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to sign in. Please try again.';
       setError(errorMessage);
