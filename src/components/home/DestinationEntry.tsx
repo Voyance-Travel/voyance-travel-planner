@@ -48,6 +48,7 @@ export default function DestinationEntry() {
   const [destination, setDestination] = useState('');
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const handleSubmit = async (dest?: string) => {
@@ -55,16 +56,24 @@ export default function DestinationEntry() {
     if (!targetDest.trim()) return;
 
     setIsGenerating(true);
+    setErrorMessage(null);
     
     try {
-      // Call quick preview endpoint (generates real 3-day itinerary)
       const { data, error } = await supabase.functions.invoke('generate-quick-preview', {
         body: { destination: targetDest.trim() }
       });
 
       if (error) {
         console.error('Preview generation error:', error);
-        // Fallback preview
+        // Check for validation errors
+        try {
+          const errBody = JSON.parse(error.message || '{}');
+          if (errBody.error === 'unknown_destination' || errBody.error === 'invalid_destination') {
+            setErrorMessage(errBody.message || "We couldn't recognize that destination. Try a well-known city or country.");
+            return;
+          }
+        } catch { /* not JSON */ }
+        // Fallback preview for other errors
         setPreviewData({
           destination: targetDest,
           days: [
@@ -76,6 +85,12 @@ export default function DestinationEntry() {
           archetypeUsed: "Slow Traveler",
           archetypeTagline: "Fewer things, done well. That's the whole philosophy.",
         });
+        return;
+      }
+
+      // Check if data itself contains an error (400 responses)
+      if (data?.error === 'unknown_destination' || data?.error === 'invalid_destination') {
+        setErrorMessage(data.message || "We couldn't recognize that destination.");
         return;
       }
 
@@ -209,7 +224,16 @@ export default function DestinationEntry() {
         </motion.p>
       )}
 
-      {/* Popular destinations as shortcuts */}
+      {errorMessage && !isGenerating && (
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="mt-4 text-red-300 text-sm"
+        >
+          {errorMessage}
+        </motion.p>
+      )}
+
       {/* Popular destinations - improved mobile touch targets */}
       {!destination && !isGenerating && (
         <motion.div

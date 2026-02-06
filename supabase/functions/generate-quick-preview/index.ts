@@ -367,6 +367,41 @@ serve(async (req: Request) => {
       );
     }
 
+    // Sanitize and validate destination input
+    const cleanDestination = destination.trim().slice(0, 100);
+    if (cleanDestination.length < 2 || !/^[a-zA-ZÀ-ÿ\s\-'.]+$/.test(cleanDestination)) {
+      return new Response(
+        JSON.stringify({ error: "invalid_destination", message: "Please enter a valid city or country name." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate against known destinations, countries, or cost index
+    const destLower = cleanDestination.toLowerCase();
+    const [destMatch, costMatch, countryMatch] = await Promise.all([
+      supabaseAdmin
+        .from('destinations')
+        .select('city', { count: 'exact', head: true })
+        .or(`city.ilike.%${destLower}%,country.ilike.%${destLower}%`),
+      supabaseAdmin
+        .from('destination_cost_index')
+        .select('city', { count: 'exact', head: true })
+        .ilike('city', `%${destLower}%`),
+      supabaseAdmin
+        .from('airport_transfer_fares')
+        .select('city', { count: 'exact', head: true })
+        .ilike('city', `%${destLower}%`),
+    ]);
+
+    const isKnown = (destMatch.count ?? 0) > 0 || (costMatch.count ?? 0) > 0 || (countryMatch.count ?? 0) > 0;
+    
+    if (!isKnown) {
+      return new Response(
+        JSON.stringify({ error: "unknown_destination", message: `We couldn't find "${cleanDestination}". Try a well-known city or country.` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const clientIP = getClientIP(req);
     const endpoint = 'quick-preview';
     const now = new Date();
