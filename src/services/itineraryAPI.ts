@@ -8,6 +8,8 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getTripCities } from '@/services/tripCitiesService';
+import type { TripCity } from '@/types/tripCity';
 
 // ============================================================================
 // TYPES
@@ -187,6 +189,48 @@ function calculateDays(startDate: string, endDate: string): number {
 }
 
 /**
+ * Build a day→city map for multi-city trips.
+ * Each day number maps to the city the traveler is in and any transition info.
+ */
+function buildDayCityMap(cities: TripCity[], totalDays: number): Array<{
+  cityName: string;
+  country?: string;
+  isTransitionDay: boolean;
+  transitionFrom?: string;
+  transitionTo?: string;
+  transitionMode?: string;
+}> {
+  const map: ReturnType<typeof buildDayCityMap> = [];
+  
+  for (const city of cities) {
+    const nights = city.nights || city.days_total || 1;
+    
+    for (let n = 0; n < nights; n++) {
+      // First day in a city that isn't the first city = transition day (half-and-half)
+      const isTransition = n === 0 && city.city_order > 0 && city.transition_day_mode !== 'skip';
+      const prevCity = city.city_order > 0 ? cities.find(c => c.city_order === city.city_order - 1) : null;
+      
+      map.push({
+        cityName: city.city_name,
+        country: city.country || undefined,
+        isTransitionDay: isTransition,
+        transitionFrom: isTransition ? prevCity?.city_name : undefined,
+        transitionTo: isTransition ? city.city_name : undefined,
+        transitionMode: isTransition ? (city.transport_type || undefined) : undefined,
+      });
+    }
+  }
+  
+  // Pad or trim to match totalDays
+  while (map.length < totalDays) {
+    const last = map[map.length - 1] || { cityName: 'Unknown', isTransitionDay: false };
+    map.push({ ...last, isTransitionDay: false });
+  }
+  
+  return map.slice(0, totalDays);
+}
+
+/**
  * Get itinerary status/content for a trip
  */
 export async function getItinerary(tripId: string): Promise<ItineraryStatusResponse> {
@@ -218,6 +262,22 @@ export async function generateItinerary(
 ): Promise<ItineraryStatusResponse> {
   const trip = await getTripDetails(tripId);
   const totalDays = calculateDays(trip.start_date, trip.end_date);
+  const isMultiCity = !!(trip as any).is_multi_city;
+  
+  // Fetch per-city data for multi-city trips
+  let dayCityMap: ReturnType<typeof buildDayCityMap> | null = null;
+  let tripCities: TripCity[] = [];
+  if (isMultiCity) {
+    try {
+      tripCities = await getTripCities(tripId);
+      if (tripCities.length > 0) {
+        dayCityMap = buildDayCityMap(tripCities, totalDays);
+        console.log(`[ItineraryAPI] Multi-city trip: ${tripCities.length} cities, ${totalDays} days`);
+      }
+    } catch (err) {
+      console.warn('[ItineraryAPI] Could not load trip cities, falling back to single destination:', err);
+    }
+  }
   
   // Update trip status to generating
   await supabase
@@ -233,7 +293,12 @@ export async function generateItinerary(
     const dayDate = new Date(trip.start_date);
     dayDate.setDate(dayDate.getDate() + dayNumber - 1);
     
-    console.log(`[ItineraryAPI] Generating day ${dayNumber}/${totalDays}`);
+    // Resolve destination for this day
+    const cityInfo = dayCityMap?.[dayNumber - 1];
+    const dayDestination = cityInfo?.cityName || trip.destination;
+    const dayCountry = cityInfo?.country || trip.destination_country;
+    
+    console.log(`[ItineraryAPI] Generating day ${dayNumber}/${totalDays} — ${dayDestination}`);
     
     const { data, error } = await supabase.functions.invoke('generate-itinerary', {
       body: {
@@ -241,14 +306,20 @@ export async function generateItinerary(
         tripId,
         dayNumber,
         totalDays,
-        destination: trip.destination,
-        destinationCountry: trip.destination_country,
+        destination: dayDestination,
+        destinationCountry: dayCountry,
         date: dayDate.toISOString().split('T')[0],
         travelers: trip.travelers || 1,
         tripType: trip.trip_type,
         budgetTier: trip.budget_tier,
         preferences: input?.preferences,
         previousDayActivities: previousActivities,
+        // Multi-city context
+        isMultiCity,
+        isTransitionDay: cityInfo?.isTransitionDay || false,
+        transitionFrom: cityInfo?.transitionFrom,
+        transitionTo: cityInfo?.transitionTo,
+        transitionMode: cityInfo?.transitionMode,
       },
     });
     
@@ -262,6 +333,14 @@ export async function generateItinerary(
     }
     
     if (data?.day) {
+      // Tag the day with city info for the UI
+      if (cityInfo) {
+        data.day.city = cityInfo.cityName;
+        data.day.country = cityInfo.country;
+        data.day.isTransitionDay = cityInfo.isTransitionDay;
+        data.day.transitionFrom = cityInfo.transitionFrom;
+        data.day.transitionTo = cityInfo.transitionTo;
+      }
       days.push(data.day);
       // Track activities for next day to avoid repetition
       data.day.activities?.forEach((a: ItineraryActivity) => {
@@ -271,15 +350,19 @@ export async function generateItinerary(
   }
   
   // Build complete itinerary
+  const tripName = isMultiCity && tripCities.length > 0
+    ? tripCities.map(c => c.city_name).join(' → ')
+    : trip.destination;
+    
   const itinerary: Itinerary = {
-    title: `${trip.destination} Adventure`,
+    title: `${tripName} Adventure`,
     destination: trip.destination,
     days,
     generatedAt: new Date().toISOString(),
     preferences: input?.preferences as Record<string, unknown> | undefined,
   };
   
-  // Save to database - cast to any to satisfy Supabase Json type
+  // Save to database
   const { error: saveError } = await supabase
     .from('trips')
     .update({
@@ -292,6 +375,16 @@ export async function generateItinerary(
   if (saveError) {
     console.error('[ItineraryAPI] Failed to save itinerary:', saveError);
     throw new Error('Failed to save itinerary');
+  }
+  
+  // Update per-city generation status
+  if (tripCities.length > 0) {
+    for (const city of tripCities) {
+      await supabase
+        .from('trip_cities')
+        .update({ generation_status: 'generated' } as any)
+        .eq('id', city.id);
+    }
   }
   
   console.log(`[ItineraryAPI] Itinerary complete: ${days.length} days generated`);

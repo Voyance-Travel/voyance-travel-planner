@@ -8,6 +8,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { DayItinerary } from '@/types/itinerary';
 import { convertBackendDay } from '@/types/itinerary';
+import { getTripCities } from '@/services/tripCitiesService';
 
 // ============================================================================
 // TYPES
@@ -32,6 +33,7 @@ export interface GenerateItineraryParams {
   tripType?: string;
   budgetTier?: string;
   preferences?: Record<string, unknown>;
+  isMultiCity?: boolean;
 }
 
 // ============================================================================
@@ -84,6 +86,16 @@ export function useProgressiveItinerary() {
     });
 
     try {
+      // Fetch multi-city data if applicable
+      let cities: Array<{ city_name: string; country?: string; nights?: number; days_total?: number; city_order: number; transition_day_mode?: string; transport_type?: string }> = [];
+      if (params.isMultiCity) {
+        try {
+          cities = await getTripCities(params.tripId);
+        } catch (e) {
+          console.warn('[Progressive] Could not load trip cities:', e);
+        }
+      }
+
       // Call the generate-itinerary edge function
       const { data, error } = await supabase.functions.invoke('generate-itinerary', {
         body: {
@@ -95,6 +107,15 @@ export function useProgressiveItinerary() {
           tripType: params.tripType || 'vacation',
           budgetTier: params.budgetTier || 'moderate',
           preferences: params.preferences || {},
+          isMultiCity: params.isMultiCity || false,
+          cities: cities.length > 0 ? cities.map(c => ({
+            cityName: c.city_name,
+            country: c.country,
+            nights: c.nights || c.days_total || 1,
+            order: c.city_order,
+            transitionDayMode: c.transition_day_mode || 'half_and_half',
+            transportType: c.transport_type,
+          })) : undefined,
         },
       });
 

@@ -27,6 +27,7 @@ interface ItineraryGeneratorProps {
   tripType?: string;
   budgetTier?: string;
   userId?: string;
+  isMultiCity?: boolean;
   /** Auto-start generation immediately without showing confirmation */
   autoStart?: boolean;
   onComplete: (days: GeneratedDay[], overview?: TripOverview) => void;
@@ -53,6 +54,7 @@ export function ItineraryGenerator({
   tripType,
   budgetTier,
   userId,
+  isMultiCity,
   autoStart = false,
   onComplete,
   onCancel,
@@ -122,6 +124,7 @@ export function ItineraryGenerator({
         tripType,
         budgetTier,
         userId,
+        isMultiCity,
       });
 
       // Ensure we exit the pre-generation screen even if we never received
