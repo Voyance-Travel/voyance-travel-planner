@@ -26,6 +26,7 @@ import {
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
 import { CREDIT_COSTS } from '@/config/pricing';
+import { CreditNudge } from './CreditNudge';
 import { HotelGalleryModal } from './HotelGalleryModal';
 import { DraggableActivityList } from './DraggableActivityList';
 import { Badge } from '@/components/ui/badge';
@@ -810,6 +811,9 @@ export function EditorialItinerary({
   const [showGuidedAssist, setShowGuidedAssist] = useState(false);
   const [guidedAssistDayIndex, setGuidedAssistDayIndex] = useState<number | null>(null);
   const [pendingGuidedPreferences, setPendingGuidedPreferences] = useState<string | null>(null);
+  
+  // Credit nudge state
+  const [creditNudge, setCreditNudge] = useState<{ action: keyof typeof CREDIT_COSTS } | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showShareGuideSheet, setShowShareGuideSheet] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
@@ -1185,6 +1189,7 @@ export function EditorialItinerary({
         });
       } catch (err) {
         console.error('[Swap] Credit spend failed:', err);
+        setCreditNudge({ action: 'SWAP_ACTIVITY' });
         setSwapDrawerOpen(false);
         setSwapTarget(null);
         setSwapDrawerActivity(null);
@@ -1636,8 +1641,9 @@ export function EditorialItinerary({
             dayIndex,
           });
         } catch (err) {
-          // Credit deduction failed - don't proceed
+          // Credit deduction failed - show nudge
           console.error('[Regenerate] Credit spend failed:', err);
+          setCreditNudge({ action: 'REGENERATE_DAY' });
           return;
         }
       }
@@ -1662,6 +1668,7 @@ export function EditorialItinerary({
         });
       } catch (err) {
         console.error('[GuidedAssist] Credit spend failed:', err);
+        setCreditNudge({ action: 'REGENERATE_DAY' });
         setShowGuidedAssist(false);
         setGuidedAssistDayIndex(null);
         return;
@@ -2262,6 +2269,17 @@ export function EditorialItinerary({
                   onActivityEdit={(dIdx, aIdx, activity) => setEditActivityModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
                   onPaymentRequest={onPaymentRequest}
                   onViewReviews={openReviewsDrawer}
+                />
+              </div>
+            )}
+            
+            {/* Credit Nudge - inline when credits insufficient */}
+            {creditNudge && (
+              <div className="mt-3">
+                <CreditNudge
+                  action={creditNudge.action}
+                  currentBalance={totalCredits}
+                  onDismiss={() => setCreditNudge(null)}
                 />
               </div>
             )}
