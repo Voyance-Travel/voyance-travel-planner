@@ -236,8 +236,9 @@ export const ARCHETYPE_TEASERS: Record<string, ArchetypeTeaser> = {
  */
 export const POPULAR_DESTINATIONS = [
   'Tokyo',
-  'Paris', 
-  'Rome',
-  'Barcelona',
+  'New York',
+  'Paris',
+  'Miami',
+  'Austin',
   'Bali',
 ];
