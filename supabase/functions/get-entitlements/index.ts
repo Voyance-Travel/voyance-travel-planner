@@ -14,20 +14,18 @@ const logStep = (step: string, details?: unknown) => {
 
 // Stripe price ID to plan mapping
 const PRICE_TO_PLAN: Record<string, { plan: string; type: 'subscription' | 'payment' }> = {
-  // Subscriptions
   'price_1SrKz2FYxIg9jcJUVbrbOfFl': { plan: 'monthly', type: 'subscription' },
   'price_1SrKz4FYxIg9jcJU8kMbZDSk': { plan: 'yearly', type: 'subscription' },
-  // Legacy prices (keep for existing customers)
   'price_1RpYVWFYxIg9jcJU4t3JVCy0': { plan: 'monthly', type: 'subscription' },
   'price_1RpYWpFYxIg9jcJUPrSLmFsu': { plan: 'yearly', type: 'subscription' },
 };
 
-// Credit costs in cents - must match src/config/pricing.ts
-const CREDIT_COSTS: Record<string, number> = {
-  build_day: 399,          // $3.99
-  build_full_trip: 999,    // $9.99
-  route_optimize: 199,     // $1.99
-  group_budget_setup: 299, // $2.99
+// Credit costs for feature flags (v2 pricing)
+const CREDIT_COSTS = {
+  swap_activity: 15,
+  regenerate_day: 90,
+  hotel_search_per_city: 40,
+  base_rate_per_day: 90,
 };
 
 // Plan features configuration
@@ -41,10 +39,10 @@ const PLAN_LIMITS = {
     groupBudgeting: false,
     coEditCollaboration: false,
     routeOptimization: false,
-    weatherTracker: true, // Free users can see weather
+    weatherTracker: true,
   },
   monthly: {
-    fullBuilds: -1, // Unlimited
+    fullBuilds: -1,
     draftTrips: 5,
     dayRebuilds: -1,
     tripVersions: 4,
@@ -56,7 +54,7 @@ const PLAN_LIMITS = {
   },
   yearly: {
     fullBuilds: -1,
-    draftTrips: -1, // Unlimited
+    draftTrips: -1,
     dayRebuilds: -1,
     tripVersions: -1,
     flightHotelOptimization: true,
@@ -82,7 +80,6 @@ serve(async (req) => {
   try {
     logStep("Function started");
 
-    // Authenticate user
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "No authorization header provided" }), {
@@ -111,12 +108,10 @@ serve(async (req) => {
     }
     logStep("User authenticated", { userId: user.id, email: user.email });
 
-    // Default to free plan
     let activePlan = 'free';
     let subscriptionEnd: string | null = null;
     let subscriptionPriceId: string | null = null;
 
-    // Check Stripe subscription status
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (stripeKey) {
       const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
@@ -146,14 +141,19 @@ serve(async (req) => {
       }
     }
 
-    // Get user credits
-    const { data: credits } = await supabaseAdmin
-      .from('user_credits')
-      .select('balance_cents')
+    // Get user credit balance
+    const { data: creditBalance } = await supabaseAdmin
+      .from('credit_balances')
+      .select('purchased_credits, free_credits, free_credits_expires_at')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
-    const creditBalance = credits?.balance_cents || 0;
+    let purchasedCredits = creditBalance?.purchased_credits || 0;
+    let freeCredits = creditBalance?.free_credits || 0;
+    if (creditBalance?.free_credits_expires_at && new Date(creditBalance.free_credits_expires_at) < new Date()) {
+      freeCredits = 0;
+    }
+    const totalCredits = purchasedCredits + freeCredits;
 
     // Get user usage for free tier tracking
     const { data: usage } = await supabaseAdmin
@@ -176,41 +176,26 @@ serve(async (req) => {
       .eq('user_id', user.id)
       .eq('status', 'draft');
 
-    // Build usage map
     const usageMap: Record<string, number> = {};
     for (const u of usage || []) {
       usageMap[u.metric_key] = u.count;
     }
 
-    // Get plan limits
     const limits = PLAN_LIMITS[activePlan as keyof typeof PLAN_LIMITS] || PLAN_LIMITS.free;
-
-    // Build unlocked trips map (trips with Trip Pass)
     const unlockedTrips = (tripPurchases || []).map(p => p.trip_id);
 
-    // Calculate remaining free builds
     const freeBuildsUsed = usageMap['full_builds'] || 0;
     const freeBuildsRemaining = activePlan === 'free' 
       ? Math.max(0, limits.fullBuilds - freeBuildsUsed)
-      : -1; // Unlimited for paid
-
-    // Build credit-based feature availability
-    const creditFeatures: Record<string, { cost: number; can_afford: boolean }> = {};
-    for (const [key, cost] of Object.entries(CREDIT_COSTS)) {
-      creditFeatures[key] = {
-        cost,
-        can_afford: creditBalance >= cost,
-      };
-    }
+      : -1;
 
     logStep("Resolved entitlements", { 
       plan: activePlan, 
-      credits: creditBalance,
+      totalCredits,
       draftTrips: draftTripsCount,
       unlockedTrips: unlockedTrips.length,
     });
 
-    // Build response
     const response = {
       user_id: user.id,
       plan: activePlan,
@@ -218,11 +203,10 @@ serve(async (req) => {
       subscription_end: subscriptionEnd,
       subscription_price_id: subscriptionPriceId,
       
-      // Credits/wallet
-      credits_balance_cents: creditBalance,
-      
-      // Credit-based feature availability (for pay-per-use)
-      credit_features: creditFeatures,
+      // Credits/wallet (v2 - credit_balances table)
+      credits_balance: totalCredits,
+      credits_purchased: purchasedCredits,
+      credits_free: freeCredits,
       
       // Usage
       usage: usageMap,
@@ -240,14 +224,16 @@ serve(async (req) => {
       // Trip Passes
       unlocked_trips: unlockedTrips,
       
-      // Feature flags (quick boolean checks)
-      // Paid users always have access; free users can use credits for some features
-      can_build_itinerary: activePlan !== 'free' || freeBuildsRemaining > 0 || creditBalance >= CREDIT_COSTS.build_full_trip,
-      can_build_day: activePlan !== 'free' || creditBalance >= CREDIT_COSTS.build_day,
+      // Feature flags - v2 credit-based checks
+      // Trip generation: paid users always can; free users need enough credits for at least a 1-day trip (90 credits)
+      can_build_itinerary: activePlan !== 'free' || freeBuildsRemaining > 0 || totalCredits >= CREDIT_COSTS.base_rate_per_day,
+      can_swap_activity: activePlan !== 'free' || totalCredits >= CREDIT_COSTS.swap_activity,
+      can_regenerate_day: activePlan !== 'free' || totalCredits >= CREDIT_COSTS.regenerate_day,
+      can_search_hotels: activePlan !== 'free' || totalCredits >= CREDIT_COSTS.hotel_search_per_city,
       can_use_flight_hotel_optimization: limits.flightHotelOptimization,
-      can_use_group_budgeting: limits.groupBudgeting || creditBalance >= CREDIT_COSTS.group_budget_setup,
+      can_use_group_budgeting: limits.groupBudgeting,
       can_co_edit: limits.coEditCollaboration,
-      can_optimize_routes: limits.routeOptimization || creditBalance >= CREDIT_COSTS.route_optimize,
+      can_optimize_routes: limits.routeOptimization,
     };
 
     return new Response(JSON.stringify(response), {
