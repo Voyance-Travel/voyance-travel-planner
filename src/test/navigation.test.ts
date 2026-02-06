@@ -93,6 +93,7 @@ const ALL_APP_ROUTES = {
     '/admin/data-cleanup',
     '/admin/image-curation',
     '/admin/margins',
+    '/admin/test-suites',
   ],
   
   // Agent CRM routes
