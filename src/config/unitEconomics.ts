@@ -160,8 +160,11 @@ export const BLENDED_COST_PER_VISITOR =
 
 export const CREDIT_ACTION_MAPPING = {
   trip_generation: { credits: 0, costMin: 0.15, costMax: 0.60, desc: 'Full trip generation (variable)' },
-  swap_activity: { credits: 15, costMin: 0.005, costMax: 0.02, desc: 'Swap an activity' },
-  regenerate_day: { credits: 90, costMin: 0.02, costMax: 0.08, desc: 'Regenerate a day' },
+  unlock_day: { credits: 150, costMin: 0.06, costMax: 0.15, desc: 'Unlock full day details' },
+  swap_activity: { credits: 10, costMin: 0.005, costMax: 0.02, desc: 'Swap an activity' },
+  regenerate_day: { credits: 20, costMin: 0.02, costMax: 0.08, desc: 'Regenerate a day' },
+  restaurant_rec: { credits: 15, costMin: 0.01, costMax: 0.04, desc: 'Restaurant recommendation' },
+  ai_message: { credits: 10, costMin: 0.005, costMax: 0.02, desc: 'AI companion message' },
   hotel_search: { credits: 40, costMin: 0.01, costMax: 0.05, desc: 'Hotel search per city' },
 } as const;
 

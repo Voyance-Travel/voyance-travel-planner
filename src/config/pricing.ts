@@ -6,12 +6,15 @@
 // Credit Costs for Actions
 export const CREDIT_COSTS = {
   // Dynamic (variable cost, calculated at generation time)
-  TRIP_GENERATION: 0,         // Placeholder — use tripCostCalculator for actual cost
+  TRIP_GENERATION: 0,         // Placeholder: use tripCostCalculator for actual cost
   HOTEL_SEARCH: 40,           // Per city
 
   // Fixed per-action costs
-  SWAP_ACTIVITY: 15,          // Swap an activity
-  REGENERATE_DAY: 90,         // Regenerate a day
+  UNLOCK_DAY: 150,            // Unlock a full day of details
+  REGENERATE_DAY: 20,         // Regenerate a day
+  SWAP_ACTIVITY: 10,          // Swap an activity
+  RESTAURANT_REC: 15,         // Restaurant recommendation
+  AI_MESSAGE: 10,             // AI companion message
 
   // Free actions
   ROUTE_OPTIMIZATION: 0,

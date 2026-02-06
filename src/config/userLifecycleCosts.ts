@@ -329,8 +329,11 @@ export const POWER_USER_COST: UserJourneyCost = {
 
 export const CREDIT_TO_COST_MAPPING = {
   trip_generation: { credits: 0, costMin: 0.15, costMax: 0.60, notes: 'Variable - includes AI generation + verification' },
-  swap_activity: { credits: 15, costMin: 0.005, costMax: 0.02 },
-  regenerate_day: { credits: 90, costMin: 0.02, costMax: 0.08 },
+  unlock_day: { credits: 150, costMin: 0.06, costMax: 0.15, notes: 'Full day detail unlock' },
+  swap_activity: { credits: 10, costMin: 0.005, costMax: 0.02 },
+  regenerate_day: { credits: 20, costMin: 0.02, costMax: 0.08 },
+  restaurant_rec: { credits: 15, costMin: 0.01, costMax: 0.04 },
+  ai_message: { credits: 10, costMin: 0.005, costMax: 0.02 },
   hotel_search: { credits: 40, costMin: 0.01, costMax: 0.05, notes: 'Per city' },
 } as const;
 
