@@ -349,7 +349,7 @@ export default function Pricing() {
         </div>
       </section>
 
-      {/* What Do Credits Cover? */}
+      {/* What Can You Build? */}
       <section className="py-12 sm:py-16 bg-muted/30">
         <div className="max-w-4xl mx-auto px-4">
           <motion.div
@@ -359,15 +359,31 @@ export default function Pricing() {
             className="text-center mb-10"
           >
             <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-2">
-              What do credits cover?
+              What can you build with credits?
             </h2>
             <p className="text-sm text-muted-foreground max-w-lg mx-auto">
-              Simple, transparent pricing. You always see the cost before you spend.
+              Real trip examples so you know exactly what you're getting.
             </p>
           </motion.div>
 
-
-
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="bg-card border border-border rounded-2xl overflow-hidden"
+          >
+            <div className="divide-y divide-border">
+              {EXAMPLE_TRIP_COSTS.map((example, i) => (
+                <div key={i} className="flex items-center justify-between px-5 sm:px-6 py-4">
+                  <span className="text-sm text-muted-foreground">{example.label}</span>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="font-medium text-foreground text-sm">{formatCredits(example.credits)}</span>
+                    <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">{example.pack}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
         </div>
       </section>
 
