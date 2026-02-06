@@ -401,12 +401,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) {
       setUser({ ...user, ...updates });
       
-      // Sync to Supabase
+      // Sync to Supabase using upsert to prevent "0 rows updated" failures
       if (session?.user) {
-        supabase.from('profiles').update({
+        supabase.from('profiles').upsert({
+          id: session.user.id,
           display_name: updates.name,
           avatar_url: updates.avatar,
-        }).eq('id', session.user.id).then(({ error }) => {
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' }).then(({ error }) => {
           if (error) console.error('[Auth] Error updating profile:', error);
         });
       }
