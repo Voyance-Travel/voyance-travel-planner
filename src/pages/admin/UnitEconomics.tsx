@@ -382,56 +382,94 @@ export default function UnitEconomics() {
   }, [revenueMix, mixConfig, scenario, volume]);
   
   const VERIFIED_DATA = useMemo(() => {
-    // CRITICAL: Real-time tracking data often has incomplete trip_id attribution
-    // This causes inflated per-trip costs (dividing total spend by few/no trips)
-    // 
-    // Solution: Use FALLBACK_DATA for per-trip rates (verified from production analysis)
-    // Use realMetrics only for TOTAL spend visibility (actual $ spent)
-    // 
-    // The fallback rates are based on verified production data:
-    // - Google: $0.5052/trip (55 calls × mixed pricing)
-    // - AI: $0.0644/trip (5 calls × $0.013)
-    // - Perplexity: $0.018/trip (3.4 calls × $0.005)
+    // When we have real econData, use ACTUAL observed costs ÷ actual trips
+    // This replaces the old approach of hardcoded fallback per-trip rates
+    if (econData && econData.trips.totalTrips > 0) {
+      const trips = econData.trips.totalTrips;
+      return {
+        trips,
+        period: `${econData.costs.periodStart} – ${econData.costs.periodEnd}`,
+        services: {
+          google: { 
+            total: econData.costs.google.cost, 
+            perTrip: econData.costs.google.cost / trips,
+            calls: econData.costs.google.calls, 
+            callsPerTrip: econData.costs.google.calls / trips, 
+            label: "Google Places + Photos", 
+            color: "#4285F4" 
+          },
+          lovableAI: { 
+            total: econData.costs.ai.cost, 
+            perTrip: econData.costs.ai.cost / trips,
+            perCall: econData.costs.ai.calls > 0 ? econData.costs.ai.cost / econData.costs.ai.calls : 0, 
+            calls: econData.costs.ai.calls, 
+            callsPerTrip: econData.costs.ai.calls / trips, 
+            label: "Lovable AI (Gemini)", 
+            color: "#A855F7" 
+          },
+          perplexity: { 
+            total: econData.costs.perplexity.cost, 
+            perTrip: econData.costs.perplexity.cost / trips,
+            perCall: 0.005, 
+            calls: econData.costs.perplexity.calls, 
+            callsPerTrip: econData.costs.perplexity.calls / trips, 
+            label: "Perplexity (Sonar)", 
+            color: "#06B6D4" 
+          },
+          amadeus: { 
+            total: econData.costs.amadeus.cost, 
+            perTrip: econData.costs.amadeus.cost / trips,
+            perCall: 0.024, 
+            calls: econData.costs.amadeus.calls, 
+            callsPerTrip: econData.costs.amadeus.calls / trips, 
+            label: "Amadeus Hotels", 
+            color: "#F59E0B" 
+          },
+        },
+        fixed: FALLBACK_DATA.fixed,
+        revenue: FALLBACK_DATA.revenue,
+      };
+    }
     
     if (!hasRealData) return FALLBACK_DATA;
     
+    // Legacy fallback using realMetrics (kept for backward compat)
     return {
-      trips: realMetrics.totalTrips > 10 ? realMetrics.totalTrips : FALLBACK_DATA.trips,
-      period: `${realMetrics.periodStart} – ${realMetrics.periodEnd}`,
+      trips: realMetrics!.totalTrips,
+      period: `${realMetrics!.periodStart} – ${realMetrics!.periodEnd}`,
       services: {
-        // Use VERIFIED per-trip rates, but show real TOTALS for spend tracking
         google: { 
-          total: realMetrics.google.totalCost, 
-          perTrip: FALLBACK_DATA.services.google.perTrip, // Use verified rate
-          calls: realMetrics.google.totalCalls, 
-          callsPerTrip: FALLBACK_DATA.services.google.callsPerTrip, 
+          total: realMetrics!.google.totalCost, 
+          perTrip: realMetrics!.google.totalCost / realMetrics!.totalTrips,
+          calls: realMetrics!.google.totalCalls, 
+          callsPerTrip: realMetrics!.google.totalCalls / realMetrics!.totalTrips, 
           label: "Google Places", 
           color: "#4285F4" 
         },
         lovableAI: { 
-          total: realMetrics.ai.totalCost, 
-          perTrip: FALLBACK_DATA.services.lovableAI.perTrip, // Use verified rate
-          perCall: realMetrics.ai.callCount > 0 ? realMetrics.ai.totalCost / realMetrics.ai.callCount : 0.013, 
-          calls: realMetrics.ai.callCount, 
-          callsPerTrip: FALLBACK_DATA.services.lovableAI.callsPerTrip, 
+          total: realMetrics!.ai.totalCost, 
+          perTrip: realMetrics!.ai.totalCost / realMetrics!.totalTrips,
+          perCall: realMetrics!.ai.callCount > 0 ? realMetrics!.ai.totalCost / realMetrics!.ai.callCount : 0.013, 
+          calls: realMetrics!.ai.callCount, 
+          callsPerTrip: realMetrics!.ai.callCount / realMetrics!.totalTrips, 
           label: "Lovable AI (Gemini)", 
           color: "#A855F7" 
         },
         perplexity: { 
-          total: realMetrics.perplexity.totalCost, 
-          perTrip: FALLBACK_DATA.services.perplexity.perTrip, // Use verified rate
+          total: realMetrics!.perplexity.totalCost, 
+          perTrip: realMetrics!.perplexity.totalCost / realMetrics!.totalTrips,
           perCall: 0.005, 
-          calls: realMetrics.perplexity.totalCalls, 
-          callsPerTrip: FALLBACK_DATA.services.perplexity.callsPerTrip, 
+          calls: realMetrics!.perplexity.totalCalls, 
+          callsPerTrip: realMetrics!.perplexity.totalCalls / realMetrics!.totalTrips, 
           label: "Perplexity (Sonar)", 
           color: "#06B6D4" 
         },
         amadeus: { 
-          total: realMetrics.amadeus.totalCost, 
-          perTrip: FALLBACK_DATA.services.amadeus.perTrip, // Use verified rate
+          total: realMetrics!.amadeus.totalCost, 
+          perTrip: realMetrics!.amadeus.totalCost / realMetrics!.totalTrips,
           perCall: 0.024, 
-          calls: realMetrics.amadeus.totalCalls, 
-          callsPerTrip: FALLBACK_DATA.services.amadeus.callsPerTrip, 
+          calls: realMetrics!.amadeus.totalCalls, 
+          callsPerTrip: realMetrics!.amadeus.totalCalls / realMetrics!.totalTrips, 
           label: "Amadeus Hotels", 
           color: "#F59E0B" 
         },
@@ -439,7 +477,7 @@ export default function UnitEconomics() {
       fixed: FALLBACK_DATA.fixed,
       revenue: FALLBACK_DATA.revenue,
     };
-  }, [hasRealData, realMetrics]);
+  }, [hasRealData, realMetrics, econData]);
 
   const revenue = VERIFIED_DATA.revenue[tier];
   const scenarioConfig = SCENARIOS[scenario];
@@ -447,13 +485,15 @@ export default function UnitEconomics() {
   const costs = useMemo(() => {
     // IMPORTANT: Use FALLBACK google rate as the "pre-cache" baseline
     // Real data reflects current operational state (which may already include some caching)
-    // Scenario comparison needs consistent baseline to show meaningful differences
+    // When using real observed data (econData available), caching is already reflected in the numbers
+    const hasRealObserved = !!econData && econData.trips.totalTrips > 0;
     const googlePreCacheRate = FALLBACK_DATA.services.google.perTrip; // $0.5052
-    const googleBase = hasRealData ? VERIFIED_DATA.services.google.perTrip : googlePreCacheRate;
+    const googleBase = VERIFIED_DATA.services.google.perTrip;
     
-    // For scenario modeling, we apply caching savings to the BASELINE rate
-    // This ensures A→B shows the expected ~33% reduction
-    const googlePerTrip = scenarioConfig.caching ? googleBase * (1 - PHOTO_CACHE_SAVINGS_RATIO) : googleBase;
+    // Only apply caching adjustment when using fallback/estimated rates (not real data)
+    const googlePerTrip = hasRealObserved 
+      ? googleBase  // Real data already includes caching effects
+      : (scenarioConfig.caching ? googleBase * (1 - PHOTO_CACHE_SAVINGS_RATIO) : googleBase);
 
     const aiPerTrip = VERIFIED_DATA.services.lovableAI.perTrip;
     const perplexityPerTrip = VERIFIED_DATA.services.perplexity.perTrip;
@@ -988,12 +1028,12 @@ export default function UnitEconomics() {
         {/* Hero Metrics - Context-aware based on view mode */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 32 }}>
           {(viewMode === 'itinerary' ? [
-            // Per-Itinerary View: Focus on what ONE trip generation costs
-            { label: "Variable Cost", value: `$${costs.variable.perTrip.toFixed(3)}`, sub: `APIs + AI per itinerary`, accent: "#38BDF8" },
-            { label: "Google Places", value: `$${costs.google.perTrip.toFixed(3)}`, sub: `${costs.google.share.toFixed(0)}% of variable`, accent: "#4285F4" },
-            { label: "AI + Perplexity", value: `$${(costs.ai.perTrip + costs.perplexity.perTrip).toFixed(3)}`, sub: `Gemini + Sonar`, accent: "#A855F7" },
+            // Per-Itinerary View: Real observed costs from tracking data
+            { label: "Variable Cost", value: `$${costs.variable.perTrip.toFixed(3)}`, sub: `Actual avg across ${VERIFIED_DATA.trips} trips`, accent: "#38BDF8" },
+            { label: "Google Places + Photos", value: `$${costs.google.perTrip.toFixed(3)}`, sub: `${VERIFIED_DATA.services.google.callsPerTrip.toFixed(1)} calls/trip · ${costs.google.share.toFixed(0)}% of var`, accent: "#4285F4" },
+            { label: "AI + Perplexity", value: `$${(costs.ai.perTrip + costs.perplexity.perTrip).toFixed(3)}`, sub: `${VERIFIED_DATA.services.lovableAI.callsPerTrip.toFixed(1)} AI + ${VERIFIED_DATA.services.perplexity.callsPerTrip.toFixed(1)} Sonar/trip`, accent: "#A855F7" },
             { label: "Amadeus", value: `$${costs.amadeus.perTrip.toFixed(3)}`, sub: scenarioConfig.amadeus ? (scenarioConfig.amadeusWithinFree ? "Within free tier" : "Paid tier") : "Not enabled", accent: "#F59E0B" },
-            { label: "Fully Loaded", value: `$${costs.fullyLoaded.toFixed(2)}`, sub: `+ $${costs.fixed.perTrip.toFixed(2)} fixed/trip`, accent: "#E2E8F0" },
+            { label: "Fully Loaded", value: `$${costs.fullyLoaded.toFixed(3)}`, sub: `Var $${costs.variable.perTrip.toFixed(3)} + Fixed $${costs.fixed.perTrip.toFixed(2)}/trip`, accent: "#E2E8F0" },
           ] : [
             // Lifecycle View: Focus on blended economics across all users
             { label: "Blended Margin", value: `${costs.blendedMargin.toFixed(1)}%`, sub: `${conversionRate}% convert @ $${blendedAOV.toFixed(2)} avg`, accent: costs.blendedMargin > 50 ? "#34D399" : costs.blendedMargin > 0 ? "#FBBF24" : "#F87171" },
