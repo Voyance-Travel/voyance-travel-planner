@@ -780,8 +780,15 @@ export default function UnitEconomics() {
     });
   }, [scenario, volume, costs.fixed.perTrip]);
 
-  // Scale points matching the reference doc
-  const scalePoints = [10, 50, 100, 250, 400, 500, 750, 1000];
+  // Scale points: always include the current volume for live feedback
+  const scalePoints = useMemo(() => {
+    const base = [10, 50, 100, 250, 400, 500, 750, 1000];
+    if (!base.includes(volume)) {
+      base.push(volume);
+      base.sort((a, b) => a - b);
+    }
+    return base;
+  }, [volume]);
 
   return (
     <div style={{ 
@@ -1801,9 +1808,12 @@ export default function UnitEconomics() {
                   return "#EF4444";
                 };
 
+                const isCurrentVolume = vol === volume;
+
                 return (
                   <tr key={vol} style={{ 
-                    background: isAmadeusThreshold ? "rgba(245, 158, 11, 0.08)" : isKeyVolume ? "rgba(99, 179, 170, 0.05)" : "transparent" 
+                    background: isCurrentVolume ? "rgba(99, 179, 170, 0.15)" : isAmadeusThreshold ? "rgba(245, 158, 11, 0.08)" : isKeyVolume ? "rgba(99, 179, 170, 0.05)" : "transparent",
+                    outline: isCurrentVolume ? "1px solid rgba(99, 179, 170, 0.4)" : "none",
                   }}>
                     <td style={{ 
                       padding: "10px 12px", 
@@ -1811,7 +1821,7 @@ export default function UnitEconomics() {
                       fontWeight: 600,
                       borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
                     }}>
-                      {vol.toLocaleString()}{isAmadeusThreshold ? " ⚠️" : ""}
+                      {vol.toLocaleString()}{isCurrentVolume ? " ◀" : ""}{isAmadeusThreshold ? " ⚠️" : ""}
                     </td>
                     <td style={{ 
                       padding: "10px 12px", 
