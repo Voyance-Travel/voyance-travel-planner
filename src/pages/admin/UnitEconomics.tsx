@@ -60,7 +60,7 @@ const FALLBACK_DATA = {
     // Hidden fixed: your own testing, API testing, dev overhead
     devOps: 20.00, // Rough estimate for internal usage/testing that doesn't generate revenue
   },
-  revenue: { boost: 8.99, single: 15.99, weekend: 29.99, explorer: 59.99, adventurer: 99.99 } as Record<string, number>,
+  revenue: { boost: 8.99, single: 15.99, weekend: 29.99, explorer: 65.99, adventurer: 99.99 } as Record<string, number>,
 };
 
 // Revenue mix presets - what % of paying users buy each tier
@@ -197,23 +197,22 @@ const SCENARIOS: Record<Scenario, { name: string; description: string; fullDescr
 
 // Credit pack tiers with USAGE-BASED COST MODELING
 // Uses the decomposed cost model: $0.163 base + $0.10/day
-// NOTE: Boost ($8.99/80 credits) replaces Top-Up ($5/50 credits)
-// Updated pricing: Boost $8.99, Single $15.99, Weekend $29.99, Explorer $59.99, Adventurer $99.99
-// Credit costs: Swap 10, Regenerate 20, Restaurant 15, AI Message 10
+// NOTE: Boost ($8.99/100 credits) replaces Top-Up ($5/50 credits)
+// Updated pricing: Boost $8.99, Single $15.99, Weekend $29.99, Explorer $65.99, Adventurer $99.99
+// Credit costs: Unlock Day 150, Swap 10, Regenerate 20, Restaurant 15, AI Message 10
 const CREDIT_TIERS = [
   { 
     key: "boost", 
     label: "Boost", 
     price: 8.99, 
-    credits: 80, 
+    credits: 100, 
     color: "#94A3B8", 
     description: "Quick boost for swaps & extras",
-    // Boost users CAN'T unlock days (need 150 credits)
-    // 80 credits / 10 per action = ~8 actions max (swaps + AI messages)
-    typicalUsage: { daysUnlocked: 0, swaps: 4, regenerates: 0, restaurants: 0, aiMessages: 4 },
-    // Cost: 4 swaps × $0.0125 + 4 msgs × $0.0125 = $0.10
-    estimatedCostToUs: 0.10,
-    notes: "Cannot unlock days - 80 credits insufficient",
+    // 100 credits / 10 per action = ~10 actions max (swaps + AI messages)
+    typicalUsage: { daysUnlocked: 0, swaps: 5, regenerates: 0, restaurants: 0, aiMessages: 5 },
+    // Cost: 5 swaps × $0.0125 + 5 msgs × $0.0125 = $0.125
+    estimatedCostToUs: 0.125,
+    notes: "Cannot unlock days - 100 credits insufficient (need 150)",
   },
   { 
     key: "single", 
@@ -244,7 +243,7 @@ const CREDIT_TIERS = [
   { 
     key: "explorer", 
     label: "Explorer", 
-    price: 59.99, 
+    price: 65.99, 
     credits: 1200, 
     color: "#34D399", 
     description: "Multi-day adventures",
