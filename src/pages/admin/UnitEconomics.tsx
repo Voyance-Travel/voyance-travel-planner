@@ -1915,15 +1915,18 @@ export default function UnitEconomics() {
             </span>
           </div>
 
-          {/* Action Cost Table */}
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 16 }}>
+          {/* Action Cost Table - Dynamic across all tiers */}
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, marginBottom: 16 }}>
             <thead>
               <tr>
-                <th style={{ textAlign: "left", padding: "10px 12px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Action</th>
-                <th style={{ textAlign: "right", padding: "10px 12px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Credits</th>
-                <th style={{ textAlign: "right", padding: "10px 12px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>User Pays*</th>
-                <th style={{ textAlign: "right", padding: "10px 12px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Our Cost</th>
-                <th style={{ textAlign: "right", padding: "10px 12px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Gross Margin</th>
+                <th style={{ textAlign: "left", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Action</th>
+                <th style={{ textAlign: "right", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Credits</th>
+                <th style={{ textAlign: "right", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Our Cost</th>
+                {CREDIT_TIERS.map(t => (
+                  <th key={t.key} style={{ textAlign: "right", padding: "8px 6px", color: t.color || "#94A3B8", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)", fontSize: 10 }}>
+                    {t.label}<br/><span style={{ color: "#475569", fontWeight: 400 }}>${(t.price / t.credits).toFixed(3)}/cr</span>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -1934,36 +1937,39 @@ export default function UnitEconomics() {
                 { action: "Restaurant Rec", credits: 15, costMin: 0.01, costMax: 0.04 },
                 { action: "AI Message", credits: 10, costMin: 0.005, costMax: 0.02 },
               ].map((row, i) => {
-                // Calculate user payment based on Explorer tier ($65.99 / 1200 credits = $0.055/credit)
-                const pricePerCredit = 65.99 / 1200;
-                const userPays = row.credits * pricePerCredit;
                 const avgCost = (row.costMin + row.costMax) / 2;
-                const grossMargin = ((userPays - avgCost) / userPays) * 100;
-                
                 return (
                   <tr key={i} style={{ background: i % 2 === 0 ? "rgba(15, 23, 42, 0.3)" : "transparent" }}>
-                    <td style={{ padding: "10px 12px", color: "#E2E8F0", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    <td style={{ padding: "8px 10px", color: "#E2E8F0", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                       {row.action}
                     </td>
-                    <td style={{ padding: "10px 12px", color: "#A78BFA", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    <td style={{ padding: "8px 10px", color: "#A78BFA", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                       {row.credits}
                     </td>
-                    <td style={{ padding: "10px 12px", color: "#34D399", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                      ${userPays.toFixed(2)}
-                    </td>
-                    <td style={{ padding: "10px 12px", color: "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    <td style={{ padding: "8px 10px", color: "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                       ${avgCost.toFixed(3)}
                     </td>
-                    <td style={{ padding: "10px 12px", color: grossMargin > 90 ? "#34D399" : grossMargin > 80 ? "#FBBF24" : "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                      {grossMargin.toFixed(0)}%
-                    </td>
+                    {CREDIT_TIERS.map(t => {
+                      const perCredit = t.price / t.credits;
+                      const userPays = row.credits * perCredit;
+                      const margin = ((userPays - avgCost) / userPays) * 100;
+                      return (
+                        <td key={t.key} style={{ padding: "8px 6px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)", fontSize: 11,
+                          color: margin > 95 ? "#34D399" : margin > 85 ? "#FBBF24" : "#F87171",
+                        }}>
+                          <span style={{ color: "#94A3B8", fontWeight: 400, fontSize: 10 }}>${userPays.toFixed(2)}</span>
+                          {" "}
+                          {margin.toFixed(0)}%
+                        </td>
+                      );
+                    })}
                   </tr>
                 );
               })}
             </tbody>
           </table>
           <p style={{ fontSize: 10, color: "#64748B", marginBottom: 24 }}>
-            *User payment based on Explorer tier ($65.99 ÷ 1,200 credits = $0.055/credit). Boost users pay more ($0.090/credit).
+            Each cell shows <span style={{ color: "#94A3B8" }}>user pays</span> + <span style={{ color: "#34D399" }}>margin %</span> at that tier's $/credit rate. Boost ($0.090/cr) yields highest margin; Adventurer ($0.040/cr) lowest.
           </p>
 
           {/* TIER-BASED COST BREAKDOWN TABLE */}
