@@ -211,8 +211,8 @@ const CREDIT_TIERS = [
     // 1 day = 150 credits, leaving 50 for extras
     // 50 credits = 5 swaps OR 2 regens + 1 msg
     typicalUsage: { daysUnlocked: 1, swaps: 2, regenerates: 1, restaurants: 0, aiMessages: 1 },
-    // Cost: $0.163 base + 1 × $0.100/day = $0.263
-    estimatedCostToUs: 0.263,
+    // Cost: $0.163 base + 1×$0.100/day + 2 swaps×$0.0125 + 1 regen×$0.05 + 1 msg×$0.0125 = $0.351
+    estimatedCostToUs: 0.351,
     notes: "1 new trip with 1 day",
   },
   { 
@@ -223,8 +223,8 @@ const CREDIT_TIERS = [
     description: "3-day trip",
     // 3 days = 450 credits, leaving 50 for extras
     typicalUsage: { daysUnlocked: 3, swaps: 2, regenerates: 1, restaurants: 0, aiMessages: 1 },
-    // Cost: $0.163 base + 3 × $0.100/day = $0.463
-    estimatedCostToUs: 0.463,
+    // Cost: $0.163 base + 3×$0.100/day + 2 swaps×$0.0125 + 1 regen×$0.05 + 1 msg×$0.0125 = $0.551
+    estimatedCostToUs: 0.551,
     notes: "1 new trip with 3 days",
   },
   { 
@@ -251,8 +251,8 @@ const CREDIT_TIERS = [
     // 16 days = 2400 credits, leaving 100 for extras
     // 100 credits = 10 swaps OR 5 regens OR mix
     typicalUsage: { daysUnlocked: 16, swaps: 5, regenerates: 2, restaurants: 0, aiMessages: 1 },
-    // Cost: 4 × $0.163 base + 16 × $0.100/day = $2.252
-    estimatedCostToUs: 2.252,
+    // Cost: 4×$0.163 base + 16×$0.100/day + 5 swaps×$0.0125 + 2 regens×$0.05 + 1 msg×$0.0125 = $2.427
+    estimatedCostToUs: 2.427,
     notes: "16 days + 100 credits extras",
   },
 ];
