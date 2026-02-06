@@ -110,10 +110,12 @@ export function useTripBudget({ tripId, totalDays = 7, enabled = true }: UseTrip
   const updateMutation = useMutation({
     mutationFn: (newSettings: Partial<TripBudgetSettings>) => 
       updateTripBudgetSettings(tripId, newSettings),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tripBudgetSettings', tripId] });
-      queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
-      queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['tripBudgetSettings', tripId] }),
+        queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] }),
+        queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] }),
+      ]);
     },
     onError: () => {
       toast.error('Failed to update budget settings');
