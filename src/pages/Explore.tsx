@@ -158,9 +158,9 @@ export default function Explore() {
       trackDestinationInterest(destination.city, destination.country, 'card_click');
     });
     
-    // Navigate directly to the Build My Itinerary flow with destination pre-filled
-    const destinationParam = encodeURIComponent(destination.city);
-    navigate(`/start?destination=${destinationParam}`);
+    // Navigate to destination detail page
+    const slug = destination.id || destination.city.toLowerCase().replace(/\s+/g, '-');
+    navigate(`/destination/${slug}`);
   };
 
   return (
