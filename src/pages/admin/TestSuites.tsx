@@ -194,73 +194,74 @@ function TestSuiteCard({
       isRunning && "ring-2 ring-primary ring-offset-2"
     )}>
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger asChild>
-          <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className={cn(
-                  "p-2 rounded-lg transition-all duration-300",
-                  isRunning ? 'bg-primary/20 text-primary animate-pulse' :
-                  suite.status === 'passed' ? 'bg-emerald-100 text-emerald-600' :
-                  suite.status === 'failed' ? 'bg-red-100 text-red-600' :
-                  'bg-muted text-muted-foreground'
-                )}>
-                  {isRunning ? (
-                    <RefreshCw className="h-5 w-5 animate-spin" />
-                  ) : (
-                    suite.icon
-                  )}
-                </div>
-                <div>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    {suite.name}
-                    {isRunning ? (
-                      <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 animate-pulse">
-                        Running...
-                      </Badge>
-                    ) : (
-                      statusIcons[suite.status]
-                    )}
-                  </CardTitle>
-                  <CardDescription className="text-sm">
-                    {isRunning ? 'Executing tests...' : suite.description}
-                  </CardDescription>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="text-right text-sm">
-                  <div className="font-medium">
-                    {passedCount}/{suite.tests.length} passed
-                  </div>
-                  {totalDuration > 0 && (
-                    <div className="text-muted-foreground text-xs">
-                      {(totalDuration / 1000).toFixed(2)}s
-                    </div>
-                  )}
-                </div>
-                {isOpen ? (
-                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+        <CardHeader 
+          className="cursor-pointer hover:bg-muted/50 transition-colors"
+          onClick={() => setIsOpen(!isOpen)}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "p-2 rounded-lg transition-all duration-300",
+                isRunning ? 'bg-primary/20 text-primary animate-pulse' :
+                suite.status === 'passed' ? 'bg-emerald-100 text-emerald-600' :
+                suite.status === 'failed' ? 'bg-red-100 text-red-600' :
+                'bg-muted text-muted-foreground'
+              )}>
+                {isRunning ? (
+                  <RefreshCw className="h-5 w-5 animate-spin" />
                 ) : (
-                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                  suite.icon
                 )}
               </div>
-            </div>
-            
-            {/* Running progress bar */}
-            {isRunning && (
-              <div className="mt-3">
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: '0%' }}
-                    animate={{ width: '100%' }}
-                    transition={{ duration: 2, ease: 'easeInOut' }}
-                    className="h-full bg-primary"
-                  />
-                </div>
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  {suite.name}
+                  {isRunning ? (
+                    <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 animate-pulse">
+                      Running...
+                    </Badge>
+                  ) : (
+                    statusIcons[suite.status]
+                  )}
+                </CardTitle>
+                <CardDescription className="text-sm">
+                  {isRunning ? 'Executing tests...' : suite.description}
+                </CardDescription>
               </div>
-            )}
-          </CardHeader>
-        </CollapsibleTrigger>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-right text-sm">
+                <div className="font-medium">
+                  {passedCount}/{suite.tests.length} passed
+                </div>
+                {totalDuration > 0 && (
+                  <div className="text-muted-foreground text-xs">
+                    {(totalDuration / 1000).toFixed(2)}s
+                  </div>
+                )}
+              </div>
+              {isOpen ? (
+                <ChevronDown className="h-5 w-5 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              )}
+            </div>
+          </div>
+          
+          {/* Running progress bar */}
+          {isRunning && (
+            <div className="mt-3">
+              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: '0%' }}
+                  animate={{ width: '100%' }}
+                  transition={{ duration: 2, ease: 'easeInOut' }}
+                  className="h-full bg-primary"
+                />
+              </div>
+            </div>
+          )}
+        </CardHeader>
         
         <CollapsibleContent>
           <CardContent className="pt-0">
