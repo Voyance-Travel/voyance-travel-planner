@@ -272,7 +272,7 @@ const SCALE_COLUMNS = [
   { key: "paid", label: "Paid", tooltip: "Number of paying users based on conversion rate slider. Formula: Total × Conversion %." },
   { key: "free", label: "Free", tooltip: "Number of free users who generate Full Preview (real venues, gated details). Formula: Total × (100% - Conversion %)." },
   { key: "freeCost", label: "Free Var $", tooltip: `Variable cost of free users under 'Full Preview, No Details' model. Each preview costs ~$${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(2)} (AI + light venue validation).` },
-  { key: "cogs", label: "COGS/Trip", tooltip: "Cost Of Goods Sold per itinerary if every user triggered full generation (Google + AI + Perplexity + Amadeus + fixed overhead). Worst-case capacity planning." },
+  { key: "cogs", label: "Paid COGS", tooltip: "Tier-weighted cost per paid user based on Revenue Mix. Uses each tier's Usage Pattern → True Cost (days unlocked, swaps, AI messages) weighted by mix %. Scenario-adjusted for caching/Amadeus." },
   { key: "blended", label: "Blended/Trip", tooltip: "All-in cost per trip = Total Cost ÷ Trips. Reflects actual mix of free previews ($0.10), tier-based paid costs, and fixed overhead. Matches Net Profit math." },
   { key: "revenue", label: "Revenue", tooltip: "Total monthly revenue from paying users only. Formula: Paid Users × Blended AOV (based on revenue mix)." },
   { key: "totalCost", label: "Total Cost", tooltip: "INCLUDES ALL FIXED COSTS. Formula: (Free Variable + Paid Variable) + $49 fixed (Cloud + Domain + DevOps). This is your REAL monthly burn." },
@@ -1739,25 +1739,12 @@ export default function UnitEconomics() {
             </thead>
             <tbody>
               {scalePoints.map((vol) => {
-                // Apply scenario-specific cost calculations (same logic as costs useMemo)
-                const googleBase = VERIFIED_DATA.services.google.perTrip;
-                const goog = scenarioConfig.caching ? googleBase * (1 - PHOTO_CACHE_SAVINGS_RATIO) : googleBase;
-                const ai = VERIFIED_DATA.services.lovableAI.perTrip;
-                const perp = VERIFIED_DATA.services.perplexity.perTrip;
-                // Amadeus: depends on scenario + volume
-                let amad = 0;
-                if (scenarioConfig.amadeus) {
-                  if (scenarioConfig.amadeusWithinFree || vol <= AMADEUS_FREE_TRIPS) {
-                    amad = 0;
-                  } else {
-                    amad = AMADEUS_CALLS_PER_TRIP * AMADEUS_COST_PER_CALL;
-                  }
-                }
-                const variable = goog + ai + perp + amad;
-                // TRUE FIXED COST: $25 Cloud + $4 Domain + $20 DevOps = $49
+                // Tier-weighted paid user COGS (uses Revenue Mix × Tier Usage Pattern)
+                const paidUserCost = blendedCostPerUser; // From tier mix calculation (scenario-aware)
+
+                // Fixed costs
                 const TOTAL_FIXED = 49;
                 const fixedPer = TOTAL_FIXED / vol;
-                const loaded = variable + fixedPer;
                 
                 // Free user economics - CREDIT-CONSTRAINED
                 // Free users get 150 credits/month → can only unlock 1 day MAX
@@ -1767,11 +1754,7 @@ export default function UnitEconomics() {
                 const freeUserCost = FREE_USER_ECONOMICS.blendedCostToUs; // ~$0.076
                 const freeCost = freeUsers * freeUserCost;
                 
-                // Paid users cost based on their tier's usage pattern:
-                // - Top-Up ($5, 50 credits): can't unlock days, only swaps/AI (~$0.16)
-                // - Single ($12, 200 credits): 1 day + extras (~$0.22)
-                // - Explorer ($55, 1200 credits): 7 days + extras (~$0.72)
-                const paidUserCost = blendedCostPerUser; // From tier mix calculation
+                // Paid users: tier-weighted cost from Revenue Mix
                 const paidCost = paidUsers * paidUserCost;
                 
                 // Total variable cost = free users (credit-limited) + paid users (tier-based)
@@ -1848,7 +1831,7 @@ export default function UnitEconomics() {
                       fontSize: 11,
                       borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
                     }}>
-                      ${loaded.toFixed(2)}
+                      ${(paidUserCost + fixedPer).toFixed(2)}
                     </td>
                     {/* Blended/Trip = what matches Net Profit math */}
                     <td style={{ 
