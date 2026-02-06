@@ -5,7 +5,7 @@
  * the many preference questions into manageable sections.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -60,6 +60,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { recalculateDNAFromPreferences } from '@/utils/quizMapping';
 import { AirportAutocomplete } from './AirportAutocomplete';
+import { useBonusCredits } from '@/hooks/useBonusCredits';
 
 // Preference categories for nested tabs
 const PREFERENCE_TABS = [
@@ -174,50 +175,10 @@ export default function EditorialPreferencesView() {
   const [isSaving, setIsSaving] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [activeTab, setActiveTab] = useState<PreferenceTabId>('travel-style');
-  
-  // Debounce ref for DNA recalculation
-  const dnaRecalcTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // Debounced DNA recalculation
-  const scheduleDNARecalc = useCallback(() => {
-    if (dnaRecalcTimeoutRef.current) {
-      clearTimeout(dnaRecalcTimeoutRef.current);
-    }
-    
-    dnaRecalcTimeoutRef.current = setTimeout(async () => {
-      if (!user?.id) return;
-      
-      setIsRecalculating(true);
-      try {
-        const result = await recalculateDNAFromPreferences(user.id);
-        if (result.success) {
-          // Invalidate DNA-related queries so UI refreshes with preserved overrides
-          queryClient.invalidateQueries({ queryKey: ['travel-dna'] });
-          queryClient.invalidateQueries({ queryKey: ['profile'] });
-          queryClient.invalidateQueries({ queryKey: ['preference-completion'] });
-          
-          if (result.dna?.primary_archetype_display) {
-            toast.success('Travel DNA updated!', {
-              description: `You're now: ${result.dna.primary_archetype_display}`,
-            });
-          }
-        }
-      } catch (err) {
-        console.error('Background DNA recalculation failed:', err);
-      } finally {
-        setIsRecalculating(false);
-      }
-    }, 1500); // Wait 1.5s after last change
-  }, [user?.id, queryClient]);
-  
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (dnaRecalcTimeoutRef.current) {
-        clearTimeout(dnaRecalcTimeoutRef.current);
-      }
-    };
-  }, []);
+  const { hasClaimedBonus, claimBonus } = useBonusCredits();
+  const prefsCompletionGranted = useRef(false);
+  // No longer auto-recalculating DNA on every preference save
+  // Users can manually trigger recalculation via the "Recalculate DNA" button
 
   // Load preferences from Supabase
   useEffect(() => {
@@ -259,14 +220,28 @@ export default function EditorialPreferencesView() {
       
       setPreferences(prev => prev ? { ...prev, [field]: value } : null);
       
-      // Check if this field affects DNA - trigger debounced recalculation
+      // Check if this field affects DNA - just inform user
       if (DNA_AFFECTING_FIELDS.has(field)) {
         toast.success('Preference saved', {
-          description: 'Updating your Travel DNA...',
+          description: 'Recalculate your Travel DNA to see changes reflected.',
         });
-        scheduleDNARecalc();
       } else {
         toast.success('Preference saved');
+      }
+      
+      // Grant preferences_completion bonus (once)
+      if (!prefsCompletionGranted.current && !hasClaimedBonus('preferences_completion')) {
+        prefsCompletionGranted.current = true;
+        try {
+          const result = await claimBonus('preferences_completion');
+          if (result.granted) {
+            toast.success(`+${result.credits} credits earned!`, {
+              description: 'Thanks for setting your preferences!',
+            });
+          }
+        } catch (e) {
+          console.warn('[Preferences] Could not grant completion bonus:', e);
+        }
       }
     } catch (error) {
       console.error('Failed to update preference:', error);
