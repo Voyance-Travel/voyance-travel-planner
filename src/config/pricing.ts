@@ -1,29 +1,33 @@
 // ============================================================
-// Pricing Configuration - Credit-Based Model
-// Single currency, single balance, single system
+// Pricing Configuration - Credit-Based Model (v2)
+// Dynamic trip pricing: roundUpTo10((Days × 90 + MultiCityFee) × TierMultiplier)
 // ============================================================
 
 // Credit Costs for Actions
 export const CREDIT_COSTS = {
-  UNLOCK_DAY: 150,          // Unlock 1 day of itinerary
-  SWAP_ACTIVITY: 10,        // Swap an activity
-  REGENERATE_DAY: 20,       // Regenerate a day
-  RESTAURANT_REC: 15,       // AI restaurant recommendation
-  AI_MESSAGE: 10,           // AI companion message
-  ROUTE_OPTIMIZATION: 0,    // Free
-  PDF_EXPORT: 0,            // Free
-  SHARING: 0,               // Free
-  REAL_TIME_MODE: 0,        // Free
+  // Dynamic (variable cost, calculated at generation time)
+  TRIP_GENERATION: 0,         // Placeholder — use tripCostCalculator for actual cost
+  HOTEL_SEARCH: 40,           // Per city
+
+  // Fixed per-action costs
+  SWAP_ACTIVITY: 15,          // Swap an activity
+  REGENERATE_DAY: 90,         // Regenerate a day
+
+  // Free actions
+  ROUTE_OPTIMIZATION: 0,
+  PDF_EXPORT: 0,
+  SHARING: 0,
+  REAL_TIME_MODE: 0,
 } as const;
 
 // Credit Packs - Stripe Products (Live)
 export const STRIPE_PRODUCTS = {
-  // Boost (convenience pack - upsell for existing customers)
-  CREDITS_80: {
-    productId: 'prod_Tv51mga9j5N42W',
-    priceId: 'price_1SxErQJytioXyqq9Zcryt1Oc',
+  // Boost (convenience pack - upsell)
+  CREDITS_100: {
+    productId: 'prod_TvoDemv6UvLUc4',
+    priceId: 'price_1SxwbFJytioXyqq9iuHKTXQS',
     name: 'Boost',
-    credits: 80,
+    credits: 100,
     price: 8.99,
     description: 'Quick boost for swaps & extras',
     mode: 'payment' as const,
@@ -32,10 +36,10 @@ export const STRIPE_PRODUCTS = {
   CREDITS_200: {
     productId: 'prod_TuvcrwliHJ0mph',
     priceId: 'price_1Sx5knJytioXyqq900832qhf',
-    name: 'Single',
+    name: 'Starter',
     credits: 200,
     price: 15.99,
-    description: '1 day + plenty of extras',
+    description: '~2 days of itinerary',
     mode: 'payment' as const,
   },
   CREDITS_500: {
@@ -44,16 +48,16 @@ export const STRIPE_PRODUCTS = {
     name: 'Weekend',
     credits: 500,
     price: 29.99,
-    description: '3-day trip',
+    description: '3-5 day trip',
     mode: 'payment' as const,
   },
   CREDITS_1200: {
-    productId: 'prod_TuvcsvTpTtqGqO',
-    priceId: 'price_1Sx5kpJytioXyqq9XMadRNV2',
+    productId: 'prod_TvoD2IYQGay8FB',
+    priceId: 'price_1SxwbGJytioXyqq9szNt1OP3',
     name: 'Explorer',
     credits: 1200,
-    price: 59.99,
-    description: '7-day trip',
+    price: 65.99,
+    description: 'Week+ trip or multi-trip',
     featured: true,
     mode: 'payment' as const,
   },
@@ -63,7 +67,7 @@ export const STRIPE_PRODUCTS = {
     name: 'Adventurer',
     credits: 2500,
     price: 99.99,
-    description: '14-day trip',
+    description: 'Multiple vacations',
     mode: 'payment' as const,
   },
 
@@ -78,16 +82,13 @@ export const STRIPE_PRODUCTS = {
 } as const;
 
 // Free Tier - "FULL PREVIEW, NO DETAILS" MODEL
-// Free users see complete itinerary with real venues, but gated details
 export const FREE_TIER = {
-  // Credit grants
-  signupBonus: 150,              // 150 credits = 1 free day unlock
-  monthlyFree: 150,              // 150 credits/month
-  maxBankedFree: 750,            // Can accumulate up to 5 months worth
-  freeExpirationMonths: 2,       // Free credits expire after 2 months
-  referralBonus: 200,            // 200 credits per referral
-  
-  // Free tier features (no credits required)
+  signupBonus: 150,
+  monthlyFree: 150,
+  maxBankedFree: 300,
+  freeExpirationMonths: 2,
+  referralBonus: 200,
+
   freeFeatures: [
     'Complete itinerary with real venue names',
     'Personalized timing and reasoning',
@@ -95,8 +96,7 @@ export const FREE_TIER = {
     'Full day-by-day structure preview',
     'DNA alignment explanations',
   ],
-  
-  // What requires credits (GATED)
+
   paidFeatures: [
     'Full addresses + Google Maps',
     'Hours of operation',
@@ -107,87 +107,95 @@ export const FREE_TIER = {
     'Optimized routing',
     'Hotel recommendations',
     'Activity swaps & regeneration',
-    'AI companion chat',
   ],
-  
-  // Cost model (internal use)
+
   internalCosts: {
-    previewCost: 0.12,           // Full preview with real venues + validation
-    fullDayCost: 0.263,          // $0.163 base + $0.10/day
-    perDayIncrement: 0.100,      // Each additional day
-    tripBaseCost: 0.163,         // Per-trip overhead (Perplexity + AI setup)
+    previewCost: 0.12,
+    fullDayCost: 0.263,
+    perDayIncrement: 0.100,
+    tripBaseCost: 0.163,
   },
 } as const;
 
-// Boost Pack (for insufficient credits prompts - upsell only)
+// Boost Pack
 export const BOOST_PACK = {
   id: 'boost' as const,
-  ...STRIPE_PRODUCTS.CREDITS_80,
-  perCredit: (8.99 / 80).toFixed(3), // ~$0.11
+  ...STRIPE_PRODUCTS.CREDITS_100,
+  perCredit: (8.99 / 100).toFixed(3),
 } as const;
 
-// Legacy alias for backwards compatibility
+// Legacy alias
 export const TOPUP_PACK = BOOST_PACK;
 
-// Credit Pack Definitions for Display (main packs, excludes top-up)
+// Credit Pack Definitions for Display
 export const CREDIT_PACKS = [
   {
     id: 'single' as const,
     ...STRIPE_PRODUCTS.CREDITS_200,
-    perCredit: (15.99 / 200).toFixed(3), // ~$0.08
+    perCredit: (15.99 / 200).toFixed(3),
     featured: false,
   },
   {
     id: 'weekend' as const,
     ...STRIPE_PRODUCTS.CREDITS_500,
-    perCredit: (29.99 / 500).toFixed(3), // ~$0.06
+    perCredit: (29.99 / 500).toFixed(3),
     featured: false,
   },
   {
     id: 'explorer' as const,
     ...STRIPE_PRODUCTS.CREDITS_1200,
-    perCredit: (59.99 / 1200).toFixed(3), // ~$0.05
+    perCredit: (65.99 / 1200).toFixed(3),
     featured: true,
   },
   {
     id: 'adventurer' as const,
     ...STRIPE_PRODUCTS.CREDITS_2500,
-    perCredit: (99.99 / 2500).toFixed(3), // ~$0.04
+    perCredit: (99.99 / 2500).toFixed(3),
     featured: false,
   },
 ] as const;
 
-// All packs with boost at the end (for display)
 export const ALL_CREDIT_PACKS = [
   ...CREDIT_PACKS,
   BOOST_PACK,
 ] as const;
 
-// Trip cost examples (for pricing page)
+// Trip cost examples (for pricing page — formula-based)
 export const TRIP_COST_EXAMPLES = {
   threeDay: {
+    label: 'Paris, 3 days, standard',
     days: 3,
-    swaps: 4,
-    regenerates: 1,
-    restaurants: 1,
-    aiMessages: 5,
-    total: 3 * 150 + 4 * 5 + 1 * 15 + 1 * 10 + 5 * 10, // ~545
+    cities: 1,
+    tier: 'standard' as const,
+    total: 270, // 3×90 = 270, ×1.0 = 270
   },
   fiveDay: {
+    label: 'Tokyo, 5 days, standard',
     days: 5,
-    swaps: 6,
-    regenerates: 2,
-    restaurants: 2,
-    aiMessages: 10,
-    total: 5 * 150 + 6 * 5 + 2 * 15 + 2 * 10 + 10 * 10, // ~930
+    cities: 1,
+    tier: 'standard' as const,
+    total: 450, // 5×90 = 450
   },
-  sevenDay: {
+  multiCity: {
+    label: 'Tokyo → Kyoto, 7 days',
     days: 7,
-    swaps: 8,
-    regenerates: 3,
-    restaurants: 3,
-    aiMessages: 15,
-    total: 7 * 150 + 8 * 5 + 3 * 15 + 3 * 10 + 15 * 10, // ~1315
+    cities: 2,
+    tier: 'standard' as const,
+    total: 690, // 7×90+60 = 690
+  },
+  custom: {
+    label: 'Barcelona anniversary + vegan',
+    days: 3,
+    cities: 1,
+    tier: 'custom' as const,
+    total: 320, // 3×90=270, ×1.15=310.5, roundUp10=320
+  },
+  curated: {
+    label: 'Japan honeymoon, 3 cities, 10 days',
+    days: 10,
+    cities: 3,
+    tier: 'highly_curated' as const,
+    total: 1330, // (10×90+120)×1.3=1326, roundUp10=1330
   },
 } as const;
 
@@ -206,7 +214,7 @@ export function getRecommendedPack(creditsNeeded: number): typeof CREDIT_PACKS[n
       return pack;
     }
   }
-  return CREDIT_PACKS[CREDIT_PACKS.length - 1]; // Return largest if none fit
+  return CREDIT_PACKS[CREDIT_PACKS.length - 1];
 }
 
 // ============================================
@@ -376,7 +384,7 @@ export const PLAN_FEATURES = {
   },
 } as const;
 
-// Legacy helper for backwards compatibility
+// Legacy helper
 export function isPlanFeatureEnabled(
   planId: string, 
   feature: 'flightHotelOptimization' | 'groupBudgeting' | 'coEditCollaboration' | 'preferenceLearning' | 'budgetTracking'

@@ -328,12 +328,10 @@ export const POWER_USER_COST: UserJourneyCost = {
 // ============================================================================
 
 export const CREDIT_TO_COST_MAPPING = {
-  // Action: [credits charged, min cost, max cost]
-  unlock_day: { credits: 150, costMin: 0.03, costMax: 0.12, notes: 'Includes AI generation + verification' },
-  swap_activity: { credits: 5, costMin: 0.005, costMax: 0.02 },
-  regenerate_day: { credits: 15, costMin: 0.02, costMax: 0.08 },
-  restaurant_rec: { credits: 10, costMin: 0.01, costMax: 0.04 },
-  ai_message: { credits: 2, costMin: 0.005, costMax: 0.02 },
+  trip_generation: { credits: 0, costMin: 0.15, costMax: 0.60, notes: 'Variable - includes AI generation + verification' },
+  swap_activity: { credits: 15, costMin: 0.005, costMax: 0.02 },
+  regenerate_day: { credits: 90, costMin: 0.02, costMax: 0.08 },
+  hotel_search: { credits: 40, costMin: 0.01, costMax: 0.05, notes: 'Per city' },
 } as const;
 
 // Calculate cost per credit (for margin analysis)

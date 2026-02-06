@@ -1,6 +1,6 @@
 /**
  * Spend Credits Edge Function
- * Deducts credits for actions: unlock_day, swap_activity, regenerate_day, restaurant_rec, ai_message
+ * Deducts credits for actions: trip_generation, hotel_search, swap_activity, regenerate_day
  */
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
@@ -11,20 +11,25 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-// Credit costs - must match frontend config
-const CREDIT_COSTS: Record<string, number> = {
-  unlock_day: 150,
-  swap_activity: 5,
-  regenerate_day: 15,
-  restaurant_rec: 10,
-  ai_message: 2,
+// Fixed credit costs
+const FIXED_COSTS: Record<string, number> = {
+  swap_activity: 15,
+  regenerate_day: 90,
 };
 
+// Variable-cost actions (cost passed from client, validated server-side)
+const VARIABLE_COST_ACTIONS = ['trip_generation', 'hotel_search'];
+
+// Hotel search rate
+const HOTEL_SEARCH_PER_CITY = 40;
+const BASE_RATE_PER_DAY = 90;
+
 interface SpendRequest {
-  action: keyof typeof CREDIT_COSTS;
+  action: string;
   tripId?: string;
   activityId?: string;
   dayIndex?: number;
+  creditsAmount?: number; // For variable-cost actions
   metadata?: Record<string, unknown>;
 }
 
@@ -34,7 +39,6 @@ serve(async (req) => {
   }
 
   try {
-    // Authenticate user
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(
@@ -44,8 +48,6 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace('Bearer ', '');
-    
-    // Create client WITH auth header for proper JWT validation on Lovable Cloud
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -53,7 +55,6 @@ serve(async (req) => {
     );
 
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
-    
     if (authError || !user) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
@@ -61,21 +62,48 @@ serve(async (req) => {
       );
     }
 
-    // Parse request
     const body: SpendRequest = await req.json();
-    const { action, tripId, activityId, dayIndex, metadata } = body;
+    const { action, tripId, activityId, dayIndex, creditsAmount, metadata } = body;
 
-    // Validate action
-    if (!action || !(action in CREDIT_COSTS)) {
+    // Determine cost
+    let cost: number;
+    const isVariable = VARIABLE_COST_ACTIONS.includes(action);
+
+    if (isVariable) {
+      if (!creditsAmount || creditsAmount <= 0) {
+        return new Response(
+          JSON.stringify({ error: 'creditsAmount required for variable-cost actions' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      // Basic server-side validation
+      if (action === 'hotel_search') {
+        const cityCount = (metadata?.cityCount as number) || 1;
+        const expected = cityCount * HOTEL_SEARCH_PER_CITY;
+        if (creditsAmount !== expected) {
+          console.warn(`[spend-credits] Hotel search mismatch: got ${creditsAmount}, expected ${expected}`);
+        }
+      }
+      if (action === 'trip_generation') {
+        const days = (metadata?.days as number) || 1;
+        const minCost = days * BASE_RATE_PER_DAY;
+        if (creditsAmount < minCost * 0.9) {
+          return new Response(
+            JSON.stringify({ error: 'Trip cost too low for given parameters' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+      cost = creditsAmount;
+    } else if (action in FIXED_COSTS) {
+      cost = FIXED_COSTS[action];
+    } else {
       return new Response(
-        JSON.stringify({ error: 'Invalid action', validActions: Object.keys(CREDIT_COSTS) }),
+        JSON.stringify({ error: 'Invalid action', validActions: [...Object.keys(FIXED_COSTS), ...VARIABLE_COST_ACTIONS] }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const cost = CREDIT_COSTS[action];
-
-    // Use service role for database operations
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -96,32 +124,22 @@ serve(async (req) => {
       );
     }
 
-    // Calculate available credits (purchased + non-expired free)
     const purchasedCredits = balance?.purchased_credits || 0;
     let freeCredits = balance?.free_credits || 0;
-    
-    // Check if free credits are expired
     const expiresAt = balance?.free_credits_expires_at;
     if (expiresAt && new Date(expiresAt) < new Date()) {
       freeCredits = 0;
     }
-
     const totalCredits = purchasedCredits + freeCredits;
 
-    // Check if user can afford
     if (totalCredits < cost) {
       return new Response(
-        JSON.stringify({ 
-          error: 'Insufficient credits',
-          required: cost,
-          available: totalCredits,
-          action,
-        }),
+        JSON.stringify({ error: 'Insufficient credits', required: cost, available: totalCredits, action }),
         { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Deduct credits - use free credits first, then purchased
+    // Deduct: free credits first, then purchased
     let remainingCost = cost;
     let newFreeCredits = freeCredits;
     let newPurchasedCredits = purchasedCredits;
@@ -134,13 +152,11 @@ serve(async (req) => {
       remainingCost -= fromFree;
       usedFreeCredits = fromFree;
     }
-
     if (remainingCost > 0) {
       newPurchasedCredits = purchasedCredits - remainingCost;
       usedPurchasedCredits = remainingCost;
     }
 
-    // Update balance
     const { error: updateError } = await supabaseAdmin
       .from('credit_balances')
       .upsert({
@@ -170,21 +186,20 @@ serve(async (req) => {
         action_type: action,
         trip_id: tripId || null,
         activity_id: activityId || null,
-        notes: `${action.replace('_', ' ')} - ${cost} credits`,
+        notes: `${action.replace(/_/g, ' ')} - ${cost} credits`,
         metadata: {
           ...metadata,
           day_index: dayIndex,
           used_free_credits: usedFreeCredits,
           used_purchased_credits: usedPurchasedCredits,
+          is_variable_cost: isVariable,
         },
       });
 
     if (ledgerError) {
       console.error('[spend-credits] Error creating ledger entry:', ledgerError);
-      // Don't fail the request - balance was already updated
     }
 
-    // Return success with new balance
     const newTotal = newPurchasedCredits + newFreeCredits;
 
     return new Response(
@@ -192,15 +207,10 @@ serve(async (req) => {
         success: true,
         spent: cost,
         action,
-        newBalance: {
-          total: newTotal,
-          purchased: newPurchasedCredits,
-          free: newFreeCredits,
-        },
+        newBalance: { total: newTotal, purchased: newPurchasedCredits, free: newFreeCredits },
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-
   } catch (error) {
     console.error('[spend-credits] Unexpected error:', error);
     return new Response(

@@ -159,12 +159,10 @@ export const BLENDED_COST_PER_VISITOR =
 // ============================================================================
 
 export const CREDIT_ACTION_MAPPING = {
-  // Credit cost → Actual $ cost
-  unlock_day: { credits: 150, costMin: 0.03, costMax: 0.10, desc: 'Unlock 1 day of itinerary' },
-  swap_activity: { credits: 5, costMin: 0.005, costMax: 0.02, desc: 'Swap an activity' },
-  regenerate_day: { credits: 15, costMin: 0.02, costMax: 0.08, desc: 'Regenerate a day' },
-  restaurant_rec: { credits: 10, costMin: 0.01, costMax: 0.04, desc: 'Restaurant recommendation' },
-  ai_message: { credits: 2, costMin: 0.005, costMax: 0.02, desc: 'AI chat message' },
+  trip_generation: { credits: 0, costMin: 0.15, costMax: 0.60, desc: 'Full trip generation (variable)' },
+  swap_activity: { credits: 15, costMin: 0.005, costMax: 0.02, desc: 'Swap an activity' },
+  regenerate_day: { credits: 90, costMin: 0.02, costMax: 0.08, desc: 'Regenerate a day' },
+  hotel_search: { credits: 40, costMin: 0.01, costMax: 0.05, desc: 'Hotel search per city' },
 } as const;
 
 // ============================================================================
@@ -175,11 +173,11 @@ export const CREDIT_ACTION_MAPPING = {
 export const REVENUE_CONFIG = {
   // Current products (active in Stripe)
   creditPacks: {
-    topup: { credits: 50, price: 5.00, stripeProductId: 'prod_TuvbjIwD6ZfPHT' },
-    single: { credits: 200, price: 12.00, stripeProductId: 'prod_TuvcrwliHJ0mph' },
-    starter: { credits: 500, price: 29.00, stripeProductId: 'prod_Tuvc6zstLq6b4V' },
-    explorer: { credits: 1200, price: 55.00, stripeProductId: 'prod_TuvcsvTpTtqGqO' },
-    adventurer: { credits: 2500, price: 89.00, stripeProductId: 'prod_TuvcYuWNk7Tayn' },
+    boost: { credits: 100, price: 8.99, stripeProductId: 'prod_TvoDemv6UvLUc4' },
+    single: { credits: 200, price: 15.99, stripeProductId: 'prod_TuvcrwliHJ0mph' },
+    weekend: { credits: 500, price: 29.99, stripeProductId: 'prod_Tuvc6zstLq6b4V' },
+    explorer: { credits: 1200, price: 65.99, stripeProductId: 'prod_TvoD2IYQGay8FB' },
+    adventurer: { credits: 2500, price: 99.99, stripeProductId: 'prod_TuvcYuWNk7Tayn' },
   },
   
   // Legacy (deprecated but still in DB)
@@ -199,8 +197,8 @@ export const REVENUE_CONFIG = {
   freeTier: {
     signupBonus: 150,
     monthlyGrant: 150,
-    maxBankedFree: 750,
-    expirationMonths: 6,
+    maxBankedFree: 300,
+    expirationMonths: 2,
   },
 } as const;
 

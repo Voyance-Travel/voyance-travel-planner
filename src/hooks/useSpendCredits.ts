@@ -12,11 +12,10 @@ type ActionType = keyof typeof CREDIT_COSTS;
 
 // Map config keys to API action names
 const ACTION_MAP: Record<string, string> = {
-  UNLOCK_DAY: 'unlock_day',
+  TRIP_GENERATION: 'trip_generation',
+  HOTEL_SEARCH: 'hotel_search',
   SWAP_ACTIVITY: 'swap_activity',
   REGENERATE_DAY: 'regenerate_day',
-  RESTAURANT_REC: 'restaurant_rec',
-  AI_MESSAGE: 'ai_message',
 };
 
 interface SpendCreditsParams {
@@ -24,6 +23,8 @@ interface SpendCreditsParams {
   tripId?: string;
   activityId?: string;
   dayIndex?: number;
+  /** For variable-cost actions (trip_generation, hotel_search) */
+  creditsAmount?: number;
   metadata?: Record<string, unknown>;
 }
 
@@ -49,7 +50,6 @@ export function useSpendCredits() {
         throw new Error('Must be logged in to spend credits');
       }
 
-      // Convert config key to API action name
       const apiAction = ACTION_MAP[params.action] || params.action.toLowerCase();
 
       const { data, error } = await supabase.functions.invoke('spend-credits', {
@@ -58,6 +58,7 @@ export function useSpendCredits() {
           tripId: params.tripId,
           activityId: params.activityId,
           dayIndex: params.dayIndex,
+          creditsAmount: params.creditsAmount,
           metadata: params.metadata,
         },
       });
@@ -75,8 +76,7 @@ export function useSpendCredits() {
 
       return data;
     },
-    onSuccess: (data) => {
-      // Refresh credit balance
+    onSuccess: () => {
       if (user?.id) {
         queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
       }

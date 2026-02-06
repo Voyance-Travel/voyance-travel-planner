@@ -9,14 +9,9 @@ export interface FreeTierLimits {
   freeCredits: number;
   
   // Affordability checks
-  canUnlockDay: boolean;
   canSwapActivity: boolean;
   canRegenerateDay: boolean;
-  canGetRestaurantRec: boolean;
-  canSendAiMessage: boolean;
-  
-  // Day calculations
-  daysAffordable: number;
+  canSearchHotels: boolean;
   
   // Export/Share (always free)
   canExport: boolean;
@@ -29,7 +24,6 @@ export interface FreeTierLimits {
 
 /**
  * Hook to check credit-based limits for the current user.
- * Everything is gated by credits - no separate limits to track.
  */
 export function useFreeTierLimits(): FreeTierLimits {
   const { data, isLoading } = useCredits();
@@ -40,12 +34,9 @@ export function useFreeTierLimits(): FreeTierLimits {
         totalCredits: 0,
         purchasedCredits: 0,
         freeCredits: 0,
-        canUnlockDay: false,
         canSwapActivity: false,
         canRegenerateDay: false,
-        canGetRestaurantRec: false,
-        canSendAiMessage: false,
-        daysAffordable: 0,
+        canSearchHotels: false,
         canExport: true,
         canShare: true,
         needsCredits: true,
@@ -61,15 +52,12 @@ export function useFreeTierLimits(): FreeTierLimits {
       totalCredits,
       purchasedCredits,
       freeCredits,
-      canUnlockDay: totalCredits >= CREDIT_COSTS.UNLOCK_DAY,
       canSwapActivity: totalCredits >= CREDIT_COSTS.SWAP_ACTIVITY,
       canRegenerateDay: totalCredits >= CREDIT_COSTS.REGENERATE_DAY,
-      canGetRestaurantRec: totalCredits >= CREDIT_COSTS.RESTAURANT_REC,
-      canSendAiMessage: totalCredits >= CREDIT_COSTS.AI_MESSAGE,
-      daysAffordable: Math.floor(totalCredits / CREDIT_COSTS.UNLOCK_DAY),
-      canExport: true, // Always free
-      canShare: true, // Always free
-      needsCredits: totalCredits < CREDIT_COSTS.UNLOCK_DAY,
+      canSearchHotels: totalCredits >= CREDIT_COSTS.HOTEL_SEARCH,
+      canExport: true,
+      canShare: true,
+      needsCredits: totalCredits < CREDIT_COSTS.SWAP_ACTIVITY,
       isLoading: false,
     };
   }, [data, isLoading]);
