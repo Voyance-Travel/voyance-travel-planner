@@ -289,7 +289,7 @@ const EXPENSE_COLUMNS = [
 ];
 
 export default function UnitEconomics() {
-  const [volume, setVolume] = useState(61);
+  const [volume, setVolume] = useState(60);
   const [tier, setTier] = useState("explorer");
   const [scenario, setScenario] = useState<Scenario>('A');
   const [conversionRate, setConversionRate] = useState(2); // % of trips that convert to paid (niche product baseline)
