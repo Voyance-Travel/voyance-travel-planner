@@ -4,7 +4,7 @@ import {
   User, Bell, Shield, Link2,
   ChevronRight, Mail, Smartphone, 
   LogOut, Trash2, Loader2, KeyRound,
-  Briefcase, Users, ExternalLink, BarChart3
+  Briefcase, Users, ExternalLink, BarChart3, TestTube2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
@@ -682,6 +682,22 @@ export default function Settings() {
                           <div className="font-medium text-sm">Image Curation</div>
                           <div className="text-sm text-muted-foreground">
                             Curate destination and activity images
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                    </button>
+                    
+                    <button 
+                      onClick={() => navigate('/admin/test-suites')}
+                      className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <TestTube2 className="w-5 h-5 text-muted-foreground" />
+                        <div className="text-left">
+                          <div className="font-medium text-sm">Test Suites</div>
+                          <div className="text-sm text-muted-foreground">
+                            E2E test results and suite management
                           </div>
                         </div>
                       </div>
