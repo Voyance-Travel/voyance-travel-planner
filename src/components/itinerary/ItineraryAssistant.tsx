@@ -141,26 +141,7 @@ export function ItineraryAssistant({
       return;
     }
 
-    // Check if user can afford AI message (skip for paid users)
-    if (!isPaid && totalCredits < CREDIT_COSTS.AI_MESSAGE) {
-      toast.error(`Need ${CREDIT_COSTS.AI_MESSAGE} credits for AI messages`, {
-        description: 'Get more credits to continue chatting.',
-      });
-      return;
-    }
-
-    // Spend credits for AI message (skip for paid users)
-    if (!isPaid) {
-      try {
-        await spendCredits.mutateAsync({
-          action: 'AI_MESSAGE',
-          tripId,
-        });
-      } catch (err) {
-        console.error('[ItineraryAssistant] Credit spend failed:', err);
-        return;
-      }
-    }
+    // AI messages are now free - no credit check needed
 
     // Client-side safety: basic input sanitization
     const sanitizedInput = trimmedInput

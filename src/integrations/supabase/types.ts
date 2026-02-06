@@ -4574,6 +4574,57 @@ export type Database = {
           },
         ]
       }
+      trip_complexity: {
+        Row: {
+          base_credits: number
+          created_at: string
+          factor_count: number
+          factors: Json
+          multi_city_fee: number
+          multiplier: number
+          tier: string
+          total_credits: number
+          trip_id: string
+        }
+        Insert: {
+          base_credits?: number
+          created_at?: string
+          factor_count?: number
+          factors?: Json
+          multi_city_fee?: number
+          multiplier?: number
+          tier?: string
+          total_credits?: number
+          trip_id: string
+        }
+        Update: {
+          base_credits?: number
+          created_at?: string
+          factor_count?: number
+          factors?: Json
+          multi_city_fee?: number
+          multiplier?: number
+          tier?: string
+          total_credits?: number
+          trip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_complexity_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: true
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_complexity_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: true
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_cost_tracking: {
         Row: {
           action_type: string

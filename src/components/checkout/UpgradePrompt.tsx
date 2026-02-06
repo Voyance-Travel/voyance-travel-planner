@@ -16,7 +16,7 @@ interface UpgradePromptProps {
   isOpen: boolean;
   onClose: () => void;
   featureName?: string;
-  context?: 'regenerate' | 'route' | 'budget' | 'general' | 'credits' | 'swap' | 'unlock_day' | 'restaurant' | 'ai_message';
+  context?: 'regenerate' | 'route' | 'budget' | 'general' | 'credits' | 'swap' | 'trip_generation' | 'hotel_search';
   creditsNeeded?: number;
    tripId?: string;
    showManualOption?: boolean;
@@ -26,9 +26,8 @@ interface UpgradePromptProps {
 const ACTION_LABELS: Record<string, { label: string; cost: number }> = {
   swap: { label: 'Swap activity', cost: CREDIT_COSTS.SWAP_ACTIVITY },
   regenerate: { label: 'Regenerate day', cost: CREDIT_COSTS.REGENERATE_DAY },
-  unlock_day: { label: 'Unlock day', cost: CREDIT_COSTS.UNLOCK_DAY },
-  restaurant: { label: 'Restaurant rec', cost: CREDIT_COSTS.RESTAURANT_REC },
-  ai_message: { label: 'AI message', cost: CREDIT_COSTS.AI_MESSAGE },
+  trip_generation: { label: 'Generate trip', cost: 0 }, // Variable cost
+  hotel_search: { label: 'Hotel search', cost: CREDIT_COSTS.HOTEL_SEARCH },
 };
 
 export function UpgradePrompt({
@@ -65,8 +64,8 @@ export function UpgradePrompt({
      onClose();
    };
   
-  // Show boost if action cost is affordable with 80 credits (not for unlock_day)
-  const canUseBoost = actionCost <= 80 && context !== 'unlock_day';
+  // Show boost if action cost is affordable with 100 credits (not for trip_generation)
+  const canUseBoost = actionCost <= 100 && context !== 'trip_generation';
 
   const getContextMessage = () => {
     if (context === 'route') {
@@ -146,7 +145,7 @@ export function UpgradePrompt({
                   ) : (
                     <>
                       <Plus className="mr-2 h-4 w-4" />
-                      +80 credits · $8
+                      +100 credits · $8.99
                     </>
                   )}
                 </Button>
@@ -242,7 +241,7 @@ export function UpgradePrompt({
               </p>
                
                {/* Manual builder option for unlock_day or when explicitly requested */}
-               {(showManualOption || context === 'unlock_day') && tripId && (
+               {(showManualOption || context === 'trip_generation') && tripId && (
                  <div className="pt-3 mt-2 border-t border-border">
                    <button
                      onClick={handleManualBuild}

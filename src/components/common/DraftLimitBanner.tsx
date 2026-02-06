@@ -14,27 +14,24 @@ import { cn } from '@/lib/utils';
 import { CREDIT_COSTS, formatCredits } from '@/config/pricing';
 
 interface DraftLimitBannerProps {
-  /** Custom class name */
   className?: string;
-  /** Compact mode for inline display */
   compact?: boolean;
 }
 
 export function DraftLimitBanner({ className = '', compact = false }: DraftLimitBannerProps) {
   const navigate = useNavigate();
-  const { canCreateDraft, currentCredits, canUnlockDay, message, isLoading, needsCredits } = useDraftLimitCheck();
+  const { currentCredits, message, isLoading, needsCredits } = useDraftLimitCheck();
   const [dismissed, setDismissed] = useState(false);
 
   // Don't show if loading, dismissed, or has plenty of credits
-  if (isLoading || dismissed || currentCredits >= CREDIT_COSTS.UNLOCK_DAY * 3) {
+  const minThreshold = CREDIT_COSTS.SWAP_ACTIVITY * 3; // 45 credits
+  if (isLoading || dismissed || currentCredits >= minThreshold) {
     return null;
   }
 
-  // Show warning when can't unlock a day
-  const isLowCredits = currentCredits > 0 && currentCredits < CREDIT_COSTS.UNLOCK_DAY;
+  const isLowCredits = currentCredits > 0 && currentCredits < CREDIT_COSTS.SWAP_ACTIVITY;
   const isOutOfCredits = currentCredits === 0 || needsCredits;
 
-  // Don't show if not worth showing
   if (!isLowCredits && !isOutOfCredits) {
     return null;
   }
@@ -127,10 +124,9 @@ interface DraftLimitBlockerProps {
 
 export function DraftLimitBlocker({ onClose }: DraftLimitBlockerProps) {
   const navigate = useNavigate();
-  const { canUnlockDay, message, isLoading } = useDraftLimitCheck();
+  const { canAffordAction, message, isLoading } = useDraftLimitCheck();
 
-  // Don't show if can unlock or loading
-  if (isLoading || canUnlockDay) {
+  if (isLoading || canAffordAction) {
     return null;
   }
 

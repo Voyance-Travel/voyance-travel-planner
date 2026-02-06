@@ -2,7 +2,7 @@
  * Draft Limit Check Hook
  * 
  * Enforces itinerary build limits based on user's credit balance.
- * Users can build unlimited itineraries, but need credits to unlock days.
+ * Users can build unlimited itineraries, but need credits to generate trips.
  */
 
 import { useMemo } from 'react';
@@ -10,12 +10,12 @@ import { useCredits } from './useCredits';
 import { CREDIT_COSTS } from '@/config/pricing';
 
 interface DraftLimitResult {
-  /** Whether user can create a new itinerary (always true - credits just gate day unlocks) */
+  /** Whether user can create a new itinerary (always true) */
   canCreateDraft: boolean;
   /** Current credit balance */
   currentCredits: number;
-  /** Whether user can unlock at least one day */
-  canUnlockDay: boolean;
+  /** Whether user can afford at least a swap */
+  canAffordAction: boolean;
   /** User-friendly message */
   message: string;
   /** Whether data is still loading */
@@ -32,7 +32,7 @@ export function useDraftLimitCheck(): DraftLimitResult {
       return {
         canCreateDraft: true,
         currentCredits: 0,
-        canUnlockDay: false,
+        canAffordAction: false,
         message: 'Loading...',
         isLoading: true,
         needsCredits: false,
@@ -40,24 +40,24 @@ export function useDraftLimitCheck(): DraftLimitResult {
     }
 
     const currentCredits = data.totalCredits;
-    const canUnlockDay = currentCredits >= CREDIT_COSTS.UNLOCK_DAY;
+    // Minimum useful action is a swap at 15 credits
+    const minActionCost = CREDIT_COSTS.SWAP_ACTIVITY;
+    const canAffordAction = currentCredits >= minActionCost;
 
-    // Users can always create drafts - credits just gate day unlocks
     let message = '';
-    if (canUnlockDay) {
-      const daysAffordable = Math.floor(currentCredits / CREDIT_COSTS.UNLOCK_DAY);
-      message = `You can unlock ${daysAffordable} day${daysAffordable !== 1 ? 's' : ''} with your credits`;
+    if (currentCredits > 0) {
+      message = `You have ${currentCredits} credits available`;
     } else {
-      message = `You need ${CREDIT_COSTS.UNLOCK_DAY} credits to unlock a day. You have ${currentCredits}.`;
+      message = 'You need credits to generate trips and use premium features.';
     }
 
     return {
-      canCreateDraft: true, // Always allow draft creation
+      canCreateDraft: true,
       currentCredits,
-      canUnlockDay,
+      canAffordAction,
       message,
       isLoading: false,
-      needsCredits: !canUnlockDay,
+      needsCredits: currentCredits === 0,
     };
   }, [data, isLoading]);
 }
