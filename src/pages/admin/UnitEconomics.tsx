@@ -822,7 +822,98 @@ export default function UnitEconomics() {
           </div>
         )}
 
-        {/* View Mode Toggle */}
+        {/* Revenue Drilldown - appears when there are paid users */}
+        {econData && econData.revenue.purchaseCount > 0 && (
+          <div style={{
+            marginBottom: 24,
+            background: "rgba(30, 41, 59, 0.5)",
+            borderRadius: 12,
+            border: "1px solid rgba(52, 211, 153, 0.2)",
+            overflow: "hidden",
+          }}>
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(100, 116, 139, 0.15)" }}>
+              <h3 style={{ fontSize: 14, fontWeight: 600, color: "#34D399", margin: 0 }}>
+                💰 Revenue Drilldown — {econData.revenue.userPurchases.length} Paying {econData.revenue.userPurchases.length === 1 ? 'User' : 'Users'}
+              </h3>
+            </div>
+            
+            {/* Tier Summary */}
+            {econData.revenue.tiers.length > 0 && (
+              <div style={{ padding: "12px 20px", borderBottom: "1px solid rgba(100, 116, 139, 0.1)" }}>
+                <p style={{ fontSize: 10, color: "#64748B", marginBottom: 8, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>By Credit Pack</p>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  {econData.revenue.tiers.map((tier) => (
+                    <div key={tier.tier} style={{
+                      background: "rgba(52, 211, 153, 0.08)",
+                      borderRadius: 6,
+                      padding: "8px 12px",
+                      minWidth: 100,
+                    }}>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: "#E2E8F0", margin: "0 0 2px", textTransform: "capitalize" }}>{tier.tier}</p>
+                      <p style={{ fontSize: 16, fontWeight: 700, color: "#34D399", fontFamily: "'JetBrains Mono', monospace", margin: "0 0 2px" }}>
+                        ${tier.totalRevenue.toFixed(2)}
+                      </p>
+                      <p style={{ fontSize: 10, color: "#94A3B8", margin: 0 }}>
+                        {tier.count} purchase{tier.count !== 1 ? 's' : ''} · {tier.totalCredits.toLocaleString()} credits
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* Per-User Breakdown */}
+            <div style={{ padding: "12px 20px" }}>
+              <p style={{ fontSize: 10, color: "#64748B", marginBottom: 8, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>By User</p>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid rgba(100, 116, 139, 0.2)" }}>
+                    <th style={{ textAlign: "left", padding: "6px 8px", color: "#94A3B8", fontWeight: 500 }}>User</th>
+                    <th style={{ textAlign: "right", padding: "6px 8px", color: "#94A3B8", fontWeight: 500 }}>Purchases</th>
+                    <th style={{ textAlign: "right", padding: "6px 8px", color: "#94A3B8", fontWeight: 500 }}>Credits</th>
+                    <th style={{ textAlign: "right", padding: "6px 8px", color: "#94A3B8", fontWeight: 500 }}>Revenue</th>
+                    <th style={{ textAlign: "left", padding: "6px 8px", color: "#94A3B8", fontWeight: 500 }}>Packs Bought</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {econData.revenue.userPurchases.map((up) => {
+                    const packSummary = up.purchases.reduce((acc, p) => {
+                      acc[p.tier] = (acc[p.tier] || 0) + 1;
+                      return acc;
+                    }, {} as Record<string, number>);
+                    return (
+                      <tr key={up.userId} style={{ borderBottom: "1px solid rgba(100, 116, 139, 0.1)" }}>
+                        <td style={{ padding: "8px", color: "#E2E8F0", fontWeight: 500 }}>
+                          {up.displayName}
+                          <span style={{ fontSize: 10, color: "#64748B", marginLeft: 6 }}>{up.userId.slice(0, 8)}</span>
+                        </td>
+                        <td style={{ padding: "8px", textAlign: "right", color: "#CBD5E1", fontFamily: "'JetBrains Mono', monospace" }}>{up.purchaseCount}</td>
+                        <td style={{ padding: "8px", textAlign: "right", color: "#CBD5E1", fontFamily: "'JetBrains Mono', monospace" }}>{up.totalCredits.toLocaleString()}</td>
+                        <td style={{ padding: "8px", textAlign: "right", color: "#34D399", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>${up.totalRevenue.toFixed(2)}</td>
+                        <td style={{ padding: "8px", color: "#94A3B8" }}>
+                          {Object.entries(packSummary).map(([tier, count]) => (
+                            <span key={tier} style={{
+                              display: "inline-block",
+                              background: "rgba(52, 211, 153, 0.1)",
+                              borderRadius: 4,
+                              padding: "2px 6px",
+                              marginRight: 4,
+                              fontSize: 10,
+                              textTransform: "capitalize",
+                            }}>
+                              {tier} ×{count}
+                            </span>
+                          ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         <div style={{ 
           display: "flex", 
           alignItems: "center", 
