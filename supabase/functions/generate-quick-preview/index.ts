@@ -73,13 +73,6 @@ interface CostIndexRow {
   city: string;
   country: string;
   cost_multiplier: number;
-  currency_code: string;
-  currency_symbol: string;
-  tipping_culture: string;
-  base_meal_cost: number;
-  base_transport_cost: number;
-  base_activity_cost: number;
-  base_accommodation_cost: number;
 }
 
 function normalizeDestinationKey(destination: string): string {
@@ -166,25 +159,21 @@ function formatCurrencyName(code: string, symbol: string): string {
     'MAD': 'Dirham',
   };
   
-  const name = currencyNames[code] || 'currency';
+  const name = currencyNames[code] || 'Local currency';
+  if (!symbol || symbol === 'undefined') {
+    return name;
+  }
   return `${name} (${symbol})`;
 }
 
-function getPaymentTips(tippingCulture: string, costLevel: string): string {
-  const tips: Record<string, string> = {
-    'required': 'Tips expected (15-20%)',
-    'appreciated': 'Tips appreciated but not required',
-    'optional': 'Tipping optional',
-    'not_expected': 'Tipping not expected',
-    'included': 'Service usually included',
-  };
-  
-  const tippingTip = tips[tippingCulture] || 'Tipping varies';
-  
+function getPaymentTips(costLevel: string): string {
   if (costLevel === 'luxury' || costLevel === 'expensive') {
-    return `Cards widely accepted. ${tippingTip}`;
+    return 'Cards widely accepted. Tipping customary in many places.';
   }
-  return `Cards + cash both common. ${tippingTip}`;
+  if (costLevel === 'budget') {
+    return 'Cash often preferred. Cards accepted at larger establishments.';
+  }
+  return 'Cards widely accepted. Check local tipping customs.';
 }
 
 async function fetchBudgetData(
@@ -192,35 +181,49 @@ async function fetchBudgetData(
   destination: string
 ): Promise<{ budgetEstimate?: BudgetEstimate; paymentInfo?: PaymentInfo }> {
   try {
-    // Try to find destination in cost index
     const destinationLower = destination.toLowerCase();
     
-    // Try exact city match first
-    let { data: costData } = await supabaseAdmin
-      .from('destination_cost_index')
-      .select('*')
-      .ilike('city', `%${destinationLower}%`)
-      .limit(1)
-      .single();
-    
-    // If not found, use default
-    if (!costData) {
-      const { data: defaultData } = await supabaseAdmin
-        .from('destination_cost_index')
-        .select('*')
-        .eq('city', '_default')
-        .single();
-      
-      costData = defaultData;
-    }
-    
-    if (!costData) {
+    // Fetch cost data and currency info in parallel
+    const [costResult, currencyResult] = await Promise.all([
+      (async () => {
+        let { data } = await supabaseAdmin
+          .from('destination_cost_index')
+          .select('city, country, cost_multiplier')
+          .ilike('city', `%${destinationLower}%`)
+          .limit(1)
+          .single();
+        
+        if (!data) {
+          const { data: defaultData } = await supabaseAdmin
+            .from('destination_cost_index')
+            .select('city, country, cost_multiplier')
+            .eq('city', '_default')
+            .single();
+          data = defaultData;
+        }
+        return data as CostIndexRow | null;
+      })(),
+      (async () => {
+        // Try airport_transfer_fares for currency info
+        const { data } = await supabaseAdmin
+          .from('airport_transfer_fares')
+          .select('currency, currency_symbol')
+          .ilike('city', `%${destinationLower}%`)
+          .limit(1)
+          .single();
+        return data ? { currency_code: data.currency, currency_symbol: data.currency_symbol } : null;
+      })(),
+    ]);
+
+    if (!costResult) {
       return {};
     }
 
-    const row = costData as CostIndexRow;
-    const budget = calculateDailyBudget(row);
-    const costLevel = getCostLevel(row.cost_multiplier);
+    const budget = calculateDailyBudget(costResult);
+    const costLevel = getCostLevel(costResult.cost_multiplier);
+    
+    const currencyCode = currencyResult?.currency_code || 'USD';
+    const currencySymbol = currencyResult?.currency_symbol || '$';
     
     return {
       budgetEstimate: {
@@ -230,9 +233,9 @@ async function fetchBudgetData(
         costLevel,
       },
       paymentInfo: {
-        localCurrency: formatCurrencyName(row.currency_code, row.currency_symbol),
-        currencyCode: row.currency_code,
-        paymentTips: getPaymentTips(row.tipping_culture, costLevel),
+        localCurrency: formatCurrencyName(currencyCode, currencySymbol),
+        currencyCode: currencyCode,
+        paymentTips: getPaymentTips(costLevel),
       },
     };
   } catch (error) {
