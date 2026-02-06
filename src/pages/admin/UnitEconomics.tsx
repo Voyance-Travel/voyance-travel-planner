@@ -260,11 +260,11 @@ const CREDIT_TIERS = [
 // Cost per action (verified from 41-trip production data, $0.091 avg/trip)
 const ACTION_COSTS = {
   dayUnlock: 0.018,     // $0.091 ÷ 5 days avg
-  swap: 0.024,          // 1 Places + 1 Photo call
+  swap: 0.009,          // 1 Places ($0.004) + 1 Photo ($0.005)
   regenerate: 0.018,    // Same as unlock (full day regen)
   restaurant: 0.015,    // 1 Perplexity call
   aiMessage: 0.005,     // 1 Gemini call
-  hotelSearch: 0.020,   // ~2 Places calls per city
+  hotelSearch: 0.020,   // ~2-3 Places calls per city
 };
 
 // Column definitions with tooltips for per-trip scaling table (now includes free user economics)
@@ -1936,7 +1936,7 @@ export default function UnitEconomics() {
             <tbody>
               {[
                 { action: "Unlock 1 Day", credits: 90, cost: 0.018 },
-                { action: "Swap Activity", credits: 15, cost: 0.024 },
+                { action: "Swap Activity", credits: 15, cost: 0.009 },
                 { action: "Regenerate Day", credits: 90, cost: 0.018 },
                 { action: "Restaurant Rec", credits: 15, cost: 0.015 },
                 { action: "AI Message", credits: 10, cost: 0.005 },
