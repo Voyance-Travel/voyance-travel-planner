@@ -1151,6 +1151,7 @@ export default function Start() {
   // Current step: 1 = Trip Details, 2 = Flight & Hotel
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showAuthGate, setShowAuthGate] = useState(false);
 
   // Trip state
   const destinationFromQuery = searchParams.get('destination');
@@ -1349,7 +1350,22 @@ export default function Start() {
                     setCelebrationDay={setCelebrationDay}
                     budgetAmount={budgetAmount}
                     setBudgetAmount={setBudgetAmount}
-                    onContinue={() => { setCurrentStep(2); window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior }); }}
+                    onContinue={() => {
+                      if (!user) {
+                        // Save basics to context before showing auth gate
+                        setBasics({
+                          destination: destinationSelection.cityName,
+                          startDate: startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
+                          endDate: endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
+                          travelers,
+                          budgetAmount,
+                        });
+                        setShowAuthGate(true);
+                        return;
+                      }
+                      setCurrentStep(2);
+                      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+                    }}
                   />
                 )}
 
@@ -1387,6 +1403,37 @@ export default function Start() {
           </div>
         </div>
       </section>
+
+      {/* Auth Gate Dialog */}
+      <Dialog open={showAuthGate} onOpenChange={setShowAuthGate}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Create a free account to save your trip
+            </DialogTitle>
+            <DialogDescription>
+              Sign in or create an account to save your trip details, build your itinerary, and access it anytime.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 pt-2">
+            <Button
+              onClick={() => navigate(ROUTES.SIGNUP + '?redirect=' + encodeURIComponent('/start'))}
+              className="w-full gap-2"
+            >
+              Create Free Account
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => navigate(ROUTES.SIGNIN + '?redirect=' + encodeURIComponent('/start'))}
+              className="w-full"
+            >
+              I already have an account
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }
