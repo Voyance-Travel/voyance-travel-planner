@@ -99,7 +99,7 @@ Favorite categories: ${topLovedCategories.map(([cat, score]) => `${cat} (score: 
 
 Write a brief, warm 2-3 sentence summary of their travel preferences. Be specific about what they enjoy and gently note what they tend to skip. Make it feel personal and insightful.`;
 
-    const aiResponse = await fetch("https://api.lovable.dev/api/v1/chat/completions", {
+    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
