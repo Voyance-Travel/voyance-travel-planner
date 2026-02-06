@@ -21,12 +21,16 @@ export function WelcomeBonusManager() {
   const { requestPopup, closePopup, hasActiveModal } = usePopupCoordination();
 
   useEffect(() => {
-    // Wait for auth and bonus data to load
+    // Wait for auth and bonus data to fully load
     if (authLoading || bonusLoading || !user) return;
 
     // Check if we've already shown the welcome modal this session
     const welcomeShown = sessionStorage.getItem(POPUP_STORAGE.WELCOME_SHOWN);
     if (welcomeShown) return;
+
+    // Also check localStorage to prevent re-showing across sessions after claim
+    const welcomeClaimed = localStorage.getItem('voyance_welcome_bonus_claimed');
+    if (welcomeClaimed) return;
 
     // Check if user hasn't claimed welcome bonus yet (new user)
     if (!hasClaimedBonus('welcome')) {
@@ -37,7 +41,7 @@ export function WelcomeBonusManager() {
           setShowWelcomeModal(true);
           sessionStorage.setItem(POPUP_STORAGE.WELCOME_SHOWN, 'true');
         }
-      }, 800); // Slightly longer delay to let page settle
+      }, 1200); // Allow extra time for bonus query to settle
       return () => clearTimeout(timer);
     }
   }, [user, authLoading, bonusLoading, hasClaimedBonus, requestPopup]);
@@ -45,6 +49,7 @@ export function WelcomeBonusManager() {
   const handleCloseWelcome = () => {
     setShowWelcomeModal(false);
     closePopup('welcome_credits');
+    localStorage.setItem('voyance_welcome_bonus_claimed', 'true');
   };
 
   // Don't render anything if not authenticated
