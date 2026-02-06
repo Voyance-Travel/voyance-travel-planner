@@ -367,7 +367,7 @@ export default function UserTracking() {
               </Panel>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
               {/* Referrer Sources */}
               <Panel title="🌐 Traffic Sources" subtitle="Where users come from">
                 {sorted(analytics.refCounts).slice(0, 8).map(([source, count]) => (
@@ -392,6 +392,61 @@ export default function UserTracking() {
                   ))
                 )}
               </Panel>
+            </div>
+
+            {/* All Pages Stats Table */}
+            <div style={{ background: 'rgba(30,41,59,0.5)', borderRadius: 12, padding: 16, border: '1px solid #1E293B' }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 2px', color: '#E2E8F0' }}>📋 All Pages Overview</h3>
+              <p style={{ fontSize: 10, color: '#64748B', margin: '0 0 12px' }}>Complete stats for every page on the site</p>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid #1E293B' }}>
+                      {['Page', 'Views', 'Entries', 'Exits', 'Bounces', 'Bounce %', 'Avg Time', 'Avg Scroll', 'Exit %'].map(h => (
+                        <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Page' ? 'left' : 'right', fontSize: 9, color: '#64748B', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      // Gather all known pages from traffic, entries, exits, bounces
+                      const allPaths = new Set([
+                        ...Object.keys(analytics.pageTraffic),
+                        ...Object.keys(analytics.entryCounts),
+                        ...Object.keys(analytics.exitData),
+                        ...Object.keys(analytics.bounceCounts),
+                      ]);
+                      return Array.from(allPaths)
+                        .map(path => {
+                          const traffic = analytics.pageTraffic[path] || { views: 0, avgTime: 0, avgScroll: 0, exits: 0 };
+                          const entries = analytics.entryCounts[path] || 0;
+                          const exitInfo = analytics.exitData[path] || { count: 0, totalTime: 0, timeEntries: 0 };
+                          const bounces = analytics.bounceCounts[path] || 0;
+                          const bounceRate = entries > 0 ? Math.round((bounces / entries) * 100) : 0;
+                          const exitRate = traffic.views > 0 ? Math.round((exitInfo.count / traffic.views) * 100) : 0;
+                          return { path, views: traffic.views, entries, exits: exitInfo.count, bounces, bounceRate, avgTime: traffic.avgTime, avgScroll: traffic.avgScroll, exitRate };
+                        })
+                        .sort((a, b) => b.views - a.views)
+                        .map(row => (
+                          <tr key={row.path} style={{ borderBottom: '1px solid #1E293B' }}>
+                            <td style={{ padding: '7px 10px', color: '#E2E8F0', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <span>{niceName(row.path)}</span>
+                              <span style={{ display: 'block', fontSize: 9, color: '#475569' }}>{row.path}</span>
+                            </td>
+                            <td style={{ padding: '7px 10px', textAlign: 'right', color: '#38BDF8', fontFamily: 'monospace' }}>{row.views}</td>
+                            <td style={{ padding: '7px 10px', textAlign: 'right', color: '#A78BFA', fontFamily: 'monospace' }}>{row.entries}</td>
+                            <td style={{ padding: '7px 10px', textAlign: 'right', color: '#F87171', fontFamily: 'monospace' }}>{row.exits}</td>
+                            <td style={{ padding: '7px 10px', textAlign: 'right', color: '#94A3B8', fontFamily: 'monospace' }}>{row.bounces}</td>
+                            <td style={{ padding: '7px 10px', textAlign: 'right', color: row.bounceRate > 60 ? '#F87171' : row.bounceRate > 30 ? '#FBBF24' : '#34D399', fontFamily: 'monospace' }}>{row.bounceRate}%</td>
+                            <td style={{ padding: '7px 10px', textAlign: 'right', color: '#94A3B8', fontFamily: 'monospace' }}>{row.avgTime ? formatDuration(row.avgTime) : '—'}</td>
+                            <td style={{ padding: '7px 10px', textAlign: 'right', color: row.avgScroll > 70 ? '#34D399' : row.avgScroll > 30 ? '#FBBF24' : '#F87171', fontFamily: 'monospace' }}>{row.avgScroll ? `${row.avgScroll}%` : '—'}</td>
+                            <td style={{ padding: '7px 10px', textAlign: 'right', color: row.exitRate > 50 ? '#F87171' : '#94A3B8', fontFamily: 'monospace' }}>{row.exitRate}%</td>
+                          </tr>
+                        ));
+                    })()}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </>
         )}
