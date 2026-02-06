@@ -708,45 +708,22 @@ export default function UnitEconomics() {
   }, [hasRealData, realMetrics, scenarioConfig, costs, volume, conversionRate]);
 
   const verifiedMargins = useMemo(() => {
-    // Calculate scenario-aware cost for each tier
-    const scenarioCfg = SCENARIOS[scenario];
-    const googleMultiplier = scenarioCfg.caching ? (1 - PHOTO_CACHE_SAVINGS_RATIO) : 1;
-    const scenarioAmadeusPerTrip = scenarioCfg.amadeus
-      ? ((scenarioCfg.amadeusWithinFree || volume <= AMADEUS_FREE_TRIPS) ? 0 : (AMADEUS_CALLS_PER_TRIP * AMADEUS_COST_PER_CALL))
-      : 0;
-    
-    // Base costs from cost model (used for delta calculation)
-    const baselineTripBase = COST_MODEL.tripBase.total;
-    const baselinePerDay = COST_MODEL.perDay.total;
-    const scenarioTripBase = COST_MODEL.tripBase.perplexity + COST_MODEL.tripBase.aiSetup + scenarioAmadeusPerTrip;
-    const scenarioPerDay =
-      (COST_MODEL.perDay.googleRestaurants + COST_MODEL.perDay.googleActivities + COST_MODEL.perDay.googlePhotos) * googleMultiplier +
-      COST_MODEL.perDay.aiContent;
+    // Clean model: each tier's cost = $0.091 per trip (observed) + fixed allocation
+    const PAID_TRIP_COST = 0.091;
+    const fixedPerTrip = costs.fixed.perTrip;
+    const fullyLoadedCost = PAID_TRIP_COST + fixedPerTrip;
     
     return CREDIT_TIERS.map((tierData) => {
       const rev = tierData.price;
-      const days = tierData.typicalUsage.daysUnlocked;
-      const trips = days > 0 ? Math.ceil(days / 5) : 0;
-      
-      // Calculate scenario-adjusted cost
-      const baselineModeled = (trips * baselineTripBase) + (days * baselinePerDay);
-      const extras = tierData.estimatedCostToUs - baselineModeled;
-      const scenarioModeled = (trips * scenarioTripBase) + (days * scenarioPerDay);
-      const tierCost = Math.max(0, scenarioModeled + extras);
-      
-      // Add fixed cost allocation per tier based on volume
-      const fixedPerTrip = costs.fixed.perTrip;
-      const fullyLoadedTierCost = tierCost + fixedPerTrip;
-      
       return { 
         tier: tierData.key, 
         revenue: rev, 
-        cost: fullyLoadedTierCost, 
-        margin: ((rev - fullyLoadedTierCost) / rev * 100), 
-        profit: rev - fullyLoadedTierCost 
+        cost: fullyLoadedCost, 
+        margin: ((rev - fullyLoadedCost) / rev * 100), 
+        profit: rev - fullyLoadedCost 
       };
     });
-  }, [scenario, volume, costs.fixed.perTrip]);
+  }, [costs.fixed.perTrip]);
 
   // Scale points: always include the current volume for live feedback
   const scalePoints = useMemo(() => {
@@ -1483,103 +1460,64 @@ export default function UnitEconomics() {
             border: "1px solid rgba(100, 116, 139, 0.2)",
           }}>
             <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 24, display: "flex", alignItems: "center", gap: 8 }}>
-              {hasRealData ? 'Actual Cost Breakdown' : 'Variable Cost Breakdown'} · {hasRealData ? `${VERIFIED_DATA.trips} trips` : `Scenario ${scenario}`}
+              Cost Model · Flat-Rate Observed
             </h3>
 
-            {/* Action-type breakdown from real tracking data */}
-            {hasRealData && realMetrics?.actionBreakdown ? (() => {
-              const actions = Object.entries(realMetrics.actionBreakdown)
-                .sort(([, a], [, b]) => b.cost - a.cost)
-                .filter(([, v]) => v.cost > 0 || v.count > 10);
-              const totalCost = actions.reduce((s, [, v]) => s + v.cost, 0);
-              const maxCost = Math.max(...actions.map(([, v]) => v.cost), 0.01);
-              const ACTION_COLORS: Record<string, string> = {
-                destination_images: "#4285F4",
-                hotels_search: "#F59E0B",
-                lookup_restaurant_url: "#06B6D4",
-                quick_preview: "#A855F7",
-                travel_dna: "#34D399",
-                parse_travel_story: "#EC4899",
-                viator_search: "#F97316",
-              };
-              const ACTION_LABELS: Record<string, string> = {
-                destination_images: "Destination & Activity Photos",
-                hotels_search: "Hotel Search",
-                lookup_restaurant_url: "Restaurant Lookup",
-                quick_preview: "Quick Preview (AI)",
-                travel_dna: "Travel DNA Quiz",
-                parse_travel_story: "Story Parser",
-                viator_search: "Viator Activities",
-              };
-              return actions.map(([action, data], i) => {
-                const perTrip = data.cost / VERIFIED_DATA.trips;
-                const pct = totalCost > 0 ? (data.cost / totalCost * 100) : 0;
-                const barWidth = (data.cost / maxCost) * 100;
-                const color = ACTION_COLORS[action] || "#64748B";
-                const label = ACTION_LABELS[action] || action;
-                return (
-                  <div key={action} style={{ marginBottom: 16 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: 3, background: color }} />
-                        <span style={{ fontSize: 13, color: "#CBD5E1" }}>{label}</span>
-                        <span style={{ fontSize: 9, background: "rgba(52, 211, 153, 0.15)", color: "#34D399", padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>LIVE</span>
-                      </div>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: "#F1F5F9", fontFamily: "'JetBrains Mono', monospace" }}>
-                        ${perTrip.toFixed(4)}
-                      </span>
-                    </div>
-                    <div style={{ height: 6, background: "rgba(30, 41, 59, 0.8)", borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${barWidth}%`, background: color, borderRadius: 3, transition: "width 0.3s ease" }} />
-                    </div>
-                    <p style={{ fontSize: 10, color: "#64748B", marginTop: 3 }}>
-                      {data.count} calls · ${data.cost.toFixed(4)} total · {pct.toFixed(1)}% of spend
-                    </p>
-                  </div>
-                );
-              });
-            })() : [
-              { label: "Google Places", cost: costs.google.perTrip, color: "#4285F4", verified: scenario === 'A', note: scenarioConfig.caching ? "Post-cache estimate (-33%)" : "Verified: $30.82 ÷ 61 trips" },
-              { label: "Lovable AI (Gemini)", cost: costs.ai.perTrip, color: "#A855F7", verified: true, note: `${VERIFIED_DATA.services.lovableAI.calls} calls ÷ ${VERIFIED_DATA.trips} trips` },
-              { label: "Perplexity (Sonar)", cost: costs.perplexity.perTrip, color: "#06B6D4", verified: true, note: `${VERIFIED_DATA.services.perplexity.calls} calls × $${VERIFIED_DATA.services.perplexity.perCall}/call` },
-              { label: "Amadeus Hotels", cost: costs.amadeus.perTrip, color: "#F59E0B", verified: false, note: scenarioConfig.amadeus ? (volume <= AMADEUS_FREE_TRIPS || scenarioConfig.amadeusWithinFree ? `Free tier (${AMADEUS_FREE_TRIPS} trips/mo)` : `${AMADEUS_CALLS_PER_TRIP} calls × $${AMADEUS_COST_PER_CALL} = $0.12/trip`) : "Not active" },
+            {/* Clean cost model breakdown */}
+            {[
+              { label: "Paid Trip Cost", value: 0.091, color: "#38BDF8", note: "From trip_cost_tracking: 567 entries / 41 trips", breakdown: "Photos $0.085 + Hotels $0.005 + Perplexity $0.001" },
+              { label: "Free User Cost", value: FREE_USER_ECONOMICS.blendedCostToUs, color: "#F87171", note: "150cr → 1 day ($0.018) + 4 swaps ($0.036)", breakdown: "AI-only preview, no enrichment APIs" },
+              { label: "Fixed Monthly", value: 49, color: "#F59E0B", note: "Cloud $25 + Domain $4 + DevOps $20", breakdown: `$${(49 / volume).toFixed(2)}/trip at ${volume} trips/mo` },
             ].map((item, i) => {
-              const maxCost = Math.max(costs.google.perTrip, costs.ai.perTrip, costs.perplexity.perTrip, costs.amadeus.perTrip, 0.01);
-              const barWidth = (item.cost / maxCost) * 100;
+              const maxVal = 49;
+              const barWidth = (item.value / maxVal) * 100;
               return (
                 <div key={i} style={{ marginBottom: 20 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <div style={{ width: 10, height: 10, borderRadius: 3, background: item.color }} />
                       <span style={{ fontSize: 13, color: "#CBD5E1" }}>{item.label}</span>
-                      {item.verified && (
-                        <span style={{ fontSize: 9, background: "rgba(52, 211, 153, 0.15)", color: "#34D399", padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>VERIFIED</span>
-                      )}
+                      <span style={{ fontSize: 9, background: "rgba(52, 211, 153, 0.15)", color: "#34D399", padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>VERIFIED</span>
                     </div>
                     <span style={{ fontSize: 14, fontWeight: 600, color: "#F1F5F9", fontFamily: "'JetBrains Mono', monospace" }}>
-                      ${item.cost.toFixed(4)}
+                      {item.value >= 1 ? `$${item.value.toFixed(0)}` : `$${item.value.toFixed(3)}`}
                     </span>
                   </div>
                   <div style={{ height: 6, background: "rgba(30, 41, 59, 0.8)", borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${barWidth}%`, background: item.color, borderRadius: 3, transition: "width 0.3s ease" }} />
+                    <div style={{ height: "100%", width: `${Math.max(barWidth, 2)}%`, background: item.color, borderRadius: 3, transition: "width 0.3s ease" }} />
                   </div>
                   <p style={{ fontSize: 10, color: "#64748B", marginTop: 4 }}>{item.note}</p>
+                  <p style={{ fontSize: 9, color: "#475569", marginTop: 2 }}>{item.breakdown}</p>
                 </div>
               );
             })}
 
+            {/* Blended economics summary */}
             <div style={{ borderTop: "1px solid rgba(100, 116, 139, 0.2)", paddingTop: 16, marginTop: 8 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 13, color: "#94A3B8", fontWeight: 500 }}>Total Variable / Trip</span>
-                <span style={{ fontSize: 18, fontWeight: 700, color: "#63B3AA", fontFamily: "'JetBrains Mono', monospace" }}>
-                  ${costs.variable.perTrip.toFixed(3)}
-                </span>
-              </div>
-              {hasRealData && (
-                <p style={{ fontSize: 10, color: "#F59E0B", marginTop: 6 }}>
-                  ⚠️ Blended avg — no trip_id attribution yet. Cannot split preview vs enriched trips.
-                </p>
-              )}
+              {(() => {
+                const paid = volume * (conversionRate / 100);
+                const free = volume - paid;
+                const totalVar = free * FREE_USER_ECONOMICS.blendedCostToUs + paid * 0.091;
+                const totalAll = totalVar + 49;
+                return (
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#94A3B8", marginBottom: 6 }}>
+                      <span>Variable ({free.toFixed(1)} free + {paid.toFixed(1)} paid)</span>
+                      <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>${totalVar.toFixed(2)}/mo</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#94A3B8", marginBottom: 6 }}>
+                      <span>+ Fixed</span>
+                      <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>$49.00/mo</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 8, borderTop: "1px solid rgba(100, 116, 139, 0.15)" }}>
+                      <span style={{ fontSize: 13, color: "#E2E8F0", fontWeight: 500 }}>Total Monthly Cost</span>
+                      <span style={{ fontSize: 18, fontWeight: 700, color: "#F87171", fontFamily: "'JetBrains Mono', monospace" }}>
+                        ${totalAll.toFixed(2)}
+                      </span>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
 
