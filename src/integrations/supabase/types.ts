@@ -3770,6 +3770,72 @@ export type Database = {
           },
         ]
       }
+      page_events: {
+        Row: {
+          created_at: string
+          device_type: string | null
+          element_id: string | null
+          element_text: string | null
+          event_data: Json | null
+          event_type: string
+          id: string
+          page_path: string
+          page_title: string | null
+          referrer: string | null
+          scroll_depth: number | null
+          session_id: string
+          time_on_page_ms: number | null
+          user_id: string | null
+          utm_campaign: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          viewport_height: number | null
+          viewport_width: number | null
+        }
+        Insert: {
+          created_at?: string
+          device_type?: string | null
+          element_id?: string | null
+          element_text?: string | null
+          event_data?: Json | null
+          event_type: string
+          id?: string
+          page_path: string
+          page_title?: string | null
+          referrer?: string | null
+          scroll_depth?: number | null
+          session_id: string
+          time_on_page_ms?: number | null
+          user_id?: string | null
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          viewport_height?: number | null
+          viewport_width?: number | null
+        }
+        Update: {
+          created_at?: string
+          device_type?: string | null
+          element_id?: string | null
+          element_text?: string | null
+          event_data?: Json | null
+          event_type?: string
+          id?: string
+          page_path?: string
+          page_title?: string | null
+          referrer?: string | null
+          scroll_depth?: number | null
+          session_id?: string
+          time_on_page_ms?: number | null
+          user_id?: string | null
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          viewport_height?: number | null
+          viewport_width?: number | null
+        }
+        Relationships: []
+      }
       personalization_tag_stats: {
         Row: {
           completed_count: number | null
