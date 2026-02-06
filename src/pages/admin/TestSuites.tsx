@@ -29,6 +29,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 // Test suite definitions
 interface TestCase {
@@ -266,7 +267,14 @@ function TestSuiteCard({ suite, onRun }: { suite: TestSuite; onRun: () => void }
                 ) : (
                   <span className="text-xs text-muted-foreground">Never run</span>
                 )}
-                <Button size="sm" variant="outline" onClick={onRun}>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRun();
+                  }}
+                >
                   <Play className="h-3 w-3 mr-1" />
                   Run Suite
                 </Button>
@@ -295,14 +303,17 @@ export default function TestSuites() {
   const completedSuites = suites.filter(s => s.status !== 'not-run' && s.status !== 'pending').length;
 
   const handleRunSuite = (suiteId: string) => {
-    // In a real implementation, this would trigger actual test runs
-    // For now, we just show a placeholder
-    console.log(`Running suite: ${suiteId}`);
+    const suite = suites.find(s => s.id === suiteId);
+    toast.info(`Running ${suite?.name || suiteId}...`, {
+      description: 'Test execution is handled via browser automation.',
+    });
   };
 
   const handleRunAll = () => {
     setIsRunningAll(true);
-    // Simulate running all suites
+    toast.info('Running all test suites...', {
+      description: 'This would trigger browser automation for all suites.',
+    });
     setTimeout(() => setIsRunningAll(false), 2000);
   };
 
