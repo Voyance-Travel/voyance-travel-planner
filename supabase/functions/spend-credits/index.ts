@@ -13,8 +13,11 @@ const corsHeaders = {
 
 // Fixed credit costs
 const FIXED_COSTS: Record<string, number> = {
-  swap_activity: 15,
+  unlock_day: 90,
   regenerate_day: 90,
+  swap_activity: 15,
+  restaurant_rec: 15,
+  ai_message: 10,
 };
 
 // Variable-cost actions (cost passed from client, validated server-side)
