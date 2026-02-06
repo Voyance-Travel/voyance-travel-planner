@@ -1426,12 +1426,64 @@ export default function UnitEconomics() {
             border: "1px solid rgba(100, 116, 139, 0.2)",
           }}>
             <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 24, display: "flex", alignItems: "center", gap: 8 }}>
-              Variable Cost Breakdown · Scenario {scenario}
+              {hasRealData ? 'Actual Cost Breakdown' : 'Variable Cost Breakdown'} · {hasRealData ? `${VERIFIED_DATA.trips} trips` : `Scenario ${scenario}`}
             </h3>
 
-            {[
+            {/* Action-type breakdown from real tracking data */}
+            {hasRealData && realMetrics?.actionBreakdown ? (() => {
+              const actions = Object.entries(realMetrics.actionBreakdown)
+                .sort(([, a], [, b]) => b.cost - a.cost)
+                .filter(([, v]) => v.cost > 0 || v.count > 10);
+              const totalCost = actions.reduce((s, [, v]) => s + v.cost, 0);
+              const maxCost = Math.max(...actions.map(([, v]) => v.cost), 0.01);
+              const ACTION_COLORS: Record<string, string> = {
+                destination_images: "#4285F4",
+                hotels_search: "#F59E0B",
+                lookup_restaurant_url: "#06B6D4",
+                quick_preview: "#A855F7",
+                travel_dna: "#34D399",
+                parse_travel_story: "#EC4899",
+                viator_search: "#F97316",
+              };
+              const ACTION_LABELS: Record<string, string> = {
+                destination_images: "Destination & Activity Photos",
+                hotels_search: "Hotel Search",
+                lookup_restaurant_url: "Restaurant Lookup",
+                quick_preview: "Quick Preview (AI)",
+                travel_dna: "Travel DNA Quiz",
+                parse_travel_story: "Story Parser",
+                viator_search: "Viator Activities",
+              };
+              return actions.map(([action, data], i) => {
+                const perTrip = data.cost / VERIFIED_DATA.trips;
+                const pct = totalCost > 0 ? (data.cost / totalCost * 100) : 0;
+                const barWidth = (data.cost / maxCost) * 100;
+                const color = ACTION_COLORS[action] || "#64748B";
+                const label = ACTION_LABELS[action] || action;
+                return (
+                  <div key={action} style={{ marginBottom: 16 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: 3, background: color }} />
+                        <span style={{ fontSize: 13, color: "#CBD5E1" }}>{label}</span>
+                        <span style={{ fontSize: 9, background: "rgba(52, 211, 153, 0.15)", color: "#34D399", padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>LIVE</span>
+                      </div>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: "#F1F5F9", fontFamily: "'JetBrains Mono', monospace" }}>
+                        ${perTrip.toFixed(4)}
+                      </span>
+                    </div>
+                    <div style={{ height: 6, background: "rgba(30, 41, 59, 0.8)", borderRadius: 3, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${barWidth}%`, background: color, borderRadius: 3, transition: "width 0.3s ease" }} />
+                    </div>
+                    <p style={{ fontSize: 10, color: "#64748B", marginTop: 3 }}>
+                      {data.count} calls · ${data.cost.toFixed(4)} total · {pct.toFixed(1)}% of spend
+                    </p>
+                  </div>
+                );
+              });
+            })() : [
               { label: "Google Places", cost: costs.google.perTrip, color: "#4285F4", verified: scenario === 'A', note: scenarioConfig.caching ? "Post-cache estimate (-33%)" : "Verified: $30.82 ÷ 61 trips" },
-              { label: "Lovable AI (Gemini)", cost: costs.ai.perTrip, color: "#A855F7", verified: true, note: `${VERIFIED_DATA.services.lovableAI.calls} calls ÷ ${VERIFIED_DATA.trips} trips = ${VERIFIED_DATA.services.lovableAI.callsPerTrip} calls/trip` },
+              { label: "Lovable AI (Gemini)", cost: costs.ai.perTrip, color: "#A855F7", verified: true, note: `${VERIFIED_DATA.services.lovableAI.calls} calls ÷ ${VERIFIED_DATA.trips} trips` },
               { label: "Perplexity (Sonar)", cost: costs.perplexity.perTrip, color: "#06B6D4", verified: true, note: `${VERIFIED_DATA.services.perplexity.calls} calls × $${VERIFIED_DATA.services.perplexity.perCall}/call` },
               { label: "Amadeus Hotels", cost: costs.amadeus.perTrip, color: "#F59E0B", verified: false, note: scenarioConfig.amadeus ? (volume <= AMADEUS_FREE_TRIPS || scenarioConfig.amadeusWithinFree ? `Free tier (${AMADEUS_FREE_TRIPS} trips/mo)` : `${AMADEUS_CALLS_PER_TRIP} calls × $${AMADEUS_COST_PER_CALL} = $0.12/trip`) : "Not active" },
             ].map((item, i) => {
@@ -1461,14 +1513,16 @@ export default function UnitEconomics() {
 
             <div style={{ borderTop: "1px solid rgba(100, 116, 139, 0.2)", paddingTop: 16, marginTop: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 13, color: "#94A3B8", fontWeight: 500 }}>Total Variable</span>
+                <span style={{ fontSize: 13, color: "#94A3B8", fontWeight: 500 }}>Total Variable / Trip</span>
                 <span style={{ fontSize: 18, fontWeight: 700, color: "#63B3AA", fontFamily: "'JetBrains Mono', monospace" }}>
-                  ${costs.variable.perTrip.toFixed(4)}
+                  ${costs.variable.perTrip.toFixed(3)}
                 </span>
               </div>
-              <p style={{ fontSize: 11, color: "#64748B", marginTop: 4 }}>
-                Google = {costs.google.share.toFixed(0)}% of variable cost
-              </p>
+              {hasRealData && (
+                <p style={{ fontSize: 10, color: "#F59E0B", marginTop: 6 }}>
+                  ⚠️ Blended avg — no trip_id attribution yet. Cannot split preview vs enriched trips.
+                </p>
+              )}
             </div>
           </div>
 
@@ -1519,8 +1573,8 @@ export default function UnitEconomics() {
 
             {/* Fixed cost detail */}
             <div style={{ marginTop: 20, padding: 16, background: "rgba(15, 23, 42, 0.5)", borderRadius: 8 }}>
-              <p style={{ fontSize: 12, color: "#94A3B8", fontWeight: 500, marginBottom: 8 }}>
-                Fixed Costs · $29.08/mo
+            <p style={{ fontSize: 12, color: "#94A3B8", fontWeight: 500, marginBottom: 8 }}>
+                Fixed Costs · ${costs.fixed.total.toFixed(0)}/mo
               </p>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#64748B", marginBottom: 4 }}>
                 <span>Lovable Cloud</span>
@@ -1531,12 +1585,12 @@ export default function UnitEconomics() {
                 <span>$4.08</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#64748B", marginBottom: 4 }}>
-                <span>Email (Zoho)</span>
-                <span>$0.00</span>
+                <span>DevOps / Testing</span>
+                <span>$20.00</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#94A3B8", marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(100, 116, 139, 0.2)" }}>
                 <span>Per-trip allocation at {volume}/mo</span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>${costs.fixed.perTrip.toFixed(3)}</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>${costs.fixed.perTrip.toFixed(2)}</span>
               </div>
             </div>
           </div>
