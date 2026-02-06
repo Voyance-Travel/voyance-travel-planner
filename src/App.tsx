@@ -187,6 +187,7 @@ function AnimatedRoutes() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/profile/edit" element={<ProfileEdit />} />
           <Route path="/profile/settings" element={<Settings />} />
+          <Route path="/settings" element={<Navigate to="/profile/settings" replace />} />
           
           {/* Trip Planning Routes */}
           <Route path="/planner" element={<Navigate to="/start" replace />} />
