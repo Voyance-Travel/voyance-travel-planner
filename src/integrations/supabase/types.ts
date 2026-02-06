@@ -4526,6 +4526,115 @@ export type Database = {
           },
         ]
       }
+      trip_cities: {
+        Row: {
+          activity_cost_cents: number | null
+          arrival_date: string | null
+          city_name: string
+          city_order: number
+          country: string | null
+          created_at: string
+          days_generated: number | null
+          days_total: number | null
+          departure_date: string | null
+          destination_id: string | null
+          dining_cost_cents: number | null
+          generation_status: string
+          hotel_cost_cents: number | null
+          hotel_selection: Json | null
+          id: string
+          itinerary_data: Json | null
+          misc_cost_cents: number | null
+          nights: number | null
+          slug: string | null
+          total_cost_cents: number | null
+          transport_cost_cents: number | null
+          transport_currency: string | null
+          transport_details: Json | null
+          transport_type: string | null
+          trip_id: string
+          updated_at: string
+        }
+        Insert: {
+          activity_cost_cents?: number | null
+          arrival_date?: string | null
+          city_name: string
+          city_order?: number
+          country?: string | null
+          created_at?: string
+          days_generated?: number | null
+          days_total?: number | null
+          departure_date?: string | null
+          destination_id?: string | null
+          dining_cost_cents?: number | null
+          generation_status?: string
+          hotel_cost_cents?: number | null
+          hotel_selection?: Json | null
+          id?: string
+          itinerary_data?: Json | null
+          misc_cost_cents?: number | null
+          nights?: number | null
+          slug?: string | null
+          total_cost_cents?: number | null
+          transport_cost_cents?: number | null
+          transport_currency?: string | null
+          transport_details?: Json | null
+          transport_type?: string | null
+          trip_id: string
+          updated_at?: string
+        }
+        Update: {
+          activity_cost_cents?: number | null
+          arrival_date?: string | null
+          city_name?: string
+          city_order?: number
+          country?: string | null
+          created_at?: string
+          days_generated?: number | null
+          days_total?: number | null
+          departure_date?: string | null
+          destination_id?: string | null
+          dining_cost_cents?: number | null
+          generation_status?: string
+          hotel_cost_cents?: number | null
+          hotel_selection?: Json | null
+          id?: string
+          itinerary_data?: Json | null
+          misc_cost_cents?: number | null
+          nights?: number | null
+          slug?: string | null
+          total_cost_cents?: number | null
+          transport_cost_cents?: number | null
+          transport_currency?: string | null
+          transport_details?: Json | null
+          transport_type?: string | null
+          trip_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_cities_destination_id_fkey"
+            columns: ["destination_id"]
+            isOneToOne: false
+            referencedRelation: "destinations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_cities_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_cities_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_collaborators: {
         Row: {
           accepted_at: string | null
