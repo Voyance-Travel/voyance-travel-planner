@@ -341,7 +341,7 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
 
   // ---- USER METRICS ----
   const uniqueApiUsers = new Set(costEntries.filter(e => e.user_id).map(e => e.user_id));
-  let outstandingPurchased = 0, outstandingFree = 0;
+  
   
   // Count paid users from actual purchase transactions in ledger (not system-granted credits)
   const paidUsers = new Set(
@@ -351,8 +351,18 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
       .filter(Boolean)
   ).size;
   
+  // Outstanding credits: only count purchased_credits that are backed by real Stripe purchases
+  // System-generated test credits in credit_balances.purchased_credits don't count
+  const realPurchasedCreditsFromLedger = ledgerEntries
+    .filter(e => e.transaction_type === 'purchase' && (e.amount_cents || 0) > 0)
+    .reduce((sum, e) => sum + (e.credits_delta || 0), 0);
+  const realSpentPurchasedCredits = ledgerEntries
+    .filter(e => e.transaction_type === 'spend' && !e.is_free_credit)
+    .reduce((sum, e) => sum + Math.abs(e.credits_delta || 0), 0);
+  const outstandingPurchased = Math.max(0, realPurchasedCreditsFromLedger - realSpentPurchasedCredits);
+  
+  let outstandingFree = 0;
   for (const b of balances) {
-    outstandingPurchased += b.purchased_credits || 0;
     outstandingFree += b.free_credits || 0;
   }
 

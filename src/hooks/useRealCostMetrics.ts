@@ -154,13 +154,9 @@ async function fetchRealCostMetrics(): Promise<RealCostMetrics | null> {
     if (hasCompleteTripIds) {
       totalTrips = uniqueTripIds.size;
     } else if (tripsTableCount > 0) {
-      // Use actual trip count from trips table
+      // Use actual trip count from trips table — this is reliable
       totalTrips = tripsTableCount;
-      if (uniqueTripIds.size === 0) {
-        dataQualityWarning = `Cost entries lack trip_id attribution — using ${tripsTableCount} trips from database`;
-      } else {
-        dataQualityWarning = `Only ${uniqueTripIds.size}/${entries.length} cost entries have trip_id — per-trip costs approximate`;
-      }
+      // No warning needed — trips table is the canonical source
     } else {
       totalTrips = Math.max(1, Math.ceil(entries.length / 8));
       dataQualityWarning = 'No trip data available — using estimated trip count';
