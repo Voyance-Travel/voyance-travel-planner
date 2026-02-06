@@ -311,6 +311,8 @@ export default function UnitEconomics() {
   const [conversionRate, setConversionRate] = useState(2); // % of trips that convert to paid (niche product baseline)
   const [revenueMix, setRevenueMix] = useState<keyof typeof REVENUE_MIX_PRESETS>('conservative');
   const [viewMode, setViewMode] = useState<'itinerary' | 'lifecycle'>('lifecycle');
+  const [insightsOpen, setInsightsOpen] = useState(false);
+  const [dismissedInsights, setDismissedInsights] = useState<Set<string>>(new Set());
   
   // Fetch real data from trip_cost_tracking table
   const { data: realMetrics, isLoading: metricsLoading, isError: metricsError } = useRealCostMetrics();
@@ -1075,133 +1077,159 @@ export default function UnitEconomics() {
           ))}
         </div>
 
-        {/* Insights & Opportunities Panel */}
-        {insights.length > 0 && (
-          <div style={{
-            background: "rgba(30, 41, 59, 0.5)",
-            borderRadius: 12,
-            padding: "24px 28px",
-            border: "1px solid rgba(100, 116, 139, 0.2)",
-            marginBottom: 32,
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 20 }}>🔍</span>
-                <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", margin: 0 }}>
-                    Live Insights & Opportunities
-                  </h3>
-                  <p style={{ fontSize: 11, color: "#64748B", margin: "4px 0 0" }}>
-                    Auto-detected based on real tracking data + current scenario
-                  </p>
+        {/* Insights & Opportunities Panel - Collapsible */}
+        {(() => {
+          const activeInsights = insights.filter(i => !dismissedInsights.has(i.title));
+          const leakCount = activeInsights.filter(i => i.type === 'leak').length;
+          const warningCount = activeInsights.filter(i => i.type === 'warning').length;
+          const oppCount = activeInsights.filter(i => i.type === 'opportunity').length;
+          const successCount = activeInsights.filter(i => i.type === 'success').length;
+          const actionableCount = leakCount + warningCount + oppCount;
+          
+          if (activeInsights.length === 0) return null;
+          
+          const INSIGHT_STYLES: Record<string, { bg: string; border: string; icon: string; accent: string }> = {
+            leak: { bg: "rgba(239, 68, 68, 0.08)", border: "#EF4444", icon: "🚨", accent: "#EF4444" },
+            warning: { bg: "rgba(245, 158, 11, 0.08)", border: "#F59E0B", icon: "⚠️", accent: "#F59E0B" },
+            opportunity: { bg: "rgba(56, 189, 248, 0.08)", border: "#38BDF8", icon: "💡", accent: "#38BDF8" },
+            success: { bg: "rgba(52, 211, 153, 0.08)", border: "#34D399", icon: "✓", accent: "#34D399" },
+          };
+          
+          const groupOrder: Array<'leak' | 'warning' | 'opportunity' | 'success'> = ['leak', 'warning', 'opportunity', 'success'];
+          const groupLabels: Record<string, string> = { leak: 'Leaks', warning: 'Warnings', opportunity: 'Opportunities', success: 'Resolved' };
+          
+          return (
+            <div style={{
+              background: "rgba(30, 41, 59, 0.4)",
+              borderRadius: 12,
+              border: "1px solid rgba(100, 116, 139, 0.15)",
+              marginBottom: 32,
+              overflow: "hidden",
+            }}>
+              {/* Clickable Header */}
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); setInsightsOpen(!insightsOpen); }}
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "16px 24px",
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  transition: "background 0.15s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(100, 116, 139, 0.08)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 14, transition: "transform 0.2s", transform: insightsOpen ? "rotate(90deg)" : "rotate(0deg)", color: "#64748B" }}>▶</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#CBD5E1" }}>Insights</span>
+                  {actionableCount > 0 && (
+                    <span style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      padding: "2px 7px",
+                      borderRadius: 10,
+                      background: leakCount > 0 ? "rgba(239, 68, 68, 0.25)" : "rgba(245, 158, 11, 0.25)",
+                      color: leakCount > 0 ? "#EF4444" : "#F59E0B",
+                    }}>
+                      {actionableCount}
+                    </span>
+                  )}
                 </div>
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <span style={{ 
-                  fontSize: 10, 
-                  padding: "4px 8px", 
-                  borderRadius: 4, 
-                  background: "rgba(239, 68, 68, 0.2)", 
-                  color: "#EF4444",
-                  fontWeight: 600,
-                }}>
-                  {insights.filter(i => i.type === 'leak').length} Leaks
-                </span>
-                <span style={{ 
-                  fontSize: 10, 
-                  padding: "4px 8px", 
-                  borderRadius: 4, 
-                  background: "rgba(245, 158, 11, 0.2)", 
-                  color: "#F59E0B",
-                  fontWeight: 600,
-                }}>
-                  {insights.filter(i => i.type === 'warning').length} Warnings
-                </span>
-                <span style={{ 
-                  fontSize: 10, 
-                  padding: "4px 8px", 
-                  borderRadius: 4, 
-                  background: "rgba(56, 189, 248, 0.2)", 
-                  color: "#38BDF8",
-                  fontWeight: 600,
-                }}>
-                  {insights.filter(i => i.type === 'opportunity').length} Opportunities
-                </span>
-                <span style={{ 
-                  fontSize: 10, 
-                  padding: "4px 8px", 
-                  borderRadius: 4, 
-                  background: "rgba(52, 211, 153, 0.2)", 
-                  color: "#34D399",
-                  fontWeight: 600,
-                }}>
-                  {insights.filter(i => i.type === 'success').length} ✓
-                </span>
-              </div>
-            </div>
-
-            <div style={{ display: "grid", gap: 12 }}>
-              {insights.map((insight, i) => {
-                const INSIGHT_STYLES: Record<string, { bg: string; border: string; icon: string; accent: string }> = {
-                  leak: { bg: "rgba(239, 68, 68, 0.1)", border: "#EF4444", icon: "🚨", accent: "#EF4444" },
-                  warning: { bg: "rgba(245, 158, 11, 0.1)", border: "#F59E0B", icon: "⚠️", accent: "#F59E0B" },
-                  opportunity: { bg: "rgba(56, 189, 248, 0.1)", border: "#38BDF8", icon: "💡", accent: "#38BDF8" },
-                  success: { bg: "rgba(52, 211, 153, 0.1)", border: "#34D399", icon: "✓", accent: "#34D399" },
-                };
-                const style = INSIGHT_STYLES[insight.type];
-                
-                return (
-                  <div 
-                    key={i}
-                    style={{
-                      background: style.bg,
-                      borderRadius: 8,
-                      padding: 16,
-                      borderLeft: `4px solid ${style.border}`,
-                      display: "grid",
-                      gridTemplateColumns: "auto 1fr auto",
-                      gap: 16,
-                      alignItems: "start",
-                    }}
-                  >
-                    <span style={{ fontSize: 18 }}>{style.icon}</span>
-                    <div>
-                      <p style={{ fontSize: 13, fontWeight: 600, color: "#E2E8F0", margin: "0 0 4px" }}>
-                        {insight.title}
-                      </p>
-                      <p style={{ fontSize: 11, color: "#94A3B8", margin: "0 0 8px", lineHeight: 1.5 }}>
-                        {insight.description}
-                      </p>
-                      {insight.action && (
-                        <p style={{ 
-                          fontSize: 11, 
-                          color: style.accent, 
-                          margin: 0, 
-                          padding: "6px 10px",
-                          background: "rgba(15, 23, 42, 0.5)",
-                          borderRadius: 4,
-                          display: "inline-block",
-                        }}>
-                          <strong>→</strong> {insight.action}
+                <div style={{ display: "flex", gap: 6 }}>
+                  {leakCount > 0 && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: "rgba(239, 68, 68, 0.15)", color: "#EF4444", fontWeight: 600 }}>{leakCount} leak{leakCount > 1 ? 's' : ''}</span>}
+                  {warningCount > 0 && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: "rgba(245, 158, 11, 0.15)", color: "#F59E0B", fontWeight: 600 }}>{warningCount} warn</span>}
+                  {oppCount > 0 && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: "rgba(56, 189, 248, 0.15)", color: "#38BDF8", fontWeight: 600 }}>{oppCount} opp</span>}
+                  {successCount > 0 && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: "rgba(52, 211, 153, 0.15)", color: "#34D399", fontWeight: 600 }}>{successCount} ✓</span>}
+                </div>
+              </button>
+              
+              {/* Collapsible Content */}
+              {insightsOpen && (
+                <div style={{ padding: "0 24px 20px" }}>
+                  {groupOrder.map(groupType => {
+                    const groupItems = activeInsights.filter(i => i.type === groupType);
+                    if (groupItems.length === 0) return null;
+                    const gs = INSIGHT_STYLES[groupType];
+                    
+                    return (
+                      <div key={groupType} style={{ marginBottom: 16 }}>
+                        <p style={{ fontSize: 10, fontWeight: 600, color: gs.accent, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 8px", opacity: 0.8 }}>
+                          {groupLabels[groupType]}
                         </p>
-                      )}
-                    </div>
-                    <div style={{ textAlign: "right" }}>
-                      <span style={{ 
-                        fontSize: 12, 
-                        fontWeight: 700, 
-                        color: style.accent,
-                        fontFamily: "'JetBrains Mono', monospace",
-                      }}>
-                        {insight.impact}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
+                        <div style={{ display: "grid", gap: 6 }}>
+                          {groupItems.map((insight, i) => (
+                            <div
+                              key={i}
+                              style={{
+                                background: gs.bg,
+                                borderRadius: 8,
+                                padding: "12px 14px",
+                                borderLeft: `3px solid ${gs.border}`,
+                                display: "flex",
+                                alignItems: "flex-start",
+                                gap: 10,
+                                position: "relative",
+                              }}
+                            >
+                              <span style={{ fontSize: 14, lineHeight: 1, marginTop: 1 }}>{gs.icon}</span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                                  <p style={{ fontSize: 12, fontWeight: 600, color: "#E2E8F0", margin: 0 }}>{insight.title}</p>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: gs.accent, fontFamily: "'JetBrains Mono', monospace", whiteSpace: "nowrap", flexShrink: 0 }}>{insight.impact}</span>
+                                </div>
+                                <p style={{ fontSize: 11, color: "#94A3B8", margin: "3px 0 0", lineHeight: 1.4 }}>{insight.description}</p>
+                                {insight.action && (
+                                  <p style={{ fontSize: 10, color: gs.accent, margin: "6px 0 0", padding: "4px 8px", background: "rgba(15, 23, 42, 0.4)", borderRadius: 4, display: "inline-block", opacity: 0.9 }}>
+                                    → {insight.action}
+                                  </p>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setDismissedInsights(prev => new Set([...prev, insight.title])); }}
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  color: "#475569",
+                                  cursor: "pointer",
+                                  fontSize: 14,
+                                  padding: "2px 4px",
+                                  borderRadius: 4,
+                                  lineHeight: 1,
+                                  flexShrink: 0,
+                                  transition: "color 0.15s",
+                                }}
+                                onMouseEnter={(e) => (e.currentTarget.style.color = "#94A3B8")}
+                                onMouseLeave={(e) => (e.currentTarget.style.color = "#475569")}
+                                title="Dismiss"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {dismissedInsights.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setDismissedInsights(new Set())}
+                      style={{ fontSize: 10, color: "#475569", background: "none", border: "none", cursor: "pointer", padding: "4px 0", marginTop: 4 }}
+                    >
+                      Reset {dismissedInsights.size} dismissed
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Controls - 2x2 Grid */}
         <div style={{ 
