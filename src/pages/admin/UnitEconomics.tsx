@@ -265,15 +265,15 @@ const ACTION_COSTS = {
 // Column definitions with tooltips for per-trip scaling table (now includes free user economics)
 const SCALE_COLUMNS = [
   { key: "trips", label: "Total Trips", tooltip: "Total monthly trip volume (paid + free users combined)." },
-  { key: "paid", label: "Paid", tooltip: "Number of paying users based on conversion rate slider. Formula: Total × Conversion %." },
-  { key: "free", label: "Free", tooltip: "Number of free users who generate Full Preview (real venues, gated details). Formula: Total × (100% - Conversion %)." },
-  { key: "freeCost", label: "Free Var $", tooltip: `Variable cost of free users under 'Full Preview, No Details' model. Each preview costs ~$${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(2)} (AI + light venue validation).` },
-  { key: "cogs", label: "Paid COGS", tooltip: "Tier-weighted cost per paid user based on Revenue Mix. Uses each tier's Usage Pattern → True Cost (days unlocked, swaps, AI messages) weighted by mix %. Scenario-adjusted for caching/Amadeus." },
-  { key: "blended", label: "Blended/Trip", tooltip: "All-in cost per trip = Total Cost ÷ Trips. Reflects actual mix of free previews ($0.10), tier-based paid costs, and fixed overhead. Matches Net Profit math." },
-  { key: "revenue", label: "Revenue", tooltip: "Total monthly revenue from paying users only. Formula: Paid Users × Blended AOV (based on revenue mix)." },
-  { key: "totalCost", label: "Total Cost", tooltip: "INCLUDES ALL FIXED COSTS. Formula: (Free Variable + Paid Variable) + $49 fixed (Cloud + Domain + DevOps). This is your REAL monthly burn." },
-  { key: "netProfit", label: "Net Profit", tooltip: "Revenue minus ALL costs (variable + fixed). Formula: Revenue - Total Cost. This is what hits your bank account." },
-  { key: "realMargin", label: "Real Margin", tooltip: "True margin after ALL costs including fixed overhead. Formula: Net Profit / Revenue. Much lower than per-tier margins." },
+  { key: "paid", label: "Paid", tooltip: "Number of paying users. Formula: Total × Conversion %." },
+  { key: "free", label: "Free", tooltip: "Non-paying users. Formula: Total - Paid." },
+  { key: "freeCost", label: "Free Var $", tooltip: `Variable cost of serving all free users. Formula: Free × $${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(3)}.` },
+  { key: "paidCost", label: "Paid Var $", tooltip: "Variable cost of serving all paid users. Formula: Paid × $0.091 (observed production cost)." },
+  { key: "blended", label: "Blended/Trip", tooltip: "All-in cost per trip = Total Cost ÷ Total Trips." },
+  { key: "revenue", label: "Revenue", tooltip: "Revenue from paying users. Formula: Paid × Blended AOV." },
+  { key: "totalCost", label: "Total Cost", tooltip: "Free Var $ + Paid Var $ + $49 Fixed. This is your real monthly burn." },
+  { key: "netProfit", label: "Net Profit", tooltip: "Revenue - Total Cost. What hits your bank account." },
+  { key: "realMargin", label: "Margin", tooltip: "Net Profit ÷ Revenue × 100." },
 ];
 
 
@@ -1109,22 +1109,23 @@ export default function UnitEconomics() {
         {/* Hero Metrics - Context-aware based on view mode */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 32 }}>
           {(viewMode === 'itinerary' ? (() => {
-            // Use tier-weighted cost model — same as scale table
-            const freeTrips = volume - costs.payingTrips;
-            const freeVarCost = freeTrips * FREE_USER_ECONOMICS.blendedCostToUs;
-            const paidVarCost = costs.payingTrips * blendedCostPerUser;
-            const totalVarCost = freeVarCost + paidVarCost;
-            const totalMonthlyCost = totalVarCost + costs.fixed.total;
-            const blendedAllUserCost = totalVarCost / volume;
-            const breakEven = (FREE_USER_ECONOMICS.blendedCostToUs / (blendedAOV * 0.97) * 100);
-            console.log('[UnitEcon] revenueMix:', revenueMix, 'blendedCostPerUser:', blendedCostPerUser, 'paidVarCost:', paidVarCost, 'totalMonthlyCost:', totalMonthlyCost);
+            // CLEAN FLAT-RATE MODEL: same formulas as the scale table
+            const PAID_COST = 0.091;
+            const FREE_COST = FREE_USER_ECONOMICS.blendedCostToUs;
+            const paid = volume * (conversionRate / 100);
+            const free = volume - paid;
+            const freeVarCost = free * FREE_COST;
+            const paidVarCost = paid * PAID_COST;
+            const totalCost = freeVarCost + paidVarCost + costs.fixed.total;
+            const blendedAllUserCost = (freeVarCost + paidVarCost) / volume;
+            const breakEvenTrips = Math.ceil(costs.fixed.total / (blendedAOV * (conversionRate / 100) - FREE_COST));
             return [
-              { label: "Full Trip Cost", value: `$${costs.variable.perTrip.toFixed(3)}`, sub: `Observed across ${VERIFIED_DATA.trips} trips`, accent: "#38BDF8", icon: "📍" },
-              { label: "Free User Cost", value: `$${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(3)}`, sub: `150cr → 1 day + 4 swaps`, accent: "#F87171", icon: "🆓" },
-              { label: "Paid User Cost", value: `$${blendedCostPerUser.toFixed(3)}`, sub: `${REVENUE_MIX_PRESETS[revenueMix].label} mix weighted`, accent: "#A78BFA", icon: "💳" },
-              { label: "Blended / User", value: `$${blendedAllUserCost.toFixed(3)}`, sub: `Break-even at ${breakEven.toFixed(1)}% conversion`, accent: "#34D399", icon: "⚖" },
-              { label: "Fixed / Trip", value: `$${costs.fixed.perTrip.toFixed(2)}`, sub: `$${costs.fixed.total.toFixed(0)}/mo at ${volume} trips`, accent: "#F59E0B", icon: "🏗" },
-              { label: "Monthly Burn", value: `$${totalMonthlyCost.toFixed(2)}`, sub: `Free $${freeVarCost.toFixed(2)} + Paid $${paidVarCost.toFixed(2)} + Fixed $${costs.fixed.total.toFixed(0)}`, accent: "#F87171", icon: "🔥" },
+              { label: "Free User Cost", value: `$${FREE_COST.toFixed(3)}`, sub: `150cr → 1 day + 4 swaps`, accent: "#F87171", icon: "🆓" },
+              { label: "Paid Trip Cost", value: `$${PAID_COST.toFixed(3)}`, sub: `Observed production cost`, accent: "#38BDF8", icon: "💳" },
+              { label: "Blended / Trip", value: `$${blendedAllUserCost.toFixed(3)}`, sub: `${conversionRate}% conversion weighted`, accent: "#34D399", icon: "⚖" },
+              { label: "Fixed / Trip", value: `$${costs.fixed.perTrip.toFixed(2)}`, sub: `$${costs.fixed.total.toFixed(0)}/mo ÷ ${volume} trips`, accent: "#F59E0B", icon: "🏗" },
+              { label: "Monthly Burn", value: `$${totalCost.toFixed(2)}`, sub: `Free $${freeVarCost.toFixed(2)} + Paid $${paidVarCost.toFixed(2)} + Fixed $${costs.fixed.total.toFixed(0)}`, accent: "#F87171", icon: "🔥" },
+              { label: "Break-even", value: `${breakEvenTrips} trips`, sub: `To cover $${costs.fixed.total.toFixed(0)} fixed @ ${conversionRate}%`, accent: "#A78BFA", icon: "📍" },
             ];
           })() : [
             { label: "Blended Margin", value: `${costs.blendedMargin.toFixed(1)}%`, sub: `${conversionRate}% convert @ $${blendedAOV.toFixed(2)} avg`, accent: costs.blendedMargin > 50 ? "#34D399" : costs.blendedMargin > 0 ? "#FBBF24" : "#F87171", icon: "📊" },
@@ -1741,38 +1742,24 @@ export default function UnitEconomics() {
             </thead>
             <tbody>
               {scalePoints.map((vol) => {
-                // Tier-weighted paid user COGS (uses Revenue Mix × Tier Usage Pattern)
-                const paidUserCost = blendedCostPerUser; // From tier mix calculation (scenario-aware)
-
-                // Fixed costs
+                // CLEAN FORMULAS — flat observed rates, exactly as specified
+                const FREE_COST_PER_USER = FREE_USER_ECONOMICS.blendedCostToUs; // $0.054
+                const PAID_COST_PER_USER = 0.091; // Observed production cost per paid trip
                 const TOTAL_FIXED = 49;
-                const fixedPer = TOTAL_FIXED / vol;
-                
-                // Free user economics - CREDIT-CONSTRAINED
-                // Free users get 150 credits/month → can only unlock 1 day MAX
-                // This costs us ~$0.065-$0.08, NOT $0.42 (which assumes 7-day trip)
-                const paidUsers = Math.round(vol * (conversionRate / 100));
-                const freeUsers = vol - paidUsers;
-                const freeUserCost = FREE_USER_ECONOMICS.blendedCostToUs; // ~$0.076
-                const freeCost = freeUsers * freeUserCost;
-                
-                // Paid users: tier-weighted cost from Revenue Mix
-                const paidCost = paidUsers * paidUserCost;
-                
-                // Total variable cost = free users (credit-limited) + paid users (tier-based)
-                const totalVariableCost = freeCost + paidCost;
-                
-                // Revenue from paying users
-                const revenue = paidUsers * blendedAOV;
-                const totalCost = totalVariableCost + TOTAL_FIXED; // Variable + ALL fixed
-                const netProfit = revenue - totalCost;
-                const realMargin = revenue > 0 ? (netProfit / revenue) * 100 : -100;
 
-                // Blended all-in cost per trip (matches Total Cost / Net Profit)
+                const paid = vol * (conversionRate / 100);
+                const free = vol - paid;
+                const freeVarCost = free * FREE_COST_PER_USER;
+                const paidVarCost = paid * PAID_COST_PER_USER;
+                const totalCost = freeVarCost + paidVarCost + TOTAL_FIXED;
+                const revenue = paid * blendedAOV;
+                const netProfit = revenue - totalCost;
+                const margin = revenue > 0 ? (netProfit / revenue) * 100 : -100;
                 const blendedCostPerTrip = totalCost / vol;
 
                 const isAmadeusThreshold = vol === 400;
                 const isKeyVolume = vol === 100 || vol === 500 || vol === 1000;
+                const isCurrentVolume = vol === volume;
                 
                 const getMarginColor = (m: number) => {
                   if (m >= 50) return "#34D399";
@@ -1781,108 +1768,40 @@ export default function UnitEconomics() {
                   return "#EF4444";
                 };
 
-                const isCurrentVolume = vol === volume;
-
                 return (
                   <tr key={vol} style={{ 
                     background: isCurrentVolume ? "rgba(99, 179, 170, 0.15)" : isAmadeusThreshold ? "rgba(245, 158, 11, 0.08)" : isKeyVolume ? "rgba(99, 179, 170, 0.05)" : "transparent",
                     outline: isCurrentVolume ? "1px solid rgba(99, 179, 170, 0.4)" : "none",
                   }}>
-                    <td style={{ 
-                      padding: "10px 12px", 
-                      color: "#E2E8F0", 
-                      fontWeight: 600,
-                      borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
-                    }}>
+                    <td style={{ padding: "10px 12px", color: "#E2E8F0", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                       {vol.toLocaleString()}{isCurrentVolume ? " ◀" : ""}{isAmadeusThreshold ? " ⚠️" : ""}
                     </td>
-                    <td style={{ 
-                      padding: "10px 12px", 
-                      color: "#34D399", 
-                      textAlign: "right",
-                      fontFamily: "'JetBrains Mono', monospace",
-                      borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
-                    }}>
-                      {paidUsers.toLocaleString()}
+                    <td style={{ padding: "10px 12px", color: "#34D399", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                      {paid % 1 === 0 ? paid.toFixed(0) : paid.toFixed(1)}
                     </td>
-                    <td style={{ 
-                      padding: "10px 12px", 
-                      color: "#F87171", 
-                      textAlign: "right",
-                      fontFamily: "'JetBrains Mono', monospace",
-                      borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
-                    }}>
-                      {freeUsers.toLocaleString()}
+                    <td style={{ padding: "10px 12px", color: "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                      {free % 1 === 0 ? free.toFixed(0) : free.toFixed(1)}
                     </td>
-                    <td style={{ 
-                      padding: "10px 12px", 
-                      color: "#F87171", 
-                      textAlign: "right",
-                      fontFamily: "'JetBrains Mono', monospace",
-                      fontWeight: 600,
-                      borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
-                    }}>
-                      -${freeCost.toFixed(0)}
+                    <td style={{ padding: "10px 12px", color: "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                      ${freeVarCost.toFixed(2)}
                     </td>
-                    {/* COGS/Trip = worst-case full itinerary generation */}
-                    <td style={{ 
-                      padding: "10px 12px", 
-                      color: "#64748B", 
-                      textAlign: "right",
-                      fontFamily: "'JetBrains Mono', monospace",
-                      fontSize: 11,
-                      borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
-                    }}>
-                      ${(paidUserCost + fixedPer).toFixed(2)}
+                    <td style={{ padding: "10px 12px", color: "#64748B", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontSize: 11, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                      ${paidVarCost.toFixed(2)}
                     </td>
-                    {/* Blended/Trip = what matches Net Profit math */}
-                    <td style={{ 
-                      padding: "10px 12px", 
-                      color: "#E2E8F0", 
-                      textAlign: "right",
-                      fontFamily: "'JetBrains Mono', monospace",
-                      fontWeight: 600,
-                      borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
-                    }}>
+                    <td style={{ padding: "10px 12px", color: "#E2E8F0", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                       ${blendedCostPerTrip.toFixed(2)}
                     </td>
-                    <td style={{ 
-                      padding: "10px 12px", 
-                      color: "#34D399", 
-                      textAlign: "right",
-                      fontFamily: "'JetBrains Mono', monospace",
-                      borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
-                    }}>
+                    <td style={{ padding: "10px 12px", color: "#34D399", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                       ${revenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </td>
-                    <td style={{ 
-                      padding: "10px 12px", 
-                      color: "#F87171", 
-                      textAlign: "right",
-                      fontFamily: "'JetBrains Mono', monospace",
-                      borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
-                    }}>
+                    <td style={{ padding: "10px 12px", color: "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                       -${totalCost.toFixed(0)}
                     </td>
-                    <td style={{ 
-                      padding: "10px 12px", 
-                      color: netProfit > 0 ? "#34D399" : "#EF4444", 
-                      textAlign: "right",
-                      fontFamily: "'JetBrains Mono', monospace",
-                      fontWeight: 600,
-                      borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
-                    }}>
+                    <td style={{ padding: "10px 12px", color: netProfit > 0 ? "#34D399" : "#EF4444", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                       {netProfit >= 0 ? "$" : "-$"}{Math.abs(netProfit).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </td>
-                    <td style={{ 
-                      padding: "10px 12px", 
-                      color: getMarginColor(realMargin), 
-                      textAlign: "right",
-                      fontFamily: "'JetBrains Mono', monospace",
-                      fontWeight: 600,
-                      borderBottom: "1px solid rgba(30, 41, 59, 0.5)",
-                    }}>
-                      {realMargin.toFixed(0)}%
+                    <td style={{ padding: "10px 12px", color: getMarginColor(margin), textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                      {margin.toFixed(0)}%
                     </td>
                   </tr>
                 );
@@ -1892,10 +1811,13 @@ export default function UnitEconomics() {
           
           <div style={{ marginTop: 16, padding: 12, background: "rgba(245, 158, 11, 0.1)", borderRadius: 8, borderLeft: "3px solid #F59E0B" }}>
             <p style={{ fontSize: 11, color: "#94A3B8", margin: 0, lineHeight: 1.6 }}>
-              <strong style={{ color: "#F59E0B" }}>📋 Credit-Constrained Model:</strong> Free users consume 150cr → 1 day + 4 swaps = <strong style={{ color: "#F59E0B" }}>~${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(3)}</strong> API cost.
-              Full enriched trip: <strong style={{ color: "#38BDF8" }}>$0.091</strong> (actual observed).
-              Break-even conversion: <strong style={{ color: "#34D399" }}>{(FREE_USER_ECONOMICS.blendedCostToUs / (blendedAOV * 0.97) * 100).toFixed(1)}%</strong>.
-              Blended paid user cost at <strong style={{ color: "#A78BFA" }}>{REVENUE_MIX_PRESETS[revenueMix].label}</strong> mix: <strong style={{ color: "#F59E0B" }}>${blendedCostPerUser.toFixed(3)}</strong>.
+              <strong style={{ color: "#F59E0B" }}>Formulas:</strong>{" "}
+              Paid = Total × {conversionRate}% · Free = Total - Paid · 
+              Free Var = Free × <strong style={{ color: "#F59E0B" }}>${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(3)}</strong> · 
+              Paid Var = Paid × <strong style={{ color: "#38BDF8" }}>$0.091</strong> · 
+              Fixed = <strong>$49</strong> · 
+              Revenue = Paid × <strong style={{ color: "#34D399" }}>${blendedAOV.toFixed(2)}</strong> AOV · 
+              Break-even ≈ <strong style={{ color: "#34D399" }}>{Math.ceil(49 / (blendedAOV * (conversionRate / 100) - FREE_USER_ECONOMICS.blendedCostToUs))} trips</strong>
             </p>
           </div>
         </div>
