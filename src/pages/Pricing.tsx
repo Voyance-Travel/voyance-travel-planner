@@ -366,57 +366,7 @@ export default function Pricing() {
             </p>
           </motion.div>
 
-          {/* Pricing Formula */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="bg-card border border-border rounded-2xl p-5 sm:p-6 mb-6"
-          >
-            <h3 className="font-semibold text-foreground text-sm mb-4">Trip Generation</h3>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground">Base rate</span>
-                <span className="font-medium text-foreground">{BASE_RATE_PER_DAY} credits / day</span>
-              </div>
-              <div className="border-t border-border pt-3">
-                <p className="text-xs font-medium text-muted-foreground mb-2">Multi-city fees</p>
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div className="bg-muted/50 rounded-lg p-2 text-center">
-                    <p className="font-medium text-foreground">2 cities</p>
-                    <p className="text-muted-foreground">+60</p>
-                  </div>
-                  <div className="bg-muted/50 rounded-lg p-2 text-center">
-                    <p className="font-medium text-foreground">3 cities</p>
-                    <p className="text-muted-foreground">+120</p>
-                  </div>
-                  <div className="bg-muted/50 rounded-lg p-2 text-center">
-                    <p className="font-medium text-foreground">4+ cities</p>
-                    <p className="text-muted-foreground">+180 (cap)</p>
-                  </div>
-                </div>
-              </div>
-              <div className="border-t border-border pt-3">
-                <p className="text-xs font-medium text-muted-foreground mb-2">Complexity tiers</p>
-                <div className="space-y-2 text-xs">
-                  {Object.entries(COMPLEXITY_TIERS).map(([key, tier]) => (
-                    <div key={key} className="flex justify-between items-center">
-                      <span className="text-muted-foreground">
-                        {tier.label} ({tier.minFactors}–{tier.maxFactors === Infinity ? '∞' : tier.maxFactors} factors)
-                      </span>
-                      <span className="font-medium text-foreground">×{tier.multiplier.toFixed(2)}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex items-start gap-2 mt-3 p-2 bg-primary/5 rounded-lg">
-                  <Info className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
-                  <p className="text-[11px] text-muted-foreground">
-                    Accessibility needs are always free, no upcharge, ever. Vegetarian alone doesn't count as a complexity factor.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </motion.div>
+
 
         </div>
       </section>
