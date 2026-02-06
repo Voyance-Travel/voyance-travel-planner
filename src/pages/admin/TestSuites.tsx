@@ -305,10 +305,12 @@ function TestSuiteCard({
                   <span className="text-xs text-muted-foreground">Never run</span>
                 )}
                 <Button 
+                  type="button"
                   size="sm" 
                   variant="outline" 
                   disabled={isRunning}
                   onClick={(e) => {
+                    e.preventDefault();
                     e.stopPropagation();
                     onRun();
                   }}
@@ -400,7 +402,10 @@ export default function TestSuites() {
                 </p>
               </div>
             </div>
-            <Button onClick={handleRunAll} disabled={isRunningAll}>
+            <Button type="button" onClick={(e) => {
+              e.preventDefault();
+              handleRunAll();
+            }} disabled={isRunningAll}>
               {isRunningAll ? (
                 <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
               ) : (
