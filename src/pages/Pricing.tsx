@@ -418,61 +418,6 @@ export default function Pricing() {
             </div>
           </motion.div>
 
-          {/* Add-On Costs */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="bg-card border border-border rounded-2xl p-5 sm:p-6 mb-6"
-          >
-            <h3 className="font-semibold text-foreground text-sm mb-4">Add-ons & Actions</h3>
-            <div className="space-y-2 text-sm">
-              {[
-                { label: 'Hotel search', cost: '40 / city', desc: 'Matched to your budget and preferences' },
-                { label: 'Day regeneration', cost: '90', desc: 'Rebuild a day with fresh recommendations' },
-                { label: 'Activity swap', cost: '15', desc: 'Replace one activity with a curated alternative' },
-                { label: 'PDF export', cost: 'Free', desc: 'Download your full itinerary' },
-                { label: 'Trip sharing', cost: 'Free', desc: 'Share with friends and co-edit' },
-                { label: 'Route optimization', cost: 'Free', desc: 'Activities ordered for efficient routing' },
-              ].map((item, i) => (
-                <div key={i} className="flex items-center justify-between py-1.5">
-                  <div>
-                    <p className="font-medium text-foreground">{item.label}</p>
-                    <p className="text-xs text-muted-foreground">{item.desc}</p>
-                  </div>
-                  <span className={cn(
-                    "text-sm font-medium shrink-0 ml-4",
-                    item.cost === 'Free' ? 'text-primary' : 'text-foreground'
-                  )}>
-                    {item.cost === 'Free' ? 'Free' : `${item.cost} credits`}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-
-          {/* Example Trip Costs */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="bg-card border border-border rounded-2xl overflow-hidden"
-          >
-            <div className="p-5 sm:p-6 pb-3">
-              <h3 className="font-semibold text-foreground text-sm">Example trip costs</h3>
-            </div>
-            <div className="divide-y divide-border">
-              {EXAMPLE_TRIP_COSTS.map((example, i) => (
-                <div key={i} className="flex items-center justify-between px-5 sm:px-6 py-3">
-                  <span className="text-sm text-muted-foreground">{example.label}</span>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="font-medium text-foreground text-sm">{formatCredits(example.credits)}</span>
-                    <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">{example.pack}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
         </div>
       </section>
 
@@ -630,25 +575,6 @@ export default function Pricing() {
         </div>
       </section>
 
-      {/* Guarantee */}
-      <section className="py-10 sm:py-12 bg-muted/30">
-        <div className="max-w-2xl mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="bg-primary/5 border border-primary/20 rounded-2xl p-6 sm:p-8 text-center"
-          >
-            <ShieldCheck className="w-10 h-10 text-primary mx-auto mb-4" />
-            <h3 className="text-lg sm:text-xl font-serif font-medium text-foreground mb-2">
-              Not worth it? We'll make it right.
-            </h3>
-            <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
-              If your itinerary doesn't meet expectations, contact us within 7 days for a full credit refund. No questions asked. We're building trust, one trip at a time.
-            </p>
-          </motion.div>
-        </div>
-      </section>
 
       {/* FAQ */}
       <section className="py-12 sm:py-16">
