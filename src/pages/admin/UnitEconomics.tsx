@@ -1117,6 +1117,7 @@ export default function UnitEconomics() {
             const totalMonthlyCost = totalVarCost + costs.fixed.total;
             const blendedAllUserCost = totalVarCost / volume;
             const breakEven = (FREE_USER_ECONOMICS.blendedCostToUs / (blendedAOV * 0.97) * 100);
+            console.log('[UnitEcon] revenueMix:', revenueMix, 'blendedCostPerUser:', blendedCostPerUser, 'paidVarCost:', paidVarCost, 'totalMonthlyCost:', totalMonthlyCost);
             return [
               { label: "Full Trip Cost", value: `$${costs.variable.perTrip.toFixed(3)}`, sub: `Observed across ${VERIFIED_DATA.trips} trips`, accent: "#38BDF8", icon: "📍" },
               { label: "Free User Cost", value: `$${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(3)}`, sub: `150cr → 1 day + 4 swaps`, accent: "#F87171", icon: "🆓" },
