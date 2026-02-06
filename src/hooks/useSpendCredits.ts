@@ -14,8 +14,11 @@ type ActionType = keyof typeof CREDIT_COSTS;
 const ACTION_MAP: Record<string, string> = {
   TRIP_GENERATION: 'trip_generation',
   HOTEL_SEARCH: 'hotel_search',
+  UNLOCK_DAY: 'unlock_day',
   SWAP_ACTIVITY: 'swap_activity',
   REGENERATE_DAY: 'regenerate_day',
+  RESTAURANT_REC: 'restaurant_rec',
+  AI_MESSAGE: 'ai_message',
 };
 
 interface SpendCreditsParams {

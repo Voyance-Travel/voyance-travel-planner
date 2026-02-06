@@ -9,9 +9,12 @@ export interface FreeTierLimits {
   freeCredits: number;
   
   // Affordability checks
+  canUnlockDay: boolean;
   canSwapActivity: boolean;
   canRegenerateDay: boolean;
   canSearchHotels: boolean;
+  canGetRestaurantRec: boolean;
+  canSendAiMessage: boolean;
   
   // Export/Share (always free)
   canExport: boolean;
@@ -34,9 +37,12 @@ export function useFreeTierLimits(): FreeTierLimits {
         totalCredits: 0,
         purchasedCredits: 0,
         freeCredits: 0,
+        canUnlockDay: false,
         canSwapActivity: false,
         canRegenerateDay: false,
         canSearchHotels: false,
+        canGetRestaurantRec: false,
+        canSendAiMessage: false,
         canExport: true,
         canShare: true,
         needsCredits: true,
@@ -52,9 +58,12 @@ export function useFreeTierLimits(): FreeTierLimits {
       totalCredits,
       purchasedCredits,
       freeCredits,
+      canUnlockDay: totalCredits >= CREDIT_COSTS.UNLOCK_DAY,
       canSwapActivity: totalCredits >= CREDIT_COSTS.SWAP_ACTIVITY,
       canRegenerateDay: totalCredits >= CREDIT_COSTS.REGENERATE_DAY,
       canSearchHotels: totalCredits >= CREDIT_COSTS.HOTEL_SEARCH,
+      canGetRestaurantRec: totalCredits >= CREDIT_COSTS.RESTAURANT_REC,
+      canSendAiMessage: totalCredits >= CREDIT_COSTS.AI_MESSAGE,
       canExport: true,
       canShare: true,
       needsCredits: totalCredits < CREDIT_COSTS.SWAP_ACTIVITY,
