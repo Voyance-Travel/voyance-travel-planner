@@ -1922,6 +1922,9 @@ export default function UnitEconomics() {
                 <th style={{ textAlign: "left", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Action</th>
                 <th style={{ textAlign: "right", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Credits</th>
                 <th style={{ textAlign: "right", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Our Cost</th>
+                <th style={{ textAlign: "right", padding: "8px 6px", color: "#EF4444", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)", fontSize: 10 }}>
+                  Free<br/><span style={{ color: "#475569", fontWeight: 400 }}>$0/cr</span>
+                </th>
                 {CREDIT_TIERS.map(t => (
                   <th key={t.key} style={{ textAlign: "right", padding: "8px 6px", color: t.color || "#94A3B8", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)", fontSize: 10 }}>
                     {t.label}<br/><span style={{ color: "#475569", fontWeight: 400 }}>${(t.price / t.credits).toFixed(3)}/cr</span>
@@ -1948,6 +1951,11 @@ export default function UnitEconomics() {
                     </td>
                     <td style={{ padding: "8px 10px", color: "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                       ${avgCost.toFixed(3)}
+                    </td>
+                    {/* Free tier column - pure loss */}
+                    <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)", fontSize: 11, color: "#EF4444" }}>
+                      <span style={{ color: "#64748B", fontWeight: 400, fontSize: 10 }}>$0</span>
+                      {" "}-100%
                     </td>
                     {CREDIT_TIERS.map(t => {
                       const perCredit = t.price / t.credits;
