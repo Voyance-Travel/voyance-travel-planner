@@ -15,6 +15,7 @@ import { WelcomeBonusManager } from '@/components/common/WelcomeBonusManager';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
 import { GlobalErrorHandler } from '@/components/common/GlobalErrorHandler';
 import { OAuthReturnHandler } from '@/components/auth/OAuthReturnHandler';
+import { useAnalyticsTracker } from '@/hooks/useAnalyticsTracker';
 
 // Providers
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -90,6 +91,7 @@ import DataCleanup from "./pages/admin/DataCleanup";
 import ImageCuration from "./pages/admin/ImageCuration";
 import UnitEconomics from "./pages/admin/UnitEconomics";
 import TestSuites from "./pages/admin/TestSuites";
+import UserTracking from "./pages/admin/UserTracking";
 
 // Agent CRM
 import AgentDashboard from "./pages/agent/AgentDashboard";
@@ -116,11 +118,12 @@ function ImagePreloaderInit() {
   return null;
 }
 
-// Component to track page views for journey awareness
+// Component to track page views for journey awareness + analytics
 function JourneyTracker() {
   const location = useLocation();
   const trackPageView = useJourneyStore(state => state.trackPageView);
   const trackAction = useJourneyStore(state => state.trackAction);
+  useAnalyticsTracker();
   
   useEffect(() => {
     trackPageView(location.pathname);
@@ -234,6 +237,11 @@ function AnimatedRoutes() {
           <Route path="/admin/test-suites" element={
             <ProtectedRoute>
               <TestSuites />
+            </ProtectedRoute>
+           } />
+          <Route path="/admin/user-tracking" element={
+            <ProtectedRoute>
+              <UserTracking />
             </ProtectedRoute>
           } />
           

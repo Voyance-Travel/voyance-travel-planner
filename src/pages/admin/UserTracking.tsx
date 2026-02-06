@@ -1,0 +1,391 @@
+import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { ArrowLeft, TrendingUp, TrendingDown, Users, MousePointerClick, Eye, Clock, ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { format, subDays, startOfDay } from 'date-fns';
+
+type PageEvent = {
+  id: string;
+  session_id: string;
+  user_id: string | null;
+  event_type: string;
+  page_path: string;
+  page_title: string | null;
+  referrer: string | null;
+  utm_source: string | null;
+  utm_medium: string | null;
+  scroll_depth: number | null;
+  time_on_page_ms: number | null;
+  device_type: string | null;
+  element_text: string | null;
+  created_at: string;
+};
+
+const NICE_NAMES: Record<string, string> = {
+  '/': 'Home',
+  '/explore': 'Explore',
+  '/destinations': 'Destinations',
+  '/quiz': 'Quiz',
+  '/quiz/results': 'Quiz Results',
+  '/sign-in': 'Sign In',
+  '/sign-up': 'Sign Up',
+  '/itinerary': 'Itinerary',
+  '/settings': 'Settings',
+  '/how-it-works': 'How It Works',
+  '/about': 'About',
+  '/faq': 'FAQ',
+  '/guides': 'Guides',
+  '/contact': 'Contact',
+};
+
+function niceName(path: string): string {
+  if (NICE_NAMES[path]) return NICE_NAMES[path];
+  if (path.startsWith('/destination/')) return 'Destination Detail';
+  if (path.startsWith('/guide/')) return 'Guide Detail';
+  if (path.startsWith('/trip/')) return 'Trip View';
+  return path;
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return '<1s';
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  return `${m}m ${s % 60}s`;
+}
+
+function extractDomain(ref: string): string {
+  try {
+    const u = new URL(ref);
+    return u.hostname.replace('www.', '');
+  } catch {
+    return ref || 'direct';
+  }
+}
+
+export default function UserTracking() {
+  const navigate = useNavigate();
+  const [days, setDays] = useState(7);
+  
+  const since = useMemo(() => startOfDay(subDays(new Date(), days)).toISOString(), [days]);
+
+  const { data: events = [], isLoading } = useQuery({
+    queryKey: ['page-events', days],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('page_events')
+        .select('*')
+        .gte('created_at', since)
+        .order('created_at', { ascending: true })
+        .limit(50000);
+      if (error) throw error;
+      return (data || []) as PageEvent[];
+    },
+  });
+
+  // Compute analytics
+  const analytics = useMemo(() => {
+    if (!events.length) return null;
+
+    const pageViews = events.filter(e => e.event_type === 'page_view');
+    const pageExits = events.filter(e => e.event_type === 'page_exit');
+    const sessions = new Set(events.map(e => e.session_id));
+    const authedSessions = new Set(events.filter(e => e.user_id).map(e => e.session_id));
+
+    // --- Entry pages (first page_view per session) ---
+    const firstBySession = new Map<string, PageEvent>();
+    for (const e of pageViews) {
+      if (!firstBySession.has(e.session_id)) firstBySession.set(e.session_id, e);
+    }
+    const entryCounts: Record<string, number> = {};
+    for (const e of firstBySession.values()) {
+      entryCounts[e.page_path] = (entryCounts[e.page_path] || 0) + 1;
+    }
+
+    // --- Exit pages (last page_view per session) ---
+    const lastBySession = new Map<string, PageEvent>();
+    for (const e of pageViews) {
+      lastBySession.set(e.session_id, e);
+    }
+    const exitCounts: Record<string, number> = {};
+    for (const e of lastBySession.values()) {
+      exitCounts[e.page_path] = (exitCounts[e.page_path] || 0) + 1;
+    }
+
+    // --- Page traffic ---
+    const pageTraffic: Record<string, { views: number; avgTime: number; avgScroll: number; exits: number }> = {};
+    for (const e of pageViews) {
+      if (!pageTraffic[e.page_path]) pageTraffic[e.page_path] = { views: 0, avgTime: 0, avgScroll: 0, exits: 0 };
+      pageTraffic[e.page_path].views++;
+    }
+    for (const e of pageExits) {
+      if (pageTraffic[e.page_path]) {
+        if (e.time_on_page_ms) pageTraffic[e.page_path].avgTime += e.time_on_page_ms;
+        if (e.scroll_depth) pageTraffic[e.page_path].avgScroll += e.scroll_depth;
+        pageTraffic[e.page_path].exits++;
+      }
+    }
+    // Average out
+    for (const p of Object.keys(pageTraffic)) {
+      const t = pageTraffic[p];
+      if (t.exits > 0) {
+        t.avgTime = Math.round(t.avgTime / t.exits);
+        t.avgScroll = Math.round(t.avgScroll / t.exits);
+      }
+    }
+
+    // --- Referrer sources ---
+    const refCounts: Record<string, number> = {};
+    for (const e of firstBySession.values()) {
+      const domain = e.referrer ? extractDomain(e.referrer) : 'direct';
+      refCounts[domain] = (refCounts[domain] || 0) + 1;
+    }
+
+    // --- Flow: page transitions ---
+    const sessionPages = new Map<string, string[]>();
+    for (const e of pageViews) {
+      if (!sessionPages.has(e.session_id)) sessionPages.set(e.session_id, []);
+      sessionPages.get(e.session_id)!.push(e.page_path);
+    }
+    const transitions: Record<string, number> = {};
+    for (const pages of sessionPages.values()) {
+      for (let i = 0; i < pages.length - 1; i++) {
+        const key = `${pages[i]} → ${pages[i + 1]}`;
+        transitions[key] = (transitions[key] || 0) + 1;
+      }
+    }
+
+    // --- Bounce rate per page (single-page sessions where page was entry) ---
+    const bounceSessions = new Set<string>();
+    for (const [sid, pages] of sessionPages.entries()) {
+      if (pages.length === 1) bounceSessions.add(sid);
+    }
+    const bounceCounts: Record<string, number> = {};
+    for (const sid of bounceSessions) {
+      const entry = firstBySession.get(sid);
+      if (entry) bounceCounts[entry.page_path] = (bounceCounts[entry.page_path] || 0) + 1;
+    }
+
+    // --- Device breakdown ---
+    const deviceCounts: Record<string, number> = { mobile: 0, tablet: 0, desktop: 0 };
+    for (const e of firstBySession.values()) {
+      const d = e.device_type || 'desktop';
+      deviceCounts[d] = (deviceCounts[d] || 0) + 1;
+    }
+
+    // --- UTM breakdown ---
+    const utmCounts: Record<string, number> = {};
+    for (const e of firstBySession.values()) {
+      if (e.utm_source) {
+        const key = [e.utm_source, e.utm_medium].filter(Boolean).join(' / ');
+        utmCounts[key] = (utmCounts[key] || 0) + 1;
+      }
+    }
+
+    return {
+      totalSessions: sessions.size,
+      totalPageViews: pageViews.length,
+      authedSessions: authedSessions.size,
+      entryCounts,
+      exitCounts,
+      pageTraffic,
+      refCounts,
+      transitions,
+      bounceCounts,
+      deviceCounts,
+      utmCounts,
+    };
+  }, [events]);
+
+  const sorted = (obj: Record<string, number>) =>
+    Object.entries(obj).sort((a, b) => b[1] - a[1]);
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#0B1120', color: '#E2E8F0', padding: '24px 16px' }}>
+      {/* Header */}
+      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <button onClick={() => navigate('/settings')} style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16, background: 'none', border: 'none', cursor: 'pointer', fontSize: 13 }}>
+          <ArrowLeft size={16} /> Back to Settings
+        </button>
+        
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, fontFamily: "'Playfair Display', serif" }}>User Tracking</h1>
+            <p style={{ color: '#64748B', fontSize: 13, margin: '4px 0 0' }}>Where users enter, where they leave, and what converts</p>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[1, 7, 14, 30].map(d => (
+              <button
+                key={d}
+                onClick={() => setDays(d)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  border: '1px solid',
+                  borderColor: days === d ? '#38BDF8' : '#1E293B',
+                  background: days === d ? '#38BDF822' : '#1E293B',
+                  color: days === d ? '#38BDF8' : '#94A3B8',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {d === 1 ? 'Today' : `${d}d`}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {isLoading ? (
+          <p style={{ color: '#64748B', textAlign: 'center', padding: 40 }}>Loading events...</p>
+        ) : !analytics || analytics.totalSessions === 0 ? (
+          <div style={{ textAlign: 'center', padding: 60, color: '#64748B' }}>
+            <Eye size={40} style={{ margin: '0 auto 12px', opacity: 0.4 }} />
+            <p style={{ fontSize: 16, fontWeight: 600 }}>No tracking data yet</p>
+            <p style={{ fontSize: 13 }}>Events will appear here as users visit your site</p>
+          </div>
+        ) : (
+          <>
+            {/* KPI Row */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 24 }}>
+              {[
+                { label: 'Sessions', value: analytics.totalSessions, icon: <Users size={14} />, color: '#38BDF8' },
+                { label: 'Page Views', value: analytics.totalPageViews, icon: <Eye size={14} />, color: '#A78BFA' },
+                { label: 'Authenticated', value: analytics.authedSessions, icon: <MousePointerClick size={14} />, color: '#34D399' },
+                { label: 'Auth Rate', value: `${analytics.totalSessions > 0 ? Math.round((analytics.authedSessions / analytics.totalSessions) * 100) : 0}%`, icon: <TrendingUp size={14} />, color: '#FBBF24' },
+              ].map((m, i) => (
+                <div key={i} style={{ background: 'rgba(30,41,59,0.7)', borderRadius: 12, padding: '12px 14px', border: `1px solid ${m.color}22` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+                    <span style={{ color: m.color }}>{m.icon}</span>
+                    <span style={{ fontSize: 9, color: '#64748B', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{m.label}</span>
+                  </div>
+                  <span style={{ fontSize: 20, fontWeight: 800, color: m.color, fontFamily: "'JetBrains Mono', monospace" }}>{m.value}</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+              {/* Entry Pages */}
+              <Panel title="🚪 Entry Pages" subtitle="Where sessions begin">
+                {sorted(analytics.entryCounts).slice(0, 10).map(([path, count]) => {
+                  const bounces = analytics.bounceCounts[path] || 0;
+                  const bounceRate = Math.round((bounces / count) * 100);
+                  return (
+                    <Row key={path} label={niceName(path)} sublabel={path} value={count} total={analytics.totalSessions}
+                      extra={<span style={{ fontSize: 10, color: bounceRate > 60 ? '#F87171' : '#94A3B8' }}>{bounceRate}% bounce</span>}
+                    />
+                  );
+                })}
+              </Panel>
+
+              {/* Exit Pages — "Experience Killers" */}
+              <Panel title="💀 Exit Pages" subtitle="Where users leave">
+                {sorted(analytics.exitCounts).slice(0, 10).map(([path, count]) => (
+                  <Row key={path} label={niceName(path)} sublabel={path} value={count} total={analytics.totalSessions}
+                    extra={<TrendingDown size={12} style={{ color: '#F87171' }} />}
+                  />
+                ))}
+              </Panel>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+              {/* Traffic by Page */}
+              <Panel title="📊 Page Traffic" subtitle="Views, time, scroll depth">
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 4, marginBottom: 6 }}>
+                  <span style={{ fontSize: 9, color: '#64748B', fontWeight: 600 }}>PAGE</span>
+                  <span style={{ fontSize: 9, color: '#64748B', fontWeight: 600, textAlign: 'right' }}>VIEWS</span>
+                  <span style={{ fontSize: 9, color: '#64748B', fontWeight: 600, textAlign: 'right' }}>AVG TIME</span>
+                  <span style={{ fontSize: 9, color: '#64748B', fontWeight: 600, textAlign: 'right' }}>SCROLL</span>
+                </div>
+                {Object.entries(analytics.pageTraffic)
+                  .sort((a, b) => b[1].views - a[1].views)
+                  .slice(0, 12)
+                  .map(([path, data]) => (
+                    <div key={path} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 4, padding: '5px 0', borderBottom: '1px solid #1E293B' }}>
+                      <span style={{ fontSize: 12, color: '#E2E8F0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{niceName(path)}</span>
+                      <span style={{ fontSize: 12, color: '#38BDF8', textAlign: 'right', fontFamily: 'monospace' }}>{data.views}</span>
+                      <span style={{ fontSize: 12, color: '#94A3B8', textAlign: 'right', fontFamily: 'monospace' }}>{data.avgTime ? formatDuration(data.avgTime) : '—'}</span>
+                      <span style={{ fontSize: 12, color: data.avgScroll > 70 ? '#34D399' : data.avgScroll > 30 ? '#FBBF24' : '#F87171', textAlign: 'right', fontFamily: 'monospace' }}>{data.avgScroll ? `${data.avgScroll}%` : '—'}</span>
+                    </div>
+                  ))}
+              </Panel>
+
+              {/* Top Flows */}
+              <Panel title="🔀 Top User Flows" subtitle="Most common page transitions">
+                {sorted(analytics.transitions).slice(0, 12).map(([flow, count]) => {
+                  const [from, to] = flow.split(' → ');
+                  return (
+                    <div key={flow} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 0', borderBottom: '1px solid #1E293B' }}>
+                      <span style={{ fontSize: 11, color: '#94A3B8', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{niceName(from)}</span>
+                      <ArrowRight size={12} style={{ color: '#38BDF8', flexShrink: 0 }} />
+                      <span style={{ fontSize: 11, color: '#E2E8F0', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{niceName(to)}</span>
+                      <span style={{ fontSize: 11, color: '#38BDF8', fontFamily: 'monospace', flexShrink: 0 }}>{count}</span>
+                    </div>
+                  );
+                })}
+              </Panel>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+              {/* Referrer Sources */}
+              <Panel title="🌐 Traffic Sources" subtitle="Where users come from">
+                {sorted(analytics.refCounts).slice(0, 8).map(([source, count]) => (
+                  <Row key={source} label={source} value={count} total={analytics.totalSessions} />
+                ))}
+              </Panel>
+
+              {/* Device Breakdown */}
+              <Panel title="📱 Devices" subtitle="Session device type">
+                {sorted(analytics.deviceCounts).map(([device, count]) => (
+                  <Row key={device} label={device.charAt(0).toUpperCase() + device.slice(1)} value={count} total={analytics.totalSessions} />
+                ))}
+              </Panel>
+
+              {/* UTM Campaigns */}
+              <Panel title="🎯 UTM Campaigns" subtitle="Tracked campaign traffic">
+                {Object.keys(analytics.utmCounts).length === 0 ? (
+                  <p style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', padding: '8px 0' }}>No UTM-tagged traffic yet</p>
+                ) : (
+                  sorted(analytics.utmCounts).slice(0, 8).map(([campaign, count]) => (
+                    <Row key={campaign} label={campaign} value={count} total={analytics.totalSessions} />
+                  ))
+                )}
+              </Panel>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- Reusable sub-components ---
+
+function Panel({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+  return (
+    <div style={{ background: 'rgba(30,41,59,0.5)', borderRadius: 12, padding: 16, border: '1px solid #1E293B' }}>
+      <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 2px', color: '#E2E8F0' }}>{title}</h3>
+      <p style={{ fontSize: 10, color: '#64748B', margin: '0 0 10px' }}>{subtitle}</p>
+      {children}
+    </div>
+  );
+}
+
+function Row({ label, sublabel, value, total, extra }: { label: string; sublabel?: string; value: number; total: number; extra?: React.ReactNode }) {
+  const pct = Math.round((value / total) * 100);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid #1E293B' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, color: '#E2E8F0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</div>
+        {sublabel && <div style={{ fontSize: 9, color: '#475569' }}>{sublabel}</div>}
+      </div>
+      {extra}
+      <div style={{ width: 50, height: 4, borderRadius: 2, background: '#1E293B', flexShrink: 0 }}>
+        <div style={{ width: `${pct}%`, height: '100%', borderRadius: 2, background: '#38BDF8' }} />
+      </div>
+      <span style={{ fontSize: 12, fontFamily: 'monospace', color: '#38BDF8', minWidth: 28, textAlign: 'right' }}>{value}</span>
+      <span style={{ fontSize: 10, color: '#64748B', minWidth: 32, textAlign: 'right' }}>{pct}%</span>
+    </div>
+  );
+}
