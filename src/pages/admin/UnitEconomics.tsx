@@ -1079,14 +1079,13 @@ export default function UnitEconomics() {
             const paidVarCost = paid * PAID_COST;
             const totalCost = freeVarCost + paidVarCost + costs.fixed.total;
             const blendedAllUserCost = (freeVarCost + paidVarCost) / volume;
-            const breakEvenTrips = Math.ceil(costs.fixed.total / (blendedAOV * (conversionRate / 100) - FREE_COST));
+            const breakEvenPaying = Math.ceil(costs.fixed.total / (blendedAOV - PAID_COST));
             return [
               { label: "Free User Cost", value: `$${FREE_COST.toFixed(3)}`, sub: `150cr → 1 day + 4 swaps`, accent: "#F87171", icon: "🆓" },
-              { label: "Paid Trip Cost", value: `$${PAID_COST.toFixed(3)}`, sub: `Observed production cost`, accent: "#38BDF8", icon: "💳" },
-              { label: "Blended / Trip", value: `$${blendedAllUserCost.toFixed(3)}`, sub: `${conversionRate}% conversion weighted`, accent: "#34D399", icon: "⚖" },
+              { label: "Paid Trip Cost", value: `$${PAID_COST.toFixed(3)}`, sub: `Photos $0.085 · Hotels $0.005 · AI ~$0`, accent: "#38BDF8", icon: "💎" },
               { label: "Fixed / Trip", value: `$${costs.fixed.perTrip.toFixed(2)}`, sub: `$${costs.fixed.total.toFixed(0)}/mo ÷ ${volume} trips`, accent: "#F59E0B", icon: "🏗" },
               { label: "Monthly Burn", value: `$${totalCost.toFixed(2)}`, sub: `Free $${freeVarCost.toFixed(2)} + Paid $${paidVarCost.toFixed(2)} + Fixed $${costs.fixed.total.toFixed(0)}`, accent: "#F87171", icon: "🔥" },
-              { label: "Break-even", value: `${breakEvenTrips} trips`, sub: `To cover $${costs.fixed.total.toFixed(0)} fixed @ ${conversionRate}%`, accent: "#A78BFA", icon: "📍" },
+              { label: "Break-even", value: `${breakEvenPaying} paying`, sub: `@ $${blendedAOV.toFixed(2)} AOV to cover $${costs.fixed.total.toFixed(0)}/mo`, accent: "#A78BFA", icon: "📍" },
             ];
           })() : [
             { label: "Blended Margin", value: `${costs.blendedMargin.toFixed(1)}%`, sub: `${conversionRate}% convert @ $${blendedAOV.toFixed(2)} avg`, accent: costs.blendedMargin > 50 ? "#34D399" : costs.blendedMargin > 0 ? "#FBBF24" : "#F87171", icon: "📊" },
@@ -1738,7 +1737,7 @@ export default function UnitEconomics() {
               Paid Var = Paid × <strong style={{ color: "#38BDF8" }}>$0.091</strong> · 
               Fixed = <strong>$49</strong> · 
               Revenue = Paid × <strong style={{ color: "#34D399" }}>${blendedAOV.toFixed(2)}</strong> AOV · 
-              Break-even ≈ <strong style={{ color: "#34D399" }}>{Math.ceil(49 / (blendedAOV * (conversionRate / 100) - FREE_USER_ECONOMICS.blendedCostToUs))} trips</strong>
+              Break-even ≈ <strong style={{ color: "#34D399" }}>{Math.ceil(49 / (blendedAOV - 0.091))} paying users</strong>
             </p>
           </div>
         </div>
