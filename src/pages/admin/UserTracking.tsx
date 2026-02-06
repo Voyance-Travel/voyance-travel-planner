@@ -254,7 +254,7 @@ export default function UserTracking() {
     <div style={{ minHeight: '100vh', background: '#0B1120', color: '#E2E8F0', padding: '24px 16px' }}>
       {/* Header */}
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <button onClick={() => navigate('/settings')} style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16, background: 'none', border: 'none', cursor: 'pointer', fontSize: 13 }}>
+        <button onClick={() => navigate('/profile/settings')} style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16, background: 'none', border: 'none', cursor: 'pointer', fontSize: 13 }}>
           <ArrowLeft size={16} /> Back to Settings
         </button>
         
