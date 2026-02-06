@@ -1934,8 +1934,8 @@ export default function UnitEconomics() {
                 { action: "Restaurant Rec", credits: 15, costMin: 0.01, costMax: 0.04 },
                 { action: "AI Message", credits: 10, costMin: 0.005, costMax: 0.02 },
               ].map((row, i) => {
-                // Calculate user payment based on Explorer tier ($59.99 / 1200 credits = $0.05/credit)
-                const pricePerCredit = 59.99 / 1200;
+                // Calculate user payment based on Explorer tier ($65.99 / 1200 credits = $0.055/credit)
+                const pricePerCredit = 65.99 / 1200;
                 const userPays = row.credits * pricePerCredit;
                 const avgCost = (row.costMin + row.costMax) / 2;
                 const grossMargin = ((userPays - avgCost) / userPays) * 100;
@@ -1963,7 +1963,7 @@ export default function UnitEconomics() {
             </tbody>
           </table>
           <p style={{ fontSize: 10, color: "#64748B", marginBottom: 24 }}>
-            *User payment based on Explorer tier ($59.99 ÷ 1200 credits = $0.05/credit). Boost users pay more ($0.11/credit).
+            *User payment based on Explorer tier ($65.99 ÷ 1,200 credits = $0.055/credit). Boost users pay more ($0.090/credit).
           </p>
 
           {/* TIER-BASED COST BREAKDOWN TABLE */}
@@ -2075,7 +2075,7 @@ export default function UnitEconomics() {
                     1
                   </td>
                   <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    ~15
+                    ~10
                   </td>
                   <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                     1
