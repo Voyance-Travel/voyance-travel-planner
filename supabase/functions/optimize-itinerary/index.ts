@@ -1601,6 +1601,13 @@ serve(async (req) => {
       transportPreferences,
     } = body;
 
+    if (!tripId || !destination || !days || !Array.isArray(days) || days.length === 0) {
+      return new Response(JSON.stringify({ success: false, error: 'Missing required fields: tripId, destination, and days array' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Extract transport preferences with defaults
     const allowedModes = transportPreferences?.allowedModes || ['bus', 'train', 'rideshare', 'taxi', 'walking'];
     const distanceUnit = transportPreferences?.distanceUnit || 'km';
