@@ -121,13 +121,20 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
     },
   ];
 
-  // TEMP: Force-show tour for preview testing (remove after review)
+  // Request slot from popup coordination on first visit only
   useEffect(() => {
+    if (!user) return;
+    const alreadyCompleted = localStorage.getItem(STORAGE_KEY) === 'true';
+    if (alreadyCompleted) return;
+
     const timer = setTimeout(() => {
-      setIsVisible(true);
+      const allowed = requestPopup('site_tour');
+      if (allowed) {
+        setIsVisible(true);
+      }
     }, 1500);
     return () => clearTimeout(timer);
-  }, []);
+  }, [user, requestPopup]);
 
   // Navigate to route when step changes
   useEffect(() => {
