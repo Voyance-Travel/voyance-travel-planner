@@ -8,9 +8,7 @@ import {
   Plane, 
   Hotel, 
   Clock,
-  Phone,
-  Mail,
-  Globe
+  MessageCircle
 } from 'lucide-react';
 import Head from '@/components/common/Head';
 import { Card, CardContent } from '@/components/ui/card';
@@ -18,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { EditorialItinerary, type EditorialDay } from '@/components/itinerary/EditorialItinerary';
+import TripChat from '@/components/chat/TripChat';
 
 interface SharedTrip {
   id: string;
@@ -61,6 +60,7 @@ export default function TripShare() {
   const [segments, setSegments] = useState<BookingSegment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showChat, setShowChat] = useState(false);
 
   useEffect(() => {
     if (shareToken) {
@@ -275,6 +275,26 @@ export default function TripShare() {
             </Card>
           </section>
         )}
+
+        {/* Trip Discussion Chat */}
+        <section>
+          <button
+            onClick={() => setShowChat(!showChat)}
+            className="flex items-center gap-2 text-lg font-semibold mb-4 hover:text-primary transition-colors"
+          >
+            <MessageCircle className="h-5 w-5" />
+            Trip Discussion
+          </button>
+          {showChat && (
+            <div className="border rounded-xl bg-card h-[400px]">
+              <TripChat
+                tripId={trip.id}
+                tripType="agency"
+                shareToken={shareToken}
+              />
+            </div>
+          )}
+        </section>
       </main>
 
       {/* Footer with agent contact */}

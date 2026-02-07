@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { format, parseISO, isAfter, isBefore, differenceInDays } from 'date-fns';
-import { Loader2, Calendar, MapPin, ArrowLeft, Edit, Sparkles } from 'lucide-react';
+import { Loader2, Calendar, MapPin, ArrowLeft, Edit, Sparkles, MessageCircle } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,7 @@ import { initiateBooking } from '@/services/tripPaymentsAPI';
 import { toast } from 'sonner';
 import { normalizeLegacyHotelSelection, type HotelBooking } from '@/utils/hotelValidation';
 import { parseEditorialDays, parseAssistantDays } from '@/utils/itineraryParser';
+import TripChat from '@/components/chat/TripChat';
 
 type Trip = Tables<'trips'>;
 type TripActivity = Tables<'trip_activities'>;
@@ -74,6 +75,8 @@ export default function TripDetail() {
   const [paymentsRefreshKey, setPaymentsRefreshKey] = useState(0);
   const [destinationMeta, setDestinationMeta] = useState<Destination | null>(null);
   const [showDebriefModal, setShowDebriefModal] = useState(false);
+  const [hasCollaborators, setHasCollaborators] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const scheduleNotifications = useScheduleNotifications();
   const { user } = useAuth();
   const hotelEnrichmentAttempted = useRef(false);
@@ -391,6 +394,15 @@ export default function TripDetail() {
         }
 
         setTrip(tripData);
+
+        // Check for collaborators to show chat tab
+        if (user?.id) {
+          const { count } = await supabase
+            .from('trip_collaborators')
+            .select('id', { count: 'exact', head: true })
+            .eq('trip_id', tripId);
+          setHasCollaborators((count || 0) > 0);
+        }
 
         // Fetch destination metadata so itinerary can show correct local currency (EUR for Rome)
         try {
@@ -1019,6 +1031,24 @@ export default function TripDetail() {
           <div className="mt-12">
             <TripPhotoGallery tripId={trip.id} />
           </div>
+
+          {/* Trip Chat — visible when trip has collaborators */}
+          {hasCollaborators && (
+            <div className="mt-12">
+              <button
+                onClick={() => setShowChat(!showChat)}
+                className="flex items-center gap-2 text-lg font-semibold mb-4 hover:text-primary transition-colors"
+              >
+                <MessageCircle className="h-5 w-5" />
+                Trip Discussion
+              </button>
+              {showChat && (
+                <div className="border rounded-xl bg-card h-[400px]">
+                  <TripChat tripId={trip.id} tripType="consumer" />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </section>
 
