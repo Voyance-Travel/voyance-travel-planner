@@ -83,7 +83,7 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
       title: 'Build Your Itinerary',
       description: 'Pick a destination and dates. We handle venue picks, timing, and routing.',
       icon: <Rocket className="h-5 w-5" />,
-      route: '/',
+      route: ROUTES.START,
       position: 'center',
     },
     {
@@ -99,7 +99,7 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
       title: 'Free Credits Included',
       description: 'Every trip starts free. Credits unlock addresses, booking links, and insider tips.',
       icon: <Zap className="h-5 w-5" />,
-      route: '/',
+      route: `${ROUTES.PROFILE.VIEW}?tab=subscription`,
       position: 'center',
     },
     {
@@ -116,7 +116,7 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
       title: 'Ready to Go?',
       description: 'Take the DNA quiz first for best results, or jump straight into planning.',
       icon: <Heart className="h-5 w-5" />,
-      route: '/',
+      route: ROUTES.QUIZ,
       position: 'center',
     },
   ];
