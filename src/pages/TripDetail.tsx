@@ -112,7 +112,7 @@ export default function TripDetail() {
     
     // Check if enrichment is needed
     const hasAddress = !!primaryHotel.address;
-    const hasWebsite = !!primaryHotel.website || !!primaryHotel.googleMapsUrl;
+    const hasWebsite = !!primaryHotel.website;
     const hasPhotos = Array.isArray(primaryHotel.images) && primaryHotel.images.length > 0;
     
     if (hasAddress && hasWebsite && hasPhotos) {
