@@ -141,7 +141,23 @@ export function ItineraryAssistant({
       return;
     }
 
-    // AI messages are now free - no credit check needed
+    // Charge credits for AI messages (skip for paid users)
+    if (!isPaid) {
+      if (totalCredits < CREDIT_COSTS.AI_MESSAGE) {
+        toast.error(`Need ${CREDIT_COSTS.AI_MESSAGE} credits to send a message`);
+        return;
+      }
+      try {
+        await spendCredits.mutateAsync({
+          action: 'AI_MESSAGE',
+          tripId,
+          metadata: { source: 'itinerary_assistant' },
+        });
+      } catch {
+        // Credit deduction failed — useSpendCredits shows error toast
+        return;
+      }
+    }
 
     // Client-side safety: basic input sanitization
     const sanitizedInput = trimmedInput

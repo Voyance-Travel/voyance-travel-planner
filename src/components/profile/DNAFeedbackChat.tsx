@@ -1,8 +1,9 @@
 /**
  * DNA Feedback Chat Component
  * 
- * A mini-chatbot for users to conversationally refine their Travel DNA
- * by explaining what feels off in their profile.
+ * An AI-powered mini-chatbot for users to conversationally refine their Travel DNA.
+ * Uses the dna-feedback-chat edge function for intelligent responses.
+ * Charges 10 credits per message (AI_MESSAGE cost).
  */
 
 import { useState, useRef, useEffect } from 'react';
@@ -22,6 +23,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { recalculateDNAFromPreferences } from '@/utils/quizMapping';
+import { useSpendCredits } from '@/hooks/useSpendCredits';
+import { useCredits } from '@/hooks/useCredits';
+import { useEntitlements } from '@/hooks/useEntitlements';
+import { CREDIT_COSTS } from '@/config/pricing';
 
 interface Message {
   id: string;
@@ -65,12 +70,34 @@ export default function DNAFeedbackChat({
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Credit system hooks
+  const { data: creditData } = useCredits();
+  const { isPaid } = useEntitlements();
+  const spendCredits = useSpendCredits();
+  const totalCredits = creditData?.totalCredits ?? 0;
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return;
+
+    // Check and charge credits (skip for paid users)
+    if (!isPaid) {
+      if (totalCredits < CREDIT_COSTS.AI_MESSAGE) {
+        toast.error(`Need ${CREDIT_COSTS.AI_MESSAGE} credits to send a message`);
+        return;
+      }
+      try {
+        await spendCredits.mutateAsync({
+          action: 'AI_MESSAGE',
+          metadata: { source: 'dna_feedback_chat' },
+        });
+      } catch {
+        return; // useSpendCredits shows error toast
+      }
+    }
 
     const userMessage: Message = {
       id: `user-${Date.now()}`,
@@ -84,31 +111,33 @@ export default function DNAFeedbackChat({
     setIsLoading(true);
 
     try {
-      // Log the feedback event
-      await supabase.from('voyance_events').insert({
-        user_id: userId,
-        event_name: 'dna_chat_feedback',
-        properties: {
-          message: userMessage.content,
-          current_archetype: currentArchetype,
-          current_traits: currentTraits,
-          timestamp: new Date().toISOString(),
+      // Build conversation history for the edge function
+      const apiMessages = messages
+        .filter(m => m.id !== 'initial')
+        .map(m => ({ role: m.role, content: m.content }));
+      apiMessages.push({ role: 'user' as const, content: userMessage.content });
+
+      // Call the AI edge function
+      const { data: response, error } = await supabase.functions.invoke('dna-feedback-chat', {
+        body: {
+          messages: apiMessages,
+          currentArchetype,
+          currentTraits,
         },
       });
 
-      // Generate a helpful response based on the input
-      const response = generateResponse(userMessage.content, currentTraits);
+      if (error) throw error;
 
       const assistantMessage: Message = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
-        content: response.message,
+        content: response.message || "I've updated your profile based on your feedback.",
         timestamp: new Date(),
       };
 
       setMessages(prev => [...prev, assistantMessage]);
 
-      // If we detected trait adjustments, apply them as overrides and recalculate
+      // If AI suggested trait adjustments, apply them as overrides and recalculate
       if (response.suggestedTraits && Object.keys(response.suggestedTraits).length > 0) {
         // Merge with existing overrides
         const { data: profileData } = await supabase
@@ -120,17 +149,17 @@ export default function DNAFeedbackChat({
         const existingOverrides = (profileData?.travel_dna_overrides as Record<string, number>) || {};
         const mergedOverrides = { ...existingOverrides, ...response.suggestedTraits };
 
-        const { error } = await supabase
+        const { error: updateError } = await supabase
           .from('profiles')
           .update({ travel_dna_overrides: mergedOverrides })
           .eq('id', userId);
 
-        if (!error) {
-          // Trigger full DNA recalculation so archetypes update immediately
+        if (!updateError) {
+          // Trigger full DNA recalculation
           await recalculateDNAFromPreferences(userId);
           
-          toast.success('Trait adjustments applied!', {
-            description: 'Your profile and archetype have been updated.',
+          toast.success('Profile updated!', {
+            description: response.explanation || 'Your Travel DNA has been refined.',
           });
           onFeedbackApplied?.();
         }
@@ -186,7 +215,9 @@ export default function DNAFeedbackChat({
           </div>
           <div>
             <h4 className="text-sm font-medium text-foreground">Refine Your DNA</h4>
-            <p className="text-xs text-muted-foreground">Tell us what feels off</p>
+            <p className="text-xs text-muted-foreground">
+              AI-powered • {CREDIT_COSTS.AI_MESSAGE} credits/message
+            </p>
           </div>
         </div>
         <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} aria-label="Close feedback chat">
@@ -299,124 +330,6 @@ export default function DNAFeedbackChat({
       </div>
     </motion.div>
   );
-}
-
-// Simple pattern-based response generator
-function generateResponse(
-  input: string, 
-  currentTraits: Record<string, number>
-): { message: string; suggestedTraits?: Record<string, number> } {
-  const lowerInput = input.toLowerCase();
-  const suggestedTraits: Record<string, number> = {};
-
-  // Pace adjustments
-  if (lowerInput.includes('too fast') || lowerInput.includes('slower') || lowerInput.includes('relaxed pace')) {
-    suggestedTraits.pace = Math.max((currentTraits.pace ?? 0) - 4, -10);
-    return {
-      message: `Got it! I've adjusted your pace preference to be more relaxed (${suggestedTraits.pace > 0 ? '+' : ''}${suggestedTraits.pace}). Your future itineraries will include more downtime and fewer rushed activities.`,
-      suggestedTraits,
-    };
-  }
-
-  if (lowerInput.includes('too slow') || lowerInput.includes('faster') || lowerInput.includes('more activities')) {
-    suggestedTraits.pace = Math.min((currentTraits.pace ?? 0) + 4, 10);
-    return {
-      message: `Understood! I've increased your pace preference (${suggestedTraits.pace > 0 ? '+' : ''}${suggestedTraits.pace}). Expect more packed itineraries with exciting activities throughout the day.`,
-      suggestedTraits,
-    };
-  }
-
-  // Adventure adjustments
-  if (lowerInput.includes('more adventurous') || lowerInput.includes('thrill') || lowerInput.includes('adrenaline')) {
-    suggestedTraits.adventure = Math.min((currentTraits.adventure ?? 0) + 4, 10);
-    return {
-      message: `Adventure mode activated! I've boosted your adventure score to ${suggestedTraits.adventure > 0 ? '+' : ''}${suggestedTraits.adventure}. Get ready for more thrilling experiences in your trips!`,
-      suggestedTraits,
-    };
-  }
-
-  if (lowerInput.includes('less adventurous') || lowerInput.includes('too risky') || lowerInput.includes('safer')) {
-    suggestedTraits.adventure = Math.max((currentTraits.adventure ?? 0) - 4, -10);
-    return {
-      message: `No problem! I've adjusted for a more comfortable adventure level (${suggestedTraits.adventure > 0 ? '+' : ''}${suggestedTraits.adventure}). Your itineraries will focus on enjoyable experiences without the extreme activities.`,
-      suggestedTraits,
-    };
-  }
-
-  // Budget adjustments
-  if (lowerInput.includes('budget') || lowerInput.includes('frugal') || lowerInput.includes('save money') || lowerInput.includes('cheaper')) {
-    suggestedTraits.budget = Math.min((currentTraits.budget ?? 0) + 4, 10);
-    suggestedTraits.comfort = Math.max((currentTraits.comfort ?? 0) - 3, -10);
-    return {
-      message: `Budget-conscious mode enabled! I've adjusted your spending style to be more frugal. You'll see more value-focused recommendations without compromising on great experiences.`,
-      suggestedTraits,
-    };
-  }
-
-  if (lowerInput.includes('luxury') || lowerInput.includes('splurge') || lowerInput.includes('premium') || lowerInput.includes('fancy')) {
-    suggestedTraits.budget = Math.max((currentTraits.budget ?? 0) - 4, -10);
-    suggestedTraits.comfort = Math.min((currentTraits.comfort ?? 0) + 4, 10);
-    return {
-      message: `Luxury preferences updated! I've adjusted your profile for more premium experiences. Expect recommendations for upscale accommodations and exclusive activities.`,
-      suggestedTraits,
-    };
-  }
-
-  // Social adjustments
-  if (lowerInput.includes('solo') || lowerInput.includes('alone') || lowerInput.includes('by myself') || lowerInput.includes('not social')) {
-    suggestedTraits.social = Math.max((currentTraits.social ?? 0) - 5, -10);
-    return {
-      message: `Solo traveler preferences saved! I've adjusted your social score (${suggestedTraits.social > 0 ? '+' : ''}${suggestedTraits.social}). Your itineraries will emphasize independent exploration and personal reflection time.`,
-      suggestedTraits,
-    };
-  }
-
-  if (lowerInput.includes('group') || lowerInput.includes('social') || lowerInput.includes('meet people') || lowerInput.includes('friends')) {
-    suggestedTraits.social = Math.min((currentTraits.social ?? 0) + 5, 10);
-    return {
-      message: `Social butterfly mode on! I've boosted your social preference (${suggestedTraits.social > 0 ? '+' : ''}${suggestedTraits.social}). Expect more group activities and opportunities to connect with fellow travelers.`,
-      suggestedTraits,
-    };
-  }
-
-  // Planning adjustments
-  if (lowerInput.includes('spontaneous') || lowerInput.includes('flexible') || lowerInput.includes('go with the flow')) {
-    suggestedTraits.planning = Math.max((currentTraits.planning ?? 0) - 5, -10);
-    return {
-      message: `Flexibility is key! I've adjusted your planning style to be more spontaneous (${suggestedTraits.planning > 0 ? '+' : ''}${suggestedTraits.planning}). Your itineraries will include more free time and flexible options.`,
-      suggestedTraits,
-    };
-  }
-
-  if (lowerInput.includes('planned') || lowerInput.includes('organized') || lowerInput.includes('structured') || lowerInput.includes('detailed')) {
-    suggestedTraits.planning = Math.min((currentTraits.planning ?? 0) + 5, 10);
-    return {
-      message: `Organization mode activated! I've increased your planning preference (${suggestedTraits.planning > 0 ? '+' : ''}${suggestedTraits.planning}). Expect well-structured itineraries with clear timelines and reservations.`,
-      suggestedTraits,
-    };
-  }
-
-  // Authenticity adjustments
-  if (lowerInput.includes('local') || lowerInput.includes('authentic') || lowerInput.includes('off the beaten path') || lowerInput.includes('hidden gems')) {
-    suggestedTraits.authenticity = Math.min((currentTraits.authenticity ?? 0) + 5, 10);
-    return {
-      message: `Local explorer mode! I've boosted your authenticity preference (${suggestedTraits.authenticity > 0 ? '+' : ''}${suggestedTraits.authenticity}). You'll discover more hidden gems and local favorites in your trips.`,
-      suggestedTraits,
-    };
-  }
-
-  if (lowerInput.includes('tourist') || lowerInput.includes('famous') || lowerInput.includes('popular') || lowerInput.includes('landmarks')) {
-    suggestedTraits.authenticity = Math.max((currentTraits.authenticity ?? 0) - 5, -10);
-    return {
-      message: `Got it! I've adjusted your profile to include more popular attractions (${suggestedTraits.authenticity > 0 ? '+' : ''}${suggestedTraits.authenticity}). Your itineraries will feature must-see landmarks and well-known experiences.`,
-      suggestedTraits,
-    };
-  }
-
-  // Default response if no pattern matched
-  return {
-    message: "Thanks for sharing! Could you be more specific about which aspect of your travel style we got wrong? For example, is it about pace, adventure level, budget preference, social style, or how planned vs spontaneous you like your trips?",
-  };
 }
 
 export type { DNAFeedbackChatProps };

@@ -63,7 +63,9 @@ import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2.90.1";
    'itinerary-chat': 'itinerary_edit',
    'optimize-itinerary': 'itinerary_edit',
    'analyze_itinerary': 'itinerary_edit',
-   'analyze-itinerary': 'itinerary_edit',
+    'analyze-itinerary': 'itinerary_edit',
+    'dna_feedback_chat': 'dna_profile',
+    'dna-feedback-chat': 'dna_profile',
    
    // Booking Search
    'hotels_search': 'booking_search',
