@@ -15,8 +15,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
+import { cn } from '@/lib/utils';
 import { EditorialItinerary, type EditorialDay } from '@/components/itinerary/EditorialItinerary';
 import TripChat from '@/components/chat/TripChat';
+import TripSuggestions from '@/components/suggestions/TripSuggestions';
 
 interface SharedTrip {
   id: string;
@@ -61,6 +63,7 @@ export default function TripShare() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showChat, setShowChat] = useState(false);
+  const [activeTab, setActiveTab] = useState<'chat' | 'suggestions'>('suggestions');
 
   useEffect(() => {
     if (shareToken) {
@@ -276,22 +279,58 @@ export default function TripShare() {
           </section>
         )}
 
-        {/* Trip Discussion Chat */}
+        {/* Trip Collaboration */}
         <section>
           <button
             onClick={() => setShowChat(!showChat)}
             className="flex items-center gap-2 text-lg font-semibold mb-4 hover:text-primary transition-colors"
           >
             <MessageCircle className="h-5 w-5" />
-            Trip Discussion
+            Trip Collaboration
           </button>
           {showChat && (
-            <div className="border rounded-xl bg-card h-[400px]">
-              <TripChat
-                tripId={trip.id}
-                tripType="agency"
-                shareToken={shareToken}
-              />
+            <div className="space-y-3">
+              {/* Tab switcher */}
+              <div className="flex gap-1 bg-muted/50 p-1 rounded-lg w-fit">
+                <button
+                  onClick={() => setActiveTab('suggestions')}
+                  className={cn(
+                    "px-3 py-1.5 text-sm rounded-md transition-colors",
+                    activeTab === 'suggestions'
+                      ? "bg-background shadow-sm font-medium"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  💡 Suggestions
+                </button>
+                <button
+                  onClick={() => setActiveTab('chat')}
+                  className={cn(
+                    "px-3 py-1.5 text-sm rounded-md transition-colors",
+                    activeTab === 'chat'
+                      ? "bg-background shadow-sm font-medium"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  💬 Chat
+                </button>
+              </div>
+
+              {activeTab === 'suggestions' ? (
+                <TripSuggestions
+                  tripId={trip.id}
+                  tripType="agency"
+                  shareToken={shareToken}
+                />
+              ) : (
+                <div className="border rounded-xl bg-card h-[400px]">
+                  <TripChat
+                    tripId={trip.id}
+                    tripType="agency"
+                    shareToken={shareToken}
+                  />
+                </div>
+              )}
             </div>
           )}
         </section>

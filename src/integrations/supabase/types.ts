@@ -5987,6 +5987,83 @@ export type Database = {
           },
         ]
       }
+      trip_suggestion_votes: {
+        Row: {
+          created_at: string
+          id: string
+          suggestion_id: string
+          user_id: string | null
+          vote_type: string
+          voter_name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          suggestion_id: string
+          user_id?: string | null
+          vote_type?: string
+          voter_name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          suggestion_id?: string
+          user_id?: string | null
+          vote_type?: string
+          voter_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_suggestion_votes_suggestion_id_fkey"
+            columns: ["suggestion_id"]
+            isOneToOne: false
+            referencedRelation: "trip_suggestions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_suggestions: {
+        Row: {
+          created_at: string
+          description: string | null
+          display_name: string
+          id: string
+          status: string
+          suggestion_type: string
+          title: string
+          trip_id: string
+          trip_type: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          display_name: string
+          id?: string
+          status?: string
+          suggestion_type?: string
+          title: string
+          trip_id: string
+          trip_type?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          display_name?: string
+          id?: string
+          status?: string
+          suggestion_type?: string
+          title?: string
+          trip_id?: string
+          trip_type?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       trips: {
         Row: {
           abandoned_at: string | null
