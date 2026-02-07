@@ -954,7 +954,8 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
 
 export function getArchetypeNarrative(archetypeId: string): ArchetypeNarrative {
   // Normalize the ID - convert spaces/hyphens to underscores and lowercase
-  const normalizedId = archetypeId.toLowerCase().replace(/[\s-]/g, '_');
+  // Also strip leading "the_" prefix (e.g. "The Social Butterfly" → "social_butterfly")
+  const normalizedId = archetypeId.toLowerCase().replace(/[\s-]/g, '_').replace(/^the_/, '');
   
   // Direct match
   if (ARCHETYPE_NARRATIVES[normalizedId]) {
