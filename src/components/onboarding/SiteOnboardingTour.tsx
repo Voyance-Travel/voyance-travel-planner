@@ -83,9 +83,7 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
       title: 'Build Your Itinerary',
       description: 'Pick a destination and dates. We handle venue picks, timing, and routing.',
       icon: <Rocket className="h-5 w-5" />,
-      route: ROUTES.START,
-      selector: '[data-site-tour="build-cta"]',
-      position: 'bottom',
+      position: 'center',
     },
     {
       id: 'profile-hub',
@@ -235,7 +233,7 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
           className="absolute inset-0 pointer-events-auto"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          style={{ backgroundColor: isHighEmphasis ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.45)' }}
+          style={{ backgroundColor: isHighEmphasis ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.25)' }}
           onClick={handleSkip}
         />
 
