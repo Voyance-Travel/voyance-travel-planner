@@ -106,7 +106,7 @@ export default function AvatarUpload({
   const initial = userName?.charAt(0) || 'V';
 
   return (
-    <div className="relative inline-block">
+    <div className={`relative inline-block ${sizeClasses[size]}`}>
       <div 
         className={`${sizeClasses[size]} rounded-full border-4 border-background bg-muted flex items-center justify-center overflow-hidden cursor-pointer group`}
         onClick={handleClick}
