@@ -21,6 +21,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { recalculateDNAFromPreferences } from '@/utils/quizMapping';
 
 interface Message {
   id: string;
@@ -107,21 +108,29 @@ export default function DNAFeedbackChat({
 
       setMessages(prev => [...prev, assistantMessage]);
 
-      // If we detected trait adjustments, apply them
+      // If we detected trait adjustments, apply them as overrides and recalculate
       if (response.suggestedTraits && Object.keys(response.suggestedTraits).length > 0) {
+        // Merge with existing overrides
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('travel_dna_overrides')
+          .eq('id', userId)
+          .maybeSingle();
+
+        const existingOverrides = (profileData?.travel_dna_overrides as Record<string, number>) || {};
+        const mergedOverrides = { ...existingOverrides, ...response.suggestedTraits };
+
         const { error } = await supabase
           .from('profiles')
-          .update({ 
-            travel_dna_overrides: {
-              ...currentTraits,
-              ...response.suggestedTraits,
-            }
-          })
+          .update({ travel_dna_overrides: mergedOverrides })
           .eq('id', userId);
 
         if (!error) {
+          // Trigger full DNA recalculation so archetypes update immediately
+          await recalculateDNAFromPreferences(userId);
+          
           toast.success('Trait adjustments applied!', {
-            description: 'Your profile has been updated.',
+            description: 'Your profile and archetype have been updated.',
           });
           onFeedbackApplied?.();
         }
