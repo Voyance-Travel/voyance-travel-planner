@@ -28,6 +28,9 @@ import { InlineActivityRating } from '@/components/feedback/InlineActivityRating
 import { TripRescueBanner } from '@/components/feedback/TripRescueBanner';
 import { CheckInButton } from '@/components/feedback/CheckInButton';
 import { DailyProgressBar } from '@/components/trips/DailyProgressBar';
+import { SmartSwapSuggestion } from '@/components/trips/SmartSwapSuggestion';
+import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternativesDrawer';
+import type { ItineraryActivity as DrawerItineraryActivity } from '@/types/itinerary';
 import { ActivityMediaCapture } from '@/components/feedback/ActivityMediaCapture';
 import { useFeedbackTrigger } from '@/hooks/useFeedbackTrigger';
 import { useTripSentiment } from '@/hooks/useTripSentiment';
@@ -417,6 +420,9 @@ export default function ActiveTrip() {
                 onRescueDismiss={() => setRescueDismissed(true)}
                 onSwapActivity={handleSwapActivity}
                 onLightenPace={handleLightenPace}
+                destination={trip.destination}
+                tripId={tripId || ''}
+                itineraryActivities={todaysItinerary?.activities.map(a => a.name) || []}
               />
             )}
 
@@ -537,6 +543,9 @@ interface TodayViewProps {
   onRescueDismiss: () => void;
   onSwapActivity: () => void;
   onLightenPace: () => void;
+  destination: string;
+  tripId: string;
+  itineraryActivities: string[];
 }
 
 function TodayView({
@@ -557,7 +566,49 @@ function TodayView({
   onRescueDismiss,
   onSwapActivity,
   onLightenPace,
+  destination,
+  tripId,
+  itineraryActivities,
 }: TodayViewProps) {
+  // Swap drawer state
+  const [swapDrawerOpen, setSwapDrawerOpen] = useState(false);
+  const [swapTargetActivity, setSwapTargetActivity] = useState<DrawerItineraryActivity | null>(null);
+
+  const handleSwapRequest = useCallback((activityId: string) => {
+    const activity = todaysItinerary?.activities.find(a => a.id === activityId);
+    if (!activity) return;
+    
+    // Convert to drawer's ItineraryActivity type
+    const drawerActivity: DrawerItineraryActivity = {
+      id: activity.id,
+      title: activity.name,
+      description: activity.description || '',
+      time: activity.startTime || '09:00',
+      duration: activity.duration ? `${activity.duration} min` : '1 hour',
+      type: (activity.category as DrawerItineraryActivity['type']) || 'activity',
+      cost: 0,
+      location: {
+        name: activity.location?.name || '',
+        address: activity.location?.address || '',
+        coordinates: activity.location?.lat && activity.location?.lng
+          ? { lat: activity.location.lat, lng: activity.location.lng }
+          : undefined,
+      },
+      tags: [],
+      isLocked: false,
+    };
+    setSwapTargetActivity(drawerActivity);
+    setSwapDrawerOpen(true);
+  }, [todaysItinerary]);
+
+  const handleAlternativeSelected = useCallback((newActivity: DrawerItineraryActivity) => {
+    setSwapDrawerOpen(false);
+    setSwapTargetActivity(null);
+    // The drawer handles the toast and tracking. In a full implementation,
+    // this would update the itinerary data. For now, trigger the parent swap handler.
+    onSwapActivity();
+  }, [onSwapActivity]);
+
   // GPS proximity detection for check-in
   const venues = useMemo(() => {
     if (!todaysItinerary) return [];
@@ -683,6 +734,30 @@ function TodayView({
           onDismiss={onRescueDismiss}
         />
       )}
+
+      {/* Smart Swap Suggestion */}
+      <SmartSwapSuggestion
+        currentActivity={nowContext?.currentActivity ? {
+          id: nowContext.currentActivity.id,
+          name: nowContext.currentActivity.name,
+          startTime: nowContext.currentActivity.startTime,
+          endTime: nowContext.currentActivity.endTime,
+          location: nowContext.currentActivity.location,
+        } : null}
+        nextActivity={nowContext?.nextActivity ? {
+          id: nowContext.nextActivity.id,
+          name: nowContext.nextActivity.name,
+          startTime: nowContext.nextActivity.startTime,
+          endTime: nowContext.nextActivity.endTime,
+          duration: nowContext.nextActivity.duration,
+          location: nowContext.nextActivity.location,
+          type: nowContext.nextActivity.type,
+          category: nowContext.nextActivity.category,
+        } : null}
+        dayDate={todaysItinerary.date}
+        completedActivities={completedActivities}
+        onSwapRequest={handleSwapRequest}
+      />
 
       <div className="space-y-3">
         <h3 className="font-semibold text-muted-foreground text-sm uppercase tracking-wide">
@@ -840,6 +915,19 @@ function TodayView({
           Tomorrow →
         </Button>
       </div>
+
+      {/* Activity Alternatives Drawer (Smart Swap) */}
+      <ActivityAlternativesDrawer
+        open={swapDrawerOpen}
+        onClose={() => {
+          setSwapDrawerOpen(false);
+          setSwapTargetActivity(null);
+        }}
+        activity={swapTargetActivity}
+        destination={destination}
+        existingActivities={itineraryActivities}
+        onSelectAlternative={handleAlternativeSelected}
+      />
     </motion.div>
   );
 }
