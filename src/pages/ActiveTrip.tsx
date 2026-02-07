@@ -27,6 +27,7 @@ import { DaySummaryPrompt } from '@/components/feedback/DaySummaryPrompt';
 import { InlineActivityRating } from '@/components/feedback/InlineActivityRating';
 import { TripRescueBanner } from '@/components/feedback/TripRescueBanner';
 import { CheckInButton } from '@/components/feedback/CheckInButton';
+import { DailyProgressBar } from '@/components/trips/DailyProgressBar';
 import { ActivityMediaCapture } from '@/components/feedback/ActivityMediaCapture';
 import { useFeedbackTrigger } from '@/hooks/useFeedbackTrigger';
 import { useTripSentiment } from '@/hooks/useTripSentiment';
@@ -595,6 +596,16 @@ function TodayView({
       exit={{ opacity: 0, x: 20 }}
       className="space-y-6"
     >
+      {/* Daily Progress Bar */}
+      <DailyProgressBar
+        completedCount={completedActivities.size}
+        totalCount={todaysItinerary.activities.length}
+        dayNumber={tripContext.currentDayNumber}
+        totalDays={tripContext.totalDays}
+        daysRemaining={tripContext.daysRemaining}
+        isLastDay={tripContext.isLastDay}
+      />
+
       {/* NOW Context Card */}
       <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10">
         <CardContent className="p-5">
