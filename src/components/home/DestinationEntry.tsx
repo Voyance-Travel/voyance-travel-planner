@@ -73,18 +73,7 @@ export default function DestinationEntry() {
             return;
           }
         } catch { /* not JSON */ }
-        // Fallback preview for other errors
-        setPreviewData({
-          destination: targetDest,
-          days: [
-            { dayNumber: 1, headline: "Explore the Local Scene", description: "Discover hidden gems and local favorites in the heart of the city." },
-            { dayNumber: 2, headline: "Cultural Immersion", description: "Dive into history, art, and the stories that shape this place." },
-            { dayNumber: 3, headline: "Neighborhood Wandering", description: "Get lost on purpose. The best finds aren't on any map." },
-          ],
-          totalDays: 7,
-          archetypeUsed: "Slow Traveler",
-          archetypeTagline: "Fewer things, done well. That's the whole philosophy.",
-        });
+        setErrorMessage("Something went wrong. Please try again.");
         return;
       }
 
@@ -106,18 +95,7 @@ export default function DestinationEntry() {
       });
     } catch (err) {
       console.error('Preview error:', err);
-      // Fallback preview
-      setPreviewData({
-        destination: targetDest,
-        days: [
-          { dayNumber: 1, headline: "Explore the Local Scene", description: "Discover hidden gems and local favorites." },
-          { dayNumber: 2, headline: "Cultural Immersion", description: "Dive into history, art, and local stories." },
-          { dayNumber: 3, headline: "Neighborhood Wandering", description: "Get lost on purpose. The best finds aren't on any map." },
-        ],
-        totalDays: 7,
-        archetypeUsed: "Slow Traveler",
-        archetypeTagline: "Fewer things, done well.",
-      });
+      setErrorMessage("Something went wrong. Please try again.");
     } finally {
       setIsGenerating(false);
     }
