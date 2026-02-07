@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar, Users, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { MapPin, Calendar, Users, CheckCircle2, AlertCircle, Loader2, UserPlus } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -167,15 +167,24 @@ export default function AcceptInvite() {
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="text-center"
+            className="text-center max-w-sm"
           >
             <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-6">
               <CheckCircle2 className="h-10 w-10 text-green-600" />
             </div>
             <h1 className="text-2xl font-semibold mb-2">You're In!</h1>
-            <p className="text-muted-foreground mb-2">
+            <p className="text-muted-foreground mb-4">
               Welcome to {inviteInfo.tripName}
             </p>
+
+            {/* Friend connection confirmation */}
+            <div className="bg-muted/50 rounded-lg p-3 mb-4 flex items-center gap-3">
+              <UserPlus className="h-4 w-4 text-primary shrink-0" />
+              <p className="text-xs text-muted-foreground text-left">
+                <strong className="text-foreground">{inviteInfo.inviterName || 'The trip owner'}</strong> has been added as a friend. You'll find this trip in your dashboard.
+              </p>
+            </div>
+
             <p className="text-sm text-muted-foreground">
               Redirecting to your trip...
             </p>
@@ -273,7 +282,7 @@ export default function AcceptInvite() {
               )}
 
               <p className="text-xs text-center text-muted-foreground">
-                By joining, you'll be able to view the itinerary and collaborate on planning.
+                By joining, you'll be added as a friend, and this trip will appear in your dashboard for easy access.
               </p>
             </CardContent>
           </Card>
