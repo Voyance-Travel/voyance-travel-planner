@@ -33,6 +33,7 @@ import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternative
 import { PostActivityNudge } from '@/components/feedback/PostActivityNudge';
 import { MemoryUploadButton } from '@/components/memories/MemoryUploadButton';
 import { MemoriesTimeline } from '@/components/memories/MemoriesTimeline';
+import { ActiveTripStats } from '@/components/trips/ActiveTripStats';
 import type { ItineraryActivity as DrawerItineraryActivity } from '@/types/itinerary';
 import { ActivityMediaCapture } from '@/components/feedback/ActivityMediaCapture';
 import { useFeedbackTrigger } from '@/hooks/useFeedbackTrigger';
@@ -85,7 +86,7 @@ interface ItineraryDay {
   };
 }
 
-type ViewType = 'today' | 'overview' | 'nearby' | 'memories';
+type ViewType = 'today' | 'overview' | 'nearby' | 'memories' | 'stats';
 
 // Get time of day greeting and icon
 function getTimeContext() {
@@ -382,20 +383,25 @@ export default function ActiveTrip() {
 
             {/* View Tabs */}
             <div className="flex gap-4 pb-3">
-              {(['today', 'overview', 'nearby', 'memories'] as ViewType[]).map(v => (
-                <button
-                  key={v}
-                  onClick={() => setView(v)}
-                  className={cn(
-                    'pb-2 border-b-2 text-sm font-medium transition-colors capitalize',
-                    view === v 
-                      ? 'border-primary text-primary' 
-                      : 'border-transparent text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  {v === 'today' ? 'Today' : v === 'overview' ? 'Trip' : v === 'nearby' ? 'Nearby' : '📸'}
-                </button>
-              ))}
+              {(['today', 'overview', 'nearby', 'memories', 'stats'] as ViewType[]).map(v => {
+                const labels: Record<ViewType, string> = {
+                  today: 'Today', overview: 'Trip', nearby: 'Nearby', memories: '📸', stats: '📊'
+                };
+                return (
+                  <button
+                    key={v}
+                    onClick={() => setView(v)}
+                    className={cn(
+                      'pb-2 border-b-2 text-sm font-medium transition-colors',
+                      view === v 
+                        ? 'border-primary text-primary' 
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    {labels[v]}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </header>
@@ -478,6 +484,38 @@ export default function ActiveTrip() {
                 <MemoriesTimeline
                   tripId={tripId || ''}
                   tripName={trip.name}
+                />
+              </motion.div>
+            )}
+
+            {view === 'stats' && (
+              <motion.div
+                key="stats"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+              >
+                <ActiveTripStats
+                  tripId={tripId || ''}
+                  tripName={trip.name}
+                  destination={trip.destination}
+                  itinerary={itinerary.map(day => ({
+                    dayNumber: day.dayNumber,
+                    date: day.date,
+                    theme: day.theme,
+                    activities: day.activities.map(a => ({
+                      id: a.id,
+                      name: a.name,
+                      category: a.category,
+                      duration: a.duration,
+                    })),
+                  }))}
+                  completedActivities={completedActivities}
+                  currentDayNumber={tripContext?.currentDayNumber || 1}
+                  totalDays={tripContext?.totalDays || 1}
+                  budget={trip.budget_total_cents ? trip.budget_total_cents / 100 : undefined}
+                  currency={trip.budget_currency || 'USD'}
+                  travelers={trip.travelers || 1}
                 />
               </motion.div>
             )}
