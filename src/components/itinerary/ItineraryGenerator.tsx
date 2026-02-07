@@ -13,9 +13,12 @@ import { PreferenceNudge, usePreferenceCompletion } from '@/components/common/Pr
 import { GenerationPhases } from '@/components/planner/shared/GenerationPhases';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, differenceInCalendarDays } from 'date-fns';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { ROUTES } from '@/config/routes';
+import { useGenerationGate, type GateResult } from '@/hooks/useGenerationGate';
+import { generateFullPreview, type FullPreview, type PreviewDay } from '@/services/fullPreviewService';
+import { convertPreviewToGeneratedDays } from '@/utils/previewConverter';
 
 interface ItineraryGeneratorProps {
   tripId: string;
@@ -92,6 +95,9 @@ export function ItineraryGenerator({
   const [prePhase, setPrePhase] = useState<Extract<GenerationStep, 'gathering-dna' | 'personalizing' | 'preparing'> | null>(null);
   const autoStartTriggered = useRef(false);
 
+  // Generation gate — pre-authorizes credits before generation
+  const { authorize } = useGenerationGate();
+
   // Keep the pre-generation experience on screen until the first day is ready,
   // so we don't flash back to the generic spinner state.
   useEffect(() => {
@@ -110,30 +116,85 @@ export function ItineraryGenerator({
     await new Promise(resolve => setTimeout(resolve, 800));
     setPrePhase('personalizing');
     await new Promise(resolve => setTimeout(resolve, 800));
+
+    // Calculate trip days for the gate
+    const totalDays = differenceInCalendarDays(parseISO(endDate), parseISO(startDate)) + 1;
+    const cities = isMultiCity ? [] : [destination]; // Multi-city cities resolved inside gate if needed
+
+    // PRE-AUTHORIZE: Check credits and deduct if affordable
     setPrePhase('preparing');
-    await new Promise(resolve => setTimeout(resolve, 800));
+    let gateResult: GateResult;
+    try {
+      gateResult = await authorize({
+        tripId,
+        days: totalDays,
+        cities,
+      });
+    } catch (err) {
+      console.error('[ItineraryGenerator] Gate error, defaulting to preview:', err);
+      gateResult = {
+        mode: 'preview',
+        tripCost: totalDays * 90,
+        creditsCharged: 0,
+        currentBalance: 0,
+        shortfall: totalDays * 90,
+        recommendedPack: null,
+      };
+    }
+
+    console.log(`[ItineraryGenerator] Gate result: mode=${gateResult.mode}, cost=${gateResult.tripCost}, charged=${gateResult.creditsCharged}`);
 
     try {
-      const generatedDays = await generateItinerary({
-        tripId,
-        destination,
-        destinationCountry,
-        startDate,
-        endDate,
-        travelers,
-        tripType,
-        budgetTier,
-        userId,
-        isMultiCity,
-      });
+      if (gateResult.mode === 'full') {
+        // FULL GENERATION — credits already deducted
+        const generatedDays = await generateItinerary({
+          tripId,
+          destination,
+          destinationCountry,
+          startDate,
+          endDate,
+          travelers,
+          tripType,
+          budgetTier,
+          userId,
+          isMultiCity,
+        });
 
-      // Ensure we exit the pre-generation screen even if we never received
-      // streamed days (e.g. if the hook fell back to the full pipeline).
-      setPrePhase(null);
+        setPrePhase(null);
+        await new Promise(resolve => setTimeout(resolve, 900));
+        onComplete(generatedDays, overview);
+      } else {
+        // PREVIEW GENERATION — cheap AI-only, no credits deducted
+        console.log(`[ItineraryGenerator] Generating preview (user has ${gateResult.currentBalance} credits, needs ${gateResult.tripCost})`);
+        
+        const previewResponse = await generateFullPreview({
+          destination,
+          destinationCountry,
+          startDate,
+          endDate,
+          travelers,
+          tripType,
+          budgetTier,
+        });
 
-      // Let the user see the completed formation state briefly before switching views.
-      await new Promise(resolve => setTimeout(resolve, 900));
-      onComplete(generatedDays, overview);
+        setPrePhase(null);
+
+        if (previewResponse.success && previewResponse.preview) {
+          // Convert preview data to GeneratedDay[] format with isPreview flag
+          const previewDays = convertPreviewToGeneratedDays(previewResponse.preview);
+          
+          // Pass to onComplete with preview metadata in overview
+          const previewOverview: TripOverview = {
+            highlights: previewResponse.preview.dnaAlignment,
+            localTips: previewResponse.preview.gatedFeatures,
+          };
+
+          await new Promise(resolve => setTimeout(resolve, 900));
+          onComplete(previewDays, previewOverview);
+        } else {
+          throw new Error(previewResponse.error || 'Failed to generate preview');
+        }
+      }
     } catch (err) {
       console.error('Generation failed:', err);
     }
