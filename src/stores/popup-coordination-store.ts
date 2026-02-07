@@ -9,6 +9,7 @@ import { create } from 'zustand';
 export type PopupType = 
   | 'welcome_credits'
   | 'onboarding_preferences' 
+  | 'site_tour'
   | 'itinerary_tour'
   | 'credit_progress_bar'
   | 'review_capture';
@@ -23,9 +24,10 @@ interface PopupPriority {
 // Progress bar is always-visible but hides when modals are active
 const POPUP_PRIORITIES: PopupPriority[] = [
   { type: 'welcome_credits', priority: 1, minDelaySinceLastPopup: 0 },
-  { type: 'itinerary_tour', priority: 2, minDelaySinceLastPopup: 500 },
-  { type: 'onboarding_preferences', priority: 3, minDelaySinceLastPopup: 1000 },
-  { type: 'review_capture', priority: 4, minDelaySinceLastPopup: 2000 },
+  { type: 'site_tour', priority: 2, minDelaySinceLastPopup: 1000 },
+  { type: 'itinerary_tour', priority: 3, minDelaySinceLastPopup: 500 },
+  { type: 'onboarding_preferences', priority: 4, minDelaySinceLastPopup: 1000 },
+  { type: 'review_capture', priority: 5, minDelaySinceLastPopup: 2000 },
   { type: 'credit_progress_bar', priority: 10, minDelaySinceLastPopup: 2000 },
 ];
 
@@ -126,6 +128,7 @@ export const usePopupCoordination = create<PopupState>((set, get) => ({
 export const POPUP_STORAGE = {
   WELCOME_SHOWN: 'voyance_welcome_shown',
   ONBOARDING_SHOWN: 'voyance_onboarding_nudge_shown',
+  SITE_TOUR_COMPLETED: 'voyance_site_tour_completed',
   ITINERARY_TOUR_COMPLETED: 'voyance_itinerary_tour_completed',
   PROGRESS_BAR_COLLAPSED: 'voyance_progress_bar_collapsed',
   REVIEW_SUBMITTED: 'voyance_review_submitted',

@@ -34,9 +34,9 @@ const navLinks = [
 ];
 
 const userMenuItems = [
-  { href: ROUTES.PROFILE.VIEW, label: 'My Profile', icon: User },
-  { href: ROUTES.TRIP.DASHBOARD, label: 'My Trips', icon: MapPin },
-  { href: ROUTES.PROFILE.SETTINGS, label: 'Settings', icon: Settings },
+  { href: ROUTES.PROFILE.VIEW, label: 'My Profile', icon: User, tourId: 'profile-link' },
+  { href: ROUTES.TRIP.DASHBOARD, label: 'My Trips', icon: MapPin, tourId: 'my-trips' },
+  { href: ROUTES.PROFILE.SETTINGS, label: 'Settings', icon: Settings, tourId: undefined },
 ];
 
 const agentMenuItem = { href: ROUTES.AGENT.DASHBOARD, label: 'Agent Dashboard', icon: Briefcase };
@@ -126,7 +126,7 @@ export default function TopNav() {
           {/* Desktop Navigation */}
           <div className="hidden lg:flex items-center gap-6">
             {/* Explore Dropdown */}
-            <div className="relative" ref={exploreMenuRef}>
+            <div className="relative" ref={exploreMenuRef} data-site-tour="explore-menu">
               <button
                 onClick={() => setIsExploreOpen(!isExploreOpen)}
                 className={`flex items-center gap-1.5 text-sm font-medium transition-colors hover:opacity-80 ${
@@ -195,7 +195,7 @@ export default function TopNav() {
             {isAuthenticated ? (
               <>
                 {/* Notification Bell */}
-                <div className={isTransparent ? '[&_button]:text-white [&_button]:hover:bg-white/10' : ''}>
+                <div data-site-tour="notifications" className={isTransparent ? '[&_button]:text-white [&_button]:hover:bg-white/10' : ''}>
                   <NotificationBell />
                 </div>
 
@@ -203,13 +203,14 @@ export default function TopNav() {
                 <Button
                   size="sm"
                   onClick={() => navigate(ROUTES.START)}
+                  data-site-tour="build-cta"
                   className={`gap-2 ${isTransparent ? 'bg-white text-foreground hover:bg-white/90' : ''}`}
                 >
                   Build My Itinerary
                 </Button>
 
                 {/* User Dropdown */}
-                <div className="relative" ref={userMenuRef}>
+                <div className="relative" ref={userMenuRef} data-site-tour="profile">
                   <button
                     onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                     className={`flex items-center gap-2 px-2 py-1.5 rounded-full transition-colors ${
