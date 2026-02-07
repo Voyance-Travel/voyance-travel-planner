@@ -28,6 +28,8 @@ import { toast } from 'sonner';
 import { normalizeLegacyHotelSelection, type HotelBooking } from '@/utils/hotelValidation';
 import { parseEditorialDays, parseAssistantDays } from '@/utils/itineraryParser';
 import TripChat from '@/components/chat/TripChat';
+import TripSuggestions from '@/components/suggestions/TripSuggestions';
+import { cn } from '@/lib/utils';
 
 type Trip = Tables<'trips'>;
 type TripActivity = Tables<'trip_activities'>;
@@ -77,6 +79,7 @@ export default function TripDetail() {
   const [showDebriefModal, setShowDebriefModal] = useState(false);
   const [hasCollaborators, setHasCollaborators] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [collabTab, setCollabTab] = useState<'suggestions' | 'chat'>('suggestions');
   const scheduleNotifications = useScheduleNotifications();
   const { user } = useAuth();
   const hotelEnrichmentAttempted = useRef(false);
@@ -1032,7 +1035,7 @@ export default function TripDetail() {
             <TripPhotoGallery tripId={trip.id} />
           </div>
 
-          {/* Trip Chat — visible when trip has collaborators */}
+          {/* Trip Collaboration — visible when trip has collaborators */}
           {hasCollaborators && (
             <div className="mt-12">
               <button
@@ -1040,11 +1043,42 @@ export default function TripDetail() {
                 className="flex items-center gap-2 text-lg font-semibold mb-4 hover:text-primary transition-colors"
               >
                 <MessageCircle className="h-5 w-5" />
-                Trip Discussion
+                Trip Collaboration
               </button>
               {showChat && (
-                <div className="border rounded-xl bg-card h-[400px]">
-                  <TripChat tripId={trip.id} tripType="consumer" />
+                <div className="space-y-3">
+                  <div className="flex gap-1 bg-muted/50 p-1 rounded-lg w-fit">
+                    <button
+                      onClick={() => setCollabTab('suggestions')}
+                      className={cn(
+                        "px-3 py-1.5 text-sm rounded-md transition-colors",
+                        collabTab === 'suggestions'
+                          ? "bg-background shadow-sm font-medium"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      💡 Suggestions
+                    </button>
+                    <button
+                      onClick={() => setCollabTab('chat')}
+                      className={cn(
+                        "px-3 py-1.5 text-sm rounded-md transition-colors",
+                        collabTab === 'chat'
+                          ? "bg-background shadow-sm font-medium"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      💬 Chat
+                    </button>
+                  </div>
+
+                  {collabTab === 'suggestions' ? (
+                    <TripSuggestions tripId={trip.id} tripType="consumer" />
+                  ) : (
+                    <div className="border rounded-xl bg-card h-[400px]">
+                      <TripChat tripId={trip.id} tripType="consumer" />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
