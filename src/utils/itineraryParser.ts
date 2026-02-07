@@ -66,6 +66,8 @@ export interface ParsedActivity {
   website?: string;
   photos?: Array<{ url: string } | string>;
   tags?: string[];
+  /** Allow pass-through of editorial-specific fields (timeBlockType, bookingState, etc.) */
+  [key: string]: unknown;
 }
 
 export interface ParsedWeather {
@@ -85,6 +87,7 @@ export interface ParsedDay {
   estimatedDistance?: string;
   activities: ParsedActivity[];
   weather?: ParsedWeather;
+  [key: string]: unknown;
 }
 
 // For EditorialItinerary component compatibility
@@ -334,6 +337,10 @@ function parseSingleActivity(
   const title = extractString(a, ['title', 'name']) || 'Untitled Activity';
   
   return {
+    // Spread all raw fields first to preserve unknown/editorial-specific fields
+    // (timeBlockType, bookingUrl, bookingState, vendorName, viatorProductCode, etc.)
+    ...a,
+    // Then override with safely parsed versions
     id,
     title,
     name: title, // Alias for backwards compatibility
@@ -395,6 +402,8 @@ function parseSingleDay(
     .map((a, actIdx) => parseSingleActivity(a, dayIndex, actIdx));
   
   return {
+    // Spread raw day fields first to preserve unknown/editorial-specific fields
+    ...d,
     dayNumber,
     date: extractString(d, ['date']) || calculateDayDate(tripStartDate, dayIndex),
     title: extractString(d, ['title', 'theme']),
@@ -523,11 +532,13 @@ export function parseAssistantDays(
   const days = parseItineraryDays(rawData, tripStartDate);
   
   return days.map(day => ({
+    ...day, // Preserve ALL day fields (theme, weather, etc.)
     dayNumber: day.dayNumber,
     date: day.date,
     theme: day.theme,
     description: day.description,
     activities: day.activities.map(a => ({
+      ...a, // Preserve ALL activity fields (tips, transportation, timeBlockType, etc.)
       id: a.id,
       title: a.title,
       name: a.name,
