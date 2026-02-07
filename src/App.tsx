@@ -12,6 +12,7 @@ import { PageTransition } from '@/components/layout/PageTransition';
 import { useJourneyStore } from '@/stores/journey-store';
 import { MonthlyCreditsChecker } from '@/components/common/MonthlyCreditsChecker';
 import { WelcomeBonusManager } from '@/components/common/WelcomeBonusManager';
+import { SiteOnboardingTour } from '@/components/onboarding/SiteOnboardingTour';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
 import { GlobalErrorHandler } from '@/components/common/GlobalErrorHandler';
 import { OAuthReturnHandler } from '@/components/auth/OAuthReturnHandler';
@@ -286,6 +287,7 @@ const App = () => (
               <JourneyTracker />
               <MonthlyCreditsChecker />
               <WelcomeBonusManager />
+              <SiteOnboardingTour />
               <OAuthReturnHandler />
               <ErrorBoundary>
                 <AnimatedRoutes />
