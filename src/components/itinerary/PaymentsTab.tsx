@@ -172,10 +172,27 @@ export function PaymentsTab({
     });
 
     // Activities from itinerary - include ALL activities with costs (not just bookingRequired)
+    // Filter out non-payable activities like free time, downtime, transfers, check-in/out
+    const NON_PAYABLE_KEYWORDS = [
+      'free time', 'downtime', 'leisure time', 'at leisure', 'rest', 'sleep',
+      'check-in', 'check-out', 'checkin', 'checkout', 'check in', 'check out',
+      'airport transfer', 'transfer to airport', 'transfer to hotel',
+      'arrival at', 'departure from', 'packing',
+    ];
+    const NON_PAYABLE_CATEGORIES = ['downtime', 'free_time', 'transport', 'transportation'];
+
     days.forEach(day => {
       day.activities.forEach(activity => {
         const cost = activity.cost?.amount || activity.estimatedCost?.amount || 0;
         if (cost > 0) {
+          // Skip non-payable activities
+          const titleLower = (activity.title || '').toLowerCase();
+          const catLower = (activity.type || activity.category || '').toLowerCase();
+          const isNonPayable = NON_PAYABLE_KEYWORDS.some(kw => titleLower.includes(kw)) ||
+            NON_PAYABLE_CATEGORIES.includes(catLower) ||
+            activity.timeBlockType === 'downtime';
+          if (isNonPayable) return;
+
           const activityPayment = payments.find(p => p.item_type === 'activity' && p.item_id === activity.id);
           items.push({
             id: activity.id,
