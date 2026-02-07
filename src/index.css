@@ -323,3 +323,168 @@
 .preserve-3d {
   transform-style: preserve-3d;
 }
+
+/* ================================================================
+   PRINT STYLES — Clean, readable itinerary output
+   ================================================================ */
+@media print {
+  /* Reset page */
+  @page {
+    size: A4 portrait;
+    margin: 15mm 12mm;
+  }
+
+  /* Hide all non-content UI */
+  nav,
+  header,
+  footer,
+  aside,
+  [data-sonner-toaster],
+  .fixed,
+  .sticky,
+  button,
+  [role="dialog"],
+  [role="tooltip"],
+  [role="menu"],
+  .print\\:hidden {
+    display: none !important;
+  }
+
+  /* But keep buttons inside print-visible areas if they have text labels */
+  .print\\:block { display: block !important; }
+  .print\\:flex { display: flex !important; }
+
+  /* Body & background */
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 11pt !important;
+    line-height: 1.5 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Remove shadows, borders, and rounded corners for clean print */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Make all cards flat */
+  .bg-card,
+  [class*="rounded-xl"],
+  [class*="rounded-lg"] {
+    border-radius: 0 !important;
+    border: 1px solid #e0e0e0 !important;
+  }
+
+  /* Ensure content fills the page width */
+  .max-w-4xl,
+  .max-w-5xl,
+  .max-w-6xl,
+  .max-w-7xl,
+  .container {
+    max-width: 100% !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  /* Expand all collapsed/accordion content */
+  [data-state="closed"] > [data-radix-collapsible-content],
+  [data-state="closed"] > div {
+    display: block !important;
+    height: auto !important;
+    opacity: 1 !important;
+    overflow: visible !important;
+  }
+
+  /* Day sections: avoid breaking mid-day when possible */
+  .print-day-section {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Activity cards: keep together */
+  .print-activity-card {
+    page-break-inside: avoid;
+    break-inside: avoid;
+    margin-bottom: 4pt;
+  }
+
+  /* Day headers: don't orphan at bottom of page */
+  h2, h3, h4 {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  /* Hide interactive-only elements */
+  [class*="hover:"],
+  .group-hover,
+  [class*="cursor-pointer"] {
+    cursor: default !important;
+  }
+
+  /* Hide utility bar buttons, share buttons, edit buttons */
+  .gap-2 > button,
+  [class*="DropdownMenu"],
+  [class*="Tooltip"] {
+    display: none !important;
+  }
+
+  /* Show all day content (remove line-clamp truncation) */
+  .line-clamp-1,
+  .line-clamp-2,
+  .line-clamp-3 {
+    -webkit-line-clamp: unset !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  /* Links: show URL after text */
+  a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 8pt;
+    color: #666;
+    word-break: break-all;
+  }
+
+  /* Images: constrain size for print */
+  img {
+    max-height: 120px !important;
+    object-fit: cover !important;
+  }
+
+  /* Animations: disable */
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* Tabs: show all tab content, hide tab nav */
+  [role="tablist"] {
+    display: none !important;
+  }
+
+  /* Badge / chip styling for print */
+  .badge,
+  [class*="Badge"] {
+    border: 1px solid #ccc !important;
+    background: #f5f5f5 !important;
+    color: #333 !important;
+  }
+
+  /* Progress bars: hide */
+  [role="progressbar"] {
+    display: none !important;
+  }
+
+  /* Ensure text is black */
+  p, span, li, h1, h2, h3, h4, h5, h6, div {
+    color: #1a1a1a !important;
+  }
+
+  /* Muted text stays slightly lighter */
+  .text-muted-foreground {
+    color: #555 !important;
+  }
+}
