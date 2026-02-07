@@ -2,24 +2,21 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Sparkles, 
-  Lock, 
-  Crown,
   MapPin,
   Compass,
   ArrowRight
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import MysteryGetawayModal from './MysteryGetawayModal';
 
 interface SurpriseTripCardProps {
-  isPremium?: boolean;
   className?: string;
 }
 
-export default function SurpriseTripCard({ isPremium = false, className }: SurpriseTripCardProps) {
+export default function SurpriseTripCard({ className }: SurpriseTripCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -43,12 +40,7 @@ export default function SurpriseTripCard({ isPremium = false, className }: Surpr
             className="w-full h-full object-cover transition-transform duration-700"
             style={{ transform: isHovered ? 'scale(1.05)' : 'scale(1)' }}
           />
-          <div className={cn(
-            "absolute inset-0 transition-all duration-500",
-            isPremium 
-              ? "bg-gradient-to-br from-primary/80 via-accent/60 to-primary/40"
-              : "bg-gradient-to-br from-gray-900/90 via-gray-800/80 to-gray-900/70"
-          )} />
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/80 via-accent/60 to-primary/40 transition-all duration-500" />
         </div>
 
         {/* Floating Elements */}
@@ -79,17 +71,10 @@ export default function SurpriseTripCard({ isPremium = false, className }: Surpr
         <div className="relative z-10 p-8 md:p-10">
           {/* Badge */}
           <div className="mb-6">
-            {isPremium ? (
-              <Badge className="bg-white/20 backdrop-blur-sm text-white border-0 gap-1.5 px-3 py-1.5">
-                <Crown className="h-3.5 w-3.5" />
-                Premium Feature
-              </Badge>
-            ) : (
-              <Badge variant="secondary" className="bg-white/10 backdrop-blur-sm text-white/80 border-0 gap-1.5 px-3 py-1.5">
-                <Lock className="h-3.5 w-3.5" />
-                Premium Only
-              </Badge>
-            )}
+            <Badge className="bg-white/20 backdrop-blur-sm text-white border-0 gap-1.5 px-3 py-1.5">
+              <Sparkles className="h-3.5 w-3.5" />
+              Uses Credits
+            </Badge>
           </div>
 
           {/* Title & Description */}
@@ -135,28 +120,14 @@ export default function SurpriseTripCard({ isPremium = false, className }: Surpr
             </div>
 
             {/* CTA */}
-            {isPremium ? (
-              <Button 
-                size="lg" 
-                className="bg-white text-foreground hover:bg-white/90 gap-2 group shadow-lg"
-                onClick={() => setModalOpen(true)}
-              >
-                Discover My Matches
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-              </Button>
-            ) : (
-              <Button 
-                size="lg" 
-                variant="outline" 
-                className="border-white/30 text-white hover:bg-white/10 gap-2"
-                asChild
-              >
-                <Link to="/profile?tab=subscription">
-                  <Crown className="h-4 w-4" />
-                  Upgrade to Unlock
-                </Link>
-              </Button>
-            )}
+            <Button 
+              size="lg" 
+              className="bg-white text-foreground hover:bg-white/90 gap-2 group shadow-lg"
+              onClick={() => setModalOpen(true)}
+            >
+              Discover My Matches
+              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+            </Button>
           </div>
         </div>
       </motion.div>
