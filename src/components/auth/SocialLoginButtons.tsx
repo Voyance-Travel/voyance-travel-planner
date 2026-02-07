@@ -1,8 +1,16 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { lovable } from '@/integrations/lovable/index';
+import { createLovableAuth } from '@lovable.dev/cloud-auth-js';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+
+// Use a custom auth instance that always routes OAuth through the .lovable.app domain
+// so it works on custom domains (e.g. travelwithvoyance.com) where ~oauth/initiate isn't served
+const LOVABLE_APP_ORIGIN = 'https://voyance-travel-planner.lovable.app';
+const lovableAuth = createLovableAuth({
+  oauthBrokerUrl: `${LOVABLE_APP_ORIGIN}/~oauth/initiate`,
+});
 
 interface SocialLoginButtonsProps {
   mode?: 'signin' | 'signup';
@@ -14,13 +22,23 @@ export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps)
   const handleGoogleLogin = async () => {
     setIsLoadingGoogle(true);
     try {
-      const { error } = await lovable.auth.signInWithOAuth('google', {
+      const result = await lovableAuth.signInWithOAuth('google', {
         redirect_uri: window.location.origin,
       });
-      
-      if (error) {
+
+      if (result.redirected) return;
+
+      if (result.error) {
         toast.error('Failed to sign in with Google');
-        console.error('Google login error:', error);
+        console.error('Google login error:', result.error);
+        return;
+      }
+
+      // Set session from tokens
+      try {
+        await supabase.auth.setSession(result.tokens);
+      } catch (e) {
+        console.error('Session set error:', e);
       }
     } catch (error) {
       toast.error('An unexpected error occurred');
