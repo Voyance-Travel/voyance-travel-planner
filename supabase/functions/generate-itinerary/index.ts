@@ -6705,6 +6705,76 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
       }
       
       // =======================================================================
+      // STAGE 1.92: Hidden Gems Discovery (5-layer Perplexity engine)
+      // Runs in parallel via dedicated edge function, results injected into AI prompt
+      // =======================================================================
+      console.log("[Stage 1.92] Discovering hidden gems...");
+      let hiddenGemsContext = "";
+      let discoveredGems: any[] = [];
+      
+      try {
+        const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY");
+        
+        if (PERPLEXITY_API_KEY) {
+          const gemsResponse = await fetch(`${supabaseUrl}/functions/v1/discover-hidden-gems`, {
+            method: 'POST',
+            headers: {
+              'Authorization': authHeader,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              destination: context.destination,
+              country: context.destinationCountry || '',
+              archetypeName: unifiedProfile.primaryArchetype || 'Explorer',
+              secondaryArchetype: unifiedProfile.secondaryArchetype || undefined,
+              interests: unifiedProfile.interests || [],
+              diningStyle: prefs?.dining_style || undefined,
+              budgetTier: unifiedProfile.budgetTier || undefined,
+              travelPace: prefs?.travel_pace || undefined,
+              tripDuration: context.totalDays,
+              isFirstVisit: context.isFirstTimeVisitor,
+            }),
+          });
+
+          if (gemsResponse.ok) {
+            const gemsData = await gemsResponse.json();
+            discoveredGems = gemsData.gems || [];
+            
+            if (discoveredGems.length > 0) {
+              // Build context for AI prompt - inject gems as strong candidates
+              const gemLines = discoveredGems.slice(0, 8).map((g: any, i: number) => 
+                `${i + 1}. ${g.name} (${g.category}) in ${g.neighborhood} — ${g.whyFitsYou} [Source: ${g.discoveryLayer}]${g.tip ? ` TIP: ${g.tip}` : ''}`
+              ).join('\n');
+              
+              hiddenGemsContext = `\n## 💎 HIDDEN GEMS DISCOVERED (HIGH PRIORITY — INCLUDE 2-3 PER DAY)
+The following spots were discovered through deep research (Reddit mining, local-language sources, new openings, neighborhood clusters) and are specifically matched to this traveler's ${unifiedProfile.primaryArchetype || 'Explorer'} archetype.
+
+THESE ARE YOUR SECRET WEAPON — most travel apps cannot find these. Include at least 2-3 of these per day, mixed naturally into the schedule:
+${gemLines}
+
+RULES FOR HIDDEN GEMS:
+- Mark each included gem with "isHiddenGem": true in the activity intelligence object
+- In the "whyThisFits" field, reference why this specific gem matches the traveler
+- Include the "discoverySource" field with the layer that found it (e.g., "Reddit Mining", "Local Language Sources")
+- Prioritize gems over generic tourist attractions
+- Space them throughout the trip (don't cluster all gems on one day)
+`;
+              console.log(`[Stage 1.92] Discovered ${discoveredGems.length} hidden gems, injecting ${Math.min(discoveredGems.length, 8)} into prompt`);
+            } else {
+              console.log("[Stage 1.92] No hidden gems found");
+            }
+          } else {
+            console.warn(`[Stage 1.92] Hidden gems API error: ${gemsResponse.status}`);
+            await gemsResponse.text(); // consume body
+          }
+        } else {
+          console.log("[Stage 1.92] Skipping - Perplexity not configured");
+        }
+      } catch (gemsError) {
+        console.warn("[Stage 1.92] Failed to discover hidden gems:", gemsError);
+      }
+      
+      // =======================================================================
       // STAGE 1.95: Cold Start Detection (simplified - using profile-loader)
       // Cold start handling is now integrated into loadTravelerProfile() which
       // provides dataCompleteness and isFallback flags. No separate module needed.
@@ -6938,10 +7008,10 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
       }
       
       // Combine all context for maximum personalization
-      // Order: ARCHETYPE CONSTRAINTS → TRIP TYPE → SKIP LIST → DIETARY ENFORCEMENT → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE
+      // Order: ARCHETYPE CONSTRAINTS → TRIP TYPE → SKIP LIST → DIETARY ENFORCEMENT → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → HIDDEN GEMS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE
       // NOTE: generationHierarchy includes destination essentials, archetype behavioral rules, budget guardrails (Phase 2 Fix)
       // Phase 2 Fix: Removed unifiedDNAContext - all traveler data now comes from generationHierarchy via unified profile
-      const preferenceContext = generationHierarchy + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt;
+      const preferenceContext = generationHierarchy + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + hiddenGemsContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt;
 
       // STAGE 2: AI Generation (batch with validation and retry)
       let aiResult;
@@ -7194,6 +7264,8 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
             overview
           },
           enrichmentMetadata: enrichedItinerary.enrichmentMetadata,
+          // Hidden gems discovered but not auto-included (for browsable section)
+          hiddenGems: discoveredGems.length > 0 ? discoveredGems : undefined,
           // Free tier metadata for frontend upgrade prompts
           freeTierInfo: isFreeUser ? {
             isFreeTier: true,
