@@ -896,7 +896,97 @@ export function EditorialItinerary({
   const { data: creditData } = useCredits();
   const spendCredits = useSpendCredits();
   const totalCredits = creditData?.totalCredits ?? 0;
-  
+  const [changingTransportActivityId, setChangingTransportActivityId] = useState<string | null>(null);
+
+  // Handle transport mode change for a specific activity route segment
+  const handleTransportModeChange = useCallback(async (dayIndex: number, activityId: string, newMode: string) => {
+    const day = days[dayIndex];
+    const activity = day?.activities.find(a => a.id === activityId);
+    if (!activity?.transportation) return;
+
+    // Charge credits (skip for paid users)
+    if (!isPaid) {
+      if (totalCredits < CREDIT_COSTS.TRANSPORT_MODE_CHANGE) {
+        toast.error(`Need ${CREDIT_COSTS.TRANSPORT_MODE_CHANGE} credits to change transport mode`);
+        return;
+      }
+      try {
+        await spendCredits.mutateAsync({
+          action: 'TRANSPORT_MODE_CHANGE',
+          tripId,
+          metadata: { activityId, newMode },
+        });
+      } catch {
+        return;
+      }
+    }
+
+    setChangingTransportActivityId(activityId);
+    try {
+      // Call optimize for just this single segment with the specified mode
+      const activityIndex = day.activities.findIndex(a => a.id === activityId);
+      const nextActivity = day.activities[activityIndex + 1];
+      
+      const { data, error } = await supabase.functions.invoke('optimize-itinerary', {
+        body: {
+          tripId,
+          destination,
+          days: [{
+            dayNumber: day.dayNumber,
+            date: day.date,
+            activities: day.activities.map(a => ({
+              id: a.id,
+              title: a.title,
+              category: a.category || a.type,
+              startTime: a.startTime,
+              endTime: a.endTime,
+              location: a.location,
+              cost: a.cost,
+              transportation: a.transportation,
+            })),
+          }],
+          enableRouteOptimization: true,
+          enableRealTransport: true,
+          enableCostLookup: false,
+          transportPreferences: {
+            allowedModes: [newMode],
+            forceModeForSegment: {
+              fromActivityId: activityId,
+              toActivityId: nextActivity?.id,
+              mode: newMode,
+            },
+          },
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.days?.[0]) {
+        // Update only the transport data for the changed activity
+        const optimizedDay = data.days[0];
+        setDays(prev => prev.map((d, idx) => {
+          if (idx !== dayIndex) return d;
+          return {
+            ...d,
+            activities: d.activities.map(act => {
+              const optAct = optimizedDay.activities?.find((oa: any) => oa.id === act.id);
+              if (optAct?.transportation && act.id === activityId) {
+                return { ...act, transportation: optAct.transportation };
+              }
+              return act;
+            }),
+          };
+        }));
+        setHasChanges(true);
+        toast.success(`Route updated to ${newMode} (${CREDIT_COSTS.TRANSPORT_MODE_CHANGE} credits used)`);
+      }
+    } catch (err) {
+      console.error('Transport mode change error:', err);
+      toast.error('Failed to recalculate route');
+    } finally {
+      setChangingTransportActivityId(null);
+    }
+  }, [days, isPaid, totalCredits, spendCredits, tripId, destination]);
   // Get trip permission for current user
   const { data: tripPermission } = useTripPermission(tripId);
   const { data: collaborators = [] } = useTripCollaborators(tripId);
@@ -2323,9 +2413,11 @@ export function EditorialItinerary({
                   onTimeEdit={(dIdx, aIdx, activity) => setTimeEditModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
                   onActivityEdit={(dIdx, aIdx, activity) => setEditActivityModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
                   onPaymentRequest={onPaymentRequest}
-                  onViewReviews={openReviewsDrawer}
-                  collaboratorColorMap={collaboratorColorMap}
-                />
+                   onViewReviews={openReviewsDrawer}
+                   onTransportModeChange={handleTransportModeChange}
+                   changingTransportActivityId={changingTransportActivityId}
+                   collaboratorColorMap={collaboratorColorMap}
+                 />
               </div>
             )}
             
@@ -4583,6 +4675,8 @@ interface DayCardProps {
   onBookingStateChange?: (activityId: string, newState: BookingItemState) => void;
   onViewReviews?: (activity: EditorialActivity) => void;
   onUnlockTrip?: () => void;
+  onTransportModeChange?: (dayIndex: number, activityId: string, newMode: string) => Promise<void>;
+  changingTransportActivityId?: string | null;
   collaboratorColorMap?: Map<string, CollaboratorAttribution>;
 }
 
@@ -4620,6 +4714,8 @@ function DayCard({
   onBookingStateChange,
   onViewReviews,
   onUnlockTrip,
+  onTransportModeChange,
+  changingTransportActivityId,
   collaboratorColorMap,
 }: DayCardProps) {
   const allLocked = day.activities.every(a => a.isLocked);
@@ -4772,9 +4868,11 @@ function DayCard({
                       onEdit={onActivityEdit}
                       onPaymentRequest={onPaymentRequest}
                       onBookingStateChange={onBookingStateChange}
-                      onViewReviews={onViewReviews}
-                      collaboratorColorMap={collaboratorColorMap}
-                    />
+                       onViewReviews={onViewReviews}
+                       onTransportModeChange={onTransportModeChange}
+                       changingTransportActivityId={changingTransportActivityId}
+                       collaboratorColorMap={collaboratorColorMap}
+                     />
                   </div>
                 )}
               />
@@ -4872,6 +4970,9 @@ interface ActivityRowProps {
   onPaymentRequest?: (activityId: string) => void;
   onBookingStateChange?: (activityId: string, newState: BookingItemState) => void;
   onViewReviews?: (activity: EditorialActivity) => void;
+  /** Handler for changing transport mode on a route segment */
+  onTransportModeChange?: (dayIndex: number, activityId: string, newMode: string) => Promise<void>;
+  changingTransportActivityId?: string | null;
   /** Color map for collaborator attribution badges */
   collaboratorColorMap?: Map<string, CollaboratorAttribution>;
 }
@@ -4905,6 +5006,8 @@ function ActivityRow({
   onPaymentRequest,
   onBookingStateChange,
   onViewReviews,
+  onTransportModeChange,
+  changingTransportActivityId,
   collaboratorColorMap,
 }: ActivityRowProps) {
   const activityType = getActivityType(activity);
@@ -5276,6 +5379,12 @@ function ActivityRow({
                   tripCurrency={tripCurrency}
                   displayCost={displayCost}
                   showDetails={showTransportDetails}
+                  onTransportModeChange={
+                    isEditable && onTransportModeChange
+                      ? (newMode) => onTransportModeChange(dayIndex, activity.id, newMode)
+                      : undefined
+                  }
+                  isChangingMode={changingTransportActivityId === activity.id}
                 />
               </div>
             )}
