@@ -3,6 +3,7 @@
  * Dashboard component showing all bonus opportunities
  */
 
+import React from 'react';
 import { motion } from 'framer-motion';
 import { Check, Gift, ChevronRight, Sparkles } from 'lucide-react';
 import { useBonusCredits, BONUS_INFO, BonusType } from '@/hooks/useBonusCredits';
@@ -22,7 +23,7 @@ interface CreditEarningChecklistProps {
   compact?: boolean;
 }
 
-export function CreditEarningChecklist({ className, compact = false }: CreditEarningChecklistProps) {
+export const CreditEarningChecklist = React.forwardRef<HTMLDivElement, CreditEarningChecklistProps>(function CreditEarningChecklist({ className, compact = false }, ref) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { hasClaimedBonus, isLoading } = useBonusCredits();
@@ -190,6 +191,6 @@ export function CreditEarningChecklist({ className, compact = false }: CreditEar
       )}
     </div>
   );
-}
+});
 
 export default CreditEarningChecklist;
