@@ -2722,8 +2722,11 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
     
     if (hotel) {
       const hotelInfo: string[] = [];
+      const accomType = hotel.accommodationType || 'hotel';
+      const accomEmoji = accomType === 'airbnb' ? '🏠' : accomType === 'rental' ? '🏡' : accomType === 'hostel' ? '🛏️' : '🏨';
+      const accomLabel = accomType === 'airbnb' ? 'Airbnb' : accomType === 'rental' ? 'Vacation Rental' : accomType === 'hostel' ? 'Hostel' : 'Hotel';
       if (hotel.name) {
-        hotelInfo.push(`🏨 Hotel: ${hotel.name}`);
+        hotelInfo.push(`${accomEmoji} ${accomLabel}: ${hotel.name}`);
         hotelName = hotel.name;
       }
       if (hotel.address) {
@@ -2734,7 +2737,7 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
         hotelInfo.push(`   Neighborhood: ${hotel.neighborhood}`);
       }
       if (hotelInfo.length > 0) {
-        sections.push(`\n${'='.repeat(40)}\n🏨 ACCOMMODATION (Use as daily starting/ending point)\n${'='.repeat(40)}\n${hotelInfo.join('\n')}\n⚠️ Start each day from the hotel area and end nearby for easy return.\n⚠️ CRITICAL: Day 1 activities must NOT begin before hotel check-in is complete. Standard check-in is 3:00 PM - do not schedule sightseeing before this unless arrival is very early.`);
+        sections.push(`\n${'='.repeat(40)}\n${accomEmoji} ACCOMMODATION — ${accomLabel.toUpperCase()} (Use as daily starting/ending point)\n${'='.repeat(40)}\n${hotelInfo.join('\n')}\n⚠️ Start each day from the ${accomLabel.toLowerCase()} area and end nearby for easy return.\n⚠️ CRITICAL: Day 1 activities must NOT begin before check-in is complete. Standard check-in is 3:00 PM - do not schedule sightseeing before this unless arrival is very early.`);
       }
     } else {
       console.log(`[FlightHotel] ⚠️ NO HOTEL DATA FOUND - hotel_selection is empty or missing`);

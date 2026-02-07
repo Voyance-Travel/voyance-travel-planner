@@ -51,6 +51,7 @@ export interface ManualHotelEntry {
   checkOutDate?: string; // YYYY-MM-DD
   checkInTime?: string;
   checkOutTime?: string;
+  accommodationType?: import('@/utils/hotelValidation').AccommodationType;
 }
 
 interface AddFlightInlineProps {
@@ -474,8 +475,12 @@ export function AddHotelInline({
       checkOutDate: endDate,
       checkInTime: '15:00',
       checkOutTime: '11:00',
+      accommodationType: 'hotel',
     };
   });
+
+  const accomType = hotelData.accommodationType || 'hotel';
+  const accomLabel = accomType === 'airbnb' ? 'Airbnb' : accomType === 'rental' ? 'Rental' : accomType === 'hostel' ? 'Hostel' : 'Hotel';
   
   // Date picker state
   const [checkInDate, setCheckInDate] = useState<Date | undefined>(
@@ -498,7 +503,7 @@ export function AddHotelInline({
 
   const handleSaveManualHotel = async () => {
     if (!hotelData.name) {
-      toast.error('Please enter the hotel name');
+      toast.error(`Please enter the ${accomLabel.toLowerCase()} name`);
       return;
     }
     
@@ -531,15 +536,18 @@ export function AddHotelInline({
 
     setIsSaving(true);
     try {
-      // Try to enrich the hotel with real data (address, photos, etc.)
-      toast.info('Looking up hotel details...', { id: 'hotel-enrich' });
+      // Try to enrich with real data (address, photos, etc.)
+      // For Airbnb/rentals, enrichment may not find a match — that's OK, the address is used directly
+      const isHotelType = accomType === 'hotel' || accomType === 'hostel';
+      toast.info(isHotelType ? `Looking up ${accomLabel.toLowerCase()} details...` : 'Saving stay details...', { id: 'hotel-enrich' });
       
       // Normalize destination (remove IATA codes)
       const cleanDestination = destination
         .replace(/\s*\([A-Z]{3}\)\s*$/i, '')
         .trim();
       
-      const enrichment = await enrichHotel(hotelData.name, cleanDestination);
+      // Only try enrichment for hotels/hostels (not Airbnb/rentals)
+      const enrichment = isHotelType ? await enrichHotel(hotelData.name, cleanDestination) : null;
       
       const newHotel: HotelBooking = {
         id: existingHotel?.id || `manual-${Date.now()}`,
@@ -557,6 +565,7 @@ export function AddHotelInline({
         placeId: enrichment?.placeId,
         isManualEntry: true,
         isEnriched: !!enrichment,
+        accommodationType: hotelData.accommodationType || 'hotel',
       };
       
       // Build updated hotels array
@@ -584,7 +593,7 @@ export function AddHotelInline({
       if (error) throw error;
 
       toast.dismiss('hotel-enrich');
-      toast.success(enrichment ? 'Hotel found and details updated!' : 'Hotel details saved!');
+      toast.success(enrichment ? `${accomLabel} found and details updated!` : `${accomLabel} details saved!`);
       setShowManualEntry(false);
       onHotelAdded?.();
     } catch (err) {
@@ -614,21 +623,49 @@ export function AddHotelInline({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Hotel className="h-5 w-5 text-primary" />
-              {editMode ? 'Edit Hotel Details' : 'Add Hotel'}
+              {editMode ? `Edit ${accomLabel} Details` : 'Add Accommodation'}
             </DialogTitle>
             <DialogDescription>
               {existingHotels.length > 0 
-                ? `You have ${existingHotels.length} hotel(s). Add another or edit dates to avoid overlap.`
-                : 'Enter your hotel details and stay dates.'
+                ? `You have ${existingHotels.length} stay(s). Add another or edit dates to avoid overlap.`
+                : 'Enter your stay details — hotel, Airbnb, vacation rental, or any address.'
               }
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            {/* Accommodation Type Selector */}
             <div>
-              <Label>Hotel Name *</Label>
+              <Label className="text-xs mb-1.5 block">Type of Stay</Label>
+              <div className="flex gap-2 flex-wrap">
+                {([
+                  { value: 'hotel', label: 'Hotel' },
+                  { value: 'airbnb', label: 'Airbnb' },
+                  { value: 'rental', label: 'Vacation Rental' },
+                  { value: 'hostel', label: 'Hostel' },
+                  { value: 'other', label: 'Other' },
+                ] as const).map(opt => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setHotelData(prev => ({ ...prev, accommodationType: opt.value }))}
+                    className={cn(
+                      "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
+                      accomType === opt.value 
+                        ? "bg-primary text-primary-foreground border-primary" 
+                        : "bg-secondary text-muted-foreground border-border hover:border-primary/40"
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <Label>{accomLabel} Name *</Label>
               <Input
-                placeholder="e.g. The Ritz Paris"
+                placeholder={accomType === 'airbnb' ? 'e.g. Cozy French Quarter Loft' : accomType === 'rental' ? 'e.g. Beachfront Villa' : 'e.g. The Ritz Paris'}
                 value={hotelData.name}
                 onChange={(e) => setHotelData(prev => ({ ...prev, name: e.target.value }))}
               />
@@ -707,7 +744,7 @@ export function AddHotelInline({
             <div>
               <Label>Address</Label>
               <Input
-                placeholder="e.g. 15 Place Vendôme, 75001 Paris"
+                placeholder={accomType === 'airbnb' ? 'e.g. 742 Bourbon St, New Orleans, LA' : 'e.g. 15 Place Vendôme, 75001 Paris'}
                 value={hotelData.address}
                 onChange={(e) => setHotelData(prev => ({ ...prev, address: e.target.value }))}
               />
@@ -748,7 +785,7 @@ export function AddHotelInline({
             </Button>
             <Button onClick={handleSaveManualHotel} disabled={isSaving} className="gap-2">
               {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isSaving ? 'Finding Hotel...' : (editMode ? 'Update Hotel' : 'Add Hotel')}
+              {isSaving ? `Finding ${accomLabel}...` : (editMode ? `Update ${accomLabel}` : `Add ${accomLabel}`)}
             </Button>
           </DialogFooter>
         </DialogContent>
