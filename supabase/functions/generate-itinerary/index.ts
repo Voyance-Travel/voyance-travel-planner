@@ -303,6 +303,8 @@ interface StrictActivity {
   priceLevel?: number; // 1-4 scale
   googleMapsUrl?: string;
   reviewHighlights?: string[];
+  /** Traveler ID whose preferences most influenced this activity (group trips) */
+  suggestedFor?: string;
   // =========================================================================
   // PERSONALIZATION GUARANTEE FIELDS - Phase 1
   // These fields make personalization provable and machine-checkable

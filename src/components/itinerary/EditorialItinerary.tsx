@@ -66,6 +66,7 @@ import { UpgradePrompt } from '@/components/checkout/UpgradePrompt';
 import { AddFlightInline, AddHotelInline } from './AddBookingInline';
 import { TripCollaboratorsPanel } from './TripCollaboratorsPanel';
 import { GuestDNABanner } from './GuestDNABanner';
+import { type CollaboratorAttribution, getCollaboratorColor, buildCollaboratorColorMap } from '@/utils/collaboratorAttribution';
 import { useTripPermission, useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import type { BookingItemState, TravelerInfo } from '@/services/bookingStateMachine';
 import OptimizePreferencesDialog, { type OptimizePreferences } from './OptimizePreferencesDialog';
@@ -140,6 +141,8 @@ export interface EditorialActivity {
   vendorName?: string;
   bookedAt?: string;
   cancelledAt?: string;
+  /** User ID of the collaborator this activity was suggested for (group trips) */
+  suggestedFor?: string;
 }
 
 export interface EditorialDay {
@@ -903,6 +906,14 @@ export function EditorialItinerary({
   
   // Determine effective editability based on permission
   const effectiveIsEditable = !isPreview && isEditable && (tripPermission?.isOwner || tripPermission?.canEdit);
+
+  // Build collaborator color map for activity attribution (only for group trips)
+  const collaboratorColorMap = useMemo(() => {
+    if (collaborators.length === 0) return undefined;
+    // Owner is whoever is NOT in the collaborators list
+    // We assign "Owner" as index 0, collaborators get 1+
+    return buildCollaboratorColorMap('__owner__', 'Owner', collaborators);
+  }, [collaborators]);
 
   // Calculate intelligence value stats for the itinerary
   const skippedItems = useMemo(() => getDestinationSkippedItems(destination), [destination]);
@@ -2056,6 +2067,22 @@ export function EditorialItinerary({
         <GuestDNABanner tripId={tripId} />
       )}
 
+      {/* Collaborator Color Legend */}
+      {collaboratorColorMap && collaboratorColorMap.size > 0 && (
+        <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Trip members:</span>
+          {Array.from(collaboratorColorMap.values()).map((attr) => {
+            const colors = getCollaboratorColor(attr.colorIndex);
+            return (
+              <span key={attr.userId} className="inline-flex items-center gap-1.5">
+                <span className={cn("h-2.5 w-2.5 rounded-full", colors.dot)} />
+                {attr.name}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
       {/* Destination Hero Image */}
       <DestinationHeroImage 
         destination={destination} 
@@ -2297,6 +2324,7 @@ export function EditorialItinerary({
                   onActivityEdit={(dIdx, aIdx, activity) => setEditActivityModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
                   onPaymentRequest={onPaymentRequest}
                   onViewReviews={openReviewsDrawer}
+                  collaboratorColorMap={collaboratorColorMap}
                 />
               </div>
             )}
@@ -4555,6 +4583,7 @@ interface DayCardProps {
   onBookingStateChange?: (activityId: string, newState: BookingItemState) => void;
   onViewReviews?: (activity: EditorialActivity) => void;
   onUnlockTrip?: () => void;
+  collaboratorColorMap?: Map<string, CollaboratorAttribution>;
 }
 
 function DayCard({
@@ -4591,6 +4620,7 @@ function DayCard({
   onBookingStateChange,
   onViewReviews,
   onUnlockTrip,
+  collaboratorColorMap,
 }: DayCardProps) {
   const allLocked = day.activities.every(a => a.isLocked);
   const totalCost = isPreview ? 0 : getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry);
@@ -4743,6 +4773,7 @@ function DayCard({
                       onPaymentRequest={onPaymentRequest}
                       onBookingStateChange={onBookingStateChange}
                       onViewReviews={onViewReviews}
+                      collaboratorColorMap={collaboratorColorMap}
                     />
                   </div>
                 )}
@@ -4814,21 +4845,21 @@ function DayCard({
 
 interface ActivityRowProps {
   activity: EditorialActivity;
-  destination: string; // Add destination for real photo lookup
-  destinationCountry?: string; // For cost estimation
+  destination: string;
+  destinationCountry?: string;
   dayIndex: number;
   activityIndex: number;
   totalActivities: number;
-  totalDays: number; // Total number of days in itinerary
+  totalDays: number;
   isLast: boolean;
   isEditable: boolean;
-  isPreview?: boolean; // Preview mode — gates details
+  isPreview?: boolean;
   travelers: number;
   budgetTier?: string;
-  tripCurrency: string; // User's preferred display currency
-  displayCost: (amountInUSD: number) => number; // Convert USD to display currency
+  tripCurrency: string;
+  displayCost: (amountInUSD: number) => number;
   tripId: string;
-  showTransportDetails: boolean; // Whether to show expanded transport info
+  showTransportDetails: boolean;
   existingPayment?: TripPayment;
   onPaymentSuccess: () => void;
   onLock: (dayIndex: number, activityId: string) => void;
@@ -4841,6 +4872,8 @@ interface ActivityRowProps {
   onPaymentRequest?: (activityId: string) => void;
   onBookingStateChange?: (activityId: string, newState: BookingItemState) => void;
   onViewReviews?: (activity: EditorialActivity) => void;
+  /** Color map for collaborator attribution badges */
+  collaboratorColorMap?: Map<string, CollaboratorAttribution>;
 }
 
 function ActivityRow({
@@ -4872,6 +4905,7 @@ function ActivityRow({
   onPaymentRequest,
   onBookingStateChange,
   onViewReviews,
+  collaboratorColorMap,
 }: ActivityRowProps) {
   const activityType = getActivityType(activity);
   const style = activityStyles[activityType] || activityStyles.activity;
@@ -5024,6 +5058,21 @@ function ActivityRow({
         {activity.duration && (
           <span className="text-xs text-muted-foreground">• {activity.duration}</span>
         )}
+        {/* Collaborator attribution dot (mobile) */}
+        {activity.suggestedFor && collaboratorColorMap?.has(activity.suggestedFor) && (() => {
+          const attr = collaboratorColorMap.get(activity.suggestedFor!)!;
+          const colors = getCollaboratorColor(attr.colorIndex);
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className={cn("h-2.5 w-2.5 rounded-full shrink-0", colors.dot)} />
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">
+                Suggested for {attr.name}
+              </TooltipContent>
+            </Tooltip>
+          );
+        })()}
         {activity.isLocked && <Lock className="h-3 w-3 text-primary ml-auto" />}
       </div>
 
@@ -5077,6 +5126,24 @@ function ActivityRow({
             <div className="hidden sm:flex items-center gap-2 mb-1.5">
               <span className="p-1 rounded bg-primary/10 text-primary">{style.icon}</span>
               <span className="text-xs text-primary/80 uppercase tracking-wider font-medium">{style.label}</span>
+              {/* Collaborator attribution dot (desktop) */}
+              {activity.suggestedFor && collaboratorColorMap?.has(activity.suggestedFor) && (() => {
+                const attr = collaboratorColorMap.get(activity.suggestedFor!)!;
+                const colors = getCollaboratorColor(attr.colorIndex);
+                return (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className={cn("inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full", colors.bg, colors.text)}>
+                        <span className={cn("h-2 w-2 rounded-full", colors.dot)} />
+                        {attr.name}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">
+                      Suggested for {attr.name}'s travel style
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })()}
               {/* Rating badge - clickable to view reviews (only for reviewable activity types) */}
               {(() => {
                 // Types that should NOT show reviews
