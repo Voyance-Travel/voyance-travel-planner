@@ -19,6 +19,8 @@ const FIXED_COSTS: Record<string, number> = {
   restaurant_rec: 15,
   ai_message: 10,
   mystery_getaway: 15,
+  mystery_logistics: 5,
+  transport_mode_change: 5,
 };
 
 // Variable-cost actions (cost passed from client, validated server-side)
