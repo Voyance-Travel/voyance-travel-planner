@@ -5575,7 +5575,7 @@ function TimeEditModal({ isOpen, activity, onClose, onSave }: TimeEditModalProps
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md pointer-events-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Clock className="h-5 w-5 text-primary" />
@@ -5586,21 +5586,25 @@ function TimeEditModal({ isOpen, activity, onClose, onSave }: TimeEditModalProps
           <p className="text-sm text-muted-foreground mb-4">{activity?.title}</p>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-sm font-medium mb-2 block">Start Time</label>
-              <Input 
+              <label htmlFor="start-time-input" className="text-sm font-medium mb-2 block">Start Time</label>
+              <input 
+                id="start-time-input"
                 type="time" 
                 value={startTime} 
                 onChange={(e) => setStartTime(e.target.value)}
-                className="text-base"
+                className="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 pointer-events-auto touch-manipulation"
+                style={{ fontSize: '16px' }}
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-2 block">End Time</label>
-              <Input 
+              <label htmlFor="end-time-input" className="text-sm font-medium mb-2 block">End Time</label>
+              <input 
+                id="end-time-input"
                 type="time" 
                 value={endTime} 
                 onChange={(e) => setEndTime(e.target.value)}
-                className="text-base"
+                className="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 pointer-events-auto touch-manipulation"
+                style={{ fontSize: '16px' }}
               />
             </div>
           </div>
