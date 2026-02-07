@@ -386,9 +386,12 @@ export async function getBudgetSummary(tripId: string, totalDays?: number): Prom
   if (settings.budget_include_hotel) totalCommitted += committedHotel;
   if (settings.budget_include_flight) totalCommitted += committedFlight;
   
-  // Calculate remaining
-  const remaining = settings.budget_total_cents - totalCommitted;
-  const usedPercent = (totalCommitted / settings.budget_total_cents) * 100;
+  // Include planned amounts in the used total so budget reflects itinerary estimates
+  const totalUsed = totalCommitted + plannedTotal;
+  
+  // Calculate remaining based on committed + planned
+  const remaining = settings.budget_total_cents - totalUsed;
+  const usedPercent = (totalUsed / settings.budget_total_cents) * 100;
   
   // Calculate daily target
   const days = totalDays || 7;
@@ -455,9 +458,16 @@ export async function syncItineraryToBudget(
   for (const day of days) {
     for (const activity of day.activities) {
       if (activity.cost?.amount && activity.cost.amount > 0) {
+        // Skip non-payable activities (free time, downtime, transfers)
+        const titleLower = (activity.title || '').toLowerCase();
+        const catLower = (activity.category || '').toLowerCase();
+        const isNonPayable = ['free time', 'downtime', 'leisure time', 'at leisure', 'rest', 'sleep',
+          'check-in', 'check-out', 'checkin', 'checkout', 'packing'].some(kw => titleLower.includes(kw)) ||
+          ['downtime', 'free_time'].includes(catLower);
+        if (isNonPayable) continue;
+
         // Map activity category to budget category
         let budgetCategory: BudgetCategory = 'activities';
-        const catLower = activity.category?.toLowerCase() || '';
         
         if (catLower.includes('food') || catLower.includes('dining') || catLower.includes('restaurant') || catLower.includes('meal')) {
           budgetCategory = 'food';
