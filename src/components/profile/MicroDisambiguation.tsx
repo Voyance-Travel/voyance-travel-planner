@@ -2,7 +2,8 @@
  * Micro-Disambiguation Component
  * 
  * Shows a single clarifying question when DNA confidence is low (<60%).
- * Answer triggers a rerun of DNA calculation with the new signal.
+ * Answer saves deltas as overrides and triggers a full DNA recalculation
+ * so archetypes, tone tags, and all derived data stay in sync.
  */
 
 import { useState } from 'react';
@@ -18,6 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { recalculateDNAFromPreferences } from '@/utils/quizMapping';
 
 // ============================================================================
 // TYPES
@@ -194,39 +196,30 @@ export default function MicroDisambiguation({
           },
         });
 
-      // Get current travel DNA profile
-      const { data: currentProfile } = await supabase
-        .from('travel_dna_profiles')
-        .select('trait_scores, travel_dna_v2')
-        .eq('user_id', userId)
+      // Apply disambiguation deltas as overrides, then trigger full recalc
+      // so archetypes and all derived data stay consistent
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('travel_dna_overrides')
+        .eq('id', userId)
         .maybeSingle();
 
-      if (currentProfile) {
-        // Apply disambiguation deltas to trait scores
-        const currentScores = (currentProfile.travel_dna_v2 as { trait_scores?: Record<string, number> })?.trait_scores || 
-                             (currentProfile.trait_scores as Record<string, number>) || {};
-        
-        const updatedScores = { ...currentScores };
-        for (const [trait, delta] of Object.entries(selectedOption.deltas)) {
-          const currentValue = updatedScores[trait] || 0;
-          updatedScores[trait] = Math.max(-10, Math.min(10, currentValue + delta));
-        }
-
-        // Update the profile with adjusted scores
-        const currentV2 = (currentProfile.travel_dna_v2 as Record<string, unknown>) || {};
-        await supabase
-          .from('travel_dna_profiles')
-          .update({
-            trait_scores: updatedScores,
-            travel_dna_v2: {
-              ...currentV2,
-              trait_scores: updatedScores,
-              disambiguation_applied: true,
-            },
-            updated_at: new Date().toISOString(),
-          })
-          .eq('user_id', userId);
+      const existingOverrides = (profileData?.travel_dna_overrides as Record<string, number>) || {};
+      const mergedOverrides = { ...existingOverrides };
+      
+      for (const [trait, delta] of Object.entries(selectedOption.deltas)) {
+        const currentValue = mergedOverrides[trait] || 0;
+        mergedOverrides[trait] = Math.max(-10, Math.min(10, currentValue + delta));
       }
+
+      // Save overrides to profiles table
+      await supabase
+        .from('profiles')
+        .update({ travel_dna_overrides: mergedOverrides })
+        .eq('id', userId);
+
+      // Full recalculation — updates archetypes, tone tags, everything
+      await recalculateDNAFromPreferences(userId);
 
       setIsResolved(true);
       toast.success('Thanks! Your profile has been refined.');
