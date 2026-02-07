@@ -83,6 +83,7 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
       title: 'Build Your Itinerary',
       description: 'Pick a destination and dates. We handle venue picks, timing, and routing.',
       icon: <Rocket className="h-5 w-5" />,
+      route: '/',
       position: 'center',
     },
     {
@@ -90,6 +91,7 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
       title: 'Your Command Center',
       description: 'Trips, DNA results, and preferences — all in one place.',
       icon: <User className="h-5 w-5" />,
+      route: '/',
       selector: '[data-site-tour="profile"]',
       position: 'bottom',
     },
@@ -98,6 +100,7 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
       title: 'Free Credits Included',
       description: 'Every trip starts free. Credits unlock addresses, booking links, and insider tips.',
       icon: <Zap className="h-5 w-5" />,
+      route: '/',
       position: 'center',
     },
     {
@@ -105,6 +108,7 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
       title: 'Smart Itineraries',
       description: 'See WHY each pick was made — timing hacks, tourist trap warnings, and savings tallies.',
       icon: <Star className="h-5 w-5" />,
+      route: '/',
       position: 'center',
       emphasis: 'high',
     },
@@ -113,6 +117,7 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
       title: 'Ready to Go?',
       description: 'Take the DNA quiz first for best results, or jump straight into planning.',
       icon: <Heart className="h-5 w-5" />,
+      route: '/',
       position: 'center',
     },
   ];
