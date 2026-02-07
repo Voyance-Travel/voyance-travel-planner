@@ -375,8 +375,12 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
   }
 
   const narrative = getArchetypeNarrative(dnaData.primary_archetype_name);
-  const secondaryNarrative = dnaData.secondary_archetype_name 
+  const secondaryNarrativeRaw = dnaData.secondary_archetype_name 
     ? getArchetypeNarrative(dnaData.secondary_archetype_name) 
+    : null;
+  // Ensure secondary is actually different from primary (guard against duplicates)
+  const secondaryNarrative = secondaryNarrativeRaw && secondaryNarrativeRaw.id !== narrative.id 
+    ? secondaryNarrativeRaw 
     : null;
   const colors = getCategoryColors(narrative.category);
   const confidence = dnaData.dna_confidence_score || 85;
