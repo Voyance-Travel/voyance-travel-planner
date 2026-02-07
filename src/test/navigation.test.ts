@@ -94,6 +94,7 @@ const ALL_APP_ROUTES = {
     '/admin/image-curation',
     '/admin/margins',
     '/admin/test-suites',
+    '/admin/user-tracking',
   ],
   
   // Agent CRM routes
@@ -366,37 +367,149 @@ describe('Dynamic Route Parameter Validation', () => {
 });
 
 describe('Navigation Link Safety', () => {
-  it('internal links should use defined routes', () => {
-    // This test documents that components should use ROUTES constants
-    // rather than hardcoded strings
-    
-    const safeLink = (path: string) => {
-      // Check if path matches a known route pattern
-      const allRoutes = [
-        ...ALL_APP_ROUTES.public,
-        ...ALL_APP_ROUTES.auth,
-        ...ALL_APP_ROUTES.semiProtected,
-        ...ALL_APP_ROUTES.trip,
-        ...ALL_APP_ROUTES.admin,
-        ...ALL_APP_ROUTES.agent,
-        ...ALL_APP_ROUTES.publicDynamic,
-      ];
-      
-      // For static routes, direct match
-      if (allRoutes.includes(path)) return true;
-      
-      // For dynamic routes, check pattern
-      const dynamicPatterns = allRoutes
-        .filter(r => r.includes(':'))
-        .map(r => new RegExp('^' + r.replace(/:\w+/g, '[^/]+') + '$'));
-      
-      return dynamicPatterns.some(pattern => pattern.test(path));
-    };
+  // All valid route patterns from App.tsx
+  const allRoutePatterns = [
+    ...ALL_APP_ROUTES.public,
+    ...ALL_APP_ROUTES.auth,
+    ...ALL_APP_ROUTES.semiProtected,
+    ...ALL_APP_ROUTES.trip,
+    ...ALL_APP_ROUTES.admin,
+    ...ALL_APP_ROUTES.agent,
+    ...ALL_APP_ROUTES.publicDynamic,
+    ...ALL_APP_ROUTES.redirects.map(r => r.from),
+  ];
 
-    expect(safeLink('/')).toBe(true);
-    expect(safeLink('/signin')).toBe(true);
-    expect(safeLink('/trip/abc-123')).toBe(true);
-    expect(safeLink('/destination/paris')).toBe(true);
-    expect(safeLink('/nonexistent-page')).toBe(false);
+  /**
+   * Check if a navigation path resolves to a known route.
+   * Handles static routes, dynamic segments, and query params.
+   */
+  function isValidRoute(path: string): boolean {
+    // Strip query params and hash
+    const cleanPath = path.split('?')[0].split('#')[0];
+    
+    // Direct match for static routes
+    if (allRoutePatterns.includes(cleanPath)) return true;
+    
+    // Match dynamic route patterns (e.g., /trip/:tripId -> /trip/abc-123)
+    const dynamicPatterns = allRoutePatterns
+      .filter(r => r.includes(':'))
+      .map(r => new RegExp('^' + r.replace(/:\w+/g, '[^/]+') + '$'));
+    
+    return dynamicPatterns.some(pattern => pattern.test(cleanPath));
+  }
+
+  it('internal links should use defined routes', () => {
+    expect(isValidRoute('/')).toBe(true);
+    expect(isValidRoute('/signin')).toBe(true);
+    expect(isValidRoute('/trip/abc-123')).toBe(true);
+    expect(isValidRoute('/trip/abc-123?generate=true')).toBe(true);
+    expect(isValidRoute('/destination/paris')).toBe(true);
+    expect(isValidRoute('/nonexistent-page')).toBe(false);
+  });
+
+  it('infrastructure paths should never be in app routes', () => {
+    // These paths are handled by Lovable Cloud infrastructure, NOT React Router.
+    // If they hit the React router, users see a 404 "Wrong Turn" page.
+    const infrastructurePaths = [
+      '/~oauth/initiate',
+      '/~oauth/callback',
+    ];
+    
+    infrastructurePaths.forEach(path => {
+      // Infrastructure paths must NOT match any app route
+      expect(isValidRoute(path)).toBe(false);
+    });
+  });
+
+  it('all hardcoded navigate targets should resolve to valid routes', () => {
+    // These are all unique static navigate() targets found in the codebase.
+    // If you add a new navigate('/some-path') call, add it here too.
+    // This catches the class of bug where code navigates to a non-existent route.
+    const knownNavigateTargets = [
+      '/',
+      '/start',
+      '/signin',
+      '/signup',
+      '/forgot-password',
+      '/reset-password',
+      '/quiz',
+      '/explore',
+      '/demo',
+      '/profile',
+      '/profile/edit',
+      '/profile/settings',
+      '/welcome',
+      '/onboard/conversation',
+      '/trip/dashboard',
+      '/planner/multi-city',
+      '/planner/flight',
+      '/planner/hotel',
+      '/planner/summary',
+      '/planner/booking',
+      '/planner/itinerary',
+      '/pricing',
+      '/payment-success',
+      '/about',
+      '/contact',
+      '/faq',
+      '/help',
+      '/privacy',
+      '/terms',
+      '/sample-itinerary',
+      '/admin/bulk-import',
+      '/admin/data-cleanup',
+      '/admin/image-curation',
+      '/admin/margins',
+      '/admin/test-suites',
+      '/admin/user-tracking',
+      '/agent',
+      '/agent/clients',
+      '/agent/clients/new',
+      '/agent/trips',
+      '/agent/trips/new',
+      '/agent/tasks',
+      '/agent/settings',
+      '/agent/documents',
+      '/agent/payouts',
+    ];
+    
+    const invalidTargets: string[] = [];
+    knownNavigateTargets.forEach(target => {
+      if (!isValidRoute(target)) {
+        invalidTargets.push(target);
+      }
+    });
+    
+    expect(invalidTargets).toEqual([]);
+  });
+
+  it('all dynamic navigate targets should match route patterns', () => {
+    // Dynamic targets use buildRoute helpers or template literals.
+    // These simulate real-world dynamic navigation.
+    const dynamicTargets = [
+      '/trip/some-uuid-123',
+      '/trip/some-uuid-123/active',
+      '/trip/some-uuid-123/recap',
+      '/trips/some-uuid-123/confirmation',
+      '/destination/paris-france',
+      '/itinerary/itin-123',
+      '/agent/clients/client-123',
+      '/agent/clients/client-123/edit',
+      '/agent/trips/trip-123',
+      '/agent/trips/trip-123/edit',
+      '/share/share-token-abc',
+      '/intake/intake-token-xyz',
+      '/invite/invite-token-def',
+      '/guides/some-guide-slug',
+    ];
+    
+    const invalidTargets: string[] = [];
+    dynamicTargets.forEach(target => {
+      if (!isValidRoute(target)) {
+        invalidTargets.push(target);
+      }
+    });
+    
+    expect(invalidTargets).toEqual([]);
   });
 });
