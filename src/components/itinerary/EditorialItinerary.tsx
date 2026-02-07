@@ -1642,11 +1642,55 @@ export function EditorialItinerary({
     setHasChanges(true);
   }, []);
 
-  // Handle drag-and-drop reorder of activities within a day
+  // Handle drag-and-drop reorder of activities within a day — dynamically reassign times
   const handleActivityReorder = useCallback((dayIndex: number, reorderedActivities: EditorialActivity[]) => {
+    // Helper: parse "HH:mm" or "H:mm AM/PM" to minutes since midnight
+    const toMins = (t?: string): number | null => {
+      if (!t) return null;
+      const m24 = t.match(/^(\d{1,2}):(\d{2})$/);
+      if (m24) return parseInt(m24[1], 10) * 60 + parseInt(m24[2], 10);
+      const m12 = t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+      if (!m12) return null;
+      let h = parseInt(m12[1], 10);
+      const mins = parseInt(m12[2], 10);
+      const pm = m12[3].toUpperCase() === 'PM';
+      if (pm && h !== 12) h += 12;
+      if (!pm && h === 12) h = 0;
+      return h * 60 + mins;
+    };
+    const fmtTime = (mins: number) => {
+      const h = Math.floor(mins / 60) % 24;
+      const m = mins % 60;
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    };
+
+    // Collect original durations (in minutes) for each activity
+    const withTimes = reorderedActivities.map(a => {
+      const s = toMins(a.startTime || a.time);
+      const e = toMins(a.endTime);
+      const dur = (s !== null && e !== null && e > s) ? e - s : 30; // default 30 min
+      return { activity: a, duration: dur };
+    });
+
+    // Start from the earliest original time across the day, or first activity's time, or 09:00
+    const allStarts = reorderedActivities.map(a => toMins(a.startTime || a.time)).filter((v): v is number => v !== null);
+    let cursor = allStarts.length > 0 ? Math.min(...allStarts) : 9 * 60;
+
+    const updated = withTimes.map(({ activity, duration }) => {
+      const newStart = fmtTime(cursor);
+      const newEnd = fmtTime(cursor + duration);
+      cursor += duration + 15; // 15 min buffer between activities
+      return {
+        ...activity,
+        startTime: newStart,
+        endTime: newEnd,
+        time: newStart,
+      };
+    });
+
     setDays(prev => prev.map((day, idx) => {
       if (idx !== dayIndex) return day;
-      return { ...day, activities: reorderedActivities };
+      return { ...day, activities: updated };
     }));
     setHasChanges(true);
   }, []);
