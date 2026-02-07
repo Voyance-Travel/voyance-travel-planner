@@ -27,6 +27,7 @@ import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpen
 import { useCredits } from '@/hooks/useCredits';
 import { CREDIT_COSTS } from '@/config/pricing';
 import { CreditNudge } from './CreditNudge';
+import { UnlockBanner } from './UnlockBanner';
 import { HotelGalleryModal } from './HotelGalleryModal';
 import { DraggableActivityList } from './DraggableActivityList';
 import { Badge } from '@/components/ui/badge';
@@ -248,6 +249,8 @@ export interface EditorialItineraryProps {
   onActivityReorder?: (dayIndex: number, activities: EditorialActivity[]) => void;
   /** Called when user requests payment for an activity */
   onPaymentRequest?: (activityId: string) => void;
+  /** Called when preview trip is unlocked with full enrichment */
+  onUnlockComplete?: (enrichedItinerary: any) => void;
 }
 
 // =============================================================================
@@ -786,6 +789,7 @@ export function EditorialItinerary({
   onRegenerateDay,
   onBookingAdded,
   onPaymentRequest,
+  onUnlockComplete,
 }: EditorialItineraryProps) {
   const [days, setDays] = useState<EditorialDay[]>(initialDays);
   const [expandedDays, setExpandedDays] = useState<number[]>(initialDays.map(d => d.dayNumber));
@@ -2278,13 +2282,30 @@ export function EditorialItinerary({
               </div>
             )}
             
-            {/* Credit Nudge - inline when credits insufficient */}
-            {creditNudge && (
+            {/* Credit Nudge - inline when credits insufficient (not for preview unlock) */}
+            {creditNudge && creditNudge.action !== 'UNLOCK_DAY' && (
               <div className="mt-3">
                 <CreditNudge
                   action={creditNudge.action}
                   currentBalance={totalCredits}
                   onDismiss={() => setCreditNudge(null)}
+                />
+              </div>
+            )}
+
+            {/* Unlock Banner - shown for preview itineraries */}
+            {isPreview && (
+              <div className="mt-4">
+                <UnlockBanner
+                  tripId={tripId}
+                  totalDays={days.length}
+                  destination={destination}
+                  destinationCountry={destinationCountry}
+                  travelers={travelers}
+                  startDate={startDate}
+                  budgetTier={budgetTier}
+                  tripType={tripType}
+                  onUnlockComplete={onUnlockComplete}
                 />
               </div>
             )}
