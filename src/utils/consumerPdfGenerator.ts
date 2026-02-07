@@ -104,22 +104,23 @@ export async function generateConsumerTripPdf(data: ConsumerTripPdfData): Promis
   const fmtDate = (s: string) => { try { return format(new Date(s), 'EEE, MMM d'); } catch { return s; } };
   const fmtDateLong = (s: string) => { try { return format(new Date(s), 'EEEE, MMMM d, yyyy'); } catch { return s; } };
 
-  const getCategoryIcon = (cat?: string): string => {
-    const icons: Record<string, string> = {
-      food: '🍽', restaurant: '🍽', dining: '🍽',
-      culture: '🏛', museum: '🏛', history: '🏛',
-      nature: '🌿', outdoors: '🌿', park: '🌿',
-      shopping: '🛍', market: '🛍',
-      nightlife: '🌙', bar: '🌙',
-      transport: '🚌', transit: '🚌',
-      hotel: '🏨', accommodation: '🏨',
-      flight: '✈',
-      beach: '🏖', 
-      activity: '⭐', tour: '⭐', experience: '⭐',
+  const getCategoryLabel = (cat?: string): string => {
+    const labels: Record<string, string> = {
+      food: '[DINE]', restaurant: '[DINE]', dining: '[DINE]',
+      culture: '[CULTURE]', museum: '[CULTURE]', history: '[CULTURE]',
+      nature: '[NATURE]', outdoors: '[NATURE]', park: '[NATURE]',
+      shopping: '[SHOP]', market: '[SHOP]',
+      nightlife: '[NIGHT]', bar: '[NIGHT]',
+      transport: '[TRANSFER]', transit: '[TRANSFER]',
+      hotel: '[HOTEL]', accommodation: '[HOTEL]',
+      flight: '[FLIGHT]',
+      beach: '[BEACH]',
+      activity: '[ACTIVITY]', tour: '[ACTIVITY]', experience: '[ACTIVITY]',
+      wellness: '[WELLNESS]', spa: '[WELLNESS]',
     };
-    if (!cat) return '•';
+    if (!cat) return '';
     const key = cat.toLowerCase();
-    return icons[key] || '•';
+    return labels[key] || '';
   };
 
   // ── COVER PAGE ──────────────────────────────────────────────────
@@ -228,7 +229,7 @@ export async function generateConsumerTripPdf(data: ConsumerTripPdfData): Promis
           needsBreak(22);
 
           const timeStr = act.startTime || act.time || '';
-          const icon = getCategoryIcon(act.category || act.type);
+          const catLabel = getCategoryLabel(act.category || act.type);
           const locationName = act.location?.name || act.location?.address;
 
           // Time column
@@ -239,9 +240,15 @@ export async function generateConsumerTripPdf(data: ConsumerTripPdfData): Promis
 
           const xContent = M + (timeStr ? 22 : 5);
 
+          // Category label
+          if (catLabel) {
+            setFont(6.5, 'bold', C.accent);
+            text(catLabel, xContent, y - 3);
+          }
+
           // Activity title
           setFont(10, 'bold', C.dark);
-          text(`${icon}  ${act.title}`, xContent, y);
+          text(act.title, xContent, y);
           y += 5;
 
           // Description (1 line max for clean look)
@@ -254,8 +261,8 @@ export async function generateConsumerTripPdf(data: ConsumerTripPdfData): Promis
 
           // Location + Duration row
           const metaParts: string[] = [];
-          if (locationName) metaParts.push(`📍 ${locationName}`);
-          if (act.duration) metaParts.push(`⏱ ${act.duration}`);
+          if (locationName) metaParts.push(locationName);
+          if (act.duration) metaParts.push(act.duration);
           if (act.cost?.amount) metaParts.push(`${act.cost.currency || '$'}${act.cost.amount}`);
 
           if (metaParts.length > 0) {
@@ -267,7 +274,7 @@ export async function generateConsumerTripPdf(data: ConsumerTripPdfData): Promis
           // Tips
           if (act.tips) {
             setFont(7.5, 'normal', C.accent);
-            const tipLines = pdf.splitTextToSize(`💡 ${act.tips}`, CW - (timeStr ? 26 : 8));
+            const tipLines = pdf.splitTextToSize(`TIP: ${act.tips}`, CW - (timeStr ? 26 : 8));
             pdf.text(tipLines.slice(0, 1), xContent, y);
             y += 3.5;
           }
