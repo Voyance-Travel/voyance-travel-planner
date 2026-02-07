@@ -2017,9 +2017,10 @@ serve(async (req) => {
     console.log('[TravelDNA V2] Top matches:', matches.slice(0, 3).map(m => `${m.name} (${m.pct}%)`));
     console.log('[TravelDNA V2] Confidence:', confidence);
     
-    // Step 3: Get primary and secondary archetypes
+    // Step 3: Get primary and secondary archetypes (ensure they are different)
     const primaryMatch = matches[0];
-    const secondaryMatch = matches[1];
+    // Find the first match that is different from the primary
+    const secondaryMatch = matches.slice(1).find(m => m.archetype_id !== primaryMatch.archetype_id) || null;
     const primaryArchetype = ARCHETYPES_V2.find(a => a.id === primaryMatch.archetype_id) || ARCHETYPES_V2[ARCHETYPES_V2.length - 1];
     const secondaryArchetype = secondaryMatch ? ARCHETYPES_V2.find(a => a.id === secondaryMatch.archetype_id) : null;
     
