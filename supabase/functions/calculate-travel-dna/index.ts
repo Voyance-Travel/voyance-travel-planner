@@ -803,6 +803,15 @@ const LEGACY_ANSWER_MAPPINGS: Record<string, AnswerDelta> = {
   'chain': { deltas: { planning: 2, comfort: 2 }, label: 'Chain hotel' },
   'vacation_rental': { deltas: { authenticity: 3, social: -1 }, label: 'Vacation rental' },
   'resort': { deltas: { comfort: 5, pace: -2 }, label: 'Resort' },
+  
+  // Hotel/Evening vibes (from Preferences page — stored in travel_vibes)
+  'Spa treatments': { deltas: { social: -1, pace: -2, comfort: 3 }, label: 'Spa vibe' },
+  'Drinks & socializing': { deltas: { social: 3, adventure: 1 }, label: 'Social evening vibe' },
+  'Alone time in room': { deltas: { social: -3, pace: -1 }, label: 'Solitude vibe' },
+  'Room service': { deltas: { social: -2, comfort: 2 }, label: 'Room service vibe' },
+  'Exploring nightlife': { deltas: { social: 3, adventure: 2, pace: 1 }, label: 'Nightlife vibe' },
+  'Early sleep': { deltas: { pace: -2, social: -1, planning: 1 }, label: 'Early sleep vibe' },
+  'Light walking': { deltas: { pace: -1, authenticity: 1 }, label: 'Light walking vibe' },
 };
 
 // ============================================================================
@@ -825,6 +834,14 @@ const QUESTION_MAPPINGS: Record<string, Record<string, AnswerDelta>> = {
     quiet: LEGACY_ANSWER_MAPPINGS.quiet,
     bold: LEGACY_ANSWER_MAPPINGS.bold,
     spiritual: LEGACY_ANSWER_MAPPINGS.spiritual,
+    // Hotel/evening vibes from Preferences page
+    'Spa treatments': LEGACY_ANSWER_MAPPINGS['Spa treatments'],
+    'Drinks & socializing': LEGACY_ANSWER_MAPPINGS['Drinks & socializing'],
+    'Alone time in room': LEGACY_ANSWER_MAPPINGS['Alone time in room'],
+    'Room service': LEGACY_ANSWER_MAPPINGS['Room service'],
+    'Exploring nightlife': LEGACY_ANSWER_MAPPINGS['Exploring nightlife'],
+    'Early sleep': LEGACY_ANSWER_MAPPINGS['Early sleep'],
+    'Light walking': LEGACY_ANSWER_MAPPINGS['Light walking'],
   },
   budget: {
     budget: LEGACY_ANSWER_MAPPINGS.budget,
