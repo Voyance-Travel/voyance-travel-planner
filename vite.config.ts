@@ -21,6 +21,7 @@ export default defineConfig(({ mode }) => ({
       includeAssets: ["favicon.png", "favicon.ico", "og-image.jpg"],
       manifest: false, // Using public/manifest.json
       workbox: {
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MiB
         globPatterns: ["**/*.{js,css,html,ico,png,svg,jpg,webp,woff2}"],
         runtimeCaching: [
           {
