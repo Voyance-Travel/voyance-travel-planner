@@ -450,7 +450,7 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
             <span className="text-xs text-muted-foreground">Upcoming</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-gray-500" />
+            <div className="w-3 h-3 rounded-full bg-pink-500" />
             <span className="text-xs text-muted-foreground">Draft / Planning</span>
           </div>
         </div>
@@ -511,14 +511,14 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
           {destinations.filter(d => !d.visited && !d.upcoming).length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-3">
-                <div className="w-3 h-3 rounded-full bg-gray-500" />
+                <div className="w-3 h-3 rounded-full bg-pink-500" />
                 <span className="text-sm font-medium text-foreground">Draft / Planning ({destinations.filter(d => !d.visited && !d.upcoming).length})</span>
               </div>
               <div className="flex flex-wrap gap-2">
                 {destinations.filter(d => !d.visited && !d.upcoming).slice(0, 8).map(d => (
                   <span 
                     key={d.id}
-                    className="px-3 py-1 bg-muted text-muted-foreground rounded-full text-xs font-medium"
+                    className="px-3 py-1 bg-pink-500/10 text-pink-700 dark:text-pink-400 rounded-full text-xs font-medium"
                   >
                     {d.name}
                   </span>
