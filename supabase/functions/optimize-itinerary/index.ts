@@ -1961,7 +1961,8 @@ serve(async (req) => {
           if (selected.mode === 'walk') {
             instructions = `${selected.durationMins} minute walk to ${destName}`;
           } else if (selected.mode === 'metro') {
-            instructions = `Take public transit to ${destName} (${distanceText})`;
+            const fromName = from.location?.name || from.title;
+            instructions = `Take public transit from ${fromName} to ${destName} (${distanceText})`;
           } else if (selected.mode === 'uber') {
             instructions = `Take a rideshare to ${destName} (${distanceText}, ~$${selected.cost})`;
           } else if (selected.mode === 'taxi') {
@@ -2049,8 +2050,26 @@ serve(async (req) => {
           // Prefer real routing when possible:
           // 1) coords -> best
           // 2) address strings -> still lets Directions API return transit line + stop details
-          const originRouting: GoogleLocationInput | null = originCoords || getRoutingAddress(from.location, destination);
-          const destRouting: GoogleLocationInput | null = destCoords || getRoutingAddress(to.location, destination);
+          // 3) activity title + destination as last-resort address for transit details
+          let originRouting: GoogleLocationInput | null = originCoords || getRoutingAddress(from.location, destination);
+          let destRouting: GoogleLocationInput | null = destCoords || getRoutingAddress(to.location, destination);
+
+          // Last-resort: use activity title + destination city as an address query
+          // This allows Google Routes API to still return detailed transit line/stop info
+          if (!originRouting) {
+            const fromTitle = from.location?.name || from.title;
+            if (fromTitle) {
+              originRouting = `${fromTitle}, ${destination}`;
+              console.log(`[optimize-itinerary] Using title-based address for origin: "${originRouting}"`);
+            }
+          }
+          if (!destRouting) {
+            const toTitle = to.location?.name || to.title;
+            if (toTitle) {
+              destRouting = `${toTitle}, ${destination}`;
+              console.log(`[optimize-itinerary] Using title-based address for dest: "${destRouting}"`);
+            }
+          }
 
           if (originRouting && destRouting) {
             const transport = await getOptimalTransport(originRouting, destRouting, to.location?.name || to.title);
@@ -2100,7 +2119,7 @@ serve(async (req) => {
               transportation: estimateNoCoords(from, to, seed),
             };
             transportCalculated++;
-            console.log(`[optimize-itinerary] No coords for leg "${from.title}" → "${to.title}", using estimated transport`);
+            console.log(`[optimize-itinerary] No routing info at all for leg "${from.title}" → "${to.title}", using estimated transport`);
           }
         }
       }
