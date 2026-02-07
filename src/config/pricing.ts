@@ -15,6 +15,7 @@ export const CREDIT_COSTS = {
   SWAP_ACTIVITY: 15,          // Swap an activity (1 Places + 1 Photo call)
   RESTAURANT_REC: 15,         // Restaurant recommendation (1 Perplexity call)
   AI_MESSAGE: 10,             // AI companion message (1 Gemini call)
+  MYSTERY_GETAWAY: 15,        // Mystery Getaway destination suggestions
 
   // Free actions
   ROUTE_OPTIMIZATION: 0,
