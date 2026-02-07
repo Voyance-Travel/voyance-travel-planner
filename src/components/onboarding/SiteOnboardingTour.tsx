@@ -2,18 +2,16 @@
  * Site Onboarding Tour
  * 
  * A step-by-step guided tour for new users after their first sign-in.
- * Highlights key features and drives users toward building their first trip.
- * 
- * Uses the same spotlight/tooltip pattern as ItineraryOnboardingTour
- * but targets site-level navigation elements.
+ * Navigates users to actual feature pages and highlights key value props.
+ * Uses spotlight/tooltip pattern with page navigation between steps.
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, ChevronRight, ChevronLeft, Sparkles, Compass,
-  MapPin, User, Bell, Rocket, Heart, Zap
+  User, Rocket, Heart, Zap, Dna, Globe, Star
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -26,10 +24,13 @@ interface TourStep {
   title: string;
   description: string;
   icon: React.ReactNode;
+  /** Route to navigate to before showing this step */
+  route?: string;
+  /** CSS selector to spotlight an element on the page */
   selector?: string;
   position: 'top' | 'bottom' | 'left' | 'right' | 'center';
-  /** Optional action on step completion (e.g., navigate) */
-  action?: () => void;
+  /** Emphasis level — 'high' gets a special visual treatment */
+  emphasis?: 'normal' | 'high';
 }
 
 const STORAGE_KEY = 'voyance_site_tour_completed';
@@ -42,9 +43,12 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [highlightRect, setHighlightRect] = useState<DOMRect | null>(null);
+  const [isNavigating, setIsNavigating] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { requestPopup, closePopup } = usePopupCoordination();
+  const navigationTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   const firstName = user?.name?.split(' ')[0] || 'there';
 
@@ -52,71 +56,73 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
     {
       id: 'welcome',
       title: `Welcome to Voyance, ${firstName}! 🌍`,
-      description: 'You just unlocked a smarter way to travel. Let me show you around — this will only take 30 seconds.',
+      description: 'You just unlocked a smarter way to travel. Let me give you a quick tour of the features that make Voyance different — this takes about 45 seconds.',
       icon: <Sparkles className="h-5 w-5" />,
+      route: '/',
       position: 'center',
     },
     {
-      id: 'build-itinerary',
-      title: 'Build Your First Trip',
-      description: 'This is where the magic happens. Tell us your destination, dates, and travel style — we\'ll craft a personalized day-by-day itinerary with real venue picks, insider tips, and optimized routing.',
+      id: 'explore-page',
+      title: 'Discover Where to Go Next',
+      description: 'Browse curated destinations with real traveler insights, seasonal recommendations, and hidden gems you won\'t find on generic travel sites. Every destination card shows what makes it special for YOUR travel style.',
+      icon: <Compass className="h-5 w-5" />,
+      route: ROUTES.EXPLORE,
+      position: 'center',
+    },
+    {
+      id: 'travel-dna',
+      title: '🧬 Your Travel DNA — This Changes Everything',
+      description: 'This 2-minute quiz is the secret weapon. It identifies your unique traveler archetype from 27 types, then EVERY itinerary, recommendation, and tip is personalized to match. Budget travelers get different picks than luxury seekers. Night owls get different schedules than early risers. No two itineraries are ever the same.',
+      icon: <Dna className="h-5 w-5" />,
+      route: ROUTES.QUIZ,
+      position: 'center',
+      emphasis: 'high',
+    },
+    {
+      id: 'build-trip',
+      title: 'Build Your First Itinerary',
+      description: 'Tell us where and when — we\'ll craft a personalized day-by-day plan with real venue picks, insider timing hacks, tourist trap warnings, and optimized routing that saves you hours of walking. This is where the magic happens.',
       icon: <Rocket className="h-5 w-5" />,
+      route: ROUTES.START,
       selector: '[data-site-tour="build-cta"]',
       position: 'bottom',
     },
     {
-      id: 'explore',
-      title: 'Explore Destinations',
-      description: 'Not sure where to go? Browse curated destinations, discover your Travel DNA archetype, or get inspired by featured trips from real travelers.',
-      icon: <Compass className="h-5 w-5" />,
-      selector: '[data-site-tour="explore-menu"]',
-      position: 'bottom',
-    },
-    {
-      id: 'profile',
-      title: 'Your Profile & Trips',
-      description: 'Your avatar menu is command central — access your Trip Dashboard, complete your Travel DNA quiz, and set preferences so every itinerary is tailored to your style.',
+      id: 'profile-hub',
+      title: 'Your Travel Command Center',
+      description: 'Access your Trip Dashboard, saved itineraries, Travel DNA results, and preferences all from your profile. The more you use Voyance, the smarter your recommendations get.',
       icon: <User className="h-5 w-5" />,
       selector: '[data-site-tour="profile"]',
-      position: 'bottom',
-    },
-    {
-      id: 'profile',
-      title: 'Your Travel Profile',
-      description: 'Complete your Travel DNA quiz and set preferences so every trip is tailored to you — dietary needs, pace, interests, and budget all factored in automatically.',
-      icon: <User className="h-5 w-5" />,
-      selector: '[data-site-tour="profile"]',
-      position: 'bottom',
-    },
-    {
-      id: 'notifications',
-      title: 'Stay in the Loop',
-      description: 'Get notified about trip updates, collaboration invites from travel companions, and personalized travel tips.',
-      icon: <Bell className="h-5 w-5" />,
-      selector: '[data-site-tour="notifications"]',
       position: 'bottom',
     },
     {
       id: 'credits',
-      title: 'Your Free Credits',
-      description: 'You\'ve got free credits to preview any trip. When you\'re ready for the full experience — addresses, photos, tips, and booking links — credits unlock everything.',
+      title: 'You\'ve Got Free Credits 🎉',
+      description: 'Every trip starts with a free preview — see the full structure, venues, and flow. When you\'re ready for the premium experience (exact addresses, booking links, insider tips, photo galleries), your credits unlock it all. No subscription required.',
       icon: <Zap className="h-5 w-5" />,
       position: 'center',
     },
     {
-      id: 'start',
-      title: 'Ready to Plan? Let\'s Go! ✈️',
-      description: 'Your first trip is just a few clicks away. We\'ll personalize every recommendation to match your travel style. No two itineraries are the same.',
+      id: 'intelligent-itineraries',
+      title: 'Itineraries That Think For You',
+      description: 'Our Visible Intelligence engine shows you WHY each recommendation was made. You\'ll see timing hacks ("visit at 8am to skip the 2-hour line"), tourist trap warnings, hidden local favorites, and a dollar-and-time savings tally for every trip.',
+      icon: <Star className="h-5 w-5" />,
+      position: 'center',
+      emphasis: 'high',
+    },
+    {
+      id: 'start-journey',
+      title: 'Ready? Let\'s Build Your First Trip ✈️',
+      description: 'Your personalized travel experience starts now. Take the Travel DNA quiz first for the best results — or jump straight into planning. Either way, no two Voyance itineraries are ever the same.',
       icon: <Heart className="h-5 w-5" />,
       position: 'center',
     },
   ];
 
-  // Check if tour should show — coordinate with popup system
+  // Check if tour should show
   useEffect(() => {
     const completed = localStorage.getItem(STORAGE_KEY);
     if (!completed && user) {
-      // Delay to let welcome modal finish first
       const timer = setTimeout(() => {
         const allowed = requestPopup('site_tour');
         if (allowed) {
@@ -127,66 +133,74 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
     }
   }, [user, requestPopup]);
 
-  // Update highlight position when step changes
+  // Navigate to route when step changes
   useEffect(() => {
+    if (!isVisible) return;
+    const step = TOUR_STEPS[currentStep];
+    if (step?.route && location.pathname !== step.route) {
+      setIsNavigating(true);
+      navigate(step.route);
+      navigationTimerRef.current = setTimeout(() => {
+        setIsNavigating(false);
+      }, 800);
+    } else {
+      setIsNavigating(false);
+    }
+    return () => {
+      if (navigationTimerRef.current) clearTimeout(navigationTimerRef.current);
+    };
+  }, [currentStep, isVisible]);
+
+  // Update highlight position when step changes or navigation completes
+  useEffect(() => {
+    if (!isVisible || isNavigating) return;
+    const step = TOUR_STEPS[currentStep];
+
     const updateHighlight = () => {
-      const step = TOUR_STEPS[currentStep];
       if (step?.selector) {
         const element = document.querySelector(step.selector);
         if (element) {
           const rect = element.getBoundingClientRect();
           setHighlightRect(rect);
-        } else {
-          setHighlightRect(null);
+          return;
         }
-      } else {
-        setHighlightRect(null);
       }
+      setHighlightRect(null);
     };
 
-    const step = TOUR_STEPS[currentStep];
-    if (step?.selector) {
-      const element = document.querySelector(step.selector);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        const scrollTimer = setTimeout(updateHighlight, 400);
-        window.addEventListener('resize', updateHighlight);
-        window.addEventListener('scroll', updateHighlight, true);
-        return () => {
-          clearTimeout(scrollTimer);
-          window.removeEventListener('resize', updateHighlight);
-          window.removeEventListener('scroll', updateHighlight, true);
-        };
-      }
-    }
-    updateHighlight();
-  }, [currentStep]);
+    // Delay to allow page render after navigation
+    const timer = setTimeout(updateHighlight, 500);
+    window.addEventListener('resize', updateHighlight);
+    window.addEventListener('scroll', updateHighlight, true);
 
-  // Continuously update highlight position while tour is active
-  useEffect(() => {
-    if (!isVisible) return;
+    // Polling for dynamically rendered elements
     const interval = setInterval(() => {
-      const step = TOUR_STEPS[currentStep];
       if (step?.selector) {
-        const element = document.querySelector(step.selector);
-        if (element) {
-          const rect = element.getBoundingClientRect();
+        const el = document.querySelector(step.selector);
+        if (el) {
+          const rect = el.getBoundingClientRect();
           setHighlightRect(prev => {
             if (!prev) return rect;
-            const hasChanged = Math.abs(prev.top - rect.top) > 2 || Math.abs(prev.left - rect.left) > 2;
-            return hasChanged ? rect : prev;
+            const changed = Math.abs(prev.top - rect.top) > 2 || Math.abs(prev.left - rect.left) > 2;
+            return changed ? rect : prev;
           });
         }
       }
-    }, 100);
-    return () => clearInterval(interval);
-  }, [isVisible, currentStep]);
+    }, 200);
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+      window.removeEventListener('resize', updateHighlight);
+      window.removeEventListener('scroll', updateHighlight, true);
+    };
+  }, [currentStep, isVisible, isNavigating]);
 
   const handleNext = useCallback(() => {
     if (currentStep < TOUR_STEPS.length - 1) {
       setCurrentStep(prev => prev + 1);
     } else {
-      handleComplete();
+      handleComplete('quiz');
     }
   }, [currentStep, TOUR_STEPS.length]);
 
@@ -196,21 +210,20 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
     }
   }, [currentStep]);
 
-  const handleSkip = useCallback(() => {
-    handleComplete();
-  }, []);
-
-  const handleComplete = useCallback(() => {
+  const handleComplete = useCallback((destination: 'quiz' | 'start' = 'start') => {
     localStorage.setItem(STORAGE_KEY, 'true');
     setIsVisible(false);
     closePopup('site_tour');
     onComplete?.();
+    navigate(destination === 'quiz' ? ROUTES.QUIZ : ROUTES.START);
+  }, [onComplete, navigate, closePopup]);
 
-    // On last step, navigate to start planning
-    if (currentStep === TOUR_STEPS.length - 1) {
-      navigate(ROUTES.START);
-    }
-  }, [onComplete, currentStep, navigate, closePopup, TOUR_STEPS.length]);
+  const handleSkip = useCallback(() => {
+    localStorage.setItem(STORAGE_KEY, 'true');
+    setIsVisible(false);
+    closePopup('site_tour');
+    onComplete?.();
+  }, [onComplete, closePopup]);
 
   if (!isVisible) return null;
 
@@ -218,18 +231,22 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
   const isFirst = currentStep === 0;
   const isLast = currentStep === TOUR_STEPS.length - 1;
   const isCentered = step.position === 'center' || !highlightRect;
+  const isHighEmphasis = step.emphasis === 'high';
 
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-[100] pointer-events-none">
-        {/* Click-to-dismiss overlay */}
-        <div
+        {/* Overlay */}
+        <motion.div
           className="absolute inset-0 pointer-events-auto"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          style={{ backgroundColor: isHighEmphasis ? 'rgba(0,0,0,0.82)' : 'rgba(0,0,0,0.7)' }}
           onClick={handleSkip}
         />
 
         {/* Spotlight cutout */}
-        {highlightRect && (
+        {highlightRect && !isNavigating && (
           <motion.div
             key={`spotlight-${currentStep}`}
             initial={{ opacity: 0 }}
@@ -255,28 +272,39 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
             zIndex: 102,
             ...(typeof window !== 'undefined' && window.innerWidth < 640
               ? { bottom: 96 }
-              : step.position === 'bottom' && highlightRect
-                ? { top: Math.min(highlightRect.bottom + 20, window.innerHeight - 300) }
-                : step.position === 'top' && highlightRect
+              : step.position === 'bottom' && highlightRect && !isNavigating
+                ? { top: Math.min(highlightRect.bottom + 20, window.innerHeight - 350) }
+                : step.position === 'top' && highlightRect && !isNavigating
                   ? { bottom: window.innerHeight - highlightRect.top + 20 }
-                  : isCentered
+                  : isCentered || isNavigating
                     ? { top: '50%', transform: 'translateY(-50%)' }
                     : {}
             ),
           }}
         >
           <motion.div
-            key={step.id}
-            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            key={`card-${currentStep}`}
+            initial={{ opacity: 0, y: 16, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -10, scale: 0.95 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
-            className="w-full sm:w-[360px] max-w-[calc(100vw-1.5rem)] bg-card border border-border rounded-xl shadow-2xl overflow-hidden"
+            exit={{ opacity: 0, y: -16, scale: 0.95 }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
+            className={cn(
+              "w-full sm:w-[400px] max-w-[calc(100vw-1.5rem)] bg-card border rounded-xl shadow-2xl overflow-hidden",
+              isHighEmphasis ? "border-primary/50 ring-1 ring-primary/20" : "border-border"
+            )}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-3 sm:p-4 border-b border-border bg-gradient-to-r from-primary/10 to-transparent">
+            <div className={cn(
+              "flex items-center justify-between p-3 sm:p-4 border-b border-border",
+              isHighEmphasis
+                ? "bg-gradient-to-r from-primary/20 via-primary/10 to-transparent"
+                : "bg-gradient-to-r from-primary/10 to-transparent"
+            )}>
               <div className="flex items-center gap-2">
-                <div className="p-1.5 sm:p-2 rounded-lg bg-primary/10 text-primary">
+                <div className={cn(
+                  "p-1.5 sm:p-2 rounded-lg",
+                  isHighEmphasis ? "bg-primary/20 text-primary" : "bg-primary/10 text-primary"
+                )}>
                   {step.icon}
                 </div>
                 <span className="text-xs text-muted-foreground font-medium">
@@ -294,13 +322,29 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
             </div>
 
             {/* Content */}
-            <div className="p-3 sm:p-4">
-              <h3 className="font-serif text-base sm:text-lg font-semibold mb-1.5 sm:mb-2">
+            <div className="p-3 sm:p-5">
+              <h3 className={cn(
+                "font-serif font-semibold mb-2",
+                isHighEmphasis ? "text-lg sm:text-xl" : "text-base sm:text-lg"
+              )}>
                 {step.title}
               </h3>
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
                 {step.description}
               </p>
+
+              {/* Emphasis callout for high-priority steps */}
+              {isHighEmphasis && (
+                <div className="mt-3 p-2.5 rounded-lg bg-primary/5 border border-primary/10">
+                  <p className="text-xs font-medium text-primary flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {step.id === 'travel-dna'
+                      ? 'Take the quiz after this tour for the most personalized experience'
+                      : 'This is what makes Voyance different from every other travel app'
+                    }
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Footer with navigation */}
@@ -327,22 +371,43 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
                       "h-1 sm:h-1.5 rounded-full transition-all",
                       idx === currentStep
                         ? "bg-primary w-2 sm:w-3"
-                        : "bg-muted-foreground/30 hover:bg-muted-foreground/50 w-1 sm:w-1.5"
+                        : idx < currentStep
+                          ? "bg-primary/40 w-1 sm:w-1.5"
+                          : "bg-muted-foreground/30 hover:bg-muted-foreground/50 w-1 sm:w-1.5"
                     )}
                   />
                 ))}
               </div>
 
-              <Button
-                size="sm"
-                onClick={handleNext}
-                className="h-8 px-2 sm:px-3 gap-0.5 sm:gap-1"
-              >
-                <span className="text-xs sm:text-sm">
-                  {isLast ? 'Start Planning!' : 'Next'}
-                </span>
-                {!isLast && <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4" />}
-              </Button>
+              {isLast ? (
+                <div className="flex gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleComplete('start')}
+                    className="h-8 px-2 sm:px-3 text-xs sm:text-sm"
+                  >
+                    Plan a Trip
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => handleComplete('quiz')}
+                    className="h-8 px-2 sm:px-3 gap-0.5 sm:gap-1 text-xs sm:text-sm"
+                  >
+                    <Dna className="h-3 w-3 sm:h-4 sm:w-4" />
+                    Take Quiz
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={handleNext}
+                  className="h-8 px-2 sm:px-3 gap-0.5 sm:gap-1"
+                >
+                  <span className="text-xs sm:text-sm">Next</span>
+                  <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4" />
+                </Button>
+              )}
             </div>
           </motion.div>
         </div>
