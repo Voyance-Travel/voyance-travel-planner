@@ -4592,6 +4592,39 @@ export type Database = {
           },
         ]
       }
+      trip_chat_messages: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string
+          id: string
+          message: string
+          trip_id: string
+          trip_type: string
+          user_id: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name: string
+          id?: string
+          message: string
+          trip_id: string
+          trip_type?: string
+          user_id?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string
+          id?: string
+          message?: string
+          trip_id?: string
+          trip_type?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       trip_cities: {
         Row: {
           activity_cost_cents: number | null
