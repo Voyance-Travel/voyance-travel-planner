@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import HeroImageWithFallback from '@/components/common/HeroImageWithFallback';
 import { useHeroImage } from '@/services/destinationImagesAPI';
 import { getDestinationImages, hasCuratedImages } from '@/utils/destinationImages';
@@ -12,6 +12,8 @@ interface DestinationHeroImageProps {
    * Pass "" to disable overlay (most callers already render their own overlay)
    */
   overlayGradient?: string;
+  /** Skip lazy loading – fetch immediately (e.g. above-the-fold hero) */
+  eager?: boolean;
 }
 
 function generateGradientDataUrl(label: string): string {
@@ -40,14 +42,16 @@ function generateGradientDataUrl(label: string): string {
 /**
  * DestinationHeroImage
  * 
- * Uses React Query with long staleTime (1 hour) to avoid refetching.
- * The backend caches Google Places images in curated_images table for 90 days.
+ * LAZY by default: the useHeroImage API call only fires once the component
+ * scrolls into view (200px margin). This prevents dozens of edge-function
+ * invocations on pages like Browse/Explore where many cards are off-screen.
  * 
  * Flow:
- * 1. Check React Query cache (in-memory, instant)
- * 2. If miss, call backend which checks curated_images DB table (cached Google Places)
- * 3. If DB miss, backend fetches from Google Places and caches for 90 days
- * 4. Gradient fallback if all else fails
+ * 1. Render gradient placeholder immediately
+ * 2. When visible (IntersectionObserver), check curated images first
+ * 3. If no curated image, fire useHeroImage (React Query → edge function)
+ * 4. Edge function checks DB cache (90-day Google Places cache)
+ * 5. Gradient fallback if all else fails
  */
 export default function DestinationHeroImage({
   destinationId,
@@ -55,9 +59,31 @@ export default function DestinationHeroImage({
   alt,
   className,
   overlayGradient = '',
+  eager = false,
 }: DestinationHeroImageProps) {
-  // If we have curated local images for this destination, always prefer them.
-  // This prevents backend/third-party images (which can include people) from being used.
+  const [isInView, setIsInView] = useState(eager);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Intersection Observer – triggers API fetch only when visible
+  useEffect(() => {
+    if (eager || isInView) return;
+    const el = containerRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsInView(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '200px', threshold: 0 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [eager, isInView]);
+
+  // Curated images (local, no API cost) – always check
   const curatedSrc = useMemo(() => {
     if (!destinationName) return null;
     if (!hasCuratedImages(destinationName)) return null;
@@ -65,9 +91,13 @@ export default function DestinationHeroImage({
     return first || null;
   }, [destinationName]);
 
-  // useHeroImage has staleTime of 1 hour - won't refetch on every render
-  // Backend checks curated_images table first (90-day cache of Google Places images)
-  const { data } = useHeroImage(destinationId, destinationName);
+  // Only call the API when in view AND no curated image exists
+  const shouldFetchApi = isInView && !curatedSrc;
+
+  const { data } = useHeroImage(
+    shouldFetchApi ? destinationId : undefined,
+    shouldFetchApi ? destinationName : undefined
+  );
 
   const fallback = useMemo(() => generateGradientDataUrl(destinationName), [destinationName]);
   
@@ -75,11 +105,13 @@ export default function DestinationHeroImage({
   const src = curatedSrc || data?.url || fallback;
 
   return (
-    <HeroImageWithFallback
-      src={src}
-      alt={alt || destinationName}
-      className={className}
-      overlayGradient={overlayGradient}
-    />
+    <div ref={containerRef} className={className} style={{ position: 'relative' }}>
+      <HeroImageWithFallback
+        src={src}
+        alt={alt || destinationName}
+        className={className}
+        overlayGradient={overlayGradient}
+      />
+    </div>
   );
 }
