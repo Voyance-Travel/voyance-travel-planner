@@ -965,6 +965,15 @@ export default function TripDetail() {
                   isEditable={true}
                   isPreview={!!(trip.itinerary_data as any)?.isPreview}
                   onBookingAdded={() => window.location.reload()}
+                  onUnlockComplete={(enrichedItinerary) => {
+                    // Refresh trip with enriched data — reload to re-parse
+                    setTrip(prev => prev ? {
+                      ...prev,
+                      itinerary_data: enrichedItinerary as any,
+                    } : prev);
+                    // Force full reload to re-parse editorial days
+                    window.location.reload();
+                  }}
                   onPaymentRequest={async (activityId) => {
                     // Find the activity across all days
                     const activity = editorDays
