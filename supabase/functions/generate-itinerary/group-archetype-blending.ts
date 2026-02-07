@@ -462,6 +462,9 @@ ${splitOpportunities.map(s => `- **${s.timeSlot}**: ${s.description}`).join('\n'
 3. If suggesting split activities, always provide a reunification point
 4. The primary planner's preferences get 60% weight, others 40%
 5. Never schedule activities that any group member has in their "never" list
+6. **IMPORTANT**: For each activity, include a "suggestedFor" field with the traveler ID whose preferences most influenced that choice. Use the traveler IDs below:
+${travelers.map((t: TravelerArchetype) => `   - "${t.travelerId}" (${formatArchetypeName(t.archetype)}${t.isPrimary ? ', primary' : ''})`).join('\n')}
+   If an activity is a group consensus pick, use the primary planner's ID.
 `;
 
   return prompt;
