@@ -5120,7 +5120,7 @@ function ActivityRow({
       )}
 
       {/* Content */}
-      <div className="flex-1 p-3 sm:p-4">
+      <div className="flex-1 p-3 sm:p-4 overflow-hidden">
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
             <div className="hidden sm:flex items-center gap-2 mb-1.5">
@@ -5215,13 +5215,13 @@ function ActivityRow({
               if (venue) {
                 return (
                   <>
-                    <h4 className="font-serif text-lg font-medium text-foreground">{venue}</h4>
-                    <p className="text-sm text-muted-foreground mt-0.5 italic">{activityTitle}</p>
+                    <h4 className="font-serif text-base sm:text-lg font-medium text-foreground leading-snug">{venue}</h4>
+                    <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 italic line-clamp-1">{activityTitle}</p>
                     {/* Address gated in preview */}
                     {!isPreview && hasAddress && address !== venue && (
-                      <div className="flex items-start gap-1.5 mt-2 text-xs text-muted-foreground">
-                        <MapPin className="h-3.5 w-3.5 text-primary/60 mt-0.5" />
-                        <span className="leading-snug">{address}</span>
+                      <div className="flex items-start gap-1.5 mt-1.5 text-xs text-muted-foreground">
+                        <MapPin className="h-3 w-3 text-primary/60 mt-0.5 shrink-0" />
+                        <span className="leading-snug line-clamp-2 sm:line-clamp-none">{address}</span>
                       </div>
                     )}
                     {isPreview && (
@@ -5236,20 +5236,20 @@ function ActivityRow({
 
               return (
                 <>
-                  <h4 className="font-serif text-lg font-medium text-foreground">{activityTitle}</h4>
+                  <h4 className="font-serif text-base sm:text-lg font-medium text-foreground leading-snug">{activityTitle}</h4>
                   {activity.description && (
-                    <p className="text-sm text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{activity.description}</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 line-clamp-2 leading-relaxed">{activity.description}</p>
                   )}
 
                   {/* Location gated in preview */}
                   {!isPreview && (activity.location?.name || hasAddress) && (
-                    <div className="mt-2">
+                    <div className="mt-1.5">
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <MapPin className="h-3.5 w-3.5 text-primary/60" />
-                        <span>{activity.location?.name || address}</span>
+                        <MapPin className="h-3 w-3 text-primary/60 shrink-0" />
+                        <span className="truncate">{activity.location?.name || address}</span>
                       </div>
                       {activity.location?.name && hasAddress && address !== activity.location?.name && (
-                        <div className="pl-5 mt-0.5 text-xs text-muted-foreground/70 leading-snug">
+                        <div className="hidden sm:block pl-5 mt-0.5 text-xs text-muted-foreground/70 leading-snug">
                           {address}
                         </div>
                       )}
@@ -5282,7 +5282,7 @@ function ActivityRow({
           </div>
 
           {/* Actions & Cost */}
-          <div className="flex flex-col items-end gap-2 ml-4">
+          <div className="flex flex-col items-end gap-1.5 sm:gap-2 ml-2 sm:ml-4 shrink-0">
             {isPreview ? (
               /* Preview: show locked cost placeholder */
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60">
@@ -5343,19 +5343,20 @@ function ActivityRow({
               </>
             )}
             {isEditable && !isPreview && (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1.5 sm:gap-2">
                 {/* Primary Actions Row - Find Alternative ALWAYS visible */}
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   {!activity.isLocked && (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => onSwap?.(dayIndex, activity)}
-                      className="gap-1.5 h-7 text-xs font-medium hover:bg-primary/10 hover:text-primary hover:border-primary/30"
+                      className="gap-1 h-6 sm:h-7 text-[10px] sm:text-xs font-medium hover:bg-primary/10 hover:text-primary hover:border-primary/30 px-1.5 sm:px-2.5"
                       data-tour="find-alternative"
                     >
-                      <ArrowRightLeft className="h-3.5 w-3.5" />
-                      Find Alternative
+                      <ArrowRightLeft className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                      <span className="hidden sm:inline">Find Alternative</span>
+                      <span className="sm:hidden">Swap</span>
                     </Button>
                   )}
                   
