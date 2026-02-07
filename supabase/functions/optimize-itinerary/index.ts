@@ -640,9 +640,19 @@ async function verifyVenue(
 
   try {
     const query = encodeURIComponent(`${venueName} ${destination}`);
-    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${query}&key=${apiKey}`;
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(destination)}&key=${apiKey}`;
     
-    const response = await fetch(url);
+    // Get destination center for distance check
+    let destCenter: { lat: number; lng: number } | null = null;
+    try {
+      const geoRes = await fetch(url);
+      const geoData = await geoRes.json();
+      const loc = geoData.results?.[0]?.geometry?.location;
+      if (loc) destCenter = { lat: loc.lat, lng: loc.lng };
+    } catch { /* ignore */ }
+
+    const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${query}&key=${apiKey}`;
+    const response = await fetch(searchUrl);
     const data = await response.json();
 
     if (data.status !== 'OK' || !data.results?.[0]) {
@@ -650,6 +660,22 @@ async function verifyVenue(
     }
 
     const place = data.results[0];
+
+    // Distance guard: reject venues >50km from destination
+    if (destCenter && place.geometry?.location) {
+      const R = 6371;
+      const dLat = (place.geometry.location.lat - destCenter.lat) * Math.PI / 180;
+      const dLng = (place.geometry.location.lng - destCenter.lng) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(destCenter.lat * Math.PI / 180) * Math.cos(place.geometry.location.lat * Math.PI / 180) *
+        Math.sin(dLng / 2) ** 2;
+      const distKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      if (distKm > 50) {
+        console.log(`[venue-verification] ❌ REJECTED "${venueName}" → "${place.name}" is ${distKm.toFixed(0)}km from ${destination}`);
+        return { isValid: false, confidence: 0 };
+      }
+    }
+
     const similarity = calculateStringSimilarity(venueName, place.name);
     const ratingBoost = (place.rating || 0) >= 4.0 ? 0.1 : 0;
     const confidence = Math.min(similarity + ratingBoost, 1.0);

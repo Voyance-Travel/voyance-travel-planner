@@ -5236,6 +5236,44 @@ Are these the same venue?`
   return finalResult;
 }
 
+/**
+ * Calculate haversine distance between two lat/lng points in km
+ */
+function haversineDistanceKm(
+  lat1: number, lng1: number,
+  lat2: number, lng2: number
+): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * Geocode a destination name to get its center coordinates for location biasing
+ */
+async function getDestinationCenter(
+  destination: string,
+  apiKey: string
+): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const response = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(destination)}&key=${apiKey}`
+    );
+    const data = await response.json();
+    const loc = data.results?.[0]?.geometry?.location;
+    return loc ? { lat: loc.lat, lng: loc.lng } : null;
+  } catch {
+    return null;
+  }
+}
+
+// Cache destination centers to avoid repeated geocoding
+const destinationCenterCache = new Map<string, { lat: number; lng: number } | null>();
+
 async function verifyVenueWithGooglePlaces(
   venueName: string,
   destination: string,
@@ -5247,12 +5285,34 @@ async function verifyVenueWithGooglePlaces(
   }
 
   try {
+    // Get destination center for location biasing (cached)
+    let destCenter = destinationCenterCache.get(destination);
+    if (destCenter === undefined) {
+      destCenter = await getDestinationCenter(destination, GOOGLE_MAPS_API_KEY);
+      destinationCenterCache.set(destination, destCenter);
+    }
+
     const textQuery = `${venueName} ${destination}`;
     console.log(`[Stage 4] Verifying venue: ${venueName}`);
 
     // Use AbortController for 3-second timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+    // Build request body with location bias to strongly prefer results near destination
+    const requestBody: Record<string, unknown> = {
+      textQuery,
+      maxResultCount: 1,
+    };
+
+    if (destCenter) {
+      requestBody.locationBias = {
+        circle: {
+          center: { latitude: destCenter.lat, longitude: destCenter.lng },
+          radius: 30000.0, // 30km radius bias
+        },
+      };
+    }
 
     const response = await fetch(
       "https://places.googleapis.com/v1/places:searchText",
@@ -5263,10 +5323,7 @@ async function verifyVenueWithGooglePlaces(
           "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
           "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.priceLevel,places.currentOpeningHours,places.websiteUri,places.googleMapsUri",
         },
-        body: JSON.stringify({
-          textQuery,
-          maxResultCount: 1,
-        }),
+        body: JSON.stringify(requestBody),
         signal: controller.signal,
       }
     );
@@ -5285,6 +5342,18 @@ async function verifyVenueWithGooglePlaces(
     if (!place) {
       console.log(`[Stage 4] No place found for: ${venueName}`);
       return null;
+    }
+
+    // CRITICAL: Distance guard — reject venues that are too far from the destination
+    if (destCenter && place.location) {
+      const distKm = haversineDistanceKm(
+        destCenter.lat, destCenter.lng,
+        place.location.latitude, place.location.longitude
+      );
+      if (distKm > 50) {
+        console.log(`[Stage 4] ❌ REJECTED venue "${venueName}" → "${place.displayName?.text}" is ${distKm.toFixed(0)}km from ${destination} (max 50km)`);
+        return null;
+      }
     }
 
     // Map price level from new API format
