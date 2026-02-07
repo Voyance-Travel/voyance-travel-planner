@@ -104,10 +104,10 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
     },
     {
       id: 'intelligent-itineraries',
-      title: 'Smart Itineraries',
-      description: 'See WHY each pick was made — timing hacks, tourist trap warnings, and savings tallies.',
+      title: 'Your Trips',
+      description: 'All your trips live here. View itineraries, track plans, and pick up right where you left off.',
       icon: <Star className="h-5 w-5" />,
-      route: '/#demo-section',
+      route: '/trip/dashboard',
       position: 'center',
       emphasis: 'high',
     },
