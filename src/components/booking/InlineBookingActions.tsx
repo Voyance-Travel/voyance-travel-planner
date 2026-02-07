@@ -445,19 +445,8 @@ export function InlineBookingActions({
         );
       }
       
-      // Fallback - basic add to trip (shouldn't happen often)
-      return (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={handlePrimaryAction}
-          disabled={selectMutation.isPending}
-          className="gap-1.5 text-xs"
-        >
-          <ShoppingCart className="h-3 w-3" />
-          {compact ? 'Add' : 'Add to Trip'}
-        </Button>
-      );
+      // No booking integration available - show nothing rather than broken UI
+      return null;
 
     case 'selected_pending':
       const hasTravelers = activity.travelerData && activity.travelerData.length > 0;
