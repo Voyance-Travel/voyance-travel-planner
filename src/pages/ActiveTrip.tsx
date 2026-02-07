@@ -34,6 +34,7 @@ import { PostActivityNudge } from '@/components/feedback/PostActivityNudge';
 import { MemoryUploadButton } from '@/components/memories/MemoryUploadButton';
 import { MemoriesTimeline } from '@/components/memories/MemoriesTimeline';
 import { ActiveTripStats } from '@/components/trips/ActiveTripStats';
+import TripChat from '@/components/chat/TripChat';
 import type { ItineraryActivity as DrawerItineraryActivity } from '@/types/itinerary';
 import { ActivityMediaCapture } from '@/components/feedback/ActivityMediaCapture';
 import { useFeedbackTrigger } from '@/hooks/useFeedbackTrigger';
@@ -86,7 +87,7 @@ interface ItineraryDay {
   };
 }
 
-type ViewType = 'today' | 'overview' | 'nearby' | 'memories' | 'stats';
+type ViewType = 'today' | 'overview' | 'nearby' | 'memories' | 'stats' | 'chat';
 
 // Get time of day greeting and icon
 function getTimeContext() {
@@ -383,9 +384,9 @@ export default function ActiveTrip() {
 
             {/* View Tabs */}
             <div className="flex gap-4 pb-3">
-              {(['today', 'overview', 'nearby', 'memories', 'stats'] as ViewType[]).map(v => {
+              {(['today', 'overview', 'nearby', 'memories', 'stats', 'chat'] as ViewType[]).map(v => {
                 const labels: Record<ViewType, string> = {
-                  today: 'Today', overview: 'Trip', nearby: 'Nearby', memories: '📸', stats: '📊'
+                  today: 'Today', overview: 'Trip', nearby: 'Nearby', memories: '📸', stats: '📊', chat: '💬'
                 };
                 return (
                   <button
@@ -516,6 +517,21 @@ export default function ActiveTrip() {
                   budget={trip.budget_total_cents ? trip.budget_total_cents / 100 : undefined}
                   currency={trip.budget_currency || 'USD'}
                   travelers={trip.travelers || 1}
+                />
+              </motion.div>
+            )}
+
+            {view === 'chat' && (
+              <motion.div
+                key="chat"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="h-[calc(100vh-280px)]"
+              >
+                <TripChat
+                  tripId={tripId || ''}
+                  tripType="consumer"
                 />
               </motion.div>
             )}
