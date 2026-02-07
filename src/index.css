@@ -328,77 +328,83 @@
    PRINT STYLES — Clean, readable itinerary output
    ================================================================ */
 @media print {
-  /* Reset page */
   @page {
     size: A4 portrait;
-    margin: 15mm 12mm;
+    margin: 18mm 15mm;
   }
 
-  /* Hide all non-content UI */
-  nav,
-  header,
-  footer,
-  aside,
+  /* ── Hide chrome ─────────────────────────────────────────────── */
+  nav, footer, aside,
   [data-sonner-toaster],
-  .fixed,
-  .sticky,
-  button,
-  [role="dialog"],
-  [role="tooltip"],
-  [role="menu"],
-  .print\\:hidden {
+  .fixed, .sticky,
+  [role="dialog"], [role="tooltip"], [role="menu"],
+  [role="tablist"],
+  [role="progressbar"],
+  .print\:hidden {
     display: none !important;
   }
 
-  /* But keep buttons inside print-visible areas if they have text labels */
-  .print\\:block { display: block !important; }
-  .print\\:flex { display: flex !important; }
+  /* Hide all buttons EXCEPT ones explicitly marked for print */
+  button:not(.print\:visible),
+  [class*="DropdownMenu"],
+  [class*="Tooltip"] {
+    display: none !important;
+  }
 
-  /* Body & background */
+  /* Show print-visible elements */
+  .print\:block { display: block !important; }
+  .print\:flex { display: flex !important; }
+
+  /* ── Base reset ──────────────────────────────────────────────── */
   body {
     background: white !important;
-    color: black !important;
-    font-size: 11pt !important;
-    line-height: 1.5 !important;
+    color: #1a1a2e !important;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
+    font-size: 10pt !important;
+    line-height: 1.55 !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
-  /* Remove shadows, borders, and rounded corners for clean print */
   * {
     box-shadow: none !important;
     text-shadow: none !important;
+    animation: none !important;
+    transition: none !important;
   }
 
-  /* Make all cards flat */
-  .bg-card,
-  [class*="rounded-xl"],
-  [class*="rounded-lg"] {
-    border-radius: 0 !important;
-    border: 1px solid #e0e0e0 !important;
+  /* ── Typography ──────────────────────────────────────────────── */
+  h1 { font-size: 20pt !important; font-weight: 700 !important; color: #1a1a2e !important; margin-bottom: 4pt !important; }
+  h2 { font-size: 14pt !important; font-weight: 700 !important; color: #1a1a2e !important; margin-bottom: 3pt !important; }
+  h3 { font-size: 12pt !important; font-weight: 600 !important; color: #2d2d3f !important; margin-bottom: 2pt !important; }
+  h4 { font-size: 10pt !important; font-weight: 600 !important; color: #2d2d3f !important; }
+
+  p, span, li, div {
+    color: #333 !important;
   }
 
-  /* Ensure content fills the page width */
-  .max-w-4xl,
-  .max-w-5xl,
-  .max-w-6xl,
-  .max-w-7xl,
-  .container {
+  .text-muted-foreground {
+    color: #666 !important;
+  }
+
+  /* ── Layout ──────────────────────────────────────────────────── */
+  .max-w-4xl, .max-w-5xl, .max-w-6xl, .max-w-7xl, .container {
     max-width: 100% !important;
     padding-left: 0 !important;
     padding-right: 0 !important;
   }
 
-  /* Expand all collapsed/accordion content */
-  [data-state="closed"] > [data-radix-collapsible-content],
-  [data-state="closed"] > div {
-    display: block !important;
-    height: auto !important;
-    opacity: 1 !important;
-    overflow: visible !important;
+  /* ── Cards: clean flat style ─────────────────────────────────── */
+  .bg-card,
+  [class*="rounded-xl"],
+  [class*="rounded-lg"] {
+    border-radius: 4pt !important;
+    border: 0.5pt solid #e2e2e8 !important;
+    background: white !important;
   }
 
-  /* Day sections: avoid breaking mid-day when possible */
+  /* ── Itinerary-specific ──────────────────────────────────────── */
+  /* Day sections: avoid splitting */
   .print-day-section {
     page-break-inside: avoid;
     break-inside: avoid;
@@ -408,83 +414,61 @@
   .print-activity-card {
     page-break-inside: avoid;
     break-inside: avoid;
-    margin-bottom: 4pt;
+    margin-bottom: 3pt !important;
+    padding: 6pt 8pt !important;
+    border-bottom: 0.5pt solid #eee !important;
   }
 
-  /* Day headers: don't orphan at bottom of page */
+  /* Day headers: never orphan */
   h2, h3, h4 {
     page-break-after: avoid;
     break-after: avoid;
   }
 
-  /* Hide interactive-only elements */
-  [class*="hover:"],
-  .group-hover,
-  [class*="cursor-pointer"] {
-    cursor: default !important;
+  /* ── Expand collapsed content ────────────────────────────────── */
+  [data-state="closed"] > [data-radix-collapsible-content],
+  [data-state="closed"] > div {
+    display: block !important;
+    height: auto !important;
+    opacity: 1 !important;
+    overflow: visible !important;
   }
 
-  /* Hide utility bar buttons, share buttons, edit buttons */
-  .gap-2 > button,
-  [class*="DropdownMenu"],
-  [class*="Tooltip"] {
-    display: none !important;
-  }
-
-  /* Show all day content (remove line-clamp truncation) */
-  .line-clamp-1,
-  .line-clamp-2,
-  .line-clamp-3 {
+  /* ── Line clamps: remove ─────────────────────────────────────── */
+  .line-clamp-1, .line-clamp-2, .line-clamp-3 {
     -webkit-line-clamp: unset !important;
     overflow: visible !important;
     display: block !important;
   }
 
-  /* Links: show URL after text */
-  a[href^="http"]::after {
-    content: " (" attr(href) ")";
-    font-size: 8pt;
-    color: #666;
-    word-break: break-all;
-  }
-
-  /* Images: constrain size for print */
+  /* ── Images: constrained ─────────────────────────────────────── */
   img {
-    max-height: 120px !important;
+    max-height: 100px !important;
     object-fit: cover !important;
+    border-radius: 2pt !important;
   }
 
-  /* Animations: disable */
-  *, *::before, *::after {
-    animation: none !important;
-    transition: none !important;
-  }
-
-  /* Tabs: show all tab content, hide tab nav */
-  [role="tablist"] {
-    display: none !important;
-  }
-
-  /* Badge / chip styling for print */
-  .badge,
-  [class*="Badge"] {
-    border: 1px solid #ccc !important;
-    background: #f5f5f5 !important;
+  /* ── Badges: flat print style ────────────────────────────────── */
+  .badge, [class*="Badge"] {
+    border: 0.5pt solid #ccc !important;
+    background: #f8f8f8 !important;
     color: #333 !important;
+    font-size: 7pt !important;
+    padding: 1pt 4pt !important;
   }
 
-  /* Progress bars: hide */
-  [role="progressbar"] {
-    display: none !important;
+  /* ── Links: don't show full URLs (too noisy) ─────────────────── */
+  a[href]::after {
+    content: none !important;
   }
 
-  /* Ensure text is black */
-  p, span, li, h1, h2, h3, h4, h5, h6, div {
-    color: #1a1a1a !important;
-  }
-
-  /* Muted text stays slightly lighter */
-  .text-muted-foreground {
-    color: #555 !important;
+  /* ── Print header for itinerary ──────────────────────────────── */
+  .print-itinerary-header {
+    display: block !important;
+    text-align: center;
+    padding: 12pt 0;
+    margin-bottom: 12pt;
+    border-bottom: 1.5pt solid #4f46e5;
   }
 }
+
