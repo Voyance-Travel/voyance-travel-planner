@@ -44,6 +44,8 @@ import { useTripFeedback } from '@/services/activityFeedbackAPI';
 import { useProximityCheckIn } from '@/hooks/useProximityCheckIn';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOfflineItinerary, getCachedTrip } from '@/hooks/useOfflineItinerary';
+import { useOfflineStatus } from '@/hooks/useOfflineStatus';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { parseActiveTripDays } from '@/utils/itineraryParser';
@@ -106,6 +108,11 @@ export default function ActiveTrip() {
   const { user } = useAuth();
   const [trip, setTrip] = useState<Trip | null>(null);
   const [loading, setLoading] = useState(true);
+  const { isOnline } = useOfflineStatus();
+
+  // Auto-cache trip data for offline use
+  useOfflineItinerary(trip);
+
   const [view, setView] = useState<ViewType>('today');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [completedActivities, setCompletedActivities] = useState<Set<string>>(new Set());
@@ -116,13 +123,23 @@ export default function ActiveTrip() {
     open: false, activityId: '', activityName: '', mode: 'photo'
   });
 
-  // Load trip data
+  // Load trip data (with offline fallback)
   useEffect(() => {
     async function loadTrip() {
       if (!tripId) return;
       
       try {
         setLoading(true);
+
+        // If offline, use cached data
+        if (!navigator.onLine) {
+          const cached = getCachedTrip(tripId);
+          if (cached) {
+            setTrip(cached);
+            return;
+          }
+        }
+
         const { data, error } = await supabase
           .from('trips')
           .select('*')
@@ -133,14 +150,21 @@ export default function ActiveTrip() {
         if (data) setTrip(data);
       } catch (err) {
         console.error('Error loading trip:', err);
-        toast.error('Failed to load trip');
+        // Fallback to cache on network error
+        const cached = getCachedTrip(tripId);
+        if (cached) {
+          setTrip(cached);
+          toast.info('Showing cached trip data');
+        } else {
+          toast.error('Failed to load trip');
+        }
       } finally {
         setLoading(false);
       }
     }
 
     loadTrip();
-  }, [tripId]);
+  }, [tripId, isOnline]);
 
   // Parse itinerary data using centralized safe parser
   const itinerary = useMemo((): ItineraryDay[] => {

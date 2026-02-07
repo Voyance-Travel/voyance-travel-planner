@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AnimatePresence } from 'framer-motion';
 import { ScrollToTop } from "@/components/common/ScrollToTop";
+import { OfflineBanner } from "@/components/common/OfflineBanner";
 import { useImagePreloader } from "@/hooks/useImagePreloader";
 import { CookieConsent } from "@/components/common/CookieConsent";
 import { PageTransition } from '@/components/layout/PageTransition';
@@ -282,6 +283,7 @@ const App = () => (
             <Toaster />
             <Sonner />
             <BrowserRouter>
+              <OfflineBanner />
               <CookieConsent />
               <ScrollToTop />
               <JourneyTracker />
