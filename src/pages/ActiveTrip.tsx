@@ -26,10 +26,12 @@ import { FeedbackPromptOverlay } from '@/components/feedback/FeedbackPromptOverl
 import { DaySummaryPrompt } from '@/components/feedback/DaySummaryPrompt';
 import { InlineActivityRating } from '@/components/feedback/InlineActivityRating';
 import { TripRescueBanner } from '@/components/feedback/TripRescueBanner';
+import { CheckInButton } from '@/components/feedback/CheckInButton';
 import { ActivityMediaCapture } from '@/components/feedback/ActivityMediaCapture';
 import { useFeedbackTrigger } from '@/hooks/useFeedbackTrigger';
 import { useTripSentiment } from '@/hooks/useTripSentiment';
 import { useTripFeedback } from '@/services/activityFeedbackAPI';
+import { useProximityCheckIn } from '@/hooks/useProximityCheckIn';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -555,6 +557,21 @@ function TodayView({
   onSwapActivity,
   onLightenPace,
 }: TodayViewProps) {
+  // GPS proximity detection for check-in
+  const venues = useMemo(() => {
+    if (!todaysItinerary) return [];
+    return todaysItinerary.activities
+      .filter(a => a.location?.lat && a.location?.lng)
+      .map(a => ({
+        id: a.id,
+        lat: a.location!.lat!,
+        lng: a.location!.lng!,
+        name: a.name,
+      }));
+  }, [todaysItinerary]);
+
+  const proximity = useProximityCheckIn(venues, completedActivities, !!todaysItinerary);
+
   if (!todaysItinerary) {
     return (
       <motion.div
@@ -766,7 +783,7 @@ function TodayView({
                       </div>
 
                       {/* Action Buttons */}
-                      <div className="flex gap-2 mt-3">
+                      <div className="flex items-center gap-2 mt-3">
                         {activity.location && (
                           <Button size="sm" variant="outline" className="h-8 gap-1.5">
                             <Navigation className="w-3.5 h-3.5" />
@@ -779,17 +796,20 @@ function TodayView({
                             Show tickets
                           </Button>
                         )}
-                        {!isCompleted && (
-                          <Button 
-                            size="sm" 
-                            variant="ghost" 
-                            className="h-8"
-                            onClick={() => onActivityComplete(activity.id)}
-                          >
-                            <Check className="w-3.5 h-3.5 mr-1" />
-                            Done
-                          </Button>
-                        )}
+                        <div className="ml-auto">
+                          <CheckInButton
+                            activityId={activity.id}
+                            activityName={activity.name}
+                            tripId={trip.id}
+                            destination={trip.destination}
+                            activityType={activity.type}
+                            activityCategory={activity.category}
+                            isCheckedIn={isCompleted}
+                            isNearby={proximity.nearbyActivityId === activity.id}
+                            distanceMeters={proximity.nearbyActivityId === activity.id ? proximity.distanceMeters : null}
+                            onCheckIn={onActivityComplete}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
