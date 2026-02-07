@@ -582,6 +582,13 @@ export default function Quiz() {
   };
 
   const handleComplete = () => {
+    // Check for post-quiz redirect (e.g., guest returning to shared trip)
+    const postQuizRedirect = sessionStorage.getItem('postQuizRedirect');
+    if (postQuizRedirect) {
+      sessionStorage.removeItem('postQuizRedirect');
+      navigate(postQuizRedirect);
+      return;
+    }
     navigate(consumeReturnPath(ROUTES.PROFILE.VIEW));
   };
 
