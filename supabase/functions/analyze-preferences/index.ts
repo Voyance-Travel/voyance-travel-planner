@@ -57,13 +57,14 @@ serve(async (req) => {
     
     console.log(`[analyze-preferences] Authenticated user: ${authResult.userId}`);
 
+    const body: AnalyzeRequest = await req.json().catch(() => ({} as AnalyzeRequest));
     const { 
-      lovedTypes, 
-      dislikedTypes, 
-      lovedCategories, 
-      dislikedCategories, 
-      feedbackCount 
-    }: AnalyzeRequest = await req.json();
+      lovedTypes = {}, 
+      dislikedTypes = {}, 
+      lovedCategories = {}, 
+      dislikedCategories = {}, 
+      feedbackCount = 0 
+    } = body;
 
     // Sort to find top preferences
     const topLoved = Object.entries(lovedTypes)
