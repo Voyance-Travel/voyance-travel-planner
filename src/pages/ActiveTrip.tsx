@@ -24,7 +24,12 @@ import { TripOverview } from '@/components/trips/TripOverview';
 import WhatsNearby from '@/components/trips/WhatsNearby';
 import { FeedbackPromptOverlay } from '@/components/feedback/FeedbackPromptOverlay';
 import { DaySummaryPrompt } from '@/components/feedback/DaySummaryPrompt';
+import { InlineActivityRating } from '@/components/feedback/InlineActivityRating';
+import { TripRescueBanner } from '@/components/feedback/TripRescueBanner';
+import { ActivityMediaCapture } from '@/components/feedback/ActivityMediaCapture';
 import { useFeedbackTrigger } from '@/hooks/useFeedbackTrigger';
+import { useTripSentiment } from '@/hooks/useTripSentiment';
+import { useTripFeedback } from '@/services/activityFeedbackAPI';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -94,6 +99,10 @@ export default function ActiveTrip() {
   const [completedActivities, setCompletedActivities] = useState<Set<string>>(new Set());
   const [recentCompletedActivity, setRecentCompletedActivity] = useState<ActivityContext | null>(null);
   const [showDaySummary, setShowDaySummary] = useState(false);
+  const [rescueDismissed, setRescueDismissed] = useState(false);
+  const [mediaCapture, setMediaCapture] = useState<{ open: boolean; activityId: string; activityName: string; mode: 'photo' | 'voice' }>({
+    open: false, activityId: '', activityName: '', mode: 'photo'
+  });
 
   // Load trip data
   useEffect(() => {
@@ -248,7 +257,40 @@ export default function ActiveTrip() {
     enabled: !!trip && tripContext?.isActive,
   });
 
-  // Handle activity completion
+  // Trip sentiment detection for rescue system
+  const sentiment = useTripSentiment({
+    tripId: tripId || '',
+    currentDayNumber: tripContext?.currentDayNumber || 1,
+    enabled: !!trip && tripContext?.isActive,
+  });
+
+  // Get existing feedback for inline ratings
+  const { data: tripFeedback = [] } = useTripFeedback(tripId || null);
+  const feedbackByActivity = useMemo(() => {
+    const map = new Map<string, string>();
+    tripFeedback.forEach(f => map.set(f.activity_id, f.rating));
+    return map;
+  }, [tripFeedback]);
+
+  // Handle media capture
+  const openMediaCapture = useCallback((activityId: string, activityName: string, mode: 'photo' | 'voice') => {
+    setMediaCapture({ open: true, activityId, activityName, mode });
+  }, []);
+
+  // Handle rescue actions
+  const handleSwapActivity = useCallback(() => {
+    // Navigate to the trip detail page with swap mode
+    navigate(`/trip/${tripId}`);
+    toast.info('Use "Find Alternative" on any activity to swap it');
+  }, [tripId, navigate]);
+
+  const handleLightenPace = useCallback(() => {
+    toast.success('We\'ll adjust tomorrow\'s schedule to give you more breathing room');
+    setRescueDismissed(true);
+    // The actual pace adjustment would be handled by the itinerary system
+  }, []);
+
+
   const handleActivityComplete = useCallback((activityId: string) => {
     setCompletedActivities(prev => new Set([...prev, activityId]));
     
@@ -364,6 +406,14 @@ export default function ActiveTrip() {
                 onCopy={handleCopy}
                 copiedId={copiedId}
                 archetype={userArchetype}
+                feedbackByActivity={feedbackByActivity}
+                onMediaPress={(id, name) => openMediaCapture(id, name, 'photo')}
+                onVoicePress={(id, name) => openMediaCapture(id, name, 'voice')}
+                sentiment={sentiment}
+                rescueDismissed={rescueDismissed}
+                onRescueDismiss={() => setRescueDismissed(true)}
+                onSwapActivity={handleSwapActivity}
+                onLightenPace={handleLightenPace}
               />
             )}
 
@@ -433,6 +483,16 @@ export default function ActiveTrip() {
             />
           )}
         </AnimatePresence>
+
+        {/* Media Capture Modal */}
+        <ActivityMediaCapture
+          open={mediaCapture.open}
+          onOpenChange={(open) => setMediaCapture(prev => ({ ...prev, open }))}
+          activityId={mediaCapture.activityId}
+          activityName={mediaCapture.activityName}
+          tripId={tripId || ''}
+          mode={mediaCapture.mode}
+        />
       </div>
     </MainLayout>
   );
@@ -466,6 +526,14 @@ interface TodayViewProps {
   onCopy: (id: string, text: string) => void;
   copiedId: string | null;
   archetype?: string;
+  feedbackByActivity: Map<string, string>;
+  onMediaPress: (activityId: string, activityName: string) => void;
+  onVoicePress: (activityId: string, activityName: string) => void;
+  sentiment: import('@/hooks/useTripSentiment').TripSentiment;
+  rescueDismissed: boolean;
+  onRescueDismiss: () => void;
+  onSwapActivity: () => void;
+  onLightenPace: () => void;
 }
 
 function TodayView({
@@ -478,6 +546,14 @@ function TodayView({
   onCopy,
   copiedId,
   archetype,
+  feedbackByActivity,
+  onMediaPress,
+  onVoicePress,
+  sentiment,
+  rescueDismissed,
+  onRescueDismiss,
+  onSwapActivity,
+  onLightenPace,
 }: TodayViewProps) {
   if (!todaysItinerary) {
     return (
@@ -566,7 +642,20 @@ function TodayView({
         </CardContent>
       </Card>
 
-      {/* Upcoming Activities */}
+      {/* Trip Rescue Banner */}
+      {sentiment.needsRescue && !rescueDismissed && (
+        <TripRescueBanner
+          sentiment={sentiment}
+          destination={trip.destination}
+          tripId={trip.id}
+          dayNumber={tripContext.currentDayNumber}
+          totalDays={tripContext.totalDays}
+          onSwapActivity={onSwapActivity}
+          onLightenPace={onLightenPace}
+          onDismiss={onRescueDismiss}
+        />
+      )}
+
       <div className="space-y-3">
         <h3 className="font-semibold text-muted-foreground text-sm uppercase tracking-wide">
           {nowContext?.currentActivity ? 'Coming Up' : 'Today\'s Schedule'}
@@ -660,6 +749,21 @@ function TodayView({
                           </Button>
                         </div>
                       )}
+
+                      {/* Inline Rating */}
+                      <div className="mt-3 pt-2 border-t border-border/30">
+                        <InlineActivityRating
+                          activityId={activity.id}
+                          tripId={trip.id}
+                          activityType={activity.type}
+                          activityCategory={activity.category}
+                          destination={trip.destination}
+                          existingRating={feedbackByActivity.get(activity.id) as any || null}
+                          onMediaPress={() => onMediaPress(activity.id, activity.name)}
+                          onVoicePress={() => onVoicePress(activity.id, activity.name)}
+                          compact
+                        />
+                      </div>
 
                       {/* Action Buttons */}
                       <div className="flex gap-2 mt-3">
