@@ -139,7 +139,7 @@ export default function AvatarUpload({
       <button 
         onClick={handleClick}
         disabled={isUploading}
-        className="absolute bottom-2 right-2 p-2 bg-background border border-border rounded-full shadow-sm hover:bg-muted transition-colors disabled:opacity-50"
+        className="absolute bottom-0 right-0 p-2 bg-background border border-border rounded-full shadow-sm hover:bg-muted transition-colors disabled:opacity-50"
       >
         {isUploading ? (
           <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
