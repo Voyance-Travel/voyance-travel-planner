@@ -1,13 +1,14 @@
 /**
  * Consumer PDF Generator
  * 
- * Generates a clean, branded, print-ready PDF itinerary.
- * Designed for travelers to carry on their trip.
+ * Uses html2canvas to capture the rendered itinerary DOM,
+ * then slices it into A4 pages via jsPDF.
  */
 
 import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { format } from 'date-fns';
-import type { EditorialDay, EditorialActivity } from '@/components/itinerary/EditorialItinerary';
+import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
 
 export interface ConsumerTripPdfData {
   tripName?: string;
@@ -31,287 +32,203 @@ export interface ConsumerTripPdfData {
   };
 }
 
-// Refined color palette
-const C = {
-  black: [20, 20, 30] as [number, number, number],
-  dark: [40, 45, 55] as [number, number, number],
-  body: [55, 60, 70] as [number, number, number],
-  muted: [120, 125, 135] as [number, number, number],
-  light: [200, 200, 205] as [number, number, number],
-  bg: [245, 246, 248] as [number, number, number],
-  accent: [79, 70, 229] as [number, number, number],      // Indigo-600
-  accentLight: [224, 221, 255] as [number, number, number],
-  white: [255, 255, 255] as [number, number, number],
+const fmtDateLong = (s: string) => {
+  try { return format(new Date(s), 'EEEE, MMMM d, yyyy'); } catch { return s; }
 };
 
+const fmtDate = (s: string) => {
+  try { return format(new Date(s), 'EEE, MMM d'); } catch { return s; }
+};
+
+/**
+ * Build an off-screen HTML element that represents a clean, print-ready itinerary,
+ * render it to canvas, and output as a paginated PDF.
+ */
 export async function generateConsumerTripPdf(data: ConsumerTripPdfData): Promise<void> {
-  const pdf = new jsPDF('p', 'mm', 'a4');
-  const W = pdf.internal.pageSize.getWidth();   // 210
-  const H = pdf.internal.pageSize.getHeight();   // 297
-  const M = 18; // margin
-  const CW = W - M * 2; // content width
-  let y = 0;
-  let pageNum = 0;
+  // Build a temporary container with inline styles (no CSS dependencies)
+  const container = document.createElement('div');
+  container.style.cssText = `
+    position: fixed; top: -99999px; left: -99999px;
+    width: 794px; /* A4 at 96dpi */
+    background: white;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    color: #1a1a2e;
+    padding: 0;
+    z-index: -1;
+  `;
 
-  // ── Helpers ──────────────────────────────────────────────────────
-  const setFont = (size: number, style: 'normal' | 'bold' = 'normal', color = C.dark) => {
-    pdf.setFontSize(size);
-    pdf.setFont('helvetica', style);
-    pdf.setTextColor(...color);
-  };
+  const accentColor = '#4f46e5';
+  const mutedColor = '#888';
+  const bodyColor = '#333';
 
-  const text = (t: string, x: number, yy: number, opts?: { align?: 'left' | 'center' | 'right'; maxWidth?: number }) => {
-    if (opts?.maxWidth) {
-      const lines = pdf.splitTextToSize(t, opts.maxWidth);
-      pdf.text(lines, x, yy, { align: opts.align });
-      return lines.length;
-    }
-    pdf.text(t, x, yy, { align: opts?.align });
-    return 1;
-  };
+  // ── COVER ──────────────────────────────────────────────────────
+  let coverHtml = `
+    <div style="padding: 60px 50px 40px; text-align: center; min-height: 600px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+      <div style="width: 100%; height: 4px; background: ${accentColor}; margin-bottom: 60px; border-radius: 2px;"></div>
+      <h1 style="font-size: 38px; font-weight: 700; margin: 0 0 12px; color: #1a1a2e; letter-spacing: -0.5px;">${escapeHtml(data.destination)}</h1>
+  `;
 
-  const line = (x1: number, yy: number, x2: number, color = C.light, width = 0.3) => {
-    pdf.setDrawColor(...color);
-    pdf.setLineWidth(width);
-    pdf.line(x1, yy, x2, yy);
-  };
-
-  const newPage = () => {
-    pdf.addPage();
-    pageNum++;
-    y = M;
-  };
-
-  const needsBreak = (space: number) => {
-    if (y + space > H - 20) {
-      newPage();
-      return true;
-    }
-    return false;
-  };
-
-  const addFooters = () => {
-    const total = pdf.getNumberOfPages();
-    for (let i = 1; i <= total; i++) {
-      pdf.setPage(i);
-      setFont(7, 'normal', C.muted);
-      pdf.text(`Voyance`, M, H - 8);
-      pdf.text(`${i} / ${total}`, W - M, H - 8, { align: 'right' });
-      line(M, H - 12, W - M, C.bg);
-    }
-  };
-
-  const fmtDate = (s: string) => { try { return format(new Date(s), 'EEE, MMM d'); } catch { return s; } };
-  const fmtDateLong = (s: string) => { try { return format(new Date(s), 'EEEE, MMMM d, yyyy'); } catch { return s; } };
-
-  const getCategoryLabel = (cat?: string): string => {
-    const labels: Record<string, string> = {
-      food: '[DINE]', restaurant: '[DINE]', dining: '[DINE]',
-      culture: '[CULTURE]', museum: '[CULTURE]', history: '[CULTURE]',
-      nature: '[NATURE]', outdoors: '[NATURE]', park: '[NATURE]',
-      shopping: '[SHOP]', market: '[SHOP]',
-      nightlife: '[NIGHT]', bar: '[NIGHT]',
-      transport: '[TRANSFER]', transit: '[TRANSFER]',
-      hotel: '[HOTEL]', accommodation: '[HOTEL]',
-      flight: '[FLIGHT]',
-      beach: '[BEACH]',
-      activity: '[ACTIVITY]', tour: '[ACTIVITY]', experience: '[ACTIVITY]',
-      wellness: '[WELLNESS]', spa: '[WELLNESS]',
-    };
-    if (!cat) return '';
-    const key = cat.toLowerCase();
-    return labels[key] || '';
-  };
-
-  // ── COVER PAGE ──────────────────────────────────────────────────
-  pageNum = 1;
-
-  // Top accent bar
-  pdf.setFillColor(...C.accent);
-  pdf.rect(0, 0, W, 3, 'F');
-
-  // Destination title
-  y = 70;
-  setFont(32, 'bold', C.black);
-  text(data.destination, W / 2, y, { align: 'center' });
-
-  // Trip name (if different)
   if (data.tripName && data.tripName !== data.destination && !data.tripName.includes(data.destination)) {
-    y += 14;
-    setFont(13, 'normal', C.muted);
-    text(data.tripName, W / 2, y, { align: 'center' });
+    coverHtml += `<p style="font-size: 16px; color: ${mutedColor}; margin: 0 0 8px;">${escapeHtml(data.tripName)}</p>`;
   }
 
-  // Date range
-  y += 16;
-  setFont(12, 'normal', C.body);
-  const dateStr = `${fmtDateLong(data.startDate)}  –  ${fmtDateLong(data.endDate)}`;
-  text(dateStr, W / 2, y, { align: 'center' });
+  coverHtml += `
+      <p style="font-size: 14px; color: ${bodyColor}; margin: 16px 0 6px;">${fmtDateLong(data.startDate)} &ndash; ${fmtDateLong(data.endDate)}</p>
+      <p style="font-size: 13px; color: ${mutedColor}; margin: 0 0 30px;">${data.travelers} traveler${data.travelers !== 1 ? 's' : ''}</p>
+      <div style="width: 40px; height: 1px; background: #ccc; margin: 0 auto 30px;"></div>
+  `;
 
-  // Travelers
-  y += 8;
-  setFont(10, 'normal', C.muted);
-  text(`${data.travelers} traveler${data.travelers !== 1 ? 's' : ''}`, W / 2, y, { align: 'center' });
-
-  // Divider
-  y += 20;
-  line(W / 2 - 20, y, W / 2 + 20, C.light, 0.5);
-
-  // Quick reference box
-  y += 15;
-  const hasBookings = data.flight || data.hotel;
-  if (hasBookings) {
-    pdf.setFillColor(...C.bg);
-    pdf.roundedRect(M + 10, y - 5, CW - 20, data.flight && data.hotel ? 42 : 22, 3, 3, 'F');
-
+  // Quick reference
+  if (data.flight || data.hotel) {
+    coverHtml += `<div style="background: #f5f6f8; border-radius: 8px; padding: 20px 28px; text-align: left; max-width: 500px; width: 100%;">`;
     if (data.flight) {
-      setFont(8, 'bold', C.muted);
-      text('FLIGHT', M + 18, y + 2);
-      setFont(10, 'normal', C.dark);
-      text(`${data.flight.airline}  ·  ${data.flight.departureAirport} → ${data.flight.arrivalAirport}`, M + 18, y + 9);
-      setFont(9, 'normal', C.muted);
-      text(`Departs ${data.flight.departure}  ·  Arrives ${data.flight.arrival}`, M + 18, y + 16);
-      y += 22;
+      coverHtml += `
+        <p style="font-size: 10px; font-weight: 700; color: ${mutedColor}; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 4px;">Flight</p>
+        <p style="font-size: 13px; color: #1a1a2e; margin: 0 0 2px;">${escapeHtml(data.flight.airline)} &middot; ${escapeHtml(data.flight.departureAirport)} &rarr; ${escapeHtml(data.flight.arrivalAirport)}</p>
+        <p style="font-size: 12px; color: ${mutedColor}; margin: 0 0 14px;">Departs ${escapeHtml(data.flight.departure)} &middot; Arrives ${escapeHtml(data.flight.arrival)}</p>
+      `;
     }
-
     if (data.hotel) {
-      setFont(8, 'bold', C.muted);
-      text('HOTEL', M + 18, y + 2);
-      setFont(10, 'normal', C.dark);
-      text(`${data.hotel.name}  ·  ${data.hotel.neighborhood}`, M + 18, y + 9);
-      setFont(9, 'normal', C.muted);
-      text(`${data.hotel.checkIn} – ${data.hotel.checkOut}`, M + 18, y + 16);
-      y += 22;
+      coverHtml += `
+        <p style="font-size: 10px; font-weight: 700; color: ${mutedColor}; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 4px;">Hotel</p>
+        <p style="font-size: 13px; color: #1a1a2e; margin: 0 0 2px;">${escapeHtml(data.hotel.name)} &middot; ${escapeHtml(data.hotel.neighborhood)}</p>
+        <p style="font-size: 12px; color: ${mutedColor}; margin: 0;">${escapeHtml(data.hotel.checkIn)} &ndash; ${escapeHtml(data.hotel.checkOut)}</p>
+      `;
     }
+    coverHtml += `</div>`;
   }
 
-  // Footer text on cover
-  setFont(8, 'normal', C.muted);
-  text('Generated by Voyance  ·  travelwithvoyance.com', W / 2, H - 20, { align: 'center' });
+  coverHtml += `
+      <p style="font-size: 10px; color: #aaa; margin-top: 50px;">Generated by Voyance &middot; travelwithvoyance.com</p>
+    </div>
+  `;
 
-  // ── ITINERARY PAGES ─────────────────────────────────────────────
+  // ── ITINERARY DAYS ─────────────────────────────────────────────
+  let daysHtml = '';
   if (data.days && data.days.length > 0) {
-    newPage();
-
-    // Section title
-    setFont(18, 'bold', C.black);
-    text('Your Itinerary', M, y + 4);
-    y += 12;
-    line(M, y, W - M, C.accent, 0.8);
-    y += 10;
+    daysHtml += `
+      <div style="padding: 40px 50px;">
+        <h2 style="font-size: 22px; font-weight: 700; color: #1a1a2e; margin: 0 0 8px;">Your Itinerary</h2>
+        <div style="width: 100%; height: 2px; background: ${accentColor}; margin-bottom: 30px; border-radius: 1px;"></div>
+    `;
 
     for (const day of data.days) {
-      needsBreak(45);
+      const dateStr = day.date ? fmtDate(day.date) : '';
+      const theme = day.title || day.theme || '';
 
-      // Day header bar
-      pdf.setFillColor(...C.accent);
-      pdf.roundedRect(M, y - 1, CW, 12, 2, 2, 'F');
+      daysHtml += `
+        <div style="margin-bottom: 28px;">
+          <div style="background: ${accentColor}; color: white; border-radius: 6px; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <div>
+              <span style="font-weight: 700; font-size: 14px; margin-right: 16px;">Day ${day.dayNumber}</span>
+              <span style="font-size: 13px; opacity: 0.9;">${escapeHtml(theme)}</span>
+            </div>
+            <span style="font-size: 12px; opacity: 0.85;">${escapeHtml(dateStr)}</span>
+          </div>
+      `;
 
-      setFont(11, 'bold', C.white);
-      const dayLabel = `Day ${day.dayNumber}`;
-      text(dayLabel, M + 5, y + 7);
-
-      if (day.title || day.theme) {
-        setFont(10, 'normal', C.accentLight);
-        text(day.title || day.theme || '', M + 30, y + 7);
-      }
-
-      if (day.date) {
-        setFont(9, 'normal', C.accentLight);
-        text(fmtDate(day.date), W - M - 5, y + 7, { align: 'right' });
-      }
-
-      y += 17;
-
-      // Activities
       if (day.activities && day.activities.length > 0) {
         for (const act of day.activities) {
-          needsBreak(22);
-
           const timeStr = act.startTime || act.time || '';
-          const catLabel = getCategoryLabel(act.category || act.type);
-          const locationName = act.location?.name || act.location?.address;
-
-          // Time column
-          if (timeStr) {
-            setFont(9, 'bold', C.accent);
-            text(timeStr, M + 2, y);
-          }
-
-          const xContent = M + (timeStr ? 22 : 5);
-
-          // Category label
-          if (catLabel) {
-            setFont(6.5, 'bold', C.accent);
-            text(catLabel, xContent, y - 3);
-          }
-
-          // Activity title
-          setFont(10, 'bold', C.dark);
-          text(act.title, xContent, y);
-          y += 5;
-
-          // Description (1 line max for clean look)
-          if (act.description) {
-            setFont(8.5, 'normal', C.body);
-            const descLines = pdf.splitTextToSize(act.description, CW - (timeStr ? 26 : 8));
-            pdf.text(descLines.slice(0, 2), xContent, y);
-            y += Math.min(descLines.length, 2) * 3.5;
-          }
-
-          // Location + Duration row
+          const locationName = act.location?.name || act.location?.address || '';
           const metaParts: string[] = [];
           if (locationName) metaParts.push(locationName);
           if (act.duration) metaParts.push(act.duration);
           if (act.cost?.amount) metaParts.push(`${act.cost.currency || '$'}${act.cost.amount}`);
 
-          if (metaParts.length > 0) {
-            setFont(7.5, 'normal', C.muted);
-            text(metaParts.join('   ·   '), xContent, y);
-            y += 3.5;
-          }
-
-          // Tips
-          if (act.tips) {
-            setFont(7.5, 'normal', C.accent);
-            const tipLines = pdf.splitTextToSize(`TIP: ${act.tips}`, CW - (timeStr ? 26 : 8));
-            pdf.text(tipLines.slice(0, 1), xContent, y);
-            y += 3.5;
-          }
-
-          y += 4; // spacing between activities
-
-          // Light separator
-          line(xContent, y - 2, W - M, C.bg, 0.2);
+          daysHtml += `
+            <div style="display: flex; gap: 12px; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #f0f0f3;">
+              <div style="width: 50px; flex-shrink: 0; text-align: right;">
+                ${timeStr ? `<span style="font-size: 12px; font-weight: 700; color: ${accentColor};">${escapeHtml(timeStr)}</span>` : ''}
+              </div>
+              <div style="flex: 1; min-width: 0;">
+                <p style="font-size: 13px; font-weight: 700; color: #1a1a2e; margin: 0 0 3px;">${escapeHtml(act.title)}</p>
+                ${act.description ? `<p style="font-size: 11px; color: ${bodyColor}; margin: 0 0 4px; line-height: 1.5;">${escapeHtml(act.description)}</p>` : ''}
+                ${metaParts.length > 0 ? `<p style="font-size: 10px; color: ${mutedColor}; margin: 0 0 2px;">${metaParts.map(escapeHtml).join(' &middot; ')}</p>` : ''}
+                ${act.tips ? `<p style="font-size: 10px; color: ${accentColor}; margin: 2px 0 0; font-style: italic;">Tip: ${escapeHtml(act.tips)}</p>` : ''}
+              </div>
+            </div>
+          `;
         }
       } else {
-        setFont(9, 'normal', C.muted);
-        text('Free day — explore at your own pace', M + 5, y);
-        y += 6;
+        daysHtml += `<p style="font-size: 12px; color: ${mutedColor}; padding-left: 62px;">Free day — explore at your own pace</p>`;
       }
 
-      y += 6; // spacing between days
+      daysHtml += `</div>`; // close day
     }
+
+    daysHtml += `</div>`; // close itinerary section
   }
 
-  // ── NOTES PAGE (optional) ───────────────────────────────────────
-  newPage();
-  setFont(16, 'bold', C.black);
-  text('Notes', M, y + 4);
-  y += 10;
-  line(M, y, W - M, C.light, 0.3);
-  y += 8;
-
-  // Ruled lines for handwritten notes
-  for (let i = 0; i < 25; i++) {
-    line(M, y, W - M, C.bg, 0.15);
-    y += 9;
+  // ── NOTES PAGE ─────────────────────────────────────────────────
+  let notesHtml = `
+    <div style="padding: 40px 50px; min-height: 500px;">
+      <h2 style="font-size: 20px; font-weight: 700; color: #1a1a2e; margin: 0 0 12px;">Notes</h2>
+      <div style="width: 100%; height: 1px; background: #ddd; margin-bottom: 16px;"></div>
+  `;
+  for (let i = 0; i < 22; i++) {
+    notesHtml += `<div style="width: 100%; height: 1px; background: #f0f0f3; margin-bottom: 22px;"></div>`;
   }
+  notesHtml += `</div>`;
 
-  // ── Footers ─────────────────────────────────────────────────────
-  addFooters();
+  container.innerHTML = coverHtml + daysHtml + notesHtml;
+  document.body.appendChild(container);
 
-  // ── Save ────────────────────────────────────────────────────────
-  const safeName = (data.tripName || data.destination).replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-  pdf.save(`${safeName}-itinerary.pdf`);
+  try {
+    // Render to canvas at 2x for quality
+    const canvas = await html2canvas(container, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+      width: 794,
+      windowWidth: 794,
+    });
+
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pdfW = pdf.internal.pageSize.getWidth();   // 210
+    const pdfH = pdf.internal.pageSize.getHeight();   // 297
+
+    const imgW = pdfW - 10; // 5mm margin each side
+    const imgH = (canvas.height * imgW) / canvas.width;
+
+    let heightLeft = imgH;
+    let position = 5; // top margin
+
+    // First page
+    pdf.addImage(imgData, 'PNG', 5, position, imgW, imgH);
+    heightLeft -= (pdfH - 10);
+
+    // Subsequent pages
+    while (heightLeft > 0) {
+      pdf.addPage();
+      position = -(imgH - heightLeft) + 5;
+      pdf.addImage(imgData, 'PNG', 5, position, imgW, imgH);
+      heightLeft -= (pdfH - 10);
+    }
+
+    // Add page numbers
+    const totalPages = pdf.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      pdf.setPage(i);
+      pdf.setFontSize(8);
+      pdf.setTextColor(170, 170, 170);
+      pdf.text('Voyance', 10, pdfH - 6);
+      pdf.text(`${i} / ${totalPages}`, pdfW - 10, pdfH - 6, { align: 'right' });
+    }
+
+    const safeName = (data.tripName || data.destination).replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+    pdf.save(`${safeName}-itinerary.pdf`);
+  } finally {
+    document.body.removeChild(container);
+  }
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
