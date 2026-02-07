@@ -55,24 +55,24 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
   const TOUR_STEPS: TourStep[] = [
     {
       id: 'welcome',
-      title: `Welcome to Voyance, ${firstName}! 🌍`,
-      description: 'You just unlocked a smarter way to travel. Let me give you a quick tour of the features that make Voyance different — this takes about 45 seconds.',
+      title: `Welcome, ${firstName}!`,
+      description: 'Quick 45-second tour of what makes Voyance different.',
       icon: <Sparkles className="h-5 w-5" />,
       route: '/',
       position: 'center',
     },
     {
       id: 'explore-page',
-      title: 'Discover Where to Go Next',
-      description: 'Browse curated destinations with real traveler insights, seasonal recommendations, and hidden gems you won\'t find on generic travel sites. Every destination card shows what makes it special for YOUR travel style.',
+      title: 'Explore Destinations',
+      description: 'Curated destinations with seasonal tips and hidden gems matched to your travel style.',
       icon: <Compass className="h-5 w-5" />,
       route: ROUTES.EXPLORE,
       position: 'center',
     },
     {
       id: 'travel-dna',
-      title: '🧬 Your Travel DNA — This Changes Everything',
-      description: 'This 2-minute quiz is the secret weapon. It identifies your unique traveler archetype from 27 types, then EVERY itinerary, recommendation, and tip is personalized to match. Budget travelers get different picks than luxury seekers. Night owls get different schedules than early risers. No two itineraries are ever the same.',
+      title: 'Your Travel DNA',
+      description: '2-minute quiz that identifies your traveler type. Every recommendation personalizes to match.',
       icon: <Dna className="h-5 w-5" />,
       route: ROUTES.QUIZ,
       position: 'center',
@@ -80,8 +80,8 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
     },
     {
       id: 'build-trip',
-      title: 'Build Your First Itinerary',
-      description: 'Tell us where and when — we\'ll craft a personalized day-by-day plan with real venue picks, insider timing hacks, tourist trap warnings, and optimized routing that saves you hours of walking. This is where the magic happens.',
+      title: 'Build Your Itinerary',
+      description: 'Pick a destination and dates. We handle venue picks, timing, and routing.',
       icon: <Rocket className="h-5 w-5" />,
       route: ROUTES.START,
       selector: '[data-site-tour="build-cta"]',
@@ -89,31 +89,31 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
     },
     {
       id: 'profile-hub',
-      title: 'Your Travel Command Center',
-      description: 'Access your Trip Dashboard, saved itineraries, Travel DNA results, and preferences all from your profile. The more you use Voyance, the smarter your recommendations get.',
+      title: 'Your Command Center',
+      description: 'Trips, DNA results, and preferences — all in one place.',
       icon: <User className="h-5 w-5" />,
       selector: '[data-site-tour="profile"]',
       position: 'bottom',
     },
     {
       id: 'credits',
-      title: 'You\'ve Got Free Credits 🎉',
-      description: 'Every trip starts with a free preview — see the full structure, venues, and flow. When you\'re ready for the premium experience (exact addresses, booking links, insider tips, photo galleries), your credits unlock it all. No subscription required.',
+      title: 'Free Credits Included',
+      description: 'Every trip starts free. Credits unlock addresses, booking links, and insider tips.',
       icon: <Zap className="h-5 w-5" />,
       position: 'center',
     },
     {
       id: 'intelligent-itineraries',
-      title: 'Itineraries That Think For You',
-      description: 'Our Visible Intelligence engine shows you WHY each recommendation was made. You\'ll see timing hacks ("visit at 8am to skip the 2-hour line"), tourist trap warnings, hidden local favorites, and a dollar-and-time savings tally for every trip.',
+      title: 'Smart Itineraries',
+      description: 'See WHY each pick was made — timing hacks, tourist trap warnings, and savings tallies.',
       icon: <Star className="h-5 w-5" />,
       position: 'center',
       emphasis: 'high',
     },
     {
       id: 'start-journey',
-      title: 'Ready? Let\'s Build Your First Trip ✈️',
-      description: 'Your personalized travel experience starts now. Take the Travel DNA quiz first for the best results — or jump straight into planning. Either way, no two Voyance itineraries are ever the same.',
+      title: 'Ready to Go?',
+      description: 'Take the DNA quiz first for best results, or jump straight into planning.',
       icon: <Heart className="h-5 w-5" />,
       position: 'center',
     },
@@ -235,7 +235,7 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
           className="absolute inset-0 pointer-events-auto"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          style={{ backgroundColor: isHighEmphasis ? 'rgba(0,0,0,0.82)' : 'rgba(0,0,0,0.7)' }}
+          style={{ backgroundColor: isHighEmphasis ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.45)' }}
           onClick={handleSkip}
         />
 
@@ -259,22 +259,10 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
           </motion.div>
         )}
 
-        {/* Tooltip card */}
+        {/* Tooltip card — pinned to bottom so page content stays visible */}
         <div
-          className="pointer-events-auto fixed inset-x-0 flex justify-center px-3 sm:px-4"
-          style={{
-            zIndex: 102,
-            ...(typeof window !== 'undefined' && window.innerWidth < 640
-              ? { bottom: 96 }
-              : step.position === 'bottom' && highlightRect && !isNavigating
-                ? { top: Math.min(highlightRect.bottom + 20, window.innerHeight - 350) }
-                : step.position === 'top' && highlightRect && !isNavigating
-                  ? { bottom: window.innerHeight - highlightRect.top + 20 }
-                  : isCentered || isNavigating
-                    ? { top: '50%', transform: 'translateY(-50%)' }
-                    : {}
-            ),
-          }}
+          className="pointer-events-auto fixed inset-x-0 bottom-0 flex justify-center px-3 sm:px-4 pb-4 sm:pb-6"
+          style={{ zIndex: 102 }}
         >
           <motion.div
             key={`card-${currentStep}`}
