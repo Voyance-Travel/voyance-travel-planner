@@ -31,6 +31,8 @@ import { DailyProgressBar } from '@/components/trips/DailyProgressBar';
 import { SmartSwapSuggestion } from '@/components/trips/SmartSwapSuggestion';
 import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternativesDrawer';
 import { PostActivityNudge } from '@/components/feedback/PostActivityNudge';
+import { MemoryUploadButton } from '@/components/memories/MemoryUploadButton';
+import { MemoriesTimeline } from '@/components/memories/MemoriesTimeline';
 import type { ItineraryActivity as DrawerItineraryActivity } from '@/types/itinerary';
 import { ActivityMediaCapture } from '@/components/feedback/ActivityMediaCapture';
 import { useFeedbackTrigger } from '@/hooks/useFeedbackTrigger';
@@ -83,7 +85,7 @@ interface ItineraryDay {
   };
 }
 
-type ViewType = 'today' | 'overview' | 'nearby';
+type ViewType = 'today' | 'overview' | 'nearby' | 'memories';
 
 // Get time of day greeting and icon
 function getTimeContext() {
@@ -380,7 +382,7 @@ export default function ActiveTrip() {
 
             {/* View Tabs */}
             <div className="flex gap-4 pb-3">
-              {(['today', 'overview', 'nearby'] as ViewType[]).map(v => (
+              {(['today', 'overview', 'nearby', 'memories'] as ViewType[]).map(v => (
                 <button
                   key={v}
                   onClick={() => setView(v)}
@@ -391,7 +393,7 @@ export default function ActiveTrip() {
                       : 'border-transparent text-muted-foreground hover:text-foreground'
                   )}
                 >
-                  {v === 'today' ? 'Today' : v === 'overview' ? 'Trip' : 'Nearby'}
+                  {v === 'today' ? 'Today' : v === 'overview' ? 'Trip' : v === 'nearby' ? 'Nearby' : '📸'}
                 </button>
               ))}
             </div>
@@ -463,6 +465,20 @@ export default function ActiveTrip() {
                 exit={{ opacity: 0, x: -20 }}
               >
                 <WhatsNearby archetype={userArchetype} />
+              </motion.div>
+            )}
+
+            {view === 'memories' && (
+              <motion.div
+                key="memories"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+              >
+                <MemoriesTimeline
+                  tripId={tripId || ''}
+                  tripName={trip.name}
+                />
               </motion.div>
             )}
           </AnimatePresence>
@@ -899,6 +915,14 @@ function TodayView({
                             Show tickets
                           </Button>
                         )}
+                        <MemoryUploadButton
+                          tripId={trip.id}
+                          activityId={activity.id}
+                          activityName={activity.name}
+                          locationName={activity.location?.name}
+                          dayNumber={tripContext.currentDayNumber}
+                          variant="icon"
+                        />
                         <div className="ml-auto">
                           <CheckInButton
                             activityId={activity.id}
