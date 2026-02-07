@@ -6,7 +6,14 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
-import { lovable } from '@/integrations/lovable/index';
+import { createLovableAuth } from '@lovable.dev/cloud-auth-js';
+
+// Custom auth instance that routes OAuth through .lovable.app domain
+// so it works on custom domains where ~oauth/initiate isn't served
+const LOVABLE_APP_ORIGIN = 'https://voyance-travel-planner.lovable.app';
+const lovableAuth = createLovableAuth({
+  oauthBrokerUrl: `${LOVABLE_APP_ORIGIN}/~oauth/initiate`,
+});
 
 // ============================================================================
 // Types
@@ -260,12 +267,21 @@ export async function updatePassword(newPassword: string): Promise<{ success: bo
 
 export async function signInWithGoogle(): Promise<{ success: boolean; error?: string }> {
   try {
-    const { error } = await lovable.auth.signInWithOAuth('google', {
+    const result = await lovableAuth.signInWithOAuth('google', {
       redirect_uri: window.location.origin,
     });
 
-    if (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Google sign in failed' };
+    if (result.redirected) return { success: true };
+
+    if (result.error) {
+      return { success: false, error: result.error instanceof Error ? result.error.message : 'Google sign in failed' };
+    }
+
+    // Set session from tokens
+    try {
+      await supabase.auth.setSession(result.tokens);
+    } catch (e) {
+      console.error('Session set error:', e);
     }
 
     return { success: true };
