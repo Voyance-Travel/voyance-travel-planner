@@ -5477,101 +5477,93 @@ function ActivityRow({
               </>
             )}
             {isEditable && !isPreview && (
-              <div className="flex flex-col gap-1.5 sm:gap-2">
-                {/* Primary Actions Row - Find Alternative ALWAYS visible */}
-                <div className="flex items-center gap-1">
-                  {!activity.isLocked && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onSwap?.(dayIndex, activity)}
-                      className="gap-1 h-6 sm:h-7 text-[10px] sm:text-xs font-medium hover:bg-primary/10 hover:text-primary hover:border-primary/30 px-1.5 sm:px-2.5"
-                      data-tour="find-alternative"
-                    >
-                      <ArrowRightLeft className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                      <span className="hidden sm:inline">Find Alternative</span>
-                      <span className="sm:hidden">Swap</span>
-                    </Button>
+              <div className="flex items-center gap-0.5">
+                {/* Lock button */}
+                <button
+                  onClick={() => onLock(dayIndex, activity.id)}
+                  className={cn(
+                    "p-1.5 rounded transition-colors",
+                    activity.isLocked
+                      ? "bg-primary/10 text-primary"
+                      : "hover:bg-secondary text-muted-foreground"
                   )}
-                  
-                  {/* Lock button */}
-                  <button
-                    onClick={() => onLock(dayIndex, activity.id)}
-                    className={cn(
-                      "p-1.5 rounded transition-colors",
-                      activity.isLocked
-                        ? "bg-primary/10 text-primary"
-                        : "hover:bg-secondary text-muted-foreground"
-                    )}
-                    title={activity.isLocked ? "Unlock to edit" : "Lock"}
-                    data-tour="lock-button"
-                  >
-                    {activity.isLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
-                  </button>
-                  
-                  {/* More actions overflow - Move, Remove, Save */}
-                  {!activity.isLocked && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          className="p-1.5 rounded transition-colors hover:bg-secondary text-muted-foreground"
-                          aria-label="More actions"
-                          data-tour="more-actions"
-                        >
-                          <MoreHorizontal className="h-3.5 w-3.5" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="bg-background border shadow-lg z-50 min-w-[160px]">
-                        <DropdownMenuItem
-                          onClick={() => onMove(dayIndex, activity.id, 'up')}
-                          disabled={activityIndex === 0}
-                          className={cn("cursor-pointer gap-2", activityIndex === 0 && "opacity-50")}
-                        >
-                          <MoveUp className="h-4 w-4" />
-                          Move up
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => onMove(dayIndex, activity.id, 'down')}
-                          disabled={activityIndex === totalActivities - 1}
-                          className={cn("cursor-pointer gap-2", activityIndex === totalActivities - 1 && "opacity-50")}
-                        >
-                          <MoveDown className="h-4 w-4" />
-                          Move down
-                        </DropdownMenuItem>
-                        {totalDays > 1 && onMoveToDay && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuSub>
-                              <DropdownMenuSubTrigger className="gap-2">
-                                <Calendar className="h-4 w-4" />
-                                Move to day
-                              </DropdownMenuSubTrigger>
-                              <DropdownMenuSubContent className="bg-background border shadow-lg">
-                                {Array.from({ length: totalDays }, (_, i) => i).filter(i => i !== dayIndex).map(targetDay => (
-                                  <DropdownMenuItem
-                                    key={targetDay}
-                                    onClick={() => onMoveToDay(dayIndex, activity.id, targetDay)}
-                                    className="cursor-pointer"
-                                  >
-                                    Day {targetDay + 1}
-                                  </DropdownMenuItem>
-                                ))}
-                              </DropdownMenuSubContent>
-                            </DropdownMenuSub>
-                          </>
-                        )}
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => onRemove(dayIndex, activity.id)}
-                          className="cursor-pointer gap-2 text-destructive focus:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Remove
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </div>
+                  title={activity.isLocked ? "Unlock to edit" : "Lock"}
+                  data-tour="lock-button"
+                >
+                  {activity.isLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                </button>
+                
+                {/* Overflow menu - all edit actions consolidated here */}
+                {!activity.isLocked && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className="p-1.5 rounded transition-colors hover:bg-secondary text-muted-foreground"
+                        aria-label="More actions"
+                        data-tour="more-actions"
+                      >
+                        <MoreHorizontal className="h-3.5 w-3.5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="bg-background border shadow-lg z-50 min-w-[160px]">
+                      <DropdownMenuItem
+                        onClick={() => onSwap?.(dayIndex, activity)}
+                        className="cursor-pointer gap-2"
+                        data-tour="find-alternative"
+                      >
+                        <ArrowRightLeft className="h-4 w-4" />
+                        Find Alternative
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => onMove(dayIndex, activity.id, 'up')}
+                        disabled={activityIndex === 0}
+                        className={cn("cursor-pointer gap-2", activityIndex === 0 && "opacity-50")}
+                      >
+                        <MoveUp className="h-4 w-4" />
+                        Move up
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => onMove(dayIndex, activity.id, 'down')}
+                        disabled={activityIndex === totalActivities - 1}
+                        className={cn("cursor-pointer gap-2", activityIndex === totalActivities - 1 && "opacity-50")}
+                      >
+                        <MoveDown className="h-4 w-4" />
+                        Move down
+                      </DropdownMenuItem>
+                      {totalDays > 1 && onMoveToDay && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuSub>
+                            <DropdownMenuSubTrigger className="gap-2">
+                              <Calendar className="h-4 w-4" />
+                              Move to day
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent className="bg-background border shadow-lg">
+                              {Array.from({ length: totalDays }, (_, i) => i).filter(i => i !== dayIndex).map(targetDay => (
+                                <DropdownMenuItem
+                                  key={targetDay}
+                                  onClick={() => onMoveToDay(dayIndex, activity.id, targetDay)}
+                                  className="cursor-pointer"
+                                >
+                                  Day {targetDay + 1}
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuSubContent>
+                          </DropdownMenuSub>
+                        </>
+                      )}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => onRemove(dayIndex, activity.id)}
+                        className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Remove
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
               </div>
             )}
           </div>
