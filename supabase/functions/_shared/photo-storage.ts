@@ -42,17 +42,23 @@ export async function getCachedPhotoUrl(
   // Generate storage path
   const sanitizedId = entityId.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 80);
   const storagePath = `${entityType}/${sanitizedId}.jpg`;
+  const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/${storagePath}`;
   
-  // Check if already in storage
-  const { data: existingFile } = await supabase.storage
-    .from(BUCKET_NAME)
-    .createSignedUrl(storagePath, 60); // Just checking if exists
-  
-  if (existingFile?.signedUrl) {
-    // File exists - return public URL
-    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/${storagePath}`;
-    console.log(`[PhotoStorage] Cache hit: ${entityType}/${sanitizedId}`);
-    return { url: publicUrl, cached: true, cacheHit: true, source: 'storage' };
+  // Check if already in storage using a HEAD request against the public URL.
+  // The old approach (createSignedUrl) silently fails on public buckets,
+  // causing every request to re-download from Google ($0.007/hit).
+  try {
+    const headResp = await fetch(publicUrl, { method: 'HEAD' });
+    if (headResp.ok) {
+      const contentLength = parseInt(headResp.headers.get('content-length') || '0', 10);
+      // Ensure it's a real image (not a 0-byte or error page)
+      if (contentLength > 500) {
+        console.log(`[PhotoStorage] Cache hit: ${entityType}/${sanitizedId} (${contentLength} bytes)`);
+        return { url: publicUrl, cached: true, cacheHit: true, source: 'storage' };
+      }
+    }
+  } catch {
+    // HEAD failed — fall through to download
   }
   
   // Download the photo from Google
