@@ -3,7 +3,7 @@
  * Used on both Pricing page and Profile page
  */
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Loader2, Sparkles } from 'lucide-react';
@@ -29,11 +29,11 @@ interface CreditPacksGridProps {
   className?: string;
 }
 
-export default function CreditPacksGrid({ 
+const CreditPacksGrid = React.forwardRef<HTMLDivElement, CreditPacksGridProps>(function CreditPacksGrid({ 
   showBoost = true, 
   returnPath = '/profile?payment=success',
   className = '' 
-}: CreditPacksGridProps) {
+}, ref) {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [checkoutConfig, setCheckoutConfig] = useState<CheckoutConfig | null>(null);
   const { toast } = useToast();
@@ -150,4 +150,6 @@ export default function CreditPacksGrid({
       )}
     </>
   );
-}
+});
+
+export default CreditPacksGrid;
