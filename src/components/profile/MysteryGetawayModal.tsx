@@ -440,7 +440,7 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
               {credits && credits.totalCredits < 15 && (
                 <p className="text-sm text-destructive mb-4">You don't have enough credits for this feature.</p>
               )}
-              <Button size="lg" onClick={fetchSuggestions} disabled={loading || (credits ? credits.totalCredits < 15 : false)} className="gap-2">
+              <Button size="lg" onClick={fetchSuggestions} disabled={loading || !credits || credits.totalCredits < 15} className="gap-2">
                 {loading ? (<><Loader2 className="h-4 w-4 animate-spin" />Finding Your Perfect Matches...</>) : (<><Sparkles className="h-4 w-4" />Reveal My Destinations</>)}
               </Button>
             </motion.div>

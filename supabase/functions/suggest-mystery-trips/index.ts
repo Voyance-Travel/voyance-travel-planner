@@ -66,7 +66,7 @@ serve(async (req) => {
     console.log(`[suggest-mystery-trips] Generating suggestions for user: ${user.id}`);
 
     // Fetch user data in parallel (including enrichment/feedback data)
-    const [travelDnaResult, preferencesResult, pastTripsResult, destinationsResult, enrichmentResult] = await Promise.all([
+    const [travelDnaResult, preferencesResult, pastTripsResult, destinationsResult, enrichmentResult, previousSuggestionsResult] = await Promise.all([
       supabase
         .from('travel_dna_profiles')
         .select('primary_archetype_name, secondary_archetype_name, trait_scores, emotional_drivers')
@@ -92,6 +92,14 @@ serve(async (req) => {
         .select('entity_id, entity_name, feedback_tags, decline_count, suppress_until, is_permanent_suppress')
         .eq('user_id', user.id)
         .eq('enrichment_type', 'destination_decline'),
+      // Get recently shown mystery trip suggestions to avoid repeats
+      supabase
+        .from('user_enrichment')
+        .select('entity_name, created_at')
+        .eq('user_id', user.id)
+        .eq('enrichment_type', 'mystery_trip_shown')
+        .order('created_at', { ascending: false })
+        .limit(15),
     ]);
 
     const travelDna: TravelDNA | null = travelDnaResult.data;
@@ -99,6 +107,7 @@ serve(async (req) => {
     const pastTrips = pastTripsResult.data || [];
     const destinations = destinationsResult.data || [];
     const enrichmentData: UserEnrichment[] = enrichmentResult.data || [];
+    const previouslyShown = (previousSuggestionsResult.data || []).map(s => s.entity_name?.toLowerCase()).filter(Boolean);
 
     // Build sets of destinations to exclude
     const pastDestinations = pastTrips.map(t => t.destination?.toLowerCase()).filter(Boolean);
@@ -163,15 +172,20 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
+    // Shuffle available destinations to reduce AI bias toward top-of-list picks
+    const shuffled = [...destinationList].sort(() => Math.random() - 0.5);
+
     const systemPrompt = `You are a travel expert for Voyance, a personalized travel planning service. 
 Your task is to suggest exactly 3 destinations that would be PERFECT for this specific traveler based on their unique Travel DNA and preferences.
 
 IMPORTANT: 
+- VARIETY IS CRITICAL: Pick surprising, diverse destinations across different regions and vibes. Never cluster all 3 in the same region.
 - Choose destinations that genuinely match their personality and travel style
 - AVOID destinations that match their known dislikes (listed below)
 - Provide a compelling, personalized reason for each suggestion (2-3 sentences max)
 - The reason should feel personal, like "Based on your love of culture and relaxed pace, you'd thrive in..."
-- Avoid generic descriptions - make it feel like you KNOW this traveler`;
+- Avoid generic descriptions - make it feel like you KNOW this traveler
+- Do NOT repeat previously shown destinations (listed below)`;
 
     const userPrompt = `Based on this traveler's profile, suggest 3 perfect mystery getaway destinations:
 
@@ -183,10 +197,13 @@ ${pastDestinations.length > 0 ? pastDestinations.join(', ') : 'None'}
 DECLINED DESTINATIONS TO EXCLUDE (they weren't interested):
 ${suppressedDestinations.length > 0 ? suppressedDestinations.map(id => id.replace('_', ', ')).join('; ') : 'None'}
 
-AVAILABLE DESTINATIONS TO CHOOSE FROM:
-${JSON.stringify(destinationList.slice(0, 30), null, 2)}
+PREVIOUSLY SUGGESTED DESTINATIONS TO EXCLUDE (already shown recently — DO NOT repeat these):
+${previouslyShown.length > 0 ? previouslyShown.join(', ') : 'None'}
 
-Return EXACTLY 3 destinations as JSON.`;
+AVAILABLE DESTINATIONS TO CHOOSE FROM:
+${JSON.stringify(shuffled.slice(0, 30), null, 2)}
+
+Return EXACTLY 3 destinations as JSON. Pick different destinations than the previously suggested ones.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -196,6 +213,7 @@ Return EXACTLY 3 destinations as JSON.`;
       },
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
+        temperature: 1.2,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -289,6 +307,19 @@ Return EXACTLY 3 destinations as JSON.`;
     });
 
     console.log(`[suggest-mystery-trips] Generated ${enrichedSuggestions.length} suggestions`);
+
+    // Record shown suggestions so they won't repeat next time
+    const shownRecords = enrichedSuggestions.map((s: any) => ({
+      user_id: user.id,
+      enrichment_type: 'mystery_trip_shown',
+      entity_type: 'destination',
+      entity_id: `${s.city?.toLowerCase()}_${s.country?.toLowerCase()}`,
+      entity_name: `${s.city}, ${s.country}`,
+      metadata: { shown_at: new Date().toISOString() },
+    }));
+    await supabase.from('user_enrichment').insert(shownRecords).throwOnError().catch(err => {
+      console.warn('[suggest-mystery-trips] Failed to record shown suggestions:', err);
+    });
 
     return new Response(JSON.stringify({ 
       suggestions: enrichedSuggestions,
