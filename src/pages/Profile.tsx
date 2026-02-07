@@ -562,7 +562,7 @@ export default function Profile() {
             </div>
 
             {/* Surprise Trip Card */}
-            <SurpriseTripCard isPremium={!!subscription?.subscribed} />
+            <SurpriseTripCard />
 
             {/* Trip Timeline */}
             {(upcomingTrips.length > 0 || completedTrips.length > 0) && (
