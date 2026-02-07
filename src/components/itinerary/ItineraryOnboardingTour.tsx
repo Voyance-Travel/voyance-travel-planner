@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { usePopupCoordination } from '@/stores/popup-coordination-store';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, ChevronRight, ChevronLeft, Lock, MoreHorizontal, 
@@ -126,15 +127,21 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
   const [isVisible, setIsVisible] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [highlightRect, setHighlightRect] = useState<DOMRect | null>(null);
+  const { requestPopup, closePopup } = usePopupCoordination();
 
-  // Show tour only once ever (global, not per-trip)
+  // Show tour only once ever, gated through popup coordination
   useEffect(() => {
     const completed = localStorage.getItem(STORAGE_KEY);
-    if (completed !== 'true') {
-      const timer = setTimeout(() => setIsVisible(true), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, []);
+    if (completed === 'true') return;
+
+    const timer = setTimeout(() => {
+      const allowed = requestPopup('itinerary_tour');
+      if (allowed) {
+        setIsVisible(true);
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [requestPopup]);
 
   // Update highlight position when step changes
   useEffect(() => {
@@ -205,8 +212,9 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
   const handleComplete = useCallback(() => {
     localStorage.setItem(STORAGE_KEY, 'true');
     setIsVisible(false);
+    closePopup('itinerary_tour');
     onComplete?.();
-  }, [onComplete]);
+  }, [onComplete, closePopup]);
 
   const handleSkip = useCallback(() => {
     handleComplete();
