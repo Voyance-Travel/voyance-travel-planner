@@ -5902,6 +5902,75 @@ export type Database = {
           },
         ]
       }
+      trip_reviews: {
+        Row: {
+          created_at: string
+          experience_rating: number | null
+          food_rating: number | null
+          highlight_label: string | null
+          highlight_text: string | null
+          id: string
+          location_rating: number | null
+          overall_rating: number
+          photo_url: string | null
+          review_text: string | null
+          tags: string[] | null
+          trip_id: string
+          updated_at: string
+          user_id: string
+          value_rating: number | null
+        }
+        Insert: {
+          created_at?: string
+          experience_rating?: number | null
+          food_rating?: number | null
+          highlight_label?: string | null
+          highlight_text?: string | null
+          id?: string
+          location_rating?: number | null
+          overall_rating: number
+          photo_url?: string | null
+          review_text?: string | null
+          tags?: string[] | null
+          trip_id: string
+          updated_at?: string
+          user_id: string
+          value_rating?: number | null
+        }
+        Update: {
+          created_at?: string
+          experience_rating?: number | null
+          food_rating?: number | null
+          highlight_label?: string | null
+          highlight_text?: string | null
+          id?: string
+          location_rating?: number | null
+          overall_rating?: number
+          photo_url?: string | null
+          review_text?: string | null
+          tags?: string[] | null
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+          value_rating?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_reviews_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_reviews_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_settlements: {
         Row: {
           amount: number

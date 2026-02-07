@@ -24,6 +24,7 @@ import {
    Trash2
 } from 'lucide-react';
 import ActiveTripCard from '@/components/trips/ActiveTripCard';
+import { PastTripCard } from '@/components/trips/PastTripCard';
 
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -246,11 +247,9 @@ function canDeleteTrip(trip: Trip): { canDelete: boolean; reason?: string } {
 function TripCard({ trip, index = 0, onDelete }: { trip: Trip; index?: number; onDelete?: (tripId: string) => void }) {
   const navigate = useNavigate();
   const displayStatus = mapToDisplayStatus(trip.status, trip.startDate, trip.endDate);
-  const status = statusConfig[displayStatus];
-  const StatusIcon = status.icon;
-   const deleteCheck = canDeleteTrip(trip);
-   const [isDeleting, setIsDeleting] = useState(false);
-  
+  const deleteCheck = canDeleteTrip(trip);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Use smart hero image hook with API fallback for uncurated destinations
   const seededHero = (trip.metadata && typeof trip.metadata === 'object')
     ? (trip.metadata as Record<string, unknown>).hero_image
@@ -262,6 +261,14 @@ function TripCard({ trip, index = 0, onDelete }: { trip: Trip; index?: number; o
     seededHeroUrl,
     tripId: trip.id,
   });
+
+  // Use PastTripCard for completed trips (after all hooks)
+  if (displayStatus === 'completed') {
+    return <PastTripCard trip={trip} index={index} />;
+  }
+
+  const status = statusConfig[displayStatus];
+  const StatusIcon = status.icon;
   
   // Check for booking status - use direct properties
   const hasItinerary = !!trip.hasItineraryData;
@@ -270,8 +277,7 @@ function TripCard({ trip, index = 0, onDelete }: { trip: Trip; index?: number; o
   const travelersCount = typeof trip.travelers === 'number' ? trip.travelers : 1;
 
   const handleCardClick = () => {
-    // Only go to itinerary view if there's actual itinerary data
-    if (hasItinerary && (displayStatus === 'upcoming' || displayStatus === 'completed')) {
+    if (hasItinerary && displayStatus === 'upcoming') {
       navigate(`/itinerary/${trip.id}`);
     } else {
       navigate(`/trip/${trip.id}`);
