@@ -26,7 +26,7 @@ export default function VoyanceGuides() {
             </p>
           </div>
           <Link
-            to="/explore#guides"
+            to="/guides"
             className="hidden md:flex items-center gap-1 text-sm font-medium text-primary hover:underline"
           >
             All guides
