@@ -236,6 +236,8 @@ export interface EditorialItineraryProps {
   };
   heroImageUrl?: string;
   isEditable?: boolean;
+  /** Preview mode — shows venue names/times but gates details (address, photos, tips, actions) */
+  isPreview?: boolean;
   originCity?: string;
   /** Activity IDs to highlight (e.g., from chatbot suggestions) */
   highlightedActivityIds?: string[];
@@ -778,6 +780,7 @@ export function EditorialItinerary({
   destinationInfo,
   heroImageUrl,
   isEditable = true,
+  isPreview = false,
   originCity,
   onSave,
   onRegenerateDay,
@@ -894,7 +897,7 @@ export function EditorialItinerary({
   const { settings: budgetSettings } = useTripBudget({ tripId, totalDays: days.length, enabled: true });
   
   // Determine effective editability based on permission
-  const effectiveIsEditable = isEditable && (tripPermission?.isOwner || tripPermission?.canEdit);
+  const effectiveIsEditable = !isPreview && isEditable && (tripPermission?.isOwner || tripPermission?.canEdit);
 
   // Calculate intelligence value stats for the itinerary
   const skippedItems = useMemo(() => getDestinationSkippedItems(destination), [destination]);
@@ -2252,7 +2255,9 @@ export function EditorialItinerary({
                   isExpanded={expandedDays.includes(days[selectedDayIndex].dayNumber)}
                   isRegenerating={regeneratingDay === days[selectedDayIndex].dayNumber}
                   isEditable={effectiveIsEditable}
+                  isPreview={isPreview}
                   tripId={tripId}
+                  onUnlockTrip={() => setCreditNudge({ action: 'UNLOCK_DAY' })}
                   getPaymentForItem={getPaymentForItem}
                   refreshPayments={refreshPayments}
                   onToggle={() => toggleDay(days[selectedDayIndex].dayNumber)}
@@ -4489,6 +4494,7 @@ interface DayCardProps {
   isExpanded: boolean;
   isRegenerating: boolean;
   isEditable: boolean;
+  isPreview?: boolean; // Preview mode — gates details
   tripId: string;
   highlightedActivityIds?: string[]; // Activities to highlight (from chatbot)
   getPaymentForItem: (itemType: 'flight' | 'hotel' | 'activity', itemId: string) => TripPayment | undefined;
@@ -4508,6 +4514,7 @@ interface DayCardProps {
   onPaymentRequest?: (activityId: string) => void;
   onBookingStateChange?: (activityId: string, newState: BookingItemState) => void;
   onViewReviews?: (activity: EditorialActivity) => void;
+  onUnlockTrip?: () => void;
 }
 
 function DayCard({
@@ -4523,6 +4530,7 @@ function DayCard({
   isExpanded,
   isRegenerating,
   isEditable,
+  isPreview = false,
   tripId,
   highlightedActivityIds = [],
   getPaymentForItem,
@@ -4542,9 +4550,10 @@ function DayCard({
   onPaymentRequest,
   onBookingStateChange,
   onViewReviews,
+  onUnlockTrip,
 }: DayCardProps) {
   const allLocked = day.activities.every(a => a.isLocked);
-  const totalCost = getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry);
+  const totalCost = isPreview ? 0 : getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry);
   
   // Transport details toggle - collapsed by default to reduce visual noise
   const [showTransportDetails, setShowTransportDetails] = useState(false);
@@ -4675,6 +4684,7 @@ function DayCard({
                       totalDays={totalDays}
                       isLast={activityIndex === day.activities.length - 1}
                       isEditable={isEditable}
+                      isPreview={isPreview}
                       travelers={travelers}
                       budgetTier={budgetTier}
                       tripCurrency={tripCurrency}
@@ -4701,33 +4711,53 @@ function DayCard({
 
             {/* Day Footer */}
             <div className="px-6 py-4 bg-gradient-to-r from-secondary/30 via-secondary/20 to-secondary/30 border-t border-border">
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-6 text-muted-foreground">
-                  {day.estimatedWalkingTime && (
-                    <span className="flex items-center gap-1.5">
-                      <Route className="h-4 w-4" />
-                      Walking: {day.estimatedWalkingTime}
-                    </span>
-                  )}
-                  {day.estimatedDistance && (
-                    <span className="flex items-center gap-1.5">
-                      <MapPin className="h-4 w-4" />
-                      Distance: {day.estimatedDistance}
-                    </span>
-                  )}
+              {isPreview ? (
+                /* Preview Unlock CTA */
+                <div className="flex flex-col items-center gap-3 py-2">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Lock className="h-4 w-4" />
+                    <span>Addresses, photos, tips & booking links are locked</span>
+                  </div>
+                  <Button 
+                    size="sm" 
+                    className="gap-2"
+                    onClick={() => {
+                      onUnlockTrip?.();
+                    }}
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Unlock Full Itinerary
+                  </Button>
                 </div>
-                <div className="flex items-center gap-4">
-                  {isEditable && (
-                    <Button variant="outline" size="sm" onClick={onAddActivity} className="gap-1 bg-background hover:bg-primary/5 hover:border-primary/30">
-                      <Plus className="h-4 w-4" />
-                      Add Activity
-                    </Button>
-                  )}
-                  <span className="font-medium text-foreground px-3 py-1 rounded-full bg-primary/10 text-primary">
-                    Day Total: {formatCurrency(displayCost(totalCost), tripCurrency)}
-                  </span>
+              ) : (
+                <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-6 text-muted-foreground">
+                    {day.estimatedWalkingTime && (
+                      <span className="flex items-center gap-1.5">
+                        <Route className="h-4 w-4" />
+                        Walking: {day.estimatedWalkingTime}
+                      </span>
+                    )}
+                    {day.estimatedDistance && (
+                      <span className="flex items-center gap-1.5">
+                        <MapPin className="h-4 w-4" />
+                        Distance: {day.estimatedDistance}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-4">
+                    {isEditable && (
+                      <Button variant="outline" size="sm" onClick={onAddActivity} className="gap-1 bg-background hover:bg-primary/5 hover:border-primary/30">
+                        <Plus className="h-4 w-4" />
+                        Add Activity
+                      </Button>
+                    )}
+                    <span className="font-medium text-foreground px-3 py-1 rounded-full bg-primary/10 text-primary">
+                      Day Total: {formatCurrency(displayCost(totalCost), tripCurrency)}
+                    </span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </motion.div>
         )}
@@ -4752,6 +4782,7 @@ interface ActivityRowProps {
   totalDays: number; // Total number of days in itinerary
   isLast: boolean;
   isEditable: boolean;
+  isPreview?: boolean; // Preview mode — gates details
   travelers: number;
   budgetTier?: string;
   tripCurrency: string; // User's preferred display currency
@@ -4782,6 +4813,7 @@ function ActivityRow({
   totalDays,
   isLast,
   isEditable,
+  isPreview = false,
   travelers,
   budgetTier,
   tripCurrency,
@@ -4925,7 +4957,7 @@ function ActivityRow({
   
   // Fetch real photos for most activities, including hotels (but not generic check-ins without hotel name)
   const hasHotelName = hotelName && hotelName.length > 3 && !hotelName.toLowerCase().includes('hotel check');
-  const shouldFetchRealPhoto = showThumbnail && !isAirport && (hasHotelName || (!isCheckIn && !isAccommodation));
+  const shouldFetchRealPhoto = !isPreview && showThumbnail && !isAirport && (hasHotelName || (!isCheckIn && !isAccommodation));
   
   const { imageUrl: fetchedImageUrl, loading: imageLoading } = useActivityImage(
     isHotelActivity && hasHotelName ? `${hotelName} hotel` : effectiveSearchTerm,
@@ -5078,10 +5110,17 @@ function ActivityRow({
                   <>
                     <h4 className="font-serif text-lg font-medium text-foreground">{venue}</h4>
                     <p className="text-sm text-muted-foreground mt-0.5 italic">{activityTitle}</p>
-                    {hasAddress && address !== venue && (
+                    {/* Address gated in preview */}
+                    {!isPreview && hasAddress && address !== venue && (
                       <div className="flex items-start gap-1.5 mt-2 text-xs text-muted-foreground">
                         <MapPin className="h-3.5 w-3.5 text-primary/60 mt-0.5" />
                         <span className="leading-snug">{address}</span>
+                      </div>
+                    )}
+                    {isPreview && (
+                      <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground/60 italic">
+                        <Lock className="h-3 w-3" />
+                        <span>Address available after unlock</span>
                       </div>
                     )}
                   </>
@@ -5095,7 +5134,8 @@ function ActivityRow({
                     <p className="text-sm text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{activity.description}</p>
                   )}
 
-                  {(activity.location?.name || hasAddress) && (
+                  {/* Location gated in preview */}
+                  {!isPreview && (activity.location?.name || hasAddress) && (
                     <div className="mt-2">
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <MapPin className="h-3.5 w-3.5 text-primary/60" />
@@ -5108,15 +5148,21 @@ function ActivityRow({
                       )}
                     </div>
                   )}
+                  {isPreview && (
+                    <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground/60 italic">
+                      <Lock className="h-3 w-3" />
+                      <span>Details available after unlock</span>
+                    </div>
+                  )}
                 </>
               );
             })()}
-            {/* Voyance Insight - Local knowledge for this activity */}
-            {activity.tips && !isDowntime && !isTransport && !isCheckIn && (
+            {/* Voyance Insight - Local knowledge (gated in preview) */}
+            {!isPreview && activity.tips && !isDowntime && !isTransport && !isCheckIn && (
               <VoyanceInsight tip={activity.tips} />
             )}
-            {/* Transportation to next - Enhanced with distance/time */}
-            {activity.timeBlockType !== 'downtime' && activity.transportation && !isLast && (
+            {/* Transportation to next (gated in preview) */}
+            {!isPreview && activity.timeBlockType !== 'downtime' && activity.transportation && !isLast && (
               <TransitBadge 
                 transportation={activity.transportation}
                 tripCurrency={tripCurrency}
@@ -5128,56 +5174,66 @@ function ActivityRow({
 
           {/* Actions & Cost */}
           <div className="flex flex-col items-end gap-2 ml-4">
-            {costInfo.isEstimated ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="font-medium cursor-help border-b border-dashed border-muted-foreground/40">
-                    ~{formatCurrency(displayCost(cost), tripCurrency)}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="left" className="max-w-[200px] text-xs">
-                  <p>{costInfo.estimateReason}</p>
-                </TooltipContent>
-              </Tooltip>
+            {isPreview ? (
+              /* Preview: show locked cost placeholder */
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60">
+                <Lock className="h-3 w-3" />
+                <span className="italic">Cost hidden</span>
+              </div>
             ) : (
-              <span className="font-medium">{formatCurrency(displayCost(cost), tripCurrency)}</span>
+              <>
+                {costInfo.isEstimated ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="font-medium cursor-help border-b border-dashed border-muted-foreground/40">
+                        ~{formatCurrency(displayCost(cost), tripCurrency)}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="left" className="max-w-[200px] text-xs">
+                      <p>{costInfo.estimateReason}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <span className="font-medium">{formatCurrency(displayCost(cost), tripCurrency)}</span>
+                )}
+                {/* Booking state actions - replaces static vendor links */}
+                <InlineBookingActions
+                  activity={{
+                    id: activity.id,
+                    title: activity.title,
+                    // Ensure restaurant lookup gets the best venue name (not the generic meal title)
+                    location: venueNameForLink
+                      ? { ...(activity.location || {}), name: venueNameForLink }
+                      : activity.location,
+                    bookingState: activity.bookingState,
+                    bookingRequired: activity.bookingRequired,
+                    quotePriceCents: activity.quotePriceCents,
+                    quoteExpiresAt: activity.quoteExpiresAt,
+                    quoteLocked: activity.quoteLocked,
+                    confirmationNumber: activity.confirmationNumber,
+                    voucherUrl: activity.voucherUrl,
+                    voucherData: activity.voucherData,
+                    cancellationPolicy: activity.cancellationPolicy,
+                    travelerData: activity.travelerData,
+                    vendorName: activity.vendorName,
+                    bookedAt: activity.bookedAt,
+                    cancelledAt: activity.cancelledAt,
+                    website: activity.website,
+                    bookingUrl: activity.bookingUrl,
+                    viatorProductCode: activity.viatorProductCode,
+                    externalBookingUrl: activity.bookingUrl, // Pass actual URL for vendor links
+                    cost,
+                    currency: activity.cost?.currency || 'USD',
+                  }}
+                  destination={destination}
+                  estimatedCost={cost}
+                  onPaymentRequest={onPaymentRequest}
+                  onStateChange={onBookingStateChange}
+                  compact
+                />
+              </>
             )}
-            {/* Booking state actions - replaces static vendor links */}
-            <InlineBookingActions
-              activity={{
-                id: activity.id,
-                title: activity.title,
-                // Ensure restaurant lookup gets the best venue name (not the generic meal title)
-                location: venueNameForLink
-                  ? { ...(activity.location || {}), name: venueNameForLink }
-                  : activity.location,
-                bookingState: activity.bookingState,
-                bookingRequired: activity.bookingRequired,
-                quotePriceCents: activity.quotePriceCents,
-                quoteExpiresAt: activity.quoteExpiresAt,
-                quoteLocked: activity.quoteLocked,
-                confirmationNumber: activity.confirmationNumber,
-                voucherUrl: activity.voucherUrl,
-                voucherData: activity.voucherData,
-                cancellationPolicy: activity.cancellationPolicy,
-                travelerData: activity.travelerData,
-                vendorName: activity.vendorName,
-                bookedAt: activity.bookedAt,
-                cancelledAt: activity.cancelledAt,
-                website: activity.website,
-                bookingUrl: activity.bookingUrl,
-                viatorProductCode: activity.viatorProductCode,
-                externalBookingUrl: activity.bookingUrl, // Pass actual URL for vendor links
-                cost,
-                currency: activity.cost?.currency || 'USD',
-              }}
-              destination={destination}
-              estimatedCost={cost}
-              onPaymentRequest={onPaymentRequest}
-              onStateChange={onBookingStateChange}
-              compact
-            />
-            {isEditable && (
+            {isEditable && !isPreview && (
               <div className="flex flex-col gap-2">
                 {/* Primary Actions Row - Find Alternative ALWAYS visible */}
                 <div className="flex items-center gap-1.5">

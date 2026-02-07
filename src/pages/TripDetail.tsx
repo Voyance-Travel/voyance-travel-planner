@@ -963,6 +963,7 @@ export default function TripDetail() {
                       : undefined
                   }
                   isEditable={true}
+                  isPreview={!!(trip.itinerary_data as any)?.isPreview}
                   onBookingAdded={() => window.location.reload()}
                   onPaymentRequest={async (activityId) => {
                     // Find the activity across all days
