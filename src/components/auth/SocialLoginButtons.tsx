@@ -1,16 +1,13 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { createLovableAuth } from '@lovable.dev/cloud-auth-js';
+import { lovable } from '@/integrations/lovable/index';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-// Use a custom auth instance that always routes OAuth through the .lovable.app domain
-// so it works on custom domains (e.g. travelwithvoyance.com) where ~oauth/initiate isn't served
-const LOVABLE_APP_ORIGIN = 'https://voyance-travel-planner.lovable.app';
-const lovableAuth = createLovableAuth({
-  oauthBrokerUrl: `${LOVABLE_APP_ORIGIN}/~oauth/initiate`,
-});
+const isCustomDomain = () =>
+  !window.location.hostname.includes('lovable.app') &&
+  !window.location.hostname.includes('lovableproject.com');
 
 interface SocialLoginButtonsProps {
   mode?: 'signin' | 'signup';
@@ -22,26 +19,33 @@ export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps)
   const handleGoogleLogin = async () => {
     setIsLoadingGoogle(true);
     try {
-      const result = await lovableAuth.signInWithOAuth('google', {
-        redirect_uri: window.location.origin,
-      });
+      if (isCustomDomain()) {
+        // On custom domains, bypass the auth-bridge entirely
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: window.location.origin,
+            skipBrowserRedirect: true,
+          },
+        });
 
-      if (result.redirected) return;
+        if (error) throw error;
 
-      if (result.error) {
-        toast.error('Failed to sign in with Google');
-        console.error('Google login error:', result.error);
-        return;
-      }
+        if (data?.url) {
+          window.location.href = data.url;
+          return;
+        }
+      } else {
+        // On lovable.app domains, use the managed flow
+        const result = await lovable.auth.signInWithOAuth('google', {
+          redirect_uri: window.location.origin,
+        });
 
-      // Set session from tokens
-      try {
-        await supabase.auth.setSession(result.tokens);
-      } catch (e) {
-        console.error('Session set error:', e);
+        if (result.redirected) return;
+        if (result.error) throw result.error;
       }
     } catch (error) {
-      toast.error('An unexpected error occurred');
+      toast.error('Failed to sign in with Google');
       console.error('Google login error:', error);
     } finally {
       setIsLoadingGoogle(false);

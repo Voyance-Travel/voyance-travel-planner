@@ -6,14 +6,11 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
-import { createLovableAuth } from '@lovable.dev/cloud-auth-js';
+import { lovable } from '@/integrations/lovable/index';
 
-// Custom auth instance that routes OAuth through .lovable.app domain
-// so it works on custom domains where ~oauth/initiate isn't served
-const LOVABLE_APP_ORIGIN = 'https://voyance-travel-planner.lovable.app';
-const lovableAuth = createLovableAuth({
-  oauthBrokerUrl: `${LOVABLE_APP_ORIGIN}/~oauth/initiate`,
-});
+const isCustomDomain = () =>
+  !window.location.hostname.includes('lovable.app') &&
+  !window.location.hostname.includes('lovableproject.com');
 
 // ============================================================================
 // Types
@@ -267,24 +264,36 @@ export async function updatePassword(newPassword: string): Promise<{ success: bo
 
 export async function signInWithGoogle(): Promise<{ success: boolean; error?: string }> {
   try {
-    const result = await lovableAuth.signInWithOAuth('google', {
-      redirect_uri: window.location.origin,
-    });
+    if (isCustomDomain()) {
+      // On custom domains, bypass the auth-bridge entirely
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+          skipBrowserRedirect: true,
+        },
+      });
 
-    if (result.redirected) return { success: true };
+      if (error) throw error;
 
-    if (result.error) {
-      return { success: false, error: result.error instanceof Error ? result.error.message : 'Google sign in failed' };
+      if (data?.url) {
+        window.location.href = data.url;
+        return { success: true };
+      }
+
+      return { success: false, error: 'No OAuth URL returned' };
+    } else {
+      // On lovable.app domains, use the managed flow
+      const { error } = await lovable.auth.signInWithOAuth('google', {
+        redirect_uri: window.location.origin,
+      });
+
+      if (error) {
+        return { success: false, error: error instanceof Error ? error.message : 'Google sign in failed' };
+      }
+
+      return { success: true };
     }
-
-    // Set session from tokens
-    try {
-      await supabase.auth.setSession(result.tokens);
-    } catch (e) {
-      console.error('Session set error:', e);
-    }
-
-    return { success: true };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Google sign in failed' };
   }
