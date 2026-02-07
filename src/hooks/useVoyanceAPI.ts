@@ -95,22 +95,52 @@ export function useTrips(params: ListTripsParams = {}) {
     queryFn: async () => {
       if (!user) throw new Error('Not authenticated');
       
-      let query = supabase
+      // Fetch owned trips
+      let ownQuery = supabase
         .from('trips')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
       
       if (params.status) {
-        query = query.eq('status', params.status as 'draft' | 'planning' | 'booked' | 'active' | 'completed' | 'cancelled');
+        ownQuery = ownQuery.eq('status', params.status as 'draft' | 'planning' | 'booked' | 'active' | 'completed' | 'cancelled');
       }
       if (params.limit) {
-        query = query.limit(params.limit);
+        ownQuery = ownQuery.limit(params.limit);
       }
       
-      const { data, error } = await query;
-      if (error) throw error;
-      return { trips: data || [], total: data?.length || 0 };
+      // Fetch collaborated trips (where user is an accepted collaborator)
+      const { data: collabs } = await supabase
+        .from('trip_collaborators')
+        .select('trip_id')
+        .eq('user_id', user.id)
+        .not('accepted_at', 'is', null);
+      
+      const collabTripIds = (collabs || []).map(c => c.trip_id);
+      
+      const [ownResult, collabResult] = await Promise.all([
+        ownQuery,
+        collabTripIds.length > 0
+          ? supabase
+              .from('trips')
+              .select('*')
+              .in('id', collabTripIds)
+              .order('created_at', { ascending: false })
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+      
+      if (ownResult.error) throw ownResult.error;
+      
+      // Merge and deduplicate
+      const allTrips = [...(ownResult.data || [])];
+      const ownIds = new Set(allTrips.map(t => t.id));
+      for (const trip of (collabResult.data || [])) {
+        if (!ownIds.has(trip.id)) {
+          allTrips.push(trip);
+        }
+      }
+      
+      return { trips: allTrips, total: allTrips.length };
     },
     enabled: !!user,
     staleTime: 30 * 1000,
@@ -129,7 +159,6 @@ export function useTrip(tripId: string | null) {
         .from('trips')
         .select('*')
         .eq('id', tripId)
-        .eq('user_id', user.id)
         .single();
       
       if (error) throw error;
