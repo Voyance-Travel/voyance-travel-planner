@@ -20,6 +20,7 @@ const ACTION_MAP: Record<string, string> = {
   RESTAURANT_REC: 'restaurant_rec',
   AI_MESSAGE: 'ai_message',
   MYSTERY_GETAWAY: 'mystery_getaway',
+  TRANSPORT_MODE_CHANGE: 'transport_mode_change',
 };
 
 interface SpendCreditsParams {
