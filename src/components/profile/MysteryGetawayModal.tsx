@@ -21,6 +21,8 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSpendCredits } from '@/hooks/useSpendCredits';
+import { useCredits } from '@/hooks/useCredits';
 
 interface DestinationSuggestion {
   city: string;
@@ -50,6 +52,8 @@ const DECLINE_REASONS = [
 export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetawayModalProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const spendCredits = useSpendCredits();
+  const { data: credits } = useCredits();
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<DestinationSuggestion[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -71,6 +75,9 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
         toast.error('Please sign in to use Mystery Getaway');
         return;
       }
+
+      // Deduct credits first
+      await spendCredits.mutateAsync({ action: 'MYSTERY_GETAWAY' });
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/suggest-mystery-trips`,
@@ -309,10 +316,16 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
                 we think you'd love. Pick your favorite, and we'll help you build the perfect trip.
               </p>
 
+              {credits && credits.totalCredits < 15 && (
+                <p className="text-sm text-destructive mb-4">
+                  You don't have enough credits for this feature. Purchase more to continue.
+                </p>
+              )}
+
               <Button 
                 size="lg" 
                 onClick={fetchSuggestions}
-                disabled={loading}
+                disabled={loading || (credits ? credits.totalCredits < 15 : false)}
                 className="gap-2"
               >
                 {loading ? (

@@ -19,6 +19,7 @@ const ACTION_MAP: Record<string, string> = {
   REGENERATE_DAY: 'regenerate_day',
   RESTAURANT_REC: 'restaurant_rec',
   AI_MESSAGE: 'ai_message',
+  MYSTERY_GETAWAY: 'mystery_getaway',
 };
 
 interface SpendCreditsParams {
