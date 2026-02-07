@@ -65,6 +65,7 @@ import { useEntitlements } from '@/hooks/useEntitlements';
 import { UpgradePrompt } from '@/components/checkout/UpgradePrompt';
 import { AddFlightInline, AddHotelInline } from './AddBookingInline';
 import { TripCollaboratorsPanel } from './TripCollaboratorsPanel';
+import { GuestDNABanner } from './GuestDNABanner';
 import { useTripPermission, useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import type { BookingItemState, TravelerInfo } from '@/services/bookingStateMachine';
 import OptimizePreferencesDialog, { type OptimizePreferences } from './OptimizePreferencesDialog';
@@ -2048,6 +2049,11 @@ export function EditorialItinerary({
             </p>
           </div>
         </div>
+      )}
+
+      {/* Guest DNA Banner — prompt to take quiz or request blend */}
+      {tripPermission && !tripPermission.isOwner && (
+        <GuestDNABanner tripId={tripId} />
       )}
 
       {/* Destination Hero Image */}
