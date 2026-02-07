@@ -2025,13 +2025,26 @@ export function EditorialItinerary({
       </div>
 
       {/* View-Only Mode Indicator */}
-      {isEditable && !effectiveIsEditable && tripPermission && (
+      {isEditable && !effectiveIsEditable && tripPermission && !tripPermission.isOwner && (
         <div className="bg-muted/50 border border-border rounded-lg px-4 py-3 flex items-center gap-3">
           <Eye className="h-4 w-4 text-muted-foreground" />
           <div className="flex-1">
             <p className="text-sm font-medium">View Only</p>
             <p className="text-xs text-muted-foreground">
-              You have viewer access to this trip. Contact the owner to request edit permissions.
+              You have viewer access to this trip. The trip owner can grant you edit permissions.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Collaborator Edit Mode Info */}
+      {effectiveIsEditable && tripPermission && !tripPermission.isOwner && (
+        <div className="bg-primary/5 border border-primary/20 rounded-lg px-4 py-3 flex items-center gap-3">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <div className="flex-1">
+            <p className="text-sm font-medium">Editing as Guest</p>
+            <p className="text-xs text-muted-foreground">
+              You can edit this itinerary. AI actions (swap, regenerate) will use your credits.
             </p>
           </div>
         </div>
