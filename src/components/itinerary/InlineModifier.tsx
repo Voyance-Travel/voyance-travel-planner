@@ -7,6 +7,10 @@ import { sendChatMessage, getActionDisplayInfo, type ItineraryContext } from '@/
 import { executeAction, type ItineraryDay, type ActionExecutionResult } from '@/services/itineraryActionExecutor';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useSpendCredits } from '@/hooks/useSpendCredits';
+import { useCredits } from '@/hooks/useCredits';
+import { useEntitlements } from '@/hooks/useEntitlements';
+import { CREDIT_COSTS } from '@/config/pricing';
 
 interface InlineModifierProps {
   tripId: string;
@@ -41,6 +45,12 @@ export function InlineModifier({
   const [isApplying, setIsApplying] = useState(false);
   const [pendingChange, setPendingChange] = useState<PendingChange | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // Credit system hooks
+  const { data: creditData } = useCredits();
+  const { isPaid } = useEntitlements();
+  const spendCredits = useSpendCredits();
+  const totalCredits = creditData?.totalCredits ?? 0;
 
   // Build itinerary context for the chat API
   const buildContext = useCallback((): ItineraryContext => {
@@ -87,6 +97,23 @@ export function InlineModifier({
 
   const handleSubmit = useCallback(async () => {
     if (!input.trim() || isProcessing) return;
+
+    // Charge credits for AI messages (skip for paid users)
+    if (!isPaid) {
+      if (totalCredits < CREDIT_COSTS.AI_MESSAGE) {
+        toast.error(`Need ${CREDIT_COSTS.AI_MESSAGE} credits to send a message`);
+        return;
+      }
+      try {
+        await spendCredits.mutateAsync({
+          action: 'AI_MESSAGE',
+          tripId,
+          metadata: { source: 'inline_modifier' },
+        });
+      } catch {
+        return;
+      }
+    }
 
     setIsProcessing(true);
     setPendingChange(null);
