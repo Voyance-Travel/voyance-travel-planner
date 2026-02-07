@@ -81,7 +81,8 @@ export function DestinationAutocomplete({
 
   const handleInputChange = (val: string) => {
     setInputValue(val);
-    if (val.length === 0) {
+    if (hasValidSelection) {
+      // User is editing after a valid selection — invalidate it
       setHasValidSelection(false);
       onChange({
         display: '',
@@ -89,7 +90,8 @@ export function DestinationAutocomplete({
         airportCodes: undefined,
         isMetroArea: false,
       });
-    } else if (hasValidSelection) {
+    }
+    if (val.length === 0) {
       setHasValidSelection(false);
     }
     setIsOpen(true);
@@ -113,11 +115,11 @@ export function DestinationAutocomplete({
         onBlur={() => setTimeout(() => setIsOpen(false), 300)}
         className={cn(
           'h-12 pl-8 text-base bg-transparent border-0 border-b rounded-none focus:ring-0 font-sans',
-          showValidationHint ? 'border-amber-500' : 'border-border focus:border-primary'
+          showValidationHint ? 'border-destructive' : 'border-border focus:border-primary'
         )}
       />
       {showValidationHint && (
-        <p className="text-xs text-amber-600 mt-1">Please select a city from the dropdown</p>
+        <p className="text-xs text-destructive mt-1">Please select a valid city from the dropdown</p>
       )}
       {showDropdown && (
         <motion.div
