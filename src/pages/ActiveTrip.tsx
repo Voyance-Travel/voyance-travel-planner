@@ -35,6 +35,7 @@ import { MemoryUploadButton } from '@/components/memories/MemoryUploadButton';
 import { MemoriesTimeline } from '@/components/memories/MemoriesTimeline';
 import { ActiveTripStats } from '@/components/trips/ActiveTripStats';
 import TripChat from '@/components/chat/TripChat';
+import { MidTripDNA } from '@/components/trips/MidTripDNA';
 import type { ItineraryActivity as DrawerItineraryActivity } from '@/types/itinerary';
 import { ActivityMediaCapture } from '@/components/feedback/ActivityMediaCapture';
 import { useFeedbackTrigger } from '@/hooks/useFeedbackTrigger';
@@ -87,7 +88,7 @@ interface ItineraryDay {
   };
 }
 
-type ViewType = 'today' | 'overview' | 'nearby' | 'memories' | 'stats' | 'chat';
+type ViewType = 'today' | 'overview' | 'nearby' | 'memories' | 'stats' | 'chat' | 'dna';
 
 // Get time of day greeting and icon
 function getTimeContext() {
@@ -384,9 +385,9 @@ export default function ActiveTrip() {
 
             {/* View Tabs */}
             <div className="flex gap-4 pb-3">
-              {(['today', 'overview', 'nearby', 'memories', 'stats', 'chat'] as ViewType[]).map(v => {
+              {(['today', 'overview', 'nearby', 'memories', 'stats', 'dna', 'chat'] as ViewType[]).map(v => {
                 const labels: Record<ViewType, string> = {
-                  today: 'Today', overview: 'Trip', nearby: 'Nearby', memories: '📸', stats: '📊', chat: '💬'
+                  today: 'Today', overview: 'Trip', nearby: 'Nearby', memories: '📸', stats: '📊', dna: '🧬', chat: '💬'
                 };
                 return (
                   <button
@@ -533,6 +534,17 @@ export default function ActiveTrip() {
                   tripId={tripId || ''}
                   tripType="consumer"
                 />
+              </motion.div>
+            )}
+
+            {view === 'dna' && (
+              <motion.div
+                key="dna"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+              >
+                <MidTripDNA tripId={tripId || ''} />
               </motion.div>
             )}
           </AnimatePresence>
