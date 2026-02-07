@@ -107,7 +107,7 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
       title: 'Smart Itineraries',
       description: 'See WHY each pick was made — timing hacks, tourist trap warnings, and savings tallies.',
       icon: <Star className="h-5 w-5" />,
-      route: ROUTES.DEMO,
+      route: '/#demo-section',
       position: 'center',
       emphasis: 'high',
     },
@@ -133,12 +133,29 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
   useEffect(() => {
     if (!isVisible) return;
     const step = TOUR_STEPS[currentStep];
-    if (step?.route && location.pathname !== step.route) {
-      setIsNavigating(true);
-      navigate(step.route);
-      navigationTimerRef.current = setTimeout(() => {
+    if (step?.route) {
+      const [routePath, queryOrHash] = step.route.split(/(?=[?#])/);
+      const targetPath = routePath || '/';
+      const needsNavigation = location.pathname !== targetPath || 
+        (queryOrHash && !location.search.includes(queryOrHash.replace('?', '')) && !location.hash.includes(queryOrHash.replace('#', '')));
+      
+      if (needsNavigation) {
+        setIsNavigating(true);
+        navigate(step.route);
+        navigationTimerRef.current = setTimeout(() => {
+          setIsNavigating(false);
+          // Scroll to hash target if present
+          if (queryOrHash?.startsWith('#')) {
+            document.getElementById(queryOrHash.slice(1))?.scrollIntoView({ behavior: 'smooth' });
+          }
+        }, 800);
+      } else {
         setIsNavigating(false);
-      }, 800);
+        // Still scroll to hash if on the right page
+        if (queryOrHash?.startsWith('#')) {
+          document.getElementById(queryOrHash.slice(1))?.scrollIntoView({ behavior: 'smooth' });
+        }
+      }
     } else {
       setIsNavigating(false);
     }
