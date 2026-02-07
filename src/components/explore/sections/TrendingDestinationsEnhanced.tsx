@@ -77,7 +77,7 @@ export default function TrendingDestinationsEnhanced() {
             to="/destinations"
             className="hidden md:flex items-center gap-1 text-sm font-medium text-primary hover:underline"
           >
-            View all
+            Featured Destinations
             <ArrowRight className="h-4 w-4" />
           </Link>
         </motion.div>
@@ -129,7 +129,7 @@ export default function TrendingDestinationsEnhanced() {
             to="/destinations"
             className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
           >
-            View all destinations
+            Featured Destinations
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
