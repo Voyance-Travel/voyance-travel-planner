@@ -2239,6 +2239,31 @@ export function EditorialItinerary({
               destination={destination}
               onSave={effectiveIsEditable ? handleSave : undefined}
               isSaving={isSaving}
+              onExportPDF={async () => {
+                const { generateConsumerTripPdf } = await import('@/utils/consumerPdfGenerator');
+                generateConsumerTripPdf({
+                  tripName: `Trip to ${destination}`,
+                  destination,
+                  startDate,
+                  endDate,
+                  travelers,
+                  days,
+                  flight: flightSelection?.outbound ? {
+                    airline: flightSelection.outbound.airline || '',
+                    departure: flightSelection.outbound.departure?.time || '',
+                    arrival: flightSelection.outbound.arrival?.time || '',
+                    departureAirport: flightSelection.outbound.departure?.airport || '',
+                    arrivalAirport: flightSelection.outbound.arrival?.airport || '',
+                  } : undefined,
+                  hotel: hotelSelection ? {
+                    name: hotelSelection.name || '',
+                    neighborhood: hotelSelection.neighborhood || '',
+                    checkIn: startDate,
+                    checkOut: endDate,
+                  } : undefined,
+                });
+                toast.success('PDF downloaded!');
+              }}
             />
 
             {/* What We Skipped - Tourist traps avoided */}
