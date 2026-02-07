@@ -6,6 +6,8 @@
 
 import { isBefore, isAfter, parseISO, isSameDay } from 'date-fns';
 
+export type AccommodationType = 'hotel' | 'airbnb' | 'rental' | 'hostel' | 'other';
+
 export interface HotelBooking {
   id: string;
   name: string;
@@ -23,6 +25,8 @@ export interface HotelBooking {
   rating?: number;
   isManualEntry?: boolean;
   isEnriched?: boolean;
+  /** Type of accommodation: hotel, airbnb, rental, hostel, other */
+  accommodationType?: AccommodationType;
 }
 
 /**
