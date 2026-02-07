@@ -30,6 +30,7 @@ import { CheckInButton } from '@/components/feedback/CheckInButton';
 import { DailyProgressBar } from '@/components/trips/DailyProgressBar';
 import { SmartSwapSuggestion } from '@/components/trips/SmartSwapSuggestion';
 import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternativesDrawer';
+import { PostActivityNudge } from '@/components/feedback/PostActivityNudge';
 import type { ItineraryActivity as DrawerItineraryActivity } from '@/types/itinerary';
 import { ActivityMediaCapture } from '@/components/feedback/ActivityMediaCapture';
 import { useFeedbackTrigger } from '@/hooks/useFeedbackTrigger';
@@ -850,6 +851,22 @@ function TodayView({
                               <Copy className="w-3 h-3" />
                             )}
                           </Button>
+                        </div>
+                      )}
+
+                      {/* Post-Activity Nudge (for completed, unrated activities) */}
+                      {isCompleted && !feedbackByActivity.has(activity.id) && (
+                        <div className="mt-3">
+                          <PostActivityNudge
+                            activityId={activity.id}
+                            activityName={activity.name}
+                            tripId={trip.id}
+                            destination={trip.destination}
+                            activityType={activity.type}
+                            activityCategory={activity.category}
+                            isCompleted={isCompleted}
+                            hasRating={feedbackByActivity.has(activity.id)}
+                          />
                         </div>
                       )}
 
