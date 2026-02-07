@@ -5184,12 +5184,14 @@ function ActivityRow({
             )}
             {/* Transportation to next (gated in preview) */}
             {!isPreview && activity.timeBlockType !== 'downtime' && activity.transportation && !isLast && (
-              <TransitBadge 
-                transportation={activity.transportation}
-                tripCurrency={tripCurrency}
-                displayCost={displayCost}
-                showDetails={showTransportDetails}
-              />
+              <div data-tour="transit-badge">
+                <TransitBadge 
+                  transportation={activity.transportation}
+                  tripCurrency={tripCurrency}
+                  displayCost={displayCost}
+                  showDetails={showTransportDetails}
+                />
+              </div>
             )}
           </div>
 
