@@ -5225,27 +5225,25 @@ function ActivityRow({
         )}
       </div>
 
-      {/* Thumbnail Column - Hidden on mobile, visible on desktop */}
-      {showThumbnail && (
-        <div className="hidden sm:block w-24 h-24 shrink-0 border-r border-border bg-muted/30 overflow-hidden relative">
-          {thumbnailUrl && !thumbnailError ? (
-            <>
-              <img
-                src={thumbnailUrl}
-                alt={activityTitle}
-                className="w-full h-full object-cover transition-transform group-hover/activity:scale-105"
-                loading="lazy"
-                onError={() => setThumbnailError(true)}
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover/activity:opacity-100 transition-opacity" />
-            </>
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-secondary/50 to-secondary/20 text-primary/50">
-              {style.icon}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Thumbnail Column - Hidden on mobile, consistent width on desktop */}
+      <div className="hidden sm:block w-24 h-24 shrink-0 border-r border-border bg-muted/30 overflow-hidden relative">
+        {showThumbnail && thumbnailUrl && !thumbnailError ? (
+          <>
+            <img
+              src={thumbnailUrl}
+              alt={activityTitle}
+              className="w-full h-full object-cover transition-transform group-hover/activity:scale-105"
+              loading="lazy"
+              onError={() => setThumbnailError(true)}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover/activity:opacity-100 transition-opacity" />
+          </>
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-secondary/50 to-secondary/20 text-primary/50">
+            {style.icon}
+          </div>
+        )}
+      </div>
 
       {/* Content */}
       <div className="flex-1 p-3 sm:p-4 overflow-hidden">
