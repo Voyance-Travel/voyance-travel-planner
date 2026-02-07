@@ -5539,6 +5539,63 @@ export type Database = {
           },
         ]
       }
+      trip_memories: {
+        Row: {
+          activity_id: string | null
+          activity_name: string | null
+          caption: string | null
+          created_at: string
+          day_number: number | null
+          id: string
+          image_url: string
+          location_name: string | null
+          taken_at: string
+          trip_id: string
+          user_id: string
+        }
+        Insert: {
+          activity_id?: string | null
+          activity_name?: string | null
+          caption?: string | null
+          created_at?: string
+          day_number?: number | null
+          id?: string
+          image_url: string
+          location_name?: string | null
+          taken_at?: string
+          trip_id: string
+          user_id: string
+        }
+        Update: {
+          activity_id?: string | null
+          activity_name?: string | null
+          caption?: string | null
+          created_at?: string
+          day_number?: number | null
+          id?: string
+          image_url?: string
+          location_name?: string | null
+          taken_at?: string
+          trip_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_memories_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_memories_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_notes: {
         Row: {
           content: string
