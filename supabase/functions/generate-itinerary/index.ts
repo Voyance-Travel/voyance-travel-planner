@@ -222,6 +222,15 @@ const corsHeaders = {
 // TYPES & INTERFACES
 // =============================================================================
 
+interface MultiCityDayInfo {
+  cityName: string;
+  country?: string;
+  isTransitionDay: boolean;
+  transitionFrom?: string;
+  transitionTo?: string;
+  transportType?: string;
+}
+
 interface GenerationContext {
   tripId: string;
   userId: string;
@@ -255,6 +264,9 @@ interface GenerationContext {
   groupArchetypes?: TravelerArchetype[];
   // Celebration day: User-specified day for birthday/anniversary celebration (1-indexed)
   celebrationDay?: number;
+  // Multi-city support
+  isMultiCity?: boolean;
+  multiCityDayMap?: MultiCityDayInfo[];
 }
 
 interface StrictActivity {
@@ -323,6 +335,12 @@ interface StrictDay {
     mealsIncluded?: number;
     pacingLevel?: 'relaxed' | 'moderate' | 'packed';
   };
+  // Multi-city tags
+  city?: string;
+  country?: string;
+  isTransitionDay?: boolean;
+  transitionFrom?: string;
+  transitionTo?: string;
 }
 
 interface TravelAdvisory {
@@ -3733,7 +3751,86 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
   };
   context.dailyBudget = budgetMap[context.budgetTier || 'standard'] || 150;
 
-  console.log(`[Stage 1] Context prepared: ${context.totalDays} days in ${context.destination}`);
+  // =========================================================================
+  // MULTI-CITY SUPPORT: Build day→city mapping from destinations or trip_cities
+  // =========================================================================
+  if (trip.is_multi_city) {
+    context.isMultiCity = true;
+    console.log(`[Stage 1] Multi-city trip detected`);
+    
+    // Try destinations JSONB first (always present), then trip_cities table
+    const destinations = trip.destinations as Array<{ city: string; country?: string; nights: number; order?: number }> | null;
+    
+    if (destinations && destinations.length >= 2) {
+      // Sort by order if available
+      const sorted = [...destinations].sort((a, b) => (a.order || 0) - (b.order || 0));
+      
+      const dayMap: MultiCityDayInfo[] = [];
+      for (let i = 0; i < sorted.length; i++) {
+        const dest = sorted[i];
+        const nights = dest.nights || 1;
+        
+        for (let n = 0; n < nights; n++) {
+          const isTransition = n === 0 && i > 0;
+          dayMap.push({
+            cityName: dest.city,
+            country: dest.country,
+            isTransitionDay: isTransition,
+            transitionFrom: isTransition ? sorted[i - 1].city : undefined,
+            transitionTo: isTransition ? dest.city : undefined,
+          });
+        }
+      }
+      
+      // Pad or trim to match totalDays
+      while (dayMap.length < totalDays) {
+        const last = dayMap[dayMap.length - 1] || { cityName: context.destination, isTransitionDay: false };
+        dayMap.push({ ...last, isTransitionDay: false });
+      }
+      context.multiCityDayMap = dayMap.slice(0, totalDays);
+      
+      console.log(`[Stage 1] Multi-city day map: ${context.multiCityDayMap.map(d => d.cityName).join(' → ')}`);
+    } else {
+      // Fallback: try trip_cities table
+      try {
+        const { data: tripCities } = await supabase
+          .from('trip_cities')
+          .select('*')
+          .eq('trip_id', tripId)
+          .order('city_order', { ascending: true });
+        
+        if (tripCities && tripCities.length >= 2) {
+          const dayMap: MultiCityDayInfo[] = [];
+          for (let i = 0; i < tripCities.length; i++) {
+            const city = tripCities[i];
+            const nights = city.nights || city.days_total || 1;
+            
+            for (let n = 0; n < nights; n++) {
+              const isTransition = n === 0 && i > 0;
+              dayMap.push({
+                cityName: city.city_name,
+                country: city.country,
+                isTransitionDay: isTransition,
+                transitionFrom: isTransition ? tripCities[i - 1].city_name : undefined,
+                transitionTo: isTransition ? city.city_name : undefined,
+                transportType: isTransition ? city.transport_type : undefined,
+              });
+            }
+          }
+          while (dayMap.length < totalDays) {
+            const last = dayMap[dayMap.length - 1] || { cityName: context.destination, isTransitionDay: false };
+            dayMap.push({ ...last, isTransitionDay: false });
+          }
+          context.multiCityDayMap = dayMap.slice(0, totalDays);
+          console.log(`[Stage 1] Multi-city day map (from trip_cities): ${context.multiCityDayMap.map(d => d.cityName).join(' → ')}`);
+        }
+      } catch (e) {
+        console.warn('[Stage 1] Could not load trip_cities:', e);
+      }
+    }
+  }
+
+  console.log(`[Stage 1] Context prepared: ${context.totalDays} days in ${context.destination}${context.isMultiCity ? ' (multi-city)' : ''}`);
   return context;
 }
 
@@ -4343,13 +4440,28 @@ ${flightHotelContext}${retryPrompt}`;
         bannedTypes.push('wine tastings', 'vineyard tours', 'winery visits');
       }
 
-      const userPrompt = `Generate Day ${dayNumber} of ${context.totalDays} for ${context.destination}${context.destinationCountry ? `, ${context.destinationCountry}` : ''}.
+      // Resolve per-day destination for multi-city trips
+      const dayCity = context.multiCityDayMap?.[dayNumber - 1];
+      const dayDestination = dayCity?.cityName || context.destination;
+      const dayCountry = dayCity?.country || context.destinationCountry;
+      const isTransitionDay = dayCity?.isTransitionDay || false;
+      
+      let multiCityPrompt = '';
+      if (context.isMultiCity && dayCity) {
+        multiCityPrompt = `\n🌍 MULTI-CITY TRIP: This day is in **${dayDestination}${dayCountry ? `, ${dayCountry}` : ''}**. ALL activities MUST be located in ${dayDestination}.`;
+        if (isTransitionDay && dayCity.transitionFrom) {
+          multiCityPrompt += `\n🚆 TRANSITION DAY: Traveler is moving from ${dayCity.transitionFrom} to ${dayDestination} today. Start the day with travel/transfer, then plan afternoon activities in ${dayDestination}.`;
+        }
+      }
+
+      const userPrompt = `Generate Day ${dayNumber} of ${context.totalDays} for ${dayDestination}${dayCountry ? `, ${dayCountry}` : ''}.
 
 DATE: ${date}
 TRAVELERS: ${context.travelers}
 BUDGET: ${context.budgetTier || 'standard'} (~$${context.dailyBudget}/day per person)
 ARCHETYPE: ${context.travelerDNA?.primaryArchetype || 'balanced'}
 MAX ACTIVITIES: ${maxActivitiesFromArchetype} (from archetype day structure - this is a HARD LIMIT)
+${multiCityPrompt}
 
 ${previousActivities.length > 0 ? `AVOID REPEATING THESE SPECIFIC ACTIVITIES: ${previousActivities.join(', ')}\n` : ''}
 NOTE: The previous-activities list is ONLY for de-duplication. Do NOT treat it as a signal for spending style.
@@ -4360,6 +4472,7 @@ CRITICAL REMINDERS:
 2. Check the archetype's avoid list. If it says "no spa", there are ZERO spa activities.
 3. Check the budget constraints. If value-focused, no €100+ experiences.
 4. ${context.travelerDNA?.primaryArchetype === 'flexible_wanderer' || context.travelerDNA?.primaryArchetype === 'slow_traveler' || (context.travelerDNA?.traits?.pace || 0) <= -3 ? 'Include at least one 2+ hour UNSCHEDULED block labeled "Free time to explore [neighborhood]"' : 'Follow the pacing guidelines for this archetype'}
+${context.isMultiCity ? `5. ALL activities MUST be in ${dayDestination}. Do NOT include activities from other cities.` : ''}
 
 Generate activities for this day following ALL constraints above.`;
 
@@ -4655,7 +4768,15 @@ Generate activities for this day following ALL constraints above.`;
 
       // If valid or on last retry, return the day
       if (validation.isValid || attempt === maxRetries) {
-        console.log(`[Stage 2] Day ${dayNumber} generated successfully (${generatedDay.activities.length} activities)`);
+        // Tag day with multi-city info
+        if (context.isMultiCity && dayCity) {
+          generatedDay.city = dayCity.cityName;
+          generatedDay.country = dayCity.country;
+          generatedDay.isTransitionDay = dayCity.isTransitionDay;
+          generatedDay.transitionFrom = dayCity.transitionFrom;
+          generatedDay.transitionTo = dayCity.transitionTo;
+        }
+        console.log(`[Stage 2] Day ${dayNumber} generated successfully (${generatedDay.activities.length} activities${dayCity ? `, city: ${dayCity.cityName}` : ''})`);
         return generatedDay;
       }
 

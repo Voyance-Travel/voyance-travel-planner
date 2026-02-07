@@ -1445,7 +1445,13 @@ export default function Start() {
           days_total: d.nights,
         }));
 
-        await supabase.from('trip_cities').insert(cityRows as any[]);
+        const { error: citiesError } = await supabase.from('trip_cities').insert(cityRows as any[]);
+        if (citiesError) {
+          console.error('[Start] Failed to persist trip_cities:', citiesError);
+          // Non-fatal: edge function can fall back to destinations JSONB
+        } else {
+          console.log(`[Start] Persisted ${cityRows.length} trip_cities for trip ${trip.id}`);
+        }
       }
 
       // Navigate directly to trip page with generate flag
