@@ -289,8 +289,8 @@ async function getGooglePlacesPhoto(
 
     const venueTokens = new Set(tokenize(venueName));
 
-    // Minimum match threshold (0-1): require at least 50% token overlap (raised from 0.4)
-    const MIN_MATCH_SCORE = 0.50;
+    // Minimum match threshold (0-1): require at least 55% token overlap (raised from 0.50)
+    const MIN_MATCH_SCORE = 0.55;
 
     try {
       const searchResponse = await fetch(
@@ -384,9 +384,18 @@ async function getGooglePlacesPhoto(
       scored.sort((a, b) => b.score - a.score);
       const best = scored[0];
 
+      // If best score is still weak, skip to fallback
+      if (best.score < 0.6) {
+        console.log(`[Images] Best match score too low (${best.score.toFixed(2)}), falling back`);
+        return null;
+      }
+
       console.log(`[Images] ✅ Best match (score ${best.score.toFixed(2)}):`, best.place.displayName?.text);
 
-      const photoResource = best.place.photos[0].name;
+      // Pick the best photo from the place (prefer 2nd or 3rd photo — first is often a logo/sign)
+      const photos = best.place.photos || [];
+      const photoIndex = photos.length >= 3 ? 1 : 0; // Skip first photo if multiple available
+      const photoResource = photos[photoIndex].name;
       const googlePhotoUrl = `https://places.googleapis.com/v1/${photoResource}/media?maxWidthPx=1200&key=${apiKey}`;
       
       // Download to Supabase Storage to avoid repeated API calls
@@ -461,8 +470,8 @@ async function getTripAdvisorPhoto(
     const locationName = location.name || '';
     const matchScore = calculateMatchScore(venueTokens, locationName);
     
-    // Match threshold for TripAdvisor (raised from 0.3 to 0.45)
-    const MIN_MATCH_SCORE = 0.45;
+    // Match threshold for TripAdvisor (raised from 0.45 to 0.55)
+    const MIN_MATCH_SCORE = 0.55;
     
     if (matchScore < MIN_MATCH_SCORE) {
       console.log(`[Images] Rejecting TripAdvisor result (low score ${matchScore.toFixed(2)}): ${locationName}`);
@@ -753,7 +762,7 @@ function extractVenueName(activityTitle: string): { cleanName: string; shouldSki
     /^(arrival|departure|transfer|airport)/i,
     /^(pack|unpack|settle\s+in)/i,
     /^(breakfast|lunch|dinner|brunch)\s+(break|time)$/i,
-    // Hotel dining activities - should skip generic search (frontend will handle with hotel name)
+    // Hotel dining activities
     /^(?:relaxed|leisurely|early|late)?\s*(?:morning|afternoon|evening)?\s*(?:and\s+)?(?:breakfast|brunch|lunch|dinner)\s+(?:at\s+)?(?:the\s+)?hotel/i,
     /^(?:breakfast|brunch|lunch|dinner|meal)\s+at\s+(?:the\s+)?(?:hotel|resort|inn|lodge)/i,
     // Generic meal descriptors without a venue name
@@ -762,10 +771,20 @@ function extractVenueName(activityTitle: string): { cleanName: string; shouldSki
     /^(?:morning|afternoon|evening|late|early)\s+(?:breakfast|brunch|lunch|dinner|meal|snack)/i,
     /^(?:quick|light|leisurely|relaxed|casual|formal)\s+(?:breakfast|brunch|lunch|dinner|meal)/i,
     /^[A-Z][a-z]+\s+(?:cuisine|culinary|gastronomy|food)\s+(?:experience|adventure|exploration|journey|tour)/i,
-    // ENHANCED: More generic patterns
+    // Generic patterns
     /^(?:wander|stroll|walk)\s+(?:around|through|along)/i,
     /^(?:relax|unwind|chill)\s+(?:at\s+the\s+)?(?:hotel|room|pool)/i,
     /^(?:pack\s+up|get\s+ready|prepare)/i,
+    // NEW: Catch creative AI-generated generic titles
+    /^(?:high[\-\s]?protein|low[\-\s]?carb|healthy|power|energy)\s+(?:fuel|fueling|refuel|breakfast|lunch|meal)/i,
+    /^(?:fuel|fueling|refuel)\s+(?:up|station|stop|break)/i,
+    /^(?:morning|afternoon|evening|pre[\-\s]?workout|post[\-\s]?workout)\s+(?:fuel|fueling|refuel)/i,
+    /^(?:social|group|team|family)\s+(?:dinner|lunch|breakfast|brunch|drinks?|cocktails?|bbq)/i,
+    /^(?:romantic|sunset|sunrise|late[\-\s]?night|midnight)\s+(?:dinner|lunch|drinks?|cocktails?|stroll|walk)/i,
+    /^(?:power|morning|sunrise|sunset|beach|park|urban)\s+(?:run|jog|sprint|workout|exercise|yoga|stretch)/i,
+    /^(?:rooftop|poolside|beachside|garden|terrace)\s+(?:drinks?|cocktails?|dinner|lunch|brunch|chill|vibes?)/i,
+    // Catch vague descriptor-only titles (no proper nouns)
+    /^(?:hidden|secret|local|authentic|traditional|famous|best|top|favorite|favourite|iconic|legendary|charming|cozy|quaint|trendy|hip|buzzy)\s+(?:spot|gem|find|discovery|eatery|joint|hole[\-\s]?in[\-\s]?the[\-\s]?wall|place|haunt|hangout)$/i,
   ];
   
   for (const pattern of skipPatterns) {
@@ -821,8 +840,18 @@ function extractVenueName(activityTitle: string): { cleanName: string; shouldSki
     }
   }
   
-  // Final attempt: infer category even without extraction
+  // Final heuristic: if title has NO proper nouns (no capitalized words after first),
+  // it's likely a generic description → use category fallback
   const inferredCat = inferCategoryFromTitle(title);
+  const words = title.split(/\s+/).filter(w => w.length > 2);
+  const properNouns = words.filter((w, i) => i > 0 && /^[A-Z]/.test(w) && !NOISE_WORDS.has(w.toLowerCase()));
+  
+  if (properNouns.length === 0 && words.length > 2) {
+    // No proper nouns detected — likely "social korean bbq dinner" type title
+    console.log(`[Images] No proper nouns in "${title}", using category fallback (${inferredCat})`);
+    return { cleanName: title, shouldSkip: true, inferredCategory: inferredCat };
+  }
+  
   return { cleanName: title, shouldSkip: false, inferredCategory: inferredCat };
 }
 
@@ -1045,7 +1074,8 @@ Respond ONLY with JSON: {"score": <0-100>, "issues": ["issue1"], "confidence": <
     if (!response.ok) {
       console.log("[Quality] API error:", response.status);
       // Fail open - assume image is acceptable
-      return { score: 0.7, pass: true, issues: ["api_error"], confidence: 0 };
+      // Fail closed for API errors — don't cache bad images
+      return { score: 0.5, pass: false, issues: ["api_error"], confidence: 0 };
     }
 
     const data = await response.json();
@@ -1081,7 +1111,8 @@ Respond ONLY with JSON: {"score": <0-100>, "issues": ["issue1"], "confidence": <
       console.error("[Quality] Error:", e);
     }
     // Fail open
-    return { score: 0.7, pass: true, issues: ["timeout"], confidence: 0 };
+    // Fail closed — better to show a category fallback than a bad image
+    return { score: 0.5, pass: false, issues: ["timeout"], confidence: 0 };
   }
 }
 
