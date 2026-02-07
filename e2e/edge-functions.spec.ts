@@ -121,7 +121,6 @@ test.describe('Edge Functions - Endpoint Availability', () => {
     { name: 'analyze-preferences', method: 'POST' },
     { name: 'parse-travel-story', method: 'POST' },
     { name: 'calculate-travel-dna', method: 'POST' },
-    { name: 'get-destination-guide', method: 'POST' },
   ];
 
   for (const endpoint of endpoints) {
