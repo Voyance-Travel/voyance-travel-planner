@@ -1,5 +1,6 @@
 /**
- * Hook for spending credits on actions
+ * Hook for spending credits on actions.
+ * On insufficient credits, triggers the global OutOfCreditsModal popup.
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -7,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { CREDIT_COSTS } from '@/config/pricing';
+import { useOutOfCredits } from '@/contexts/OutOfCreditsContext';
 
 type ActionType = keyof typeof CREDIT_COSTS;
 
@@ -49,6 +51,7 @@ export function useSpendCredits() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { showOutOfCredits } = useOutOfCredits();
 
   return useMutation({
     mutationFn: async (params: SpendCreditsParams): Promise<SpendCreditsResponse> => {
@@ -75,6 +78,13 @@ export function useSpendCredits() {
 
       if (data.error) {
         if (data.error === 'Insufficient credits') {
+          // Trigger the global out-of-credits modal
+          showOutOfCredits({
+            action: params.action,
+            creditsNeeded: data.required ?? CREDIT_COSTS[params.action],
+            creditsAvailable: data.available ?? 0,
+            tripId: params.tripId,
+          });
           throw new Error(`Not enough credits. Need ${data.required}, have ${data.available}.`);
         }
         throw new Error(data.error);
@@ -88,6 +98,9 @@ export function useSpendCredits() {
       }
     },
     onError: (error: Error) => {
+      // Don't show toast for insufficient credits — the modal handles it
+      if (error.message.startsWith('Not enough credits')) return;
+      
       toast({
         title: 'Action failed',
         description: error.message,
