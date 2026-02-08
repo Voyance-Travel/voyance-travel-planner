@@ -67,10 +67,10 @@ export default function TrendingDestinationsEnhanced() {
         >
           <div>
             <h2 className="text-2xl md:text-3xl font-display font-bold text-foreground mb-2">
-              Trending Destinations
+              Featured Destinations
             </h2>
             <p className="text-muted-foreground">
-              Where travelers are heading right now
+              Handpicked places worth exploring
             </p>
           </div>
           <Link
