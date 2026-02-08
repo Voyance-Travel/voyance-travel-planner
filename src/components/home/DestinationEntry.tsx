@@ -194,7 +194,7 @@ export default function DestinationEntry() {
           value={destination}
           onChange={(e) => setDestination(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Where do you want to go..."
+          placeholder="Preview where you want to go..."
           className="w-full text-lg sm:text-xl text-center py-3 sm:py-4 border-0 border-b-2 border-white/40 bg-transparent text-white placeholder:text-white/50 focus:outline-none focus:border-white transition-colors"
           autoFocus
           disabled={isGenerating}
