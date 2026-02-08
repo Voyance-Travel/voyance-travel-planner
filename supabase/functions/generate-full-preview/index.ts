@@ -144,7 +144,7 @@ serve(async (req) => {
     const start = new Date(startDate);
     const end = new Date(endDate);
     const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    const cappedDays = Math.min(totalDays, 7);
+    const cappedDays = Math.min(totalDays, 2); // Cap FREE preview at 2 days — user must unlock additional days with credits
 
     costTracker.addMetadata('destination', destination);
     costTracker.addMetadata('days', cappedDays);
