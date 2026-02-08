@@ -116,7 +116,7 @@ export default function LinkToTripModal({ open, onOpenChange, friend }: LinkToTr
       await addCollaborator.mutateAsync({
         tripId: selectedTripId,
         userId: friend.id,
-        permission: 'contributor',
+        permission: 'edit',
         includePreferences,
       });
       onOpenChange(false);

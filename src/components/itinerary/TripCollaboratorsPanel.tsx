@@ -59,20 +59,20 @@ interface TripCollaboratorsPanelProps {
 }
 
 const permissionLabels: Record<CollaboratorPermission, { label: string; icon: typeof Eye; description: string }> = {
-  viewer: { 
+  view: { 
     label: 'Viewer', 
     icon: Eye, 
     description: 'Can view the itinerary only' 
   },
-  editor: { 
+  edit: { 
     label: 'Editor', 
     icon: Edit3, 
     description: 'Can edit activities and make changes' 
   },
-  contributor: { 
-    label: 'Contributor', 
+  admin: { 
+    label: 'Admin', 
     icon: Edit3, 
-    description: 'Can suggest and add activities' 
+    description: 'Full access to trip settings' 
   },
 };
 
@@ -253,7 +253,7 @@ export function TripCollaboratorsPanel({
           ) : (
             <AnimatePresence>
               {collaborators.map(collaborator => {
-                const permInfo = permissionLabels[collaborator.permission] || permissionLabels.viewer;
+                const permInfo = permissionLabels[collaborator.permission] || permissionLabels.view;
                 const PermIcon = permInfo.icon;
                 const dnaInfo = collaboratorDNA[collaborator.user_id];
                 const hasDNA = dnaInfo?.hasDNA ?? false;
