@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { MapPin, Star, TrendingUp, Compass, Globe, Sparkles, ArrowRight } from 'lucide-react';
+import { MapPin, Star, TrendingUp, Compass, Sparkles, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -77,14 +77,7 @@ const popularDestinations = [
 ];
 
 
-const regions = [
-  { id: 'europe', name: 'Europe', image: 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=100&h=100&fit=crop' },
-  { id: 'asia', name: 'Asia', image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=100&h=100&fit=crop' },
-  { id: 'north-america', name: 'North America', image: 'https://images.unsplash.com/photo-1485738422979-f5c462d49f74?w=100&h=100&fit=crop' },
-  { id: 'south-america', name: 'South America', image: 'https://images.unsplash.com/photo-1483729558449-99ef09a8c325?w=100&h=100&fit=crop' },
-  { id: 'africa', name: 'Africa', image: 'https://images.unsplash.com/photo-1547471080-7cc2caa01a7e?w=100&h=100&fit=crop' },
-  { id: 'oceania', name: 'Oceania', image: 'https://images.unsplash.com/photo-1523482580672-f109ba8cb9be?w=100&h=100&fit=crop' },
-];
+
 
 // Image loading component with skeleton
 function DestinationImage({ 
@@ -125,7 +118,7 @@ function DestinationImage({
 
 export default function Destinations() {
   const navigate = useNavigate();
-  const [hoveredRegion, setHoveredRegion] = useState<string | null>(null);
+  
 
   const handleDestinationClick = (id: string) => {
     navigate(buildRoute.destination(id));
@@ -315,48 +308,6 @@ export default function Destinations() {
         </div>
       </section>
       
-      {/* Browse by Region */}
-      <section className="py-16 bg-background">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-center gap-3 mb-10">
-            <Globe className="h-6 w-6 text-primary" />
-            <h2 className="text-2xl font-display font-bold text-foreground">
-              Browse by Region
-            </h2>
-          </div>
-          
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {regions.map((region, index) => (
-              <motion.div
-                key={region.id}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.05 }}
-                className="group cursor-pointer"
-                onMouseEnter={() => setHoveredRegion(region.id)}
-                onMouseLeave={() => setHoveredRegion(null)}
-              >
-                <Link 
-                  to={`/explore?region=${region.id}`}
-                  className="flex items-center gap-4 p-4 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 transition-all duration-300"
-                >
-                  <img src={region.image} alt={region.name} className="w-12 h-12 rounded-lg object-cover" />
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
-                      {region.name}
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      Build your itinerary
-                    </p>
-                  </div>
-                  <ArrowRight className={`h-5 w-5 text-muted-foreground transition-all duration-300 ${hoveredRegion === region.id ? 'translate-x-1 text-primary' : ''}`} />
-                </Link>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
       
     </MainLayout>
   );
