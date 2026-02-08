@@ -495,17 +495,6 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
         rarity={rarity}
       />
 
-      {/* 2. DNA Trait Fingerprint - Always visible hero element */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="rounded-xl border border-border bg-card p-5 md:p-6"
-      >
-        <DNATraitFingerprint 
-          traitScores={dnaData.trait_scores as Record<string, number> | null} 
-        />
-      </motion.div>
 
       {/* Low confidence disambiguation */}
       {confidence < 60 && (
