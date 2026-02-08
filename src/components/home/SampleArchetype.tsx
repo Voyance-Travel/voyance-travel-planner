@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { ArrowRight, Sparkles, Zap, Compass, Leaf, Palette, Heart, Mountain, Camera, Map } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
 import { useRef } from 'react';
@@ -152,6 +152,7 @@ function ArchetypeCard({ archetype }: { archetype: typeof FEATURED_ARCHETYPES[0]
 }
 
 export default function SampleArchetype() {
+  const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   return (
@@ -218,13 +219,13 @@ export default function SampleArchetype() {
           transition={{ delay: 0.2 }}
           className="text-center mb-10"
         >
-          <Link 
-            to={ROUTES.ARCHETYPES}
+          <button 
+            onClick={() => navigate(ROUTES.ARCHETYPES)}
             className="relative z-10 inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-primary/30 bg-primary/5 text-primary font-medium text-sm hover:bg-primary/10 hover:border-primary/50 transition-all"
           >
             See all 27 archetypes
             <ArrowRight className="w-4 h-4" />
-          </Link>
+          </button>
         </motion.div>
 
         {/* Primary Quiz CTA - mobile-optimized */}
@@ -250,12 +251,10 @@ export default function SampleArchetype() {
             Take the quiz and let us match you perfectly.
           </p>
           
-          <Link to={ROUTES.QUIZ}>
-            <Button size="lg" className="font-sans text-sm sm:text-base px-6 sm:px-8 min-h-[48px]">
+          <Button size="lg" className="font-sans text-sm sm:text-base px-6 sm:px-8 min-h-[48px]" onClick={() => navigate(ROUTES.QUIZ)}>
               Take the 5-Minute Quiz
               <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </Link>
+          </Button>
           
           <p className="text-[10px] sm:text-xs text-muted-foreground mt-3 sm:mt-4">
             Take once. Your profile stays with you.
