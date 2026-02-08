@@ -197,52 +197,53 @@ function calculateEstimatedSavings(
 }
 
 /**
- * Get default skipped items for a destination
+ * Get default local alternatives for a destination
  */
 export function getDestinationSkippedItems(destination: string): SkippedItem[] {
   const city = destination.toLowerCase();
   
-  const skipLists: Record<string, SkippedItem[]> = {
+  const localAlternatives: Record<string, SkippedItem[]> = {
     tokyo: [
       {
         name: 'Robot Restaurant',
-        reason: 'Overpriced gimmick at $80+. The "robots" are people in costumes, the food is terrible, and locals never go.',
-        category: 'tourist-trap',
+        reason: 'For a more authentic Tokyo night out, Golden Gai\'s tiny bars offer genuine local atmosphere at a fraction of the cost.',
+        category: 'local-favorite',
         savingsEstimate: { money: '$80', time: '3 hours' },
+        betterAlternative: 'Golden Gai bars in Shinjuku',
       },
       {
         name: 'Tokyo Skytree',
-        reason: 'Expensive ticket ($30), always crowded, and the view isn\'t better than free alternatives.',
-        category: 'overpriced',
+        reason: 'Shibuya Sky offers equally stunning panoramic views with shorter waits and a more vibrant atmosphere.',
+        category: 'better-value',
         savingsEstimate: { money: '$30', time: '90 min' },
         betterAlternative: 'Shibuya Sky or Tokyo Tower at sunset',
       },
       {
-        name: 'Tsukiji sushi sit-down restaurants',
-        reason: 'The wholesale market moved to Toyosu in 2018. Tourist-facing restaurants now cater to visitors with inflated prices.',
-        category: 'overhyped',
+        name: 'Tsukiji sit-down restaurants',
+        reason: 'Standing sushi at the outer market stalls is fresher, faster, and the way locals actually eat here.',
+        category: 'insider-pick',
         betterAlternative: 'Standing sushi at outer market stalls',
       },
     ],
     rome: [
       {
-        name: 'Restaurants on Piazza Navona',
-        reason: 'Triple the price for half the quality. No Roman would eat here.',
-        category: 'tourist-trap',
+        name: 'Piazza Navona restaurants',
+        reason: 'Testaccio and the Jewish Ghetto offer authentic Roman cuisine at honest prices — where Romans actually eat.',
+        category: 'local-favorite',
         savingsEstimate: { money: '$40' },
         betterAlternative: 'Trattoria in Testaccio or Jewish Ghetto',
       },
       {
-        name: 'Trevi Fountain selfie crowd (midday)',
-        reason: 'Packed 10am-6pm with selfie sticks and tour groups. Visit at 7am or after 10pm.',
-        category: 'overcrowded',
+        name: 'Trevi Fountain midday visit',
+        reason: 'Visit at 7am or after 10pm for a magical, uncrowded experience with better photo opportunities.',
+        category: 'insider-pick',
         savingsEstimate: { time: '45 min' },
         betterAlternative: 'Early morning or late night visit',
       },
       {
-        name: 'Cafes on Spanish Steps',
-        reason: 'You\'re paying for the view, not the coffee. A €2 espresso becomes €8.',
-        category: 'overpriced',
+        name: 'Spanish Steps cafes',
+        reason: 'Sant\'Eustachio Il Caffè serves what many consider Rome\'s best espresso at a fraction of the price.',
+        category: 'better-value',
         savingsEstimate: { money: '$20' },
         betterAlternative: 'Sant\'Eustachio Il Caffè',
       },
@@ -250,23 +251,24 @@ export function getDestinationSkippedItems(destination: string): SkippedItem[] {
     paris: [
       {
         name: 'Champs-Élysées restaurants',
-        reason: 'Chain restaurants with frozen food at premium prices. The avenue is for walking, not eating.',
-        category: 'tourist-trap',
+        reason: 'Le Marais and Canal Saint-Martin have Paris\'s best dining scenes — locals flock there for a reason.',
+        category: 'local-favorite',
         savingsEstimate: { money: '$30' },
         betterAlternative: 'Le Marais or Canal Saint-Martin',
       },
       {
         name: 'Seine dinner cruises',
-        reason: 'Mediocre buffet food, crowded boats, expensive. Better to walk the Seine at sunset.',
-        category: 'overhyped',
+        reason: 'A sunset walk along the Seine with wine from a local caviste is more romantic and authentically Parisian.',
+        category: 'insider-pick',
         savingsEstimate: { money: '$80' },
+        betterAlternative: 'Seine-side picnic at sunset',
       },
     ],
     london: [
       {
         name: 'Leicester Square restaurants',
-        reason: 'Tourist trap central. Overpriced chains, aggressive touts.',
-        category: 'tourist-trap',
+        reason: 'Borough Market and Soho side streets offer incredible food diversity that Londoners actually love.',
+        category: 'local-favorite',
         savingsEstimate: { money: '$25' },
         betterAlternative: 'Borough Market or Soho side streets',
       },
@@ -274,33 +276,33 @@ export function getDestinationSkippedItems(destination: string): SkippedItem[] {
     barcelona: [
       {
         name: 'La Rambla restaurants',
-        reason: 'Terrible food, aggressive waiters, pickpocket central. Walk it, don\'t eat on it.',
-        category: 'tourist-trap',
+        reason: 'El Born and Gràcia have Barcelona\'s best tapas bars — more authentic, better food, friendlier vibe.',
+        category: 'local-favorite',
         savingsEstimate: { money: '$25' },
         betterAlternative: 'El Born or Gràcia tapas bars',
       },
     ],
     lisbon: [
       {
-        name: 'Pastéis de Belém line (peak hours)',
-        reason: 'Hour-long waits midday for custard tarts. Go before 9am or after 8pm — same tart, no line.',
-        category: 'overcrowded',
+        name: 'Pastéis de Belém at peak hours',
+        reason: 'Visit before 9am for the same legendary tarts with zero wait, or try Manteigaria for equally delicious pastéis.',
+        category: 'insider-pick',
         savingsEstimate: { time: '45 min' },
         betterAlternative: 'Visit early morning or try Manteigaria',
       },
       {
         name: 'Tram 28 midday ride',
-        reason: 'Packed with tourists and pickpockets from 10am-5pm. Take it at 8am or walk the route instead.',
-        category: 'overcrowded',
+        reason: 'Walking Alfama\'s winding streets is more rewarding, or catch Tram 28 before 9am for a peaceful ride.',
+        category: 'insider-pick',
         savingsEstimate: { time: '30 min' },
         betterAlternative: 'Walk Alfama or take Tram 28 before 9am',
       },
     ],
   };
 
-  const matchedCity = Object.keys(skipLists).find(key => 
+  const matchedCity = Object.keys(localAlternatives).find(key => 
     city.includes(key) || key.includes(city)
   );
 
-  return matchedCity ? skipLists[matchedCity] : [];
+  return matchedCity ? localAlternatives[matchedCity] : [];
 }

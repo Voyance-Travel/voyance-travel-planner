@@ -32,7 +32,7 @@ const BETA_TESTIMONIALS = [
 // 7 layers of intelligence - what makes Voyance different
 const INTELLIGENCE_LAYERS = [
   { icon: MapPin, label: "What to do", description: "Curated activities matched to your style" },
-  { icon: AlertTriangle, label: "What to skip", description: "Tourist traps filtered out automatically" },
+  { icon: Gem, label: "Local picks", description: "Insider alternatives locals actually love" },
   { icon: Clock, label: "When to go", description: "Optimal timing to avoid crowds" },
   { icon: TrendingUp, label: "How to pace", description: "Energy flow matched to your rhythm" },
   { icon: Gem, label: "Hidden finds", description: "Local gems only your archetype would love" },
