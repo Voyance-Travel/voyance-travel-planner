@@ -2083,6 +2083,24 @@ export function EditorialItinerary({
               <Users className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-primary" />
               <span className="font-medium text-foreground">{travelers} {travelers === 1 ? 'Guest' : 'Guests'}</span>
             </div>
+            {/* Planning Progress */}
+            {(() => {
+              const lockedDays = days.filter(d => d.activities.length > 0 && d.activities.every(a => a.isLocked)).length;
+              const totalDays = days.length;
+              if (lockedDays === 0) return null;
+              const allDone = lockedDays === totalDays;
+              return (
+                <div className={cn(
+                  "flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md border text-xs sm:text-sm shrink-0 transition-colors",
+                  allDone 
+                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400" 
+                    : "bg-background border-border"
+                )}>
+                  <Check className={cn("h-3 sm:h-3.5 w-3 sm:w-3.5", allDone ? "text-emerald-500" : "text-primary")} />
+                  <span className="font-medium">{lockedDays}/{totalDays} Planned</span>
+                </div>
+              );
+            })()}
           </div>
           
           {/* Right: Cost + Actions */}
@@ -4802,14 +4820,27 @@ function DayCard({
   return (
     <div className="border border-border bg-card overflow-hidden rounded-xl shadow-sm hover:shadow-md transition-shadow">
       {/* Day Header - Editorial Style with Color Accent */}
-      <div className="relative p-4 sm:p-6 bg-gradient-to-r from-primary/5 via-transparent to-accent/5">
+      <div className={cn(
+        "relative p-4 sm:p-6 transition-colors duration-500",
+        allLocked 
+          ? "bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-accent/5" 
+          : "bg-gradient-to-r from-primary/5 via-transparent to-accent/5"
+      )}>
         {/* Decorative accent bar */}
-        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary via-accent to-primary/50" />
+        <div className={cn(
+          "absolute left-0 top-0 bottom-0 w-1 transition-colors duration-500",
+          allLocked
+            ? "bg-gradient-to-b from-emerald-500 via-emerald-400 to-emerald-500/50"
+            : "bg-gradient-to-b from-primary via-accent to-primary/50"
+        )} />
         
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-3 sm:gap-4">
             <div className="relative shrink-0">
-              <span className="text-3xl sm:text-5xl font-serif font-light text-primary/40">
+              <span className={cn(
+                "text-3xl sm:text-5xl font-serif font-light transition-colors duration-500",
+                allLocked ? "text-emerald-500/50" : "text-primary/40"
+              )}>
                 {String(day.dayNumber).padStart(2, '0')}
               </span>
               <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-6 sm:w-8 h-0.5 bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
@@ -4825,7 +4856,13 @@ function DayCard({
           </div>
 
           {/* Day Actions */}
-          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide pl-10 sm:pl-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide pl-10 sm:pl-0">
+              {allLocked && (
+                <Badge variant="outline" className="text-xs font-medium border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0 gap-1">
+                  <Check className="h-3 w-3" />
+                  Planned
+                </Badge>
+              )}
             {totalCost > 0 && (
               <Badge variant="outline" className="text-xs sm:text-sm font-semibold border-primary/30 bg-primary/5 text-primary shrink-0">
                 {formatCurrency(displayCost(totalCost), tripCurrency)}
