@@ -13,7 +13,7 @@ import type { Profile } from '@/services/supabase/profiles';
 // TYPES
 // ============================================================================
 
-export type CollaboratorPermission = 'viewer' | 'editor' | 'contributor';
+export type CollaboratorPermission = 'view' | 'edit' | 'admin';
 
 export interface TripCollaborator {
   id: string;
@@ -99,7 +99,7 @@ export async function getTripCollaborators(tripId: string): Promise<TripCollabor
 /**
  * Add a collaborator to a trip
  */
-export async function addTripCollaborator({ tripId, userId, permission = 'contributor', includePreferences = true }: AddCollaboratorRequest): Promise<TripCollaborator> {
+export async function addTripCollaborator({ tripId, userId, permission = 'edit', includePreferences = true }: AddCollaboratorRequest): Promise<TripCollaborator> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
