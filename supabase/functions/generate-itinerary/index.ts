@@ -835,72 +835,84 @@ async function getDestinationId(supabase: any, destination: string): Promise<str
 interface SkippedItem {
   name: string;
   reason: string;
-  keywords?: string[]; // Additional keywords to catch variations
+  preferredAlternative?: string;
+  keywords?: string[]; // Keywords to steer away from these spots
 }
 
-const DESTINATION_SKIP_LISTS: Record<string, SkippedItem[]> = {
+const DESTINATION_ALTERNATIVES: Record<string, SkippedItem[]> = {
   paris: [
     {
       name: 'Seine dinner cruises',
-      reason: 'Mediocre buffet food, crowded boats, expensive',
+      reason: 'A sunset walk along the Seine with wine is more authentically Parisian',
+      preferredAlternative: 'Seine-side picnic at sunset',
       keywords: ['seine cruise', 'river cruise', 'bateaux', 'boat cruise', 'dinner cruise', 'sunset cruise on seine']
     },
     {
       name: 'Champs-Élysées restaurants',
-      reason: 'Chain restaurants with frozen food at premium prices',
+      reason: 'Le Marais and Canal Saint-Martin have far better dining',
+      preferredAlternative: 'Le Marais or Canal Saint-Martin restaurants',
       keywords: ['champs-elysees restaurant', 'champs elysees dining']
     },
     {
       name: 'Montmartre portrait artists',
-      reason: 'Overpriced and often pushy',
+      reason: 'Explore Montmartre\'s galleries and cafés instead',
+      preferredAlternative: 'Montmartre gallery walk',
       keywords: ['montmartre portrait', 'place du tertre artists']
     }
   ],
   tokyo: [
     {
       name: 'Robot Restaurant',
-      reason: 'Overpriced gimmick with terrible food',
+      reason: 'Golden Gai bars offer authentic Tokyo nightlife',
+      preferredAlternative: 'Golden Gai bars in Shinjuku',
       keywords: ['robot restaurant', 'robot show']
     },
     {
       name: 'Tokyo Skytree',
-      reason: 'Expensive, crowded, view not better than free alternatives',
+      reason: 'Shibuya Sky offers equally stunning views with shorter waits',
+      preferredAlternative: 'Shibuya Sky or Tokyo Tower at sunset',
       keywords: ['skytree observation', 'tokyo skytree']
     }
   ],
   rome: [
     {
       name: 'Piazza Navona restaurants',
-      reason: 'Triple the price for half the quality',
+      reason: 'Testaccio and Jewish Ghetto have Rome\'s best trattorias',
+      preferredAlternative: 'Testaccio or Jewish Ghetto trattorias',
       keywords: ['piazza navona dining', 'navona restaurants']
     },
     {
       name: 'Via Veneto restaurants',
-      reason: 'Overpriced tourist spots coasting on old reputation',
+      reason: 'Trastevere has more authentic Roman dining',
+      preferredAlternative: 'Trastevere trattorias',
       keywords: ['via veneto restaurant']
     }
   ],
   london: [
     {
       name: 'Leicester Square restaurants',
-      reason: 'Tourist trap central with overpriced chains',
+      reason: 'Borough Market and Soho side streets are where Londoners eat',
+      preferredAlternative: 'Borough Market or Soho side streets',
       keywords: ['leicester square dining', 'leicester square restaurant']
     },
     {
       name: 'Hard Rock Cafe London',
-      reason: 'American chain, not a London experience',
+      reason: 'Explore London\'s incredible independent restaurant scene instead',
+      preferredAlternative: 'Independent restaurants in Shoreditch or Brixton',
       keywords: ['hard rock cafe']
     }
   ],
   barcelona: [
     {
       name: 'La Rambla restaurants',
-      reason: 'Terrible food, aggressive waiters, pickpocket central',
+      reason: 'El Born and Gràcia have Barcelona\'s best tapas bars',
+      preferredAlternative: 'El Born or Gràcia tapas bars',
       keywords: ['rambla restaurant', 'las ramblas dining']
     },
     {
       name: 'Barceloneta beachfront restaurants',
-      reason: 'Frozen seafood at beach prices, tourist paella',
+      reason: 'Local seafood restaurants in El Poblenou are far better',
+      preferredAlternative: 'El Poblenou seafood restaurants',
       keywords: ['barceloneta restaurant', 'beach paella']
     }
   ]
@@ -908,7 +920,7 @@ const DESTINATION_SKIP_LISTS: Record<string, SkippedItem[]> = {
 
 function buildSkipListPrompt(destination: string): string {
   const cityKey = destination.toLowerCase();
-  const matchedCity = Object.keys(DESTINATION_SKIP_LISTS).find(key => 
+  const matchedCity = Object.keys(DESTINATION_ALTERNATIVES).find(key => 
     cityKey.includes(key) || key.includes(cityKey)
   );
   
@@ -916,31 +928,32 @@ function buildSkipListPrompt(destination: string): string {
     return '';
   }
   
-  const skipList = DESTINATION_SKIP_LISTS[matchedCity];
-  if (!skipList || skipList.length === 0) {
+  const altList = DESTINATION_ALTERNATIVES[matchedCity];
+  if (!altList || altList.length === 0) {
     return '';
   }
   
-  const avoidItems = skipList.map(item => {
-    const keywords = item.keywords ? ` (also avoid: ${item.keywords.join(', ')})` : '';
-    return `  ❌ ${item.name}${keywords} — ${item.reason}`;
+  const preferItems = altList.map(item => {
+    const keywords = item.keywords ? ` (steer away from: ${item.keywords.join(', ')})` : '';
+    const alt = item.preferredAlternative ? ` → PREFER: ${item.preferredAlternative}` : '';
+    return `  ✦ Instead of ${item.name}${keywords} — ${item.reason}${alt}`;
   }).join('\n');
   
   return `
 ╔═══════════════════════════════════════════════════════════════════════╗
-║                    TOURIST TRAP SKIP LIST                             ║
+║                    LOCAL INSIDER ALTERNATIVES                         ║
 ╚═══════════════════════════════════════════════════════════════════════╝
 
-⚠️ CRITICAL: DO NOT RECOMMEND ANY OF THESE ACTIVITIES.
-We tell users to AVOID these in our "Why We Skipped These" section.
-It would be contradictory and trust-breaking to then recommend them.
+IMPORTANT: Prefer these local-favorite alternatives over commonly visited spots.
+We highlight these insider picks in our "Better Alternatives" section.
+Using the preferred alternatives reinforces trust in our recommendations.
 
-${avoidItems}
+${preferItems}
 
-ENFORCEMENT:
+GUIDANCE:
 - If a celebration/birthday suggests a "cruise" → suggest a WALKING tour along the Seine, rooftop bar, or picnic instead
 - If the user wants river views → recommend Pont Alexandre III at sunset, a riverside café, or Île Saint-Louis stroll
-- Never generate activities matching the skip list names or keywords above
+- Prefer the listed alternatives over the commonly visited spots above
 `;
 }
 

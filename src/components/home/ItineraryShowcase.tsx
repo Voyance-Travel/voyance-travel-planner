@@ -198,10 +198,10 @@ function ItineraryCard({ itinerary }: { itinerary: typeof SAMPLE_ITINERARIES[0] 
             <span className="text-xs text-muted-foreground">Timing</span>
           </div>
           <div className="w-px h-4 bg-border" />
-          <div className="flex items-center gap-1.5" title="Traps Avoided - Tourist traps we skipped">
-            <AlertTriangle className="w-3.5 h-3.5 text-destructive/70" />
+          <div className="flex items-center gap-1.5" title="Local Picks - Insider alternatives included">
+            <Gem className="w-3.5 h-3.5 text-primary/70" />
             <span className="text-xs font-medium text-foreground">{itinerary.intelligence.trapsAvoided}</span>
-            <span className="text-xs text-muted-foreground">Skipped</span>
+            <span className="text-xs text-muted-foreground">Local Picks</span>
           </div>
         </div>
         

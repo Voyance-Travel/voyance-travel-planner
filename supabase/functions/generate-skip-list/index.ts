@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 /**
- * Generate Skip List — AI-powered tourist trap avoidance for ANY destination.
- * Returns a list of places/experiences to avoid with reasons and alternatives.
+ * Generate Local Alternatives — AI-powered insider recommendations for ANY destination.
+ * Returns a list of better local-favorite alternatives to commonly visited tourist spots.
  */
 
 const corsHeaders = {
@@ -27,30 +27,30 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const prompt = `You are a seasoned travel expert. For the destination "${destination}", list 3-5 specific tourist traps, overpriced spots, overcrowded attractions, or overhyped experiences that savvy travelers should AVOID.
+    const prompt = `You are a seasoned travel expert who helps travelers discover authentic local experiences. For the destination "${destination}", list 3-5 commonly visited spots where savvy travelers can find BETTER local alternatives.
 
 For each item, provide:
-- name: The specific place or experience name
-- reason: 1-2 sentences explaining WHY to avoid it (be specific — mention prices, quality issues, crowd problems)
-- category: one of "tourist-trap", "overpriced", "overcrowded", "overhyped"
-- savingsEstimate: { money?: "$XX", time?: "XX min" } — what the traveler saves by skipping
-- betterAlternative: A specific, lesser-known alternative (optional but preferred)
+- name: The well-known spot or experience
+- localAlternative: A specific, lesser-known alternative that locals prefer
+- reason: 1-2 sentences explaining WHY the alternative is better (focus on the positive — better value, more authentic, less crowded, better quality)
+- category: one of "local-favorite", "better-value", "hidden-gem", "insider-pick"
+- savingsEstimate: { money?: "$XX", time?: "XX min" } — what the traveler gains by choosing the alternative
 
 RULES:
-- Be SPECIFIC — real venue/experience names, real prices
-- Focus on things that locals would NEVER do or places that are genuinely bad value
-- Do NOT include legitimate attractions that happen to be popular (e.g., the Louvre is crowded but still worth it)
-- Include at least one dining-related trap and one activity-related trap
+- Frame everything POSITIVELY — focus on why the alternative is great, not why the popular spot is bad
+- Be SPECIFIC — real venue/experience names, real benefits
+- Focus on genuine local favorites that deliver better experiences
+- Include at least one dining alternative and one activity alternative
 
 Return valid JSON only:
 {
-  "skippedItems": [
+  "localAlternatives": [
     {
-      "name": "Example Restaurant Row",
-      "reason": "Triple the price for half the quality...",
-      "category": "tourist-trap",
-      "savingsEstimate": { "money": "$40", "time": "30 min" },
-      "betterAlternative": "A specific alternative"
+      "name": "Popular Spot Name",
+      "localAlternative": "The better local option",
+      "reason": "Why locals prefer this — better quality, authentic atmosphere...",
+      "category": "local-favorite",
+      "savingsEstimate": { "money": "$40", "time": "30 min" }
     }
   ]
 }`;
@@ -84,19 +84,18 @@ Return valid JSON only:
       content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     }
 
-    // Fix common AI JSON issues: smart quotes, trailing commas, unescaped newlines in strings
+    // Fix common AI JSON issues
     content = content
       .replace(/[\u201C\u201D]/g, '"')
       .replace(/[\u2018\u2019]/g, "'")
       .replace(/,\s*([\]}])/g, '$1')
       .replace(/\n/g, ' ');
 
-    let parsed: { skippedItems?: unknown[] };
+    let parsed: { localAlternatives?: unknown[]; skippedItems?: unknown[] };
     try {
       parsed = JSON.parse(content);
     } catch (parseErr) {
       console.error("[generate-skip-list] Raw content:", content.substring(0, 500));
-      // Try extracting JSON object from content
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         parsed = JSON.parse(jsonMatch[0]);
@@ -105,8 +104,11 @@ Return valid JSON only:
       }
     }
 
+    // Support both old and new response shapes
+    const items = parsed.localAlternatives || parsed.skippedItems || [];
+
     return new Response(
-      JSON.stringify({ success: true, skippedItems: parsed.skippedItems || [] }),
+      JSON.stringify({ success: true, skippedItems: items }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {

@@ -1,25 +1,26 @@
 /**
- * Why We Skipped Section
+ * Better Alternatives Section (formerly "Why We Skipped")
  * 
- * Displays tourist traps and overrated spots that were intentionally
- * excluded from the itinerary, with reasoning.
+ * Displays local-favorite alternatives to commonly visited tourist spots,
+ * framed positively as insider recommendations.
  */
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, MapPinOff, AlertTriangle, DollarSign, Clock, Users } from 'lucide-react';
+import { ChevronDown, Compass, Star, DollarSign, Clock, Gem } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
 export interface SkippedItem {
   name: string;
   reason: string;
-  category?: 'overpriced' | 'overcrowded' | 'overhyped' | 'tourist-trap' | 'better-alternative';
+  category?: 'overpriced' | 'overcrowded' | 'overhyped' | 'tourist-trap' | 'better-alternative' | 'local-favorite' | 'better-value' | 'hidden-gem' | 'insider-pick';
   savingsEstimate?: {
     money?: string;
     time?: string;
   };
   betterAlternative?: string;
+  localAlternative?: string;
 }
 
 interface WhyWeSkippedSectionProps {
@@ -38,23 +39,33 @@ export function WhyWeSkippedSection({
   if (skippedItems.length === 0) return null;
 
   const categoryIcons: Record<string, React.ReactNode> = {
+    'local-favorite': <Star className="h-3.5 w-3.5" />,
+    'better-value': <DollarSign className="h-3.5 w-3.5" />,
+    'hidden-gem': <Gem className="h-3.5 w-3.5" />,
+    'insider-pick': <Compass className="h-3.5 w-3.5" />,
+    // Legacy categories mapped to positive icons
     'overpriced': <DollarSign className="h-3.5 w-3.5" />,
-    'overcrowded': <Users className="h-3.5 w-3.5" />,
-    'overhyped': <AlertTriangle className="h-3.5 w-3.5" />,
-    'tourist-trap': <MapPinOff className="h-3.5 w-3.5" />,
-    'better-alternative': <MapPinOff className="h-3.5 w-3.5" />,
+    'overcrowded': <Star className="h-3.5 w-3.5" />,
+    'overhyped': <Compass className="h-3.5 w-3.5" />,
+    'tourist-trap': <Star className="h-3.5 w-3.5" />,
+    'better-alternative': <Gem className="h-3.5 w-3.5" />,
   };
 
   const categoryLabels: Record<string, string> = {
-    'overpriced': 'Overpriced',
-    'overcrowded': 'Overcrowded',
-    'overhyped': 'Overhyped',
-    'tourist-trap': 'Tourist Trap',
-    'better-alternative': 'Better Option Exists',
+    'local-favorite': 'Local Favorite',
+    'better-value': 'Better Value',
+    'hidden-gem': 'Hidden Gem',
+    'insider-pick': 'Insider Pick',
+    // Legacy categories mapped to positive labels
+    'overpriced': 'Better Value',
+    'overcrowded': 'Local Alternative',
+    'overhyped': 'Insider Pick',
+    'tourist-trap': 'Local Favorite',
+    'better-alternative': 'Hidden Gem',
   };
 
   return (
-    <div className={cn('rounded-xl border border-rose-200/50 bg-rose-50/30 dark:bg-rose-950/10 dark:border-rose-900/30', className)}>
+    <div className={cn('rounded-xl border border-primary/20 bg-primary/5 dark:bg-primary/5 dark:border-primary/20', className)}>
       {/* Header - Always visible */}
       <Button
         variant="ghost"
@@ -62,15 +73,15 @@ export function WhyWeSkippedSection({
         className="w-full flex items-center justify-between p-4 hover:bg-transparent"
       >
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-rose-500/10 flex items-center justify-center">
-            <MapPinOff className="h-4 w-4 text-rose-500" />
+          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+            <Compass className="h-4 w-4 text-primary" />
           </div>
           <div className="text-left">
             <h4 className="text-sm font-medium text-foreground">
-              Why We Skipped These
+              Better Alternatives
             </h4>
             <p className="text-xs text-muted-foreground">
-              {skippedItems.length} tourist trap{skippedItems.length !== 1 ? 's' : ''} avoided in {destination}
+              {skippedItems.length} local pick{skippedItems.length !== 1 ? 's' : ''} for {destination}
             </p>
           </div>
         </div>
@@ -93,61 +104,70 @@ export function WhyWeSkippedSection({
             className="overflow-hidden"
           >
             <div className="px-4 pb-4 space-y-3">
-              {skippedItems.map((item, index) => (
-                <motion.div
-                  key={item.name}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="p-3 rounded-lg bg-background/80 border border-border"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-full bg-rose-500/10 flex items-center justify-center shrink-0 mt-0.5">
-                      {categoryIcons[item.category || 'tourist-trap']}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h5 className="text-sm font-medium text-foreground line-through opacity-70">
-                          {item.name}
-                        </h5>
-                        {item.category && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 font-medium">
-                            {categoryLabels[item.category]}
-                          </span>
-                        )}
+              {skippedItems.map((item, index) => {
+                const alternative = item.localAlternative || item.betterAlternative;
+                return (
+                  <motion.div
+                    key={item.name}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="p-3 rounded-lg bg-background/80 border border-border"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                        {categoryIcons[item.category || 'local-favorite']}
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {item.reason}
-                      </p>
-                      
-                      {/* Savings or Alternative */}
-                      <div className="flex flex-wrap items-center gap-2 mt-2">
-                        {item.savingsEstimate?.money && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center gap-1">
-                            <DollarSign className="h-2.5 w-2.5" />
-                            Save {item.savingsEstimate.money}
-                          </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          {alternative ? (
+                            <h5 className="text-sm font-medium text-foreground">
+                              {alternative}
+                            </h5>
+                          ) : (
+                            <h5 className="text-sm font-medium text-foreground">
+                              {item.name}
+                            </h5>
+                          )}
+                          {item.category && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                              {categoryLabels[item.category]}
+                            </span>
+                          )}
+                        </div>
+                        {alternative && (
+                          <p className="text-xs text-muted-foreground mb-1">
+                            Instead of {item.name}
+                          </p>
                         )}
-                        {item.savingsEstimate?.time && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 flex items-center gap-1">
-                            <Clock className="h-2.5 w-2.5" />
-                            Save {item.savingsEstimate.time}
-                          </span>
-                        )}
-                        {item.betterAlternative && (
-                          <span className="text-[10px] text-primary">
-                            Instead: {item.betterAlternative}
-                          </span>
-                        )}
+                        <p className="text-xs text-muted-foreground">
+                          {item.reason}
+                        </p>
+                        
+                        {/* Value Gained */}
+                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                          {item.savingsEstimate?.money && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center gap-1">
+                              <DollarSign className="h-2.5 w-2.5" />
+                              Save {item.savingsEstimate.money}
+                            </span>
+                          )}
+                          {item.savingsEstimate?.time && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 flex items-center gap-1">
+                              <Clock className="h-2.5 w-2.5" />
+                              Save {item.savingsEstimate.time}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
 
               {/* Trust Statement */}
               <p className="text-xs text-muted-foreground text-center pt-2 italic">
-                When we steer you away from tourist traps, you know our recommendations are genuine.
+                These picks come from local insights — the spots residents actually love.
               </p>
             </div>
           </motion.div>

@@ -4,7 +4,7 @@
  * Displays quantified value at the top of each itinerary with expandable details:
  * - X Voyance Finds (hidden gems)
  * - Y Timing Hacks
- * - Z Tourist Traps Avoided
+ * - Z Local Picks (insider alternatives)
  * - W Insider Tips
  * 
  * Each badge is expandable to show specifics. Includes savings calculation.
@@ -106,11 +106,11 @@ export function ItineraryValueHeader({
         )}
         {stats.touristTrapsAvoided > 0 && (
           <ExpandableBadge
-            icon={<MapPinOff className="h-4 w-4" />}
+            icon={<Sparkles className="h-4 w-4" />}
             value={stats.touristTrapsAvoided}
-            label="Traps Avoided"
-            subtitle="Overpriced spots we skipped"
-            color="rose"
+            label="Local Picks"
+            subtitle="Insider alternatives included"
+            color="primary"
             details={stats.trapsAvoidedDetails}
           />
         )}
@@ -249,8 +249,8 @@ function DetailItem({ detail, color }: { detail: IntelligenceDetail; color: stri
   return (
     <div className="flex items-start gap-2 text-xs">
       <div className="mt-0.5">
-        {color === 'rose' ? (
-          <AlertTriangle className="h-3 w-3 text-rose-500" />
+        {color === 'rose' || color === 'primary' ? (
+          <MapPin className="h-3 w-3 text-primary" />
         ) : color === 'gold' ? (
           <Lightbulb className="h-3 w-3 text-gold" />
         ) : color === 'accent' ? (

@@ -137,8 +137,8 @@ export function LockedDayCard({
               </div>
             )}
             {intelligenceBadges.trapsAvoided > 0 && (
-              <div className="flex items-center gap-1 text-xs text-rose-500">
-                <MapPinOff className="h-3 w-3" />
+              <div className="flex items-center gap-1 text-xs text-primary">
+                <Sparkles className="h-3 w-3" />
                 <span>{intelligenceBadges.trapsAvoided}</span>
               </div>
             )}
