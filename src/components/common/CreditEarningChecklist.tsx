@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 const BONUS_ROUTES: Partial<Record<BonusType, string>> = {
   quiz_completion: '/quiz',
   preferences_completion: '/profile?tab=preferences',
-  first_share: '/trips',
+  first_share: '/trip/dashboard',
   second_itinerary: '/plan',
 };
 

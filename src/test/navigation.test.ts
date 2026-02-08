@@ -512,4 +512,46 @@ describe('Navigation Link Safety', () => {
     
     expect(invalidTargets).toEqual([]);
   });
+
+  it('share and referral URLs should resolve to valid routes', () => {
+    // These are URLs generated for sharing trips/referrals.
+    // They must resolve to valid app routes to avoid 404s.
+    const shareTargets = [
+      // Trip share via shareToken (correct pattern)
+      '/share/some-share-token',
+      // Trip page via tripId (fallback share URL)
+      '/trip/some-trip-uuid',
+    ];
+    
+    const invalidShareUrls = [
+      // These are KNOWN INVALID patterns that must NOT be generated.
+      // If any code produces these, it's a bug.
+      '/share/trip/some-id',  // Wrong: /share/trip/ is not a route
+      '/trips',               // Wrong: /trips is not a route (use /trip/dashboard)
+    ];
+    
+    // Valid share targets should resolve
+    shareTargets.forEach(target => {
+      expect(isValidRoute(target)).toBe(true);
+    });
+    
+    // Invalid patterns should NOT resolve
+    invalidShareUrls.forEach(target => {
+      expect(isValidRoute(target)).toBe(false);
+    });
+  });
+
+  it('credit earning checklist routes should all be valid', () => {
+    // Routes used by CreditEarningChecklist and CreditEarningProgressBar
+    const checklistRoutes = [
+      '/quiz',
+      '/profile?tab=preferences',
+      '/trip/dashboard',
+      '/start',
+    ];
+    
+    checklistRoutes.forEach(route => {
+      expect(isValidRoute(route)).toBe(true);
+    });
+  });
 });

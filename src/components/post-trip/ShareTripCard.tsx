@@ -27,7 +27,7 @@ export function ShareTripCard({ isOpen, onClose, trip, photos, highlights }: Sha
   const [friendEmail, setFriendEmail] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const shareUrl = `${window.location.origin}/share/trip/${trip.id}`;
+  const shareUrl = `${window.location.origin}/trip/${trip.id}`;
 
   const copyLink = () => {
     navigator.clipboard.writeText(shareUrl);
