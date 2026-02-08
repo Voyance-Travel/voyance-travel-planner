@@ -351,7 +351,7 @@ export default function Archetypes() {
               How We Match You
             </h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              Your archetype isn't random. It's the result of a careful analysis of how you actually travel.
+              Your type isn't random. It's the result of a careful analysis of how you actually travel.
             </p>
           </motion.div>
 
@@ -365,17 +365,17 @@ export default function Archetypes() {
               {
                 icon: Dna,
                 title: 'Quiz Analysis',
-                description: 'Your answers build a trait profile that captures your authentic travel personality.',
+                description: 'Your answers build a trait profile that captures your authentic travel style.',
               },
               {
                 icon: Sliders,
-                title: 'Archetype Matching',
-                description: 'We score your profile against all 27 archetypes to find your best fit.',
+                title: 'Type Matching',
+                description: 'We score your profile against all 27 types to find your best fit.',
               },
               {
                 icon: MapPin,
                 title: 'Personalized Trips',
-                description: 'Your archetype shapes every recommendation: destinations, pace, activities, dining.',
+                description: 'Your type shapes every recommendation: destinations, pace, activities, dining.',
               },
             ].map((item, index) => (
               <motion.div
@@ -407,10 +407,10 @@ export default function Archetypes() {
                 Beyond the 27
               </Badge>
               <h3 className="text-xl font-serif font-bold text-foreground mb-2">
-                Your Archetype Is Just the Beginning
+                Your Type Is Just the Beginning
               </h3>
               <p className="text-muted-foreground max-w-xl mx-auto">
-                Once we place you in one of 27 archetypes, we don't stop there. Your preferences, 
+                Once we place you in one of 27 types, we don't stop there. Your preferences, 
                 adjustments, and feedback shape every itinerary to fit <em>you</em> specifically.
               </p>
             </div>
