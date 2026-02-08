@@ -62,6 +62,7 @@ import { BudgetTab } from '@/components/planner/budget/BudgetTab';
 import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useTripBudget } from '@/hooks/useTripBudget';
 import { useEntitlements } from '@/hooks/useEntitlements';
+import { useAuth } from '@/contexts/AuthContext';
 import { UpgradePrompt } from '@/components/checkout/UpgradePrompt';
 import { AddFlightInline, AddHotelInline } from './AddBookingInline';
 import { TripCollaboratorsPanel } from './TripCollaboratorsPanel';
@@ -806,6 +807,7 @@ export function EditorialItinerary({
     const todayIndex = initialDays.findIndex(d => d.date && isToday(parseISO(d.date)));
     return todayIndex >= 0 ? todayIndex : 0;
   });
+  const { user } = useAuth();
   const dayButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -1003,10 +1005,10 @@ export function EditorialItinerary({
   // Build collaborator color map for activity attribution (only for group trips)
   const collaboratorColorMap = useMemo(() => {
     if (collaborators.length === 0) return undefined;
-    // Owner is whoever is NOT in the collaborators list
-    // We assign "Owner" as index 0, collaborators get 1+
-    return buildCollaboratorColorMap('__owner__', 'Owner', collaborators);
-  }, [collaborators]);
+    const ownerId = user?.id || '__owner__';
+    const ownerName = user?.email || 'You';
+    return buildCollaboratorColorMap(ownerId, ownerName, collaborators);
+  }, [collaborators, user]);
 
   // Calculate intelligence value stats for the itinerary
   const skippedItems = useMemo(() => getDestinationSkippedItems(destination), [destination]);
