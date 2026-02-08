@@ -67,7 +67,7 @@ const tiers = [
 ];
 
 const freePreviewFeatures = [
-  { icon: CalendarClock, text: '3-4 curated activities', detail: 'Real venues we picked for you' },
+  { icon: CalendarClock, text: '5-7 curated activities', detail: 'Real venues we picked for you' },
   { icon: Clock, text: 'Timing & flow', detail: 'When to arrive, how the day moves' },
   { icon: Star, text: 'Ratings & reviews', detail: 'What others think' },
   { icon: Ticket, text: 'Booking alerts', detail: 'Which spots need reservations' },
@@ -120,7 +120,7 @@ const everythingIncluded = [
   {
     title: 'Your Itinerary',
     items: [
-      { icon: CalendarClock, text: '4-5 activities per day' },
+      { icon: CalendarClock, text: '5-7 activities per day' },
       { icon: UtensilsCrossed, text: 'Restaurant picks with dish recommendations' },
       { icon: DollarSign, text: 'Budget tiers: Safe ($) / Stretch ($$) / Splurge ($$$)' },
       { icon: ShieldAlert, text: 'Trap warnings \u2014 overhyped spots flagged' },
@@ -327,9 +327,9 @@ export default function Pricing() {
 
           <div className="grid sm:grid-cols-3 gap-6">
             {[
-              { step: '01', title: 'Tell us about your trip', desc: 'Destination, dates, who\'s going, what you love, what you skip. 2 minutes.' },
-              { step: '02', title: 'Preview your first 2 days — free', desc: 'See 3-4 curated activities per day with real venues, timing, and ratings. Get a feel for how we plan before you commit.' },
-              { step: '03', title: 'Choose your path', desc: 'Unlock: Use credits to reveal the rest of your itinerary — every day, every detail, ready to book. Build: Use our framework to create your own itinerary manually.' },
+              { title: 'Tell us about your trip', desc: 'Destination, dates, who\'s going, what you love, what you skip. 2 minutes.' },
+              { title: 'Preview your first 2 days — free', desc: 'See 5-7 curated activities per day with real venues, timing, and ratings. Get a feel for how we plan before you commit.' },
+              { title: 'Choose your path', desc: 'Unlock: Use credits to reveal the rest of your itinerary — every day, every detail, ready to book. Build: Use our framework to create your own itinerary manually.' },
             ].map((item, i) => (
               <motion.div
                 key={i}
@@ -339,9 +339,6 @@ export default function Pricing() {
                 transition={{ delay: i * 0.08 }}
                 className="text-center"
               >
-                <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-primary/10 text-primary text-sm font-bold mb-4">
-                  {item.step}
-                </span>
                 <h3 className="font-semibold text-foreground mb-2">{item.title}</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
               </motion.div>
