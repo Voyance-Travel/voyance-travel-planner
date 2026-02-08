@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { MapPin, Star, TrendingUp, Compass, Sparkles, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import MainLayout from '@/components/layout/MainLayout';
+import TrendingDestinationsEnhanced from '@/components/explore/sections/TrendingDestinationsEnhanced';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -307,7 +308,9 @@ export default function Destinations() {
           </div>
         </div>
       </section>
-      
+
+      {/* Trending Destinations */}
+      <TrendingDestinationsEnhanced />
       
     </MainLayout>
   );
