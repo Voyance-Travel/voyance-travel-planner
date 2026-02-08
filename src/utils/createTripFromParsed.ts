@@ -171,6 +171,7 @@ export async function createTripFromParsed(
         trip_type: parsed.tripType || 'leisure',
         budget_tier: budgetTier,
         status: 'draft',
+        creation_source: 'manual_paste',
         itinerary_data: itineraryData as any,
         metadata: {
           source: 'manual_paste',

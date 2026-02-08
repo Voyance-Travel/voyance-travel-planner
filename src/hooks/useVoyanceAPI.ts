@@ -43,6 +43,7 @@ export interface CreateTripRequest {
   travelers?: number;
   originCity?: string;
   budgetTier?: string;
+  creationSource?: 'single_city' | 'multi_city' | 'chat' | 'manual_paste';
 }
 
 export interface UpdateTripRequest {
@@ -194,6 +195,7 @@ export function useCreateTrip() {
           origin_city: input.originCity,
           budget_tier: input.budgetTier,
           owner_plan_tier: ownerPlanTier,
+          creation_source: input.creationSource || 'single_city',
           status: 'draft',
         })
         .select()

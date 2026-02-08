@@ -82,6 +82,7 @@ export async function createPlannerTrip(input: TripCreateInput): Promise<CreateT
     travelers: input.travelers,
     budget_tier: input.budgetTier || 'moderate',
     owner_plan_tier: ownerPlanTier,
+    creation_source: (input as any).creationSource || 'single_city',
     status: 'draft' as const,
     metadata: JSON.parse(JSON.stringify({
       sessionId,
