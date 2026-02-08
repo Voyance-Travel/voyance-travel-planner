@@ -23,6 +23,8 @@ import { useAnalyticsTracker } from '@/hooks/useAnalyticsTracker';
 import { AuthProvider } from "@/contexts/AuthContext";
 import { TripPlannerProvider } from "@/contexts/TripPlannerContext";
 import { QuizProvider } from "@/contexts/QuizContext";
+import { OutOfCreditsProvider } from "@/contexts/OutOfCreditsContext";
+import { OutOfCreditsModal } from "@/components/checkout/OutOfCreditsModal";
 
 // Layouts
 import ProtectedRoute from "@/components/layout/ProtectedRoute";
@@ -277,25 +279,28 @@ const App = () => (
     <AuthProvider>
       <TripPlannerProvider>
         <QuizProvider>
-          <TooltipProvider>
-            <ImagePreloaderInit />
-            <GlobalErrorHandler />
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <OfflineBanner />
-              <CookieConsent />
-              <ScrollToTop />
-              <JourneyTracker />
-              <MonthlyCreditsChecker />
-              <WelcomeBonusManager />
-              <SiteOnboardingTour />
-              <OAuthReturnHandler />
-              <ErrorBoundary>
-                <AnimatedRoutes />
-              </ErrorBoundary>
-            </BrowserRouter>
-          </TooltipProvider>
+          <OutOfCreditsProvider>
+            <TooltipProvider>
+              <ImagePreloaderInit />
+              <GlobalErrorHandler />
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <OfflineBanner />
+                <CookieConsent />
+                <ScrollToTop />
+                <JourneyTracker />
+                <MonthlyCreditsChecker />
+                <WelcomeBonusManager />
+                <SiteOnboardingTour />
+                <OAuthReturnHandler />
+                <OutOfCreditsModal />
+                <ErrorBoundary>
+                  <AnimatedRoutes />
+                </ErrorBoundary>
+              </BrowserRouter>
+            </TooltipProvider>
+          </OutOfCreditsProvider>
         </QuizProvider>
       </TripPlannerProvider>
     </AuthProvider>
