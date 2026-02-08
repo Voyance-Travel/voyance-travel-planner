@@ -181,12 +181,6 @@ export default function ArchetypeDetailSheet({ archetype, open, onOpenChange }: 
               </>
             )}
 
-            {/* Primary/Secondary badge */}
-            <div className="mt-8 pt-4 border-t border-border text-center">
-              <Badge variant={archetype.isPrimary ? 'default' : 'secondary'} className="text-xs">
-                {archetype.isPrimary ? `Primary Archetype #${archetype.number}` : `Secondary Archetype #${archetype.number}`}
-              </Badge>
-            </div>
           </div>
         </ScrollArea>
       </SheetContent>
