@@ -11,6 +11,7 @@ import { ItineraryGenerator } from '@/components/itinerary/ItineraryGenerator';
 import { EditorialItinerary } from '@/components/itinerary/EditorialItinerary';
 import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
 import { ItineraryAssistant } from '@/components/itinerary/ItineraryAssistant';
+import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { TripDebriefModal } from '@/components/trip/TripDebriefModal';
 import { TripConfirmationBanner } from '@/components/trip/TripConfirmationBanner';
 import type { SwapSuggestion } from '@/components/trip/SwapReviewDialog';
@@ -79,6 +80,8 @@ export default function TripDetail() {
   const [showDebriefModal, setShowDebriefModal] = useState(false);
   const [hasCollaborators, setHasCollaborators] = useState(false);
   const scheduleNotifications = useScheduleNotifications();
+  const { isManualBuilder } = useManualBuilderStore();
+  const isManualMode = tripId ? isManualBuilder(tripId) : false;
   const { user } = useAuth();
   const hotelEnrichmentAttempted = useRef(false);
   const debriefPromptAttempted = useRef(false);
@@ -1104,7 +1107,7 @@ export default function TripDetail() {
       </section>
 
       {/* Itinerary Assistant - Floating Chatbot */}
-      {hasItinerary && (
+      {hasItinerary && !(isManualMode && !trip.smart_finish_purchased) && (
         <ItineraryAssistant
           tripId={trip.id}
           destination={trip.destination}
