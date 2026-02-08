@@ -5699,6 +5699,20 @@ function ActivityRow({
                   tripId={tripId}
                   activityId={activity.id}
                   activityTitle={sanitizeActivityName(activity.title || '')}
+                  destination={destination}
+                  activityForDrawer={{
+                    id: activity.id,
+                    title: activity.title || 'Activity',
+                    type: (activity.type || activity.category || 'activity') as any,
+                    description: activity.description || '',
+                    time: activity.startTime || '',
+                    duration: activity.duration || '60 min',
+                    cost: activity.cost?.amount || 0,
+                    location: { name: activity.location?.name || '', address: activity.location?.address || '' },
+                    isLocked: false,
+                    bookingRequired: false,
+                    tags: activity.tags || [],
+                  }}
                 />
               </div>
             )}
