@@ -854,15 +854,23 @@ export function EditorialItinerary({
 
   // Sync days from parent when initialDays prop changes (e.g., from ItineraryAssistant apply)
   // Only sync if there are no unsaved local changes to avoid overwriting user edits
-  const initialDaysRef = useRef(initialDays);
+  // Use a content-based fingerprint instead of reference equality to avoid
+  // false positives when the parent re-creates the array on every render.
+  const initialDaysFingerprint = useMemo(() => {
+    return JSON.stringify(initialDays.map(d => ({
+      n: d.dayNumber,
+      a: d.activities.map(a => a.id),
+    })));
+  }, [initialDays]);
+  const prevFingerprintRef = useRef(initialDaysFingerprint);
   useEffect(() => {
-    if (initialDays !== initialDaysRef.current) {
-      initialDaysRef.current = initialDays;
+    if (initialDaysFingerprint !== prevFingerprintRef.current) {
+      prevFingerprintRef.current = initialDaysFingerprint;
       if (!hasChanges) {
         setDays(initialDays);
       }
     }
-  }, [initialDays, hasChanges]);
+  }, [initialDaysFingerprint, hasChanges]);
   const [addActivityModal, setAddActivityModal] = useState<{ dayIndex: number } | null>(null);
   const [importModal, setImportModal] = useState<{ dayIndex: number } | null>(null);
   const [editActivityModal, setEditActivityModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
@@ -1522,11 +1530,18 @@ export function EditorialItinerary({
     
     const autoSaveTimer = setTimeout(async () => {
       try {
-        const itineraryData = {
+        const itineraryData: Record<string, unknown> = {
           days: JSON.parse(JSON.stringify(days)),
           status: 'ready',
           savedAt: new Date().toISOString(),
         };
+        // Preserve parsed metadata (accommodationNotes, practicalTips, source)
+        if (parsedMetadata) {
+          itineraryData.metadata = {
+            ...parsedMetadata,
+            lastUpdated: new Date().toISOString(),
+          };
+        }
 
         // Try database first
         const { data: existingTrip, error: checkError } = await supabase
@@ -1540,7 +1555,7 @@ export function EditorialItinerary({
           const { error } = await supabase
             .from('trips')
             .update({
-              itinerary_data: itineraryData,
+              itinerary_data: itineraryData as any,
               itinerary_status: 'ready',
               updated_at: new Date().toISOString()
             })
@@ -1587,11 +1602,17 @@ export function EditorialItinerary({
   const handleSave = useCallback(async () => {
     setIsSaving(true);
     try {
-      const itineraryData = {
+      const itineraryData: Record<string, unknown> = {
         days: JSON.parse(JSON.stringify(days)),
         status: 'ready',
         savedAt: new Date().toISOString(),
       };
+      if (parsedMetadata) {
+        itineraryData.metadata = {
+          ...parsedMetadata,
+          lastUpdated: new Date().toISOString(),
+        };
+      }
 
       // Check if trip exists in database
       const { data: existingTrip } = await supabase
@@ -1607,7 +1628,7 @@ export function EditorialItinerary({
         const { error } = await supabase
           .from('trips')
           .update({
-            itinerary_data: itineraryData,
+            itinerary_data: itineraryData as any,
             itinerary_status: 'ready',
             updated_at: new Date().toISOString()
           })
