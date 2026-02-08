@@ -79,7 +79,7 @@ export async function getTripCollaborators(tripId: string): Promise<TripCollabor
       accepted_at,
       created_at,
       include_preferences,
-      profile:profiles!trip_collaborators_user_id_fkey(id, handle, display_name, avatar_url)
+      profile:profiles!trip_collaborators_user_id_profiles_fkey(id, handle, display_name, avatar_url)
     `)
     .eq('trip_id', tripId);
 
@@ -134,7 +134,7 @@ export async function addTripCollaborator({ tripId, userId, permission = 'contri
       accepted_at,
       created_at,
       include_preferences,
-      profile:profiles!trip_collaborators_user_id_fkey(id, handle, display_name, avatar_url)
+      profile:profiles!trip_collaborators_user_id_profiles_fkey(id, handle, display_name, avatar_url)
     `)
     .single();
 

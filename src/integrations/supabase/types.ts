@@ -4770,6 +4770,34 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "trip_collaborators_invited_by_profiles_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_collaborators_invited_by_profiles_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles_friends"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_collaborators_invited_by_profiles_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_collaborators_invited_by_profiles_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "trip_collaborators_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
@@ -4781,6 +4809,34 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_collaborators_user_id_profiles_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_collaborators_user_id_profiles_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_friends"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_collaborators_user_id_profiles_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_collaborators_user_id_profiles_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
             referencedColumns: ["id"]
           },
         ]
