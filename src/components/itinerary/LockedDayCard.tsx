@@ -1,20 +1,20 @@
 /**
  * Locked Day Card
  * 
- * Blurred preview of locked days 2-5 with:
- * - Day title visible
- * - Activity count
- * - One teaser line
- * - Intelligence badge count
- * - Unlock CTA
+ * Shown for days beyond the free 2-day preview.
+ * Two variants:
+ * 1. First-trip users (0 credits) → explain free preview, offer manual build or get credits
+ * 2. Returning users without enough credits → buy credits CTA, then auto-generate
  */
 
 import { motion } from 'framer-motion';
- import { Lock, Sparkles, Clock, MapPinOff, Target, Pencil } from 'lucide-react';
+import { Lock, Sparkles, Clock, MapPinOff, Target, Pencil, CreditCard, Gift } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
- import { useManualBuilderStore } from '@/stores/manual-builder-store';
- import { toast } from 'sonner';
+import { useManualBuilderStore } from '@/stores/manual-builder-store';
+import { useNavigate } from 'react-router-dom';
+import { ROUTES } from '@/config/routes';
+import { toast } from 'sonner';
 
 interface LockedDayCardProps {
   dayNumber: number;
@@ -30,8 +30,14 @@ interface LockedDayCardProps {
   onUnlock: () => void;
   creditsNeeded: number;
   className?: string;
-   tripId?: string;
-   onManualBuild?: () => void;
+  tripId?: string;
+  onManualBuild?: () => void;
+  /** Whether this is the user's first trip (got 2 free days) */
+  isFirstTrip?: boolean;
+  /** Whether user can afford to unlock this day */
+  canAfford?: boolean;
+  /** Current credit balance */
+  currentBalance?: number;
 }
 
 export function LockedDayCard({
@@ -43,24 +49,32 @@ export function LockedDayCard({
   onUnlock,
   creditsNeeded,
   className,
-   tripId,
-   onManualBuild,
+  tripId,
+  onManualBuild,
+  isFirstTrip = false,
+  canAfford = false,
+  currentBalance = 0,
 }: LockedDayCardProps) {
-   const { enableManualBuilder } = useManualBuilderStore();
-   
+  const { enableManualBuilder } = useManualBuilderStore();
+  const navigate = useNavigate();
+    
   const totalBadges = 
     intelligenceBadges.finds + 
     intelligenceBadges.timingHacks + 
     intelligenceBadges.trapsAvoided + 
     intelligenceBadges.tips;
  
-   const handleManualBuild = () => {
-     if (tripId) {
-       enableManualBuilder(tripId);
-       toast.success('Manual builder mode enabled! Edit freely.');
-     }
-     onManualBuild?.();
-   };
+  const handleManualBuild = () => {
+    if (tripId) {
+      enableManualBuilder(tripId);
+      toast.success('Manual builder mode enabled! Edit freely.');
+    }
+    onManualBuild?.();
+  };
+
+  const handleGetCredits = () => {
+    navigate(ROUTES.PRICING);
+  };
 
   return (
     <motion.div
@@ -71,7 +85,7 @@ export function LockedDayCard({
         className
       )}
     >
-      {/* Blurred background - represents the content */}
+      {/* Blurred background */}
       <div className="absolute inset-0 bg-gradient-to-b from-muted/30 to-muted/50 backdrop-blur-sm" />
       
       {/* Content */}
@@ -102,7 +116,7 @@ export function LockedDayCard({
           {teaserLine}
         </p>
 
-        {/* Intelligence badges - mini version */}
+        {/* Intelligence badges */}
         {totalBadges > 0 && (
           <div className="flex items-center gap-3 mb-6">
             {intelligenceBadges.finds > 0 && (
@@ -149,27 +163,92 @@ export function LockedDayCard({
           ))}
         </div>
 
-        {/* Unlock CTA */}
-        <Button
-          onClick={onUnlock}
-          className="w-full gap-2 rounded-xl"
-          size="lg"
-        >
-          <Lock className="h-4 w-4" />
-          Unlock Day {dayNumber}
-          <span className="text-xs opacity-80">({creditsNeeded} credits)</span>
-        </Button>
-         
-         {/* Manual builder escape hatch */}
-         {tripId && (
-           <button
-             onClick={handleManualBuild}
-             className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mt-3 transition-colors w-full"
-           >
-             <Pencil className="h-3 w-3" />
-             I'll build it myself
-           </button>
-         )}
+        {/* === CTA SECTION — depends on user state === */}
+        {isFirstTrip ? (
+          /* FIRST TRIP: Explain free preview + offer paths */
+          <div className="space-y-3">
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-primary/5 border border-primary/10">
+              <Gift className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+              <p className="text-xs text-muted-foreground">
+                Your first 2 days are <span className="font-medium text-foreground">free</span>! 
+                Unlock remaining days with credits to get full venue details, photos & tips.
+              </p>
+            </div>
+
+            <Button
+              onClick={handleGetCredits}
+              className="w-full gap-2 rounded-xl"
+              size="lg"
+            >
+              <CreditCard className="h-4 w-4" />
+              Get Credits to Unlock
+              <span className="text-xs opacity-80">({creditsNeeded} credits)</span>
+            </Button>
+
+            {tripId && (
+              <button
+                onClick={handleManualBuild}
+                className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mt-1 transition-colors w-full"
+              >
+                <Pencil className="h-3 w-3" />
+                I'll build it myself
+              </button>
+            )}
+          </div>
+        ) : canAfford ? (
+          /* HAS CREDITS: Unlock directly */
+          <div className="space-y-3">
+            <Button
+              onClick={onUnlock}
+              className="w-full gap-2 rounded-xl"
+              size="lg"
+            >
+              <Lock className="h-4 w-4" />
+              Unlock Day {dayNumber}
+              <span className="text-xs opacity-80">({creditsNeeded} credits)</span>
+            </Button>
+
+            {tripId && (
+              <button
+                onClick={handleManualBuild}
+                className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mt-1 transition-colors w-full"
+              >
+                <Pencil className="h-3 w-3" />
+                I'll build it myself
+              </button>
+            )}
+          </div>
+        ) : (
+          /* NO CREDITS: Buy credits then generate */
+          <div className="space-y-3">
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/5 border border-amber-500/10">
+              <CreditCard className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+              <p className="text-xs text-muted-foreground">
+                You have <span className="font-medium text-foreground">{currentBalance} credits</span>. 
+                You need {creditsNeeded} credits to unlock this day.
+              </p>
+            </div>
+
+            <Button
+              onClick={handleGetCredits}
+              className="w-full gap-2 rounded-xl"
+              size="lg"
+            >
+              <CreditCard className="h-4 w-4" />
+              Get Credits to Unlock
+            </Button>
+
+            {tripId && (
+              <button
+                onClick={handleManualBuild}
+                className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mt-1 transition-colors w-full"
+              >
+                <Pencil className="h-3 w-3" />
+                I'll build it myself
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Decorative lock overlay */}

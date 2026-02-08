@@ -2553,6 +2553,9 @@ export function EditorialItinerary({
                     creditsNeeded={CREDIT_COSTS.UNLOCK_DAY}
                     tripId={tripId}
                     onManualBuild={() => {}}
+                    isFirstTrip={!!days[selectedDayIndex].metadata?.isFirstTrip}
+                    canAfford={totalCredits >= CREDIT_COSTS.UNLOCK_DAY}
+                    currentBalance={totalCredits}
                   />
                 ) : (
                   <DayCard

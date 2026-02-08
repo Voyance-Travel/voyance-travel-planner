@@ -45,6 +45,7 @@ export function createLockedPlaceholderDays(
   generatedDayCount: number,
   totalDays: number,
   destination: string,
+  isFirstTrip?: boolean,
 ): GeneratedDay[] {
   const lockedDays: GeneratedDay[] = [];
   const start = new Date(startDate);
@@ -64,6 +65,7 @@ export function createLockedPlaceholderDays(
         pacingLevel: 'moderate' as const,
         isPreview: true,
         isLocked: true,
+        isFirstTrip: isFirstTrip ?? false,
       },
     });
   }

@@ -62,6 +62,8 @@ export interface GeneratedDay {
     isPreview?: boolean;
     /** True if this day is locked and has no generated content */
     isLocked?: boolean;
+    /** True if the trip was the user's first (free 2-day preview) */
+    isFirstTrip?: boolean;
   };
   narrative?: {
     theme: string;
