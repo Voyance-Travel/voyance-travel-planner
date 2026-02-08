@@ -67,12 +67,11 @@ const tiers = [
 ];
 
 const freePreviewFeatures = [
-  { icon: CalendarClock, text: '3-4 curated activities', detail: 'Real venues we picked for you' },
+  { icon: CalendarClock, text: '4-5 curated activities', detail: 'Real venue names picked for your travel style' },
   { icon: Clock, text: 'Timing & flow', detail: 'When to arrive, how the day moves' },
-  { icon: Star, text: 'Ratings & reviews', detail: 'What others think' },
-  { icon: Ticket, text: 'Booking alerts', detail: 'Which spots need reservations' },
-  { icon: Cloud, text: 'Weather', detail: 'Conditions for your dates' },
-  { icon: Dna, text: 'Why we picked it', detail: 'Personalized to your travel style' },
+  { icon: Dna, text: 'Why we picked it', detail: 'Personalized to your Travel DNA' },
+  { icon: Route, text: 'Full day structure', detail: 'See the shape of your trip before committing' },
+  { icon: Hammer, text: 'Manual builder', detail: 'Build your own itinerary for free, anytime' },
 ];
 
 const unlockGroups = [
@@ -88,8 +87,11 @@ const unlockGroups = [
     items: [
       { icon: MapPin, text: 'Addresses & maps' },
       { icon: Camera, text: 'Photos' },
+      { icon: Star, text: 'Ratings & reviews' },
       { icon: DollarSign, text: 'Costs & budget tiers' },
+      { icon: Cloud, text: 'Weather forecasts' },
       { icon: Lightbulb, text: 'Insider tips: what to order, what to skip' },
+      { icon: Ticket, text: 'Booking alerts & reservation links' },
       { icon: Bus, text: 'Transportation between stops' },
       { icon: ExternalLink, text: 'Direct booking links' },
     ],
@@ -172,7 +174,7 @@ const faqs = [
   },
   {
     q: 'Do credits expire?',
-    a: 'Never.',
+    a: 'Purchased credits never expire. Free credits (your signup bonus and monthly grants) expire after 2 months.',
   },
   {
     q: 'What if I don\'t like Day 1?',
@@ -389,7 +391,7 @@ export default function Pricing() {
             viewport={{ once: true }}
             className="text-center text-sm text-muted-foreground mt-8 italic"
           >
-            Details like addresses, costs, photos, and booking links unlock with credits.
+            Addresses, costs, photos, ratings, weather, and booking links unlock with credits.
           </motion.p>
         </div>
       </section>
