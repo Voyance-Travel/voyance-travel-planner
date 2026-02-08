@@ -43,7 +43,7 @@ export function AddActivityModal({ isOpen, onClose, onAdd, currency = 'USD', des
   const [locationName, setLocationName] = useState('');
   const [locationAddress, setLocationAddress] = useState('');
   const [locationCoords, setLocationCoords] = useState<{ lat?: number; lng?: number }>({});
-  const [showSearch, setShowSearch] = useState(false);
+  const [showSearch, setShowSearch] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
 
@@ -107,7 +107,7 @@ export function AddActivityModal({ isOpen, onClose, onAdd, currency = 'USD', des
     setLocationName('');
     setLocationAddress('');
     setLocationCoords({});
-    setShowSearch(false);
+    setShowSearch(true);
     setSearchQuery('');
     clearResults();
   };
