@@ -21,7 +21,8 @@ import {
   ChevronRight,
   FolderOpen,
    Zap,
-   Trash2
+   Trash2,
+   UserPlus
 } from 'lucide-react';
 import ActiveTripCard from '@/components/trips/ActiveTripCard';
 import { PastTripCard } from '@/components/trips/PastTripCard';
@@ -35,6 +36,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDraftLimitCheck } from '@/hooks/useDraftLimitCheck';
 import { supabase } from '@/integrations/supabase/client';
@@ -52,12 +55,6 @@ import { getDestinationImage } from '@/utils/destinationImages';
    AlertDialogTitle,
    AlertDialogTrigger,
  } from '@/components/ui/alert-dialog';
- import {
-   Tooltip,
-   TooltipContent,
-   TooltipProvider,
-   TooltipTrigger,
- } from '@/components/ui/tooltip';
  import { Lock } from 'lucide-react';
 
 // Extract base destination name (e.g., "Rome (FCO)" -> "Rome", "Paris, France" -> "Paris")
@@ -149,6 +146,13 @@ type TabValue = 'all' | 'active' | 'upcoming' | 'completed';
 type TripStatus = 'draft' | 'planning' | 'booked' | 'active' | 'completed' | 'cancelled';
 type DisplayStatus = 'upcoming' | 'active' | 'completed' | 'canceled';
 
+interface TripCollaboratorInfo {
+  id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  handle: string | null;
+}
+
 interface Trip {
   id: string;
   destination: string;
@@ -163,6 +167,9 @@ interface Trip {
   metadata: Record<string, any> | null;
   hasItineraryData: boolean;
    isPaid?: boolean;
+  isCollaborator?: boolean; // true if user is a collaborator (not owner)
+  ownerName?: string | null;
+  collaborators?: TripCollaboratorInfo[];
 }
 
 // Simplified status mapping - no more "draft" display, all future trips are "upcoming"
@@ -437,6 +444,47 @@ function TripCard({ trip, index = 0, onDelete }: { trip: Trip; index?: number; o
           )}
         </div>
 
+        {/* Collaborator indicator badge for linked trips */}
+        {trip.isCollaborator && trip.ownerName && (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <UserPlus className="h-3.5 w-3.5 text-pink-500 shrink-0" />
+            <span>Invited by <span className="font-medium text-foreground">{trip.ownerName}</span></span>
+          </div>
+        )}
+
+        {/* Trip companions - avatar stack */}
+        {trip.collaborators && trip.collaborators.length > 0 && (
+          <div className="flex items-center gap-2">
+            <div className="flex -space-x-2">
+              {trip.collaborators.slice(0, 4).map((collab) => (
+                <TooltipProvider key={collab.id} delayDuration={0}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Avatar className="h-7 w-7 border-2 border-card">
+                        <AvatarImage src={collab.avatar_url || undefined} />
+                        <AvatarFallback className="text-[10px] bg-pink-500/10 text-pink-600">
+                          {(collab.display_name || collab.handle || '?')[0].toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">
+                      {collab.display_name || `@${collab.handle}`}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ))}
+              {trip.collaborators.length > 4 && (
+                <div className="h-7 w-7 rounded-full border-2 border-card bg-muted flex items-center justify-center text-[10px] text-muted-foreground font-medium">
+                  +{trip.collaborators.length - 4}
+                </div>
+              )}
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {trip.collaborators.length} companion{trip.collaborators.length > 1 ? 's' : ''}
+            </span>
+          </div>
+        )}
+
         {/* Actions - mobile optimized touch targets */}
         <div className="flex gap-2 pt-1 sm:pt-2">
           {hasItinerary ? (
@@ -612,7 +660,8 @@ export default function TripDashboard() {
       }
 
       try {
-        const { data, error: fetchError } = await supabase
+        // Fetch owned trips
+        const { data: ownedData, error: fetchError } = await supabase
           .from('trips')
           .select('*')
           .eq('user_id', user.id)
@@ -621,7 +670,67 @@ export default function TripDashboard() {
 
         if (fetchError) throw fetchError;
 
-        const mappedTrips: Trip[] = (data || []).map(row => ({
+        // Fetch trips where user is a collaborator
+        const { data: collabData } = await supabase
+          .from('trip_collaborators')
+          .select(`
+            trip_id,
+            permission,
+            trip:trips!trip_collaborators_trip_id_fkey(*)
+          `)
+          .eq('user_id', user.id)
+          .not('accepted_at', 'is', null);
+
+        // Get all trip IDs to fetch collaborators for
+        const ownedIds = (ownedData || []).map(r => r.id);
+        const collabTripIds = (collabData || [])
+          .filter(c => (c.trip as any)?.id)
+          .map(c => (c.trip as any).id);
+        const allTripIds = [...new Set([...ownedIds, ...collabTripIds])];
+
+        // Fetch collaborators + profiles for all trips
+        const { data: allCollaborators } = allTripIds.length > 0 
+          ? await supabase
+              .from('trip_collaborators')
+              .select(`
+                trip_id,
+                user_id,
+                profile:profiles!trip_collaborators_user_id_profiles_fkey(id, display_name, avatar_url, handle)
+              `)
+              .in('trip_id', allTripIds)
+              .not('accepted_at', 'is', null)
+          : { data: [] };
+
+        // Also fetch owner profiles for collab trips
+        const collabOwnerIds = (collabData || [])
+          .map(c => (c.trip as any)?.user_id)
+          .filter(Boolean);
+        const { data: ownerProfiles } = collabOwnerIds.length > 0
+          ? await supabase
+              .from('profiles')
+              .select('id, display_name')
+              .in('id', collabOwnerIds)
+          : { data: [] };
+
+        const ownerMap = new Map((ownerProfiles || []).map(p => [p.id, p.display_name]));
+
+        // Build collaborator map per trip
+        const collabMap = new Map<string, TripCollaboratorInfo[]>();
+        (allCollaborators || []).forEach((c: any) => {
+          const list = collabMap.get(c.trip_id) || [];
+          if (c.profile) {
+            list.push({
+              id: c.profile.id,
+              display_name: c.profile.display_name,
+              avatar_url: c.profile.avatar_url,
+              handle: c.profile.handle,
+            });
+          }
+          collabMap.set(c.trip_id, list);
+        });
+
+        // Map owned trips
+        const mappedOwned: Trip[] = (ownedData || []).map(row => ({
           id: row.id,
           destination: row.destination,
           name: row.name,
@@ -634,10 +743,38 @@ export default function TripDashboard() {
           hotelSelection: row.hotel_selection,
           metadata: row.metadata as Record<string, any> | null,
           hasItineraryData: !!row.itinerary_data,
-           isPaid: (row.metadata as Record<string, any>)?.is_paid || row.status === 'booked' || false,
+          isPaid: (row.metadata as Record<string, any>)?.is_paid || row.status === 'booked' || false,
+          isCollaborator: false,
+          collaborators: collabMap.get(row.id) || [],
         }));
 
-        setTrips(mappedTrips);
+        // Map collab trips (exclude any already owned)
+        const ownedIdSet = new Set(ownedIds);
+        const mappedCollab: Trip[] = (collabData || [])
+          .filter(c => (c.trip as any)?.id && !ownedIdSet.has((c.trip as any).id))
+          .map(c => {
+            const row = c.trip as any;
+            return {
+              id: row.id,
+              destination: row.destination,
+              name: row.name,
+              startDate: row.start_date,
+              endDate: row.end_date,
+              status: row.status as TripStatus,
+              travelers: row.travelers || 1,
+              departureCity: row.origin_city,
+              flightSelection: row.flight_selection,
+              hotelSelection: row.hotel_selection,
+              metadata: row.metadata as Record<string, any> | null,
+              hasItineraryData: !!row.itinerary_data,
+              isPaid: false,
+              isCollaborator: true,
+              ownerName: ownerMap.get(row.user_id) || null,
+              collaborators: collabMap.get(row.id) || [],
+            };
+          });
+
+        setTrips([...mappedOwned, ...mappedCollab]);
       } catch (err: any) {
         console.error('Failed to load trips:', err);
         setError(err.message);
