@@ -325,6 +325,16 @@ interface StrictActivity {
   sourceProvider?: 'google_places' | 'foursquare' | 'viator' | 'internal_db' | 'ai_generated';
   /** External provider ID for deduplication and verification */
   providerId?: string;
+  /** Hidden gem discovered through deep research */
+  isHiddenGem?: boolean;
+  /** Timing hack - scheduling at this time provides a meaningful advantage */
+  hasTimingHack?: boolean;
+  /** Why this time slot is optimal */
+  bestTime?: string;
+  /** Expected crowd level at the scheduled time */
+  crowdLevel?: 'low' | 'moderate' | 'high';
+  /** A unique Voyance-only insight */
+  voyanceInsight?: string;
 }
 
 interface StrictDay {
@@ -4576,15 +4586,30 @@ Generate activities for this day following ALL constraints above.`;
                               instructions: { type: "string" }
                             }
                           },
-                          tips: { type: "string" },
+                          tips: { type: "string", description: "Insider tip for this activity (must be specific, actionable, 30+ chars)" },
                           rating: {
                             type: "object",
                             properties: { value: { type: "number" }, totalReviews: { type: "number" } }
                           },
                           website: { type: "string" },
-                          suggestedFor: { type: "string", description: "User ID of the traveler whose preferences most influenced this activity choice (group trips only)" }
+                          suggestedFor: { type: "string", description: "User ID of the traveler whose preferences most influenced this activity choice (group trips only)" },
+                          isHiddenGem: { type: "boolean", description: "true if this is a hidden gem discovered through deep research (Reddit, local sources, new openings). NOT for mainstream tourist attractions." },
+                          hasTimingHack: { type: "boolean", description: "true if scheduling at this specific time provides a meaningful advantage (avoiding crowds, better light, special access)" },
+                          bestTime: { type: "string", description: "If hasTimingHack=true, explain why this time slot is optimal (e.g. '9am avoids the 11am-3pm crowds')" },
+                          crowdLevel: { type: "string", enum: ["low", "moderate", "high"], description: "Expected crowd level at the scheduled time" },
+                          voyanceInsight: { type: "string", description: "A unique Voyance-only insight about this place that typical travel guides miss" },
+                          personalization: {
+                            type: "object",
+                            properties: {
+                              tags: { type: "array", items: { type: "string" }, description: "Machine-checkable tags from user inputs (e.g. romantic, foodie, low-pace)" },
+                              whyThisFits: { type: "string", description: "1-2 sentences explaining why this activity fits THIS specific traveler's DNA/preferences" },
+                              confidence: { type: "number", description: "0-1 confidence score for this recommendation" },
+                              matchedInputs: { type: "array", items: { type: "string" }, description: "Which user preferences influenced this choice" }
+                            },
+                            required: ["tags", "whyThisFits", "confidence"]
+                          }
                         },
-                        required: ["id", "title", "startTime", "endTime", "category", "location", "cost", "bookingRequired"]
+                        required: ["id", "title", "startTime", "endTime", "category", "location", "cost", "bookingRequired", "personalization"]
                       }
                     }
                   },
@@ -8388,12 +8413,27 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                             estimatedCost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" } } },
                             cost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" } } },
                             bookingRequired: { type: "boolean" },
-                            tips: { type: "string" },
+                            tips: { type: "string", description: "Insider tip for this activity (must be specific, actionable, 30+ chars)" },
                             coordinates: { type: "object", properties: { lat: { type: "number" }, lng: { type: "number" } } },
                             type: { type: "string" },
-                            suggestedFor: { type: "string", description: "User ID of the traveler whose preferences most influenced this activity (group trips)" }
+                            suggestedFor: { type: "string", description: "User ID of the traveler whose preferences most influenced this activity (group trips)" },
+                            isHiddenGem: { type: "boolean", description: "true if this is a hidden gem discovered through deep research. NOT for mainstream tourist attractions." },
+                            hasTimingHack: { type: "boolean", description: "true if scheduling at this specific time provides a meaningful advantage" },
+                            bestTime: { type: "string", description: "If hasTimingHack=true, explain why this time slot is optimal" },
+                            crowdLevel: { type: "string", enum: ["low", "moderate", "high"], description: "Expected crowd level at the scheduled time" },
+                            voyanceInsight: { type: "string", description: "A unique Voyance-only insight about this place" },
+                            personalization: {
+                              type: "object",
+                              properties: {
+                                tags: { type: "array", items: { type: "string" } },
+                                whyThisFits: { type: "string", description: "Why this fits THIS traveler's DNA" },
+                                confidence: { type: "number" },
+                                matchedInputs: { type: "array", items: { type: "string" } }
+                              },
+                              required: ["tags", "whyThisFits", "confidence"]
+                            }
                           },
-                          required: ["title", "category", "startTime", "endTime", "location"]
+                          required: ["title", "category", "startTime", "endTime", "location", "personalization"]
                         }
                       },
                       narrative: { type: "object", properties: { theme: { type: "string" }, highlights: { type: "array", items: { type: "string" } } } }
