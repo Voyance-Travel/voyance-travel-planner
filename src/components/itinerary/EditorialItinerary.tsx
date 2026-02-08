@@ -2565,7 +2565,12 @@ export function EditorialItinerary({
               destination={destination}
               onSave={effectiveIsEditable ? handleSave : undefined}
               isSaving={isSaving}
-              onExportPDF={isManualMode && !smartFinishPurchased ? undefined : async () => {
+              onExportPDF={(() => {
+                // PDF export is gated: requires Smart Finish, paid/unlocked trip, or fully generated (non-preview)
+                const tripIsFullyUnlocked = !isPreview && !isManualMode;
+                const canExport = smartFinishPurchased || isPaid || tripIsFullyUnlocked;
+                if (!canExport) return undefined;
+                return async () => {
                 const { generateConsumerTripPdf } = await import('@/utils/consumerPdfGenerator');
                 generateConsumerTripPdf({
                   tripName: `Trip to ${destination}`,
@@ -2589,7 +2594,8 @@ export function EditorialItinerary({
                   } : undefined,
                 });
                 toast.success('PDF downloaded!');
-              }}
+                };
+              })()}
             />
 
             {/* What We Skipped - Tourist traps avoided */}
