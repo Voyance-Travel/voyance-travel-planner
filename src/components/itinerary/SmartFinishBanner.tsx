@@ -2,14 +2,14 @@
  * Smart Finish Review Dialog
  * 
  * Shows DNA gap analysis in a popup dialog for manual/imported itineraries.
- * "Your research. Our polish. $6.99"
+ * "Your research. Our polish. 50 credits."
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Sparkles, AlertTriangle, Info, CheckCircle2, 
-  Loader2, Zap, X
+  Loader2, Zap, Coins
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +19,9 @@ import {
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useSpendCredits } from '@/hooks/useSpendCredits';
+import { useCredits } from '@/hooks/useCredits';
+import { CREDIT_COSTS } from '@/config/pricing';
 
 interface Gap {
   hint: string;
@@ -59,6 +62,10 @@ export function SmartFinishBanner({
   const [hasAnalyzed, setHasAnalyzed] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
+  const spendCredits = useSpendCredits();
+  const { data: creditData } = useCredits();
+  const totalCredits = creditData?.totalCredits ?? 0;
+
   const shouldShow = isManualMode && !smartFinishPurchased;
 
   const runAnalysis = useCallback(async () => {
@@ -72,7 +79,6 @@ export function SmartFinishBanner({
       if (data) {
         setAnalysis(data);
         setHasAnalyzed(true);
-        // Auto-open dialog if gaps found
         if (data.gapCount > 0) {
           setIsOpen(true);
         }
@@ -84,7 +90,6 @@ export function SmartFinishBanner({
     }
   }, [tripId, shouldShow, hasAnalyzed]);
 
-  // Auto-analyze after a short delay
   useEffect(() => {
     if (!shouldShow || hasAnalyzed) return;
     const timer = setTimeout(runAnalysis, 3000);
@@ -94,18 +99,38 @@ export function SmartFinishBanner({
   const handlePurchase = async () => {
     setIsPurchasing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('purchase-smart-finish', {
-        body: { tripId },
+      // Spend credits via the spend-credits edge function
+      await spendCredits.mutateAsync({
+        action: 'SMART_FINISH',
+        tripId,
+        metadata: { source: 'smart_finish_banner' },
       });
-      if (error) throw error;
-      if (data?.url) {
-        window.open(data.url, '_blank');
+
+      // Mark smart_finish_purchased on the trip
+      const { error: updateError } = await supabase
+        .from('trips')
+        .update({ smart_finish_purchased: true })
+        .eq('id', tripId);
+
+      if (updateError) {
+        console.error('Failed to mark smart finish purchased:', updateError);
       }
+
+      // Trigger enrichment
+      supabase.functions.invoke('enrich-manual-trip', {
+        body: { tripId },
+      }).catch(err => console.error('Enrichment trigger failed:', err));
+
+      toast.success('Smart Finish activated!', {
+        description: 'Your itinerary is being enriched with route optimization, reviews, and tips.',
+      });
+
+      setIsOpen(false);
+      onPurchaseComplete?.();
     } catch (err: any) {
-      if (err?.message?.includes('already_purchased')) {
-        toast.info('Smart Finish already purchased for this trip');
-      } else {
-        toast.error('Failed to start checkout. Please try again.');
+      // useSpendCredits handles insufficient credits via the modal
+      if (!err?.message?.startsWith('Not enough credits')) {
+        toast.error('Failed to activate Smart Finish. Please try again.');
       }
     } finally {
       setIsPurchasing(false);
@@ -119,7 +144,6 @@ export function SmartFinishBanner({
 
   if (!shouldShow) return null;
 
-  // Small inline trigger button (shown when dialog is closed)
   const triggerButton = hasAnalyzed && analysis && analysis.gapCount > 0 && !isOpen && (
     <button
       onClick={() => setIsOpen(true)}
@@ -142,10 +166,8 @@ export function SmartFinishBanner({
 
   return (
     <>
-      {/* Compact inline trigger */}
       {triggerButton}
 
-      {/* Loading state inline */}
       {isLoading && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
           <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
@@ -153,7 +175,6 @@ export function SmartFinishBanner({
         </div>
       )}
 
-      {/* No gaps — small success note */}
       {hasAnalyzed && (!analysis || analysis.gapCount === 0) && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
           <CheckCircle2 className="h-4 w-4 text-green-500" />
@@ -161,7 +182,6 @@ export function SmartFinishBanner({
         </div>
       )}
 
-      {/* Review Dialog */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -185,7 +205,6 @@ export function SmartFinishBanner({
             </div>
           </DialogHeader>
 
-          {/* Gap list */}
           <div className="space-y-2 max-h-[50vh] overflow-y-auto py-2">
             {analysis?.gaps.map((gap, i) => (
               <motion.div
@@ -217,9 +236,9 @@ export function SmartFinishBanner({
               {isPurchasing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Zap className="h-4 w-4" />
+                <Coins className="h-4 w-4" />
               )}
-              Smart Finish - $6.99
+              Smart Finish — {CREDIT_COSTS.SMART_FINISH} credits
             </Button>
             <p className="text-[11px] text-center text-muted-foreground">
               Your research. Our polish. Route optimization, reviews, tips & DNA fixes.

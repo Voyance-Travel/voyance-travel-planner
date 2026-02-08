@@ -1,6 +1,6 @@
 /**
  * Spend Credits Edge Function
- * Deducts credits for actions: trip_generation, hotel_search, swap_activity, regenerate_day
+ * Deducts credits for actions with per-trip free cap support.
  */
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
@@ -13,15 +13,24 @@ const corsHeaders = {
 
 // Fixed credit costs
 const FIXED_COSTS: Record<string, number> = {
-  unlock_day: 90,
-  regenerate_day: 90,
-  swap_activity: 15,
-  restaurant_rec: 15,
-  ai_message: 10,
+  unlock_day: 60,
+  smart_finish: 50,
+  regenerate_day: 10,
+  swap_activity: 5,
+  restaurant_rec: 5,
+  ai_message: 5,
   hotel_optimization: 100,
   mystery_getaway: 15,
   mystery_logistics: 5,
   transport_mode_change: 5,
+};
+
+// Per-trip free action caps
+const FREE_CAPS: Record<string, number> = {
+  swap_activity: 10,
+  regenerate_day: 5,
+  ai_message: 20,
+  restaurant_rec: 5,
 };
 
 // Variable-cost actions (cost passed from client, validated server-side)
@@ -29,14 +38,14 @@ const VARIABLE_COST_ACTIONS = ['trip_generation', 'hotel_search'];
 
 // Hotel search rate
 const HOTEL_SEARCH_PER_CITY = 40;
-const BASE_RATE_PER_DAY = 90;
+const BASE_RATE_PER_DAY = 60;
 
 interface SpendRequest {
   action: string;
   tripId?: string;
   activityId?: string;
   dayIndex?: number;
-  creditsAmount?: number; // For variable-cost actions
+  creditsAmount?: number;
   metadata?: Record<string, unknown>;
 }
 
@@ -72,7 +81,92 @@ serve(async (req) => {
     const body: SpendRequest = await req.json();
     const { action, tripId, activityId, dayIndex, creditsAmount, metadata } = body;
 
-    // Determine cost
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
+    // ── Free cap check ──
+    const freeCap = FREE_CAPS[action];
+    if (freeCap !== undefined && tripId) {
+      // Check current usage for this action on this trip
+      const { data: usageRow } = await supabaseAdmin
+        .from('trip_action_usage')
+        .select('usage_count')
+        .eq('user_id', user.id)
+        .eq('trip_id', tripId)
+        .eq('action_type', action)
+        .maybeSingle();
+
+      const currentUsage = usageRow?.usage_count ?? 0;
+
+      if (currentUsage < freeCap) {
+        // Still free — increment usage and return success with 0 cost
+        await supabaseAdmin
+          .from('trip_action_usage')
+          .upsert({
+            user_id: user.id,
+            trip_id: tripId,
+            action_type: action,
+            usage_count: currentUsage + 1,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id,trip_id,action_type' });
+
+        // Create a zero-cost ledger entry for tracking
+        await supabaseAdmin
+          .from('credit_ledger')
+          .insert({
+            user_id: user.id,
+            transaction_type: 'spend',
+            credits_delta: 0,
+            is_free_credit: true,
+            action_type: action,
+            trip_id: tripId,
+            activity_id: activityId || null,
+            notes: `${action.replace(/_/g, ' ')} - free (${currentUsage + 1}/${freeCap})`,
+            metadata: { ...metadata, day_index: dayIndex, free_cap_used: true, usage: currentUsage + 1, cap: freeCap },
+          });
+
+        // Get current balance to return
+        const { data: balance } = await supabaseAdmin
+          .from('credit_balances')
+          .select('purchased_credits, free_credits, free_credits_expires_at')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        const purchasedCredits = balance?.purchased_credits || 0;
+        let freeCredits = balance?.free_credits || 0;
+        if (balance?.free_credits_expires_at && new Date(balance.free_credits_expires_at) < new Date()) {
+          freeCredits = 0;
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            spent: 0,
+            action,
+            freeCapUsed: true,
+            usageCount: currentUsage + 1,
+            freeCap,
+            newBalance: { total: purchasedCredits + freeCredits, purchased: purchasedCredits, free: freeCredits },
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // At/over cap — increment usage count and proceed to charge credits
+      await supabaseAdmin
+        .from('trip_action_usage')
+        .upsert({
+          user_id: user.id,
+          trip_id: tripId,
+          action_type: action,
+          usage_count: currentUsage + 1,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,trip_id,action_type' });
+    }
+
+    // ── Determine cost ──
     let cost: number;
     const isVariable = VARIABLE_COST_ACTIONS.includes(action);
 
@@ -83,7 +177,6 @@ serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      // Basic server-side validation
       if (action === 'hotel_search') {
         const cityCount = (metadata?.cityCount as number) || 1;
         const expected = cityCount * HOTEL_SEARCH_PER_CITY;
@@ -111,12 +204,7 @@ serve(async (req) => {
       );
     }
 
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-
-    // Get current balance
+    // ── Get current balance ──
     const { data: balance, error: balanceError } = await supabaseAdmin
       .from('credit_balances')
       .select('*')
@@ -139,9 +227,7 @@ serve(async (req) => {
     }
     const totalCredits = purchasedCredits + freeCredits;
 
-    // ── "Round-up" logic ──
-    // If the user can cover more than half the cost, let them proceed and
-    // drain their balance to zero so they never see a tiny leftover.
+    // ── Round-up logic ──
     const canCoverHalf = totalCredits >= cost / 2;
 
     if (totalCredits < cost && !canCoverHalf) {
@@ -151,8 +237,6 @@ serve(async (req) => {
       );
     }
 
-    // If they can't fully afford it but passed the half-threshold, charge
-    // whatever they have (drain to zero).
     const effectiveCost = totalCredits < cost ? totalCredits : cost;
 
     // Deduct: free credits first, then purchased
