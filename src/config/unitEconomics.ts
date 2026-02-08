@@ -137,8 +137,8 @@ export const EXTERNAL_API_COSTS = {
 
 export const USER_LIFECYCLE_COSTS = {
   bounce: { min: 0.001, max: 0.003, desc: 'Visitor who leaves without signup' },
-  freeUser: { min: 0.04, max: 0.16, desc: 'Signs up, uses free credits, never pays' },
-  singlePurchase: { min: 0.30, max: 1.25, desc: 'Buys one trip pass' },
+  freeUser: { min: 0.34, max: 0.41, desc: 'Signs up, uses free 3-day trip + up to 5 edits, never pays' },
+  singlePurchase: { min: 0.30, max: 1.25, desc: 'Buys one credit pack' },
   repeatUser: { min: 0.92, max: 3.40, desc: '3 trips per year' },
   powerUser: { min: 3.11, max: 11.38, desc: '10+ trips per year' },
 } as const;
@@ -147,11 +147,11 @@ export const USER_LIFECYCLE_COSTS = {
 // 60% bounce, 25% free, 10% single, 4% repeat, 1% power
 export const BLENDED_COST_PER_VISITOR = 
   0.60 * ((0.001 + 0.003) / 2) +
-  0.25 * ((0.04 + 0.16) / 2) +
+  0.25 * ((0.34 + 0.41) / 2) +
   0.10 * ((0.30 + 1.25) / 2) +
   0.04 * ((0.92 + 3.40) / 2) +
   0.01 * ((3.11 + 11.38) / 2);
-// ≈ $0.12 per visitor on average
+// ≈ $0.26 per visitor on average (up from $0.12 due to richer free tier)
 
 // ============================================================================
 // CREDIT SYSTEM COSTS
@@ -196,12 +196,13 @@ export const REVENUE_CONFIG = {
     fixed: 0.30, // $0.30 per transaction
   },
   
-  // Free tier grants
+  // Free tier - One free 3-day full-power trip
   freeTier: {
-    signupBonus: 150,
-    monthlyGrant: 150,
-    maxBankedFree: 300,
-    expirationMonths: 2,
+    freeTripDays: 3,
+    freeEditsLimit: 5,
+    oneFreeTripPerAccount: true,
+    blendedCostPerFreeUser: 0.378,
+    worstCaseCostPerFreeUser: 0.413,
   },
 } as const;
 

@@ -83,70 +83,57 @@ const AMADEUS_FREE_TRIPS = Math.floor(AMADEUS_FREE_MONTHLY / AMADEUS_CALLS_PER_T
 const PHOTO_CACHE_SAVINGS_RATIO = 0.33; // Estimated, not yet verified post-deployment
 
 // =============================================================================
-// FREE USER ECONOMICS - OPTIMIZED MODEL
-// 
-// CURRENT STATE (high cost):
-//   Free users can generate Day 1 FREE (costs us ~$0.25-$0.40)
-//   This is expensive because it triggers Google Places APIs
+// FREE USER ECONOMICS — "ONE FREE 3-DAY FULL-POWER TRIP" MODEL
 //
-// OPTIMIZED STATE (target):
-//   Free users get AI-only "Trip Preview" (costs us ~$0.02-$0.03)
-//   - Shows day structure, themes, neighborhoods
-//   - Does NOT trigger Google Places (no real venue names)
-//   - Does NOT trigger Amadeus (no hotel search)
-//   Real venue details require credits/purchase
+// Every new user gets ONE free 3-day trip with full details + 5 edits.
+// After that, all subsequent trips follow the locked preview model.
 //
-// TRANSITION METRICS:
-//   Pre-optimization: ~$0.30-$0.50 per free user
-//   Post-optimization: ~$0.10-$0.17 per free user
-// =============================================================================
-// =============================================================================
-// FREE USER ECONOMICS - "FULL PREVIEW, NO DETAILS" MODEL
-// 
-// Free users see COMPLETE itinerary with REAL venue names, times, and reasoning
-// BUT gated details: addresses, hours, photos, tips, booking links
+// Cost breakdown (per free user, worst case):
+//   - Trip base (Perplexity + AI setup):      $0.043
+//   - 3 days × $0.100/day (Google + AI):      $0.300
+//   - 5 edits (avg $0.012/edit):              $0.060
+//   - DNA lookup:                             $0.010
+//   - Total worst case:                       ~$0.41
 //
-// Cost breakdown (per full preview generation):
-//   - AI generation (gemini-3-flash-preview): ~$0.04
-//   - Light venue validation (1-3 Google Text Searches): ~$0.05-0.08
-//   - DNA lookup (Supabase): ~$0.01
-//   - Total: ~$0.10-0.14 per preview
+// Conservative estimate (not all users use all 5 edits):
+//   - ~60% use 0-2 edits, ~30% use 3-4, ~10% use all 5
+//   - Blended edits: ~2.1 avg → 2.1 × $0.012 = $0.025
+//   - Blended total: $0.043 + $0.300 + $0.025 + $0.010 = ~$0.38
 //
-// What FREE users SEE:
-//   ✓ Complete 1-7 day itinerary structure
-//   ✓ Real venue names with specific times
-//   ✓ Personalized "why this fits your DNA" reasoning
-//   ✓ Day themes and neighborhood context
+// Comparison to old model:
+//   Old "Preview First": $0.054/free user (Day 1 only, no details)
+//   New "Full Power":    $0.38/free user (~7× more expensive)
+//   Tradeoff: Much higher conversion expected (user sees full value)
 //
-// What's GATED (requires credits):
-//   ✗ Full addresses + Google Maps
-//   ✗ Hours of operation
-//   ✗ High-quality venue photos
-//   ✗ Booking links & reservations
-//   ✗ Insider tips for each stop
-//   ✗ Offline PDF export
-//
-// Psychology: User sees EXACTLY what they'll get, but can't ACT on it
+// Break-even: If conversion rate rises from ~2% to ~4%, the higher
+// free-user cost is offset by increased paid conversions.
 // =============================================================================
 const FREE_USER_ECONOMICS = {
-  // Credit grants
-  monthlyCredits: 150,
-  maxBonusCredits: 200, // referral bonus
-  maxFirstMonthCredits: 350, // 150 monthly + 200 referral
-  creditExpiry: "2 months",
-  
-  // Cost model — based on corrected credit costs (90cr/day = $0.018/day)
+  // One-time free trip
+  freeTripDays: 3,
+  freeEditsLimit: 5,
+  oneFreeTripPerAccount: true,
+
+  // Cost model
   costs: {
-    preview: 0.03,              // Free preview: structure + anchor names + proof evening (~30% of full)
-    fullTrip: 0.091,            // Full enriched trip: actual observed from 567 entries / 41 trips
-    lightBrowse: 0.02,          // Explore + quiz, no trip gen
+    tripBase: 0.043,            // Perplexity + AI setup (no Amadeus for free)
+    perDay: 0.100,              // Google Places + Photos + AI content
+    perEdit: 0.012,             // Avg across swap ($0.009), regen ($0.018), add ($0.009)
+    dnaLookup: 0.010,           // Supabase query
   },
-  
-  // Free user: 150cr → 1 day (90cr) + 4 swaps (60cr) = $0.018 + 4×$0.009 = $0.054
-  blendedCostToUs: 0.054,
-  
+
+  // Blended cost per free user (assuming ~2.1 edits avg)
+  blendedCostToUs: 0.378,
+
+  // Worst case (all 5 edits used)
+  worstCaseCost: 0.413,
+
+  // Old model for comparison
+  oldModelCost: 0.054,
+  oldModelName: "Preview First (Day 1 only)",
+
   // Model name for display
-  modelName: "Preview First",
+  modelName: "One Free 3-Day Full Power",
 };
 
 // Helper function: Calculate variable cost for N days
@@ -262,12 +249,12 @@ const ACTION_COSTS = {
   hotelSearch: 0.020,   // ~2-3 Places calls per city
 };
 
-// Column definitions with tooltips for per-trip scaling table (now includes free user economics)
+// Column definitions with tooltips for per-trip scaling table
 const SCALE_COLUMNS = [
   { key: "trips", label: "Total Trips", tooltip: "Total monthly trip volume (paid + free users combined)." },
   { key: "paid", label: "Paid", tooltip: "Number of paying users. Formula: Total × Conversion %." },
   { key: "free", label: "Free", tooltip: "Non-paying users. Formula: Total - Paid." },
-  { key: "freeCost", label: "Free Var $", tooltip: `Variable cost of serving all free users. Formula: Free × $${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(3)}.` },
+  { key: "freeCost", label: "Free Var $", tooltip: `Variable cost of serving all free users. Formula: Free × $${FREE_USER_ECONOMICS.blendedCostToUs.toFixed(3)} (3-day full trip + ~2 edits avg).` },
   { key: "paidCost", label: "Paid Var $", tooltip: "Variable cost of serving all paid users. Formula: Paid × $0.091 (observed production cost)." },
   { key: "blended", label: "Blended/Trip", tooltip: "All-in cost per trip = Total Cost ÷ Total Trips." },
   { key: "revenue", label: "Revenue", tooltip: "Revenue from paying users. Formula: Paid × Blended AOV." },
@@ -1880,14 +1867,14 @@ export default function UnitEconomics() {
                     </tr>
                   );
                 })}
-                {/* Free user row - now with correct credit-constrained cost */}
+                {/* Free user row - one free 3-day full-power trip */}
                 <tr style={{ background: "rgba(248, 113, 113, 0.08)" }}>
                   <td style={{ padding: "8px 10px", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <div style={{ width: 8, height: 8, borderRadius: 2, background: "#EF4444" }} />
                       <span style={{ color: "#F87171", fontWeight: 500 }}>Free User</span>
                       <span style={{ fontSize: 9, color: "#64748B", background: "rgba(15, 23, 42, 0.5)", padding: "2px 6px", borderRadius: 4 }}>
-                        {FREE_USER_ECONOMICS.monthlyCredits}/mo
+                        1 free trip + {FREE_USER_ECONOMICS.freeEditsLimit} edits
                       </span>
                     </div>
                   </td>
@@ -1895,13 +1882,13 @@ export default function UnitEconomics() {
                     $0
                   </td>
                   <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    {FREE_USER_ECONOMICS.monthlyCredits}
+                    {FREE_USER_ECONOMICS.freeTripDays} days
                   </td>
                   <td style={{ padding: "8px 10px", color: "#F87171", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                     1
                   </td>
                   <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    4
+                    {FREE_USER_ECONOMICS.freeEditsLimit}
                   </td>
                   <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                     0
@@ -1913,14 +1900,14 @@ export default function UnitEconomics() {
                     -100%
                   </td>
                 </tr>
-                {/* Free user WITH bonus row */}
+                {/* Free user worst case row */}
                 <tr style={{ background: "rgba(248, 113, 113, 0.04)" }}>
                   <td style={{ padding: "8px 10px", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <div style={{ width: 8, height: 8, borderRadius: 2, background: "#FB923C" }} />
-                      <span style={{ color: "#FB923C", fontWeight: 500 }}>Free + Bonus</span>
+                      <span style={{ color: "#FB923C", fontWeight: 500 }}>Free (worst case)</span>
                       <span style={{ fontSize: 9, color: "#64748B", background: "rgba(15, 23, 42, 0.5)", padding: "2px 6px", borderRadius: 4 }}>
-                        referral/share
+                        all 5 edits used
                       </span>
                     </div>
                   </td>
@@ -1928,19 +1915,19 @@ export default function UnitEconomics() {
                     $0
                   </td>
                   <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    {FREE_USER_ECONOMICS.maxFirstMonthCredits}
+                    {FREE_USER_ECONOMICS.freeTripDays} days
                   </td>
                   <td style={{ padding: "8px 10px", color: "#FB923C", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    3
+                    1
                   </td>
                   <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    5
+                    {FREE_USER_ECONOMICS.freeEditsLimit}
                   </td>
                   <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                     0
                   </td>
                   <td style={{ padding: "8px 10px", color: "#FB923C", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    $0.10
+                    ${FREE_USER_ECONOMICS.worstCaseCost.toFixed(2)}
                   </td>
                   <td style={{ padding: "8px 10px", color: "#EF4444", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                     -100%
