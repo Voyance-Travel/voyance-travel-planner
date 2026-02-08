@@ -89,7 +89,7 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
     {
       id: 'profile-hub',
       title: 'Your Command Center',
-      description: 'Trips, DNA results, and preferences — all in one place.',
+      description: 'Trips, DNA results, and preferences, all in one place.',
       icon: <User className="h-5 w-5" />,
       route: ROUTES.PROFILE.VIEW,
       position: 'center',
@@ -285,7 +285,7 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
           </motion.div>
         )}
 
-        {/* Tooltip card — pinned to bottom so page content stays visible */}
+        {/* Tooltip card - pinned to bottom so page content stays visible */}
         <div
           className="pointer-events-auto fixed inset-x-0 bottom-0 flex justify-center px-3 sm:px-4 pb-4 sm:pb-6"
           style={{ zIndex: 102 }}

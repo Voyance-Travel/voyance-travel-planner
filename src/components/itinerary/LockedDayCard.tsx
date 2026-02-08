@@ -163,7 +163,7 @@ export function LockedDayCard({
           ))}
         </div>
 
-        {/* === CTA SECTION — depends on user state === */}
+        {/* === CTA SECTION - depends on user state === */}
         {isFirstTrip ? (
           /* FIRST TRIP: Explain free preview + offer paths */
           <div className="space-y-3">

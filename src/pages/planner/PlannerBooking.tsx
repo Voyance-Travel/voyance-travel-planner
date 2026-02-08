@@ -783,7 +783,7 @@ export default function PlannerBooking() {
                         ) : (
                           <>
                             <CreditCard className="h-5 w-5" />
-                            Buy Trip Pass — ${TRIP_PASS_PRICE}
+                            Buy Trip Pass - ${TRIP_PASS_PRICE}
                           </>
                         )}
                       </Button>

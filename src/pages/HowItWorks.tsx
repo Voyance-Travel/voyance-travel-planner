@@ -516,7 +516,7 @@ export default function HowItWorks() {
               className="mt-10 flex items-center justify-center gap-2 text-sm text-muted-foreground"
             >
               <CheckCircle className="w-4 h-4 text-emerald-500" />
-              <span>Free to start — takes 5 minutes</span>
+              <span>Free to start. Takes 5 minutes</span>
             </motion.div>
           </motion.div>
         </div>

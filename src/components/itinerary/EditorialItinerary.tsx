@@ -2264,7 +2264,7 @@ export function EditorialItinerary({
           <div className="flex-1">
             <p className="text-sm font-medium">Propose Changes</p>
             <p className="text-xs text-muted-foreground">
-              This trip requires proposals for changes. Use "Propose Replacement" on any activity — the owner and group will vote.
+              This trip requires proposals for changes. Use "Propose Replacement" on any activity. The owner and group will vote.
             </p>
           </div>
         </div>
@@ -2283,7 +2283,7 @@ export function EditorialItinerary({
         </div>
       )}
 
-      {/* Guest DNA Banner — prompt to take quiz or request blend */}
+      {/* Guest DNA Banner - prompt to take quiz or request blend */}
       {tripPermission && !tripPermission.isOwner && (
         <GuestDNABanner tripId={tripId} />
       )}
@@ -4907,7 +4907,7 @@ interface DayCardProps {
   isExpanded: boolean;
   isRegenerating: boolean;
   isEditable: boolean;
-  isPreview?: boolean; // Preview mode — gates details
+  isPreview?: boolean; // Preview mode - gates details
   tripId: string;
   highlightedActivityIds?: string[]; // Activities to highlight (from chatbot)
   getPaymentForItem: (itemType: 'flight' | 'hotel' | 'activity', itemId: string) => TripPayment | undefined;

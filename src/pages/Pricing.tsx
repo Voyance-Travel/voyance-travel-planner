@@ -175,7 +175,7 @@ const sampleDay = [
 const faqs = [
   {
     q: 'How do credits work?',
-    a: 'Credits unlock your full itinerary — all days plus actionable details like addresses, costs, and booking links. Your first trip is free with everything included.',
+    a: 'Credits unlock your full itinerary, all days plus actionable details like addresses, costs, and booking links. Your first trip is free with everything included.',
   },
   {
     q: 'Do I get free credits?',
@@ -187,7 +187,7 @@ const faqs = [
   },
   {
     q: 'What if I don\'t like the preview?',
-    a: 'Your first trip gives you 2 full days free with every detail. After that, new trips start with a Day 1 preview — unlock full details with credits.',
+    a: 'Your first trip gives you 2 full days free with every detail. After that, new trips start with a Day 1 preview. Unlock full details with credits.',
   },
   {
     q: 'Can I unlock individual days?',
@@ -259,7 +259,7 @@ export default function Pricing() {
     <MainLayout>
       <Head 
         title="Pricing | Voyance" 
-        description="Your first trip is free — 2 full days with every detail. After that, unlock future trips with credits." 
+        description="Your first trip is free. 2 full days with every detail. After that, unlock future trips with credits." 
         canonical="https://travelwithvoyance.com/pricing"
       />
       
@@ -295,7 +295,7 @@ export default function Pricing() {
             transition={{ delay: 0.1 }}
             className="text-muted-foreground text-base sm:text-lg max-w-xl mx-auto leading-relaxed"
           >
-            2 full days with addresses, photos, costs, tips, and booking links — completely free. After that, use credits to unlock future trips.
+            2 full days with addresses, photos, costs, tips, and booking links, completely free. After that, use credits to unlock future trips.
           </motion.p>
 
           <motion.div
@@ -332,8 +332,8 @@ export default function Pricing() {
           <div className="grid sm:grid-cols-3 gap-6">
             {[
               { title: 'Take the quiz & plan your trip', desc: 'Destination, dates, who\'s going, what you love. 5 minutes total.' },
-              { title: 'Your first trip — on us', desc: '2 full days, every detail included: addresses, photos, costs, tips, booking links. Plus 5 free edits to make it yours.' },
-              { title: 'Future trips — unlock with credits', desc: 'After your first trip, new trips start with a Day 1 preview. Use credits to unlock full details, day by day or all at once.' },
+              { title: 'Your first trip, on us', desc: '2 full days, every detail included: addresses, photos, costs, tips, booking links. Plus 5 free edits to make it yours.' },
+              { title: 'Future trips: unlock with credits', desc: 'After your first trip, new trips start with a Day 1 preview. Use credits to unlock full details, day by day or all at once.' },
             ].map((item, i) => (
               <motion.div
                 key={i}
@@ -363,7 +363,7 @@ export default function Pricing() {
             className="text-center mb-10"
           >
             <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-2">
-              Your First Trip — On Us
+              Your First Trip, On Us
             </h2>
             <p className="text-sm text-muted-foreground max-w-lg mx-auto">
               Experience everything Voyance can do. No credit card, no credits needed.
@@ -691,7 +691,7 @@ export default function Pricing() {
 
             <div className="p-4 bg-primary/5 border-t border-primary/10">
               <p className="text-xs text-primary text-center font-medium">
-                ✓ Addresses, costs, photos, tips, and booking links — all included on your first trip.
+                ✓ Addresses, costs, photos, tips, and booking links, all included on your first trip.
               </p>
             </div>
           </motion.div>
@@ -795,7 +795,7 @@ export default function Pricing() {
             transition={{ delay: 0.05 }}
             className="text-sm text-muted-foreground mb-6"
           >
-            Your first trip is free — 2 full days, every detail included. Takes 5 minutes.
+            Your first trip is free. 2 full days, every detail included. Takes 5 minutes.
           </motion.p>
           <motion.div
             initial={{ opacity: 0 }}

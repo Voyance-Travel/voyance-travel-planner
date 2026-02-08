@@ -87,7 +87,7 @@ const faqCategories = [
       },
       {
         q: 'Can I customize my generated itinerary?',
-         a: 'Absolutely! Every generated itinerary is fully customizable. You can swap activities, change restaurants, adjust timing, and add your own discoveries. Free users can also choose "I\'ll build it myself" to use the itinerary shell with all manual tools—perfect for travelers who want to plan everything themselves.',
+         a: 'Absolutely! Every generated itinerary is fully customizable. You can swap activities, change restaurants, adjust timing, and add your own discoveries. Free users can also choose "I\'ll build it myself" to use the itinerary shell with all manual tools, perfect for travelers who want to plan everything themselves.',
       },
       {
         q: 'Can I share my trip with friends or family?',

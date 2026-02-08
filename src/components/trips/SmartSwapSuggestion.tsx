@@ -74,7 +74,7 @@ function detectSwapReason(
     return {
       type: 'running_late',
       message: `${nextActivity.name} starts in ${minsUntilStart} min`,
-      suggestion: 'Tight on time — swap for something closer?',
+      suggestion: 'Tight on time? Swap for something closer.',
     };
   }
 

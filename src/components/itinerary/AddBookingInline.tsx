@@ -628,7 +628,7 @@ export function AddHotelInline({
             <DialogDescription>
               {existingHotels.length > 0 
                 ? `You have ${existingHotels.length} stay(s). Add another or edit dates to avoid overlap.`
-                : 'Enter your stay details — hotel, Airbnb, vacation rental, or any address.'
+                : 'Enter your stay details: hotel, Airbnb, vacation rental, or any address.'
               }
             </DialogDescription>
           </DialogHeader>

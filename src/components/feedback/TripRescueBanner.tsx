@@ -158,7 +158,7 @@ export function TripRescueBanner({
 
             {isLastDay && (
               <p className="text-xs text-muted-foreground mt-3 text-center italic">
-                It's your last day — make the most of it! We'll use this feedback for future trips.
+                It's your last day, make the most of it! We'll use this feedback for future trips.
               </p>
             )}
           </CardContent>
