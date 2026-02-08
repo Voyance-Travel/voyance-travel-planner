@@ -1,173 +1,134 @@
 
+# Lock In Final Credit Pricing Model
 
-# Two Paths, One Parser — Full Implementation Plan
+## What's Changing
 
-## Confirmed Design Decisions
+The current pricing config and backend have outdated credit costs and are missing key concepts from the final model. Here's the gap:
 
-| Decision | Resolution |
-|----------|-----------|
-| Either/Or options | Radio-style "Choose one:" groups via `optionGroup` field |
-| Currency | Display as-parsed, no conversion |
-| Preferences vs DNA | Keep separate (Option A), merge only at generation time |
-| Validation | Editable chips before save, "Save to profile" checkbox |
-| Conflicts | Explicit prompt preferences override DNA per-trip only |
+| Item | Current | Final |
+|------|---------|-------|
+| Unlock Day | 90 credits | 60 credits |
+| Smart Finish | $6.99 Stripe checkout | 50 credits |
+| Swap Activity | 15 credits (always) | 5 credits (after 10 free/trip) |
+| Regenerate Day | 90 credits (always) | 10 credits (after 5 free/trip) |
+| AI Message | 10 credits (always) | 5 credits (after 20 free/trip) |
+| Restaurant Rec | 15 credits (always) | 5 credits (after 5 free/trip) |
+| Free action caps | Not implemented | Per-trip free usage caps |
 
-## New Files to Create
+Flexible credit packs, Voyance Club packs, monthly grants, and free-credits-first spending logic are all already correct -- no changes needed.
 
-### 1. `supabase/functions/parse-trip-input/index.ts`
+Multi-city fees and complexity multipliers are already implemented and tracking in `trip_complexity`. No changes needed.
 
-Edge function using Gemini Flash with tool calling for structured extraction.
+Free actions (route optimization, nearby suggestions, local events) are either already set to 0 cost or not in the cost map at all -- safe, no risk of accidental charging.
 
-- Accepts `{ text: string }` body
-- System prompt instructs the model to:
-  - Detect prompt vs output sections (looks for "I want...", "Build me...", separators)
-  - Extract preferences from prompt section (budget, dietary, pace, avoids, walkability)
-  - Extract itinerary from output section (days, activities, times, costs, options)
-  - Handle tables, bullets, prose, mixed formats, emoji formatting
-  - Map custom column headers dynamically ("Vibe" to notes, "Where" to location)
-  - Detect either/or options and assign shared `optionGroup` IDs
-  - Capture accommodation notes and practical tips as separate arrays
-- Tool-calling schema defines `extract_trip_data` function with full `ParsedTripInput` shape including `ParsedPreferences`
-- Returns structured JSON with `preferences` (nullable) + itinerary data
-- Handles 429/402 errors from Lovable AI gateway
-- No auth required (free operation)
-- Cost: ~$0.005-0.03 per paste depending on complexity
-- Register in `supabase/config.toml`
+## Implementation Steps
 
-### 2. `src/types/parsedTrip.ts`
+### 1. Database: Add per-trip action usage tracking
 
-TypeScript interfaces:
+Create a `trip_action_usage` table to track free cap consumption per trip:
 
 ```text
-ParsedPreferences {
-  budget?: string
-  budgetLevel?: "budget" | "mid-range" | "luxury"
-  focus?: string[]
-  avoid?: string[]
-  dietary?: string[]
-  walkability?: string
-  pace?: string
-  accessibility?: string[]
-  rawPreferenceText?: string
-}
+trip_action_usage
+-----------------
+id (uuid, PK)
+user_id (uuid, NOT NULL)
+trip_id (uuid, NOT NULL, FK -> trips)
+action_type (text, NOT NULL)  -- swap_activity, regenerate_day, ai_message, restaurant_rec
+usage_count (int, default 0)
+updated_at (timestamptz)
+UNIQUE(user_id, trip_id, action_type)
+```
 
-ParsedTripInput {
-  preferences?: ParsedPreferences
-  destination?: string
-  dates?: { start: string, end: string }
-  duration?: number
-  travelers?: number
-  tripType?: string
-  days: ParsedDay[]
-  accommodationNotes?: string[]
-  practicalTips?: string[]
-  unparsed?: string[]
-}
+RLS policies: Users can only SELECT/INSERT/UPDATE their own rows.
 
-ParsedDay {
-  dayNumber: number
-  date?: string
-  theme?: string
-  dailyBudget?: number
-  activities: ParsedActivity[]
-}
+### 2. Update `src/config/pricing.ts`
 
-ParsedActivity {
-  name: string
-  time?: string
-  location?: string
-  cost?: number
-  currency?: string
-  notes?: string
-  description?: string
-  category?: string
-  isOption?: boolean
-  optionGroup?: string
-  bookingRequired?: boolean
-  source: 'parsed'
+- `UNLOCK_DAY`: 90 -> 60
+- `SWAP_ACTIVITY`: 15 -> 5
+- `REGENERATE_DAY`: 90 -> 10
+- `AI_MESSAGE`: 10 -> 5
+- `RESTAURANT_REC`: 15 -> 5
+- Add `SMART_FINISH: 50`
+- Add `FREE_ACTION_CAPS` config:
+
+```text
+FREE_ACTION_CAPS = {
+  swap_activity: 10,
+  regenerate_day: 5,
+  ai_message: 20,
+  restaurant_rec: 5,
 }
 ```
 
-### 3. `src/components/planner/ManualTripPasteEntry.tsx`
+- Update `BASE_RATE_PER_DAY` from 90 to 60 (referenced in trip cost examples and internal cost docs)
 
-New component for the "I'll Build Myself" tab:
+### 3. Update `spend-credits` edge function
 
-- Large textarea with placeholder showing example paste format
-- "Organize My Research" button
-- Calls `parse-trip-input` edge function
-- Loading state during parsing
-- **Preference review step** (when preferences detected):
-  - Shows extracted values as editable chips/tags
-  - "Save to my profile for future trips" checkbox
-  - User can edit/remove any extracted preference
-- **Itinerary preview** showing parsed days and activity count
-- On confirm: creates trip in DB with `manual_builder` flag, redirects to itinerary view
-- No credit check, no auth gate (but saving preferences requires auth)
+- Update `FIXED_COSTS` to new values: unlock_day=60, swap_activity=5, regenerate_day=10, ai_message=5, restaurant_rec=5
+- Add `smart_finish: 50` to fixed costs
+- Change `BASE_RATE_PER_DAY` from 90 to 60
+- Add free cap logic: when a capped action comes in with a `tripId`, query `trip_action_usage`. If usage is under the cap, increment usage count and return success with 0 credits spent. If at/over cap, charge credits normally.
 
-### 4. `src/utils/createTripFromParsed.ts`
+### 4. Convert Smart Finish from Stripe to credits
 
-Utility to convert `ParsedTripInput` to the existing trip/itinerary_data format:
+Update `SmartFinishBanner.tsx`:
+- Replace the "$6.99" Stripe checkout button with "50 credits" credit-based purchase
+- Call `spend-credits` with action `smart_finish` instead of invoking `purchase-smart-finish`
+- On success, mark `smart_finish_purchased = true` on the trip and trigger enrichment
+- The `purchase-smart-finish` edge function becomes unused (cleanup later)
 
-- Maps `ParsedDay[]` to the `itinerary_data.days` JSONB structure
-- Handles either/or options: first option becomes primary, alternatives stored in activity metadata as `alternativeOptions`
-- Sets `[Add address]` placeholders for missing locations
-- Sets `source: 'parsed'` on all activities
-- Stores `accommodationNotes` and `practicalTips` in `itinerary_data` metadata
-- Creates trip record via existing Supabase insert flow
-- Enables manual builder mode via Zustand store
+### 5. Create `useActionCap` hook
 
-## Files to Modify
-
-### 5. `src/pages/Start.tsx`
-
-- Add 4th tab button: "I'll Build Myself" with `PenLine` icon
-- `planMode` type changes from `'single' | 'multi' | 'chat'` to `'single' | 'multi' | 'chat' | 'manual'`
-- When `planMode === 'manual'`, render `ManualTripPasteEntry` component
-- Hide the form fields (destination, dates, etc.) in manual mode — the parser extracts them
-
-### 6. `src/components/itinerary/EditorialItinerary.tsx`
-
-- Detect activities with `isOption: true` and matching `optionGroup`
-- Render grouped options as radio-style selection blocks:
-  ```text
-  Dinner -- Choose one:
-  ( ) Uchi (elevated)
-  ( ) Loro (casual but excellent)
-  ```
-- When user selects an option, update the activity in state (selected becomes primary)
-- Show `accommodationNotes` and `practicalTips` (from `itinerary_data` metadata) in collapsible sections at the bottom of the itinerary for manually parsed trips
-- Smart Finish banner already shows for manual mode trips -- verify it works with this new entry path
-
-### 7. `supabase/config.toml`
-
-Register the new `parse-trip-input` function with `verify_jwt = false` (free, no auth required).
-
-## No Database Changes
-
-Existing infrastructure covers everything:
-- `trips` table with `itinerary_data` JSONB handles the parsed scaffold
-- `user_preferences` table stores extracted preferences (if user opts to save)
-- `manual_builder` tracked client-side in Zustand persist store
-- `smart_finish_purchased` flag already exists on trips
-
-## Implementation Sequence
+New hook for components to check free cap status:
 
 ```text
-Step 1: Create types (parsedTrip.ts)
-Step 2: Create edge function (parse-trip-input) + deploy
-Step 3: Create utility (createTripFromParsed.ts)
-Step 4: Create ManualTripPasteEntry component
-Step 5: Add 4th tab to Start.tsx
-Step 6: Update EditorialItinerary for option groups + notes sections
-Step 7: Test end-to-end with the Austin example paste
+useActionCap(tripId, actionType)
+  -> { isFree: boolean, usedCount: number, freeRemaining: number, creditCost: number, isLoading: boolean }
 ```
 
-## Cost Model
+Queries `trip_action_usage` for the current user + trip + action type.
 
-| Operation | Cost | Paid By |
-|-----------|------|---------|
-| Parse paste input | ~$0.005-0.03 | Free (absorbed) |
-| View organized itinerary | $0 | Free |
-| Smart Finish enrichment | $6.99 | User |
-| Full AI build (Just Tell Us) | Credits | User |
+### 6. Update `useSpendCredits` hook
 
+- Add `SMART_FINISH: 'smart_finish'` to the `ACTION_MAP`
+- Existing flow handles everything else automatically
+
+### 7. Update frontend components
+
+- `ItineraryAssistant.tsx`: Use `useActionCap` to show "Free" vs "5 credits" for chat messages
+- `DNAFeedbackChat.tsx`: Same pattern for AI messages
+- `AiFeatureGate.tsx`: Update copy from "requires Smart Finish or credits" to "requires credits"
+- `useFreeTierLimits.ts`: Values auto-update from `CREDIT_COSTS` changes
+- `LockedDayCard.tsx`, `CreditNudge.tsx`: Auto-update from config
+- `Pricing.tsx`: Update any hardcoded credit amounts in marketing copy
+
+### 8. Update `tripCostCalculator.ts`
+
+Change `BASE_RATE_PER_DAY` from 90 to 60 so new trip estimates reflect the final pricing.
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| New migration | `trip_action_usage` table + RLS + unique index |
+| `src/config/pricing.ts` | Updated costs, added `FREE_ACTION_CAPS`, `SMART_FINISH` |
+| `src/lib/tripCostCalculator.ts` | `BASE_RATE_PER_DAY` 90 -> 60 |
+| `supabase/functions/spend-credits/index.ts` | New costs + free cap logic |
+| `src/components/itinerary/SmartFinishBanner.tsx` | Credit-based instead of Stripe |
+| `src/hooks/useSpendCredits.ts` | Add `SMART_FINISH` to action map |
+| `src/hooks/useActionCap.ts` | New hook for free cap checking |
+| `src/components/itinerary/ItineraryAssistant.tsx` | Free cap display |
+| `src/components/profile/DNAFeedbackChat.tsx` | Free cap display |
+| `src/components/itinerary/AiFeatureGate.tsx` | Updated copy |
+| `src/pages/Pricing.tsx` | Updated credit amounts in copy |
+
+## What Stays the Same
+
+- Flexible Credits packs (100/$9, 300/$25, 500/$39)
+- Voyance Club packs (Voyager/Explorer/Adventurer)
+- Monthly grant (150 credits, 2-month expiry, 300 cap)
+- Multi-city fees (+60/+120/+180 cap) -- already live
+- Complexity multiplier (1.00x/1.15x/1.30x) -- already live
+- Free-credits-first spending order
+- Round-up logic (drain to zero if over half)
+- Ledger/accounting system
