@@ -167,7 +167,7 @@ export function ManualTripPasteEntry() {
           I'll Build It Myself
         </h2>
         <p className="text-sm text-muted-foreground">
-          Paste your research — we'll organize it into a trip you can edit
+          Paste your research - we'll organize it into a trip you can edit
         </p>
       </div>
 
@@ -360,7 +360,7 @@ export function ManualTripPasteEntry() {
             </div>
 
             <p className="text-[11px] text-center text-muted-foreground">
-              Free — you can edit everything after. Want AI enrichment? Smart Finish is available inside.
+              Free - you can edit everything after. Want AI enrichment? Smart Finish is available inside.
             </p>
           </motion.div>
         )}

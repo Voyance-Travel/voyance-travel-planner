@@ -219,7 +219,7 @@ export function SmartFinishBanner({
               ) : (
                 <Zap className="h-4 w-4" />
               )}
-              Smart Finish — $6.99
+              Smart Finish - $6.99
             </Button>
             <p className="text-[11px] text-center text-muted-foreground">
               Your research. Our polish. Route optimization, reviews, tips & DNA fixes.

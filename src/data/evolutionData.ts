@@ -78,7 +78,7 @@ export const TRAVELER_STAGES: Record<TravelerStage, StageDefinition> = {
     id: 'Master Traveler',
     name: 'The Master Traveler',
     tagline: 'The world is home',
-    description: 'Travel isn\'t something you do—it\'s who you are. You\'ve transcended tourism to become a true citizen of the world, giving back as much as you receive.',
+    description: 'Travel isn\'t something you do, it\'s who you are. You\'ve transcended tourism to become a true citizen of the world, giving back as much as you receive.',
     keyMilestones: [
       'Travel has become a way of life, not escape',
       'Deep understanding of global interconnectedness',
@@ -250,7 +250,7 @@ export function calculateEvolutionPath(
       unlockHint = 'Give back to destinations and inspire others with your journey.';
       break;
     default:
-      unlockHint = 'You\'ve reached the pinnacle—now inspire the next generation.';
+      unlockHint = 'You\'ve reached the pinnacle. Now inspire the next generation.';
   }
   
   return {
