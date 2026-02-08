@@ -21,7 +21,7 @@ import {
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
-  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins
+  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
@@ -68,6 +68,8 @@ import { TripCollaboratorsPanel } from './TripCollaboratorsPanel';
 import { GuestDNABanner } from './GuestDNABanner';
 import { type CollaboratorAttribution, getCollaboratorColor, buildCollaboratorColorMap } from '@/utils/collaboratorAttribution';
 import { useTripPermission, useTripCollaborators } from '@/services/tripCollaboratorsAPI';
+import TripChat from '@/components/chat/TripChat';
+import TripSuggestions from '@/components/suggestions/TripSuggestions';
 import type { BookingItemState, TravelerInfo } from '@/services/bookingStateMachine';
 import OptimizePreferencesDialog, { type OptimizePreferences } from './OptimizePreferencesDialog';
 import ReviewsDrawer from '@/components/reviews/ReviewsDrawer';
@@ -797,7 +799,7 @@ export function EditorialItinerary({
 }: EditorialItineraryProps) {
   const [days, setDays] = useState<EditorialDay[]>(initialDays);
   const [expandedDays, setExpandedDays] = useState<number[]>(initialDays.map(d => d.dayNumber));
-  const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'payments' | 'details' | 'needtoknow'>('itinerary');
+  const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'payments' | 'details' | 'needtoknow' | 'collab'>('itinerary');
   const [selectedDayIndex, setSelectedDayIndex] = useState(() => {
     // Auto-select "Today" if trip is active
     const todayIndex = initialDays.findIndex(d => d.date && isToday(parseISO(d.date)));
@@ -2254,6 +2256,7 @@ export function EditorialItinerary({
             { id: 'payments', label: 'Payments', fullLabel: 'Payments', icon: <CreditCard className="h-4 w-4" /> },
             { id: 'details', label: 'Details', fullLabel: 'Trip Details', icon: <Plane className="h-4 w-4" /> },
             { id: 'needtoknow', label: 'Info', fullLabel: 'Need to Know', icon: <Info className="h-4 w-4" /> },
+            ...(collaborators.length > 0 ? [{ id: 'collab', label: 'Group', fullLabel: 'Group Chat & Vote', icon: <MessageCircle className="h-4 w-4" /> }] : []),
           ].map((tab) => (
             <button
               key={tab.id}
@@ -3026,6 +3029,37 @@ export function EditorialItinerary({
             />
           </motion.div>
         )}
+
+        {activeTab === 'collab' && collaborators.length > 0 && (
+          <motion.div
+            key="collab"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="space-y-6"
+          >
+            {/* Suggestions & Voting */}
+            <div className="space-y-3">
+              <h3 className="font-serif text-lg font-semibold text-foreground flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                Suggestions & Voting
+              </h3>
+              <TripSuggestions tripId={tripId} tripType="consumer" />
+            </div>
+
+            {/* Group Chat */}
+            <div className="space-y-3">
+              <h3 className="font-serif text-lg font-semibold text-foreground flex items-center gap-2">
+                <MessageCircle className="h-5 w-5 text-primary" />
+                Group Chat
+              </h3>
+              <div className="border rounded-xl bg-card h-[400px]">
+                <TripChat tripId={tripId} tripType="consumer" />
+              </div>
+            </div>
+          </motion.div>
+        )}
+
       </AnimatePresence>
 
       {/* Guided Assist Dialog - shows after 3 regenerations */}
