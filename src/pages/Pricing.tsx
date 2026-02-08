@@ -15,7 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
 import { CREDIT_PACKS, TOPUP_PACK, formatCredits } from '@/config/pricing';
-import { EXAMPLE_TRIP_COSTS } from '@/lib/tripCostCalculator';
+
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { EmbeddedCheckoutModal } from '@/components/checkout';
@@ -673,46 +673,6 @@ export default function Pricing() {
         </div>
       </section>
 
-      {/* ================================================================= */}
-      {/* WHAT TRIPS ACTUALLY COST                                          */}
-      {/* ================================================================= */}
-      <section className="py-12 sm:py-16 bg-muted/30">
-        <div className="max-w-2xl mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-8"
-          >
-            <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-2">
-              What Trips Actually Cost
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Real examples, real credit costs.
-            </p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="bg-card border border-border rounded-2xl overflow-hidden"
-          >
-            <div className="grid grid-cols-[1fr_auto] text-xs font-medium text-muted-foreground border-b border-border px-4 py-3">
-              <span>Trip</span>
-              <span>Credits</span>
-            </div>
-            <div className="divide-y divide-border">
-              {EXAMPLE_TRIP_COSTS.map((trip, i) => (
-                <div key={i} className="grid grid-cols-[1fr_auto] items-center px-4 py-3">
-                  <span className="text-sm text-foreground">{trip.label}</span>
-                  <span className="text-sm font-medium text-primary tabular-nums">~{formatCredits(trip.credits)}</span>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        </div>
-      </section>
 
       {/* ================================================================= */}
       {/* FAQ                                                               */}
