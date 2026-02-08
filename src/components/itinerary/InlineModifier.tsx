@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Check, X, Loader2, MessageSquare } from 'lucide-react';
+import { Sparkles, Check, X, Loader2, MessageSquare, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { sendChatMessage, getActionDisplayInfo, type ItineraryContext } from '@/services/itineraryChatAPI';
@@ -11,6 +11,8 @@ import { useSpendCredits } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { CREDIT_COSTS } from '@/config/pricing';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface InlineModifierProps {
   tripId: string;
@@ -20,6 +22,8 @@ interface InlineModifierProps {
   days: ItineraryDay[];
   onItineraryUpdate: (updatedDays: ItineraryDay[]) => void;
   className?: string;
+  /** When true, changes create suggestions instead of applying directly */
+  proposeMode?: boolean;
 }
 
 interface PendingChange {
@@ -39,12 +43,15 @@ export function InlineModifier({
   days,
   onItineraryUpdate,
   className,
+  proposeMode = false,
 }: InlineModifierProps) {
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [pendingChange, setPendingChange] = useState<PendingChange | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+
+  const { user } = useAuth();
 
   // Credit system hooks
   const { data: creditData } = useCredits();
@@ -144,9 +151,10 @@ export function InlineModifier({
     } finally {
       setIsProcessing(false);
     }
-  }, [input, isProcessing, buildContext]);
+  }, [input, isProcessing, buildContext, isPaid, totalCredits, spendCredits, tripId]);
 
-  const handleApply = useCallback(async () => {
+  /** Direct apply — owner or free_edit guest */
+  const handleApplyDirect = useCallback(async () => {
     if (!pendingChange) return;
 
     setIsApplying(true);
@@ -180,10 +188,50 @@ export function InlineModifier({
     }
   }, [pendingChange, tripId, days, destination, onItineraryUpdate]);
 
+  /** Propose as suggestion — propose_approve guest */
+  const handleProposeSuggestion = useCallback(async () => {
+    if (!pendingChange) return;
+
+    setIsApplying(true);
+
+    try {
+      const displayName = user?.name || user?.email?.split('@')[0] || 'Guest';
+
+      const { error } = await supabase
+        .from('trip_suggestions')
+        .insert({
+          trip_id: tripId,
+          trip_type: 'consumer',
+          user_id: user?.id || null,
+          display_name: displayName,
+          suggestion_type: 'general',
+          title: pendingChange.preview,
+          description: `AI-suggested change: ${pendingChange.message}\n\nAction: ${pendingChange.action.type}\nDetails: ${JSON.stringify(pendingChange.action.params)}`,
+        });
+
+      if (error) throw error;
+
+      toast.success('Change proposed for approval!');
+      setPendingChange(null);
+      setInput('');
+      setIsExpanded(false);
+    } catch (error) {
+      console.error('[InlineModifier] Propose error:', error);
+      toast.error('Failed to propose change. Please try again.');
+    } finally {
+      setIsApplying(false);
+    }
+  }, [pendingChange, tripId, user]);
+
+  const handleApply = proposeMode ? handleProposeSuggestion : handleApplyDirect;
+
   const handleCancel = useCallback(() => {
     setPendingChange(null);
     setInput('');
   }, []);
+
+  const applyLabel = proposeMode ? 'Propose' : 'Apply';
+  const applyIcon = proposeMode ? <Lightbulb className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />;
 
   return (
     <div className={cn("relative", className)}>
@@ -196,7 +244,7 @@ export function InlineModifier({
           className="gap-2 text-muted-foreground hover:text-foreground"
         >
           <MessageSquare className="h-4 w-4" />
-          Modify itinerary...
+          {proposeMode ? 'Propose a change...' : 'Modify itinerary...'}
         </Button>
       )}
 
@@ -215,7 +263,10 @@ export function InlineModifier({
                 <Input
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder='Try "Make day 3 lighter" or "Add more food spots"'
+                  placeholder={proposeMode
+                    ? 'Suggest a change, e.g. "Add more food spots"'
+                    : 'Try "Make day 3 lighter" or "Add more food spots"'
+                  }
                   disabled={isProcessing}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
@@ -261,8 +312,21 @@ export function InlineModifier({
               <motion.div
                 initial={{ opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="p-4 bg-muted/50 border border-border rounded-lg space-y-3"
+                className={cn(
+                  "p-4 border rounded-lg space-y-3",
+                  proposeMode
+                    ? "bg-amber-500/5 border-amber-500/20"
+                    : "bg-muted/50 border-border"
+                )}
               >
+                {/* Mode indicator for propose */}
+                {proposeMode && (
+                  <div className="flex items-center gap-1.5 text-xs text-amber-600 font-medium">
+                    <Lightbulb className="h-3 w-3" />
+                    This will be submitted as a proposal for approval
+                  </div>
+                )}
+
                 {/* AI message */}
                 {pendingChange.message && (
                   <p className="text-sm text-foreground">
@@ -287,9 +351,9 @@ export function InlineModifier({
                     {isApplying ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : (
-                      <Check className="h-3.5 w-3.5" />
+                      applyIcon
                     )}
-                    Apply
+                    {applyLabel}
                   </Button>
                   <Button
                     variant="outline"

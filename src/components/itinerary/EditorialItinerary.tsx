@@ -2398,13 +2398,14 @@ export function EditorialItinerary({
 
 
             {/* Inline Modifier - Natural language itinerary changes */}
-            {effectiveIsEditable && (
+            {(effectiveIsEditable || guestMustPropose) && (
               <InlineModifier
                 tripId={tripId}
                 destination={destination}
                 startDate={startDate}
                 endDate={endDate}
                 days={days as unknown as ItineraryDay[]}
+                proposeMode={!!guestMustPropose}
                 onItineraryUpdate={(updatedDays) => {
                   setDays(updatedDays as unknown as EditorialDay[]);
                   setHasChanges(true);
