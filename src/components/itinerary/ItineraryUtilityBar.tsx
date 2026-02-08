@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { 
-  Share2, Download, Printer, Save, Link2, Copy, Check, 
+  Share2, Download, Save, Link2, Copy, Check, 
   Mail, MessageCircle, FileText
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -40,9 +40,7 @@ export function ItineraryUtilityBar({
 }: ItineraryUtilityBarProps) {
   const [showShareModal, setShowShareModal] = useState(false);
 
-  const handlePrint = () => {
-    window.print();
-  };
+  
 
   const handleExportPDF = () => {
     if (onExportPDF) {
@@ -91,11 +89,6 @@ export function ItineraryUtilityBar({
           <span className="hidden sm:inline">Export PDF</span>
         </Button>
 
-        {/* Print */}
-        <Button variant="ghost" size="sm" className="gap-2" onClick={handlePrint}>
-          <Printer className="h-4 w-4" />
-          <span className="hidden sm:inline">Print</span>
-        </Button>
       </div>
 
       {/* Share Modal */}
