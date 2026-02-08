@@ -716,7 +716,7 @@ export default function Pricing() {
               Or Build It Yourself
             </h2>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto mb-4">
-              Don't want to pay? Use our manual builder: start with your free 2-day preview, add your own activities, and research at your own pace.
+              Don't want to pay? Use our manual builder: start with your free Day 1 preview, add your own activities, and research at your own pace.
             </p>
             <p className="text-xs text-muted-foreground italic">
               Credits unlock our curation. The builder is always free.
