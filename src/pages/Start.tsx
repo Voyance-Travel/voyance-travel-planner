@@ -695,6 +695,7 @@ function TripDetailsStep({
           </CollapsibleContent>
         </Collapsible>
         )}
+      </div>
 
       {/* Navigation — only in form mode */}
       {planMode !== 'chat' && (
