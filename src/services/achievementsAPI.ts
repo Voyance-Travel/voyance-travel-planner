@@ -336,6 +336,95 @@ export async function syncTripCountAchievements(): Promise<void> {
   }
 }
 
+/**
+ * Retroactive achievement sync — checks existing user state and unlocks
+ * any achievements that were earned before the achievement system existed.
+ * Safe to call multiple times (idempotent via unlockAchievement's duplicate check).
+ */
+export async function syncRetroactiveAchievements(): Promise<number> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return 0;
+
+    let unlocked = 0;
+
+    // 1. Check if user has Travel DNA → first_quiz
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('travel_dna, display_name, avatar_url')
+      .eq('id', user.id)
+      .single();
+
+    if (profile?.travel_dna) {
+      const result = await unlockAchievement('first_quiz', { retroactive: true });
+      if (result.success && !result.alreadyUnlocked) unlocked++;
+    }
+
+    // 2. Check if profile is "complete" (has display_name + avatar + DNA)
+    if (profile?.travel_dna && profile?.display_name && profile?.avatar_url) {
+      const result = await unlockAchievement('profile_complete', { retroactive: true });
+      if (result.success && !result.alreadyUnlocked) unlocked++;
+    }
+
+    // 3. Check trip counts
+    const { count: tripCount } = await supabase
+      .from('trips')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id);
+
+    if (tripCount && tripCount > 0) {
+      const r = await unlockAchievement('first_trip', { retroactive: true });
+      if (r.success && !r.alreadyUnlocked) unlocked++;
+
+      // Count-based trip achievements
+      for (const { id, threshold } of [
+        { id: 'trips_5', threshold: 5 },
+        { id: 'trips_10', threshold: 10 },
+        { id: 'trips_25', threshold: 25 },
+      ]) {
+        if (tripCount >= threshold) {
+          const r2 = await unlockAchievement(id, { retroactive: true, tripCount });
+          if (r2.success && !r2.alreadyUnlocked) unlocked++;
+        } else {
+          await updateAchievementProgress(id, tripCount);
+        }
+      }
+    }
+
+    // 4. Check if user has generated any itinerary
+    const { count: itinCount } = await supabase
+      .from('trips')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .not('itinerary', 'is', null);
+
+    if (itinCount && itinCount > 0) {
+      const r = await unlockAchievement('first_itinerary', { retroactive: true });
+      if (r.success && !r.alreadyUnlocked) unlocked++;
+    }
+
+    // 5. Check if user has collaborators (group trip)
+    const { count: collabCount } = await supabase
+      .from('trip_collaborators')
+      .select('*', { count: 'exact', head: true })
+      .eq('invited_by', user.id);
+
+    if (collabCount && collabCount > 0) {
+      const r = await unlockAchievement('group_trip', { retroactive: true });
+      if (r.success && !r.alreadyUnlocked) unlocked++;
+    }
+
+    if (unlocked > 0) {
+      console.log(`[Achievements] Retroactively unlocked ${unlocked} achievement(s)`);
+    }
+
+    return unlocked;
+  } catch (err) {
+    console.error('[Achievements] Retroactive sync error:', err);
+    return 0;
+  }
+}
+
 export const TIER_COLORS: Record<AchievementTier, string> = {
   bronze: 'from-amber-600 to-amber-400',
   silver: 'from-slate-400 to-slate-200',

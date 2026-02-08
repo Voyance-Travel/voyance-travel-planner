@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Trophy, 
@@ -25,7 +26,7 @@ import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { useUserAchievements, type UserAchievement, type AchievementCategory } from '@/services/achievementsAPI';
+import { useUserAchievements, syncRetroactiveAchievements, type UserAchievement, type AchievementCategory } from '@/services/achievementsAPI';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -267,7 +268,21 @@ interface AchievementsPanelProps {
 
 export default function AchievementsPanel({ className }: AchievementsPanelProps) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const { data, isLoading } = useUserAchievements(user?.id || '');
+  const hasSynced = useRef(false);
+
+  // Retroactively unlock achievements for users who completed actions before the system existed
+  useEffect(() => {
+    if (!user?.id || hasSynced.current) return;
+    hasSynced.current = true;
+    syncRetroactiveAchievements().then((count) => {
+      if (count > 0) {
+        queryClient.invalidateQueries({ queryKey: ['user-achievements'] });
+        toast.success(`${count} achievement${count > 1 ? 's' : ''} retroactively unlocked!`);
+      }
+    });
+  }, [user?.id, queryClient]);
   
   if (isLoading || !data) {
     return (
