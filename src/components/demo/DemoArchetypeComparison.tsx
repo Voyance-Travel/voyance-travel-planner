@@ -235,7 +235,7 @@ export function DemoArchetypeComparison() {
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
             Watch how the same Iceland trip transforms based on who's traveling.
-            Toggle between archetypes to see the difference instantly.
+            Toggle between types to see the difference instantly.
           </p>
         </motion.div>
 

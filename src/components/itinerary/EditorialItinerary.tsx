@@ -96,6 +96,7 @@ import { VoyanceInsight } from './VoyanceInsight';
 import { VoyancePickCallout } from './VoyancePickCallout';
 import { TransitBadge } from './TransitBadge';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
+import { useActionCap } from '@/hooks/useActionCap';
 import { AddActivityModal } from './AddActivityModal';
 import { ImportActivitiesModal } from './ImportActivitiesModal';
 import { SmartFinishBanner } from './SmartFinishBanner';
@@ -964,6 +965,9 @@ export function EditorialItinerary({
   // Per-day unlock for preview itineraries
   const { unlockDay, isUnlocking: isUnlockingDay, unlockingDayNumber } = useUnlockDay();
   
+  // Transport mode change free cap
+  const transportCap = useActionCap(tripId, 'transport_mode_change');
+  
   const { isManualBuilder, enableManualBuilder } = useManualBuilderStore();
   const isManualMode = tripId ? isManualBuilder(tripId) : false;
   
@@ -1063,21 +1067,21 @@ export function EditorialItinerary({
     const activity = day?.activities.find(a => a.id === activityId);
     if (!activity?.transportation) return;
 
-    // Charge credits (server handles free caps)
-    {
+    // Check free cap first, then charge credits if needed
+    if (!transportCap.isFree) {
       if (totalCredits < CREDIT_COSTS.TRANSPORT_MODE_CHANGE) {
         toast.error(`Need ${CREDIT_COSTS.TRANSPORT_MODE_CHANGE} credits to change transport mode`);
         return;
       }
-      try {
-        await spendCredits.mutateAsync({
-          action: 'TRANSPORT_MODE_CHANGE',
-          tripId,
-          metadata: { activityId, newMode },
-        });
-      } catch {
-        return;
-      }
+    }
+    try {
+      await spendCredits.mutateAsync({
+        action: 'TRANSPORT_MODE_CHANGE',
+        tripId,
+        metadata: { activityId, newMode },
+      });
+    } catch {
+      if (!transportCap.isFree) return;
     }
 
     setChangingTransportActivityId(activityId);
@@ -1137,7 +1141,10 @@ export function EditorialItinerary({
           };
         }));
         setHasChanges(true);
-        toast.success(`Route updated to ${newMode} (${CREDIT_COSTS.TRANSPORT_MODE_CHANGE} credits used)`);
+        toast.success(transportCap.isFree 
+          ? `Route updated to ${newMode} (free — ${transportCap.freeRemaining - 1} free changes left)`
+          : `Route updated to ${newMode} (${CREDIT_COSTS.TRANSPORT_MODE_CHANGE} credits used)`
+        );
       }
     } catch (err) {
       console.error('Transport mode change error:', err);
@@ -1145,7 +1152,7 @@ export function EditorialItinerary({
     } finally {
       setChangingTransportActivityId(null);
     }
-  }, [days, isPaid, totalCredits, spendCredits, tripId, destination]);
+  }, [days, isPaid, totalCredits, spendCredits, tripId, destination, transportCap]);
   // Get trip permission for current user
   const { data: tripPermission } = useTripPermission(tripId);
   const { data: collaborators = [] } = useTripCollaborators(tripId);

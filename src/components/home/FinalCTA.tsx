@@ -41,7 +41,7 @@ export default function FinalCTA() {
 
             {/* Subhead */}
             <p className="text-base sm:text-lg text-muted-foreground font-sans font-light mb-8 sm:mb-10 max-w-md leading-relaxed">
-              Your archetype. Your pace. Your perfect trip, built in minutes.
+              Your type. Your pace. Your perfect trip, built in minutes.
             </p>
 
             {/* Multi-level CTAs */}

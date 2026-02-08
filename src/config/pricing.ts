@@ -36,6 +36,7 @@ export const FREE_ACTION_CAPS: Record<string, number> = {
   regenerate_day: 5,
   ai_message: 20,
   restaurant_rec: 5,
+  transport_mode_change: 5,
 };
 
 // ============================================================
@@ -225,7 +226,7 @@ export const FREE_TIER = {
   freeFeatures: [
     'Complete itinerary with real venue names',
     'Personalized timing and reasoning',
-    'Travel DNA quiz and archetype',
+    'Travel DNA quiz and travel type',
     'Full day-by-day structure preview',
     'DNA alignment explanations',
     '150 free credits every month',

@@ -25,7 +25,7 @@ import { VoyanceWordmark } from '@/components/common/VoyanceWordmark';
 const exploreItems = [
   { href: ROUTES.EXPLORE, label: 'Browse Destinations', icon: Compass, description: 'Find your next adventure' },
   { href: ROUTES.DESTINATIONS, label: 'Featured Trips', icon: Map, description: 'Curated journeys by destination' },
-  { href: ROUTES.ARCHETYPES, label: 'Travel Archetypes', icon: Users, description: 'See all 27 traveler types' },
+  { href: ROUTES.ARCHETYPES, label: 'Travel Types', icon: Users, description: 'See all 27 traveler types' },
 ];
 
 const navLinks = [

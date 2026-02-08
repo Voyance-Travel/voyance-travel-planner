@@ -30,7 +30,7 @@ const ALL_SITE_PAGES: Record<string, string> = {
   '/demo': 'Demo',
   '/how-it-works': 'How It Works',
   '/about': 'About',
-  '/archetypes': 'Archetypes',
+  '/archetypes': 'Travel Types',
   '/guides': 'Guides',
   '/travel-tips': 'Travel Tips',
   '/sample-itinerary': 'Sample Itinerary',

@@ -3202,6 +3202,30 @@ export type Database = {
         }
         Relationships: []
       }
+      founding_member_tracker: {
+        Row: {
+          awarded_at: string
+          id: string
+          purchase_number: number
+          stripe_session_id: string | null
+          user_id: string
+        }
+        Insert: {
+          awarded_at?: string
+          id?: string
+          purchase_number: number
+          stripe_session_id?: string | null
+          user_id: string
+        }
+        Update: {
+          awarded_at?: string
+          id?: string
+          purchase_number?: number
+          stripe_session_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       free_tier_status: {
         Row: {
           created_at: string
@@ -7497,6 +7521,10 @@ export type Database = {
     }
     Functions: {
       accept_trip_invite: { Args: { p_token: string }; Returns: Json }
+      award_founding_member: {
+        Args: { p_stripe_session_id?: string; p_user_id: string }
+        Returns: Json
+      }
       cleanup_expired_search_cache: { Args: never; Returns: number }
       cleanup_expired_venues: { Args: never; Returns: number }
       cleanup_rate_limits: { Args: never; Returns: undefined }
@@ -7507,6 +7535,7 @@ export type Database = {
       generate_share_token:
         | { Args: never; Returns: string }
         | { Args: { size?: number }; Returns: string }
+      get_founding_member_count: { Args: never; Returns: number }
       get_intake_account: {
         Args: { p_intake_token: string }
         Returns: {

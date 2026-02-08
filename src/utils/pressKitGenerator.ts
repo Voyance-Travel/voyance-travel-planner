@@ -19,7 +19,7 @@ export const companyInfo = {
 
 export const keyStats = [
   { label: 'Curated Destinations', value: '500+' },
-  { label: 'Travel DNA Archetypes', value: '25' },
+  { label: 'Travel DNA Types', value: '25' },
   { label: 'Personalization Signals', value: '50+' },
   { label: 'AI Itinerary Engines', value: '3' },
 ];

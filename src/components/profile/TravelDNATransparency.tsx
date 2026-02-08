@@ -113,7 +113,7 @@ export default function TravelDNATransparency({ dnaData, className }: TravelDNAT
         >
           <div className="flex items-center gap-3">
             <Sparkles className="h-4 w-4 text-primary" />
-            <h4 className="text-sm font-medium text-foreground">Your Archetype Blend</h4>
+            <h4 className="text-sm font-medium text-foreground">Your Travel Type Blend</h4>
             <span className="text-xs text-muted-foreground ml-auto">
               {Math.round(confidenceLevel)}% confidence
             </span>
