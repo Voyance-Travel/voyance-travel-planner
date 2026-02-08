@@ -10,7 +10,7 @@ import FilterPanel from '@/components/explore/FilterPanel';
 import HeroSection from '@/components/explore/sections/HeroSection';
 
 import ExploreByStyle from '@/components/explore/sections/ExploreByStyle';
-import TrendingDestinationsEnhanced from '@/components/explore/sections/TrendingDestinationsEnhanced';
+
 import VoyanceGuides from '@/components/explore/sections/VoyanceGuides';
 import DestinationHeroImage from '@/components/common/DestinationHeroImage';
 import { scrollToTop } from '@/utils/scrollUtils';
@@ -343,12 +343,6 @@ export default function Explore() {
             <ExploreByStyle />
           </ScrollTarget>
 
-          {/* Trending Destinations */}
-          <ScrollTarget id="trending" className="scroll-mt-20">
-            <div ref={destinationGridRef}>
-              <TrendingDestinationsEnhanced />
-            </div>
-          </ScrollTarget>
 
           {/* Voyance Guides */}
           <ScrollTarget id="guides" className="scroll-mt-20">
