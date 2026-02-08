@@ -137,21 +137,21 @@ export const EXTERNAL_API_COSTS = {
 
 export const USER_LIFECYCLE_COSTS = {
   bounce: { min: 0.001, max: 0.003, desc: 'Visitor who leaves without signup' },
-  freeUser: { min: 0.34, max: 0.41, desc: 'Signs up, uses free 3-day trip + up to 5 edits, never pays' },
+  freeUser: { min: 0.34, max: 0.41, desc: 'One-time acquisition: free 3-day trip + up to 5 edits. Subsequent trips: $0.03 each (locked preview)' },
   singlePurchase: { min: 0.30, max: 1.25, desc: 'Buys one credit pack' },
   repeatUser: { min: 0.92, max: 3.40, desc: '3 trips per year' },
   powerUser: { min: 3.11, max: 11.38, desc: '10+ trips per year' },
 } as const;
 
 // Blended cost per visitor (weighted by distribution)
-// 60% bounce, 25% free, 10% single, 4% repeat, 1% power
+// 60% bounce, 25% free (one-time acquisition amortized), 10% single, 4% repeat, 1% power
 export const BLENDED_COST_PER_VISITOR = 
   0.60 * ((0.001 + 0.003) / 2) +
-  0.25 * ((0.34 + 0.41) / 2) +
+  0.25 * ((0.34 + 0.41) / 2) +  // One-time acquisition cost (not recurring per trip)
   0.10 * ((0.30 + 1.25) / 2) +
   0.04 * ((0.92 + 3.40) / 2) +
   0.01 * ((3.11 + 11.38) / 2);
-// ≈ $0.26 per visitor on average (up from $0.12 due to richer free tier)
+// ≈ $0.26 per visitor on average (acquisition-weighted, not recurring)
 
 // ============================================================================
 // CREDIT SYSTEM COSTS
@@ -201,8 +201,9 @@ export const REVENUE_CONFIG = {
     freeTripDays: 3,
     freeEditsLimit: 5,
     oneFreeTripPerAccount: true,
-    blendedCostPerFreeUser: 0.378,
-    worstCaseCostPerFreeUser: 0.413,
+    acquisitionCostBlended: 0.378,     // One-time per new user
+    acquisitionCostWorstCase: 0.413,   // All 5 edits used
+    recurringCostPerTrip: 0.030,       // 3 AI activities per locked preview
   },
 } as const;
 
