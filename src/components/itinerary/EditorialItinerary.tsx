@@ -92,6 +92,7 @@ import { useSkipList } from '@/hooks/useSkipList';
 import { validateItinerary, matchesSkipList, type ValidationIssue } from '@/utils/itineraryValidator';
 import { VoyanceInsight } from './VoyanceInsight';
 import { TransitBadge } from './TransitBadge';
+import { useManualBuilderStore } from '@/stores/manual-builder-store';
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -914,6 +915,9 @@ export function EditorialItinerary({
   // Per-day unlock for preview itineraries
   const { unlockDay, isUnlocking: isUnlockingDay, unlockingDayNumber } = useUnlockDay();
   
+  const { isManualBuilder, enableManualBuilder } = useManualBuilderStore();
+  const isManualMode = tripId ? isManualBuilder(tripId) : false;
+
   const [changingTransportActivityId, setChangingTransportActivityId] = useState<string | null>(null);
 
   // Handle per-day unlock from preview mode
@@ -2486,12 +2490,12 @@ export function EditorialItinerary({
                         className={cn(
                           'flex flex-col items-center px-3 py-2 rounded-lg transition-all min-w-[60px] relative',
                           isSelected 
-                            ? day.metadata?.isLocked ? 'bg-muted border border-border' : 'bg-primary text-primary-foreground'
-                            : day.metadata?.isLocked ? 'bg-muted/30 opacity-60 hover:opacity-80' : 'bg-muted/50 hover:bg-muted',
+                            ? (day.metadata?.isLocked && !isManualMode) ? 'bg-muted border border-border' : 'bg-primary text-primary-foreground'
+                            : (day.metadata?.isLocked && !isManualMode) ? 'bg-muted/30 opacity-60 hover:opacity-80' : 'bg-muted/50 hover:bg-muted',
                           isTodayDay && !isSelected && 'ring-2 ring-primary ring-offset-2'
                         )}
                       >
-                        {day.metadata?.isLocked && (
+                        {day.metadata?.isLocked && !isManualMode && (
                           <Lock className="h-3 w-3 absolute top-1 right-1 text-muted-foreground" />
                         )}
                         {dayDate && (
@@ -2543,7 +2547,7 @@ export function EditorialItinerary({
                 )}
                 
                 {/* Check if this day is locked (placeholder with no content) */}
-                {days[selectedDayIndex].metadata?.isLocked ? (
+                {days[selectedDayIndex].metadata?.isLocked && !isManualMode ? (
                   <LockedDayCard
                     dayNumber={days[selectedDayIndex].dayNumber}
                     title={days[selectedDayIndex].title || `Day ${days[selectedDayIndex].dayNumber}`}
@@ -2553,7 +2557,12 @@ export function EditorialItinerary({
                     onUnlock={() => handleUnlockDay(days[selectedDayIndex].dayNumber)}
                     creditsNeeded={CREDIT_COSTS.UNLOCK_DAY}
                     tripId={tripId}
-                    onManualBuild={() => {}}
+                    onManualBuild={() => {
+                      if (tripId) {
+                        enableManualBuilder(tripId);
+                        toast.success('Manual builder mode enabled! Edit freely.');
+                      }
+                    }}
                     isFirstTrip={!!days[selectedDayIndex].metadata?.isFirstTrip}
                     canAfford={totalCredits >= CREDIT_COSTS.UNLOCK_DAY}
                     currentBalance={totalCredits}
