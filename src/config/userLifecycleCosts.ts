@@ -53,7 +53,7 @@ export const AI_MODEL_PRICING = {
 export const AI_FEATURE_COSTS = {
   // ========== ENTRY POINT FEATURES (Pre-signup) ==========
   quick_preview: {
-    name: 'Quick Preview (3-day teaser)',
+    name: 'Quick Preview (2-day teaser)',
     model: 'google/gemini-2.5-flash',
     inputTokens: { min: 500, max: 1000 },
     outputTokens: { min: 200, max: 500 },

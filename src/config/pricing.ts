@@ -89,7 +89,7 @@ export const STRIPE_PRODUCTS = {
 
 // Monthly Credit Grant — ALL USERS (free & paid)
 // Conversion funnel:
-//   1. First trip: bypasses credits entirely (full 3-day enriched, one-time hook)
+//   1. First trip: bypasses credits entirely (full 2-day enriched, one-time hook)
 //   2. Subsequent trips: Day 1 preview always free (AI-only, no enrichment — just a mold)
 //   3. Monthly grant: 150cr/mo for ALL users, free credits expire in 2 months
 //   4. User can apply free credits to unlock additional days (e.g., Day 2 = 90cr)
@@ -186,12 +186,12 @@ export const ALL_CREDIT_PACKS = [
 
 // Trip cost examples (for pricing page — formula-based)
 export const TRIP_COST_EXAMPLES = {
-  threeDay: {
-    label: 'Paris, 3 days, standard',
-    days: 3,
+  twoDay: {
+    label: 'Paris, 2 days, standard',
+    days: 2,
     cities: 1,
     tier: 'standard' as const,
-    total: 270, // 3×90 = 270, ×1.0 = 270
+    total: 180, // 2×90 = 180, ×1.0 = 180
   },
   fiveDay: {
     label: 'Tokyo, 5 days, standard',
