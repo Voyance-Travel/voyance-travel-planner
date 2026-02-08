@@ -83,11 +83,13 @@ export function ItineraryUtilityBar({
           </Button>
         )}
 
-        {/* Export PDF */}
-        <Button variant="ghost" size="sm" className="gap-2" onClick={handleExportPDF}>
-          <FileText className="h-4 w-4" />
-          <span className="hidden sm:inline">Export PDF</span>
-        </Button>
+        {/* Export PDF — hidden when gated (onExportPDF is undefined) */}
+        {onExportPDF && (
+          <Button variant="ghost" size="sm" className="gap-2" onClick={handleExportPDF}>
+            <FileText className="h-4 w-4" />
+            <span className="hidden sm:inline">Export PDF</span>
+          </Button>
+        )}
 
       </div>
 

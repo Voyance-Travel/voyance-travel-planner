@@ -236,3 +236,12 @@ verify_jwt = false
 
 [functions.profile-ideal-hotel]
 verify_jwt = false
+
+[functions.analyze-trip-gaps]
+verify_jwt = false
+
+[functions.purchase-smart-finish]
+verify_jwt = false
+
+[functions.enrich-manual-trip]
+verify_jwt = false
