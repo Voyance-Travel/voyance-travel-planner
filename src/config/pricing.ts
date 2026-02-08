@@ -10,22 +10,33 @@ export const CREDIT_COSTS = {
   HOTEL_SEARCH: 40,           // Per city
 
   // Fixed per-action costs
-  UNLOCK_DAY: 90,             // Unlock a full day of details (= day generation cost)
-  REGENERATE_DAY: 90,         // Regenerate a day (same as unlock)
-  SWAP_ACTIVITY: 15,          // Swap an activity (1 Places + 1 Photo call)
-  RESTAURANT_REC: 15,         // Restaurant recommendation (1 Perplexity call)
-  AI_MESSAGE: 10,             // AI companion message (1 Gemini call)
+  UNLOCK_DAY: 60,             // Unlock a full day of details
+  SMART_FINISH: 50,           // Smart Finish for manual/imported trips
+  REGENERATE_DAY: 10,         // Regenerate a day (after 5 free/trip)
+  SWAP_ACTIVITY: 5,           // Swap an activity (after 10 free/trip)
+  RESTAURANT_REC: 5,          // Restaurant recommendation (after 5 free/trip)
+  AI_MESSAGE: 5,              // AI companion message (after 20 free/trip)
   HOTEL_OPTIMIZATION: 100,    // Approve hotel-based itinerary swaps
   MYSTERY_GETAWAY: 15,        // Mystery Getaway destination suggestions
   MYSTERY_LOGISTICS: 5,       // Flight estimate + hotel suggestions for mystery trip
   TRANSPORT_MODE_CHANGE: 5,   // Change transport mode for a route segment
 
-  // Free actions
+  // Free actions (unlimited, no cap)
   ROUTE_OPTIMIZATION: 0,
+  NEARBY_SUGGESTIONS: 0,
+  LOCAL_EVENTS: 0,
   PDF_EXPORT: 0,
   SHARING: 0,
   REAL_TIME_MODE: 0,
 } as const;
+
+// Per-trip free action caps (actions free up to this count per trip)
+export const FREE_ACTION_CAPS: Record<string, number> = {
+  swap_activity: 10,
+  regenerate_day: 5,
+  ai_message: 20,
+  restaurant_rec: 5,
+};
 
 // ============================================================
 // FLEXIBLE CREDITS — Quick Top-Up (transactional, no perks)
@@ -315,35 +326,35 @@ export const TRIP_COST_EXAMPLES = {
     days: 2,
     cities: 1,
     tier: 'standard' as const,
-    total: 180,
+    total: 120,
   },
   fiveDay: {
     label: 'Tokyo, 5 days, standard',
     days: 5,
     cities: 1,
     tier: 'standard' as const,
-    total: 450,
+    total: 300,
   },
   multiCity: {
     label: 'Tokyo → Kyoto, 7 days',
     days: 7,
     cities: 2,
     tier: 'standard' as const,
-    total: 690,
+    total: 480,
   },
   custom: {
     label: 'Barcelona anniversary + vegan',
     days: 3,
     cities: 1,
     tier: 'custom' as const,
-    total: 320,
+    total: 210,
   },
   curated: {
     label: 'Japan honeymoon, 3 cities, 10 days',
     days: 10,
     cities: 3,
     tier: 'highly_curated' as const,
-    total: 1330,
+    total: 900,
   },
 } as const;
 

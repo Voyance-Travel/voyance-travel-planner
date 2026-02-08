@@ -48,7 +48,7 @@ export interface TripEstimate {
 // CONSTANTS
 // ============================================================================
 
-export const BASE_RATE_PER_DAY = 90;
+export const BASE_RATE_PER_DAY = 60;
 
 export const MULTI_CITY_FEES: Record<number, number> = {
   1: 0,
@@ -180,9 +180,9 @@ export function getRecommendedPackForEstimate(creditsNeeded: number, currentBala
 // ============================================================================
 
 export const EXAMPLE_TRIP_COSTS = [
-  { label: 'Paris, 3 days', credits: 270 },
-  { label: 'Barcelona, 4 days, anniversary + vegan', credits: 420 },
-  { label: 'Tokyo, 5 days, vegetarian', credits: 520 },
-  { label: 'Tokyo → Kyoto, 7 days', credits: 690 },
-  { label: 'Japan, 3 cities, 10 days, honeymoon', credits: 1330 },
+  { label: 'Paris, 3 days', credits: 180 },
+  { label: 'Barcelona, 4 days, anniversary + vegan', credits: 280 },
+  { label: 'Tokyo, 5 days, vegetarian', credits: 300 },
+  { label: 'Tokyo → Kyoto, 7 days', credits: 480 },
+  { label: 'Japan, 3 cities, 10 days, honeymoon', credits: 900 },
 ] as const;

@@ -216,7 +216,7 @@ export default function DNAFeedbackChat({
           <div>
             <h4 className="text-sm font-medium text-foreground">Refine Your DNA</h4>
             <p className="text-xs text-muted-foreground">
-              AI-powered • {CREDIT_COSTS.AI_MESSAGE} credits/message
+              AI-powered • {CREDIT_COSTS.AI_MESSAGE} credits/message (after 20 free)
             </p>
           </div>
         </div>

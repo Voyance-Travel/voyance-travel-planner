@@ -17,6 +17,7 @@ const ACTION_MAP: Record<string, string> = {
   TRIP_GENERATION: 'trip_generation',
   HOTEL_SEARCH: 'hotel_search',
   UNLOCK_DAY: 'unlock_day',
+  SMART_FINISH: 'smart_finish',
   SWAP_ACTIVITY: 'swap_activity',
   REGENERATE_DAY: 'regenerate_day',
   RESTAURANT_REC: 'restaurant_rec',
