@@ -28,6 +28,7 @@ import { useCredits } from '@/hooks/useCredits';
 import { CREDIT_COSTS } from '@/config/pricing';
 import { CreditNudge } from './CreditNudge';
 import { UnlockBanner } from './UnlockBanner';
+import { LockedDayCard } from './LockedDayCard';
 import { useUnlockDay } from '@/hooks/useUnlockDay';
 import { HotelGalleryModal } from './HotelGalleryModal';
 import { DraggableActivityList } from './DraggableActivityList';
@@ -165,6 +166,11 @@ export interface EditorialDay {
   };
   estimatedWalkingTime?: string;
   estimatedDistance?: string;
+  metadata?: {
+    isPreview?: boolean;
+    isLocked?: boolean;
+    [key: string]: unknown;
+  };
 }
 
 export interface FlightSelection {
@@ -2477,13 +2483,16 @@ export function EditorialItinerary({
                           setExpandedDays([day.dayNumber]);
                         }}
                         className={cn(
-                          'flex flex-col items-center px-3 py-2 rounded-lg transition-all min-w-[60px]',
+                          'flex flex-col items-center px-3 py-2 rounded-lg transition-all min-w-[60px] relative',
                           isSelected 
-                            ? 'bg-primary text-primary-foreground' 
-                            : 'bg-muted/50 hover:bg-muted',
+                            ? day.metadata?.isLocked ? 'bg-muted border border-border' : 'bg-primary text-primary-foreground'
+                            : day.metadata?.isLocked ? 'bg-muted/30 opacity-60 hover:opacity-80' : 'bg-muted/50 hover:bg-muted',
                           isTodayDay && !isSelected && 'ring-2 ring-primary ring-offset-2'
                         )}
                       >
+                        {day.metadata?.isLocked && (
+                          <Lock className="h-3 w-3 absolute top-1 right-1 text-muted-foreground" />
+                        )}
                         {dayDate && (
                           <>
                             <span className="text-xs font-medium">
@@ -2532,45 +2541,60 @@ export function EditorialItinerary({
                   />
                 )}
                 
-                <DayCard
-                  key={days[selectedDayIndex].dayNumber}
-                  day={days[selectedDayIndex]}
-                  dayIndex={selectedDayIndex}
-                  totalDays={days.length}
-                  travelers={travelers}
-                  budgetTier={budgetTier}
-                  tripCurrency={tripCurrency}
-                  displayCost={displayCost}
-                  destination={destination}
-                  destinationCountry={destinationCountry}
-                  isExpanded={expandedDays.includes(days[selectedDayIndex].dayNumber)}
-                  isRegenerating={regeneratingDay === days[selectedDayIndex].dayNumber}
-                  isEditable={effectiveIsEditable}
-                  isPreview={isPreview}
-                  tripId={tripId}
-                   onUnlockTrip={() => setCreditNudge({ action: 'UNLOCK_DAY' })}
-                   onUnlockDay={handleUnlockDay}
-                   unlockingDayNumber={unlockingDayNumber}
-                  getPaymentForItem={getPaymentForItem}
-                  refreshPayments={refreshPayments}
-                  onToggle={() => toggleDay(days[selectedDayIndex].dayNumber)}
-                  onActivitySwap={openSwapDrawer}
-                  onActivityLock={handleActivityLock}
-                  onActivityMove={handleActivityMove}
-                  onActivityReorder={(reordered) => handleActivityReorder(selectedDayIndex, reordered)}
-                  onMoveToDay={handleMoveToDay}
-                  onActivityRemove={handleActivityRemove}
-                  onDayLock={handleDayLock}
-                  onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
-                  onAddActivity={() => setAddActivityModal({ dayIndex: selectedDayIndex })}
-                  onTimeEdit={(dIdx, aIdx, activity) => setTimeEditModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
-                  onActivityEdit={(dIdx, aIdx, activity) => setEditActivityModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
-                  onPaymentRequest={onPaymentRequest}
-                   onViewReviews={openReviewsDrawer}
-                   onTransportModeChange={handleTransportModeChange}
-                   changingTransportActivityId={changingTransportActivityId}
-                   collaboratorColorMap={collaboratorColorMap}
-                 />
+                {/* Check if this day is locked (placeholder with no content) */}
+                {days[selectedDayIndex].metadata?.isLocked ? (
+                  <LockedDayCard
+                    dayNumber={days[selectedDayIndex].dayNumber}
+                    title={days[selectedDayIndex].title || `Day ${days[selectedDayIndex].dayNumber}`}
+                    activityCount={6}
+                    teaserLine={`Unlock Day ${days[selectedDayIndex].dayNumber} to discover curated activities, real venues, and personalized recommendations.`}
+                    intelligenceBadges={{ finds: 3, timingHacks: 2, trapsAvoided: 1, tips: 2 }}
+                    onUnlock={() => handleUnlockDay(days[selectedDayIndex].dayNumber)}
+                    creditsNeeded={CREDIT_COSTS.UNLOCK_DAY}
+                    tripId={tripId}
+                    onManualBuild={() => {}}
+                  />
+                ) : (
+                  <DayCard
+                    key={days[selectedDayIndex].dayNumber}
+                    day={days[selectedDayIndex]}
+                    dayIndex={selectedDayIndex}
+                    totalDays={days.length}
+                    travelers={travelers}
+                    budgetTier={budgetTier}
+                    tripCurrency={tripCurrency}
+                    displayCost={displayCost}
+                    destination={destination}
+                    destinationCountry={destinationCountry}
+                    isExpanded={expandedDays.includes(days[selectedDayIndex].dayNumber)}
+                    isRegenerating={regeneratingDay === days[selectedDayIndex].dayNumber}
+                    isEditable={effectiveIsEditable}
+                    isPreview={isPreview}
+                    tripId={tripId}
+                     onUnlockTrip={() => setCreditNudge({ action: 'UNLOCK_DAY' })}
+                     onUnlockDay={handleUnlockDay}
+                     unlockingDayNumber={unlockingDayNumber}
+                    getPaymentForItem={getPaymentForItem}
+                    refreshPayments={refreshPayments}
+                    onToggle={() => toggleDay(days[selectedDayIndex].dayNumber)}
+                    onActivitySwap={openSwapDrawer}
+                    onActivityLock={handleActivityLock}
+                    onActivityMove={handleActivityMove}
+                    onActivityReorder={(reordered) => handleActivityReorder(selectedDayIndex, reordered)}
+                    onMoveToDay={handleMoveToDay}
+                    onActivityRemove={handleActivityRemove}
+                    onDayLock={handleDayLock}
+                    onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
+                    onAddActivity={() => setAddActivityModal({ dayIndex: selectedDayIndex })}
+                    onTimeEdit={(dIdx, aIdx, activity) => setTimeEditModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
+                    onActivityEdit={(dIdx, aIdx, activity) => setEditActivityModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
+                    onPaymentRequest={onPaymentRequest}
+                     onViewReviews={openReviewsDrawer}
+                     onTransportModeChange={handleTransportModeChange}
+                     changingTransportActivityId={changingTransportActivityId}
+                     collaboratorColorMap={collaboratorColorMap}
+                   />
+                )}
               </div>
             )}
             

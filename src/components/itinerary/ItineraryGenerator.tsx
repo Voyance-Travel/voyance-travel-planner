@@ -18,7 +18,7 @@ import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { ROUTES } from '@/config/routes';
 import { useGenerationGate, type GateResult } from '@/hooks/useGenerationGate';
 import { generateFullPreview, type FullPreview, type PreviewDay } from '@/services/fullPreviewService';
-import { convertPreviewToGeneratedDays } from '@/utils/previewConverter';
+import { convertPreviewToGeneratedDays, createLockedPlaceholderDays } from '@/utils/previewConverter';
 
 interface ItineraryGeneratorProps {
   tripId: string;
@@ -139,20 +139,33 @@ export function ItineraryGenerator({
         currentBalance: 0,
         shortfall: totalDays * 90,
         recommendedPack: null,
+        requestedDays: totalDays,
+        generateDays: Math.min(totalDays, 2),
       };
     }
 
     console.log(`[ItineraryGenerator] Gate result: mode=${gateResult.mode}, cost=${gateResult.tripCost}, charged=${gateResult.creditsCharged}`);
 
     try {
+      const totalRequestedDays = gateResult.requestedDays;
+      const daysToGenerate = gateResult.generateDays;
+
       if (gateResult.mode === 'full') {
-        // FULL GENERATION — credits already deducted
+        // FULL GENERATION — credits already deducted (or first trip free)
+        // For first trip: cap endDate to only generate `daysToGenerate` days
+        let effectiveEndDate = endDate;
+        if (daysToGenerate < totalRequestedDays) {
+          const cappedEnd = new Date(startDate);
+          cappedEnd.setDate(cappedEnd.getDate() + daysToGenerate - 1);
+          effectiveEndDate = cappedEnd.toISOString().split('T')[0];
+        }
+
         const generatedDays = await generateItinerary({
           tripId,
           destination,
           destinationCountry,
           startDate,
-          endDate,
+          endDate: effectiveEndDate,
           travelers,
           tripType,
           budgetTier,
@@ -160,9 +173,13 @@ export function ItineraryGenerator({
           isMultiCity,
         });
 
+        // Append locked placeholder days for remaining days
+        const lockedDays = createLockedPlaceholderDays(startDate, daysToGenerate, totalRequestedDays, destination);
+        const allDays = [...generatedDays, ...lockedDays];
+
         setPrePhase(null);
         await new Promise(resolve => setTimeout(resolve, 900));
-        onComplete(generatedDays, overview);
+        onComplete(allDays, overview);
       } else {
         // PREVIEW GENERATION — cheap AI-only, no credits deducted
         console.log(`[ItineraryGenerator] Generating preview (user has ${gateResult.currentBalance} credits, needs ${gateResult.tripCost})`);
@@ -183,6 +200,10 @@ export function ItineraryGenerator({
           // Convert preview data to GeneratedDay[] format with isPreview flag
           const previewDays = convertPreviewToGeneratedDays(previewResponse.preview);
           
+          // Append locked placeholder days for remaining days
+          const lockedDays = createLockedPlaceholderDays(startDate, previewDays.length, totalRequestedDays, destination);
+          const allDays = [...previewDays, ...lockedDays];
+
           // Pass to onComplete with preview metadata in overview
           const previewOverview: TripOverview = {
             highlights: previewResponse.preview.dnaAlignment,
@@ -190,7 +211,7 @@ export function ItineraryGenerator({
           };
 
           await new Promise(resolve => setTimeout(resolve, 900));
-          onComplete(previewDays, previewOverview);
+          onComplete(allDays, previewOverview);
         } else {
           throw new Error(previewResponse.error || 'Failed to generate preview');
         }
