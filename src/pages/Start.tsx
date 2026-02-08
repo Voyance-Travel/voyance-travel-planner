@@ -36,6 +36,7 @@ import { AirportAutocomplete } from '@/components/common/AirportAutocomplete';
 import { HotelAutocomplete } from '@/components/common/HotelAutocomplete';
 import { FlightImportModal } from '@/components/itinerary/FlightImportModal';
 import type { ManualFlightEntry } from '@/components/itinerary/AddBookingInline';
+import GuestLinker, { type SelectedGuest } from '@/components/start/GuestLinker';
 
 // Types
 interface LocationSelection {
@@ -238,6 +239,8 @@ function TripDetailsStep({
   setEndDate,
   travelers,
   setTravelers,
+  selectedGuests,
+  onGuestsChange,
   tripType,
   setTripType,
   celebrationDay,
@@ -260,6 +263,8 @@ function TripDetailsStep({
   setEndDate: (d: Date | undefined) => void;
   travelers: number;
   setTravelers: (n: number) => void;
+  selectedGuests: SelectedGuest[];
+  onGuestsChange: (guests: SelectedGuest[]) => void;
   tripType: string;
   setTripType: (t: string) => void;
   celebrationDay: number | undefined;
@@ -491,7 +496,14 @@ function TripDetailsStep({
             >
               {travelers > 4 ? travelers : '5+'}
             </button>
-          </div>
+        </div>
+
+        {/* Link Friends */}
+        <GuestLinker
+          selectedGuests={selectedGuests}
+          onGuestsChange={onGuestsChange}
+          maxGuests={Math.max(0, travelers - 1)}
+        />
         </div>
 
         {/* Trip Type - mobile optimized */}
@@ -1256,6 +1268,7 @@ export default function Start() {
   const [tripType, setTripType] = useState<string>('leisure');
   const [celebrationDay, setCelebrationDay] = useState<number | undefined>(undefined);
   const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount);
+  const [selectedGuests, setSelectedGuests] = useState<SelectedGuest[]>([]);
 
   // Multi-city state
   const [isMultiCity, setIsMultiCity] = useState(plannerState.basics.isMultiCity || false);
@@ -1454,6 +1467,26 @@ export default function Start() {
         }
       }
 
+      // Insert linked guests as trip collaborators
+      if (selectedGuests.length > 0) {
+        const collabRows = selectedGuests.map((g) => ({
+          trip_id: trip.id,
+          user_id: g.userId,
+          permission: 'edit' as const,
+          invited_by: user.id,
+          accepted_at: new Date().toISOString(),
+          include_preferences: true,
+        }));
+        const { error: collabError } = await supabase
+          .from('trip_collaborators')
+          .insert(collabRows);
+        if (collabError) {
+          console.error('[Start] Failed to insert collaborators:', collabError);
+        } else {
+          console.log(`[Start] Linked ${collabRows.length} guests to trip ${trip.id}`);
+        }
+      }
+
       // Navigate directly to trip page with generate flag
       navigate(`/trip/${trip.id}?generate=true`);
     } catch (err) {
@@ -1494,6 +1527,8 @@ export default function Start() {
                     setEndDate={setEndDate}
                     travelers={travelers}
                     setTravelers={setTravelers}
+                    selectedGuests={selectedGuests}
+                    onGuestsChange={setSelectedGuests}
                     tripType={tripType}
                     setTripType={setTripType}
                     celebrationDay={celebrationDay}
