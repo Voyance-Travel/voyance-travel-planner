@@ -63,6 +63,7 @@ const iconMap: Record<string, typeof Bell> = {
   trip_end: Flag,
   activity_change: RefreshCw,
   friend_request: UserPlus,
+  trip_invite: UserPlus,
 };
 
 const colorMap: Record<string, string> = {
@@ -73,6 +74,7 @@ const colorMap: Record<string, string> = {
   trip_end: 'text-rose-500 bg-rose-500/10',
   activity_change: 'text-orange-500 bg-orange-500/10',
   friend_request: 'text-primary bg-primary/10',
+  trip_invite: 'text-emerald-500 bg-emerald-500/10',
 };
 
 interface FriendRequest {

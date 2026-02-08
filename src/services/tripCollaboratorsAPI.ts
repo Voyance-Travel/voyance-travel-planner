@@ -143,6 +143,38 @@ export async function addTripCollaborator({ tripId, userId, permission = 'edit',
     throw error;
   }
 
+  // Send notification to the invited user
+  try {
+    // Get trip name and inviter profile for the notification
+    const [tripResult, inviterResult] = await Promise.all([
+      supabase.from('trips').select('name, destination').eq('id', tripId).single(),
+      supabase.from('profiles').select('display_name').eq('id', user.id).single(),
+    ]);
+
+    const tripName = tripResult.data?.name || 'a trip';
+    const destination = tripResult.data?.destination || '';
+    const inviterName = inviterResult.data?.display_name || 'Someone';
+
+    await supabase.from('trip_notifications').insert({
+      trip_id: tripId,
+      user_id: userId,
+      notification_type: 'trip_invite',
+      sent: false,
+      metadata: {
+        title: `Added to ${tripName}`,
+        message: `${inviterName} added you to their trip${destination ? ` to ${destination}` : ''}`,
+        invitedBy: user.id,
+        inviterName,
+        tripName,
+        destination,
+        scheduledFor: new Date().toISOString(),
+      },
+    });
+  } catch (notifError) {
+    // Non-blocking: don't fail the collaborator add if notification fails
+    console.error('[TripCollaborators] Failed to create notification:', notifError);
+  }
+
   return {
     ...data,
     permission: data.permission as CollaboratorPermission,

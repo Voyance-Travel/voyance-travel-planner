@@ -5,7 +5,7 @@ export interface TripNotification {
   id: string;
   tripId: string;
   userId: string;
-  type: 'activity_reminder' | 'weather_alert' | 'feedback_prompt' | 'trip_start' | 'trip_end' | 'activity_change';
+  type: 'activity_reminder' | 'weather_alert' | 'feedback_prompt' | 'trip_start' | 'trip_end' | 'activity_change' | 'trip_invite';
   title: string;
   message: string;
   activityId?: string;
@@ -150,6 +150,11 @@ export const NOTIFICATION_CONFIG = {
     icon: 'RefreshCw',
     color: 'text-orange-500',
     bgColor: 'bg-orange-500/10'
+  },
+  trip_invite: {
+    icon: 'UserPlus',
+    color: 'text-primary',
+    bgColor: 'bg-primary/10'
   }
 };
 
