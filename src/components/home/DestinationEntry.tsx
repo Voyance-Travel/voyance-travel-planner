@@ -157,12 +157,20 @@ export default function DestinationEntry() {
       <motion.h1 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-2xl sm:text-3xl md:text-5xl lg:text-6xl font-serif font-normal mb-3 sm:mb-4 text-white leading-tight"
-        style={{ textShadow: '0 2px 20px rgba(0,0,0,0.8), 0 4px 40px rgba(0,0,0,0.6)' }}
+        className="text-2xl sm:text-3xl md:text-5xl lg:text-6xl font-serif font-normal mb-3 sm:mb-4 leading-tight"
       >
-        <span className="block sm:inline">You don't need more travel ideas.</span>
-        <br className="hidden sm:block" />
-        <span className="text-primary" style={{ textShadow: '0 2px 20px rgba(0,0,0,0.9), 0 4px 40px rgba(0,0,0,0.7)' }}> You need a trip.</span>
+        <span 
+          className="block text-white/90"
+          style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9), 0 4px 24px rgba(0,0,0,0.7), 0 0 60px rgba(0,0,0,0.5)' }}
+        >
+          You don't need more travel ideas.
+        </span>
+        <span 
+          className="block mt-1 sm:mt-2 text-white font-bold"
+          style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9), 0 4px 24px rgba(0,0,0,0.7), 0 0 60px rgba(0,0,0,0.5)' }}
+        >
+          You need a trip.
+        </span>
       </motion.h1>
       
       <motion.p
