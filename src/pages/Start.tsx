@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MapPin, Calendar as CalendarIcon, Users, Loader2, DollarSign, 
   Sparkles, ChevronDown, ChevronUp, PartyPopper, ArrowRight, Check, Clock,
-  Eye, Gem, Utensils, Building2, Plane, Upload, Hotel, Search, PenLine, Globe, Star, Route, UserPlus
+  Eye, Gem, Utensils, Building2, Plane, Upload, Hotel, Search, PenLine, Globe, Star, Route, UserPlus, MessageSquareText
 } from 'lucide-react';
 import { addDays as addDaysUtil } from 'date-fns';
 import MultiCitySelector from '@/components/planner/MultiCitySelector';
@@ -37,6 +37,7 @@ import { HotelAutocomplete } from '@/components/common/HotelAutocomplete';
 import { FlightImportModal } from '@/components/itinerary/FlightImportModal';
 import type { ManualFlightEntry } from '@/components/itinerary/AddBookingInline';
 import GuestLinkModal, { type LinkedGuest } from '@/components/planner/GuestLinkModal';
+import { TripChatPlanner } from '@/components/planner/TripChatPlanner';
 
 // Types
 interface LocationSelection {
@@ -255,6 +256,9 @@ function TripDetailsStep({
   setDestinations,
   transports,
   setTransports,
+  planMode,
+  setPlanMode,
+  onChatDetailsExtracted,
   onContinue,
 }: {
   destinationSelection: LocationSelection;
@@ -279,6 +283,9 @@ function TripDetailsStep({
   setDestinations: (d: TripDestination[]) => void;
   transports: InterCityTransport[];
   setTransports: (t: InterCityTransport[]) => void;
+  planMode: 'single' | 'multi' | 'chat';
+  setPlanMode: (m: 'single' | 'multi' | 'chat') => void;
+  onChatDetailsExtracted: (details: any) => void;
   onContinue: () => void;
 }) {
   const today = startOfToday();
@@ -338,15 +345,15 @@ function TripDetailsStep({
         </p>
       </div>
 
-      <div className={cn("space-y-4 sm:space-y-5 mx-auto px-1", isMultiCity ? "max-w-xl" : "max-w-md")}>
-        {/* Single / Multi-City Toggle */}
-        <div className="flex items-center gap-2 p-1 bg-muted rounded-lg w-fit mx-auto">
+      <div className={cn("space-y-4 sm:space-y-5 mx-auto px-1", planMode === 'multi' ? "max-w-xl" : "max-w-md")}>
+        {/* Single / Multi-City / Just Tell Us Toggle */}
+        <div className="flex items-center gap-1 p-1 bg-muted rounded-lg w-fit mx-auto flex-wrap justify-center">
           <button
             type="button"
-            onClick={() => handleToggleMultiCity(false)}
+            onClick={() => { setPlanMode('single'); handleToggleMultiCity(false); }}
             className={cn(
-              'px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2',
-              !isMultiCity
+              'px-3 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-1.5',
+              planMode === 'single'
                 ? 'bg-background text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             )}
@@ -356,10 +363,10 @@ function TripDetailsStep({
           </button>
           <button
             type="button"
-            onClick={() => handleToggleMultiCity(true)}
+            onClick={() => { setPlanMode('multi'); handleToggleMultiCity(true); }}
             className={cn(
-              'px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2',
-              isMultiCity
+              'px-3 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-1.5',
+              planMode === 'multi'
                 ? 'bg-background text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             )}
@@ -367,10 +374,28 @@ function TripDetailsStep({
             <Route className="h-3.5 w-3.5" />
             Multi-City
           </button>
+          <button
+            type="button"
+            onClick={() => setPlanMode('chat')}
+            className={cn(
+              'px-3 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-1.5',
+              planMode === 'chat'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <MessageSquareText className="h-3.5 w-3.5" />
+            Just Tell Us
+          </button>
         </div>
 
+        {/* Chat Mode */}
+        {planMode === 'chat' && (
+          <TripChatPlanner onDetailsExtracted={onChatDetailsExtracted} />
+        )}
+
         {/* Destination - Single City Mode */}
-        {!isMultiCity && (
+        {planMode !== 'chat' && !isMultiCity && (
         <div className="space-y-1.5 sm:space-y-2">
           <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
             Destination
@@ -384,7 +409,7 @@ function TripDetailsStep({
         )}
 
         {/* Multi-City Selector */}
-        {isMultiCity && (
+        {planMode !== 'chat' && isMultiCity && (
           <div className="space-y-1.5 sm:space-y-2">
             <MultiCitySelector
               destinations={destinations}
@@ -397,6 +422,7 @@ function TripDetailsStep({
         )}
 
         {/* Dates - mobile optimized */}
+        {planMode !== 'chat' && (
         <div className="grid grid-cols-2 gap-3 sm:gap-4">
           <div className="space-y-1.5 sm:space-y-2">
             <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
@@ -462,8 +488,10 @@ function TripDetailsStep({
             </Popover>
           </div>
         </div>
+        )}
 
         {/* Travelers - mobile optimized touch targets */}
+        {planMode !== 'chat' && (
         <div className="space-y-1.5 sm:space-y-2">
           <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
             Travelers
@@ -516,8 +544,10 @@ function TripDetailsStep({
           </button>
         )}
         </div>
+        )}
 
         {/* Trip Type - mobile optimized */}
+        {planMode !== 'chat' && (
         <div className="space-y-2 sm:space-y-3">
           <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
             Trip Type
@@ -570,9 +600,10 @@ function TripDetailsStep({
             </CollapsibleContent>
           </Collapsible>
         </div>
+        )}
 
         {/* Celebration Day */}
-        {CELEBRATION_TRIP_TYPES.includes(tripType as typeof CELEBRATION_TRIP_TYPES[number]) && startDate && endDate && (
+        {planMode !== 'chat' && CELEBRATION_TRIP_TYPES.includes(tripType as typeof CELEBRATION_TRIP_TYPES[number]) && startDate && endDate && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
@@ -606,6 +637,7 @@ function TripDetailsStep({
         )}
 
         {/* Budget Section - Collapsible */}
+        {planMode !== 'chat' && (
         <Collapsible open={showBudget} onOpenChange={setShowBudget}>
           <CollapsibleTrigger asChild>
             <button
@@ -653,7 +685,6 @@ function TripDetailsStep({
                   setBudgetAmount(val > 0 ? val : undefined);
                 }}
                 onFocus={() => {
-                  // Clear preset selection when user starts typing custom
                   if (budgetAmount && budgetPresets.some(p => p.value === budgetAmount)) {
                     setBudgetAmount(undefined);
                   }
@@ -663,15 +694,17 @@ function TripDetailsStep({
             </div>
           </CollapsibleContent>
         </Collapsible>
-      </div>
+        )}
 
-      {/* Navigation */}
-      <div className="flex justify-end pt-6 max-w-md mx-auto">
-        <Button onClick={onContinue} disabled={!isValid} className="gap-2">
-          Continue
-          <ArrowRight className="w-4 h-4" />
-        </Button>
-      </div>
+      {/* Navigation — only in form mode */}
+      {planMode !== 'chat' && (
+        <div className="flex justify-end pt-6 max-w-md mx-auto">
+          <Button onClick={onContinue} disabled={!isValid} className="gap-2">
+            Continue
+            <ArrowRight className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -1308,6 +1341,7 @@ export default function Start() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAuthGate, setShowAuthGate] = useState(false);
   const [showDNAPrompt, setShowDNAPrompt] = useState(false);
+  const [planMode, setPlanMode] = useState<'single' | 'multi' | 'chat'>('single');
 
   // Trip state
   const destinationFromQuery = searchParams.get('destination');
@@ -1634,6 +1668,33 @@ export default function Start() {
                     setDestinations={setMultiCityDestinations}
                     transports={multiCityTransports}
                     setTransports={setMultiCityTransports}
+                    planMode={planMode}
+                    setPlanMode={(m) => {
+                      setPlanMode(m);
+                      if (m === 'single') setIsMultiCity(false);
+                      else if (m === 'multi') setIsMultiCity(true);
+                    }}
+                    onChatDetailsExtracted={(details) => {
+                      // Populate form state from chat-extracted details
+                      if (details.destination) {
+                        setDestinationSelection({ display: details.destination, cityName: details.destination });
+                      }
+                      if (details.startDate) {
+                        try { setStartDate(parseISO(details.startDate)); } catch {}
+                      }
+                      if (details.endDate) {
+                        try { setEndDate(parseISO(details.endDate)); } catch {}
+                      }
+                      if (details.travelers) setTravelers(details.travelers);
+                      if (details.tripType) setTripType(details.tripType);
+                      if (details.budgetAmount) setBudgetAmount(details.budgetAmount);
+                      if (details.hotelName) {
+                        setManualHotel(prev => ({ ...prev, name: details.hotelName, address: details.hotelAddress || '' }));
+                      }
+                      if (details.mustDoActivities) setMustDoActivities(details.mustDoActivities);
+                      // Skip to submission (handleSubmit handles auth + DNA checks)
+                      handleSubmit(false);
+                    }}
                     onContinue={() => {
                       if (!user) {
                         const dest = isMultiCity
