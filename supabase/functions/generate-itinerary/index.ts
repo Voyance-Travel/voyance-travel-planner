@@ -8243,6 +8243,45 @@ FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
       );
       const maxActivitiesFromArchetype = archetypeContext.definition.dayStructure.maxScheduledActivities;
 
+      // ==========================================================================
+      // COLLABORATOR ATTRIBUTION: Load collaborators for suggestedFor coloring
+      // ==========================================================================
+      let collaboratorAttributionPrompt = '';
+      if (tripId) {
+        const { data: collabRows } = await supabase
+          .from('trip_collaborators')
+          .select('user_id')
+          .eq('trip_id', tripId)
+          .eq('include_preferences', true);
+
+        if (collabRows && collabRows.length > 0) {
+          const allUserIds = [userId, ...collabRows.map((c: any) => c.user_id)].filter(Boolean);
+          const { data: profileRows } = await supabase
+            .from('profiles')
+            .select('id, display_name, handle')
+            .in('id', allUserIds);
+
+          const profileMap = new Map((profileRows || []).map((p: any) => [p.id, p.display_name || p.handle || 'Guest']));
+          const travelerList = allUserIds.map(uid => `  - "${uid}" (${profileMap.get(uid!) || 'Traveler'})`).join('\n');
+
+          collaboratorAttributionPrompt = `
+${'='.repeat(70)}
+🎯 GROUP TRIP ATTRIBUTION — suggestedFor REQUIRED
+${'='.repeat(70)}
+This is a GROUP TRIP. For EVERY activity, you MUST include a "suggestedFor" field with the user ID of the traveler whose preferences most influenced that choice.
+
+Travelers in this group:
+${travelerList}
+
+Rules:
+- Use the primary planner's ID ("${userId}") for consensus/iconic activities
+- Use a collaborator's ID when the activity clearly matches their specific preferences
+- EVERY activity MUST have a suggestedFor value — no exceptions
+`;
+          console.log(`[generate-day] Attribution prompt injected for ${allUserIds.length} travelers`);
+        }
+      }
+
       const systemPrompt = `You are an expert travel planner. Generate a single day's detailed itinerary.
 
 ${generationHierarchy}
@@ -8261,7 +8300,8 @@ General Requirements:
 - Every activity MUST have a "title" field (the display name)
 - All times MUST be in 24-hour HH:MM format
 - MAX ${maxActivitiesFromArchetype} scheduled activities (from archetype day structure - HARD LIMIT)
-${lockedActivities.length > 0 ? '- DO NOT generate activities for locked time slots listed above' : ''}`;
+${lockedActivities.length > 0 ? '- DO NOT generate activities for locked time slots listed above' : ''}
+${collaboratorAttributionPrompt}`;
 
       const userPrompt = `Generate Day ${dayNumber} of ${totalDays} in ${destination}${destinationCountry ? `, ${destinationCountry}` : ''}.
 
@@ -8344,7 +8384,8 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                             bookingRequired: { type: "boolean" },
                             tips: { type: "string" },
                             coordinates: { type: "object", properties: { lat: { type: "number" }, lng: { type: "number" } } },
-                            type: { type: "string" }
+                            type: { type: "string" },
+                            suggestedFor: { type: "string", description: "User ID of the traveler whose preferences most influenced this activity (group trips)" }
                           },
                           required: ["title", "category", "startTime", "endTime", "location"]
                         }
