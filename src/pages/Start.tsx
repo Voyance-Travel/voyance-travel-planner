@@ -350,33 +350,39 @@ function TripDetailsStep({
         {/* Plan Mode Selection */}
         <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
           {[
-            { mode: 'single' as const, icon: MapPin, label: 'Single City', onClick: () => { setPlanMode('single'); handleToggleMultiCity(false); } },
-            { mode: 'multi' as const, icon: Route, label: 'Multi-City', onClick: () => { setPlanMode('multi'); handleToggleMultiCity(true); } },
-            { mode: 'chat' as const, icon: MessageSquareText, label: 'Just Tell Us', onClick: () => setPlanMode('chat') },
-            { mode: 'manual' as const, icon: PenLine, label: 'Build Myself', onClick: () => setPlanMode('manual') },
-          ].map(({ mode, icon: Icon, label, onClick }) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={onClick}
-              className={cn(
-                'flex flex-col items-center gap-1 py-2.5 px-1 rounded-lg border text-center transition-all duration-200',
-                planMode === mode
-                  ? 'border-primary bg-primary/5 shadow-sm'
-                  : 'border-border bg-card hover:border-primary/30'
-              )}
-            >
-              <Icon className={cn(
-                'h-4 w-4 transition-colors',
-                planMode === mode ? 'text-primary' : 'text-muted-foreground'
-              )} />
-              <span className={cn(
-                'text-[11px] sm:text-xs font-medium leading-tight',
-                planMode === mode ? 'text-foreground' : 'text-muted-foreground'
-              )}>
-                {label}
-              </span>
-            </button>
+            { mode: 'single' as const, icon: MapPin, label: 'Single City', tooltip: 'AI-powered itinerary for one destination. We handle everything.', onClick: () => { setPlanMode('single'); handleToggleMultiCity(false); } },
+            { mode: 'multi' as const, icon: Route, label: 'Multi-City', tooltip: 'Plan a trip across multiple cities with smart inter-city logistics.', onClick: () => { setPlanMode('multi'); handleToggleMultiCity(true); } },
+            { mode: 'chat' as const, icon: MessageSquareText, label: 'Just Tell Us', tooltip: 'Describe your dream trip or paste research. Our AI builds it for you.', onClick: () => setPlanMode('chat') },
+            { mode: 'manual' as const, icon: PenLine, label: 'Build Myself', tooltip: 'Full manual control. Organize your own research without AI generation.', onClick: () => setPlanMode('manual') },
+          ].map(({ mode, icon: Icon, label, tooltip, onClick }) => (
+            <div key={mode} className="relative group">
+              <button
+                type="button"
+                onClick={onClick}
+                className={cn(
+                  'w-full flex flex-col items-center gap-1 py-2.5 px-1 rounded-lg border text-center transition-all duration-200',
+                  planMode === mode
+                    ? 'border-primary bg-primary/5 shadow-sm'
+                    : 'border-border bg-card hover:border-primary/30'
+                )}
+              >
+                <Icon className={cn(
+                  'h-4 w-4 transition-colors',
+                  planMode === mode ? 'text-primary' : 'text-muted-foreground'
+                )} />
+                <span className={cn(
+                  'text-[11px] sm:text-xs font-medium leading-tight',
+                  planMode === mode ? 'text-foreground' : 'text-muted-foreground'
+                )}>
+                  {label}
+                </span>
+              </button>
+              {/* Hover tooltip */}
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-48 px-3 py-2 rounded-lg bg-foreground text-background text-[11px] leading-snug text-center opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-200 z-50 shadow-lg">
+                {tooltip}
+                <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-x-[5px] border-x-transparent border-t-[5px] border-t-foreground" />
+              </div>
+            </div>
           ))}
         </div>
 
