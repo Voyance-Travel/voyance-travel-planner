@@ -351,7 +351,7 @@ export function PaymentsTab({
 
   // Calculate per-member breakdown
   const memberBreakdown = useMemo(() => {
-    const breakdown = new Map<string, { assigned: number; paid: number; items: PayableItem[] }>();
+    const breakdown = new Map<string, { assigned: number; paid: number; items: { item: PayableItem; splitAmount: number }[] }>();
     
     // Initialize with all members
     tripMembers.forEach(m => {
@@ -362,15 +362,11 @@ export function PaymentsTab({
     breakdown.set('unassigned', { assigned: 0, paid: 0, items: [] });
 
     // Build a lookup from real IDs (trip_members UUID or userId) → synthetic member.id
-    // so we can match DB assigned_member_id to the correct member bucket
     const realIdToSyntheticId = new Map<string, string>();
     tripMembers.forEach(m => {
-      // Map the synthetic id itself
       realIdToSyntheticId.set(m.id, m.id);
-      // Map the userId (real auth user id)
       if (m.userId) realIdToSyntheticId.set(m.userId, m.id);
     });
-    // Also map real trip_members row IDs to their synthetic counterparts
     rawTripMembers.forEach(rm => {
       if (rm.userId) {
         const syntheticId = realIdToSyntheticId.get(rm.userId);
@@ -381,17 +377,32 @@ export function PaymentsTab({
     });
 
     payableItems.forEach(item => {
-      const rawId = item.assignedMemberId;
-      const memberId = rawId ? (realIdToSyntheticId.get(rawId) || 'unassigned') : 'unassigned';
-      const current = breakdown.get(memberId) || { assigned: 0, paid: 0, items: [] };
-      
-      current.assigned += item.amountCents;
-      if (item.payment?.status === 'paid') {
-        current.paid += item.amountCents;
+      // If item has split payments, attribute each payment to its assigned member
+      if (item.allPayments.length > 0) {
+        const handledMembers = new Set<string>();
+        item.allPayments.forEach(payment => {
+          const rawId = (payment as any)?.assigned_member_id;
+          const memberId = rawId ? (realIdToSyntheticId.get(rawId) || 'unassigned') : 'unassigned';
+          const current = breakdown.get(memberId) || { assigned: 0, paid: 0, items: [] };
+          
+          current.assigned += payment.amount_cents * (payment.quantity || 1);
+          if (payment.status === 'paid') {
+            current.paid += payment.amount_cents * (payment.quantity || 1);
+          }
+          if (!handledMembers.has(memberId)) {
+            current.items.push({ item, splitAmount: payment.amount_cents * (payment.quantity || 1) });
+            handledMembers.add(memberId);
+          }
+          
+          breakdown.set(memberId, current);
+        });
+      } else {
+        // No payment records — put in unassigned
+        const current = breakdown.get('unassigned') || { assigned: 0, paid: 0, items: [] };
+        current.assigned += item.amountCents;
+        current.items.push({ item, splitAmount: item.amountCents });
+        breakdown.set('unassigned', current);
       }
-      current.items.push(item);
-      
-      breakdown.set(memberId, current);
     });
 
     return breakdown;
@@ -1050,34 +1061,48 @@ export function PaymentsTab({
                   
                   const memberProgress = breakdown.assigned > 0 ? (breakdown.paid / breakdown.assigned) * 100 : 0;
                   
-                  return (
-                    <Card key={member.id} className="p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-8 w-8">
-                            <AvatarFallback className={cn(
-                              "text-xs font-medium",
-                              member.role === 'primary' ? "bg-primary text-primary-foreground" : "bg-muted"
-                            )}>
-                              {getMemberInitials(member)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-medium text-sm">{member.name || member.email?.split('@')[0]}</p>
+                    return (
+                      <Card key={member.id} className="p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-8 w-8">
+                              <AvatarFallback className={cn(
+                                "text-xs font-medium",
+                                member.role === 'primary' ? "bg-primary text-primary-foreground" : "bg-muted"
+                              )}>
+                                {getMemberInitials(member)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-medium text-sm">{member.name || member.email?.split('@')[0]}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {breakdown.items.length} item{breakdown.items.length !== 1 ? 's' : ''} assigned
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-semibold">{formatCurrency(breakdown.assigned)}</p>
                             <p className="text-xs text-muted-foreground">
-                              {breakdown.items.length} item{breakdown.items.length !== 1 ? 's' : ''} assigned
+                              {formatCurrency(breakdown.paid)} paid
                             </p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="font-semibold">{formatCurrency(breakdown.assigned)}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatCurrency(breakdown.paid)} paid
-                          </p>
+                        <Progress value={memberProgress} className="h-1.5 mb-3" />
+                        {/* Assigned items list */}
+                        <div className="space-y-1.5 mt-2">
+                          {breakdown.items.map(({ item, splitAmount }) => (
+                            <div key={item.id} className="flex items-center justify-between text-xs px-1">
+                              <div className="flex items-center gap-1.5 text-muted-foreground min-w-0">
+                                {getItemIcon(item.type)}
+                                <span className="truncate">{item.name}</span>
+                              </div>
+                              <span className="font-medium text-foreground shrink-0 ml-2">
+                                {formatCurrency(splitAmount)}
+                              </span>
+                            </div>
+                          ))}
                         </div>
-                      </div>
-                      <Progress value={memberProgress} className="h-1.5" />
-                    </Card>
+                      </Card>
                   );
                 })}
                 
@@ -1086,25 +1111,38 @@ export function PaymentsTab({
                   const unassigned = memberBreakdown.get('unassigned');
                   if (!unassigned || unassigned.items.length === 0) return null;
                   
-                  return (
-                    <Card className="p-4 border-dashed">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                            <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                    return (
+                      <Card className="p-4 border-dashed">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                              <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm text-muted-foreground">Unassigned</p>
+                              <p className="text-xs text-muted-foreground">
+                                {unassigned.items.length} item{unassigned.items.length !== 1 ? 's' : ''} need assignment
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium text-sm text-muted-foreground">Unassigned</p>
-                            <p className="text-xs text-muted-foreground">
-                              {unassigned.items.length} item{unassigned.items.length !== 1 ? 's' : ''} need assignment
-                            </p>
+                          <div className="text-right">
+                            <p className="font-semibold text-muted-foreground">{formatCurrency(unassigned.assigned)}</p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="font-semibold text-muted-foreground">{formatCurrency(unassigned.assigned)}</p>
+                        <div className="space-y-1.5 mt-2">
+                          {unassigned.items.map(({ item, splitAmount }) => (
+                            <div key={item.id} className="flex items-center justify-between text-xs px-1">
+                              <div className="flex items-center gap-1.5 text-muted-foreground min-w-0">
+                                {getItemIcon(item.type)}
+                                <span className="truncate">{item.name}</span>
+                              </div>
+                              <span className="font-medium text-muted-foreground shrink-0 ml-2">
+                                {formatCurrency(splitAmount)}
+                              </span>
+                            </div>
+                          ))}
                         </div>
-                      </div>
-                    </Card>
+                      </Card>
                   );
                 })()}
               </div>
