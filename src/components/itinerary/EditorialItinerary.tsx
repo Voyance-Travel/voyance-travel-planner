@@ -21,7 +21,7 @@ import {
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
-  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2
+  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2, ClipboardPaste
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
@@ -93,6 +93,8 @@ import { validateItinerary, matchesSkipList, type ValidationIssue } from '@/util
 import { VoyanceInsight } from './VoyanceInsight';
 import { TransitBadge } from './TransitBadge';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
+import { AddActivityModal } from './AddActivityModal';
+import { ImportActivitiesModal } from './ImportActivitiesModal';
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -824,6 +826,7 @@ export function EditorialItinerary({
   const [hasChanges, setHasChanges] = useState(false);
   const [regeneratingDay, setRegeneratingDay] = useState<number | null>(null);
   const [addActivityModal, setAddActivityModal] = useState<{ dayIndex: number } | null>(null);
+  const [importModal, setImportModal] = useState<{ dayIndex: number } | null>(null);
   const [editActivityModal, setEditActivityModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
   const [timeEditModal, setTimeEditModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
   const [hotelGalleryOpen, setHotelGalleryOpen] = useState(false);
@@ -2041,6 +2044,30 @@ export function EditorialItinerary({
     toast.success('Activity added!');
   }, [tripCurrency]);
 
+  const handleImportActivities = useCallback((dayIndex: number, activities: Array<Partial<EditorialActivity>>) => {
+    const newActivities = activities.map((activity, i) => ({
+      id: `import-${Date.now()}-${i}`,
+      title: activity.title || 'Imported Activity',
+      description: activity.description || '',
+      category: activity.category || 'activity',
+      startTime: activity.startTime || '',
+      endTime: activity.endTime || '',
+      location: activity.location || { name: '', address: '' },
+      cost: activity.cost || { amount: 0, currency: tripCurrency },
+      bookingRequired: false,
+      tags: [],
+      isLocked: false,
+    } as EditorialActivity));
+
+    setDays(prev => prev.map((day, idx) => {
+      if (idx !== dayIndex) return day;
+      return { ...day, activities: [...day.activities, ...newActivities] };
+    }));
+    setHasChanges(true);
+    setImportModal(null);
+    toast.success(`${newActivities.length} activities imported!`);
+  }, [tripCurrency]);
+
   // Update activity time
   const handleUpdateActivityTime = useCallback((dayIndex: number, activityIndex: number, startTime: string, endTime: string) => {
     setDays(prev => prev.map((day, dIdx) => {
@@ -2617,6 +2644,7 @@ export function EditorialItinerary({
                     onDayLock={handleDayLock}
                     onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
                     onAddActivity={() => setAddActivityModal({ dayIndex: selectedDayIndex })}
+                    onImportActivities={() => setImportModal({ dayIndex: selectedDayIndex })}
                     onTimeEdit={(dIdx, aIdx, activity) => setTimeEditModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
                     onActivityEdit={(dIdx, aIdx, activity) => setEditActivityModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
                     onPaymentRequest={onPaymentRequest}
@@ -3197,6 +3225,15 @@ export function EditorialItinerary({
         isOpen={!!addActivityModal}
         onClose={() => setAddActivityModal(null)}
         onAdd={(activity) => addActivityModal && handleAddActivity(addActivityModal.dayIndex, activity)}
+        currency={tripCurrency}
+        destination={destination}
+      />
+
+      {/* Import Activities Modal */}
+      <ImportActivitiesModal
+        isOpen={!!importModal}
+        onClose={() => setImportModal(null)}
+        onImport={(activities) => importModal && handleImportActivities(importModal.dayIndex, activities)}
         currency={tripCurrency}
       />
 
@@ -4949,6 +4986,7 @@ interface DayCardProps {
   onDayLock: (dayIndex: number) => void;
   onDayRegenerate: () => void;
   onAddActivity: () => void;
+  onImportActivities?: () => void;
   onTimeEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
   onActivityEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
   onPaymentRequest?: (activityId: string) => void;
@@ -4990,6 +5028,7 @@ function DayCard({
   onDayLock,
   onDayRegenerate,
   onAddActivity,
+  onImportActivities,
   onTimeEdit,
   onActivityEdit,
   onPaymentRequest,
@@ -5228,10 +5267,18 @@ function DayCard({
                   </div>
                   <div className="flex items-center gap-4">
                     {isEditable && (
-                      <Button variant="outline" size="sm" onClick={onAddActivity} className="gap-1 bg-background hover:bg-primary/5 hover:border-primary/30">
-                        <Plus className="h-4 w-4" />
-                        Add Activity
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={onAddActivity} className="gap-1 bg-background hover:bg-primary/5 hover:border-primary/30">
+                          <Plus className="h-4 w-4" />
+                          Add
+                        </Button>
+                        {onImportActivities && (
+                          <Button variant="outline" size="sm" onClick={onImportActivities} className="gap-1 bg-background hover:bg-primary/5 hover:border-primary/30">
+                            <ClipboardPaste className="h-4 w-4" />
+                            Import
+                          </Button>
+                        )}
+                      </div>
                     )}
                     <span className="font-medium text-foreground px-3 py-1 rounded-full bg-primary/10 text-primary">
                       Day Total: {formatCurrency(displayCost(totalCost), tripCurrency)}
@@ -5939,107 +5986,7 @@ function ActivityRow({
   );
 }
 
-// =============================================================================
-// ADD ACTIVITY MODAL
-// =============================================================================
-
-interface AddActivityModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onAdd: (activity: Partial<EditorialActivity>) => void;
-  currency?: string;
-}
-
-function AddActivityModal({ isOpen, onClose, onAdd, currency = 'USD' }: AddActivityModalProps) {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState<string>('activity');
-  const [startTime, setStartTime] = useState('12:00');
-  const [endTime, setEndTime] = useState('13:00');
-  const [cost, setCost] = useState('0');
-  const [locationName, setLocationName] = useState('');
-  const [locationAddress, setLocationAddress] = useState('');
-
-  const handleSubmit = () => {
-    onAdd({
-      title,
-      description,
-      category,
-      startTime,
-      endTime,
-      cost: { amount: parseFloat(cost) || 0, currency },
-      location: { name: locationName, address: locationAddress },
-    });
-    setTitle('');
-    setDescription('');
-    setCategory('activity');
-    setStartTime('12:00');
-    setEndTime('13:00');
-    setCost('0');
-    setLocationName('');
-    setLocationAddress('');
-  };
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add Activity</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div>
-            <label className="text-sm font-medium mb-1 block">Title</label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Activity name" />
-          </div>
-          <div>
-            <label className="text-sm font-medium mb-1 block">Category</label>
-            <Select value={category} onValueChange={setCategory}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="sightseeing">Sightseeing</SelectItem>
-                <SelectItem value="dining">Dining</SelectItem>
-                <SelectItem value="cultural">Cultural</SelectItem>
-                <SelectItem value="activity">Activity</SelectItem>
-                <SelectItem value="relaxation">Relaxation</SelectItem>
-                <SelectItem value="shopping">Shopping</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium mb-1 block">Start Time</label>
-              <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">End Time</label>
-              <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
-            </div>
-          </div>
-          <div>
-            <label className="text-sm font-medium mb-1 block">Venue Name</label>
-            <Input value={locationName} onChange={(e) => setLocationName(e.target.value)} placeholder="e.g. Eiffel Tower" />
-          </div>
-          <div>
-            <label className="text-sm font-medium mb-1 block">Address</label>
-            <Input value={locationAddress} onChange={(e) => setLocationAddress(e.target.value)} placeholder="e.g. Champ de Mars, 75007 Paris" />
-          </div>
-          <div>
-            <label className="text-sm font-medium mb-1 block">Cost ($)</label>
-            <Input type="number" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="0" />
-          </div>
-          <div>
-            <label className="text-sm font-medium mb-1 block">Description</label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Brief description..." rows={2} />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={!title}>Add Activity</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// Old inline AddActivityModal removed — now imported from ./AddActivityModal
 
 // =============================================================================
 // TIME EDIT MODAL
