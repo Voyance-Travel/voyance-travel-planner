@@ -1,7 +1,14 @@
 /**
  * Grant Monthly Credits Edge Function
- * Grants 150 free credits monthly to users, expiring in 2 months
- * Can be called via cron job or on user login to check eligibility
+ * Grants 150 free credits monthly to ALL users (free + paid), expiring in 2 months.
+ * Purchased credits never expire — only the monthly grant has expiration.
+ * Called on user login to check eligibility (once per calendar month).
+ *
+ * CONVERSION FUNNEL:
+ *   1. First trip: bypasses credits entirely (full enriched trip, one-time)
+ *   2. Subsequent trips: Day 1 preview always free (AI-only, no enrichment)
+ *   3. This grant: 150cr/mo lets users taste unlocking (1-2 days)
+ *   4. User runs out → buys credit pack (conversion!)
  */
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";

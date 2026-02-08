@@ -83,35 +83,43 @@ const AMADEUS_FREE_TRIPS = Math.floor(AMADEUS_FREE_MONTHLY / AMADEUS_CALLS_PER_T
 const PHOTO_CACHE_SAVINGS_RATIO = 0.33; // Estimated, not yet verified post-deployment
 
 // =============================================================================
-// FREE USER ECONOMICS — BLENDED MODEL
+// FREE USER ECONOMICS — CONVERSION FUNNEL MODEL
 //
-// TWO DISTINCT COST TYPES:
+// FUNNEL FLOW:
+//   1. FIRST TRIP (one-time, bypasses credits entirely):
+//      Full 3-day enriched itinerary + up to 5 edits. No credits deducted.
+//      Purpose: Hook the user with real quality.
+//        - Trip base (Perplexity + AI setup):      $0.043
+//        - 3 days × $0.100/day (Google + AI):      $0.300
+//        - 5 edits (avg $0.012/edit):              $0.060
+//        - DNA lookup:                             $0.010
+//        - Total worst case:                       ~$0.41
+//        - Blended (avg ~2.1 edits):               ~$0.38
 //
-// 1) ONE-TIME ACQUISITION COST (per new user, lifetime):
-//    Full 3-day itinerary + up to 5 edits. Paid once, never again.
-//      - Trip base (Perplexity + AI setup):      $0.043
-//      - 3 days × $0.100/day (Google + AI):      $0.300
-//      - 5 edits (avg $0.012/edit):              $0.060
-//      - DNA lookup:                             $0.010
-//      - Total worst case:                       ~$0.41
-//      - Blended (avg ~2.1 edits):               ~$0.38
+//   2. SUBSEQUENT TRIPS — DAY 1 PREVIEW (always free, no credits):
+//      Lightweight preview: AI-generated venue names + timing. No enrichment.
+//      No Google Places, no photos, no addresses. Just a "mold" to taste.
+//      Cost: ~$0.01 (AI only)
 //
-// 2) RECURRING MONTHLY GRANT (150 credits, 2-month expiry):
-//    After free trip, users get 150cr/mo to stay engaged.
-//    Typical usage: 1 day unlock (90cr) + a few swaps/AI messages.
-//    Cost to us depends on what they spend credits on:
-//      - If unlock 1 day: ~$0.10 (Google + AI enrichment)
-//      - If swaps only: ~$0.02 (AI-only, no enrichment)
-//      - Blended estimate: ~$0.04/mo per active free user
-//    Not all users use their credits → effective cost lower.
-//      - ~60% use some credits, ~40% lapse
-//      - Effective recurring: ~$0.024/mo per free user
+//   3. MONTHLY GRANT (150 credits, 2-month expiry — ALL users):
+//      Every user (free + paid) gets 150cr/mo. Free credits expire in 2 months.
+//      Purchased credits never expire.
+//      Typical free user: unlocks 1 day (90cr) + a few swaps = hooked.
+//      Cost to us depends on what they spend credits on:
+//        - If unlock 1 day: ~$0.10 (Google + AI enrichment)
+//        - If swaps only: ~$0.02 (AI-only, no enrichment)
+//        - Blended estimate: ~$0.04/mo per active user
+//      Not all users use their credits → effective cost lower.
+//        - ~60% use some credits, ~40% lapse
+//        - Effective recurring: ~$0.024/mo per user
+//
+//   4. CONVERSION: User runs out of 150cr, wants more days → buys pack.
 //
 // The scaling table uses the RECURRING cost ($0.024/mo).
 // The one-time acquisition is shown separately.
 // =============================================================================
 const FREE_USER_ECONOMICS = {
-  // One-time free trip (acquisition cost)
+  // Step 1: One-time free trip (bypasses credits entirely)
   freeTripDays: 3,
   freeEditsLimit: 5,
   oneFreeTripPerAccount: true,
@@ -130,21 +138,26 @@ const FREE_USER_ECONOMICS = {
   // Worst case acquisition (all 5 edits used)
   acquisitionCostWorstCase: 0.413,
 
-  // Monthly credit grant
+  // Step 2: Day 1 preview cost (always free, lightweight AI-only)
+  day1PreviewCost: 0.010,   // AI-only, no enrichment
+
+  // Step 3: Monthly credit grant (ALL users — free + paid)
   monthlyGrant: {
     credits: 150,
     expirationMonths: 2,
     maxBanked: 300,           // Can hold up to 2 months worth
+    appliesToAllUsers: true,  // Not just free users!
+    purchasedNeverExpire: true,
     costIfFullyUsed: 0.040,   // Blended cost if user spends all 150cr
-    usageRate: 0.60,          // ~60% of free users actually spend credits
+    usageRate: 0.60,          // ~60% of users actually spend free credits
   },
 
-  // RECURRING cost per free user per month (blended with usage rate)
+  // RECURRING cost per user per month (blended with usage rate)
   // = $0.040 × 60% = $0.024/mo
   recurringCostPerMonth: 0.024,
 
   // Model name for display
-  modelName: "Free Trip + 150cr/mo",
+  modelName: "Free Trip → Preview → 150cr/mo → Convert",
 };
 
 // Helper function: Calculate variable cost for N days
