@@ -678,9 +678,9 @@ export default function UnitEconomics() {
       list.push({
         type: 'warning',
         title: 'Low conversion rate modeled',
-        description: `At ${conversionRate}% conversion, ${(100 - conversionRate)}% of trips come from non-paying users.`,
-        impact: `Recurring free cost: $${(volume * (1 - conversionRate / 100) * FREE_USER_ECONOMICS.recurringCostPerMonth).toFixed(2)}/mo (150cr grants, excludes acquisition)`,
-        action: 'Improve conversion or reduce free tier generosity.',
+        description: `At ${conversionRate}% conversion, ${(100 - conversionRate)}% of users are non-paying. All still receive 150cr/mo grant.`,
+        impact: `Monthly grant cost: $${(volume * (1 - conversionRate / 100) * FREE_USER_ECONOMICS.recurringCostPerMonth).toFixed(2)}/mo (free users only, excludes acquisition)`,
+        action: 'Improve conversion. Funnel: free trip → Day 1 preview → 150cr taste → buy pack.',
       });
     }
     
@@ -1093,8 +1093,8 @@ export default function UnitEconomics() {
             const totalCost = freeVarCost + paidVarCost + costs.fixed.total;
             const breakEvenPaying = Math.ceil(costs.fixed.total / (blendedAOV - PAID_COST));
             return [
-              { label: "Free User/mo", value: `$${FREE_COST_RECURRING.toFixed(3)}`, sub: `150cr grant × 60% usage rate`, accent: "#F87171", icon: "🆓" },
-              { label: "Acquisition Cost", value: `$${FREE_USER_ECONOMICS.acquisitionCostBlended.toFixed(2)}`, sub: `One-time: 3-day full trip + ~2 edits (per new user)`, accent: "#FB923C", icon: "🎁" },
+              { label: "Monthly Grant", value: `$${FREE_COST_RECURRING.toFixed(3)}`, sub: `150cr/mo × 60% usage (ALL users, 2mo expiry)`, accent: "#F87171", icon: "🎁" },
+              { label: "Acquisition", value: `$${FREE_USER_ECONOMICS.acquisitionCostBlended.toFixed(2)}`, sub: `One-time: free 3-day enriched trip (bypasses credits)`, accent: "#FB923C", icon: "🆓" },
               { label: "Paid Trip Cost", value: `$${PAID_COST.toFixed(3)}`, sub: `Photos $0.085 · Hotels $0.005 · AI ~$0`, accent: "#38BDF8", icon: "💎" },
               { label: "Fixed / Trip", value: `$${costs.fixed.perTrip.toFixed(2)}`, sub: `$${costs.fixed.total.toFixed(0)}/mo ÷ ${volume} trips`, accent: "#F59E0B", icon: "🏗" },
               { label: "Monthly Burn", value: `$${totalCost.toFixed(2)}`, sub: `Free $${freeVarCost.toFixed(2)} + Paid $${paidVarCost.toFixed(2)} + Fixed $${costs.fixed.total.toFixed(0)}`, accent: "#F87171", icon: "🔥" },
@@ -1477,8 +1477,8 @@ export default function UnitEconomics() {
             {/* Clean cost model breakdown */}
             {[
               { label: "Paid Trip Cost", value: 0.091, color: "#38BDF8", note: "From trip_cost_tracking: 567 entries / 41 trips", breakdown: "Photos $0.085 + Hotels $0.005 + Perplexity $0.001" },
-              { label: "Free User/mo (recurring)", value: FREE_USER_ECONOMICS.recurringCostPerMonth, color: "#F87171", note: "150cr monthly grant × 60% usage rate", breakdown: "Blended: unlock 1 day ($0.10) or swaps ($0.02) — avg $0.04 if used" },
-              { label: "Acquisition (one-time)", value: FREE_USER_ECONOMICS.acquisitionCostBlended, color: "#FB923C", note: "One free 3-day full trip + ~2.1 edits avg per new user", breakdown: `Base $0.043 + 3 days $0.300 + edits $0.025 + DNA $0.010` },
+              { label: "Monthly Grant (ALL users)", value: FREE_USER_ECONOMICS.recurringCostPerMonth, color: "#F87171", note: "150cr/mo for ALL users (free + paid), 2-month expiry, 60% usage rate", breakdown: "Blended: unlock 1 day ($0.10) or swaps ($0.02) — avg $0.04 if used. Purchased credits never expire." },
+              { label: "Acquisition (one-time)", value: FREE_USER_ECONOMICS.acquisitionCostBlended, color: "#FB923C", note: "First trip bypasses credits entirely — full 3-day enriched trip + ~2.1 edits", breakdown: `Base $0.043 + 3 days $0.300 + edits $0.025 + DNA $0.010. Day 1 preview always free after ($0.01 AI-only).` },
               { label: "Fixed Monthly", value: 49, color: "#F59E0B", note: "Cloud $25 + Domain $4 + DevOps $20", breakdown: `$${(49 / volume).toFixed(2)}/trip at ${volume} trips/mo` },
             ].map((item, i) => {
               const maxVal = 49;
@@ -1646,12 +1646,12 @@ export default function UnitEconomics() {
               <span style={{ color: "#34D399", fontWeight: 600, marginLeft: 6 }}>${blendedAOV.toFixed(2)}</span>
             </div>
             <div style={{ fontSize: 11 }}>
-              <span style={{ color: "#64748B" }}>Free user/mo:</span>
+              <span style={{ color: "#64748B" }}>Monthly grant (all users):</span>
               <span style={{ color: "#F59E0B", fontWeight: 600, marginLeft: 6 }}>${FREE_USER_ECONOMICS.recurringCostPerMonth.toFixed(3)}</span>
-              <span style={{ color: "#475569", marginLeft: 4 }}>(150cr grant, 60% usage)</span>
+              <span style={{ color: "#475569", marginLeft: 4 }}>(150cr, 2mo expiry, 60% usage)</span>
               <span style={{ color: "#64748B", marginLeft: 8 }}>Acquisition:</span>
               <span style={{ color: "#FB923C", fontWeight: 600, marginLeft: 6 }}>${FREE_USER_ECONOMICS.acquisitionCostBlended.toFixed(2)}</span>
-              <span style={{ color: "#475569", marginLeft: 4 }}>(one-time per user)</span>
+              <span style={{ color: "#475569", marginLeft: 4 }}>(one-time free trip)</span>
             </div>
             <div style={{ fontSize: 11, borderLeft: "1px solid #334155", paddingLeft: 16 }}>
               <span style={{ color: "#EF4444", fontWeight: 600 }}>Fixed Burn: $49/mo</span>
@@ -1680,14 +1680,14 @@ export default function UnitEconomics() {
             <tbody>
               {scalePoints.map((vol) => {
                 // CLEAN FORMULAS — flat observed rates
-                // Uses RECURRING monthly grant cost ($0.024/user/mo), not one-time acquisition
-                const FREE_COST_PER_USER = FREE_USER_ECONOMICS.recurringCostPerMonth; // $0.024
+                // Monthly grant cost applies to ALL users ($0.024/user/mo), not just free
+                const GRANT_COST_PER_USER = FREE_USER_ECONOMICS.recurringCostPerMonth; // $0.024
                 const PAID_COST_PER_USER = 0.091; // Observed production cost per paid trip
                 const TOTAL_FIXED = 49;
 
                 const paid = vol * (conversionRate / 100);
                 const free = vol - paid;
-                const freeVarCost = free * FREE_COST_PER_USER;
+                const freeVarCost = free * GRANT_COST_PER_USER;
                 const paidVarCost = paid * PAID_COST_PER_USER;
                 const totalCost = freeVarCost + paidVarCost + TOTAL_FIXED;
                 const revenue = paid * blendedAOV;
@@ -1751,12 +1751,12 @@ export default function UnitEconomics() {
             <p style={{ fontSize: 11, color: "#94A3B8", margin: 0, lineHeight: 1.6 }}>
               <strong style={{ color: "#F59E0B" }}>Formulas:</strong>{" "}
               Paid = Total × {conversionRate}% · Free = Total - Paid · 
-              Free Var = Free × <strong style={{ color: "#F59E0B" }}>${FREE_USER_ECONOMICS.recurringCostPerMonth.toFixed(3)}</strong> <span style={{ color: "#475569" }}>(150cr/mo)</span> · 
+              Grant Cost = Free × <strong style={{ color: "#F59E0B" }}>${FREE_USER_ECONOMICS.recurringCostPerMonth.toFixed(3)}</strong> <span style={{ color: "#475569" }}>(150cr/mo, all users)</span> · 
               Paid Var = Paid × <strong style={{ color: "#38BDF8" }}>$0.091</strong> · 
               Fixed = <strong>$49</strong> · 
               Revenue = Paid × <strong style={{ color: "#34D399" }}>${blendedAOV.toFixed(2)}</strong> AOV · 
               Break-even ≈ <strong style={{ color: "#34D399" }}>{Math.ceil(49 / (blendedAOV - 0.091))} paying users</strong> · 
-              <span style={{ color: "#FB923C" }}>Acquisition: ${FREE_USER_ECONOMICS.acquisitionCostBlended.toFixed(2)}/new user (one-time)</span>
+              <span style={{ color: "#FB923C" }}>Acquisition: ${FREE_USER_ECONOMICS.acquisitionCostBlended.toFixed(2)}/new user (one-time free trip, bypasses credits)</span>
             </p>
           </div>
         </div>
