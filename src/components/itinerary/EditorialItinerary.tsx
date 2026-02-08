@@ -1063,12 +1063,15 @@ export function EditorialItinerary({
   // Get budget settings to pass limit to PaymentsTab
   const { settings: budgetSettings } = useTripBudget({ tripId, totalDays: days.length, enabled: true });
   
+  // Manual builder overrides preview mode — user gets full editing without AI enrichment
+  const effectiveIsPreview = isPreview && !isManualMode;
+
   // Determine effective editability based on permission + guest edit mode
   // Owner always can edit. Guests can edit freely only if mode is 'free_edit' AND they have edit permission.
   // In 'propose_approve' mode, guests can only propose changes (not directly edit).
   const guestCanDirectEdit = tripPermission?.canEdit && guestEditMode === 'free_edit';
-  const effectiveIsEditable = !isPreview && isEditable && (tripPermission?.isOwner || guestCanDirectEdit);
-  const guestMustPropose = !isPreview && isEditable && !tripPermission?.isOwner && tripPermission?.canEdit && isPropose;
+  const effectiveIsEditable = !effectiveIsPreview && isEditable && (tripPermission?.isOwner || guestCanDirectEdit);
+  const guestMustPropose = !effectiveIsPreview && isEditable && !tripPermission?.isOwner && tripPermission?.canEdit && isPropose;
 
   // Build collaborator color map for activity attribution (only for group trips)
   const collaboratorColorMap = useMemo(() => {
@@ -2597,7 +2600,7 @@ export function EditorialItinerary({
                     isExpanded={expandedDays.includes(days[selectedDayIndex].dayNumber)}
                     isRegenerating={regeneratingDay === days[selectedDayIndex].dayNumber}
                     isEditable={effectiveIsEditable}
-                    isPreview={isPreview}
+                    isPreview={effectiveIsPreview}
                     tripId={tripId}
                      onUnlockTrip={() => setCreditNudge({ action: 'UNLOCK_DAY' })}
                      onUnlockDay={handleUnlockDay}
@@ -2637,8 +2640,8 @@ export function EditorialItinerary({
               </div>
             )}
 
-            {/* Unlock Banner - shown for preview itineraries */}
-            {isPreview && (
+            {/* Unlock Banner - shown for preview itineraries (hidden in manual mode) */}
+            {effectiveIsPreview && (
               <div className="mt-4">
                 <UnlockBanner
                   tripId={tripId}
