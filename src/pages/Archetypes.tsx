@@ -252,6 +252,8 @@ export default function Archetypes() {
             <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none z-[5]" />
           </motion.div>
           
+          <p className="text-center text-sm text-muted-foreground mb-6">Explore all 27 types below</p>
+          
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
