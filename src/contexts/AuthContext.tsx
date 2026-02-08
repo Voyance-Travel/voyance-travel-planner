@@ -272,15 +272,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(initialSession);
         
         // Validate the session by checking if the user actually exists
-        const { error: userError } = await supabase.auth.getUser();
+        const { data: userData, error: userError } = await supabase.auth.getUser();
         if (userError) {
-          console.warn('[Auth] Stale session detected, signing out:', userError.message);
-          await supabase.auth.signOut();
-          if (isMounted) {
-            setSession(null);
-            setUser(null);
+          // Only sign out for auth-specific errors (invalid/expired token)
+          // NOT for transient network errors which would incorrectly destroy valid sessions
+          const isAuthError = userError.message?.toLowerCase().includes('invalid') ||
+                              userError.message?.toLowerCase().includes('expired') ||
+                              userError.message?.toLowerCase().includes('not authorized') ||
+                              userError.status === 401 || userError.status === 403;
+          
+          if (isAuthError) {
+            console.warn('[Auth] Stale session detected, signing out:', userError.message);
+            await supabase.auth.signOut();
+            if (isMounted) {
+              setSession(null);
+              setUser(null);
+            }
+            return;
           }
-          return;
+          
+          // For network errors, log but continue with the session we have
+          console.warn('[Auth] getUser failed (non-auth error), continuing with session:', userError.message);
         }
         
         // User is valid - load their data BEFORE setting loading to false
