@@ -2,13 +2,13 @@
  * Generation Gate Hook
  * 
  * Pre-authorizes credits before itinerary generation.
- * Routes to full generation (expensive) or preview (cheap) based on balance.
+ * Routes to full generation or preview based on balance + first-trip status.
  * 
  * Flow:
- * 1. Calculate trip cost via tripCostCalculator
- * 2. Attempt to deduct via spend-credits (trip_generation action)
- * 3. If success → mode 'full' (proceed with generate-itinerary)
- * 4. If 402 insufficient → mode 'preview' (use generate-full-preview)
+ * 1. Check if this is user's FIRST trip → mode 'full', 0 credits charged
+ * 2. If not first trip: calculate cost, attempt deduction
+ * 3. If success → mode 'full'
+ * 4. If insufficient → mode 'preview' (2-day cap, no credits)
  */
 
 import { useCallback } from 'react';
@@ -35,6 +35,7 @@ export interface GateResult {
   currentBalance: number;
   shortfall: number;
   recommendedPack: ReturnType<typeof getRecommendedPackForEstimate>;
+  isFirstTrip?: boolean;
 }
 
 export interface GenerationGateParams {
@@ -44,6 +45,33 @@ export interface GenerationGateParams {
   dna?: TravelDNA;
   mustIncludes?: string[];
   includeHotels?: boolean;
+}
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+/**
+ * Check if the user has any previously generated itineraries.
+ * Returns true if they have zero completed generations (first trip).
+ */
+async function checkIsFirstTrip(userId: string): Promise<boolean> {
+  try {
+    const { count, error } = await supabase
+      .from('trips')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .not('itinerary_status', 'is', null);
+
+    if (error) {
+      console.error('[GenerationGate] First-trip check error:', error);
+      return false; // Default to not-first on error (safe fallback)
+    }
+
+    return (count ?? 0) === 0;
+  } catch {
+    return false;
+  }
 }
 
 // ============================================================================
@@ -73,6 +101,29 @@ export function useGenerationGate() {
 
     const tripCost = estimate.totalCredits;
     const currentBalance = creditData?.totalCredits ?? 0;
+
+    // ────────────────────────────────────────────────────
+    // FIRST TRIP: Free full generation, no credits charged
+    // ────────────────────────────────────────────────────
+    if (user?.id) {
+      const isFirstTrip = await checkIsFirstTrip(user.id);
+      if (isFirstTrip) {
+        console.log('[GenerationGate] First trip detected — granting free full generation');
+        return {
+          mode: 'full',
+          tripCost: 0,
+          creditsCharged: 0,
+          currentBalance,
+          shortfall: 0,
+          recommendedPack: null,
+          isFirstTrip: true,
+        };
+      }
+    }
+
+    // ────────────────────────────────────────────────────
+    // SUBSEQUENT TRIPS: Check credits
+    // ────────────────────────────────────────────────────
 
     // If user can't afford, skip the API call and go straight to preview
     if (currentBalance < tripCost || !user) {
