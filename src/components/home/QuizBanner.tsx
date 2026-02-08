@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { ArrowRight, Sparkles } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
 
@@ -8,6 +8,8 @@ import { ROUTES } from '@/config/routes';
  * Compact Quiz CTA strip - prominent but not overwhelming
  */
 export default function QuizBanner() {
+  const navigate = useNavigate();
+
   return (
     <section className="relative py-4 sm:py-5 bg-primary overflow-hidden">
       {/* Subtle animated gradient */}
@@ -33,15 +35,13 @@ export default function QuizBanner() {
 
           {/* CTA Button */}
           <Button 
-            asChild 
             size="sm"
             variant="secondary"
             className="bg-white text-primary hover:bg-white/90 font-semibold px-5 h-9 rounded-full shadow-lg"
+            onClick={() => navigate(ROUTES.QUIZ)}
           >
-            <Link to={ROUTES.QUIZ}>
-              Take the Quiz
-              <ArrowRight className="ml-1.5 h-4 w-4" />
-            </Link>
+            Take the Quiz
+            <ArrowRight className="ml-1.5 h-4 w-4" />
           </Button>
         </motion.div>
       </div>
