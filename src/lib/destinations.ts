@@ -1,3 +1,7 @@
+import nolaHero1 from '@/assets/destinations/new-orleans-1.jpg';
+import nolaHero2 from '@/assets/destinations/new-orleans-2.jpg';
+import nolaHero3 from '@/assets/destinations/new-orleans-3.jpg';
+
 export interface Destination {
   id: string;
   city: string;
@@ -637,11 +641,11 @@ export const destinations: Destination[] = [
     description: 'A city that celebrates in the street and mourns with brass bands. New Orleans offers jazz that still evolves, Creole flavors that defy simple origin stories, and a relationship with the past that stays present.',
     timezone: 'America/Chicago',
     currency: 'USD',
-    imageUrl: 'https://images.unsplash.com/photo-1545128485-c400e7702796?w=1200&q=80',
+    imageUrl: nolaHero1,
     images: [
-      'https://images.unsplash.com/photo-1545128485-c400e7702796?w=1200&q=80',
-      'https://images.unsplash.com/photo-1571076371234-4950085dc1d9?w=1200&q=80',
-      'https://images.unsplash.com/photo-1569025743873-ea3a9ber50e7?w=1200&q=80',
+      nolaHero1,
+      nolaHero2,
+      nolaHero3,
     ],
     climate: 'Humid subtropical with hot summers and mild winters. Expect afternoon thunderstorms in summer.',
     bestMonths: ['Feb', 'Mar', 'Apr', 'Oct', 'Nov'],
