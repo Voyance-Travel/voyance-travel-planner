@@ -181,7 +181,7 @@ function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => voi
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
         >
-          <h1 className="text-3xl md:text-4xl font-display font-bold text-accent mb-4">
+          <h1 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">
             5 minutes now — Better trips forever
           </h1>
           <p className="text-lg text-muted-foreground mb-8 max-w-lg mx-auto leading-relaxed">
