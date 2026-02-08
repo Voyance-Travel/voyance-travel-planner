@@ -18,6 +18,7 @@ const FIXED_COSTS: Record<string, number> = {
   swap_activity: 15,
   restaurant_rec: 15,
   ai_message: 10,
+  hotel_optimization: 100,
   mystery_getaway: 15,
   mystery_logistics: 5,
   transport_mode_change: 5,

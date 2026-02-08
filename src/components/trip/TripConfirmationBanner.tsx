@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { SwapReviewDialog, type SwapSuggestion } from './SwapReviewDialog';
+import { useSpendCredits } from '@/hooks/useSpendCredits';
 
 interface TripConfirmationBannerProps {
   tripId: string;
@@ -18,8 +20,10 @@ interface TripConfirmationBannerProps {
   currentStatus: string;
   hasFlightSelection: boolean;
   hasHotelSelection: boolean;
+  itineraryDays: any[]; // EditorialDay[] — current itinerary for swap analysis
   onStatusUpdate: (status: string) => void;
   onTripDataUpdate: (data: { flight_selection?: any; hotel_selection?: any }) => void;
+  onApplySwaps: (swaps: SwapSuggestion[]) => void;
   onRegenerateTrip: () => void;
   className?: string;
 }
@@ -42,14 +46,23 @@ export function TripConfirmationBanner({
   currentStatus,
   hasFlightSelection,
   hasHotelSelection,
+  itineraryDays,
   onStatusUpdate,
   onTripDataUpdate,
+  onApplySwaps,
   onRegenerateTrip,
   className,
 }: TripConfirmationBannerProps) {
   const [dismissed, setDismissed] = useState(false);
   const [showLogisticsDialog, setShowLogisticsDialog] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingSwaps, setIsLoadingSwaps] = useState(false);
+  const [showSwapReview, setShowSwapReview] = useState(false);
+  const [swapSuggestions, setSwapSuggestions] = useState<SwapSuggestion[]>([]);
+  const [swapHotelContext, setSwapHotelContext] = useState('');
+  const [isApplyingSwaps, setIsApplyingSwaps] = useState(false);
+  const spendCredits = useSpendCredits();
+
   const [form, setForm] = useState<LogisticsFormData>({
     hotelName: '',
     hotelNeighborhood: '',
@@ -63,13 +76,11 @@ export function TripConfirmationBanner({
   // Don't show for non-draft trips or dismissed
   if (currentStatus !== 'draft' || dismissed) return null;
 
-  const handleDrafting = async () => {
-    // Just dismiss — trip stays as draft
+  const handleDrafting = () => {
     setDismissed(true);
   };
 
   const handleUpcoming = () => {
-    // If already has both hotel + flight, just update status
     if (hasFlightSelection && hasHotelSelection) {
       confirmUpcoming();
       return;
@@ -104,17 +115,15 @@ export function TripConfirmationBanner({
         onTripDataUpdate(logistics);
       }
 
-      // If we added new logistics, regenerate
-      if (logistics?.flight_selection || logistics?.hotel_selection) {
-        toast.success('Trip confirmed! Regenerating itinerary with your travel details...', { duration: 4000 });
-        // Small delay so the user sees the toast
-        setTimeout(() => onRegenerateTrip(), 800);
+      // If hotel was added, fetch swap suggestions instead of auto-regenerating
+      if (logistics?.hotel_selection && itineraryDays.length > 0) {
+        setShowLogisticsDialog(false);
+        await fetchSwapSuggestions(logistics.hotel_selection);
       } else {
         toast.success('Trip confirmed as upcoming!');
+        setDismissed(true);
+        setShowLogisticsDialog(false);
       }
-
-      setDismissed(true);
-      setShowLogisticsDialog(false);
     } catch (err) {
       console.error('[TripConfirmationBanner] Failed to update trip:', err);
       toast.error('Failed to update trip status');
@@ -123,10 +132,83 @@ export function TripConfirmationBanner({
     }
   };
 
+  const fetchSwapSuggestions = async (hotelSelection: { name: string; neighborhood?: string }) => {
+    setIsLoadingSwaps(true);
+    try {
+      // Build simplified day data for the AI
+      const simplifiedDays = itineraryDays.map((day: any) => ({
+        dayNumber: day.dayNumber,
+        activities: (day.activities || []).map((a: any) => ({
+          id: a.id,
+          name: a.name,
+          description: a.description,
+          type: a.type,
+          category: a.category,
+          startTime: a.startTime,
+          endTime: a.endTime,
+          location: a.location,
+          isLocked: a.isLocked,
+        })),
+      }));
+
+      const { data, error } = await supabase.functions.invoke('suggest-hotel-swaps', {
+        body: {
+          tripId,
+          destination,
+          hotelName: hotelSelection.name,
+          hotelNeighborhood: hotelSelection.neighborhood || '',
+          days: simplifiedDays,
+        },
+      });
+
+      if (error) throw error;
+
+      const suggestions = data?.suggestions || [];
+      
+      if (suggestions.length === 0) {
+        toast.success('Trip confirmed! Your itinerary is already well-suited to your hotel location.');
+        setDismissed(true);
+        return;
+      }
+
+      setSwapSuggestions(suggestions);
+      setSwapHotelContext(data?.hotelContext || hotelSelection.name);
+      setShowSwapReview(true);
+    } catch (err) {
+      console.error('[TripConfirmationBanner] Failed to fetch swap suggestions:', err);
+      toast.error('Could not analyze itinerary. Trip confirmed as upcoming.');
+      setDismissed(true);
+    } finally {
+      setIsLoadingSwaps(false);
+    }
+  };
+
+  const handleApplySwaps = async (approvedSwaps: SwapSuggestion[]) => {
+    setIsApplyingSwaps(true);
+    try {
+      // Charge credits
+      await spendCredits.mutateAsync({
+        action: 'HOTEL_OPTIMIZATION',
+        tripId,
+      });
+
+      onApplySwaps(approvedSwaps);
+      toast.success(`Applied ${approvedSwaps.length} optimization${approvedSwaps.length > 1 ? 's' : ''} to your itinerary!`);
+      setShowSwapReview(false);
+      setDismissed(true);
+    } catch (err: any) {
+      // If it's a credit error, the modal handles it
+      if (!err?.message?.startsWith('Not enough credits')) {
+        toast.error('Failed to apply optimizations');
+      }
+    } finally {
+      setIsApplyingSwaps(false);
+    }
+  };
+
   const handleLogisticsSubmit = () => {
     const logistics: { flight_selection?: any; hotel_selection?: any } = {};
 
-    // Build hotel selection
     if (form.hotelName.trim()) {
       logistics.hotel_selection = {
         name: form.hotelName.trim(),
@@ -136,22 +218,15 @@ export function TripConfirmationBanner({
       };
     }
 
-    // Build flight selection
     if (form.hasFlights === 'yes' && (form.arrivalTime || form.departureTime)) {
       logistics.flight_selection = {
         outbound: form.arrivalTime ? {
           arrivalTime: form.arrivalTime,
-          arrival: {
-            time: form.arrivalTime,
-            airport: form.arrivalAirport || undefined,
-          },
+          arrival: { time: form.arrivalTime, airport: form.arrivalAirport || undefined },
         } : undefined,
         return: form.departureTime ? {
           departureTime: form.departureTime,
-          departure: {
-            time: form.departureTime,
-            airport: form.departureAirport || undefined,
-          },
+          departure: { time: form.departureTime, airport: form.departureAirport || undefined },
         } : undefined,
       };
     }
@@ -161,6 +236,17 @@ export function TripConfirmationBanner({
 
   return (
     <>
+      {/* Loading overlay for swap analysis */}
+      {isLoadingSwaps && (
+        <div className="fixed inset-0 z-50 bg-background/80 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm font-medium">Analyzing your itinerary for your hotel neighborhood...</p>
+            <p className="text-xs text-muted-foreground">Finding better nearby alternatives</p>
+          </div>
+        </div>
+      )}
+
       <AnimatePresence>
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -190,20 +276,11 @@ export function TripConfirmationBanner({
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDrafting}
-                className="gap-1.5"
-              >
+              <Button variant="outline" size="sm" onClick={handleDrafting} className="gap-1.5">
                 <PenLine className="h-3.5 w-3.5" />
                 Just Drafting
               </Button>
-              <Button
-                size="sm"
-                onClick={handleUpcoming}
-                className="gap-1.5"
-              >
+              <Button size="sm" onClick={handleUpcoming} className="gap-1.5">
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 It's Happening!
               </Button>
@@ -221,12 +298,11 @@ export function TripConfirmationBanner({
               Tell us your travel details
             </DialogTitle>
             <DialogDescription>
-              We'll rebuild your itinerary around these — locked activities stay put.
+              We'll suggest optimizations based on your hotel location — locked activities stay put.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-5 pt-2">
-            {/* Hotel Section */}
             {!hasHotelSelection && (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium">
@@ -248,7 +324,6 @@ export function TripConfirmationBanner({
               </div>
             )}
 
-            {/* Flight Section */}
             {!hasFlightSelection && (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium">
@@ -305,15 +380,11 @@ export function TripConfirmationBanner({
               </div>
             )}
 
-            {/* Submit */}
             <div className="flex gap-2 pt-2">
               <Button
                 variant="outline"
                 className="flex-1"
-                onClick={() => {
-                  // Skip logistics, just confirm
-                  confirmUpcoming();
-                }}
+                onClick={() => confirmUpcoming()}
               >
                 Skip for now
               </Button>
@@ -333,6 +404,25 @@ export function TripConfirmationBanner({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Swap Review Dialog */}
+      <SwapReviewDialog
+        open={showSwapReview}
+        onOpenChange={setShowSwapReview}
+        suggestions={swapSuggestions}
+        hotelContext={swapHotelContext}
+        isApplying={isApplyingSwaps}
+        onApproveSelected={(ids) => {
+          const selected = swapSuggestions.filter(s => ids.includes(s.activityId));
+          handleApplySwaps(selected);
+        }}
+        onApproveAll={() => handleApplySwaps(swapSuggestions)}
+        onSkip={() => {
+          setShowSwapReview(false);
+          setDismissed(true);
+          toast.success('Trip confirmed! Keeping your current itinerary.');
+        }}
+      />
     </>
   );
 }
