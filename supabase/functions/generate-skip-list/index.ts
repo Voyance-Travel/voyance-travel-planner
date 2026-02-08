@@ -79,11 +79,31 @@ Return valid JSON only:
     const data = await response.json();
     let content = data.choices?.[0]?.message?.content || '{}';
 
+    // Strip markdown code fences
     if (content.includes('```')) {
       content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     }
 
-    const parsed = JSON.parse(content);
+    // Fix common AI JSON issues: smart quotes, trailing commas, unescaped newlines in strings
+    content = content
+      .replace(/[\u201C\u201D]/g, '"')
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/,\s*([\]}])/g, '$1')
+      .replace(/\n/g, ' ');
+
+    let parsed: { skippedItems?: unknown[] };
+    try {
+      parsed = JSON.parse(content);
+    } catch (parseErr) {
+      console.error("[generate-skip-list] Raw content:", content.substring(0, 500));
+      // Try extracting JSON object from content
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[0]);
+      } else {
+        throw parseErr;
+      }
+    }
 
     return new Response(
       JSON.stringify({ success: true, skippedItems: parsed.skippedItems || [] }),
