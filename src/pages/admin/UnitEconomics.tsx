@@ -61,17 +61,17 @@ const FALLBACK_DATA = {
     // Hidden fixed: your own testing, API testing, dev overhead
     devOps: 20.00, // Rough estimate for internal usage/testing that doesn't generate revenue
   },
-  revenue: { boost: 8.99, single: 15.99, weekend: 29.99, explorer: 65.99, adventurer: 99.99 } as Record<string, number>,
+  revenue: { flex_100: 9, flex_300: 25, flex_500: 39, voyager: 29.99, explorer: 59.99, adventurer: 99.99 } as Record<string, number>,
 };
 
 // Revenue mix presets - what % of paying users buy each tier
 // Now includes per-tier COSTS to calculate true blended margin
 // NOTE: Boost ($8.99) replaces Top-Up ($5) - less cannibalization risk
 const REVENUE_MIX_PRESETS = {
-  pessimistic: { boost: 20, single: 40, weekend: 25, explorer: 12, adventurer: 3, label: "Pessimistic", description: "Most buy Single, low commitment" },
-  conservative: { boost: 25, single: 30, weekend: 28, explorer: 14, adventurer: 3, label: "Conservative", description: "25% boosts, spread across tiers" },
-  balanced: { boost: 12, single: 25, weekend: 32, explorer: 23, adventurer: 8, label: "Balanced", description: "Most buy Weekend/Explorer" },
-  optimistic: { boost: 5, single: 15, weekend: 25, explorer: 35, adventurer: 20, label: "Optimistic", description: "Heavy Explorer/Adventurer" },
+  pessimistic: { flex_100: 25, flex_300: 30, flex_500: 20, voyager: 15, explorer: 8, adventurer: 2, label: "Pessimistic", description: "Heavy flex buying, low club adoption" },
+  conservative: { flex_100: 15, flex_300: 20, flex_500: 18, voyager: 25, explorer: 15, adventurer: 7, label: "Conservative", description: "Moderate flex, growing club" },
+  balanced: { flex_100: 8, flex_300: 12, flex_500: 12, voyager: 28, explorer: 25, adventurer: 15, label: "Balanced", description: "Most revenue from Club (Voyager/Explorer)" },
+  optimistic: { flex_100: 3, flex_300: 7, flex_500: 8, voyager: 18, explorer: 32, adventurer: 32, label: "Optimistic", description: "Heavy Explorer/Adventurer adoption" },
 };
 
 // Amadeus: 1 hotel list + 4 offer batches (~200 hotels) = 5 calls
@@ -197,13 +197,15 @@ const SCENARIOS: Record<Scenario, { name: string; description: string; fullDescr
 // Action costs: Unlock/Regen Day = 90cr/$0.018, Swap = 15cr/$0.009, Restaurant = 15cr/$0.015, AI = 10cr/$0.005, Hotel = 40cr/$0.020
 // Cost derivations from production data: $0.091 total ÷ 5 days = $0.018/day
 const CREDIT_TIERS = [
+  // ── Flexible Credits ──
   { 
-    key: "boost", 
-    label: "Boost", 
-    price: 8.99, 
+    key: "flex_100", 
+    label: "Flex 100", 
+    price: 9, 
     credits: 100, 
     color: "#94A3B8", 
-    description: "Quick boost for swaps & extras",
+    type: "flexible" as const,
+    description: "Quick top-up for swaps & extras",
     // 1 day = 90cr, leaving 10cr → 1 AI message (10cr)
     typicalUsage: { daysUnlocked: 1, swaps: 0, regenerates: 0, restaurants: 0, aiMessages: 1 },
     // Cost: 1×$0.018 + 1×$0.005 = $0.023
@@ -211,55 +213,75 @@ const CREDIT_TIERS = [
     notes: "1 day + 1 AI message (10cr leftover)",
   },
   { 
-    key: "single", 
-    label: "Single/Starter", 
-    price: 15.99, 
-    credits: 200, 
+    key: "flex_300", 
+    label: "Flex 300", 
+    price: 25, 
+    credits: 300, 
     color: "#38BDF8", 
-    description: "~2 days of itinerary",
-    // 2 days = 180cr, leaving 20cr → 1 swap (15cr) + 5cr leftover
-    typicalUsage: { daysUnlocked: 2, swaps: 1, regenerates: 0, restaurants: 0, aiMessages: 0 },
-    // Cost: 2×$0.018 + 1×$0.009 = $0.045
-    estimatedCostToUs: 0.045,
-    notes: "2 days + 1 swap",
+    type: "flexible" as const,
+    description: "~3 days of itinerary",
+    // 3 days = 270cr, leaving 30cr → 2 swaps (30cr)
+    typicalUsage: { daysUnlocked: 3, swaps: 2, regenerates: 0, restaurants: 0, aiMessages: 0 },
+    // Cost: 3×$0.018 + 2×$0.009 = $0.072
+    estimatedCostToUs: 0.072,
+    notes: "3 days + 2 swaps",
   },
   { 
-    key: "weekend", 
-    label: "Weekend", 
-    price: 29.99, 
+    key: "flex_500", 
+    label: "Flex 500", 
+    price: 39, 
     credits: 500, 
-    description: "3-5 day trip",
+    color: "#60A5FA", 
+    type: "flexible" as const,
+    description: "5-day trip",
     // 5 days = 450cr, leaving 50cr → 2 swaps (30cr) + 1 restaurant (15cr) + 5cr leftover
     typicalUsage: { daysUnlocked: 5, swaps: 2, regenerates: 0, restaurants: 1, aiMessages: 0 },
     // Cost: 5×$0.018 + 2×$0.009 + 1×$0.015 = $0.123
     estimatedCostToUs: 0.123,
     notes: "5 days + 2 swaps + 1 restaurant rec",
   },
+  // ── Voyance Club ──
+  { 
+    key: "voyager", 
+    label: "Voyager", 
+    price: 29.99, 
+    credits: 600, // 500 base + 100 bonus
+    color: "#A78BFA", 
+    type: "club" as const,
+    description: "Club entry — 500 + 100 bonus",
+    // 6 days = 540cr, leaving 60cr → 4 swaps (60cr)
+    typicalUsage: { daysUnlocked: 6, swaps: 4, regenerates: 0, restaurants: 0, aiMessages: 0 },
+    // Cost: 6×$0.018 + 4×$0.009 = $0.144
+    estimatedCostToUs: 0.144,
+    notes: "6 days + 4 swaps (500 base + 100 bonus)",
+  },
   { 
     key: "explorer", 
     label: "Explorer", 
-    price: 65.99, 
-    credits: 1200, 
+    price: 59.99, 
+    credits: 1600, // 1200 base + 400 bonus
     color: "#34D399", 
-    description: "Week+ trip or multi-trip",
-    // 13 days = 1170cr, leaving 30cr → 2 swaps (30cr)
-    typicalUsage: { daysUnlocked: 13, swaps: 2, regenerates: 0, restaurants: 0, aiMessages: 0 },
-    // Cost: 13×$0.018 + 2×$0.009 = $0.252
-    estimatedCostToUs: 0.252,
-    notes: "13 days + 2 swaps",
+    type: "club" as const,
+    description: "Popular — 1,200 + 400 bonus",
+    // 17 days = 1530cr, leaving 70cr → 4 swaps (60cr) + 1 AI (10cr)
+    typicalUsage: { daysUnlocked: 17, swaps: 4, regenerates: 0, restaurants: 0, aiMessages: 1 },
+    // Cost: 17×$0.018 + 4×$0.009 + 1×$0.005 = $0.347
+    estimatedCostToUs: 0.347,
+    notes: "17 days + 4 swaps + 1 AI (1,200 base + 400 bonus)",
   },
   { 
     key: "adventurer", 
     label: "Adventurer", 
     price: 99.99, 
-    credits: 2500, 
+    credits: 3200, // 2500 base + 700 bonus
     color: "#F59E0B", 
-    description: "Multiple vacations",
-    // 27 days = 2430cr, leaving 70cr → 4 swaps (60cr) + 1 AI msg (10cr)
-    typicalUsage: { daysUnlocked: 27, swaps: 4, regenerates: 0, restaurants: 0, aiMessages: 1 },
-    // Cost: 27×$0.018 + 4×$0.009 + 1×$0.005 = $0.527
-    estimatedCostToUs: 0.527,
-    notes: "27 days + 4 swaps + 1 AI message",
+    type: "club" as const,
+    description: "Best value — 2,500 + 700 bonus",
+    // 35 days = 3150cr, leaving 50cr → 3 swaps (45cr) + 5cr leftover
+    typicalUsage: { daysUnlocked: 35, swaps: 3, regenerates: 0, restaurants: 0, aiMessages: 0 },
+    // Cost: 35×$0.018 + 3×$0.009 = $0.657
+    estimatedCostToUs: 0.657,
+    notes: "35 days + 3 swaps (2,500 base + 700 bonus)",
   },
 ];
 
@@ -301,7 +323,7 @@ const EXPENSE_COLUMNS = [
 
 export default function UnitEconomics() {
   const [volume, setVolume] = useState(60);
-  const [tier, setTier] = useState("explorer");
+  const [tier, setTier] = useState("voyager");
   const [scenario, setScenario] = useState<Scenario>('A');
   const [conversionRate, setConversionRate] = useState(2); // % of trips that convert to paid (niche product baseline)
   const [revenueMix, setRevenueMix] = useState<keyof typeof REVENUE_MIX_PRESETS>('conservative');
@@ -329,9 +351,10 @@ export default function UnitEconomics() {
 
     const tiers = FALLBACK_DATA.revenue;
     const aov = (
-      (mixConfig.boost / 100) * tiers.boost +
-      (mixConfig.single / 100) * tiers.single +
-      (mixConfig.weekend / 100) * tiers.weekend +
+      (mixConfig.flex_100 / 100) * tiers.flex_100 +
+      (mixConfig.flex_300 / 100) * tiers.flex_300 +
+      (mixConfig.flex_500 / 100) * tiers.flex_500 +
+      (mixConfig.voyager / 100) * tiers.voyager +
       (mixConfig.explorer / 100) * tiers.explorer +
       (mixConfig.adventurer / 100) * tiers.adventurer
     );
@@ -366,11 +389,12 @@ export default function UnitEconomics() {
     }, {} as Record<string, number>);
 
     const cost = (
-      (mixConfig.boost / 100) * (scenarioTierCosts.boost ?? 0.12) +
-      (mixConfig.single / 100) * (scenarioTierCosts.single ?? 0.22) +
-      (mixConfig.weekend / 100) * (scenarioTierCosts.weekend ?? 0.38) +
-      (mixConfig.explorer / 100) * (scenarioTierCosts.explorer ?? 0.72) +
-      (mixConfig.adventurer / 100) * (scenarioTierCosts.adventurer ?? 1.35)
+      (mixConfig.flex_100 / 100) * (scenarioTierCosts.flex_100 ?? 0.02) +
+      (mixConfig.flex_300 / 100) * (scenarioTierCosts.flex_300 ?? 0.07) +
+      (mixConfig.flex_500 / 100) * (scenarioTierCosts.flex_500 ?? 0.12) +
+      (mixConfig.voyager / 100) * (scenarioTierCosts.voyager ?? 0.14) +
+      (mixConfig.explorer / 100) * (scenarioTierCosts.explorer ?? 0.35) +
+      (mixConfig.adventurer / 100) * (scenarioTierCosts.adventurer ?? 0.66)
     );
     
     return { blendedAOV: aov, blendedCostPerUser: cost };
@@ -703,15 +727,15 @@ export default function UnitEconomics() {
     }
     
     // Credit pricing check
-    const boostTier = CREDIT_TIERS.find(t => t.key === 'boost');
-    if (boostTier) {
-      const boostMargin = ((boostTier.price - boostTier.estimatedCostToUs) / boostTier.price) * 100;
-      if (boostMargin > 98) {
+    const flexSmall = CREDIT_TIERS.find(t => t.key === 'flex_100');
+    if (flexSmall) {
+      const flexMargin = ((flexSmall.price - flexSmall.estimatedCostToUs) / flexSmall.price) * 100;
+      if (flexMargin > 95) {
         list.push({
           type: 'success',
-          title: 'Boost tier is highly profitable',
-          description: `$8 Boost has ${boostMargin.toFixed(1)}% margin ($0.12 cost). Users can't unlock days - only swaps/AI.`,
-          impact: `$${(boostTier.price - boostTier.estimatedCostToUs).toFixed(2)} profit per sale`,
+          title: 'Flex 100 tier is highly profitable',
+          description: `$${flexSmall.price} Flex 100 has ${flexMargin.toFixed(1)}% margin ($${flexSmall.estimatedCostToUs.toFixed(3)} cost). 1 day + 1 AI message.`,
+          impact: `$${(flexSmall.price - flexSmall.estimatedCostToUs).toFixed(2)} profit per sale`,
         });
       }
     }
@@ -1374,7 +1398,7 @@ export default function UnitEconomics() {
               </div>
             </div>
             
-            {/* Tier Labels with $ - Compact for 5 tiers */}
+            {/* Tier Labels with $ - Compact for 6 tiers */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
               {CREDIT_TIERS.map((tier) => {
                 const pct = mixConfig[tier.key as keyof typeof mixConfig] as number;
@@ -1841,7 +1865,7 @@ export default function UnitEconomics() {
             </tbody>
           </table>
           <p style={{ fontSize: 10, color: "#64748B", marginBottom: 24 }}>
-            Each cell shows <span style={{ color: "#94A3B8" }}>user pays</span> + <span style={{ color: "#34D399" }}>margin %</span> at that tier's $/credit rate. Boost ($0.090/cr) yields highest margin; Adventurer ($0.040/cr) lowest.
+            Each cell shows <span style={{ color: "#94A3B8" }}>user pays</span> + <span style={{ color: "#34D399" }}>margin %</span> at that tier's $/credit rate. Flex 100 ($0.090/cr) yields highest margin; Adventurer ($0.031/cr) lowest.
           </p>
 
           {/* TIER-BASED COST BREAKDOWN TABLE */}
@@ -1863,11 +1887,20 @@ export default function UnitEconomics() {
                 </tr>
               </thead>
               <tbody>
-                {CREDIT_TIERS.map((tier, i) => {
+                {CREDIT_TIERS.map((tier, i, arr) => {
+                  const prevType = i > 0 ? arr[i - 1].type : null;
+                  const showGroupHeader = tier.type !== prevType;
                   const margin = ((tier.price - tier.estimatedCostToUs) / tier.price) * 100;
                   const marginColor = margin > 97 ? "#34D399" : margin > 95 ? "#FBBF24" : "#F87171";
                   
-                  return (
+                  return (<>
+                    {showGroupHeader && (
+                      <tr key={`group-${tier.type}`}>
+                        <td colSpan={8} style={{ padding: "10px 10px 4px", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: tier.type === 'club' ? "#A78BFA" : "#64748B", borderBottom: "1px solid rgba(100, 116, 139, 0.2)" }}>
+                          {tier.type === 'flexible' ? '📦 Flexible Credits' : '✨ Voyance Club'}
+                        </td>
+                      </tr>
+                    )}
                     <tr key={tier.key} style={{ background: i % 2 === 0 ? "rgba(15, 23, 42, 0.2)" : "transparent" }}>
                       <td style={{ padding: "8px 10px", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1897,7 +1930,7 @@ export default function UnitEconomics() {
                         {margin.toFixed(1)}%
                       </td>
                     </tr>
-                  );
+                  </>);
                 })}
                 {/* Free user row - one free 2-day full-power trip */}
                 <tr style={{ background: "rgba(248, 113, 113, 0.08)" }}>
@@ -1993,8 +2026,8 @@ export default function UnitEconomics() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div style={{ padding: 12, background: "rgba(52, 211, 153, 0.1)", border: "1px solid rgba(52, 211, 153, 0.3)", borderRadius: 8 }}>
               <p style={{ fontSize: 11, color: "#34D399", margin: 0, lineHeight: 1.6 }}>
-                <strong>💰 Paid User Economics:</strong> $8.99 Boost can't unlock days (only swaps/AI) = <strong>$0.10 cost (98.9% margin)</strong>. 
-                Adventurer unlocks 16 days = <strong>$2.25 cost vs $99.99 (97.7% margin)</strong>. All tiers profitable.
+                <strong>💰 Paid User Economics:</strong> Flex 100 ($9) = 1 day, <strong>$0.02 cost (99.7% margin)</strong>. 
+                Club Adventurer ($99.99) = 35 days, <strong>$0.66 cost (99.3% margin)</strong>. All 6 tiers &gt;90% margin.
               </p>
             </div>
             <div style={{ padding: 12, background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.3)", borderRadius: 8 }}>
