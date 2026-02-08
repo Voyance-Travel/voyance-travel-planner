@@ -185,13 +185,15 @@ export function LockedDayCard({
             </Button>
 
             {tripId && (
-              <button
+              <Button
+                variant="outline"
                 onClick={handleManualBuild}
-                className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mt-1 transition-colors w-full"
+                className="w-full gap-2 rounded-xl"
+                size="lg"
               >
-                <Pencil className="h-3 w-3" />
+                <Pencil className="h-4 w-4" />
                 I'll build it myself
-              </button>
+              </Button>
             )}
           </div>
         ) : canAfford ? (
@@ -222,13 +224,15 @@ export function LockedDayCard({
             </Button>
 
             {tripId && (
-              <button
+              <Button
+                variant="outline"
                 onClick={handleManualBuild}
-                className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mt-1 transition-colors w-full"
+                className="w-full gap-2 rounded-xl"
+                size="lg"
               >
-                <Pencil className="h-3 w-3" />
+                <Pencil className="h-4 w-4" />
                 I'll build it myself
-              </button>
+              </Button>
             )}
           </div>
         )}

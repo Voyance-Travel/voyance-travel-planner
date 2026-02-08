@@ -10,8 +10,10 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Lock, Sparkles, Loader2 } from 'lucide-react';
+import { Lock, Sparkles, Loader2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useManualBuilderStore } from '@/stores/manual-builder-store';
+import { toast } from 'sonner';
 import { Progress } from '@/components/ui/progress';
 import { useUnlockTrip, type UnlockTripParams } from '@/hooks/useUnlockTrip';
 import { CreditNudge } from './CreditNudge';
@@ -41,11 +43,17 @@ export function UnlockBanner({
   onUnlockComplete,
 }: UnlockBannerProps) {
   const { state, unlock, isUnlocking, getUnlockCost, canAfford, totalCredits } = useUnlockTrip();
+  const { enableManualBuilder } = useManualBuilderStore();
   const [showNudge, setShowNudge] = useState(false);
 
   const unlockCost = getUnlockCost(totalDays);
   const affordable = canAfford(totalDays);
   const perDayCost = CREDIT_COSTS.UNLOCK_DAY;
+
+  const handleManualBuild = () => {
+    enableManualBuilder(tripId);
+    toast.success('Manual builder mode enabled! Edit freely.');
+  };
 
   const handleUnlockAll = async () => {
     if (!affordable) {
@@ -131,10 +139,13 @@ export function UnlockBanner({
           </div>
           
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            {/* Unlock all days */}
             <Button onClick={handleUnlockAll} className="gap-2 flex-1">
               <Sparkles className="h-4 w-4" />
               Unlock All {totalDays} Days
+            </Button>
+            <Button variant="outline" onClick={handleManualBuild} className="gap-2 flex-1">
+              <Pencil className="h-4 w-4" />
+              I'll build it myself
             </Button>
           </div>
         </div>
