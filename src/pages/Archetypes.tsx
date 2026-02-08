@@ -1,6 +1,8 @@
+import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Dna, Sparkles, Sliders, RefreshCw, MapPin } from 'lucide-react';
+import { ArrowRight, Dna, Sparkles, Sliders, RefreshCw, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
+import useEmblaCarousel from 'embla-carousel-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
@@ -21,44 +23,33 @@ const ARCHETYPES_BY_CATEGORY: Record<string, string[]> = {
   TRANSFORMER: ['gap_year_graduate', 'midlife_explorer', 'healing_journeyer', 'sabbatical_scholar', 'retirement_ranger'],
 };
 
-// Featured archetypes for the hero spotlight
-const SPOTLIGHT_ARCHETYPES = ['cultural_anthropologist', 'adrenaline_architect', 'culinary_cartographer'];
+// All archetype IDs for the carousel
+const ALL_ARCHETYPE_IDS = Object.values(ARCHETYPES_BY_CATEGORY).flat();
 
-function SpotlightCard({ archetype, index }: { archetype: ArchetypeNarrative; index: number }) {
-  const isCenter = index === 1;
-  
+function SpotlightCard({ archetype }: { archetype: ArchetypeNarrative }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 30 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.3 + index * 0.15, duration: 0.6 }}
-      className={`relative ${isCenter ? 'md:-mt-4 md:scale-105 z-10' : 'opacity-90'}`}
-    >
-      <div className={`bg-card rounded-2xl border ${isCenter ? 'border-primary/30 shadow-xl shadow-primary/10' : 'border-border'} overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1`}>
-        {/* Gradient top accent */}
+    <div className="flex-[0_0_280px] sm:flex-[0_0_300px] min-w-0 px-2">
+      <div className="bg-card rounded-2xl border border-border overflow-hidden transition-all duration-300 hover:shadow-lg hover:border-primary/30 hover:-translate-y-1 h-full">
         <div className="h-1.5 bg-gradient-to-r from-primary/60 via-primary to-primary/60" />
-        
-        <div className="p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <span className="text-3xl">{archetype.emoji}</span>
+        <div className="p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-2xl">{archetype.emoji}</span>
             <div>
-              <h3 className="font-serif font-bold text-lg text-foreground">{archetype.name}</h3>
+              <h3 className="font-serif font-bold text-base text-foreground">{archetype.name}</h3>
               <span className="text-xs text-primary font-medium">
                 {CATEGORY_DESCRIPTIONS[archetype.category].name}
               </span>
             </div>
           </div>
-          
-          <p className="text-foreground/80 italic text-sm mb-3 leading-relaxed">
+          <p className="text-foreground/80 italic text-sm mb-2 leading-relaxed line-clamp-2">
             "{archetype.hookLine}"
           </p>
-          
-          <p className="text-sm text-muted-foreground line-clamp-3">
+          <p className="text-sm text-muted-foreground line-clamp-2">
             {archetype.coreDescription}
           </p>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -155,9 +146,31 @@ function CategorySection({ category, archetypeIds, categoryIndex }: {
 }
 
 export default function Archetypes() {
-  const spotlightArchetypes = SPOTLIGHT_ARCHETYPES
+  const allArchetypes = ALL_ARCHETYPE_IDS
     .map(id => ARCHETYPE_NARRATIVES[id])
     .filter(Boolean);
+
+  const [emblaRef, emblaApi] = useEmblaCarousel({ 
+    loop: true, 
+    align: 'start',
+    dragFree: true,
+  });
+  const [canScrollPrev, setCanScrollPrev] = useState(false);
+  const [canScrollNext, setCanScrollNext] = useState(true);
+
+  const onSelect = useCallback(() => {
+    if (!emblaApi) return;
+    setCanScrollPrev(emblaApi.canScrollPrev());
+    setCanScrollNext(emblaApi.canScrollNext());
+  }, [emblaApi]);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    onSelect();
+    emblaApi.on('select', onSelect);
+    emblaApi.on('reInit', onSelect);
+    return () => { emblaApi.off('select', onSelect); emblaApi.off('reInit', onSelect); };
+  }, [emblaApi, onSelect]);
 
   return (
     <MainLayout>
@@ -173,12 +186,12 @@ export default function Archetypes() {
         <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-primary/10 rounded-full blur-[120px] -translate-y-1/2" />
         <div className="absolute top-32 right-1/4 w-[300px] h-[300px] bg-accent/10 rounded-full blur-[100px]" />
         
-        <div className="max-w-5xl mx-auto px-4 relative">
+        <div className="max-w-6xl mx-auto px-4 relative">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className="text-center mb-14"
+            className="text-center mb-10"
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
@@ -201,12 +214,43 @@ export default function Archetypes() {
             </p>
           </motion.div>
 
-          {/* Spotlight cards */}
-          <div className="grid md:grid-cols-3 gap-4 md:gap-6 mb-10">
-            {spotlightArchetypes.map((archetype, index) => (
-              <SpotlightCard key={archetype.id} archetype={archetype} index={index} />
-            ))}
-          </div>
+          {/* Archetype carousel */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, duration: 0.6 }}
+            className="relative mb-10"
+          >
+            <div className="overflow-hidden" ref={emblaRef}>
+              <div className="flex -ml-2">
+                {allArchetypes.map((archetype) => (
+                  <SpotlightCard key={archetype.id} archetype={archetype} />
+                ))}
+              </div>
+            </div>
+            
+            {/* Navigation arrows */}
+            <button
+              onClick={() => emblaApi?.scrollPrev()}
+              disabled={!canScrollPrev}
+              className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 z-10 w-10 h-10 rounded-full bg-card border border-border shadow-md flex items-center justify-center text-foreground hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              aria-label="Previous archetypes"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => emblaApi?.scrollNext()}
+              disabled={!canScrollNext}
+              className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 z-10 w-10 h-10 rounded-full bg-card border border-border shadow-md flex items-center justify-center text-foreground hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              aria-label="Next archetypes"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+            
+            {/* Fade edges */}
+            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-background to-transparent pointer-events-none z-[5]" />
+            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none z-[5]" />
+          </motion.div>
           
           <motion.div
             initial={{ opacity: 0 }}
