@@ -348,42 +348,34 @@ function TripDetailsStep({
 
       <div className={cn("space-y-4 sm:space-y-5 mx-auto px-1", planMode === 'multi' ? "max-w-xl" : "max-w-md")}>
         {/* Plan Mode Selection */}
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+        <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
           {[
-            { mode: 'single' as const, icon: MapPin, label: 'Single City', desc: 'One destination trip', onClick: () => { setPlanMode('single'); handleToggleMultiCity(false); } },
-            { mode: 'multi' as const, icon: Route, label: 'Multi-City', desc: 'Multiple stops', onClick: () => { setPlanMode('multi'); handleToggleMultiCity(true); } },
-            { mode: 'chat' as const, icon: MessageSquareText, label: 'Just Tell Us', desc: 'Describe your ideal trip', onClick: () => setPlanMode('chat') },
-            { mode: 'manual' as const, icon: PenLine, label: 'Build Myself', desc: 'Full control, your way', onClick: () => setPlanMode('manual') },
-          ].map(({ mode, icon: Icon, label, desc, onClick }) => (
+            { mode: 'single' as const, icon: MapPin, label: 'Single City', onClick: () => { setPlanMode('single'); handleToggleMultiCity(false); } },
+            { mode: 'multi' as const, icon: Route, label: 'Multi-City', onClick: () => { setPlanMode('multi'); handleToggleMultiCity(true); } },
+            { mode: 'chat' as const, icon: MessageSquareText, label: 'Just Tell Us', onClick: () => setPlanMode('chat') },
+            { mode: 'manual' as const, icon: PenLine, label: 'Build Myself', onClick: () => setPlanMode('manual') },
+          ].map(({ mode, icon: Icon, label, onClick }) => (
             <button
               key={mode}
               type="button"
               onClick={onClick}
               className={cn(
-                'relative flex flex-col items-center gap-1.5 p-3.5 sm:p-4 rounded-xl border text-center transition-all duration-200',
+                'flex flex-col items-center gap-1 py-2.5 px-1 rounded-lg border text-center transition-all duration-200',
                 planMode === mode
-                  ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20'
-                  : 'border-border bg-card hover:border-primary/30 hover:bg-muted/50'
+                  ? 'border-primary bg-primary/5 shadow-sm'
+                  : 'border-border bg-card hover:border-primary/30'
               )}
             >
               <Icon className={cn(
-                'h-5 w-5 sm:h-6 sm:w-6 transition-colors',
+                'h-4 w-4 transition-colors',
                 planMode === mode ? 'text-primary' : 'text-muted-foreground'
               )} />
               <span className={cn(
-                'text-sm font-medium leading-tight',
-                planMode === mode ? 'text-foreground' : 'text-foreground'
+                'text-[11px] sm:text-xs font-medium leading-tight',
+                planMode === mode ? 'text-foreground' : 'text-muted-foreground'
               )}>
                 {label}
               </span>
-              <span className="text-[10px] sm:text-xs text-muted-foreground leading-tight">
-                {desc}
-              </span>
-              {planMode === mode && (
-                <div className="absolute top-2 right-2">
-                  <div className="w-2 h-2 rounded-full bg-primary" />
-                </div>
-              )}
             </button>
           ))}
         </div>
