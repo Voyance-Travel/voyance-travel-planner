@@ -330,6 +330,7 @@ async function getStaticFallback(
   destination: string
 ): Promise<QuickPreviewResponse> {
   const destinationKey = normalizeDestinationKey(destination);
+  const arch = getRandomArchetype();
   const { data: fallback } = await supabaseAdmin
     .from('destination_fallbacks')
     .select('display_name, tagline, preview_days')
@@ -338,26 +339,25 @@ async function getStaticFallback(
 
   if (fallback) {
     const fb = fallback as DestinationFallback;
-      const arch = getRandomArchetype();
-      return {
-        destination: fb.display_name,
-        days: fb.preview_days,
-        totalDays: 7,
-        archetypeUsed: arch.name,
-        archetypeTagline: fb.tagline || arch.tagline,
-        isFallback: true,
-      };
-    }
-
-    // No static fallback — return error so we don't show generic content
     return {
-      destination: destination,
-      days: [],
+      destination: fb.display_name,
+      days: fb.preview_days,
       totalDays: 7,
       archetypeUsed: arch.name,
-      archetypeTagline: arch.tagline,
+      archetypeTagline: fb.tagline || arch.tagline,
       isFallback: true,
     };
+  }
+
+  // No static fallback — return error so we don't show generic content
+  return {
+    destination: destination,
+    days: [],
+    totalDays: 7,
+    archetypeUsed: arch.name,
+    archetypeTagline: arch.tagline,
+    isFallback: true,
+  };
 }
 
 serve(async (req: Request) => {
