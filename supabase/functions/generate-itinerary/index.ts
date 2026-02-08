@@ -4448,8 +4448,9 @@ Travelers in this group:
 ${context.collaboratorTravelers.map(t => `  - "${t.userId}" (${t.name})`).join('\n')}
 
 Rules:
-- Use the primary planner's ID ("${context.userId}") for consensus/iconic activities
-- Use a collaborator's ID when the activity clearly matches their preferences
+- When an activity appeals to BOTH/ALL travelers' profiles equally (e.g. iconic landmarks, shared interests), use COMMA-SEPARATED user IDs: "id1,id2"
+- Use a single collaborator's ID when the activity clearly matches ONLY their preferences
+- Use the primary planner's ID ("${context.userId}") ONLY when it specifically matches their profile, NOT as a default
 - EVERY activity MUST have a suggestedFor value — no exceptions
 ` : ''}`;
 
@@ -8274,8 +8275,9 @@ Travelers in this group:
 ${travelerList}
 
 Rules:
-- Use the primary planner's ID ("${userId}") for consensus/iconic activities
-- Use a collaborator's ID when the activity clearly matches their specific preferences
+- When an activity appeals to BOTH/ALL travelers' profiles equally (e.g. iconic landmarks, shared interests), use COMMA-SEPARATED user IDs: "id1,id2"
+- Use a single collaborator's ID when the activity clearly matches ONLY their preferences
+- Use the primary planner's ID ("${userId}") ONLY when it specifically matches their profile, NOT as a default
 - EVERY activity MUST have a suggestedFor value — no exceptions
 `;
           console.log(`[generate-day] Attribution prompt injected for ${allUserIds.length} travelers`);
