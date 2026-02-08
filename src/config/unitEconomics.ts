@@ -196,14 +196,18 @@ export const REVENUE_CONFIG = {
     fixed: 0.30, // $0.30 per transaction
   },
   
-  // Free tier - One free 3-day full-power trip
+  // Free tier - One free 3-day full-power trip + recurring monthly grant
   freeTier: {
     freeTripDays: 3,
     freeEditsLimit: 5,
     oneFreeTripPerAccount: true,
     acquisitionCostBlended: 0.378,     // One-time per new user
     acquisitionCostWorstCase: 0.413,   // All 5 edits used
-    recurringCostPerTrip: 0.030,       // 3 AI activities per locked preview
+    monthlyGrantCredits: 150,          // Credits per month
+    monthlyGrantExpiry: 2,             // Months until expiry
+    recurringCostIfUsed: 0.040,        // Cost if user spends all 150cr
+    usageRate: 0.60,                   // ~60% of free users use credits
+    recurringCostPerMonth: 0.024,      // Blended: $0.04 × 60%
   },
 } as const;
 
