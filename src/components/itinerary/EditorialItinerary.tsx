@@ -96,6 +96,7 @@ import { TransitBadge } from './TransitBadge';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { AddActivityModal } from './AddActivityModal';
 import { ImportActivitiesModal } from './ImportActivitiesModal';
+import { SmartFinishBanner } from './SmartFinishBanner';
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -923,6 +924,45 @@ export function EditorialItinerary({
   
   const { isManualBuilder, enableManualBuilder } = useManualBuilderStore();
   const isManualMode = tripId ? isManualBuilder(tripId) : false;
+  
+  // Smart Finish state — check URL params for post-purchase return
+  const [smartFinishPurchased, setSmartFinishPurchased] = useState(false);
+  useEffect(() => {
+    // Check if trip has smart_finish_purchased flag
+    const checkSmartFinish = async () => {
+      const { data } = await supabase
+        .from('trips')
+        .select('smart_finish_purchased')
+        .eq('id', tripId)
+        .single();
+      if (data?.smart_finish_purchased) setSmartFinishPurchased(true);
+    };
+    checkSmartFinish();
+    
+    // Handle return from Stripe checkout
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('smart_finish') === 'success') {
+      // Trigger enrichment
+      const enrich = async () => {
+        toast.info('Smart Finish purchased! Enriching your itinerary...');
+        const { error } = await supabase.functions.invoke('enrich-manual-trip', {
+          body: { tripId },
+        });
+        if (!error) {
+          setSmartFinishPurchased(true);
+          toast.success('Your itinerary has been enriched with tips, route hints, and DNA fixes!');
+          // Remove query param and reload to get enriched data
+          const url = new URL(window.location.href);
+          url.searchParams.delete('smart_finish');
+          window.history.replaceState({}, '', url.toString());
+          window.location.reload();
+        } else {
+          toast.error('Enrichment failed. Please refresh the page to try again.');
+        }
+      };
+      enrich();
+    }
+  }, [tripId]);
 
   const [changingTransportActivityId, setChangingTransportActivityId] = useState<string | null>(null);
 
@@ -2416,6 +2456,16 @@ export function EditorialItinerary({
               archetype={style}
             />
 
+            {/* Smart Finish Banner — DNA gap analysis for manual trips */}
+            {isManualMode && (
+              <SmartFinishBanner
+                tripId={tripId}
+                isManualMode={isManualMode}
+                smartFinishPurchased={smartFinishPurchased}
+                onPurchaseComplete={() => setSmartFinishPurchased(true)}
+              />
+            )}
+
             {/* Utility Bar - Share/Save/Export/Print */}
             <ItineraryUtilityBar
               tripId={tripId}
@@ -2423,7 +2473,7 @@ export function EditorialItinerary({
               destination={destination}
               onSave={effectiveIsEditable ? handleSave : undefined}
               isSaving={isSaving}
-              onExportPDF={async () => {
+              onExportPDF={isManualMode && !smartFinishPurchased ? undefined : async () => {
                 const { generateConsumerTripPdf } = await import('@/utils/consumerPdfGenerator');
                 generateConsumerTripPdf({
                   tripName: `Trip to ${destination}`,

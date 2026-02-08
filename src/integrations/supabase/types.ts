@@ -6367,6 +6367,7 @@ export type Database = {
           destinations: Json | null
           end_date: string
           flight_selection: Json | null
+          gap_analysis_result: Json | null
           guest_edit_mode: string
           hotel_selection: Json | null
           id: string
@@ -6383,6 +6384,8 @@ export type Database = {
           origin_city: string | null
           owner_plan_tier: string | null
           price_lock_expires_at: string | null
+          smart_finish_purchased: boolean
+          smart_finish_purchased_at: string | null
           start_date: string
           status: Database["public"]["Enums"]["trip_status"]
           transportation_preferences: Json | null
@@ -6410,6 +6413,7 @@ export type Database = {
           destinations?: Json | null
           end_date: string
           flight_selection?: Json | null
+          gap_analysis_result?: Json | null
           guest_edit_mode?: string
           hotel_selection?: Json | null
           id?: string
@@ -6426,6 +6430,8 @@ export type Database = {
           origin_city?: string | null
           owner_plan_tier?: string | null
           price_lock_expires_at?: string | null
+          smart_finish_purchased?: boolean
+          smart_finish_purchased_at?: string | null
           start_date: string
           status?: Database["public"]["Enums"]["trip_status"]
           transportation_preferences?: Json | null
@@ -6453,6 +6459,7 @@ export type Database = {
           destinations?: Json | null
           end_date?: string
           flight_selection?: Json | null
+          gap_analysis_result?: Json | null
           guest_edit_mode?: string
           hotel_selection?: Json | null
           id?: string
@@ -6469,6 +6476,8 @@ export type Database = {
           origin_city?: string | null
           owner_plan_tier?: string | null
           price_lock_expires_at?: string | null
+          smart_finish_purchased?: boolean
+          smart_finish_purchased_at?: string | null
           start_date?: string
           status?: Database["public"]["Enums"]["trip_status"]
           transportation_preferences?: Json | null
