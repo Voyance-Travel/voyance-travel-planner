@@ -83,7 +83,7 @@ const AMADEUS_FREE_TRIPS = Math.floor(AMADEUS_FREE_MONTHLY / AMADEUS_CALLS_PER_T
 const PHOTO_CACHE_SAVINGS_RATIO = 0.33; // Estimated, not yet verified post-deployment
 
 // =============================================================================
-// FREE USER ECONOMICS — "ONE FREE 3-DAY FULL-POWER TRIP" MODEL
+// FREE USER ECONOMICS — BLENDED MODEL
 //
 // TWO DISTINCT COST TYPES:
 //
@@ -96,13 +96,19 @@ const PHOTO_CACHE_SAVINGS_RATIO = 0.33; // Estimated, not yet verified post-depl
 //      - Total worst case:                       ~$0.41
 //      - Blended (avg ~2.1 edits):               ~$0.38
 //
-// 2) RECURRING COST PER FREE TRIP (every subsequent trip):
-//    Locked preview = 3 AI-only activities. No Google, no enrichment.
-//      - 3 activities × AI cost (~$0.01):        ~$0.03
-//    This is cheap because we skip all enrichment APIs.
+// 2) RECURRING MONTHLY GRANT (150 credits, 2-month expiry):
+//    After free trip, users get 150cr/mo to stay engaged.
+//    Typical usage: 1 day unlock (90cr) + a few swaps/AI messages.
+//    Cost to us depends on what they spend credits on:
+//      - If unlock 1 day: ~$0.10 (Google + AI enrichment)
+//      - If swaps only: ~$0.02 (AI-only, no enrichment)
+//      - Blended estimate: ~$0.04/mo per active free user
+//    Not all users use their credits → effective cost lower.
+//      - ~60% use some credits, ~40% lapse
+//      - Effective recurring: ~$0.024/mo per free user
 //
-// The scaling table uses the RECURRING cost ($0.03/trip).
-// The one-time cost is amortized across the user's lifetime.
+// The scaling table uses the RECURRING cost ($0.024/mo).
+// The one-time acquisition is shown separately.
 // =============================================================================
 const FREE_USER_ECONOMICS = {
   // One-time free trip (acquisition cost)
@@ -112,10 +118,10 @@ const FREE_USER_ECONOMICS = {
 
   // One-time acquisition cost model
   acquisitionCosts: {
-    tripBase: 0.043,            // Perplexity + AI setup (no Amadeus for free)
-    perDay: 0.100,              // Google Places + Photos + AI content
-    perEdit: 0.012,             // Avg across swap ($0.009), regen ($0.018), add ($0.009)
-    dnaLookup: 0.010,           // Supabase query
+    tripBase: 0.043,
+    perDay: 0.100,
+    perEdit: 0.012,
+    dnaLookup: 0.010,
   },
 
   // Blended one-time acquisition cost (assuming ~2.1 edits avg)
@@ -124,11 +130,21 @@ const FREE_USER_ECONOMICS = {
   // Worst case acquisition (all 5 edits used)
   acquisitionCostWorstCase: 0.413,
 
-  // RECURRING cost per free trip (locked preview, 3 AI activities)
-  recurringCostPerTrip: 0.030,
+  // Monthly credit grant
+  monthlyGrant: {
+    credits: 150,
+    expirationMonths: 2,
+    maxBanked: 300,           // Can hold up to 2 months worth
+    costIfFullyUsed: 0.040,   // Blended cost if user spends all 150cr
+    usageRate: 0.60,          // ~60% of free users actually spend credits
+  },
+
+  // RECURRING cost per free user per month (blended with usage rate)
+  // = $0.040 × 60% = $0.024/mo
+  recurringCostPerMonth: 0.024,
 
   // Model name for display
-  modelName: "One Free 3-Day Full Power",
+  modelName: "Free Trip + 150cr/mo",
 };
 
 // Helper function: Calculate variable cost for N days
@@ -249,7 +265,7 @@ const SCALE_COLUMNS = [
   { key: "trips", label: "Total Trips", tooltip: "Total monthly trip volume (paid + free users combined)." },
   { key: "paid", label: "Paid", tooltip: "Number of paying users. Formula: Total × Conversion %." },
   { key: "free", label: "Free", tooltip: "Non-paying users (returning). Their trips are locked previews." },
-  { key: "freeCost", label: "Free Var $", tooltip: `Recurring cost of free user previews. Formula: Free × $${FREE_USER_ECONOMICS.recurringCostPerTrip.toFixed(3)} (3 AI activities, no enrichment). Excludes one-time acquisition cost.` },
+  { key: "freeCost", label: "Free Var $", tooltip: `Monthly cost of free users (150cr grant). Formula: Free × $${FREE_USER_ECONOMICS.recurringCostPerMonth.toFixed(3)}/mo (blended credit usage × 60% activity rate). Excludes one-time acquisition.` },
   { key: "paidCost", label: "Paid Var $", tooltip: "Variable cost of serving all paid users. Formula: Paid × $0.091 (observed production cost)." },
   { key: "blended", label: "Blended/Trip", tooltip: "All-in cost per trip = Total Cost ÷ Total Trips." },
   { key: "revenue", label: "Revenue", tooltip: "Revenue from paying users. Formula: Paid × Blended AOV." },
@@ -489,13 +505,13 @@ export default function UnitEconomics() {
     const contributionMargin = ((revenue - variablePerTrip) / revenue) * 100;
 
     // BLENDED ECONOMICS: Clean flat-rate model (matches scale table)
-    // Uses RECURRING free cost ($0.03/trip for locked previews), NOT one-time acquisition
+    // Uses RECURRING free cost ($0.024/mo for 150cr grant), NOT one-time acquisition
     const PAID_COST_PER_USER = 0.091; // Observed production cost
-    const FREE_COST_PER_TRIP = FREE_USER_ECONOMICS.recurringCostPerTrip; // $0.030 recurring
+    const FREE_COST_PER_USER = FREE_USER_ECONOMICS.recurringCostPerMonth; // $0.024/mo recurring
     const payingTrips = volume * (conversionRate / 100);
     const freeTrips = volume - payingTrips;
     
-    const freeVariableCost = freeTrips * FREE_COST_PER_TRIP;
+    const freeVariableCost = freeTrips * FREE_COST_PER_USER;
     const paidVariableCost = payingTrips * PAID_COST_PER_USER;
     const totalVariableCostBlended = freeVariableCost + paidVariableCost;
     const totalCost = totalVariableCostBlended + fixedTotal;
@@ -650,7 +666,7 @@ export default function UnitEconomics() {
         type: 'warning',
         title: 'Low conversion rate modeled',
         description: `At ${conversionRate}% conversion, ${(100 - conversionRate)}% of trips come from non-paying users.`,
-        impact: `Recurring free cost: $${(volume * (1 - conversionRate / 100) * FREE_USER_ECONOMICS.recurringCostPerTrip).toFixed(2)}/mo (excludes one-time acquisition)`,
+        impact: `Recurring free cost: $${(volume * (1 - conversionRate / 100) * FREE_USER_ECONOMICS.recurringCostPerMonth).toFixed(2)}/mo (150cr grants, excludes acquisition)`,
         action: 'Improve conversion or reduce free tier generosity.',
       });
     }
@@ -1054,9 +1070,9 @@ export default function UnitEconomics() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 32 }}>
           {(viewMode === 'itinerary' ? (() => {
             // CLEAN FLAT-RATE MODEL: same formulas as the scale table
-            // Uses RECURRING free cost, not one-time acquisition
+            // Uses RECURRING monthly grant cost, not one-time acquisition
             const PAID_COST = 0.091;
-            const FREE_COST_RECURRING = FREE_USER_ECONOMICS.recurringCostPerTrip;
+            const FREE_COST_RECURRING = FREE_USER_ECONOMICS.recurringCostPerMonth;
             const paid = volume * (conversionRate / 100);
             const free = volume - paid;
             const freeVarCost = free * FREE_COST_RECURRING;
@@ -1064,7 +1080,7 @@ export default function UnitEconomics() {
             const totalCost = freeVarCost + paidVarCost + costs.fixed.total;
             const breakEvenPaying = Math.ceil(costs.fixed.total / (blendedAOV - PAID_COST));
             return [
-              { label: "Free Trip Cost", value: `$${FREE_COST_RECURRING.toFixed(3)}`, sub: `Recurring: 3 AI activities/trip (locked preview)`, accent: "#F87171", icon: "🆓" },
+              { label: "Free User/mo", value: `$${FREE_COST_RECURRING.toFixed(3)}`, sub: `150cr grant × 60% usage rate`, accent: "#F87171", icon: "🆓" },
               { label: "Acquisition Cost", value: `$${FREE_USER_ECONOMICS.acquisitionCostBlended.toFixed(2)}`, sub: `One-time: 3-day full trip + ~2 edits (per new user)`, accent: "#FB923C", icon: "🎁" },
               { label: "Paid Trip Cost", value: `$${PAID_COST.toFixed(3)}`, sub: `Photos $0.085 · Hotels $0.005 · AI ~$0`, accent: "#38BDF8", icon: "💎" },
               { label: "Fixed / Trip", value: `$${costs.fixed.perTrip.toFixed(2)}`, sub: `$${costs.fixed.total.toFixed(0)}/mo ÷ ${volume} trips`, accent: "#F59E0B", icon: "🏗" },
@@ -1448,7 +1464,7 @@ export default function UnitEconomics() {
             {/* Clean cost model breakdown */}
             {[
               { label: "Paid Trip Cost", value: 0.091, color: "#38BDF8", note: "From trip_cost_tracking: 567 entries / 41 trips", breakdown: "Photos $0.085 + Hotels $0.005 + Perplexity $0.001" },
-              { label: "Free Trip (recurring)", value: FREE_USER_ECONOMICS.recurringCostPerTrip, color: "#F87171", note: "3 AI-only preview activities per locked trip", breakdown: "No enrichment APIs — just AI generation" },
+              { label: "Free User/mo (recurring)", value: FREE_USER_ECONOMICS.recurringCostPerMonth, color: "#F87171", note: "150cr monthly grant × 60% usage rate", breakdown: "Blended: unlock 1 day ($0.10) or swaps ($0.02) — avg $0.04 if used" },
               { label: "Acquisition (one-time)", value: FREE_USER_ECONOMICS.acquisitionCostBlended, color: "#FB923C", note: "One free 3-day full trip + ~2.1 edits avg per new user", breakdown: `Base $0.043 + 3 days $0.300 + edits $0.025 + DNA $0.010` },
               { label: "Fixed Monthly", value: 49, color: "#F59E0B", note: "Cloud $25 + Domain $4 + DevOps $20", breakdown: `$${(49 / volume).toFixed(2)}/trip at ${volume} trips/mo` },
             ].map((item, i) => {
@@ -1480,7 +1496,7 @@ export default function UnitEconomics() {
               {(() => {
                 const paid = volume * (conversionRate / 100);
                 const free = volume - paid;
-                const totalVar = free * FREE_USER_ECONOMICS.recurringCostPerTrip + paid * 0.091;
+                const totalVar = free * FREE_USER_ECONOMICS.recurringCostPerMonth + paid * 0.091;
                 const totalAll = totalVar + 49;
                 return (
                   <>
@@ -1617,11 +1633,11 @@ export default function UnitEconomics() {
               <span style={{ color: "#34D399", fontWeight: 600, marginLeft: 6 }}>${blendedAOV.toFixed(2)}</span>
             </div>
             <div style={{ fontSize: 11 }}>
-              <span style={{ color: "#64748B" }}>Free trip (recurring):</span>
-              <span style={{ color: "#F59E0B", fontWeight: 600, marginLeft: 6 }}>$${FREE_USER_ECONOMICS.recurringCostPerTrip.toFixed(3)}</span>
-              <span style={{ color: "#475569", marginLeft: 4 }}>(3 AI activities, locked preview)</span>
+              <span style={{ color: "#64748B" }}>Free user/mo:</span>
+              <span style={{ color: "#F59E0B", fontWeight: 600, marginLeft: 6 }}>${FREE_USER_ECONOMICS.recurringCostPerMonth.toFixed(3)}</span>
+              <span style={{ color: "#475569", marginLeft: 4 }}>(150cr grant, 60% usage)</span>
               <span style={{ color: "#64748B", marginLeft: 8 }}>Acquisition:</span>
-              <span style={{ color: "#FB923C", fontWeight: 600, marginLeft: 6 }}>$${FREE_USER_ECONOMICS.acquisitionCostBlended.toFixed(2)}</span>
+              <span style={{ color: "#FB923C", fontWeight: 600, marginLeft: 6 }}>${FREE_USER_ECONOMICS.acquisitionCostBlended.toFixed(2)}</span>
               <span style={{ color: "#475569", marginLeft: 4 }}>(one-time per user)</span>
             </div>
             <div style={{ fontSize: 11, borderLeft: "1px solid #334155", paddingLeft: 16 }}>
@@ -1651,14 +1667,14 @@ export default function UnitEconomics() {
             <tbody>
               {scalePoints.map((vol) => {
                 // CLEAN FORMULAS — flat observed rates
-                // Uses RECURRING free cost ($0.03/trip), not one-time acquisition
-                const FREE_COST_PER_TRIP = FREE_USER_ECONOMICS.recurringCostPerTrip; // $0.030
+                // Uses RECURRING monthly grant cost ($0.024/user/mo), not one-time acquisition
+                const FREE_COST_PER_USER = FREE_USER_ECONOMICS.recurringCostPerMonth; // $0.024
                 const PAID_COST_PER_USER = 0.091; // Observed production cost per paid trip
                 const TOTAL_FIXED = 49;
 
                 const paid = vol * (conversionRate / 100);
                 const free = vol - paid;
-                const freeVarCost = free * FREE_COST_PER_TRIP;
+                const freeVarCost = free * FREE_COST_PER_USER;
                 const paidVarCost = paid * PAID_COST_PER_USER;
                 const totalCost = freeVarCost + paidVarCost + TOTAL_FIXED;
                 const revenue = paid * blendedAOV;
@@ -1722,7 +1738,7 @@ export default function UnitEconomics() {
             <p style={{ fontSize: 11, color: "#94A3B8", margin: 0, lineHeight: 1.6 }}>
               <strong style={{ color: "#F59E0B" }}>Formulas:</strong>{" "}
               Paid = Total × {conversionRate}% · Free = Total - Paid · 
-              Free Var = Free × <strong style={{ color: "#F59E0B" }}>${FREE_USER_ECONOMICS.recurringCostPerTrip.toFixed(3)}</strong> <span style={{ color: "#475569" }}>(recurring)</span> · 
+              Free Var = Free × <strong style={{ color: "#F59E0B" }}>${FREE_USER_ECONOMICS.recurringCostPerMonth.toFixed(3)}</strong> <span style={{ color: "#475569" }}>(150cr/mo)</span> · 
               Paid Var = Paid × <strong style={{ color: "#38BDF8" }}>$0.091</strong> · 
               Fixed = <strong>$49</strong> · 
               Revenue = Paid × <strong style={{ color: "#34D399" }}>${blendedAOV.toFixed(2)}</strong> AOV · 
