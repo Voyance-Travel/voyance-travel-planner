@@ -131,8 +131,9 @@ export function useGenerationGate() {
     // SUBSEQUENT TRIPS: Check credits
     // ────────────────────────────────────────────────────
 
-    // If user can't afford, skip the API call and go straight to preview
-    if (currentBalance < tripCost || !user) {
+    // If user can't cover at least half the cost, skip to preview
+    const canCoverHalf = currentBalance >= tripCost / 2;
+    if ((!canCoverHalf && currentBalance < tripCost) || !user) {
       const shortfall = Math.max(0, tripCost - currentBalance);
       return {
         mode: 'preview',
