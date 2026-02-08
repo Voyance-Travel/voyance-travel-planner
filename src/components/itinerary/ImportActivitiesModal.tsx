@@ -94,19 +94,132 @@ function normalizeTime(raw: string): string | undefined {
   return undefined;
 }
 
-function parsePastedText(text: string, currency: string): ParsedActivity[] {
-  const lines = text
-    .split('\n')
-    .map(l => l.trim())
-    .filter(l => l.length > 0)
-    // Skip lines that are just headers/day markers
-    .filter(l => !/^(day\s*\d+|---+|===+|\*\*\*+|#{1,3}\s)$/i.test(l));
+// =============================================================================
+// SMART PARSER — Handles ChatGPT / AI-formatted itineraries
+// =============================================================================
 
-  return lines.map(line => {
-    let workingLine = line;
-    
-    // Remove common list markers: "- ", "• ", "1. ", "* "
-    workingLine = workingLine.replace(/^[-•*]\s+/, '').replace(/^\d+\.\s+/, '');
+// Lines that are structural noise (not actual activities)
+const SKIP_LINE_PATTERNS: RegExp[] = [
+  // Day headers: "Day 1 – Arrival", "## Day 2", "**Day 3**"
+  /^[#*\s]*(?:\*\*)?day\s*\d+/i,
+  // Itinerary titles: "🌴 5-Day Aruba Itinerary", "## My Trip Plan"
+  /^[#*\s🌴🏖️✈️🗺️📍]*\d+-day\s/i,
+  /itinerary/i,
+  // Section dividers
+  /^[-=*_]{3,}$/,
+  /^#{1,4}\s*$/,
+  // Meta-commentary & explanations
+  /^(?:\*\*)?why\s+this\s+works/i,
+  /^(?:\*\*)?(?:pro\s+)?tips?(?:\s*:|\s+for)/i,
+  /^(?:\*\*)?💡/,
+  /^(?:\*\*)?optimization/i,
+  /^(?:\*\*)?voyance/i,
+  /^if\s+you\s+(?:want|need|like)/i,
+  /^just\s+tell\s+me/i,
+  /^let\s+me\s+know/i,
+  // Offer lines: "Tailor this to...", "Rework it for..."
+  /^(?:tailor|rework|adjust|customize|align)\s/i,
+  // Section-only headers (single word time-of-day)
+  /^(?:\*\*)?(?:morning|afternoon|evening|midday|lunch|departure|arrival|night)(?:\*\*)?$/i,
+  // Option labels: "Option A:", "Option B:"
+  /^option\s+[a-c]\s*:/i,
+  // Pure formatting: "---", "***", empty bold
+  /^(?:\*\*\s*\*\*|\*\*\*|---+|___+)$/,
+  // Best/avoid advisory lines
+  /^(?:best|avoid|stay|book|don't)\s+(?:beaches|midday|dinner|location)/i,
+  // Bullet list suggestions at the end
+  /^[-•]\s*(?:tailor|rework|align|customize)/i,
+];
+
+// Section headers that provide time-of-day context (not activities themselves)
+const SECTION_TIME_MAP: Record<string, string> = {
+  'morning': '09:00',
+  'late morning': '10:30',
+  'midday': '12:00',
+  'lunch': '12:30',
+  'afternoon': '14:00',
+  'late afternoon': '16:00',
+  'evening': '18:00',
+  'night': '20:00',
+  'departure': '08:00',
+};
+
+function detectSectionTime(line: string): string | null {
+  const cleaned = line.replace(/\*\*/g, '').replace(/^#+\s*/, '').trim().toLowerCase();
+  return SECTION_TIME_MAP[cleaned] || null;
+}
+
+function isSkipLine(line: string): boolean {
+  const stripped = line.replace(/\*\*/g, '').replace(/^#+\s*/, '').trim();
+  // Very short non-content lines
+  if (stripped.length <= 2) return true;
+  // Lines that are pure emoji
+  if (/^[\p{Emoji}\s]+$/u.test(stripped)) return true;
+  
+  for (const pattern of SKIP_LINE_PATTERNS) {
+    if (pattern.test(stripped)) return true;
+  }
+  return false;
+}
+
+function isDescriptionLine(line: string): boolean {
+  const stripped = line.replace(/\*\*/g, '').replace(/^#+\s*/, '').trim();
+  // Indented sub-details, parenthetical notes, or lines starting with descriptors
+  if (/^[-•]\s/.test(line) && stripped.length < 60) return false; // Short bullets are likely activities
+  // Lines that look like parenthetical details
+  if (/^[(\[]/.test(stripped)) return true;
+  // Lines that describe a previous item (starts lowercase, no verb-action pattern)
+  if (/^[a-z]/.test(stripped) && stripped.length < 80) return true;
+  // Sub-bullets with pure descriptions (no proper nouns)
+  if (/^[-•]\s+[a-z]/.test(line) && !/\b(?:visit|explore|go|head|drive|walk|swim|hike|tour|book|check|arrive|depart|stroll|browse|try)\b/i.test(stripped)) return true;
+  return false;
+}
+
+function cleanMarkdown(line: string): string {
+  return line
+    .replace(/^#+\s*/, '')        // Remove heading markers
+    .replace(/\*\*([^*]+)\*\*/g, '$1')  // Bold → plain
+    .replace(/\*([^*]+)\*/g, '$1')      // Italic → plain
+    .replace(/^[-•*]\s+/, '')     // List markers
+    .replace(/^\d+\.\s+/, '')     // Numbered lists
+    .replace(/^>\s*/, '')         // Blockquotes
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Links → text
+    .replace(/^[\p{Emoji}\s]{1,4}(?=\w)/u, '') // Leading emoji
+    .trim();
+}
+
+function parsePastedText(text: string, currency: string): ParsedActivity[] {
+  const rawLines = text.split('\n');
+  const activities: ParsedActivity[] = [];
+  let currentSectionTime: string | null = null;
+
+  for (let i = 0; i < rawLines.length; i++) {
+    const raw = rawLines[i].trim();
+    if (!raw) continue;
+
+    // Check if this line sets a time-of-day context
+    const sectionTime = detectSectionTime(raw);
+    if (sectionTime) {
+      currentSectionTime = sectionTime;
+      continue;
+    }
+
+    // Skip noise lines
+    if (isSkipLine(raw)) continue;
+
+    // Clean markdown formatting
+    let workingLine = cleanMarkdown(raw);
+    if (!workingLine || workingLine.length <= 2) continue;
+
+    // Check if this is a description/detail for the previous activity
+    if (activities.length > 0 && isDescriptionLine(raw)) {
+      const prev = activities[activities.length - 1];
+      const detail = cleanMarkdown(raw);
+      prev.description = prev.description 
+        ? `${prev.description}. ${detail}` 
+        : detail;
+      continue;
+    }
 
     // Extract time range
     let startTime: string | undefined;
@@ -117,12 +230,16 @@ function parsePastedText(text: string, currency: string): ParsedActivity[] {
       endTime = normalizeTime(rangeMatch[2]);
       workingLine = workingLine.replace(rangeMatch[0], '').trim();
     } else {
-      // Single time
       const times = workingLine.match(TIME_PATTERN);
       if (times && times.length > 0) {
         startTime = normalizeTime(times[0]);
         workingLine = workingLine.replace(times[0], '').trim();
       }
+    }
+
+    // Fall back to section time if no explicit time
+    if (!startTime && currentSectionTime) {
+      startTime = currentSectionTime;
     }
 
     // Extract cost
@@ -136,20 +253,30 @@ function parsePastedText(text: string, currency: string): ParsedActivity[] {
     // Clean up separators
     workingLine = workingLine.replace(/^[-–—:,]\s*/, '').replace(/[-–—:,]\s*$/, '').trim();
 
+    // Skip if too short after cleanup
+    if (workingLine.length <= 2) continue;
+
     // Split title from description at first sentence break or dash
     let title = workingLine;
     let description: string | undefined;
     
-    // If there's a dash or colon separating title from detail
-    const separatorMatch = workingLine.match(/^([^-–—:]+?)\s*[-–—:]\s*(.+)$/);
-    if (separatorMatch && separatorMatch[1].length > 3 && separatorMatch[1].length < 80) {
-      title = separatorMatch[1].trim();
-      description = separatorMatch[2].trim();
+    // Parenthetical detail: "Lunch at Zeerovers (fresh seafood)"
+    const parenMatch = workingLine.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
+    if (parenMatch && parenMatch[1].length > 3) {
+      title = parenMatch[1].trim();
+      description = parenMatch[2].trim();
+    } else {
+      // Dash/colon separator: "Visit Eagle Beach - great for sunsets"
+      const separatorMatch = workingLine.match(/^([^-–—]+?)\s*[-–—]\s*(.+)$/);
+      if (separatorMatch && separatorMatch[1].length > 3 && separatorMatch[1].length < 80) {
+        title = separatorMatch[1].trim();
+        description = separatorMatch[2].trim();
+      }
     }
 
     const category = guessCategory(workingLine);
 
-    return {
+    activities.push({
       title,
       startTime,
       endTime,
@@ -158,8 +285,10 @@ function parsePastedText(text: string, currency: string): ParsedActivity[] {
       location: { name: title },
       cost: costAmount > 0 ? { amount: costAmount, currency } : undefined,
       included: true,
-    };
-  }).filter(a => a.title.length > 1);
+    });
+  }
+
+  return activities;
 }
 
 export function ImportActivitiesModal({ isOpen, onClose, onImport, currency = 'USD' }: ImportActivitiesModalProps) {
