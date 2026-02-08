@@ -416,7 +416,7 @@ export default function Pricing() {
               { icon: '🔄', label: 'Swap Alternatives', desc: 'Don\'t like a pick? Swap it instantly with curated alternatives' },
               { icon: '🗺️', label: 'Route Optimization', desc: 'Activities ordered to minimize backtracking and maximize your time' },
               { icon: '🤖', label: 'AI Trip Companion', desc: 'Ask questions, get suggestions, and refine your trip with AI chat' },
-              { icon: '📄', label: 'PDF Export', desc: 'Download your full itinerary as a polished, printable PDF' },
+              { icon: '📄', label: 'PDF Export', desc: 'Download your full itinerary as a polished PDF' },
               { icon: '🔒', label: 'Lock Activities', desc: 'Pin must-do activities so regenerations keep them in place' },
             ].map((feature, i) => (
               <motion.div
