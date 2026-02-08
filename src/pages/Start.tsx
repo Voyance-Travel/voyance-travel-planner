@@ -1307,6 +1307,7 @@ export default function Start() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAuthGate, setShowAuthGate] = useState(false);
+  const [showDNAPrompt, setShowDNAPrompt] = useState(false);
 
   // Trip state
   const destinationFromQuery = searchParams.get('destination');
@@ -1386,6 +1387,23 @@ export default function Start() {
     }
   }, [startDate, endDate]);
 
+  // Handle return from quiz — restore step 2 and auto-submit
+  useEffect(() => {
+    if (searchParams.get('fromQuiz') === 'true' && user?.quizCompleted && savedDraft) {
+      // Restore step 2 state from draft
+      if (savedDraft.outboundFlight) setOutboundFlight(savedDraft.outboundFlight);
+      if (savedDraft.returnFlight) setReturnFlight(savedDraft.returnFlight);
+      if (savedDraft.showReturnFlight) setShowReturnFlight(savedDraft.showReturnFlight);
+      if (savedDraft.hotelChoice) setHotelChoice(savedDraft.hotelChoice);
+      if (savedDraft.manualHotel) setManualHotel(savedDraft.manualHotel);
+      if (savedDraft.isFirstTimeVisitor !== undefined) setIsFirstTimeVisitor(savedDraft.isFirstTimeVisitor);
+      if (savedDraft.mustDoActivities) setMustDoActivities(savedDraft.mustDoActivities);
+      setCurrentStep(savedDraft.currentStep || 2);
+      // Clean up the query param
+      window.history.replaceState({}, '', '/start');
+    }
+  }, [searchParams, user]);
+
   // Check draft limit
   useEffect(() => {
     if (!canCreateDraft && user) {
@@ -1394,7 +1412,7 @@ export default function Start() {
   }, [canCreateDraft, user]);
 
   // Handle final submission
-  const handleSubmit = async () => {
+  const handleSubmit = async (skipDNACheck = false) => {
     const primaryDestination = isMultiCity
       ? (multiCityDestinations[0]?.city || '')
       : destinationSelection.cityName;
@@ -1409,7 +1427,6 @@ export default function Start() {
     try {
       // Check if user needs to authenticate
       if (!user) {
-        // Save basics to context for later
         setBasics({
           destination: destinationSelection.cityName,
           startDate: format(startDate, 'yyyy-MM-dd'),
@@ -1417,8 +1434,14 @@ export default function Start() {
           travelers,
           budgetAmount,
         });
-        // Store trip data and redirect to sign up
         navigate(ROUTES.SIGNUP + '?redirect=' + ROUTES.PLANNER.ITINERARY);
+        return;
+      }
+
+      // Check if user has Travel DNA — prompt if not
+      if (!skipDNACheck && !user.quizCompleted) {
+        setIsSubmitting(false);
+        setShowDNAPrompt(true);
         return;
       }
 
@@ -1714,6 +1737,74 @@ export default function Start() {
               I already have an account
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Travel DNA Prompt Dialog */}
+      <Dialog open={showDNAPrompt} onOpenChange={setShowDNAPrompt}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              One last thing before we generate this
+            </DialogTitle>
+            <DialogDescription className="text-sm leading-relaxed pt-2">
+              We don't have your Travel DNA yet — we don't know what makes you, <em>you</em>. 
+              This trip probably won't be as customized without it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 text-sm text-muted-foreground">
+            Take a quick 5-minute quiz so we can make this trip truly yours — personalized to your pace, 
+            style, and the things you actually care about.
+          </div>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button
+              onClick={() => {
+                // Save draft so it survives the quiz detour
+                const dest = isMultiCity
+                  ? (multiCityDestinations[0]?.city || destinationSelection.cityName)
+                  : destinationSelection.cityName;
+                const draft = {
+                  destination: dest,
+                  startDate: startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
+                  endDate: endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
+                  travelers,
+                  budgetAmount,
+                  tripType,
+                  celebrationDay,
+                  isMultiCity,
+                  multiCityDestinations,
+                  multiCityTransports,
+                  outboundFlight,
+                  returnFlight,
+                  showReturnFlight,
+                  hotelChoice,
+                  manualHotel,
+                  isFirstTimeVisitor,
+                  mustDoActivities,
+                  currentStep: 2,
+                };
+                sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+                sessionStorage.setItem('postQuizRedirect', '/start?fromQuiz=true');
+                setShowDNAPrompt(false);
+                navigate('/quiz');
+              }}
+              className="w-full gap-2"
+            >
+              Take the Quiz
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full text-muted-foreground"
+              onClick={() => {
+                setShowDNAPrompt(false);
+                handleSubmit(true);
+              }}
+            >
+              Continue without personalizing
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
