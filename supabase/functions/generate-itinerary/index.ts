@@ -4813,6 +4813,67 @@ Generate activities for this day following ALL constraints above.`;
       });
 
       // ==========================================================================
+      // TRANSIT-TIME ENFORCEMENT: Adjust gaps between activities based on each
+      // activity's own transportation.duration instead of static 15-min buffers.
+      // The AI often compresses gaps; this ensures the schedule is realistic.
+      // ==========================================================================
+      {
+        // Sort by start time first
+        generatedDay.activities.sort((a, b) => {
+          const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+          const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+          return ta - tb;
+        });
+
+        let shifted = false;
+        for (let i = 0; i < generatedDay.activities.length - 1; i++) {
+          const current = generatedDay.activities[i];
+          const next = generatedDay.activities[i + 1];
+
+          const currentEndMins = parseTimeToMinutes(current.endTime || '');
+          const nextStartMins = parseTimeToMinutes(next.startTime || '');
+          if (currentEndMins === null || nextStartMins === null) continue;
+
+          // Parse the NEXT activity's transportation.duration (e.g., "25 min", "1h 30m")
+          let requiredTransitMins = 0;
+          const transitDur = next.transportation?.duration;
+          if (transitDur && typeof transitDur === 'string') {
+            const hMatch = transitDur.match(/(\d+)\s*h/i);
+            const mMatch = transitDur.match(/(\d+)\s*m/i);
+            if (hMatch) requiredTransitMins += parseInt(hMatch[1], 10) * 60;
+            if (mMatch) requiredTransitMins += parseInt(mMatch[1], 10);
+          }
+          // Also check distanceKm as fallback
+          if (requiredTransitMins === 0 && next.transportation?.distanceKm) {
+            const dist = next.transportation.distanceKm;
+            if (dist <= 1) requiredTransitMins = 10;       // walking distance
+            else if (dist <= 5) requiredTransitMins = 20;   // short transit
+            else if (dist <= 15) requiredTransitMins = 35;  // cross-city
+            else requiredTransitMins = 45;                   // far
+          }
+          // Absolute minimum: 10 min (even for adjacent venues)
+          if (requiredTransitMins < 10) requiredTransitMins = 10;
+
+          const actualGap = nextStartMins - currentEndMins;
+          if (actualGap < requiredTransitMins) {
+            // Shift this activity and all subsequent ones forward
+            const deficit = requiredTransitMins - actualGap;
+            for (let j = i + 1; j < generatedDay.activities.length; j++) {
+              const act = generatedDay.activities[j];
+              const s = parseTimeToMinutes(act.startTime || '');
+              const e = parseTimeToMinutes(act.endTime || '');
+              if (s !== null) act.startTime = minutesToHHMM(s + deficit);
+              if (e !== null) act.endTime = minutesToHHMM(e + deficit);
+            }
+            shifted = true;
+          }
+        }
+        if (shifted) {
+          console.log(`[Stage 2] Day ${dayNumber}: Adjusted activity times to respect transportation durations`);
+        }
+      }
+
+      // ==========================================================================
       // DEPARTURE DAY SEQUENCE FIX: Ensure checkout comes BEFORE airport transfer
       // ==========================================================================
       if (isLastDay && generatedDay.activities.length > 1) {
