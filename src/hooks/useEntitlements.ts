@@ -85,8 +85,8 @@ export function useEntitlements() {
   const { user, isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
 
-  // QA MODE: Bypass all payment gates - treat everyone as premium
-  const QA_MODE_PREMIUM = true;
+  // QA MODE: Set to true to bypass all payment gates during testing
+  const QA_MODE_PREMIUM = false;
 
   // Refresh entitlements (e.g., after checkout)
   const refresh = () => {
@@ -186,8 +186,8 @@ export function useEntitlements() {
 // Utility Functions
 // ============================================================================
 
-// QA MODE: Bypass all payment gates - treat everyone as premium
-const QA_MODE_PREMIUM = true;
+// QA MODE: Set to true to bypass all payment gates during testing
+const QA_MODE_PREMIUM = false;
 
 /**
  * Check if a feature is enabled
@@ -290,7 +290,7 @@ export function checkFeatureAccess(
   isAuthenticated: boolean
 ): FeatureGateResult {
   // QA MODE: Allow all features for authenticated users
-  const QA_MODE_PREMIUM = true;
+  const QA_MODE_PREMIUM = false;
   
   if (!isAuthenticated) {
     return { allowed: false, reason: 'unauthenticated' };
