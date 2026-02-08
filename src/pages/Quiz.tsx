@@ -195,23 +195,6 @@ function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => voi
           transition={{ delay: 0.6 }}
           className="space-y-4"
         >
-          <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground mb-4">
-            <motion.div 
-              className="flex items-center gap-2"
-              whileHover={{ scale: 1.05 }}
-            >
-              <Clock className="w-4 h-4 text-primary" />
-              <span>5 minutes</span>
-            </motion.div>
-            <motion.div 
-              className="flex items-center gap-2"
-              whileHover={{ scale: 1.05 }}
-            >
-              <Star className="w-4 h-4 text-primary" />
-              <span>We remember forever</span>
-            </motion.div>
-          </div>
-
           {/* Credit earning nudge */}
           {canEarnBonus && (
             <motion.div
@@ -255,6 +238,23 @@ function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => voi
                 <MessageCircle className="w-5 h-5 mr-2" />
                 Just Tell Us
               </Button>
+            </motion.div>
+          </div>
+
+          <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground mt-4">
+            <motion.div 
+              className="flex items-center gap-2"
+              whileHover={{ scale: 1.05 }}
+            >
+              <Clock className="w-4 h-4 text-primary" />
+              <span>5 minutes</span>
+            </motion.div>
+            <motion.div 
+              className="flex items-center gap-2"
+              whileHover={{ scale: 1.05 }}
+            >
+              <Star className="w-4 h-4 text-primary" />
+              <span>We remember forever</span>
             </motion.div>
           </div>
           
