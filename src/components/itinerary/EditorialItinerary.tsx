@@ -1863,6 +1863,17 @@ export function EditorialItinerary({
       return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
     };
 
+    // Parse a transit duration string like "25 min" or "1h 30m" to minutes
+    const parseTransitDuration = (dur?: string): number | null => {
+      if (!dur) return null;
+      const hm = dur.match(/(\d+)\s*h(?:ours?|r)?/i);
+      const mm = dur.match(/(\d+)\s*m(?:in(?:ute)?s?)?/i);
+      let total = 0;
+      if (hm) total += parseInt(hm[1], 10) * 60;
+      if (mm) total += parseInt(mm[1], 10);
+      return total > 0 ? total : null;
+    };
+
     // Collect original durations (in minutes) for each activity
     const withTimes = reorderedActivities.map(a => {
       const s = toMins(a.startTime || a.time);
@@ -1875,10 +1886,16 @@ export function EditorialItinerary({
     const allStarts = reorderedActivities.map(a => toMins(a.startTime || a.time)).filter((v): v is number => v !== null);
     let cursor = allStarts.length > 0 ? Math.min(...allStarts) : 9 * 60;
 
-    const updated = withTimes.map(({ activity, duration }) => {
+    const updated = withTimes.map(({ activity, duration }, idx) => {
       const newStart = fmtTime(cursor);
       const newEnd = fmtTime(cursor + duration);
-      cursor += duration + 15; // 15 min buffer between activities
+      
+      // Use the NEXT activity's transportation duration as the gap,
+      // falling back to 20 min (a realistic urban average) instead of static 15
+      const nextActivity = withTimes[idx + 1]?.activity;
+      const transitGap = parseTransitDuration(nextActivity?.transportation?.duration) ?? 20;
+      cursor += duration + transitGap;
+      
       return {
         ...activity,
         startTime: newStart,
