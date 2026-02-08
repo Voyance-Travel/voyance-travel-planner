@@ -7092,6 +7092,69 @@ export type Database = {
         }
         Relationships: []
       }
+      voyance_picks: {
+        Row: {
+          added_by: string | null
+          address: string | null
+          best_time: string | null
+          category: string
+          coordinates: Json | null
+          created_at: string
+          description: string | null
+          destination: string
+          id: string
+          insider_tip: string | null
+          is_active: boolean | null
+          name: string
+          neighborhood: string | null
+          price_range: string | null
+          priority: number | null
+          tags: string[] | null
+          updated_at: string
+          why_essential: string
+        }
+        Insert: {
+          added_by?: string | null
+          address?: string | null
+          best_time?: string | null
+          category?: string
+          coordinates?: Json | null
+          created_at?: string
+          description?: string | null
+          destination: string
+          id?: string
+          insider_tip?: string | null
+          is_active?: boolean | null
+          name: string
+          neighborhood?: string | null
+          price_range?: string | null
+          priority?: number | null
+          tags?: string[] | null
+          updated_at?: string
+          why_essential: string
+        }
+        Update: {
+          added_by?: string | null
+          address?: string | null
+          best_time?: string | null
+          category?: string
+          coordinates?: Json | null
+          created_at?: string
+          description?: string | null
+          destination?: string
+          id?: string
+          insider_tip?: string | null
+          is_active?: boolean | null
+          name?: string
+          neighborhood?: string | null
+          price_range?: string | null
+          priority?: number | null
+          tags?: string[] | null
+          updated_at?: string
+          why_essential?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       agency_accounts_intake: {
