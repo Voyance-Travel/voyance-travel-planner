@@ -512,8 +512,8 @@ export default function About() {
                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                   <Sparkles className="w-6 h-6 text-primary" />
                 </div>
-                <h4 className="font-medium text-foreground mb-1">3 Patents Pending</h4>
-                <p className="text-sm text-muted-foreground">Travel DNA & AI personalization</p>
+                <h4 className="font-medium text-foreground mb-1">Patent Pending</h4>
+                <p className="text-sm text-muted-foreground">Travel DNA personalization technology</p>
               </div>
             </motion.div>
           </div>
@@ -554,7 +554,7 @@ export default function About() {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {[
-                    { feature: 'Travel DNA Quiz (27 unique archetypes)', status: 'live' },
+                    { feature: 'Travel DNA Quiz (27 unique types)', status: 'live' },
                     { feature: 'AI-generated personalized itineraries', status: 'live' },
                     { feature: 'Real-time activity swapping', status: 'live' },
                     { feature: 'Multi-source review aggregation (Google, TripAdvisor, Foursquare)', status: 'live' },
@@ -562,9 +562,9 @@ export default function About() {
                     { feature: 'Budget tracking & expense management', status: 'live' },
                     { feature: 'Weather-aware scheduling', status: 'live' },
                     { feature: 'Direct booking via Viator', status: 'live' },
-                    { feature: 'Flight tracking & sync', status: 'live', note: 'Add your flight, we sync the itinerary' },
-                    { feature: 'Mobile app', status: 'coming', note: 'Q2 2026' },
-                    { feature: 'Offline access', status: 'coming', note: 'Q2 2026' },
+                    { feature: 'Flight tracking & sync', status: 'coming', note: 'Coming soon' },
+                    { feature: 'Mobile app', status: 'coming', note: 'Coming 2026' },
+                    { feature: 'Offline access', status: 'coming', note: 'Coming 2026' },
                   ].map((item, idx) => (
                     <tr key={idx} className="hover:bg-muted/20 transition-colors">
                       <td className="p-4 text-foreground">
