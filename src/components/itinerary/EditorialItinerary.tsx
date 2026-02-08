@@ -91,6 +91,7 @@ import { calculateItineraryValueStats } from '@/utils/intelligenceAnalytics';
 import { useSkipList } from '@/hooks/useSkipList';
 import { validateItinerary, matchesSkipList, type ValidationIssue } from '@/utils/itineraryValidator';
 import { VoyanceInsight } from './VoyanceInsight';
+import { VoyancePickCallout } from './VoyancePickCallout';
 import { TransitBadge } from './TransitBadge';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { AddActivityModal } from './AddActivityModal';
@@ -154,6 +155,8 @@ export interface EditorialActivity {
   cancelledAt?: string;
   /** User ID of the collaborator this activity was suggested for (group trips) */
   suggestedFor?: string;
+  /** Founder-curated Voyance Pick */
+  isVoyancePick?: boolean;
 }
 
 export interface EditorialDay {
@@ -5772,8 +5775,12 @@ function ActivityRow({
                 </>
               );
             })()}
-            {/* Voyance Insight - Local knowledge (gated in preview) */}
-            {!isPreview && activity.tips && !isDowntime && !isTransport && !isCheckIn && (
+            {/* Voyance Pick — founder-curated endorsement */}
+            {!isPreview && activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
+              <VoyancePickCallout tip={activity.tips} />
+            )}
+            {/* Voyance Insight - Local knowledge (gated in preview) — skip if already showing Pick callout */}
+            {!isPreview && activity.tips && !activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
               <VoyanceInsight tip={activity.tips} />
             )}
             {/* Transportation to next (gated in preview) */}
