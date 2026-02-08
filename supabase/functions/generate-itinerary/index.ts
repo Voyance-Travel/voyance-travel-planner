@@ -494,6 +494,50 @@ function normalizeCostToUSD(cost: { amount: number; currency?: string } | undefi
 }
 
 // =============================================================================
+// INTELLIGENCE FIELD DERIVATION
+// If the AI doesn't set intelligence fields, derive them from text content
+// =============================================================================
+const TIMING_KW = ['before the crowds','avoid the rush','golden hour','sunrise','early morning','before tour buses','less crowded','off-peak','before it gets busy','at dusk','at dawn','at sunset','arrive early','beat the','ahead of'];
+const GEM_KW = ['hidden','secret','locals only','off the beaten','lesser-known','under the radar','undiscovered','tucked away','neighborhood favorite','local favorite','insider','like a local','curated','unique find','zero tourists','nobody knows','local haunt','local institution'];
+const NON_GEM_CAT = ['transport','accommodation','downtime','free_time','logistics'];
+
+function deriveIntelligenceFields(act: any): any {
+  const text = `${act.description || ''} ${act.tips || ''} ${act.personalization?.whyThisFits || ''} ${act.voyanceInsight || ''}`.toLowerCase();
+  const category = (act.category || '').toLowerCase();
+
+  // Derive isHiddenGem if not explicitly set
+  if (act.isHiddenGem == null) {
+    act.isHiddenGem = !NON_GEM_CAT.includes(category) && GEM_KW.some(kw => text.includes(kw));
+  }
+
+  // Derive hasTimingHack if not explicitly set
+  if (act.hasTimingHack == null) {
+    act.hasTimingHack = TIMING_KW.some(kw => text.includes(kw));
+  }
+
+  // Derive crowdLevel from description if not set
+  if (!act.crowdLevel) {
+    if (text.includes('crowded') || text.includes('busy') || text.includes('popular') || text.includes('lines') || text.includes('queue')) {
+      act.crowdLevel = 'high';
+    } else if (text.includes('quiet') || text.includes('peaceful') || text.includes('uncrowded') || text.includes('serene') || text.includes('zero tourists')) {
+      act.crowdLevel = 'low';
+    } else {
+      act.crowdLevel = 'moderate';
+    }
+  }
+
+  // Ensure tips has substance (>30 chars) — promote description snippet if tips is empty
+  if (!act.tips || act.tips.length < 30) {
+    const desc = act.description || '';
+    if (desc.length > 40) {
+      act.tips = desc.length > 120 ? desc.substring(0, 120) + '…' : desc;
+    }
+  }
+
+  return act;
+}
+
+// =============================================================================
 // PERSONALIZATION VALIDATOR - Phase 3
 // Validates itinerary output against user preferences to ensure real customization
 // =============================================================================
@@ -4762,6 +4806,9 @@ Generate activities for this day following ALL constraints above.`;
           }
         }
 
+        // Derive intelligence fields if AI didn't set them
+        deriveIntelligenceFields(normalizedAct);
+
         return normalizedAct;
       });
 
@@ -8672,7 +8719,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             normalizedLocation = { name: act.location, address: act.location };
           }
           
-          return {
+          const normalized = {
             ...act,
             id: act.id || `day${dayNumber}-act${idx + 1}-${Date.now()}`,
             title: normalizedTitle,
@@ -8683,6 +8730,9 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             categoryIcon: getCategoryIcon(act.category || 'activity'),
             isLocked: false, // New activities are unlocked by default
           };
+          // Derive intelligence fields if AI didn't set them
+          deriveIntelligenceFields(normalized);
+          return normalized;
         });
 
         // CRITICAL: Filter out activities that occur BEFORE arrival time on Day 1
