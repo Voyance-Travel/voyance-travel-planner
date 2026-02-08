@@ -4,7 +4,7 @@ import { consumeReturnPath } from '@/utils/authReturnPath';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, ArrowRight, Check, Compass, Plane,
-  Clock, Users, MapPin, Wand2, 
+  Clock, Users, MapPin, Wand2, ClipboardList, 
   Mountain, Coffee, Luggage, Globe, Star, AlertCircle, MessageCircle, Gift
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
@@ -181,8 +181,8 @@ function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => voi
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
         >
-          <h1 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">
-            5 minutes now. Better trips forever.
+          <h1 className="text-3xl md:text-4xl font-display font-bold text-accent mb-4">
+            5 minutes now — Better trips forever
           </h1>
           <p className="text-lg text-muted-foreground mb-8 max-w-lg mx-auto leading-relaxed">
             This isn't a "beach or mountains" quiz. We're mapping how you actually travel, and we'll remember it every time you come back.
@@ -220,7 +220,7 @@ function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => voi
                 onClick={onStart}
                 className="h-14 px-10 text-lg shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-shadow"
               >
-                <Wand2 className="w-5 h-5 mr-2" />
+                <ClipboardList className="w-5 h-5 mr-2" />
                 Start Quiz
               </Button>
             </motion.div>
@@ -236,7 +236,7 @@ function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => voi
                 className="h-14 px-8 text-lg"
               >
                 <MessageCircle className="w-5 h-5 mr-2" />
-                Just Tell Us
+                Just Tell Us Your Story
               </Button>
             </motion.div>
           </div>
