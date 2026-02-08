@@ -233,3 +233,6 @@ verify_jwt = false
 
 [functions.viator-search]
 verify_jwt = false
+
+[functions.profile-ideal-hotel]
+verify_jwt = false
