@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -36,6 +36,8 @@ import {
   type HotelOption,
   type HotelSearchParams 
 } from '@/services/hotelAPI';
+import { useDNAHotelRecommendations } from '@/hooks/useDNAHotelRecommendations';
+import { DNAHotelPicks } from '@/components/trip/DNAHotelPicks';
 
 const amenityIcons: Record<string, typeof Wifi> = {
   'Free WiFi': Wifi,
@@ -264,6 +266,20 @@ export default function PlannerHotel() {
   }), [searchParams, checkIn, checkOut, priceRange]);
   
   const { data: hotels, isLoading, error } = useHotelSearch(hotelParams);
+
+  // DNA-personalized recommendations
+  const destination = searchParams.get('destination') || 'Paris';
+  const dnaRecs = useDNAHotelRecommendations({
+    destination,
+    checkIn,
+    checkOut,
+    guests: parseInt(searchParams.get('guests') || '2'),
+  });
+
+  const handleSelectDNAHotel = useCallback((hotel: any) => {
+    setSelectedHotelId(hotel.id);
+    toast.success(`${hotel.name} selected!`);
+  }, []);
   
   const handleSelectHotel = async (hotel: HotelOption) => {
     if (selectedHotelId === hotel.id) {
@@ -371,6 +387,25 @@ export default function PlannerHotel() {
               </Button>
             </div>
           </motion.div>
+
+          {/* DNA Personalized Picks */}
+          {(dnaRecs.isLoading || dnaRecs.recommendations.length > 0) && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+              className="mb-6"
+            >
+              <DNAHotelPicks
+                profile={dnaRecs.profile}
+                recommendations={dnaRecs.recommendations}
+                topPick={dnaRecs.topPick}
+                isLoading={dnaRecs.isHotelsLoading}
+                isProfileLoading={dnaRecs.isProfileLoading}
+                onSelectHotel={handleSelectDNAHotel}
+              />
+            </motion.div>
+          )}
           
           {/* Hotel List */}
           <div className="space-y-4">

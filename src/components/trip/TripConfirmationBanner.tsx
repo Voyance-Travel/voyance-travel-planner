@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { TransportModeSelector, EMPTY_TRANSPORT_FORM, buildTransportSelection, type TransportFormData } from './TransportModeSelector';
+import { DNAHotelPicks } from './DNAHotelPicks';
+import { useDNAHotelRecommendations, type DNARecommendedHotel } from '@/hooks/useDNAHotelRecommendations';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -58,11 +60,27 @@ export function TripConfirmationBanner({
   const [isApplyingSwaps, setIsApplyingSwaps] = useState(false);
   const spendCredits = useSpendCredits();
 
+  // DNA hotel recommendations (fetched when dialog opens)
+  const dnaRecs = useDNAHotelRecommendations({
+    destination,
+    checkIn: startDate,
+    checkOut: endDate,
+    enabled: showLogisticsDialog && !hasHotelSelection,
+  });
+
   const [form, setForm] = useState<LogisticsFormData>({
     hotelName: '',
     hotelNeighborhood: '',
     transport: { ...EMPTY_TRANSPORT_FORM },
   });
+
+  const handleSelectDNAHotel = useCallback((hotel: DNARecommendedHotel) => {
+    setForm(prev => ({
+      ...prev,
+      hotelName: hotel.name,
+      hotelNeighborhood: hotel.neighborhood || '',
+    }));
+  }, []);
 
   // Don't show for non-draft trips or dismissed
   if (currentStatus !== 'draft' || dismissed) return null;
@@ -285,14 +303,32 @@ export function TripConfirmationBanner({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-5 pt-2">
+          <div className="space-y-5 pt-2 max-h-[70vh] overflow-y-auto">
             {!hasHotelSelection && (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <Hotel className="h-4 w-4 text-primary" />
                   Where are you staying?
                 </div>
+
+                {/* DNA Recommendations */}
+                {(dnaRecs.isLoading || dnaRecs.recommendations.length > 0) && (
+                  <DNAHotelPicks
+                    profile={dnaRecs.profile}
+                    recommendations={dnaRecs.recommendations}
+                    topPick={dnaRecs.topPick}
+                    isLoading={dnaRecs.isHotelsLoading}
+                    isProfileLoading={dnaRecs.isProfileLoading}
+                    onSelectHotel={handleSelectDNAHotel}
+                    compact
+                  />
+                )}
+
+                {/* Manual input (pre-filled if DNA hotel selected) */}
                 <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    {dnaRecs.recommendations.length > 0 ? 'Or enter your own hotel:' : ''}
+                  </p>
                   <Input
                     placeholder="Hotel name (e.g., The Ritz Carlton)"
                     value={form.hotelName}
