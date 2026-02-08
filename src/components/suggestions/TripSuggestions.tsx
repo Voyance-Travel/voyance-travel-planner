@@ -4,18 +4,19 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { ThumbsUp, Plus, Lightbulb, User, Loader2, ArrowRightLeft } from 'lucide-react';
+import { ThumbsUp, Plus, Lightbulb, User, Loader2, ArrowRightLeft, CalendarClock, Pencil, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, isPast, format } from 'date-fns';
 
 interface Suggestion {
   id: string;
@@ -29,6 +30,7 @@ interface Suggestion {
   target_activity_id?: string | null;
   target_activity_title?: string | null;
   replacement_reason?: string | null;
+  vote_deadline?: string | null;
   votes: Vote[];
 }
 
@@ -64,10 +66,13 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [suggestionType, setSuggestionType] = useState('general');
+  const [voteDeadline, setVoteDeadline] = useState('');
   const [anonName, setAnonName] = useState(() => {
     try { return sessionStorage.getItem(ANON_NAME_KEY) || ''; } catch { return ''; }
   });
   const [showNamePrompt, setShowNamePrompt] = useState(false);
+  const [editingDeadlineId, setEditingDeadlineId] = useState<string | null>(null);
+  const [editDeadlineValue, setEditDeadlineValue] = useState('');
 
   const isAnon = !user;
   const displayName = user
@@ -162,6 +167,7 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
             title: title.trim(),
             description: description.trim() || null,
             suggestionType,
+            voteDeadline: voteDeadline ? new Date(voteDeadline).toISOString() : null,
           },
         });
         if (error) throw error;
@@ -176,6 +182,7 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
             suggestion_type: suggestionType,
             title: title.trim(),
             description: description.trim() || null,
+            vote_deadline: voteDeadline ? new Date(voteDeadline).toISOString() : null,
           });
         if (error) throw error;
       }
@@ -183,6 +190,7 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
       setTitle('');
       setDescription('');
       setSuggestionType('general');
+      setVoteDeadline('');
       setShowForm(false);
       toast.success('Suggestion added!');
     } catch (err) {
@@ -191,7 +199,7 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
     } finally {
       setSubmitting(false);
     }
-  }, [title, description, suggestionType, isAnon, anonName, shareToken, tripId, tripType, user, displayName]);
+  }, [title, description, suggestionType, voteDeadline, isAnon, anonName, shareToken, tripId, tripType, user, displayName]);
 
   const handleVote = useCallback(async (suggestionId: string) => {
     // Check if already voted
@@ -250,6 +258,27 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
     suggestion.votes.some(v =>
       user ? v.user_id === user.id : v.voter_name === anonName
     );
+
+  const isOwner = (suggestion: Suggestion) =>
+    user ? suggestion.user_id === user.id : false;
+
+  const handleUpdateDeadline = useCallback(async (suggestionId: string, newDeadline: string | null) => {
+    try {
+      const { error } = await supabase
+        .from('trip_suggestions')
+        .update({ vote_deadline: newDeadline })
+        .eq('id', suggestionId);
+      if (error) throw error;
+      toast.success(newDeadline ? 'Deadline updated' : 'Deadline removed');
+      setEditingDeadlineId(null);
+      setEditDeadlineValue('');
+    } catch (err) {
+      console.error('Failed to update deadline:', err);
+      toast.error('Failed to update deadline');
+    }
+  }, []);
+
+  const minDeadline = new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16);
 
   // Name prompt for anonymous users
   if (showNamePrompt) {
@@ -335,6 +364,23 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
               rows={2}
               className="resize-none"
             />
+            {/* Vote deadline */}
+            <div className="flex items-center gap-2">
+              <CalendarClock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <Input
+                type="datetime-local"
+                placeholder="Vote deadline (optional)"
+                value={voteDeadline}
+                onChange={(e) => setVoteDeadline(e.target.value)}
+                min={minDeadline}
+                className="text-xs h-8 flex-1"
+              />
+              {voteDeadline && (
+                <button onClick={() => setVoteDeadline('')} className="text-muted-foreground hover:text-foreground">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
             <div className="flex gap-2 justify-end">
               <Button
                 variant="ghost"
@@ -420,6 +466,111 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
                       <span>·</span>
                       <span>{formatDistanceToNow(new Date(suggestion.created_at), { addSuffix: true })}</span>
                     </div>
+                    {/* Vote deadline */}
+                    {suggestion.vote_deadline && (
+                      <div className={cn(
+                        "flex items-center gap-1.5 mt-1.5 text-[10px] px-2 py-1 rounded",
+                        isPast(new Date(suggestion.vote_deadline))
+                          ? "bg-destructive/10 text-destructive"
+                          : "bg-primary/10 text-primary"
+                      )}>
+                        <CalendarClock className="h-3 w-3 shrink-0" />
+                        <span>
+                          {isPast(new Date(suggestion.vote_deadline))
+                            ? 'Voting closed'
+                            : `Vote by ${format(new Date(suggestion.vote_deadline), 'MMM d, h:mm a')}`}
+                        </span>
+                        {!isPast(new Date(suggestion.vote_deadline)) && (
+                          <span className="text-muted-foreground">
+                            ({formatDistanceToNow(new Date(suggestion.vote_deadline), { addSuffix: false })} left)
+                          </span>
+                        )}
+                        {isOwner(suggestion) && (
+                          <Popover open={editingDeadlineId === suggestion.id} onOpenChange={(open) => {
+                            if (open) {
+                              setEditingDeadlineId(suggestion.id);
+                              setEditDeadlineValue(
+                                suggestion.vote_deadline
+                                  ? new Date(suggestion.vote_deadline).toISOString().slice(0, 16)
+                                  : ''
+                              );
+                            } else {
+                              setEditingDeadlineId(null);
+                            }
+                          }}>
+                            <PopoverTrigger asChild>
+                              <button className="ml-auto hover:text-foreground transition-colors" title="Edit deadline">
+                                <Pencil className="h-2.5 w-2.5" />
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-3 space-y-2" align="start">
+                              <p className="text-xs font-medium">Change deadline</p>
+                              <Input
+                                type="datetime-local"
+                                value={editDeadlineValue}
+                                onChange={(e) => setEditDeadlineValue(e.target.value)}
+                                min={minDeadline}
+                                className="text-xs h-8"
+                              />
+                              <div className="flex gap-1.5">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs h-7"
+                                  onClick={() => handleUpdateDeadline(suggestion.id, null)}
+                                >
+                                  Remove
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  className="text-xs h-7"
+                                  disabled={!editDeadlineValue}
+                                  onClick={() => handleUpdateDeadline(suggestion.id, new Date(editDeadlineValue).toISOString())}
+                                >
+                                  Save
+                                </Button>
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                        )}
+                      </div>
+                    )}
+                    {/* Add deadline if none set (owner only) */}
+                    {!suggestion.vote_deadline && isOwner(suggestion) && (
+                      <Popover open={editingDeadlineId === suggestion.id} onOpenChange={(open) => {
+                        if (open) {
+                          setEditingDeadlineId(suggestion.id);
+                          setEditDeadlineValue('');
+                        } else {
+                          setEditingDeadlineId(null);
+                        }
+                      }}>
+                        <PopoverTrigger asChild>
+                          <button className="flex items-center gap-1 mt-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+                            <CalendarClock className="h-3 w-3" />
+                            <span>Set deadline</span>
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-3 space-y-2" align="start">
+                          <p className="text-xs font-medium">Set vote deadline</p>
+                          <Input
+                            type="datetime-local"
+                            value={editDeadlineValue}
+                            onChange={(e) => setEditDeadlineValue(e.target.value)}
+                            min={minDeadline}
+                            className="text-xs h-8"
+                          />
+                          <Button
+                            size="sm"
+                            className="text-xs h-7 w-full"
+                            disabled={!editDeadlineValue}
+                            onClick={() => handleUpdateDeadline(suggestion.id, new Date(editDeadlineValue).toISOString())}
+                          >
+                            Set deadline
+                          </Button>
+                        </PopoverContent>
+                      </Popover>
+                    )}
                   </div>
                 </CardContent>
               </Card>
