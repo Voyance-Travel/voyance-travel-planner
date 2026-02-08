@@ -83,6 +83,22 @@ function normalizeDestinationKey(destination: string): string {
     .replace(/\s+/g, '-');
 }
 
+// Random archetype selection for anonymous previews
+const PREVIEW_ARCHETYPES = [
+  { name: "Slow Traveler", tagline: "Fewer things, done well. That's the whole philosophy.", style: "unhurried, intentional, fewer activities done well" },
+  { name: "Cultural Purist", tagline: "Skip the gift shop. Find the soul.", style: "deep cultural immersion, museums, local traditions, historical context" },
+  { name: "Urban Explorer", tagline: "Every city has a secret. You just have to walk far enough.", style: "neighborhood wandering, street art, hidden cafes, local hangouts" },
+  { name: "Luxury Seeker", tagline: "Life's too short for bad hotels.", style: "refined experiences, premium dining, elegant venues, curated luxury" },
+  { name: "Adventure Chaser", tagline: "Comfort zones are overrated.", style: "active exploration, outdoor adventures, thrill-seeking, off-the-beaten-path" },
+  { name: "Foodie Voyager", tagline: "Tell me what you eat. I'll tell you where to go.", style: "culinary adventures, local food markets, cooking classes, hidden restaurants" },
+  { name: "Wellness Wanderer", tagline: "Travel should leave you better than it found you.", style: "mindful travel, spa retreats, nature walks, healthy dining, restorative experiences" },
+  { name: "Social Butterfly", tagline: "Strangers are just friends you haven't met yet.", style: "group activities, nightlife, social dining, community events, local meetups" },
+];
+
+function getRandomArchetype() {
+  return PREVIEW_ARCHETYPES[Math.floor(Math.random() * PREVIEW_ARCHETYPES.length)];
+}
+
 function getClientIP(req: Request): string {
   const cfConnectingIP = req.headers.get('cf-connecting-ip');
   if (cfConnectingIP) return cfConnectingIP;
@@ -322,28 +338,30 @@ async function getStaticFallback(
 
   if (fallback) {
     const fb = fallback as DestinationFallback;
+      const arch = getRandomArchetype();
+      return {
+        destination: fb.display_name,
+        days: fb.preview_days,
+        totalDays: 7,
+        archetypeUsed: arch.name,
+        archetypeTagline: fb.tagline || arch.tagline,
+        isFallback: true,
+      };
+    }
+
+    const arch = getRandomArchetype();
     return {
-      destination: fb.display_name,
-      days: fb.preview_days,
+      destination: destination,
+      days: [
+        { dayNumber: 1, headline: "Explore the Local Scene", description: "Discover hidden gems and local favorites in the heart of the city." },
+        { dayNumber: 2, headline: "Cultural Immersion", description: "Dive into history, art, and the stories that shape this place." },
+        { dayNumber: 3, headline: "Neighborhood Wandering", description: "Get lost on purpose. The best finds aren't on any map." },
+      ],
       totalDays: 7,
-      archetypeUsed: "Slow Traveler",
-      archetypeTagline: fb.tagline,
+      archetypeUsed: arch.name,
+      archetypeTagline: arch.tagline,
       isFallback: true,
     };
-  }
-
-  return {
-    destination: destination,
-    days: [
-      { dayNumber: 1, headline: "Explore the Local Scene", description: "Discover hidden gems and local favorites in the heart of the city." },
-      { dayNumber: 2, headline: "Cultural Immersion", description: "Dive into history, art, and the stories that shape this place." },
-      { dayNumber: 3, headline: "Neighborhood Wandering", description: "Get lost on purpose. The best finds aren't on any map." },
-    ],
-    totalDays: 7,
-    archetypeUsed: "Slow Traveler",
-    archetypeTagline: "Fewer things, done well. That's the whole philosophy.",
-    isFallback: true,
-  };
 }
 
 serve(async (req: Request) => {
@@ -505,11 +523,13 @@ serve(async (req: Request) => {
       });
     }
 
+    const selectedArchetype = getRandomArchetype();
+
     // Fetch budget data and travel advisory in parallel with AI generation
     const [budgetResult, advisoryResult, aiResult] = await Promise.all([
       fetchBudgetData(supabaseAdmin, destination),
       fetchTravelAdvisory(destination),
-      generateItineraryPreview(destination),
+      generateItineraryPreview(destination, selectedArchetype),
     ]);
 
     // Track usage for authenticated free users
@@ -531,8 +551,8 @@ serve(async (req: Request) => {
       destination: destination,
       days: aiResult.days || [],
       totalDays: aiResult.totalDays || 7,
-      archetypeUsed: "Slow Traveler",
-      archetypeTagline: "Fewer things, done well. That's the whole philosophy.",
+      archetypeUsed: selectedArchetype.name,
+      archetypeTagline: selectedArchetype.tagline,
       budgetEstimate: budgetResult.budgetEstimate,
       paymentInfo: budgetResult.paymentInfo,
       needToKnow: advisoryResult,
@@ -551,7 +571,7 @@ serve(async (req: Request) => {
   }
 });
 
-async function generateItineraryPreview(destination: string): Promise<{ days: QuickPreviewDay[]; totalDays: number }> {
+async function generateItineraryPreview(destination: string, archetype: { name: string; tagline: string; style: string }): Promise<{ days: QuickPreviewDay[]; totalDays: number }> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
     throw new Error("LOVABLE_API_KEY is not configured");
@@ -570,8 +590,10 @@ async function generateItineraryPreview(destination: string): Promise<{ days: Qu
           role: "system",
           content: `You are a travel expert creating quick trip previews. Generate a 3-day taste of what a trip could look like.
 
+You are building this preview as a "${archetype.name}" — ${archetype.style}.
+
 CRITICAL RULES:
-1. Use the "Slow Traveler" style: unhurried, intentional, fewer activities done well
+1. Match the "${archetype.name}" style throughout: ${archetype.style}
 2. Be SPECIFIC to the destination - use real neighborhood names, real landmarks
 3. Keep each day to ONE headline (5-7 words) and ONE description (15-25 words)
 4. Show the CONTRAST with typical rushed tourism
