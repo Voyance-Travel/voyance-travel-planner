@@ -312,14 +312,14 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1547149600-a6cdf8fce60c?w=1200',
   ],
   'new orleans': [
-    'https://images.unsplash.com/photo-1568402102990-bc541580b59f?w=1200',
-    'https://images.unsplash.com/photo-1571893544028-06b07af6dade?w=1200',
-    'https://images.unsplash.com/photo-1549965738-e1aaf5d1f6b0?w=1200',
+    'https://images.unsplash.com/photo-1551632436-cbf8dd35adfa?w=1200',
+    'https://images.unsplash.com/photo-1560507074-b9eb4b818538?w=1200',
+    'https://images.unsplash.com/photo-1565214975484-3cfa370c43ed?w=1200',
   ],
   'new-orleans': [
-    'https://images.unsplash.com/photo-1568402102990-bc541580b59f?w=1200',
-    'https://images.unsplash.com/photo-1571893544028-06b07af6dade?w=1200',
-    'https://images.unsplash.com/photo-1549965738-e1aaf5d1f6b0?w=1200',
+    'https://images.unsplash.com/photo-1551632436-cbf8dd35adfa?w=1200',
+    'https://images.unsplash.com/photo-1560507074-b9eb4b818538?w=1200',
+    'https://images.unsplash.com/photo-1565214975484-3cfa370c43ed?w=1200',
   ],
   'cusco': [
     'https://images.unsplash.com/photo-1526392060635-9d6019884377?w=1200',
