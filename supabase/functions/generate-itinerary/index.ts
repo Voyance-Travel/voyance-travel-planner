@@ -6896,6 +6896,7 @@ ${pickLines}
 RULES FOR VOYANCE PICKS:
 - MUST appear in the itinerary — this is non-negotiable
 - Mark with "isHiddenGem": true (these are curated discoveries)
+- Set "isVoyancePick": true (this flags it as a founder-vetted pick in the UI)
 - Set "voyanceInsight" to the WHY text above
 - Use the TIP as the "tips" field
 - In "personalization.whyThisFits", write "Voyance Founder Pick — [reason it fits this specific traveler]"
@@ -8354,7 +8355,7 @@ FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
           const pickLines = vpRows.map((p: any, i: number) => 
             `${i + 1}. **${p.name}** (${p.category}) in ${p.neighborhood || destination} — ${p.why_essential}${p.insider_tip ? ` TIP: ${p.insider_tip}` : ''}${p.best_time ? ` BEST TIME: ${p.best_time}` : ''}`
           ).join('\n');
-          voyancePicksPrompt = `\n${'='.repeat(70)}\n⭐ VOYANCE PICKS — MUST INCLUDE (HIGHEST PRIORITY)\n${'='.repeat(70)}\n${pickLines}\n- These MUST appear in the itinerary. Mark as isHiddenGem: true.\n`;
+          voyancePicksPrompt = `\n${'='.repeat(70)}\n⭐ VOYANCE PICKS — MUST INCLUDE (HIGHEST PRIORITY)\n${'='.repeat(70)}\n${pickLines}\n- These MUST appear in the itinerary. Mark as isHiddenGem: true AND isVoyancePick: true.\n`;
           console.log(`[generate-day] Injecting ${vpRows.length} Voyance Picks`);
         }
       } catch (e) {
