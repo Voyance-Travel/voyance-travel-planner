@@ -52,6 +52,8 @@ interface ManualHotelEntry {
   neighborhood?: string;
   checkInTime?: string;
   checkOutTime?: string;
+  pricePerNight?: number;
+  includeInBudget?: boolean;
 }
 
 // Trip occasions
@@ -1061,6 +1063,14 @@ function FlightHotelStep({
                   {manualHotel.address && (
                     <div className="text-xs text-muted-foreground">{manualHotel.address}</div>
                   )}
+                  {manualHotel.pricePerNight && manualHotel.pricePerNight > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      ${manualHotel.pricePerNight}/night
+                      {manualHotel.includeInBudget && (
+                        <span className="ml-1 text-primary">· In budget</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
               <Button variant="ghost" size="sm" onClick={() => setShowHotelModal(true)}>
@@ -1222,6 +1232,39 @@ function FlightHotelStep({
                   onChange={(e) => setManualHotel({ ...manualHotel, checkOutTime: e.target.value })}
                 />
               </div>
+            </div>
+
+            {/* Price & Budget Inclusion */}
+            <div className="space-y-3 pt-3 border-t border-border">
+              <div>
+                <Label className="text-xs">Price per Night</Label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="e.g. 150"
+                    className="pl-9"
+                    value={manualHotel.pricePerNight || ''}
+                    onChange={(e) => setManualHotel({ ...manualHotel, pricePerNight: e.target.value ? Number(e.target.value) : undefined })}
+                  />
+                </div>
+              </div>
+
+              {manualHotel.pricePerNight && manualHotel.pricePerNight > 0 && (
+                <label className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={manualHotel.includeInBudget || false}
+                    onChange={(e) => setManualHotel({ ...manualHotel, includeInBudget: e.target.checked })}
+                    className="rounded border-border"
+                  />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-foreground">Include hotel cost in budget</div>
+                    <div className="text-xs text-muted-foreground">Track this expense against your trip budget</div>
+                  </div>
+                </label>
+              )}
             </div>
           </div>
 
@@ -1408,8 +1451,11 @@ export default function Start() {
         neighborhood: manualHotel.neighborhood,
         checkInTime: manualHotel.checkInTime,
         checkOutTime: manualHotel.checkOutTime,
+        pricePerNight: manualHotel.pricePerNight || undefined,
         source: 'manual',
       }] : null;
+
+      const includeHotelInBudget = manualHotel.includeInBudget && manualHotel.pricePerNight && manualHotel.pricePerNight > 0;
 
       // Build multi-city name
       const tripName = isMultiCity && multiCityDestinations.length >= 2
@@ -1431,6 +1477,7 @@ export default function Start() {
           budget_total_cents: budgetAmount ? budgetAmount * 100 : null,
           flight_selection: flightSelection,
           hotel_selection: hotelSelection,
+          budget_include_hotel: includeHotelInBudget || false,
           is_multi_city: isMultiCity || null,
           destinations: isMultiCity ? multiCityDestinations as any : null,
           transportation_preferences: isMultiCity && multiCityTransports.length > 0 ? multiCityTransports as any : null,
