@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { format, parseISO, isAfter, isBefore, differenceInDays } from 'date-fns';
 import { Loader2, Calendar, MapPin, ArrowLeft, Edit, Sparkles } from 'lucide-react';
@@ -12,6 +12,7 @@ import { EditorialItinerary } from '@/components/itinerary/EditorialItinerary';
 import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
 import { ItineraryAssistant } from '@/components/itinerary/ItineraryAssistant';
 import { TripDebriefModal } from '@/components/trip/TripDebriefModal';
+import { TripConfirmationBanner } from '@/components/trip/TripConfirmationBanner';
 import { supabase } from '@/integrations/supabase/client';
 import { useScheduleNotifications } from '@/services/tripNotificationsAPI';
 import { useTripLearning } from '@/services/tripLearningsAPI';
@@ -649,6 +650,11 @@ export default function TripDetail() {
     }
   }, [tripId]);
 
+  // Handle full trip regeneration (from confirmation banner)
+  const handleRegenerateTrip = useCallback(() => {
+    handleShowGenerator(true);
+  }, []);
+
   const handleActivityComplete = async (activityId: string) => {
     try {
       // Update activity status in database
@@ -771,8 +777,24 @@ export default function TripDetail() {
                 <Calendar className="w-4 h-4" />
                 {format(parseISO(trip.start_date), 'MMM d')} - {format(parseISO(trip.end_date), 'MMM d, yyyy')}
               </div>
-
             </div>
+          )}
+
+          {/* Trip Confirmation Banner — ask if draft trip is real */}
+          {hasItinerary && (
+            <TripConfirmationBanner
+              tripId={trip.id}
+              destination={trip.destination}
+              startDate={trip.start_date}
+              endDate={trip.end_date}
+              currentStatus={trip.status as string}
+              hasFlightSelection={!!trip.flight_selection}
+              hasHotelSelection={!!trip.hotel_selection}
+              onStatusUpdate={(status) => setTrip(prev => prev ? { ...prev, status } as any : null)}
+              onTripDataUpdate={(data) => setTrip(prev => prev ? { ...prev, ...data } as any : null)}
+              onRegenerateTrip={handleRegenerateTrip}
+              className="mb-6"
+            />
           )}
 
           {/* Live Itinerary View for active trips */}
