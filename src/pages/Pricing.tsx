@@ -323,7 +323,7 @@ export default function Pricing() {
           <div className="grid sm:grid-cols-3 gap-6">
             {[
               { step: '01', title: 'Tell us about your trip', desc: 'Destination, dates, who\'s going, what you love, what you skip. 2 minutes.' },
-              { step: '02', title: 'Preview your first day — free', desc: 'See 3-4 curated activities with real venues, timing, and ratings. Get a feel for how we plan before you commit.' },
+              { step: '02', title: 'Preview your first day, free', desc: 'See 4-5 curated activities with real venues, timing, and personalization. Get a feel for how we plan before you commit.' },
               { step: '03', title: 'Choose your path', desc: 'Unlock: Use credits to reveal your full itinerary, every day, every detail, ready to book. Build: Use our framework to create your own itinerary manually.' },
             ].map((item, i) => (
               <motion.div
