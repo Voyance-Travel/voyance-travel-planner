@@ -88,12 +88,19 @@ export const STRIPE_PRODUCTS = {
 } as const;
 
 // Monthly Credit Grant — ALL USERS (free & paid)
-// Every user gets 150 credits/month. Free credits expire in 2 months.
-// Only purchased credits never expire.
+// Conversion funnel:
+//   1. First trip: bypasses credits entirely (full 3-day enriched, one-time hook)
+//   2. Subsequent trips: Day 1 preview always free (AI-only, no enrichment — just a mold)
+//   3. Monthly grant: 150cr/mo for ALL users, free credits expire in 2 months
+//   4. User can apply free credits to unlock additional days (e.g., Day 2 = 90cr)
+//   5. Purchased credits NEVER expire
+//   6. User runs out of free credits → buys credit pack (conversion!)
 export const MONTHLY_CREDIT_GRANT = {
   monthlyCredits: 150,
   maxBankedFree: 300,       // Can hold up to 2 months worth
   freeExpirationMonths: 2,  // Free credits expire after 2 months
+  purchasedNeverExpire: true,
+  appliesToAllUsers: true,  // Not just free users
   referralBonus: 200,
 } as const;
 

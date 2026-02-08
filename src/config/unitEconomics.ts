@@ -196,17 +196,24 @@ export const REVENUE_CONFIG = {
     fixed: 0.30, // $0.30 per transaction
   },
   
-  // Free tier - One free 3-day full-power trip + recurring monthly grant
+  // Conversion funnel:
+  // 1. First trip: bypasses credits (full 3-day enriched, one-time)
+  // 2. Subsequent trips: Day 1 preview always free (AI-only, no enrichment)
+  // 3. Monthly grant: 150cr/mo for ALL users (free + paid), 2-month expiry
+  // 4. Purchased credits never expire
+  // 5. User runs out of free credits → buys pack (conversion)
   freeTier: {
     freeTripDays: 3,
     freeEditsLimit: 5,
     oneFreeTripPerAccount: true,
     acquisitionCostBlended: 0.378,     // One-time per new user
     acquisitionCostWorstCase: 0.413,   // All 5 edits used
-    monthlyGrantCredits: 150,          // Credits per month
-    monthlyGrantExpiry: 2,             // Months until expiry
+    day1PreviewCost: 0.010,            // AI-only lightweight preview (always free)
+    monthlyGrantCredits: 150,          // Credits per month (ALL users)
+    monthlyGrantExpiry: 2,             // Months until free credits expire
+    purchasedNeverExpire: true,        // Purchased credits never expire
     recurringCostIfUsed: 0.040,        // Cost if user spends all 150cr
-    usageRate: 0.60,                   // ~60% of free users use credits
+    usageRate: 0.60,                   // ~60% of users use their free credits
     recurringCostPerMonth: 0.024,      // Blended: $0.04 × 60%
   },
 } as const;
