@@ -1251,20 +1251,16 @@ function FlightHotelStep({
                 </div>
               </div>
 
-              {manualHotel.pricePerNight && manualHotel.pricePerNight > 0 && (
-                <label className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={manualHotel.includeInBudget || false}
-                    onChange={(e) => setManualHotel({ ...manualHotel, includeInBudget: e.target.checked })}
-                    className="rounded border-border"
-                  />
-                  <div className="flex-1">
-                    <div className="text-sm font-medium text-foreground">Include hotel cost in budget</div>
-                    <div className="text-xs text-muted-foreground">Track this expense against your trip budget</div>
-                  </div>
-                </label>
-              )}
+              <label className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors">
+                <Checkbox
+                  checked={manualHotel.includeInBudget || false}
+                  onCheckedChange={(checked) => setManualHotel({ ...manualHotel, includeInBudget: checked === true })}
+                />
+                <div className="flex-1">
+                  <div className="text-sm font-medium text-foreground">Include hotel cost in budget</div>
+                  <div className="text-xs text-muted-foreground">Track this expense against your trip budget</div>
+                </div>
+              </label>
             </div>
           </div>
 
