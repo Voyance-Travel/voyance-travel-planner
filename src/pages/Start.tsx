@@ -1695,26 +1695,88 @@ export default function Start() {
                       else if (m === 'multi') setIsMultiCity(true);
                       // 'chat' and 'manual' don't affect multi-city state
                     }}
-                    onChatDetailsExtracted={(details) => {
-                      // Populate form state from chat-extracted details
-                      if (details.destination) {
-                        setDestinationSelection({ display: details.destination, cityName: details.destination });
+                    onChatDetailsExtracted={async (details) => {
+                      // Create trip directly from extracted details — don't rely on async state updates
+                      const dest = details.destination || '';
+                      const chatStartDate = details.startDate ? parseISO(details.startDate) : null;
+                      const chatEndDate = details.endDate ? parseISO(details.endDate) : null;
+
+                      if (!dest || !chatStartDate || !chatEndDate) {
+                        toast.error('Missing trip details — please provide destination and dates');
+                        return;
                       }
-                      if (details.startDate) {
-                        try { setStartDate(parseISO(details.startDate)); } catch {}
+
+                      if (!user) {
+                        // Populate state for post-auth resume, then show auth gate
+                        setDestinationSelection({ display: dest, cityName: dest });
+                        setStartDate(chatStartDate);
+                        setEndDate(chatEndDate);
+                        if (details.travelers) setTravelers(details.travelers);
+                        if (details.tripType) setTripType(details.tripType);
+                        if (details.budgetAmount) setBudgetAmount(details.budgetAmount);
+                        const draft = {
+                          destination: dest,
+                          startDate: format(chatStartDate, 'yyyy-MM-dd'),
+                          endDate: format(chatEndDate, 'yyyy-MM-dd'),
+                          travelers: details.travelers || travelers,
+                          budgetAmount: details.budgetAmount || budgetAmount,
+                          tripType: details.tripType || tripType,
+                        };
+                        sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+                        setBasics({
+                          destination: dest,
+                          startDate: draft.startDate,
+                          endDate: draft.endDate,
+                          travelers: draft.travelers,
+                          budgetAmount: draft.budgetAmount,
+                        });
+                        setShowAuthGate(true);
+                        return;
                       }
-                      if (details.endDate) {
-                        try { setEndDate(parseISO(details.endDate)); } catch {}
+
+                      setIsSubmitting(true);
+                      try {
+                        const chatBudget = details.budgetAmount || budgetAmount;
+                        const chatTripType = details.tripType || tripType;
+                        const chatTravelers = details.travelers || travelers;
+                        const hotelSelection = details.hotelName ? [{
+                          name: details.hotelName,
+                          address: details.hotelAddress || '',
+                          source: 'manual',
+                        }] : null;
+
+                        const { data: trip, error } = await supabase
+                          .from('trips')
+                          .insert({
+                            user_id: user.id,
+                            name: `Trip to ${dest}`,
+                            destination: dest,
+                            start_date: format(chatStartDate, 'yyyy-MM-dd'),
+                            end_date: format(chatEndDate, 'yyyy-MM-dd'),
+                            travelers: chatTravelers,
+                            trip_type: chatTripType,
+                            budget_tier: chatBudget ? (chatBudget < 750 ? 'budget' : chatBudget < 2000 ? 'moderate' : chatBudget < 4000 ? 'premium' : 'luxury') : 'moderate',
+                            budget_total_cents: chatBudget ? chatBudget * 100 : null,
+                            hotel_selection: hotelSelection,
+                            status: 'draft',
+                            metadata: {
+                              mustDoActivities: details.mustDoActivities || null,
+                              additionalNotes: details.additionalNotes || null,
+                              source: 'chat_planner',
+                              lastUpdated: new Date().toISOString(),
+                            },
+                          })
+                          .select('id')
+                          .single();
+
+                        if (error) throw error;
+                        navigate(`/trip/${trip.id}?generate=true`);
+                      } catch (err) {
+                        console.error('Error creating chat trip:', err);
+                        toast.error('Failed to create trip. Please try again.');
+                      } finally {
+                        setIsSubmitting(false);
                       }
-                      if (details.travelers) setTravelers(details.travelers);
-                      if (details.tripType) setTripType(details.tripType);
-                      if (details.budgetAmount) setBudgetAmount(details.budgetAmount);
-                      if (details.hotelName) {
-                        setManualHotel(prev => ({ ...prev, name: details.hotelName, address: details.hotelAddress || '' }));
-                      }
-                      if (details.mustDoActivities) setMustDoActivities(details.mustDoActivities);
-                      // Skip to submission (handleSubmit handles auth + DNA checks)
-                      handleSubmit(false);
                     }}
                     onContinue={() => {
                       if (!user) {
