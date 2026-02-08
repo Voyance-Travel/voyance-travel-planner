@@ -1063,8 +1063,8 @@ export function EditorialItinerary({
     const activity = day?.activities.find(a => a.id === activityId);
     if (!activity?.transportation) return;
 
-    // Charge credits (skip for paid users)
-    if (!isPaid) {
+    // Charge credits (server handles free caps)
+    {
       if (totalCredits < CREDIT_COSTS.TRANSPORT_MODE_CHANGE) {
         toast.error(`Need ${CREDIT_COSTS.TRANSPORT_MODE_CHANGE} credits to change transport mode`);
         return;
@@ -1393,11 +1393,10 @@ export function EditorialItinerary({
     return 'any';
   }, []);
 
-  // Check if user can swap (has enough credits)
+  // Check if user can swap (has enough credits — server handles free caps)
   const canSwap = useCallback(() => {
-    if (isPaid) return true;
-    return totalCredits >= CREDIT_COSTS.SWAP_ACTIVITY;
-  }, [isPaid, totalCredits]);
+    return true; // Let server-side spend-credits handle free cap + balance check
+  }, []);
 
   // Open the AI swap drawer for an activity
   const openSwapDrawer = useCallback((dayIndex: number, activity: EditorialActivity) => {
@@ -1454,8 +1453,8 @@ export function EditorialItinerary({
       return;
     }
 
-    // Spend credits for the swap (skip for paid users)
-    if (!isPaid) {
+    // Spend credits for the swap (server handles free caps)
+    {
       try {
         await spendCredits.mutateAsync({
           action: 'SWAP_ACTIVITY',
@@ -1961,11 +1960,9 @@ export function EditorialItinerary({
 
   // Check if user can regenerate (has enough credits)
   const canRegenerate = useCallback(() => {
-    // Paid users always can (legacy entitlement check for backwards compat)
-    if (isPaid) return true;
-    // Credit-based check: need REGENERATE_DAY credits
-    return totalCredits >= CREDIT_COSTS.REGENERATE_DAY;
-  }, [isPaid, totalCredits]);
+    // Let server-side spend-credits handle free cap + balance check
+    return true;
+  }, []);
 
   // Request regeneration - checks credits and regeneration count
   const requestDayRegenerate = useCallback(async (dayIndex: number) => {
@@ -1985,8 +1982,8 @@ export function EditorialItinerary({
       setGuidedAssistDayIndex(dayIndex);
       setShowGuidedAssist(true);
     } else {
-      // Spend credits before regenerating (skip for paid users who have unlimited)
-      if (!isPaid) {
+      // Spend credits before regenerating (server handles free caps)
+      {
         try {
           await spendCredits.mutateAsync({
             action: 'REGENERATE_DAY',
@@ -2011,8 +2008,8 @@ export function EditorialItinerary({
   const handleGuidedAssistSubmit = useCallback(async (preferences: string) => {
     if (guidedAssistDayIndex === null) return;
     
-    // Spend credits before regenerating (skip for paid users who have unlimited)
-    if (!isPaid) {
+    // Spend credits before regenerating (server handles free caps)
+    {
       try {
         await spendCredits.mutateAsync({
           action: 'REGENERATE_DAY',
