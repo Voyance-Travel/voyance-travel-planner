@@ -121,10 +121,24 @@ export function PaymentsTab({
       memberUserIds.add(ownerId);
     }
     
-    // Add collaborators that aren't already in trip_members
+    // Add collaborators that aren't already in trip_members (check both userId AND email/name)
     for (const collab of collaborators) {
       const profileName = collab.profile?.display_name || collab.profile?.handle;
-      if (collab.user_id && !memberUserIds.has(collab.user_id)) {
+      const collabNameLower = profileName?.toLowerCase();
+      
+      // Skip if userId already present
+      if (collab.user_id && memberUserIds.has(collab.user_id)) continue;
+      
+      // Skip if this person's name/email already exists in merged members
+      const alreadyExists = merged.some(m => {
+        if (collab.user_id && m.userId === collab.user_id) return true;
+        if (collabNameLower && m.name?.toLowerCase() === collabNameLower) return true;
+        if (collabNameLower && m.email?.toLowerCase() === collabNameLower) return true;
+        return false;
+      });
+      if (alreadyExists) continue;
+      
+      if (collab.user_id) {
         merged.push({
           id: `collab-${collab.id}`,
           tripId: collab.trip_id,
@@ -135,6 +149,7 @@ export function PaymentsTab({
           invitedAt: collab.created_at,
           acceptedAt: collab.accepted_at,
         });
+        memberUserIds.add(collab.user_id);
       }
     }
     
