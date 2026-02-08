@@ -1,4 +1,5 @@
-import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Trophy, 
   Lock,
@@ -17,14 +18,17 @@ import {
   Star,
   Award,
   ExternalLink,
+  ChevronDown,
   type LucideIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { useUserAchievements, type UserAchievement } from '@/services/achievementsAPI';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useUserAchievements, type UserAchievement, type AchievementCategory } from '@/services/achievementsAPI';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
 
 // Map icon names from DB to Lucide components
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -46,152 +50,216 @@ const ICON_MAP: Record<string, LucideIcon> = {
   award: Award,
 };
 
-// Tier colors
-const TIER_STYLES: Record<string, { bg: string; border: string; text: string; label: string }> = {
+// Tier visual config
+const TIER_STYLES: Record<string, { gradient: string; icon: string; label: string; ring: string }> = {
   bronze: { 
-    bg: 'bg-amber-100 dark:bg-amber-900/30', 
-    border: 'border-amber-300 dark:border-amber-700',
-    text: 'text-amber-700 dark:text-amber-400',
-    label: 'Bronze'
+    gradient: 'from-amber-600/20 to-amber-400/5', 
+    icon: 'text-amber-600 dark:text-amber-400',
+    label: 'Bronze',
+    ring: 'ring-amber-400/30',
   },
   silver: { 
-    bg: 'bg-slate-100 dark:bg-slate-800/50', 
-    border: 'border-slate-300 dark:border-slate-600',
-    text: 'text-slate-600 dark:text-slate-300',
-    label: 'Silver'
+    gradient: 'from-slate-400/20 to-slate-300/5', 
+    icon: 'text-slate-500 dark:text-slate-300',
+    label: 'Silver',
+    ring: 'ring-slate-400/30',
   },
   gold: { 
-    bg: 'bg-yellow-100 dark:bg-yellow-900/30', 
-    border: 'border-yellow-400 dark:border-yellow-600',
-    text: 'text-yellow-700 dark:text-yellow-400',
-    label: 'Gold'
+    gradient: 'from-yellow-500/20 to-yellow-300/5', 
+    icon: 'text-yellow-600 dark:text-yellow-400',
+    label: 'Gold',
+    ring: 'ring-yellow-400/30',
   },
   platinum: { 
-    bg: 'bg-violet-100 dark:bg-violet-900/30', 
-    border: 'border-violet-400 dark:border-violet-600',
-    text: 'text-violet-700 dark:text-violet-400',
-    label: 'Platinum'
+    gradient: 'from-violet-500/20 to-pink-400/5', 
+    icon: 'text-violet-500 dark:text-violet-400',
+    label: 'Platinum',
+    ring: 'ring-violet-400/30',
   },
 };
 
-/**
- * Share an achievement to social media
- */
+const CATEGORY_CONFIG: Record<string, { label: string; icon: LucideIcon }> = {
+  milestone: { label: 'Milestones', icon: Trophy },
+  exploration: { label: 'Exploration', icon: Compass },
+  social: { label: 'Social', icon: Users },
+  mastery: { label: 'Mastery', icon: Star },
+  special: { label: 'Special', icon: Sparkles },
+};
+
 function shareAchievement(achievement: UserAchievement) {
   const tierLabel = TIER_STYLES[achievement.tier]?.label || 'Bronze';
-  const text = `🏆 I just earned the "${achievement.name}" ${tierLabel} badge on Voyance! ${achievement.description}`;
+  const text = `I just earned the "${achievement.name}" ${tierLabel} badge on Voyance! ${achievement.description}`;
   const url = 'https://voyance-travel-planner.lovable.app';
   
-  // Try native share first, fall back to Twitter
   if (navigator.share) {
     navigator.share({
       title: `Voyance Achievement: ${achievement.name}`,
       text,
       url,
     }).catch(() => {
-      // User cancelled or error - fall back to copy
-      copyShareText(text, url);
+      navigator.clipboard.writeText(`${text}\n${url}`).then(() => toast.success('Copied to clipboard!'));
     });
   } else {
-    // Open Twitter share
     const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
     window.open(twitterUrl, '_blank', 'width=550,height=420');
   }
 }
 
-function copyShareText(text: string, url: string) {
-  navigator.clipboard.writeText(`${text}\n${url}`).then(() => {
-    toast.success('Copied to clipboard!');
-  }).catch(() => {
-    toast.error('Could not copy');
-  });
-}
+// ============================================================================
+// ACHIEVEMENT CARD - Editorial Style
+// ============================================================================
 
-interface AchievementBadgeProps {
-  achievement: UserAchievement;
-  index: number;
-}
-
-function AchievementBadge({ achievement, index }: AchievementBadgeProps) {
+function AchievementCard({ achievement, index }: { achievement: UserAchievement; index: number }) {
   const IconComponent = ICON_MAP[achievement.icon] || Trophy;
   const tierStyle = TIER_STYLES[achievement.tier] || TIER_STYLES.bronze;
   const isUnlocked = achievement.unlocked;
   
-  // Calculate progress percentage for count-based achievements
   const progressPercent = achievement.requirement_type === 'count' && achievement.requirement_value
     ? Math.min(100, ((achievement.progress || 0) / achievement.requirement_value) * 100)
     : 0;
   
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ delay: index * 0.05 }}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.04, duration: 0.3 }}
       className={cn(
-        "relative p-4 rounded-xl border-2 transition-all",
-        isUnlocked 
-          ? `${tierStyle.bg} ${tierStyle.border}` 
-          : "bg-muted/30 border-border/50 opacity-60"
+        "group relative",
+        !isUnlocked && "opacity-50"
       )}
     >
-      <div className="flex items-start gap-3">
+      <div className={cn(
+        "flex items-start gap-4 py-4",
+        index > 0 && "border-t border-border/50"
+      )}>
+        {/* Icon circle */}
         <div className={cn(
-          "w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0",
-          isUnlocked ? tierStyle.bg : "bg-muted"
+          "relative w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 transition-all",
+          isUnlocked 
+            ? `bg-gradient-to-br ${tierStyle.gradient} ring-1 ${tierStyle.ring}` 
+            : "bg-muted/50 ring-1 ring-border/30"
         )}>
           {isUnlocked ? (
-            <IconComponent className={cn("h-5 w-5", tierStyle.text)} />
+            <IconComponent className={cn("h-5 w-5", tierStyle.icon)} strokeWidth={1.5} />
           ) : (
-            <Lock className="h-4 w-4 text-muted-foreground" />
+            <Lock className="h-4 w-4 text-muted-foreground/60" strokeWidth={1.5} />
           )}
         </div>
         
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+        {/* Content */}
+        <div className="flex-1 min-w-0 space-y-1">
+          <div className="flex items-center justify-between gap-2">
             <h4 className={cn(
-              "font-medium text-sm truncate",
+              "font-medium text-sm",
               isUnlocked ? "text-foreground" : "text-muted-foreground"
             )}>
               {achievement.name}
             </h4>
             {isUnlocked && (
-              <span className={cn("text-xs font-medium px-1.5 py-0.5 rounded", tierStyle.bg, tierStyle.text)}>
-                +{achievement.points}
+              <span className={cn(
+                "text-[10px] font-semibold tracking-wider uppercase",
+                tierStyle.icon
+              )}>
+                {tierStyle.label}
               </span>
             )}
           </div>
           
-          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+          <p className="text-xs text-muted-foreground leading-relaxed">
             {achievement.description}
           </p>
           
-          {/* Progress bar for count-based locked achievements */}
-          {!isUnlocked && achievement.requirement_type === 'count' && achievement.requirement_value && (
-            <div className="mt-2 space-y-1">
-              <Progress value={progressPercent} className="h-1.5" />
-              <p className="text-[10px] text-muted-foreground">
-                {achievement.progress || 0} / {achievement.requirement_value}
-              </p>
+          {/* Unlock date + share for unlocked */}
+          {isUnlocked && achievement.unlocked_at && (
+            <div className="flex items-center gap-3 pt-1">
+              <span className="text-[10px] text-muted-foreground/70">
+                Earned {format(new Date(achievement.unlocked_at), 'MMM d, yyyy')}
+              </span>
+              <button
+                onClick={() => shareAchievement(achievement)}
+                className="text-[10px] text-muted-foreground/70 hover:text-foreground flex items-center gap-1 transition-colors"
+              >
+                <ExternalLink className="h-2.5 w-2.5" />
+                Share
+              </button>
             </div>
           )}
           
-          {/* Share button for unlocked achievements */}
+          {/* Progress for locked count-based */}
+          {!isUnlocked && achievement.requirement_type === 'count' && achievement.requirement_value && (
+            <div className="pt-1.5 space-y-1">
+              <div className="flex items-center justify-between">
+                <Progress value={progressPercent} className="h-1 flex-1 mr-3" />
+                <span className="text-[10px] text-muted-foreground tabular-nums">
+                  {achievement.progress || 0}/{achievement.requirement_value}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Points badge for unlocked */}
           {isUnlocked && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => shareAchievement(achievement)}
-              className="mt-2 h-7 px-2 text-xs gap-1.5 hover:bg-primary/10"
-            >
-              <ExternalLink className="h-3 w-3" />
-              Share
-            </Button>
+            <div className="pt-0.5">
+              <span className="text-[10px] text-muted-foreground/60">
+                +{achievement.points} pts
+              </span>
+            </div>
           )}
         </div>
       </div>
     </motion.div>
   );
 }
+
+// ============================================================================
+// CATEGORY GROUP
+// ============================================================================
+
+function CategoryGroup({ 
+  category, 
+  achievements, 
+  defaultOpen = true 
+}: { 
+  category: string; 
+  achievements: UserAchievement[];
+  defaultOpen?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const config = CATEGORY_CONFIG[category] || { label: category, icon: Trophy };
+  const CategoryIcon = config.icon;
+  const unlockedInCategory = achievements.filter(a => a.unlocked).length;
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger className="flex items-center justify-between w-full py-2.5 text-left group">
+        <div className="flex items-center gap-2.5">
+          <CategoryIcon className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+          <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
+            {config.label}
+          </h4>
+          <span className="text-[10px] text-muted-foreground/50 tabular-nums">
+            {unlockedInCategory}/{achievements.length}
+          </span>
+        </div>
+        <ChevronDown className={cn(
+          "h-3.5 w-3.5 text-muted-foreground/50 transition-transform duration-200",
+          isOpen && "rotate-180"
+        )} />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="pl-0.5">
+          {achievements.map((achievement, i) => (
+            <AchievementCard key={achievement.id} achievement={achievement} index={i} />
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+// ============================================================================
+// MAIN PANEL
+// ============================================================================
 
 interface AchievementsPanelProps {
   className?: string;
@@ -203,11 +271,15 @@ export default function AchievementsPanel({ className }: AchievementsPanelProps)
   
   if (isLoading || !data) {
     return (
-      <div className={cn("space-y-6", className)}>
-        <div className="animate-pulse space-y-4">
-          <div className="h-20 bg-muted rounded-xl" />
-          <div className="h-20 bg-muted rounded-xl" />
-          <div className="h-20 bg-muted rounded-xl" />
+      <div className={cn("space-y-8", className)}>
+        <div className="animate-pulse space-y-6">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="space-y-3">
+              <div className="h-3 w-24 bg-muted rounded" />
+              <div className="h-16 bg-muted/50 rounded-lg" />
+              <div className="h-16 bg-muted/50 rounded-lg" />
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -215,90 +287,76 @@ export default function AchievementsPanel({ className }: AchievementsPanelProps)
   
   const { achievements, totalPoints, unlockedCount } = data;
   const totalAchievements = achievements.length;
+  const progressPercent = totalAchievements > 0 ? (unlockedCount / totalAchievements) * 100 : 0;
   
-  // Separate unlocked and locked achievements
-  const unlockedAchievements = achievements.filter(a => a.unlocked);
-  const lockedAchievements = achievements.filter(a => !a.unlocked);
-  
-  // Sort: unlocked by unlock date (recent first), locked by sort_order
-  unlockedAchievements.sort((a, b) => {
-    if (a.unlocked_at && b.unlocked_at) {
-      return new Date(b.unlocked_at).getTime() - new Date(a.unlocked_at).getTime();
-    }
-    return 0;
-  });
-  
+  // Group by category, preserving order
+  const categoryOrder: AchievementCategory[] = ['milestone', 'exploration', 'social', 'mastery', 'special'];
+  const grouped = categoryOrder
+    .map(cat => ({
+      category: cat,
+      items: achievements.filter(a => a.category === cat),
+    }))
+    .filter(g => g.items.length > 0);
+
   return (
-    <div className={cn("space-y-6", className)}>
-      {/* Intro text explaining achievements */}
-      <div className="text-center space-y-2 pb-2">
-        <p className="text-sm text-muted-foreground">
-          Earn badges as you explore. Share your travel milestones with friends.
-        </p>
-      </div>
-      
-      {/* Summary Header */}
-      <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
-            <Trophy className="h-6 w-6 text-primary" />
-          </div>
+    <motion.div 
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className={cn("space-y-8", className)}
+    >
+      {/* Editorial summary header */}
+      <div className="space-y-4">
+        <div className="flex items-baseline justify-between">
           <div>
-            <p className="text-2xl font-bold text-foreground">{totalPoints}</p>
-            <p className="text-xs text-muted-foreground">Total Points</p>
+            <span className="text-4xl font-serif font-semibold text-foreground tabular-nums">
+              {totalPoints}
+            </span>
+            <span className="text-sm text-muted-foreground ml-2">points earned</span>
+          </div>
+          <div className="text-right">
+            <span className="text-sm tabular-nums text-foreground font-medium">
+              {unlockedCount}
+            </span>
+            <span className="text-sm text-muted-foreground">
+              /{totalAchievements} badges
+            </span>
           </div>
         </div>
-        <div className="text-right">
-          <p className="text-lg font-semibold text-foreground">{unlockedCount}/{totalAchievements}</p>
-          <p className="text-xs text-muted-foreground">Badges Earned</p>
-        </div>
-      </div>
-      
-      {/* Unlocked Achievements */}
-      {unlockedAchievements.length > 0 && (
-        <div className="space-y-3">
-          <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground flex items-center gap-2">
-            <Sparkles className="h-3 w-3" />
-            Earned Badges
-          </h4>
-          <div className="grid gap-3">
-            {unlockedAchievements.map((achievement, i) => (
-              <AchievementBadge key={achievement.id} achievement={achievement} index={i} />
-            ))}
-          </div>
-        </div>
-      )}
-      
-      {/* Locked Achievements */}
-      {lockedAchievements.length > 0 && (
-        <div className="space-y-3">
-          <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground flex items-center gap-2">
-            <Lock className="h-3 w-3" />
-            Up Next
-          </h4>
-          <div className="grid gap-3">
-            {lockedAchievements.slice(0, 4).map((achievement, i) => (
-              <AchievementBadge key={achievement.id} achievement={achievement} index={i} />
-            ))}
-          </div>
-          {lockedAchievements.length > 4 && (
-            <p className="text-xs text-muted-foreground text-center pt-2">
-              +{lockedAchievements.length - 4} more badges to earn
-            </p>
-          )}
-        </div>
-      )}
-      
-      {/* Empty state */}
-      {unlockedAchievements.length === 0 && (
-        <div className="text-center py-8">
-          <Trophy className="h-10 w-10 text-muted-foreground/50 mx-auto mb-3" />
-          <p className="text-sm font-medium text-foreground mb-1">Start Your Collection</p>
-          <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-            Take the Travel DNA quiz, plan your first trip, or generate an itinerary to earn your first badge.
+        
+        {/* Progress bar */}
+        <div className="space-y-1.5">
+          <Progress value={progressPercent} className="h-1" />
+          <p className="text-[10px] text-muted-foreground/60 text-right">
+            {Math.round(progressPercent)}% complete
           </p>
         </div>
+      </div>
+
+      {/* Category groups */}
+      <div className="space-y-6">
+        {grouped.map((group, i) => (
+          <CategoryGroup 
+            key={group.category} 
+            category={group.category}
+            achievements={group.items}
+            defaultOpen={i < 2}
+          />
+        ))}
+      </div>
+      
+      {/* Empty state */}
+      {unlockedCount === 0 && (
+        <div className="text-center py-12 space-y-3">
+          <Trophy className="h-8 w-8 text-muted-foreground/30 mx-auto" strokeWidth={1} />
+          <div>
+            <p className="text-sm font-medium text-foreground">Start Your Collection</p>
+            <p className="text-xs text-muted-foreground max-w-xs mx-auto mt-1 leading-relaxed">
+              Take the Travel DNA quiz, plan your first trip, or generate an itinerary to earn your first badge.
+            </p>
+          </div>
+        </div>
       )}
-    </div>
+    </motion.div>
   );
 }
