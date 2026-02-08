@@ -116,7 +116,7 @@ function transformTrip(trip: any): DisplayTrip {
 }
 
 export default function Profile() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [trips, setTrips] = useState<DisplayTrip[]>([]);
@@ -124,12 +124,12 @@ export default function Profile() {
   const { data: creditData, refetch: refetchCredits } = useCredits();
   const [tripStats, setTripStats] = useState<TripStats | null>(null);
   const [actualTravelDNA, setActualTravelDNA] = useState<{ archetype: string; category?: string } | null>(null);
-  // Redirect if not authenticated
+  // Redirect if not authenticated (only after auth loading completes)
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isLoading && !isAuthenticated) {
       navigate(ROUTES.SIGNIN);
     }
-  }, [isAuthenticated, navigate]);
+  }, [isLoading, isAuthenticated, navigate]);
 
   // Load trips from Supabase
   useEffect(() => {
