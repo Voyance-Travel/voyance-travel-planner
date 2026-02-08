@@ -221,7 +221,7 @@ function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => voi
                 className="h-14 px-10 text-lg shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-shadow"
               >
                 <Wand2 className="w-5 h-5 mr-2" />
-                Begin Discovery
+                Start Quiz
               </Button>
             </motion.div>
             
