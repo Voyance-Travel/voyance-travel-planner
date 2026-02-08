@@ -680,7 +680,7 @@ export default function UnitEconomics() {
         title: 'Low conversion rate modeled',
         description: `At ${conversionRate}% conversion, ${(100 - conversionRate)}% of users are non-paying. All still receive 150cr/mo grant.`,
         impact: `Monthly grant cost: $${(volume * (1 - conversionRate / 100) * FREE_USER_ECONOMICS.recurringCostPerMonth).toFixed(2)}/mo (free users only, excludes acquisition)`,
-        action: 'Improve conversion. Funnel: free trip → Day 1 preview → 150cr taste → buy pack.',
+        action: 'Improve conversion. Funnel: free 2-day trip → preview → 150cr taste → buy pack.',
       });
     }
     
@@ -1478,7 +1478,7 @@ export default function UnitEconomics() {
             {[
               { label: "Paid Trip Cost", value: 0.091, color: "#38BDF8", note: "From trip_cost_tracking: 567 entries / 41 trips", breakdown: "Photos $0.085 + Hotels $0.005 + Perplexity $0.001" },
               { label: "Monthly Grant (ALL users)", value: FREE_USER_ECONOMICS.recurringCostPerMonth, color: "#F87171", note: "150cr/mo for ALL users (free + paid), 2-month expiry, 60% usage rate", breakdown: "Blended: unlock 1 day ($0.10) or swaps ($0.02) — avg $0.04 if used. Purchased credits never expire." },
-              { label: "Acquisition (one-time)", value: FREE_USER_ECONOMICS.acquisitionCostBlended, color: "#FB923C", note: "First trip bypasses credits entirely — full 2-day enriched trip + ~2.1 edits", breakdown: `Base $0.043 + 2 days $0.200 + edits $0.025 + DNA $0.010. Day 1 preview always free after ($0.01 AI-only).` },
+              { label: "Acquisition (one-time)", value: FREE_USER_ECONOMICS.acquisitionCostBlended, color: "#FB923C", note: "First trip bypasses credits entirely — full 2-day enriched trip + ~2.1 edits", breakdown: `Base $0.043 + 2 days $0.200 + edits $0.025 + DNA $0.010. Subsequent trip previews always free ($0.01 AI-only).` },
               { label: "Fixed Monthly", value: 49, color: "#F59E0B", note: "Cloud $25 + Domain $4 + DevOps $20", breakdown: `$${(49 / volume).toFixed(2)}/trip at ${volume} trips/mo` },
             ].map((item, i) => {
               const maxVal = 49;
