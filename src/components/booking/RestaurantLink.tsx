@@ -56,7 +56,13 @@ export function RestaurantLink({ restaurantName, destination, className }: Resta
       
       try {
         const cleanName = cleanRestaurantName(restaurantName);
-        // Calling API with cleaned name
+        
+        // If cleaning stripped everything, skip the lookup
+        if (!cleanName) {
+          urlCache.set(cacheKey, { url: null, timestamp: Date.now() });
+          if (!cancelled) { setUrl(null); setIsLoading(false); }
+          return;
+        }
         
         const { data, error } = await supabase.functions.invoke('lookup-restaurant-url', {
           body: { restaurantName: cleanName, destination }
