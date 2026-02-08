@@ -28,7 +28,7 @@ import {
   type TripPayment,
   type PaymentTotals
 } from '@/services/tripPaymentsAPI';
-import { useTripMembers, type TripMember } from '@/services/tripBudgetAPI';
+import { useTripMembers, addTripMember, type TripMember } from '@/services/tripBudgetAPI';
 import { useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import { toast } from 'sonner';
 import type { EditorialDay } from './EditorialItinerary';
@@ -305,8 +305,10 @@ export function PaymentsTab({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any).from('trip_payments').insert({
+      // Resolve synthetic collab IDs to real trip_members IDs
+      const realMemberId = selectedMemberId ? await resolveRealMemberId(selectedMemberId) : null;
+
+      const { error } = await supabase.from('trip_payments').insert({
         trip_id: tripId,
         user_id: user.id,
         item_type: markPaidModal.type,
@@ -318,7 +320,7 @@ export function PaymentsTab({
         status: 'paid',
         external_provider: 'external',
         external_booking_id: externalRef || undefined,
-        assigned_member_id: selectedMemberId || null,
+        assigned_member_id: realMemberId,
         paid_at: new Date().toISOString(),
       });
 
@@ -352,8 +354,7 @@ export function PaymentsTab({
         return;
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any).from('trip_payments').insert({
+      const { error } = await supabase.from('trip_payments').insert({
         trip_id: tripId,
         user_id: user.id,
         item_type: newExpenseType,
@@ -402,26 +403,66 @@ export function PaymentsTab({
     }
   };
 
+  /**
+   * Resolve a member ID that might be a synthetic "collab-xxx" ID
+   * to a real trip_members row ID. Creates a trip_members row if needed.
+   */
+  const resolveRealMemberId = async (memberId: string): Promise<string | null> => {
+    if (!memberId) return null;
+    
+    // If it's not a synthetic collab ID, it's already a real trip_members ID
+    if (!memberId.startsWith('collab-')) return memberId;
+    
+    // Find the collaborator info from our merged list
+    const member = tripMembers.find(m => m.id === memberId);
+    if (!member) return null;
+    
+    // Check if a trip_members row already exists for this user
+    const existingReal = rawTripMembers.find(
+      m => (member.userId && m.userId === member.userId) || 
+           (member.email && m.email?.toLowerCase() === member.email?.toLowerCase())
+    );
+    if (existingReal) return existingReal.id;
+    
+    // Create a real trip_members row for this collaborator
+    try {
+      const newMember = await addTripMember({
+        tripId,
+        email: member.email || member.userId || 'unknown',
+        name: member.name || undefined,
+        role: 'attendee',
+      });
+      return newMember.id;
+    } catch (err) {
+      console.error('Failed to create trip member for collaborator:', err);
+      return null;
+    }
+  };
+
   const handleAssignMember = async () => {
     if (!assigningItem) return;
     
     try {
+      // Resolve synthetic collab IDs to real trip_members IDs
+      const realMemberId = assignMemberId ? await resolveRealMemberId(assignMemberId) : null;
+      
+      if (assignMemberId && !realMemberId) {
+        toast.error('Could not resolve member. Please try again.');
+        return;
+      }
+
       if (assigningItem.payment) {
-        // Update existing payment
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error } = await (supabase as any)
+        const { error } = await supabase
           .from('trip_payments')
-          .update({ assigned_member_id: assignMemberId || null })
+          .update({ assigned_member_id: realMemberId })
           .eq('id', assigningItem.payment.id);
         
         if (error) throw error;
       } else {
-        // Create a pending payment record with assignment
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('Not authenticated');
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error } = await (supabase as any).from('trip_payments').insert({
+        const { error } = await supabase.from('trip_payments').insert({
           trip_id: tripId,
           user_id: user.id,
           item_type: assigningItem.type,
@@ -431,7 +472,7 @@ export function PaymentsTab({
           currency: 'USD',
           quantity: 1,
           status: 'pending',
-          assigned_member_id: assignMemberId || null,
+          assigned_member_id: realMemberId,
         });
 
         if (error) throw error;
