@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
@@ -16,8 +16,12 @@ import {
   Zap,
   Palette,
   Play,
-  type LucideIcon
+  type LucideIcon,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
+import useEmblaCarousel from 'embla-carousel-react';
+import { ARCHETYPE_NARRATIVES, CATEGORY_DESCRIPTIONS, type ArchetypeNarrative } from '@/data/archetypeNarratives';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
@@ -39,6 +43,104 @@ const promises = [
   { text: "Book direct - we don't mark up prices", icon: DollarSign },
   { text: 'Your data stays yours', icon: Lock },
 ];
+
+const ALL_ARCHETYPE_IDS = [
+  'cultural_anthropologist', 'urban_nomad', 'wilderness_pioneer', 'digital_explorer',
+  'social_butterfly', 'family_architect', 'romantic_curator', 'story_seeker',
+  'bucket_list_conqueror', 'adrenaline_architect', 'collection_curator', 'status_seeker',
+  'zen_seeker', 'slow_traveler', 'beach_therapist', 'sanctuary_seeker', 'escape_artist', 'retreat_regular',
+  'culinary_cartographer', 'luxury_luminary', 'art_aficionado', 'eco_ethicist',
+  'gap_year_graduate', 'midlife_explorer', 'healing_journeyer', 'sabbatical_scholar', 'retirement_ranger',
+];
+
+function ArchetypeCarousel() {
+  const allArchetypes = ALL_ARCHETYPE_IDS
+    .map(id => ARCHETYPE_NARRATIVES[id])
+    .filter(Boolean);
+
+  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: 'start', dragFree: true });
+  const [canScrollPrev, setCanScrollPrev] = useState(false);
+  const [canScrollNext, setCanScrollNext] = useState(true);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  const onSelect = useCallback(() => {
+    if (!emblaApi) return;
+    setCanScrollPrev(emblaApi.canScrollPrev());
+    setCanScrollNext(emblaApi.canScrollNext());
+    setSelectedIndex(emblaApi.selectedScrollSnap());
+  }, [emblaApi]);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    onSelect();
+    emblaApi.on('select', onSelect);
+    emblaApi.on('reInit', onSelect);
+    return () => { emblaApi.off('select', onSelect); emblaApi.off('reInit', onSelect); };
+  }, [emblaApi, onSelect]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ delay: 0.1 }}
+      className="relative mb-12"
+    >
+      <div className="overflow-hidden" ref={emblaRef}>
+        <div className="flex -ml-2">
+          {allArchetypes.map((archetype, index) => (
+            <div
+              key={archetype.id}
+              className="flex-[0_0_280px] sm:flex-[0_0_300px] min-w-0 px-2 transition-all duration-300"
+              style={{ transform: index === selectedIndex ? 'translateY(-4px)' : 'translateY(0)' }}
+            >
+              <div className={`bg-card rounded-2xl border overflow-hidden transition-all duration-300 h-full ${index === selectedIndex ? 'border-primary/50 shadow-elevated ring-1 ring-primary/20' : 'border-border hover:shadow-lg hover:border-primary/30 hover:-translate-y-1'}`}>
+                <div className={`h-1.5 bg-gradient-to-r ${index === selectedIndex ? 'from-primary via-accent to-primary' : 'from-primary/60 via-primary to-primary/60'}`} />
+                <div className="p-5">
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="text-2xl">{archetype.emoji}</span>
+                    <div>
+                      <h3 className="font-serif font-bold text-base text-foreground">{archetype.name}</h3>
+                      <span className="text-xs text-primary font-medium">
+                        {CATEGORY_DESCRIPTIONS[archetype.category]?.name}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-foreground/80 italic text-sm mb-2 leading-relaxed line-clamp-2">
+                    "{archetype.hookLine}"
+                  </p>
+                  <p className="text-sm text-muted-foreground line-clamp-2">
+                    {archetype.coreDescription}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <button
+        onClick={() => emblaApi?.scrollPrev()}
+        disabled={!canScrollPrev}
+        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 z-10 w-10 h-10 rounded-full bg-card border border-border shadow-md flex items-center justify-center text-foreground hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        aria-label="Previous archetypes"
+      >
+        <ChevronLeft className="w-5 h-5" />
+      </button>
+      <button
+        onClick={() => emblaApi?.scrollNext()}
+        disabled={!canScrollNext}
+        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 z-10 w-10 h-10 rounded-full bg-card border border-border shadow-md flex items-center justify-center text-foreground hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        aria-label="Next archetypes"
+      >
+        <ChevronRight className="w-5 h-5" />
+      </button>
+
+      <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-background to-transparent pointer-events-none z-[5]" />
+      <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none z-[5]" />
+    </motion.div>
+  );
+}
 
 export default function HowItWorks() {
   const [showFeatureTour, setShowFeatureTour] = useState(false);
@@ -256,34 +358,7 @@ export default function HowItWorks() {
             </p>
           </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.1 }}
-            className="grid md:grid-cols-3 gap-6 mb-12"
-          >
-            {([
-              { name: 'The Slow Traveler', desc: 'Savors every moment, never rushes', Icon: Leaf },
-              { name: 'The Adrenaline Architect', desc: 'Plans adventures others dream about', Icon: Zap },
-              { name: 'The Cultural Curator', desc: 'Seeks authentic, local experiences', Icon: Palette },
-            ] as { name: string; desc: string; Icon: LucideIcon }[]).map((archetype, idx) => (
-              <motion.div
-                key={archetype.name}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: idx * 0.1 }}
-                className="bg-card border border-border/50 rounded-xl p-8 text-center hover:border-primary/30 hover:shadow-md transition-all"
-              >
-                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-5">
-                  <archetype.Icon className="h-5 w-5 text-primary" />
-                </div>
-                <h3 className="font-semibold text-foreground mb-2">{archetype.name}</h3>
-                <p className="text-sm text-muted-foreground">{archetype.desc}</p>
-              </motion.div>
-            ))}
-          </motion.div>
+          <ArchetypeCarousel />
 
           <motion.div
             initial={{ opacity: 0, y: 20 }}
