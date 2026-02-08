@@ -774,8 +774,8 @@ export function deriveScheduleConstraints(
   const comfort = traits.comfort ?? 0; // -10 (budget) to +10 (luxury)
   
   // Base values
-  let maxActivities = 6;
-  let minActivities = 3;
+  let maxActivities = 7;
+  let minActivities = 5;
   let bufferMinutes = 30;
   let maxWalkingMeters = 2000; // 2km default
   let maxWalkingMinutes = 25;

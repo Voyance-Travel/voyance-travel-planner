@@ -192,7 +192,7 @@ CRITICAL REQUIREMENTS:
 1. Use REAL, EXISTING venue names (restaurants, temples, museums, shops)
 2. Include specific times for each activity
 3. Explain WHY each venue fits this traveler's ${userArchetype} profile
-4. Balance the day with 4-6 activities including meals
+4. Balance the day with 5-7 activities including meals
 5. Consider opening hours and realistic timing
 6. Include mix of: dining, cultural, nature/walking, and optional shopping/entertainment
 
@@ -204,7 +204,7 @@ For each activity provide:
 - reasoning: 1-2 sentences explaining DNA alignment
 - durationMinutes: Estimated time to spend
 
-Generate exactly ${cappedDays} days with 4-6 activities each.
+Generate exactly ${cappedDays} days with 5-7 activities each.
 
 Respond in JSON format:
 {
