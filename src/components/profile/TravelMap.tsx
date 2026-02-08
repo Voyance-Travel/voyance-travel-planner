@@ -130,9 +130,9 @@ const equirectangularProjection = (lat: number, lng: number) => {
 // Get pin styling based on destination type
 const getPinStyling = (destination: Destination) => {
   if (destination.visited) return 'bg-emerald-500 border-emerald-600';
-  if (destination.upcoming) return 'bg-blue-500 border-blue-600';
+  if (destination.upcoming) return 'bg-pink-500 border-pink-600';
   if (destination.dream) return 'bg-pink-500 border-pink-600';
-  return 'bg-gray-500 border-gray-600';
+  return 'bg-pink-500 border-pink-600';
 };
 
 const getPinIcon = (destination: Destination) => {
@@ -195,7 +195,7 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
       const coords = getCoordinates(trip.destination) || getCoordinates(trip.destination_country || '');
       if (coords) {
         const isCompleted = trip.status === 'completed' || (trip.end_date && new Date(trip.end_date) < new Date());
-        const isUpcoming = ['booked', 'planning', 'active'].includes(trip.status) && trip.start_date && new Date(trip.start_date) >= new Date();
+        const isUpcoming = !isCompleted && ['booked', 'planning', 'active', 'draft'].includes(trip.status);
         
         result.push({
           id: trip.id,
@@ -365,13 +365,13 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
                 {destination.upcoming && (
                   <>
                     <motion.div
-                      className="absolute w-8 h-8 rounded-full border-2 border-blue-400"
+                      className="absolute w-8 h-8 rounded-full border-2 border-pink-400"
                       style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}
                       animate={{ scale: [1, 2.5], opacity: [0.8, 0] }}
                       transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
                     />
                     <motion.div
-                      className="absolute w-8 h-8 rounded-full border-2 border-blue-400"
+                      className="absolute w-8 h-8 rounded-full border-2 border-pink-400"
                       style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}
                       animate={{ scale: [1, 2.5], opacity: [0.8, 0] }}
                       transition={{ duration: 2, repeat: Infinity, ease: "easeOut", delay: 1 }}
@@ -387,7 +387,7 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
                     getPinStyling(destination)
                   )}
                   style={{ 
-                    boxShadow: `0 0 20px ${destination.visited ? '#10b981' : destination.upcoming ? '#3b82f6' : '#ec4899'}40` 
+                    boxShadow: `0 0 20px ${destination.visited ? '#10b981' : '#ec4899'}40` 
                   }}
                 >
                   <Icon className="w-4 h-4 text-white drop-shadow-lg" />
