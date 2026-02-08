@@ -7,7 +7,7 @@ import { Check, ChevronDown, Loader2, ArrowRight, Lock, Sparkles, Clock } from '
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
 import { CREDIT_PACKS, TOPUP_PACK, formatCredits } from '@/config/pricing';
-import { EXAMPLE_TRIP_COSTS, BASE_RATE_PER_DAY } from '@/lib/tripCostCalculator';
+import { BASE_RATE_PER_DAY } from '@/lib/tripCostCalculator';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { EmbeddedCheckoutModal } from '@/components/checkout';
@@ -427,54 +427,6 @@ export default function Pricing() {
             </button>
             {' '}for swaps, extensions, or upgrades.
           </motion.p>
-        </div>
-      </section>
-
-      {/* Real Examples */}
-      <section className="py-12 sm:py-16 bg-muted/30">
-        <div className="max-w-4xl mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-10"
-          >
-            <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-2">
-              What credits actually buy
-            </h2>
-            <p className="text-sm text-muted-foreground max-w-lg mx-auto">
-              Real trips, real costs. No mystery math.
-            </p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="bg-card border border-border rounded-2xl overflow-hidden"
-          >
-            <div className="divide-y divide-border">
-              {EXAMPLE_TRIP_COSTS.map((example, i) => (
-                <div key={i} className="flex items-center justify-between px-5 sm:px-6 py-4">
-                  <span className="text-sm text-muted-foreground">{example.label}</span>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="font-medium text-foreground text-sm">~{formatCredits(example.credits)}</span>
-                    <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">{example.pack}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            className="mt-6 text-xs text-muted-foreground max-w-lg mx-auto space-y-1"
-          >
-            <p className="font-medium text-foreground/80">Why the range?</p>
-            <p>More days = more credits. Dietary/accessibility needs = slightly more (extra research). Multi-city = slightly more (transit planning). Simple city break = fewer credits.</p>
-          </motion.div>
         </div>
       </section>
 
