@@ -262,6 +262,8 @@ interface GenerationContext {
   preBookedCommitments?: PreBookedCommitment[];
   mustDoActivities?: string;
   groupArchetypes?: TravelerArchetype[];
+  // Collaborator user IDs and names for suggestedFor attribution
+  collaboratorTravelers?: Array<{ userId: string; name: string }>;
   // Celebration day: User-specified day for birthday/anniversary celebration (1-indexed)
   celebrationDay?: number;
   // Multi-city support
@@ -4434,7 +4436,22 @@ ${dayConstraintsSection}` : ''}
 ADDITIONAL CONTEXT:
 ${preferenceContext}
 
-${flightHotelContext}${retryPrompt}`;
+${flightHotelContext}${retryPrompt}
+
+${context.collaboratorTravelers && context.collaboratorTravelers.length > 0 ? `
+${'='.repeat(70)}
+🎯 GROUP TRIP ATTRIBUTION — suggestedFor REQUIRED
+${'='.repeat(70)}
+This is a GROUP TRIP. For EVERY activity, you MUST include a "suggestedFor" field with the user ID of the traveler whose preferences most influenced that choice.
+
+Travelers in this group:
+${context.collaboratorTravelers.map(t => `  - "${t.userId}" (${t.name})`).join('\n')}
+
+Rules:
+- Use the primary planner's ID ("${context.userId}") for consensus/iconic activities
+- Use a collaborator's ID when the activity clearly matches their preferences
+- EVERY activity MUST have a suggestedFor value — no exceptions
+` : ''}`;
 
       // Build banned experience types list for this day
       const bannedTypes: string[] = [];
@@ -4559,7 +4576,8 @@ Generate activities for this day following ALL constraints above.`;
                             type: "object",
                             properties: { value: { type: "number" }, totalReviews: { type: "number" } }
                           },
-                          website: { type: "string" }
+                          website: { type: "string" },
+                          suggestedFor: { type: "string", description: "User ID of the traveler whose preferences most influenced this activity choice (group trips only)" }
                         },
                         required: ["id", "title", "startTime", "endTime", "category", "location", "cost", "bookingRequired"]
                       }
@@ -6216,6 +6234,27 @@ serve(async (req) => {
           console.log(`[Stage 1.2] Blended group preferences successfully`);
           prefs = blendedPrefs;
         }
+
+        // Build collaborator traveler list for suggestedFor attribution
+        const { data: collabRows } = await supabase
+          .from('trip_collaborators')
+          .select('user_id')
+          .eq('trip_id', tripId)
+          .eq('include_preferences', true);
+
+        const allUserIds = [userId, ...(collabRows || []).map((c: any) => c.user_id)].filter(Boolean);
+        const { data: profileRows } = await supabase
+          .from('profiles')
+          .select('id, display_name, handle')
+          .in('id', allUserIds);
+
+        const profileMap = new Map((profileRows || []).map((p: any) => [p.id, p.display_name || p.handle || 'Guest']));
+
+        context.collaboratorTravelers = allUserIds.map(uid => ({
+          userId: uid!,
+          name: profileMap.get(uid!) || 'Traveler',
+        }));
+        console.log(`[Stage 1.2] Attribution travelers: ${context.collaboratorTravelers.map(t => `${t.name}(${t.userId.slice(0,8)})`).join(', ')}`);
       }
       
       // =======================================================================
