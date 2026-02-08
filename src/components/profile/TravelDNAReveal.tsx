@@ -36,6 +36,7 @@ import DNAFeedbackChat from './DNAFeedbackChat';
 import TraitOverrideSliders from './TraitOverrideSliders';
 import MicroDisambiguation from './MicroDisambiguation';
 import AchievementsPanel from './AchievementsPanel';
+import DNATraitFingerprint from './DNATraitFingerprint';
 
 /** Map category names to their Lucide icon components */
 const CATEGORY_ICONS = {
@@ -66,158 +67,235 @@ interface TravelDNAData {
   emotional_drivers: string[] | null;
   perfect_trip_preview?: string | null;
   summary: string | null;
-  // V2 fields (typed loosely to accept DB Json)
   travel_dna_v2?: unknown;
   archetype_matches?: unknown;
   dna_version?: number;
-  // Evolution fields
   trip_count?: number;
   travel_frequency?: string;
   has_overrides?: boolean;
-  // User-adjusted trait overrides
   overrides?: Record<string, number>;
 }
-
-// Demo DNA data for preview mode
-const DEMO_DNA_DATA: TravelDNAData = {
-  primary_archetype_name: 'cultural_anthropologist',
-  secondary_archetype_name: 'slow_traveler',
-  dna_confidence_score: 92,
-  dna_rarity: 'Uncommon',
-  trait_scores: {
-    adventure: 65,
-    culture: 95,
-    relaxation: 45,
-    luxury: 55,
-    social: 70,
-    culinary: 85,
-    wellness: 40,
-  },
-  tone_tags: ['culture', 'culinary', 'adventure', 'social'],
-  emotional_drivers: ['understanding', 'connection', 'authenticity', 'growth'],
-  summary: 'As a Cultural Anthropologist, you prefer immersive travel experiences with a focus on authentic local connections. Your travel personality reflects someone who values deep cultural understanding over surface-level tourism.',
-};
 
 // ============================================================================
 // SUB-COMPONENTS
 // ============================================================================
 
-/** Collapsible Identity Tab with sections */
-function IdentityTabContent({ 
+/** Archetype Hero Card with gradient background */
+function ArchetypeHeroCard({ 
+  narrative, 
+  secondaryNarrative,
+  colors,
+  confidence,
+  rarity,
+}: { 
+  narrative: ArchetypeNarrative;
+  secondaryNarrative: ArchetypeNarrative | null;
+  colors: ReturnType<typeof getCategoryColors>;
+  confidence: number;
+  rarity: string;
+}) {
+  const CategoryIcon = CATEGORY_ICONS[narrative.category] || Compass;
+  const SecondaryIcon = secondaryNarrative 
+    ? CATEGORY_ICONS[secondaryNarrative.category] || Compass
+    : null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className={cn(
+        "relative overflow-hidden rounded-2xl p-6 md:p-8",
+        "bg-gradient-to-br",
+        colors.primary,
+      )}
+    >
+      {/* Subtle pattern overlay */}
+      <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_30%_20%,white_1px,transparent_1px)] bg-[size:24px_24px]" />
+      
+      <div className="relative z-10 space-y-4">
+        {/* Top row: icon + badges */}
+        <div className="flex items-start justify-between">
+          <motion.div
+            initial={{ scale: 0.7, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            className="w-14 h-14 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center"
+          >
+            <CategoryIcon className="h-7 w-7 text-white" strokeWidth={1.5} />
+          </motion.div>
+          <div className="flex items-center gap-2">
+            <Badge className="bg-white/20 text-white border-white/30 backdrop-blur-sm text-xs">
+              {rarity}
+            </Badge>
+            <Badge className="bg-white/20 text-white border-white/30 backdrop-blur-sm text-xs">
+              {confidence}% match
+            </Badge>
+          </div>
+        </div>
+
+        {/* Archetype name */}
+        <motion.h2 
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="font-serif text-3xl md:text-4xl font-semibold text-white leading-tight"
+        >
+          {narrative.name}
+        </motion.h2>
+
+        {/* Hook line */}
+        <motion.p 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          className="text-lg text-white/85 italic max-w-xl leading-relaxed"
+        >
+          "{narrative.hookLine}"
+        </motion.p>
+
+        {/* Secondary archetype */}
+        {secondaryNarrative && SecondaryIcon && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="flex items-center gap-2 pt-1"
+          >
+            <div className="w-6 h-6 rounded-md bg-white/15 flex items-center justify-center">
+              <SecondaryIcon className="h-3.5 w-3.5 text-white/80" />
+            </div>
+            <span className="text-sm text-white/70">with hints of</span>
+            <span className="text-sm font-medium text-white">{secondaryNarrative.name}</span>
+          </motion.div>
+        )}
+
+        {/* Retake link */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.6 }}
+        >
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            asChild 
+            className="px-0 text-white/60 hover:text-white hover:bg-transparent"
+          >
+            <Link to={ROUTES.QUIZ}>
+              <RefreshCw className="h-3 w-3 mr-1.5" />
+              Retake Quiz
+            </Link>
+          </Button>
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+}
+
+/** Merged "About" tab: core description + superpowers + growth + traits */
+function AboutTabContent({ 
   narrative, 
   dnaData 
 }: { 
   narrative: ArchetypeNarrative; 
   dnaData: TravelDNAData;
 }) {
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    whyTravel: true,
-    traits: false,
-    growth: false,
-  });
-
-  const toggleSection = (section: string) => {
-    setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
-  };
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
-      className="space-y-6"
+      className="space-y-8"
     >
-      {/* Core Description - Always visible */}
+      {/* Core Description */}
       <p className="text-foreground/90 leading-relaxed text-lg max-w-2xl">
         {narrative.coreDescription}
       </p>
 
-      {/* What This Means - Collapsible */}
-      <Collapsible open={openSections.whyTravel} onOpenChange={() => toggleSection('whyTravel')}>
-        <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-left group">
-          <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
-            This Is Why You Travel
-          </h4>
-          <ChevronDown className={cn(
-            "h-4 w-4 text-muted-foreground transition-transform duration-200",
-            openSections.whyTravel && "rotate-180"
-          )} />
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <ul className="space-y-3 pt-3">
-            {narrative.whatThisMeans.map((item, i) => (
-              <motion.li 
-                key={i}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05 }}
-                className="flex items-start gap-3 text-foreground/80"
-              >
-                <span className="w-1 h-1 rounded-full bg-foreground/40 mt-2.5 flex-shrink-0" />
-                {item}
-              </motion.li>
-            ))}
-          </ul>
-        </CollapsibleContent>
-      </Collapsible>
+      {/* What This Means */}
+      <div className="space-y-3">
+        <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
+          This Is Why You Travel
+        </h4>
+        <ul className="space-y-2.5">
+          {narrative.whatThisMeans.map((item, i) => (
+            <motion.li 
+              key={i}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.04 }}
+              className="flex items-start gap-3 text-foreground/80"
+            >
+              <span className="w-1 h-1 rounded-full bg-primary/60 mt-2.5 flex-shrink-0" />
+              {item}
+            </motion.li>
+          ))}
+        </ul>
+      </div>
 
-      {/* Traits - Collapsible */}
+      {/* Superpowers */}
+      <div className="space-y-3">
+        <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
+          Your Superpowers
+        </h4>
+        <div className="grid gap-2.5">
+          {narrative.superpowers.map((power, i) => (
+            <motion.div 
+              key={i}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.04 }}
+              className="flex items-start gap-3 text-foreground/80"
+            >
+              <Zap className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+              <span>{power}</span>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+
+      {/* Tone Tags */}
       {dnaData.tone_tags && dnaData.tone_tags.length > 0 && (
-        <Collapsible open={openSections.traits} onOpenChange={() => toggleSection('traits')}>
-          <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-left group">
-            <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
-              Your Travel Traits
-            </h4>
-            <ChevronDown className={cn(
-              "h-4 w-4 text-muted-foreground transition-transform duration-200",
-              openSections.traits && "rotate-180"
-            )} />
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="flex flex-wrap gap-2 pt-3">
-              {dnaData.tone_tags.map((tag, i) => (
-                <span 
-                  key={i} 
-                  className="px-3 py-1 text-sm border border-border rounded-full text-foreground/70 capitalize"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
-      )}
-
-      {/* Growth Edges - Collapsible */}
-      <Collapsible open={openSections.growth} onOpenChange={() => toggleSection('growth')}>
-        <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-left group">
+        <div className="space-y-3">
           <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
-            Room to Grow
+            Your Travel Traits
           </h4>
-          <ChevronDown className={cn(
-            "h-4 w-4 text-muted-foreground transition-transform duration-200",
-            openSections.growth && "rotate-180"
-          )} />
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="grid gap-3 pt-3">
-            {narrative.growthEdges.slice(0, 2).map((edge, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-4 py-2 text-foreground/80"
+          <div className="flex flex-wrap gap-2">
+            {dnaData.tone_tags.map((tag, i) => (
+              <span 
+                key={i} 
+                className="px-3 py-1 text-sm border border-border rounded-full text-foreground/70 capitalize"
               >
-                <TrendingUp className="h-4 w-4 text-foreground/40" />
-                <span>{edge}</span>
-              </div>
+                {tag}
+              </span>
             ))}
           </div>
-        </CollapsibleContent>
-      </Collapsible>
+        </div>
+      )}
+
+      {/* Growth Edges */}
+      <div className="space-y-3">
+        <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
+          Room to Grow
+        </h4>
+        <div className="grid gap-2.5">
+          {narrative.growthEdges.slice(0, 2).map((edge, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-3 text-foreground/70"
+            >
+              <TrendingUp className="h-4 w-4 text-foreground/40" />
+              <span>{edge}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </motion.div>
   );
 }
 
-/** Perfect Trip Preview - simple display */
+/** Perfect Trip Preview */
 function PerfectTripPreview({ preview }: { preview: string }) {
   return (
     <motion.div 
@@ -242,10 +320,14 @@ function PerfectTripPreview({ preview }: { preview: string }) {
   );
 }
 
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
+
 export default function TravelDNAReveal({ userId, className }: TravelDNARevealProps) {
   const [dnaData, setDnaData] = useState<TravelDNAData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('identity');
+  const [activeTab, setActiveTab] = useState('about');
   const [isInfoOpen, setIsInfoOpen] = useState(false);
 
   useEffect(() => {
@@ -253,7 +335,6 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
       if (!userId) return;
       
       try {
-        // Fetch DNA profile and trip count in parallel
         const [dnaResult, tripCountResult, preferencesResult] = await Promise.all([
           supabase
             .from('travel_dna_profiles')
@@ -276,7 +357,6 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
         const travelFrequency = preferencesResult.data?.travel_frequency as string | undefined;
         
         if (profileData?.primary_archetype_name) {
-          // Check if overrides exist (may be on profiles table)
           const { data: profileOverrides } = await supabase
             .from('profiles')
             .select('travel_dna_overrides')
@@ -304,7 +384,6 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
           .maybeSingle();
         
         if (userProfile?.travel_dna && typeof userProfile.travel_dna === 'object') {
-          // Map from profiles.travel_dna to TravelDNAData format
           const dnaJson = userProfile.travel_dna as Record<string, unknown>;
           const overridesData = userProfile.travel_dna_overrides as Record<string, number> | null;
           setDnaData({
@@ -337,12 +416,12 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
 
   if (isLoading) {
     return (
-      <div className={cn("bg-card rounded-xl border border-border p-8", className)}>
+      <div className={cn("rounded-2xl border border-border p-8", className)}>
         <div className="flex items-center gap-3 animate-pulse">
-          <div className="w-12 h-12 rounded-full bg-muted" />
-          <div className="space-y-2">
-            <div className="h-4 w-32 bg-muted rounded" />
-            <div className="h-3 w-24 bg-muted rounded" />
+          <div className="w-14 h-14 rounded-xl bg-muted" />
+          <div className="space-y-2 flex-1">
+            <div className="h-5 w-40 bg-muted rounded" />
+            <div className="h-3 w-28 bg-muted rounded" />
           </div>
         </div>
       </div>
@@ -351,26 +430,40 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
 
   if (!dnaData?.primary_archetype_name) {
     return (
-      <div className={cn("bg-gradient-to-br from-primary/5 to-accent/5 rounded-xl border border-border p-8", className)}>
-        <div className="text-center max-w-md mx-auto">
-          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+      <motion.div 
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={cn(
+          "relative overflow-hidden rounded-2xl border border-border p-8 md:p-10",
+          "bg-gradient-to-br from-primary/5 via-background to-accent/5",
+          className
+        )}
+      >
+        <div className="absolute inset-0 opacity-5 bg-[radial-gradient(circle_at_30%_20%,hsl(var(--primary))_1px,transparent_1px)] bg-[size:24px_24px]" />
+        <div className="relative text-center max-w-md mx-auto">
+          <motion.div
+            initial={{ scale: 0.8 }}
+            animate={{ scale: 1 }}
+            transition={{ delay: 0.1 }}
+            className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-5"
+          >
             <Sparkles className="h-8 w-8 text-primary" />
-          </div>
-          <h3 className="font-serif text-2xl font-semibold text-foreground mb-2">
+          </motion.div>
+          <h3 className="font-serif text-2xl md:text-3xl font-semibold text-foreground mb-3">
             Discover Your Travel DNA
           </h3>
-          <p className="text-muted-foreground mb-6">
+          <p className="text-muted-foreground mb-6 leading-relaxed">
             Take our quick quiz to uncover your unique travel personality. 
-            It's like a horoscope, but for wanderlust.
+            It shapes every trip we build for you.
           </p>
-          <Button asChild size="lg" className="gap-2">
+          <Button asChild size="lg" className="gap-2 rounded-xl">
             <Link to={ROUTES.QUIZ}>
               <Sparkles className="h-4 w-4" />
               Take the Quiz
             </Link>
           </Button>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
@@ -378,112 +471,52 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
   const secondaryNarrativeRaw = dnaData.secondary_archetype_name 
     ? getArchetypeNarrative(dnaData.secondary_archetype_name) 
     : null;
-  // Ensure secondary is actually different from primary (guard against duplicates)
   const secondaryNarrative = secondaryNarrativeRaw && secondaryNarrativeRaw.id !== narrative.id 
     ? secondaryNarrativeRaw 
     : null;
   const colors = getCategoryColors(narrative.category);
   const confidence = dnaData.dna_confidence_score || 85;
   const rarity = dnaData.dna_rarity || 'Uncommon';
-  
-  // Get the icon component for this category
   const CategoryIcon = CATEGORY_ICONS[narrative.category] || Compass;
-  const SecondaryIcon = secondaryNarrative 
-    ? CATEGORY_ICONS[secondaryNarrative.category] || Compass
-    : null;
   const categoryInfo = CATEGORY_DESCRIPTIONS[narrative.category];
 
   return (
     <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={cn("space-y-8", className)}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className={cn("space-y-6", className)}
     >
-      {/* Editorial Header - No Box */}
-      <div className="space-y-4">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="flex items-center gap-3"
-        >
-          <span className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
-            Travel DNA
-          </span>
-          <span className="h-px flex-1 bg-border" />
-          <Badge variant="outline" className="text-xs font-normal">
-            {rarity} • {confidence}% Match
-          </Badge>
-        </motion.div>
+      {/* 1. Hero Archetype Card */}
+      <ArchetypeHeroCard
+        narrative={narrative}
+        secondaryNarrative={secondaryNarrative}
+        colors={colors}
+        confidence={confidence}
+        rarity={rarity}
+      />
 
-        <div className="flex flex-col md:flex-row md:items-start gap-6">
-          {/* Category Icon - replaces emoji */}
-          <motion.div 
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.3 }}
-            className={cn(
-              "w-16 h-16 rounded-2xl flex items-center justify-center",
-              "bg-gradient-to-br", colors.primary
-            )}
-          >
-            <CategoryIcon className="h-8 w-8 text-white" strokeWidth={1.5} />
-          </motion.div>
+      {/* 2. DNA Trait Fingerprint - Always visible hero element */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+        className="rounded-xl border border-border bg-card p-5 md:p-6"
+      >
+        <DNATraitFingerprint 
+          traitScores={dnaData.trait_scores as Record<string, number> | null} 
+        />
+      </motion.div>
 
-          <div className="flex-1 space-y-3">
+      {/* Low confidence disambiguation */}
+      {confidence < 60 && (
+        <MicroDisambiguation
+          userId={userId}
+          confidence={confidence}
+          onResolved={() => window.location.reload()}
+        />
+      )}
 
-            {/* Primary Archetype Name */}
-            <motion.h2 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="font-serif text-3xl md:text-4xl font-semibold text-foreground leading-tight"
-            >
-              {narrative.name}
-            </motion.h2>
-
-            {/* Secondary Archetype */}
-            {secondaryNarrative && SecondaryIcon && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.45 }}
-                className="flex items-center gap-2 text-sm text-muted-foreground"
-              >
-                <SecondaryIcon className="h-4 w-4" />
-                <span>with hints of</span>
-                <span className="font-medium text-foreground">{secondaryNarrative.name}</span>
-              </motion.div>
-            )}
-
-            {/* Hook Line */}
-            <motion.p 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-              className="text-lg text-muted-foreground italic max-w-xl"
-            >
-              "{narrative.hookLine}"
-            </motion.p>
-
-            {/* Retake Link */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.6 }}
-            >
-              <Button variant="link" size="sm" asChild className="px-0 text-muted-foreground hover:text-foreground">
-                <Link to={ROUTES.QUIZ}>
-                  <RefreshCw className="h-3 w-3 mr-1.5" />
-                  Retake Quiz
-                </Link>
-              </Button>
-            </motion.div>
-          </div>
-        </div>
-      </div>
-
-      {/* Expandable: Learn About Your Archetype */}
+      {/* 3. Expandable: How is my DNA determined? */}
       <Collapsible open={isInfoOpen} onOpenChange={setIsInfoOpen}>
         <CollapsibleTrigger asChild>
           <Button 
@@ -507,7 +540,6 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
             animate={{ opacity: 1 }}
             className="mt-4 p-6 rounded-xl bg-muted/30 border border-border space-y-6"
           >
-            {/* What is this category */}
             <div className="space-y-2">
               <h4 className="font-medium text-foreground flex items-center gap-2">
                 <CategoryIcon className="h-4 w-4" />
@@ -517,8 +549,6 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
                 {categoryInfo.description}
               </p>
             </div>
-
-            {/* Key traits */}
             <div className="space-y-2">
               <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
                 Key Traits
@@ -534,11 +564,9 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
                 ))}
               </div>
             </div>
-
-            {/* How it's calculated */}
             <div className="space-y-2">
               <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
-                How It's Calculated
+                How It Works
               </h4>
               <p className="text-sm text-muted-foreground leading-relaxed">
                 Your Travel DNA is calculated by scoring your quiz responses across 8 core traits: 
@@ -547,8 +575,6 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
                 to find your primary and secondary archetypes.
               </p>
             </div>
-
-            {/* The 6 categories */}
             <div className="space-y-3">
               <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
                 The 6 Traveler Categories
@@ -577,139 +603,79 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
         </CollapsibleContent>
       </Collapsible>
 
-      {/* Micro-Disambiguation for low confidence users */}
-      {confidence < 60 && (
-        <MicroDisambiguation
-          userId={userId}
-          confidence={confidence}
-          onResolved={() => {
-            // Could trigger a refetch of DNA data
-            window.location.reload();
-          }}
-        />
-      )}
-
-      {/* Tabbed Content - Minimal Style */}
+      {/* 4. Simplified 3-Tab Deep Dive */}
       <div>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full justify-start bg-transparent border-b border-border rounded-none h-auto p-0 gap-4 md:gap-6 overflow-x-auto">
+          <TabsList className="w-full justify-start bg-transparent border-b border-border rounded-none h-auto p-0 gap-6 overflow-x-auto">
             <TabsTrigger 
-              value="identity" 
+              value="about" 
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground whitespace-nowrap"
             >
-              What This Means
+              About You
             </TabsTrigger>
             <TabsTrigger 
-              value="superpowers" 
+              value="fine-tune" 
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground whitespace-nowrap"
             >
-              Superpowers
+              Fine-Tune
             </TabsTrigger>
             <TabsTrigger 
-              value="adjust" 
+              value="deeper" 
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground whitespace-nowrap"
             >
-              Adjust
-            </TabsTrigger>
-            <TabsTrigger 
-              value="insights" 
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground whitespace-nowrap"
-            >
-              Insights
-            </TabsTrigger>
-            <TabsTrigger 
-              value="achievements" 
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground whitespace-nowrap"
-            >
-              Achievements
+              Deeper Insights
             </TabsTrigger>
           </TabsList>
 
           <AnimatePresence mode="wait">
-            <TabsContent value="identity" className="mt-8">
-              <IdentityTabContent 
-                narrative={narrative} 
-                dnaData={dnaData} 
-              />
+            {/* About: Identity + Superpowers merged */}
+            <TabsContent value="about" className="mt-8">
+              <AboutTabContent narrative={narrative} dnaData={dnaData} />
             </TabsContent>
 
-            <TabsContent value="superpowers" className="mt-8">
+            {/* Fine-Tune: Adjust sliders + micro disambiguation */}
+            <TabsContent value="fine-tune" className="mt-8">
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3 }}
-              >
-                <div className="space-y-6">
-                  <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
-                    Your Superpowers
-                  </h4>
-                  <div className="grid gap-3">
-                    {narrative.superpowers.map((power, i) => (
-                      <motion.div 
-                        key={i}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.05 }}
-                        className="flex items-start gap-3 text-foreground/80"
-                      >
-                        <Zap className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-                        <span>{power}</span>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            </TabsContent>
-
-            {/* Adjust Tab - Trait Override Sliders */}
-            <TabsContent value="adjust" className="mt-8">
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
+                className="space-y-6"
               >
                 <MicroDisambiguation 
                   userId={userId}
                   confidence={confidence}
                   onResolved={() => window.location.reload()}
                 />
-                <div className="mt-6">
-                  <TraitOverrideSliders 
-                    userId={userId}
-                    computedTraits={dnaData.trait_scores as Record<string, number> | undefined}
-                    existingOverrides={dnaData.overrides}
-                    onSave={() => window.location.reload()}
-                  />
-                </div>
+                <TraitOverrideSliders 
+                  userId={userId}
+                  computedTraits={dnaData.trait_scores as Record<string, number> | undefined}
+                  existingOverrides={dnaData.overrides}
+                  onSave={() => window.location.reload()}
+                />
               </motion.div>
             </TabsContent>
 
-            {/* Insights Tab - Travel DNA V2 Transparency */}
-            <TabsContent value="insights" className="mt-8">
+            {/* Deeper: Transparency + Feedback + Achievements */}
+            <TabsContent value="deeper" className="mt-8">
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3 }}
+                className="space-y-8"
               >
-                <div className="space-y-6">
-                  <TravelDNATransparency
-                    dnaData={dnaData.travel_dna_v2 as any}
-                  />
-                  <DNAAccuracyFeedback userId={userId} />
-                  <DNAFeedbackChat userId={userId} />
+                <TravelDNATransparency dnaData={dnaData.travel_dna_v2 as any} />
+                <DNAAccuracyFeedback userId={userId} />
+                <DNAFeedbackChat userId={userId} />
+                <div className="pt-4 border-t border-border">
+                  <AchievementsPanel />
                 </div>
               </motion.div>
-            </TabsContent>
-
-            {/* Achievements Tab */}
-            <TabsContent value="achievements" className="mt-8">
-              <AchievementsPanel />
             </TabsContent>
           </AnimatePresence>
         </Tabs>
       </div>
 
-      {/* Perfect Trip Preview - Collapsible */}
+      {/* 5. Perfect Trip Preview */}
       <PerfectTripPreview 
         preview={dnaData.perfect_trip_preview || narrative.perfectTripPreview} 
       />
