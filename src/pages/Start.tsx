@@ -1255,6 +1255,15 @@ export default function Start() {
   const { canCreateDraft } = useDraftLimitCheck();
   const [showLimitBlocker, setShowLimitBlocker] = useState(false);
 
+  const DRAFT_STORAGE_KEY = 'voyance_start_draft';
+
+  // Restore draft from sessionStorage (survives auth redirect)
+  const savedDraft = (() => {
+    try {
+      const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  })();
   // Current step: 1 = Trip Details, 2 = Flight & Hotel
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1263,30 +1272,34 @@ export default function Start() {
   // Trip state
   const destinationFromQuery = searchParams.get('destination');
   const [destinationSelection, setDestinationSelection] = useState<LocationSelection>(() => ({
-    display: destinationFromQuery || plannerState.basics.destination || '',
-    cityName: destinationFromQuery || plannerState.basics.destination || '',
+    display: destinationFromQuery || plannerState.basics.destination || savedDraft?.destination || '',
+    cityName: destinationFromQuery || plannerState.basics.destination || savedDraft?.destination || '',
     airportCodes: undefined,
   }));
   const [startDate, setStartDate] = useState<Date | undefined>(
-    plannerState.basics.startDate ? parseISO(plannerState.basics.startDate) : undefined
+    plannerState.basics.startDate ? parseISO(plannerState.basics.startDate)
+    : savedDraft?.startDate ? parseISO(savedDraft.startDate)
+    : undefined
   );
   const [endDate, setEndDate] = useState<Date | undefined>(
-    plannerState.basics.endDate ? parseISO(plannerState.basics.endDate) : undefined
+    plannerState.basics.endDate ? parseISO(plannerState.basics.endDate)
+    : savedDraft?.endDate ? parseISO(savedDraft.endDate)
+    : undefined
   );
-  const [travelers, setTravelers] = useState(plannerState.basics.travelers || 2);
-  const [tripType, setTripType] = useState<string>('leisure');
-  const [celebrationDay, setCelebrationDay] = useState<number | undefined>(undefined);
-  const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount);
+  const [travelers, setTravelers] = useState(plannerState.basics.travelers || savedDraft?.travelers || 2);
+  const [tripType, setTripType] = useState<string>(savedDraft?.tripType || 'leisure');
+  const [celebrationDay, setCelebrationDay] = useState<number | undefined>(savedDraft?.celebrationDay);
+  const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount || savedDraft?.budgetAmount);
   const [linkedGuests, setLinkedGuests] = useState<LinkedGuest[]>([]);
   const [showGuestModal, setShowGuestModal] = useState(false);
 
   // Multi-city state
-  const [isMultiCity, setIsMultiCity] = useState(plannerState.basics.isMultiCity || false);
+  const [isMultiCity, setIsMultiCity] = useState(plannerState.basics.isMultiCity || savedDraft?.isMultiCity || false);
   const [multiCityDestinations, setMultiCityDestinations] = useState<TripDestination[]>(
-    plannerState.basics.destinations || []
+    plannerState.basics.destinations || savedDraft?.multiCityDestinations || []
   );
   const [multiCityTransports, setMultiCityTransports] = useState<InterCityTransport[]>(
-    plannerState.basics.interCityTransports || []
+    plannerState.basics.interCityTransports || savedDraft?.multiCityTransports || []
   );
   
   // Flight state
@@ -1560,10 +1573,24 @@ export default function Start() {
                         const dest = isMultiCity
                           ? (multiCityDestinations[0]?.city || '')
                           : destinationSelection.cityName;
-                        setBasics({
+                        // Persist draft to sessionStorage so it survives auth redirect
+                        const draft = {
                           destination: dest,
                           startDate: startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
                           endDate: endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
+                          travelers,
+                          budgetAmount,
+                          tripType,
+                          celebrationDay,
+                          isMultiCity,
+                          multiCityDestinations,
+                          multiCityTransports,
+                        };
+                        sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+                        setBasics({
+                          destination: dest,
+                          startDate: draft.startDate,
+                          endDate: draft.endDate,
                           travelers,
                           budgetAmount,
                           isMultiCity,
@@ -1573,6 +1600,8 @@ export default function Start() {
                         setShowAuthGate(true);
                         return;
                       }
+                      // Clear draft — user is authenticated and proceeding
+                      sessionStorage.removeItem(DRAFT_STORAGE_KEY);
                       setCurrentStep(2);
                       window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
                     }}
