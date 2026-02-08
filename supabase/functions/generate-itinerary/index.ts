@@ -2151,7 +2151,7 @@ const STRICT_ITINERARY_TOOL = {
                       required: ["tags", "whyThisFits", "confidence", "matchedInputs"]
                     }
                   },
-                  required: ["id", "title", "startTime", "endTime", "category", "location", "cost", "description", "tags", "bookingRequired", "transportation", "personalization"]
+                  required: ["id", "title", "startTime", "endTime", "category", "location", "cost", "description", "tags", "bookingRequired", "transportation", "personalization", "tips", "crowdLevel", "isHiddenGem", "hasTimingHack"]
                 }
               }
             },
@@ -4466,7 +4466,23 @@ Rules:
 - Use a single collaborator's ID when the activity clearly matches ONLY their preferences
 - Use the primary planner's ID ("${context.userId}") ONLY when it specifically matches their profile, NOT as a default
 - EVERY activity MUST have a suggestedFor value — no exceptions
-` : ''}`;
+` : ''}
+
+${'='.repeat(70)}
+🧠 VOYANCE INTELLIGENCE FIELDS — MANDATORY FOR EVERY ACTIVITY
+${'='.repeat(70)}
+For EVERY activity you generate, you MUST include ALL of these intelligence fields:
+
+1. "tips" (string, 30+ chars): A specific, actionable insider tip. NOT generic advice. Example: "Ask for the corner table with harbor view — regulars know it's the best seat" or "The gift shop has a back entrance that skips the main queue"
+2. "crowdLevel" (string): Must be "low", "moderate", or "high" — your estimate at the SCHEDULED time
+3. "isHiddenGem" (boolean): true ONLY for genuine discoveries (not in top-10 TripAdvisor, not in mainstream guides). At least 1-2 per day should be true.
+4. "hasTimingHack" (boolean): true if THIS specific time slot gives an advantage (crowd avoidance, golden hour, special access). At least 2-3 per day should be true.
+5. "bestTime" (string): If hasTimingHack=true, explain WHY (e.g., "Arrives before the 10am tour bus rush")
+6. "voyanceInsight" (string): One unique fact most travelers don't know. Example: "The second floor has a hidden terrace that's not on any map"
+7. "personalization.whyThisFits" (string): MUST reference specific traveler traits/preferences. NOT generic.
+
+DO NOT leave these fields empty or omit them. They are the core intelligence layer.
+`;
 
       // Build banned experience types list for this day
       const bannedTypes: string[] = [];
@@ -4609,7 +4625,7 @@ Generate activities for this day following ALL constraints above.`;
                             required: ["tags", "whyThisFits", "confidence"]
                           }
                         },
-                        required: ["id", "title", "startTime", "endTime", "category", "location", "cost", "bookingRequired", "personalization"]
+                        required: ["id", "title", "startTime", "endTime", "category", "location", "cost", "bookingRequired", "personalization", "tips", "crowdLevel", "isHiddenGem", "hasTimingHack"]
                       }
                     }
                   },
@@ -8353,6 +8369,18 @@ CRITICAL REMINDERS:
 3. Check the budget constraints. If value-focused, no €100+ experiences.
 4. ${primaryArchetype === 'flexible_wanderer' || primaryArchetype === 'slow_traveler' || (traitScores.pace || 0) <= -3 ? 'Include at least one 2+ hour UNSCHEDULED block labeled "Free time to explore [neighborhood]"' : 'Follow the pacing guidelines for this archetype'}
 
+${'='.repeat(70)}
+🧠 VOYANCE INTELLIGENCE FIELDS — MANDATORY FOR EVERY ACTIVITY
+${'='.repeat(70)}
+For EVERY activity, you MUST include ALL of these intelligence fields:
+1. "tips" (string, 30+ chars): Specific, actionable insider tip. NOT generic.
+2. "crowdLevel": "low", "moderate", or "high" at the SCHEDULED time
+3. "isHiddenGem" (boolean): true for genuine discoveries (not mainstream). At least 1-2 per day.
+4. "hasTimingHack" (boolean): true if this time slot gives an advantage. At least 2-3 per day.
+5. "bestTime" (string): If hasTimingHack=true, explain why this time is optimal.
+6. "voyanceInsight" (string): One unique fact most travelers don't know.
+7. "personalization.whyThisFits" (string): Reference specific traveler traits/preferences.
+
 Generate activities following ALL constraints above.
 IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repeat.`;
 
@@ -8433,7 +8461,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                               required: ["tags", "whyThisFits", "confidence"]
                             }
                           },
-                          required: ["title", "category", "startTime", "endTime", "location", "personalization"]
+                          required: ["title", "category", "startTime", "endTime", "location", "personalization", "tips", "crowdLevel", "isHiddenGem", "hasTimingHack"]
                         }
                       },
                       narrative: { type: "object", properties: { theme: { type: "string" }, highlights: { type: "array", items: { type: "string" } } } }
