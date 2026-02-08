@@ -102,35 +102,39 @@ function ArchetypeHeroCard({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="relative overflow-hidden rounded-2xl p-6 md:p-8 bg-card border border-border"
+      className="relative overflow-hidden rounded-2xl p-6 md:p-8 bg-foreground/[0.03] dark:bg-foreground/[0.04] border border-border"
     >
-      <div className="relative z-10 space-y-4">
-        {/* Top row: icon + badges */}
-        <div className="flex items-start justify-between">
-          <motion.div
-            initial={{ scale: 0.7, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="w-14 h-14 rounded-xl bg-muted flex items-center justify-center"
+      {/* Editorial accent line */}
+      <div className="absolute top-0 left-6 md:left-8 w-12 h-[3px] bg-primary rounded-b" />
+
+      <div className="relative z-10 space-y-5 pt-2">
+        {/* Editorial kicker + badges */}
+        <div className="flex items-center justify-between">
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.15 }}
+            className="text-[11px] font-medium tracking-[0.2em] uppercase text-primary"
           >
-            <CategoryIcon className="h-7 w-7 text-foreground/70" strokeWidth={1.5} />
-          </motion.div>
+            Travel DNA
+          </motion.p>
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-xs font-normal">
+            <span className="text-[11px] tracking-wide text-muted-foreground">
               {rarity}
-            </Badge>
-            <Badge variant="outline" className="text-xs font-normal">
+            </span>
+            <span className="text-muted-foreground/30">|</span>
+            <span className="text-[11px] tracking-wide text-muted-foreground">
               {confidence}% match
-            </Badge>
+            </span>
           </div>
         </div>
 
-        {/* Archetype name */}
+        {/* Archetype name - large editorial serif */}
         <motion.h2 
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="font-serif text-3xl md:text-4xl font-semibold text-foreground leading-tight"
+          transition={{ delay: 0.25 }}
+          className="font-serif text-4xl md:text-5xl font-semibold text-foreground leading-[1.1] tracking-tight"
         >
           {narrative.name}
         </motion.h2>
@@ -139,43 +143,50 @@ function ArchetypeHeroCard({
         <motion.p 
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 0.4 }}
-          className="text-lg text-muted-foreground italic max-w-xl leading-relaxed"
+          transition={{ delay: 0.35 }}
+          className="text-lg md:text-xl text-foreground/60 italic max-w-xl leading-relaxed font-serif"
         >
           "{narrative.hookLine}"
         </motion.p>
 
-        {/* Secondary archetype */}
-        {secondaryNarrative && SecondaryIcon && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            className="flex items-center gap-2 pt-1"
-          >
-            <div className="w-6 h-6 rounded-md bg-muted flex items-center justify-center">
-              <SecondaryIcon className="h-3.5 w-3.5 text-muted-foreground" />
-            </div>
-            <span className="text-sm text-muted-foreground">with hints of</span>
-            <span className="text-sm font-medium text-foreground">{secondaryNarrative.name}</span>
-          </motion.div>
-        )}
-
-        {/* Retake link */}
+        {/* Divider + secondary + retake */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 0.6 }}
+          transition={{ delay: 0.45 }}
+          className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-2 border-t border-border"
         >
+          {/* Category icon + label */}
+          <div className="flex items-center gap-2">
+            <CategoryIcon className="h-4 w-4 text-primary" strokeWidth={1.5} />
+            <span className="text-xs font-medium tracking-wide uppercase text-foreground/50">
+              {narrative.category.charAt(0) + narrative.category.slice(1).toLowerCase()}
+            </span>
+          </div>
+
+          {/* Secondary archetype */}
+          {secondaryNarrative && SecondaryIcon && (
+            <>
+              <span className="text-foreground/15">|</span>
+              <div className="flex items-center gap-1.5">
+                <SecondaryIcon className="h-3.5 w-3.5 text-foreground/40" />
+                <span className="text-xs text-foreground/50">hints of</span>
+                <span className="text-xs font-medium text-foreground/70">{secondaryNarrative.name}</span>
+              </div>
+            </>
+          )}
+
+          {/* Retake */}
+          <span className="text-foreground/15 hidden sm:inline">|</span>
           <Button 
             variant="ghost" 
             size="sm" 
             asChild 
-            className="px-0 text-muted-foreground hover:text-foreground hover:bg-transparent"
+            className="px-0 h-auto py-0 text-xs text-foreground/40 hover:text-foreground hover:bg-transparent"
           >
             <Link to={ROUTES.QUIZ}>
-              <RefreshCw className="h-3 w-3 mr-1.5" />
-              Retake Quiz
+              <RefreshCw className="h-3 w-3 mr-1" />
+              Retake
             </Link>
           </Button>
         </motion.div>
