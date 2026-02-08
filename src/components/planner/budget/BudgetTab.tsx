@@ -409,7 +409,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays }: Budge
           <CardHeader>
             <CardTitle className="text-base font-medium flex items-center gap-2">
               <Calendar className="h-4 w-4" />
-              Recent Expenses
+              All Costs
             </CardTitle>
           </CardHeader>
           <CardContent>
