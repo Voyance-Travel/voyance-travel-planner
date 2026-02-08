@@ -8,7 +8,7 @@
  */
 
 import { motion } from 'framer-motion';
-import { Lock, Sparkles, Clock, MapPinOff, Target, Pencil, CreditCard, Gift } from 'lucide-react';
+import { Lock, Sparkles, Clock, MapPinOff, Target, Pencil, CreditCard, Gift, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
@@ -182,7 +182,6 @@ export function LockedDayCard({
             >
               <CreditCard className="h-4 w-4" />
               Get Credits to Unlock
-              <span className="text-xs opacity-80">({creditsNeeded} credits)</span>
             </Button>
 
             {tripId && (
@@ -196,27 +195,12 @@ export function LockedDayCard({
             )}
           </div>
         ) : canAfford ? (
-          /* HAS CREDITS: Unlock directly */
+          /* HAS CREDITS: Auto-unlock handles it. Show loading fallback. */
           <div className="space-y-3">
-            <Button
-              onClick={onUnlock}
-              className="w-full gap-2 rounded-xl"
-              size="lg"
-            >
-              <Lock className="h-4 w-4" />
-              Unlock Day {dayNumber}
-              <span className="text-xs opacity-80">({creditsNeeded} credits)</span>
-            </Button>
-
-            {tripId && (
-              <button
-                onClick={handleManualBuild}
-                className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mt-1 transition-colors w-full"
-              >
-                <Pencil className="h-3 w-3" />
-                I'll build it myself
-              </button>
-            )}
+            <div className="flex items-center gap-2 text-sm text-primary">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Unlocking...</span>
+            </div>
           </div>
         ) : (
           /* NO CREDITS: Buy credits then generate */
@@ -224,8 +208,7 @@ export function LockedDayCard({
             <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/5 border border-amber-500/10">
               <CreditCard className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
               <p className="text-xs text-muted-foreground">
-                You have <span className="font-medium text-foreground">{currentBalance} credits</span>. 
-                You need {creditsNeeded} credits to unlock this day.
+                You need more credits to unlock this day.
               </p>
             </div>
 

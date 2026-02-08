@@ -920,6 +920,21 @@ export function EditorialItinerary({
 
   const [changingTransportActivityId, setChangingTransportActivityId] = useState<string | null>(null);
 
+  // Auto-unlock locked days when user has sufficient credits
+  useEffect(() => {
+    if (!days[selectedDayIndex]) return;
+    const day = days[selectedDayIndex];
+    if (
+      day.metadata?.isLocked &&
+      !isManualMode &&
+      !isUnlockingDay &&
+      totalCredits >= CREDIT_COSTS.UNLOCK_DAY
+    ) {
+      handleUnlockDay(day.dayNumber);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDayIndex, isManualMode, isUnlockingDay]);
+
   // Handle per-day unlock from preview mode
   const handleUnlockDay = useCallback((dayNumber: number) => {
     unlockDay({
@@ -5186,7 +5201,7 @@ function DayCard({
                           onClick={() => onUnlockDay?.(day.dayNumber)}
                         >
                           <Sparkles className="h-4 w-4" />
-                          Unlock Day {day.dayNumber} · {CREDIT_COSTS.UNLOCK_DAY} credits
+                          Unlock Day {day.dayNumber}
                         </Button>
                       </div>
                     </>
