@@ -174,7 +174,7 @@ export function ItineraryGenerator({
         });
 
         // Append locked placeholder days for remaining days
-        const lockedDays = createLockedPlaceholderDays(startDate, daysToGenerate, totalRequestedDays, destination);
+        const lockedDays = createLockedPlaceholderDays(startDate, daysToGenerate, totalRequestedDays, destination, gateResult.isFirstTrip);
         const allDays = [...generatedDays, ...lockedDays];
 
         setPrePhase(null);
@@ -201,7 +201,7 @@ export function ItineraryGenerator({
           const previewDays = convertPreviewToGeneratedDays(previewResponse.preview);
           
           // Append locked placeholder days for remaining days
-          const lockedDays = createLockedPlaceholderDays(startDate, previewDays.length, totalRequestedDays, destination);
+          const lockedDays = createLockedPlaceholderDays(startDate, previewDays.length, totalRequestedDays, destination, false);
           const allDays = [...previewDays, ...lockedDays];
 
           // Pass to onComplete with preview metadata in overview
