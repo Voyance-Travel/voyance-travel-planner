@@ -67,11 +67,12 @@ const tiers = [
 ];
 
 const freePreviewFeatures = [
-  { icon: CalendarClock, text: '4-5 curated activities', detail: 'Real venue names picked for your travel style' },
+  { icon: CalendarClock, text: '3-4 curated activities', detail: 'Real venues we picked for you' },
   { icon: Clock, text: 'Timing & flow', detail: 'When to arrive, how the day moves' },
-  { icon: Dna, text: 'Why we picked it', detail: 'Personalized to your Travel DNA' },
-  { icon: Route, text: 'Full day structure', detail: 'See the shape of your trip before committing' },
-  { icon: Hammer, text: 'Manual builder', detail: 'Build your own itinerary for free, anytime' },
+  { icon: Star, text: 'Ratings & reviews', detail: 'What others think' },
+  { icon: Ticket, text: 'Booking alerts', detail: 'Which spots need reservations' },
+  { icon: Cloud, text: 'Weather', detail: 'Conditions for your dates' },
+  { icon: Dna, text: 'Why we picked it', detail: 'Personalized to your travel style' },
 ];
 
 const unlockGroups = [
@@ -119,11 +120,11 @@ const everythingIncluded = [
   {
     title: 'Your Itinerary',
     items: [
-      { icon: CalendarClock, text: 'Activities tailored to your pace, timed to avoid crowds' },
+      { icon: CalendarClock, text: '4-5 activities per day' },
       { icon: UtensilsCrossed, text: 'Restaurant picks with dish recommendations' },
       { icon: DollarSign, text: 'Budget tiers: Safe ($) / Stretch ($$) / Splurge ($$$)' },
-      { icon: ShieldAlert, text: 'Trap warnings: overhyped spots flagged' },
-      { icon: Clock, text: 'Timing strategies: when to arrive, when to book' },
+      { icon: ShieldAlert, text: 'Trap warnings \u2014 overhyped spots flagged' },
+      { icon: Clock, text: 'Timing strategies \u2014 when to arrive, when to book' },
     ],
   },
   {
@@ -170,15 +171,15 @@ const sampleDay = [
 const faqs = [
   {
     q: 'How do credits work?',
-    a: 'Credits unlock your full itinerary: all days plus actionable details like addresses, costs, and booking links. You see the exact credit cost for your specific trip before you unlock.',
+    a: 'Credits unlock your full itinerary \u2014 all days plus actionable details like addresses, costs, and booking links. You see the exact credit cost for your specific trip before you unlock.',
   },
   {
     q: 'Do credits expire?',
-    a: 'Purchased credits never expire. Free credits (your signup bonus and monthly grants) expire after 2 months.',
+    a: 'Never.',
   },
   {
     q: 'What if I don\'t like Day 1?',
-    a: 'Adjust your preferences and regenerate. Previews are free. Or switch to manual mode and build your own.',
+    a: 'Adjust your preferences and regenerate \u2014 previews are free. Or switch to manual mode and build your own.',
   },
   {
     q: 'Can I mix unlocked days with manual planning?',
@@ -323,8 +324,8 @@ export default function Pricing() {
           <div className="grid sm:grid-cols-3 gap-6">
             {[
               { step: '01', title: 'Tell us about your trip', desc: 'Destination, dates, who\'s going, what you love, what you skip. 2 minutes.' },
-              { step: '02', title: 'Preview your first day, free', desc: 'See 4-5 curated activities with real venues, timing, and personalization. Get a feel for how we plan before you commit.' },
-              { step: '03', title: 'Choose your path', desc: 'Unlock: Use credits to reveal your full itinerary, every day, every detail, ready to book. Build: Use our framework to create your own itinerary manually.' },
+              { step: '02', title: 'Preview your first day \u2014 free', desc: 'See 3-4 curated activities with real venues, timing, and ratings. Get a feel for how we plan before you commit.' },
+              { step: '03', title: 'Choose your path', desc: 'Unlock: Use credits to reveal your full itinerary \u2014 every day, every detail, ready to book. Build: Use our framework to create your own itinerary manually.' },
             ].map((item, i) => (
               <motion.div
                 key={i}
@@ -389,9 +390,9 @@ export default function Pricing() {
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
-            className="text-center text-sm text-muted-foreground mt-8 italic"
+            className="text-center text-xs text-muted-foreground mt-8 italic"
           >
-            Addresses, costs, photos, ratings, weather, and booking links unlock with credits.
+            Details like addresses, costs, photos, and booking links unlock with credits.
           </motion.p>
         </div>
       </section>
