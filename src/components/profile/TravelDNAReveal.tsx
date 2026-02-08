@@ -600,12 +600,6 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
               What This Means
             </TabsTrigger>
             <TabsTrigger 
-              value="insights" 
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground whitespace-nowrap"
-            >
-              Insights
-            </TabsTrigger>
-            <TabsTrigger 
               value="superpowers" 
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground whitespace-nowrap"
             >
@@ -616,6 +610,12 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground whitespace-nowrap"
             >
               Adjust
+            </TabsTrigger>
+            <TabsTrigger 
+              value="insights" 
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent bg-transparent px-0 pb-3 text-muted-foreground data-[state=active]:text-foreground whitespace-nowrap"
+            >
+              Insights
             </TabsTrigger>
             <TabsTrigger 
               value="achievements" 
@@ -633,139 +633,77 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
               />
             </TabsContent>
 
-            {/* Achievements Tab - Real earned badges */}
-            <TabsContent value="achievements" className="mt-8">
-              <AchievementsPanel />
-            </TabsContent>
-
-            {/* NEW: Insights Tab - Travel DNA V2 Transparency */}
-            <TabsContent value="insights" className="mt-8">
+            <TabsContent value="superpowers" className="mt-8">
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="space-y-8"
+                transition={{ duration: 0.3 }}
               >
-                {/* Travel DNA Transparency Component */}
-                <TravelDNATransparency 
-                  dnaData={dnaData.travel_dna_v2 as {
-                    dna_version?: number;
-                    trait_scores?: Record<string, number>;
-                    archetype_matches?: Array<{
-                      archetype_id: string;
-                      name: string;
-                      category?: string;
-                      score: number;
-                      pct: number;
-                    }>;
-                    confidence?: number;
-                    trait_contributions?: Array<{
-                      question_id: string;
-                      answer_id: string;
-                      label?: string;
-                      deltas: Record<string, number>;
-                      normalized_multiplier: number;
-                    }>;
-                  } | null}
-                />
-                
-                {/* Accuracy Feedback Section */}
-                <div className="pt-6 border-t border-border space-y-6">
+                <div className="space-y-6">
                   <h4 className="text-xs font-medium tracking-widest uppercase text-muted-foreground">
-                    Help Us Improve
+                    Your Superpowers
                   </h4>
-                  
-                  {/* Quick Rating Feedback */}
-                  <DNAAccuracyFeedback
-                    userId={userId}
-                    dnaVersion={dnaData.dna_version || 1}
-                    topArchetypes={(dnaData.archetype_matches as Array<{
-                      archetype_id: string;
-                      name: string;
-                      pct: number;
-                    }>) || []}
-                  />
-                  
-                  {/* Chat-based Feedback */}
-                  <div className="pt-4">
-                    <p className="text-sm text-muted-foreground mb-3">
-                      Prefer to explain in your own words?
-                    </p>
-                    <DNAFeedbackChat
-                      userId={userId}
-                      currentArchetype={dnaData.primary_archetype_name || undefined}
-                      currentTraits={(dnaData.travel_dna_v2 as { trait_scores?: Record<string, number> })?.trait_scores || 
-                        (dnaData.trait_scores as Record<string, number>) || {}}
-                      onFeedbackApplied={async () => {
-                        // Reload DNA data after chat feedback is applied
-                        const { data } = await supabase
-                          .from('travel_dna_profiles')
-                          .select('*')
-                          .eq('user_id', userId)
-                          .maybeSingle();
-                        if (data) {
-                          setDnaData(prev => prev ? { ...prev, ...data, has_overrides: true } : null);
-                        }
-                      }}
-                    />
+                  <div className="grid gap-3">
+                    {narrative.superpowers.map((power, i) => (
+                      <motion.div 
+                        key={i}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                        className="flex items-start gap-3 text-foreground/80"
+                      >
+                        <Zap className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                        <span>{power}</span>
+                      </motion.div>
+                    ))}
                   </div>
                 </div>
               </motion.div>
             </TabsContent>
 
-            <TabsContent value="superpowers" className="mt-8">
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="space-y-6"
-              >
-                <p className="text-muted-foreground">
-                  These are the unique strengths you bring to every journey.
-                </p>
-                <div className="grid gap-3">
-                  {narrative.superpowers.map((power, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.1 }}
-                      className="flex items-center gap-4 py-3 border-b border-border/50 last:border-0"
-                    >
-                      <Zap className="h-4 w-4 text-foreground/40" />
-                      <span className="text-foreground">{power}</span>
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-            </TabsContent>
-
-            {/* NEW: Adjust Tab - Trait Override Sliders */}
+            {/* Adjust Tab - Trait Override Sliders */}
             <TabsContent value="adjust" className="mt-8">
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.3 }}
               >
-                <TraitOverrideSliders
+                <MicroDisambiguation 
                   userId={userId}
-                  computedTraits={(dnaData.travel_dna_v2 as { trait_scores?: Record<string, number> })?.trait_scores || 
-                    (dnaData.trait_scores as Record<string, number>) || {}}
-                  existingOverrides={(dnaData as { overrides?: Record<string, number> }).overrides || {}}
-                  onSave={async (overrides) => {
-                    // Persist the just-saved overrides in local state so the sliders
-                    // don't re-initialize from stale overrides after a refetch.
-                    setDnaData(prev => {
-                      if (!prev) return prev;
-                      return {
-                        ...prev,
-                        overrides,
-                        has_overrides: Object.keys(overrides || {}).length > 0,
-                      };
-                    });
-                  }}
+                  confidence={confidence}
+                  onResolved={() => window.location.reload()}
                 />
+                <div className="mt-6">
+                  <TraitOverrideSliders 
+                    userId={userId}
+                    computedTraits={dnaData.trait_scores as Record<string, number> | undefined}
+                    existingOverrides={dnaData.overrides}
+                    onSave={() => window.location.reload()}
+                  />
+                </div>
               </motion.div>
+            </TabsContent>
+
+            {/* Insights Tab - Travel DNA V2 Transparency */}
+            <TabsContent value="insights" className="mt-8">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <div className="space-y-6">
+                  <TravelDNATransparency
+                    dnaData={dnaData.travel_dna_v2 as any}
+                  />
+                  <DNAAccuracyFeedback userId={userId} />
+                  <DNAFeedbackChat userId={userId} />
+                </div>
+              </motion.div>
+            </TabsContent>
+
+            {/* Achievements Tab */}
+            <TabsContent value="achievements" className="mt-8">
+              <AchievementsPanel />
             </TabsContent>
           </AnimatePresence>
         </Tabs>
