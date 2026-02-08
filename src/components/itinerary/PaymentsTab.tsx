@@ -29,6 +29,7 @@ import {
   type PaymentTotals
 } from '@/services/tripPaymentsAPI';
 import { useTripMembers, type TripMember } from '@/services/tripBudgetAPI';
+import { useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import { toast } from 'sonner';
 import type { EditorialDay } from './EditorialItinerary';
 
@@ -88,8 +89,37 @@ export function PaymentsTab({
   const [newExpenseName, setNewExpenseName] = useState('');
   const [newExpenseAmount, setNewExpenseAmount] = useState('');
   const [savingExpense, setSavingExpense] = useState(false);
-  // Fetch real trip members
-  const { data: tripMembers = [], isLoading: membersLoading } = useTripMembers(tripId);
+  // Fetch real trip members and collaborators
+  const { data: rawTripMembers = [], isLoading: membersLoading } = useTripMembers(tripId);
+  const { data: collaborators = [] } = useTripCollaborators(tripId);
+
+  // Merge collaborators into trip members so they appear in Split Bill automatically
+  const tripMembers: TripMember[] = useMemo(() => {
+    const memberUserIds = new Set(rawTripMembers.map(m => m.userId).filter(Boolean));
+    const memberEmails = new Set(rawTripMembers.map(m => m.email?.toLowerCase()).filter(Boolean));
+    
+    // Start with existing trip_members
+    const merged = [...rawTripMembers];
+    
+    // Add collaborators that aren't already in trip_members
+    for (const collab of collaborators) {
+      const profileName = collab.profile?.display_name || collab.profile?.handle;
+      if (collab.user_id && !memberUserIds.has(collab.user_id)) {
+        merged.push({
+          id: `collab-${collab.id}`,
+          tripId: collab.trip_id,
+          userId: collab.user_id,
+          email: profileName || collab.user_id,
+          name: profileName || null,
+          role: 'attendee' as const,
+          invitedAt: collab.created_at,
+          acceptedAt: collab.accepted_at,
+        });
+      }
+    }
+    
+    return merged;
+  }, [rawTripMembers, collaborators]);
 
   // Fetch payments
   const fetchPayments = useCallback(async () => {
