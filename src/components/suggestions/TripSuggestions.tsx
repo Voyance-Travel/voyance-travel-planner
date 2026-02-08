@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { ThumbsUp, Plus, Lightbulb, User, Loader2 } from 'lucide-react';
+import { ThumbsUp, Plus, Lightbulb, User, Loader2, ArrowRightLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -26,6 +26,9 @@ interface Suggestion {
   description: string | null;
   status: string;
   created_at: string;
+  target_activity_id?: string | null;
+  target_activity_title?: string | null;
+  replacement_reason?: string | null;
   votes: Vote[];
 }
 
@@ -386,17 +389,23 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
                     <span className="text-sm font-semibold">{suggestion.votes.length}</span>
                   </button>
 
-                  {/* Content */}
                   <div className="flex-1 min-w-0">
+                    {/* Replacement context banner */}
+                    {suggestion.target_activity_title && (
+                      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground bg-muted/50 rounded px-2 py-1 mb-1.5">
+                        <ArrowRightLeft className="h-3 w-3 shrink-0" />
+                        <span>Replace <span className="font-medium text-foreground">{suggestion.target_activity_title}</span></span>
+                      </div>
+                    )}
                     <div className="flex items-start gap-2 mb-1">
                       <p className="font-medium text-sm leading-snug flex-1">{suggestion.title}</p>
                       <Badge variant="outline" className="text-[10px] shrink-0 capitalize">
-                        {suggestion.suggestion_type}
+                        {suggestion.suggestion_type === 'replacement' ? '🔄 Replace' : suggestion.suggestion_type}
                       </Badge>
                     </div>
-                    {suggestion.description && (
+                    {(suggestion.replacement_reason || suggestion.description) && (
                       <p className="text-xs text-muted-foreground line-clamp-2 mb-1.5">
-                        {suggestion.description}
+                        {suggestion.replacement_reason || suggestion.description}
                       </p>
                     )}
                     <div className="flex items-center gap-2 text-[10px] text-muted-foreground">

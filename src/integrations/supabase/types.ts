@@ -6210,39 +6210,51 @@ export type Database = {
           description: string | null
           display_name: string
           id: string
+          replacement_reason: string | null
           status: string
           suggestion_type: string
+          target_activity_id: string | null
+          target_activity_title: string | null
           title: string
           trip_id: string
           trip_type: string
           updated_at: string
           user_id: string | null
+          vote_deadline: string | null
         }
         Insert: {
           created_at?: string
           description?: string | null
           display_name: string
           id?: string
+          replacement_reason?: string | null
           status?: string
           suggestion_type?: string
+          target_activity_id?: string | null
+          target_activity_title?: string | null
           title: string
           trip_id: string
           trip_type?: string
           updated_at?: string
           user_id?: string | null
+          vote_deadline?: string | null
         }
         Update: {
           created_at?: string
           description?: string | null
           display_name?: string
           id?: string
+          replacement_reason?: string | null
           status?: string
           suggestion_type?: string
+          target_activity_id?: string | null
+          target_activity_title?: string | null
           title?: string
           trip_id?: string
           trip_type?: string
           updated_at?: string
           user_id?: string | null
+          vote_deadline?: string | null
         }
         Relationships: []
       }
