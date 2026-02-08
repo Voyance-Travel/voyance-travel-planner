@@ -1057,12 +1057,12 @@ export function PaymentsTab({
               {tripMembers.length > 0 && (
                 <div className="space-y-2">
                   <Label>Paid by</Label>
-                  <Select value={selectedMemberId} onValueChange={setSelectedMemberId}>
+                  <Select value={selectedMemberId || undefined} onValueChange={setSelectedMemberId}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select who paid" />
                     </SelectTrigger>
                     <SelectContent>
-                      {tripMembers.map(member => (
+                      {tripMembers.filter(m => m.id).map(member => (
                         <SelectItem key={member.id} value={member.id}>
                           {member.name || member.email?.split('@')[0]}
                           {member.role === 'primary' && ' (Organizer)'}
@@ -1127,7 +1127,7 @@ export function PaymentsTab({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="unassigned">Unassigned</SelectItem>
-                      {tripMembers.map(member => (
+                      {tripMembers.filter(m => m.id).map(member => (
                         <SelectItem key={member.id} value={member.id}>
                           {member.name || member.email?.split('@')[0]}
                           {member.role === 'primary' && ' (Organizer)'}
