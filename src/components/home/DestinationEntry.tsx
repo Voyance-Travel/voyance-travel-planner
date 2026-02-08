@@ -180,7 +180,7 @@ export default function DestinationEntry() {
         className="text-base sm:text-lg md:text-xl text-white/90 mb-6 sm:mb-10 px-2"
         style={{ textShadow: '0 1px 10px rgba(0,0,0,0.7), 0 2px 20px rgba(0,0,0,0.5)' }}
       >
-        Tell us how you travel. We'll build every day.
+        Tell us how you travel. We'll build an experience for everyday.
       </motion.p>
 
       <motion.div
