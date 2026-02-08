@@ -134,13 +134,8 @@ export function UnlockBanner({
             {/* Unlock all days */}
             <Button onClick={handleUnlockAll} className="gap-2 flex-1">
               <Sparkles className="h-4 w-4" />
-              Unlock All {totalDays} Days · {formatCredits(unlockCost)} credits
+              Unlock All {totalDays} Days
             </Button>
-            
-            {/* Per-day hint */}
-            <p className="text-xs text-muted-foreground text-center sm:text-left self-center">
-              or unlock individual days for {formatCredits(perDayCost)} credits each
-            </p>
           </div>
         </div>
       </motion.div>
