@@ -349,35 +349,35 @@ export function PaymentsTab({
   const essentialItems = payableItems.filter(i => i.type === 'flight' || i.type === 'hotel');
   const activityItems = payableItems.filter(i => i.type === 'activity');
 
+  /**
+   * Map a real trip_members UUID back to the synthetic member.id used in the UI.
+   * This is needed so pre-population of the assign modal and breakdown work correctly.
+   */
+  const realIdToSyntheticId = useMemo(() => {
+    const map = new Map<string, string>();
+    tripMembers.forEach(m => {
+      map.set(m.id, m.id);
+      if (m.userId) {
+        rawTripMembers.forEach(rm => {
+          if (rm.userId === m.userId) {
+            map.set(rm.id, m.id);
+          }
+        });
+      }
+    });
+    return map;
+  }, [tripMembers, rawTripMembers]);
+
   // Calculate per-member breakdown
   const memberBreakdown = useMemo(() => {
     const breakdown = new Map<string, { assigned: number; paid: number; items: { item: PayableItem; splitAmount: number }[] }>();
     
-    // Initialize with all members
     tripMembers.forEach(m => {
       breakdown.set(m.id, { assigned: 0, paid: 0, items: [] });
     });
-    
-    // Add "unassigned" category
     breakdown.set('unassigned', { assigned: 0, paid: 0, items: [] });
 
-    // Build a lookup from real IDs (trip_members UUID or userId) → synthetic member.id
-    const realIdToSyntheticId = new Map<string, string>();
-    tripMembers.forEach(m => {
-      realIdToSyntheticId.set(m.id, m.id);
-      if (m.userId) realIdToSyntheticId.set(m.userId, m.id);
-    });
-    rawTripMembers.forEach(rm => {
-      if (rm.userId) {
-        const syntheticId = realIdToSyntheticId.get(rm.userId);
-        if (syntheticId) {
-          realIdToSyntheticId.set(rm.id, syntheticId);
-        }
-      }
-    });
-
     payableItems.forEach(item => {
-      // If item has split payments, attribute each payment to its assigned member
       if (item.allPayments.length > 0) {
         const handledMembers = new Set<string>();
         item.allPayments.forEach(payment => {
@@ -397,7 +397,6 @@ export function PaymentsTab({
           breakdown.set(memberId, current);
         });
       } else {
-        // No payment records — put in unassigned
         const current = breakdown.get('unassigned') || { assigned: 0, paid: 0, items: [] };
         current.assigned += item.amountCents;
         current.items.push({ item, splitAmount: item.amountCents });
@@ -406,7 +405,7 @@ export function PaymentsTab({
     });
 
     return breakdown;
-  }, [tripMembers, rawTripMembers, payableItems]);
+  }, [tripMembers, payableItems, realIdToSyntheticId]);
 
   const handleMarkAsPaid = async () => {
     if (!markPaidModal) return;
@@ -582,6 +581,8 @@ export function PaymentsTab({
     }
   };
 
+  // realIdToSyntheticId is defined above with memberBreakdown
+
   const handleAssignMember = async () => {
     if (!assigningItem) return;
     
@@ -591,6 +592,11 @@ export function PaymentsTab({
 
       const selectedIds = assignMemberIds.length > 0 ? assignMemberIds : (assignMemberId ? [assignMemberId] : []);
       
+      if (selectedIds.length === 0) {
+        toast.error('Please select at least one member');
+        return;
+      }
+
       // Resolve all synthetic IDs to real member IDs
       const resolvedIds: (string | null)[] = [];
       for (const id of selectedIds) {
@@ -598,6 +604,11 @@ export function PaymentsTab({
         resolvedIds.push(realId);
       }
       const validResolvedIds = resolvedIds.filter(Boolean) as string[];
+
+      if (validResolvedIds.length === 0) {
+        toast.error('Could not resolve member IDs. Please try again.');
+        return;
+      }
 
       // Delete all existing payments for this item to replace with new split
       if (assigningItem.allPayments.length > 0) {
@@ -610,26 +621,24 @@ export function PaymentsTab({
       }
 
       // Create new payment rows - one per assigned member with split amount
-      if (validResolvedIds.length > 0) {
-        const splitAmount = Math.round(assigningItem.amountCents / validResolvedIds.length);
-        const remainder = assigningItem.amountCents - (splitAmount * validResolvedIds.length);
-        
-        const rows = validResolvedIds.map((realMemberId, i) => ({
-          trip_id: tripId,
-          user_id: user.id,
-          item_type: assigningItem.type,
-          item_id: assigningItem.id,
-          item_name: assigningItem.name,
-          amount_cents: splitAmount + (i === 0 ? remainder : 0), // Give remainder to first
-          currency: 'USD',
-          quantity: 1,
-          status: assigningItem.payment?.status || 'pending',
-          assigned_member_id: realMemberId,
-        }));
+      const splitAmount = Math.round(assigningItem.amountCents / validResolvedIds.length);
+      const remainder = assigningItem.amountCents - (splitAmount * validResolvedIds.length);
+      
+      const rows = validResolvedIds.map((realMemberId, i) => ({
+        trip_id: tripId,
+        user_id: user.id,
+        item_type: assigningItem.type,
+        item_id: assigningItem.id,
+        item_name: assigningItem.name,
+        amount_cents: splitAmount + (i === 0 ? remainder : 0),
+        currency: 'USD',
+        quantity: 1,
+        status: assigningItem.payment?.status || 'pending',
+        assigned_member_id: realMemberId,
+      }));
 
-        const { error } = await supabase.from('trip_payments').insert(rows);
-        if (error) throw error;
-      }
+      const { error } = await supabase.from('trip_payments').insert(rows);
+      if (error) throw error;
 
       toast.success(validResolvedIds.length > 1 
         ? `Split between ${validResolvedIds.length} members` 
@@ -641,7 +650,7 @@ export function PaymentsTab({
       fetchPayments();
     } catch (err) {
       console.error('Error assigning member:', err);
-      toast.error('Failed to assign');
+      toast.error(`Failed to assign: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
@@ -756,7 +765,11 @@ export function PaymentsTab({
               onClick={() => {
                 setAssigningItem(item);
                 setAssignMemberId(item.assignedMemberId || '');
-                setAssignMemberIds(item.assignedMemberIds.length > 0 ? [...item.assignedMemberIds] : []);
+                // Convert real DB IDs back to synthetic member IDs for the UI checkboxes
+                const syntheticIds = item.assignedMemberIds
+                  .map(id => realIdToSyntheticId.get(id) || id)
+                  .filter((id, i, arr) => arr.indexOf(id) === i); // dedupe
+                setAssignMemberIds(syntheticIds);
               }}
               title="Assign to member"
             >
