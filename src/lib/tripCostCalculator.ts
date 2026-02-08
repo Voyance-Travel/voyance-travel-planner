@@ -87,28 +87,22 @@ export function calculateMultiCityFee(cityCount: number): number {
 export function calculateComplexity(dna: TravelDNA, tripParams?: TripParams): ComplexityResult {
   const factors: string[] = [];
 
-  // Dietary (vegan/allergy/halal/kosher count; vegetarian alone doesn't)
   if (dna.dietary && COMPLEX_DIETARY.includes(dna.dietary)) {
     factors.push(dna.dietary);
   }
 
-  // Travel party
   const party = dna.travelParty ?? [];
   if (party.includes('kids')) factors.push('kids');
   if (party.includes('pets')) factors.push('pets');
 
-  // Constraints
   if (dna.budget === 'strict') factors.push('strict_budget');
   if (dna.crowdAversion === 'high') factors.push('crowd_aversion');
   if (dna.specialOccasion) factors.push(dna.specialOccasion);
 
-  // Requests
   if (tripParams?.mustIncludes && tripParams.mustIncludes.length >= 2) {
     factors.push('must_includes');
   }
   if (dna.detailLevel === 'extended') factors.push('extended_detail');
-
-  // NOTE: accessibility is intentionally NOT counted
 
   const factorCount = factors.length;
 
@@ -155,28 +149,30 @@ export function calculateTripCredits(tripParams: TripParams, dna?: TravelDNA): T
 // PACK RECOMMENDATION
 // ============================================================================
 
-import { CREDIT_PACKS, BOOST_PACK } from '@/config/pricing';
+import { FLEXIBLE_CREDITS, VOYANCE_CLUB_PACKS, BOOST_PACK } from '@/config/pricing';
 
-/** Recommend the smallest pack that covers the shortfall */
+/** Recommend the smallest pack that covers the shortfall, preferring Club value */
 export function getRecommendedPackForEstimate(creditsNeeded: number, currentBalance: number) {
   const shortfall = Math.max(0, creditsNeeded - currentBalance);
   if (shortfall === 0) return null;
 
-  // Check boost first
-  if (BOOST_PACK.credits >= shortfall) {
-    return { ...BOOST_PACK, coversTrip: true, leftover: BOOST_PACK.credits - shortfall + currentBalance };
-  }
-
-  // Check main packs
-  for (const pack of CREDIT_PACKS) {
+  // Check flex credits first (smallest)
+  for (const pack of FLEXIBLE_CREDITS) {
     if (pack.credits >= shortfall) {
       return { ...pack, coversTrip: true, leftover: pack.credits - shortfall + currentBalance };
     }
   }
 
+  // Check club packs (better value)
+  for (const pack of VOYANCE_CLUB_PACKS) {
+    if (pack.totalCredits >= shortfall) {
+      return { ...pack, credits: pack.totalCredits, coversTrip: true, leftover: pack.totalCredits - shortfall + currentBalance };
+    }
+  }
+
   // Return largest pack even if insufficient
-  const largest = CREDIT_PACKS[CREDIT_PACKS.length - 1];
-  return { ...largest, coversTrip: largest.credits >= shortfall, leftover: largest.credits - shortfall + currentBalance };
+  const largest = VOYANCE_CLUB_PACKS[VOYANCE_CLUB_PACKS.length - 1];
+  return { ...largest, credits: largest.totalCredits, coversTrip: largest.totalCredits >= shortfall, leftover: largest.totalCredits - shortfall + currentBalance };
 }
 
 // ============================================================================

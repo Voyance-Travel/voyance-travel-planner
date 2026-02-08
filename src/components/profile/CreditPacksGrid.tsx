@@ -1,18 +1,19 @@
 /**
- * CreditPacksGrid - Reusable credit pack purchase grid
- * Used on both Pricing page and Profile page
+ * CreditPacksGrid - Two-tier credit purchase grid
+ * Quick Top-Up rows + Voyance Club cards
  */
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Loader2, Sparkles } from 'lucide-react';
+import { Loader2, Sparkles, Check, Crown, Zap, Award, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { CREDIT_PACKS, BOOST_PACK, formatCredits } from '@/config/pricing';
+import { FLEXIBLE_CREDITS, VOYANCE_CLUB_PACKS, formatCredits } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { EmbeddedCheckoutModal } from '@/components/checkout';
+import { cn } from '@/lib/utils';
 
 interface CheckoutConfig {
   priceId: string;
@@ -24,13 +25,13 @@ interface CheckoutConfig {
 }
 
 interface CreditPacksGridProps {
-  showBoost?: boolean;
+  showClub?: boolean;
   returnPath?: string;
   className?: string;
 }
 
 const CreditPacksGrid = React.forwardRef<HTMLDivElement, CreditPacksGridProps>(function CreditPacksGrid({ 
-  showBoost = true, 
+  showClub = true, 
   returnPath = '/profile?payment=success',
   className = '' 
 }, ref) {
@@ -54,7 +55,7 @@ const CreditPacksGrid = React.forwardRef<HTMLDivElement, CreditPacksGridProps>(f
       setCheckoutConfig({ 
         priceId: pack.priceId, 
         mode: 'payment', 
-        productName: `${pack.name} - ${formatCredits(pack.credits)} Credits`, 
+        productName: `${pack.name} — ${formatCredits(pack.credits)} Credits`, 
         returnPath,
         productId: pack.productId,
         credits: pack.credits,
@@ -68,68 +69,100 @@ const CreditPacksGrid = React.forwardRef<HTMLDivElement, CreditPacksGridProps>(f
 
   return (
     <>
-      <div className={className}>
-        {/* Main Credit Packs */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {CREDIT_PACKS.map((pack, index) => {
-            const isFeatured = pack.featured;
-            return (
+      <div ref={ref} className={className}>
+        {/* Quick Top-Up */}
+        <div className="mb-4">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
+            <Zap className="h-3 w-3" /> Quick Top-Up
+          </p>
+          <div className="bg-card border border-border rounded-xl divide-y divide-border overflow-hidden">
+            {FLEXIBLE_CREDITS.map((pack, index) => (
               <motion.div
                 key={pack.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className={`rounded-xl p-5 relative ${
-                  isFeatured 
-                    ? 'bg-primary/5 border-2 border-primary' 
-                    : 'bg-card border border-border'
-                }`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: index * 0.03 }}
+                className="flex items-center justify-between px-4 py-3"
               >
-                {isFeatured && (
-                  <Badge className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs">
-                    <Sparkles className="w-3 h-3 mr-1" />
-                    Popular
-                  </Badge>
-                )}
-                
-                <div className="text-center mb-3">
-                  <h3 className="text-sm font-medium text-muted-foreground">{pack.name}</h3>
-                  <div className="text-2xl font-bold text-foreground mt-1">${pack.price}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    {formatCredits(pack.credits)} credits
-                  </div>
+                <span className="text-sm text-foreground font-medium">
+                  {formatCredits(pack.credits)} credits
+                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground">${pack.price}</span>
+                  <Button 
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openCheckout(pack, pack.id)}
+                    disabled={loadingPlan === pack.id}
+                    className="min-w-[60px]"
+                  >
+                    {loadingPlan === pack.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Buy'}
+                  </Button>
                 </div>
-
-                <Button 
-                  className="w-full"
-                  size="sm"
-                  variant={isFeatured ? 'default' : 'outline'}
-                  onClick={() => openCheckout(pack, pack.id)}
-                  disabled={loadingPlan === pack.id}
-                >
-                  {loadingPlan === pack.id ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Get Credits'}
-                </Button>
               </motion.div>
-            );
-          })}
+            ))}
+          </div>
         </div>
 
-        {/* Quick Boost */}
-        {showBoost && (
-          <div className="mt-4 pt-4 border-t border-border">
-            <div className="flex items-center justify-between gap-4 text-sm">
-              <div>
-                <span className="text-muted-foreground">Quick boost: </span>
-                <span className="text-foreground font-medium">{formatCredits(BOOST_PACK.credits)} credits for ${BOOST_PACK.price}</span>
-              </div>
-              <Button 
-                variant="ghost"
-                size="sm"
-                onClick={() => openCheckout(BOOST_PACK, 'boost')}
-                disabled={loadingPlan === 'boost'}
-              >
-                {loadingPlan === 'boost' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Boost'}
-              </Button>
+        {/* Voyance Club */}
+        {showClub && (
+          <div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <Crown className="h-3 w-3" /> Voyance Club
+            </p>
+            <div className="grid sm:grid-cols-3 gap-3">
+              {VOYANCE_CLUB_PACKS.map((pack, index) => {
+                const isFeatured = pack.featured;
+                return (
+                  <motion.div
+                    key={pack.id}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className={cn(
+                      'rounded-xl p-4 relative',
+                      isFeatured 
+                        ? 'bg-primary/5 border-2 border-primary' 
+                        : 'bg-card border border-border'
+                    )}
+                  >
+                    {isFeatured && (
+                      <Badge className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[9px]">
+                        <Star className="w-2.5 h-2.5 mr-0.5" />
+                        Popular
+                      </Badge>
+                    )}
+                    
+                    <div className="mb-2">
+                      <h3 className="text-sm font-semibold text-foreground">{pack.name}</h3>
+                      <div className="text-xl font-bold text-foreground">${pack.price}</div>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground mb-2">
+                      {formatCredits(pack.baseCredits)} <span className="text-primary">+ {formatCredits(pack.bonusCredits)} bonus</span> = <span className="font-semibold text-foreground">{formatCredits(pack.totalCredits)}</span>
+                    </p>
+
+                    <ul className="space-y-1 mb-3">
+                      {pack.perks.slice(0, 2).map((perk, pi) => (
+                        <li key={pi} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                          <Check className="h-3 w-3 text-primary shrink-0" />
+                          {perk}
+                        </li>
+                      ))}
+                    </ul>
+
+                    <Button 
+                      className="w-full"
+                      size="sm"
+                      variant={isFeatured ? 'default' : 'outline'}
+                      onClick={() => openCheckout({ ...pack, credits: pack.totalCredits }, pack.id)}
+                      disabled={loadingPlan === pack.id}
+                    >
+                      {loadingPlan === pack.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : `Get ${pack.name}`}
+                    </Button>
+                  </motion.div>
+                );
+              })}
             </div>
           </div>
         )}

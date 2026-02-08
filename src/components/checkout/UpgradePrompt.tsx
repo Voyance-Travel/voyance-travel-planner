@@ -1,16 +1,16 @@
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
- import { ArrowRight, Sparkles, Ticket, Loader2, Plus, Pencil } from 'lucide-react';
-import { CREDIT_PACKS, BOOST_PACK, formatCredits, CREDIT_COSTS } from '@/config/pricing';
+import { ArrowRight, Sparkles, Loader2, Plus, Pencil, Crown, Zap } from 'lucide-react';
+import { FLEXIBLE_CREDITS, VOYANCE_CLUB_PACKS, BOOST_PACK, formatCredits, CREDIT_COSTS, getRecommendedPack } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { EmbeddedCheckoutModal } from './EmbeddedCheckoutModal';
 import { ROUTES } from '@/config/routes';
 import { useCredits } from '@/hooks/useCredits';
- import { useManualBuilderStore } from '@/stores/manual-builder-store';
- import { toast as sonnerToast } from 'sonner';
+import { useManualBuilderStore } from '@/stores/manual-builder-store';
+import { toast as sonnerToast } from 'sonner';
 
 interface UpgradePromptProps {
   isOpen: boolean;
@@ -18,15 +18,15 @@ interface UpgradePromptProps {
   featureName?: string;
   context?: 'regenerate' | 'route' | 'budget' | 'general' | 'credits' | 'swap' | 'trip_generation' | 'hotel_search';
   creditsNeeded?: number;
-   tripId?: string;
-   showManualOption?: boolean;
+  tripId?: string;
+  showManualOption?: boolean;
 }
 
 // Action labels for display
 const ACTION_LABELS: Record<string, { label: string; cost: number }> = {
   swap: { label: 'Swap activity', cost: CREDIT_COSTS.SWAP_ACTIVITY },
   regenerate: { label: 'Regenerate day', cost: CREDIT_COSTS.REGENERATE_DAY },
-  trip_generation: { label: 'Generate trip', cost: 0 }, // Variable cost
+  trip_generation: { label: 'Generate trip', cost: 0 },
   hotel_search: { label: 'Hotel search', cost: CREDIT_COSTS.HOTEL_SEARCH },
 };
 
@@ -36,8 +36,8 @@ export function UpgradePrompt({
   featureName = 'this feature',
   context = 'general',
   creditsNeeded = 0,
-   tripId,
-   showManualOption = false,
+  tripId,
+  showManualOption = false,
 }: UpgradePromptProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -49,42 +49,31 @@ export function UpgradePrompt({
     credits: number;
     name: string;
   } | null>(null);
-   const { enableManualBuilder } = useManualBuilderStore();
+  const { enableManualBuilder } = useManualBuilderStore();
 
   const currentBalance = creditBalance?.totalCredits ?? 0;
   const actionInfo = context && ACTION_LABELS[context];
   const actionCost = actionInfo?.cost ?? creditsNeeded;
   const actionLabel = actionInfo?.label ?? featureName;
    
-   const handleManualBuild = () => {
-     if (tripId) {
-       enableManualBuilder(tripId);
-       sonnerToast.success('Manual builder mode enabled! You can now edit freely.');
-     }
-     onClose();
-   };
+  const handleManualBuild = () => {
+    if (tripId) {
+      enableManualBuilder(tripId);
+      sonnerToast.success('Manual builder mode enabled! You can now edit freely.');
+    }
+    onClose();
+  };
   
-  // Show boost if action cost is affordable with 100 credits (not for trip_generation)
-  const canUseBoost = actionCost <= 100 && context !== 'trip_generation';
+  // Use smallest flex credit for small actions
+  const canUseQuickTopUp = actionCost <= BOOST_PACK.credits && context !== 'trip_generation';
 
   const getContextMessage = () => {
-    if (context === 'route') {
-      return 'Route optimization is free! But you need credits to unlock days first.';
-    }
-    if (context === 'budget') {
-      return 'Group budgeting is included with any unlocked trip.';
-    }
-    return null; // We'll show the structured display instead
+    if (context === 'route') return 'Route optimization is free! But you need credits to unlock days first.';
+    if (context === 'budget') return 'Group budgeting is included with any unlocked trip.';
+    return null;
   };
 
-  // For actions that can't use top-up, recommend appropriate pack
-  const getRecommendedPack = () => {
-    const needed = Math.max(creditsNeeded, actionCost);
-    if (needed <= 200) return CREDIT_PACKS[0]; // Single
-    if (needed <= 500) return CREDIT_PACKS[1]; // Starter
-    if (needed <= 1200) return CREDIT_PACKS[2]; // Explorer
-    return CREDIT_PACKS[3]; // Adventurer
-  };
+  const recommended = getRecommendedPack(Math.max(creditsNeeded, actionCost));
 
   const handleBuyPack = async (pack: { priceId: string; productId: string; credits: number; name: string; id: string }) => {
     setLoadingPack(pack.id);
@@ -111,7 +100,6 @@ export function UpgradePrompt({
   };
 
   const contextMessage = getContextMessage();
-  const recommended = getRecommendedPack();
 
   return (
     <>
@@ -132,42 +120,46 @@ export function UpgradePrompt({
             </div>
           ) : (
             <div className="space-y-4 pt-2">
-              {/* Boost Option (primary for small actions) */}
-              {canUseBoost && (
+              {/* Quick Top-Up for small actions */}
+              {canUseQuickTopUp && (
                 <Button 
                   size="lg" 
                   className="w-full text-base"
                   onClick={() => handleBuyPack(BOOST_PACK)}
-                  disabled={loadingPack === 'boost'}
+                  disabled={loadingPack === BOOST_PACK.id}
                 >
-                  {loadingPack === 'boost' ? (
+                  {loadingPack === BOOST_PACK.id ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <>
-                      <Plus className="mr-2 h-4 w-4" />
-                      +100 credits · $8.99
+                      <Zap className="mr-2 h-4 w-4" />
+                      +{BOOST_PACK.credits} credits · ${BOOST_PACK.price}
                     </>
                   )}
                 </Button>
               )}
 
-              {/* For unlock_day or when boost doesn't apply, show recommended pack */}
-              {!canUseBoost && (
+              {/* Recommended pack for larger needs */}
+              {!canUseQuickTopUp && recommended && (
                 <div className="rounded-lg border-2 border-primary p-4 bg-primary/5">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-primary" />
+                      {'type' in recommended && recommended.type === 'club' ? (
+                        <Crown className="h-4 w-4 text-primary" />
+                      ) : (
+                        <Sparkles className="h-4 w-4 text-primary" />
+                      )}
                       <h4 className="font-medium text-sm">{recommended.name}</h4>
                     </div>
                     <span className="text-sm font-semibold">${recommended.price}</span>
                   </div>
                   <p className="text-xs text-muted-foreground mb-3">
-                    {formatCredits(recommended.credits)} credits · {recommended.description}
+                    {formatCredits(recommended.credits)} credits
                   </p>
                   <Button 
                     size="sm" 
                     className="w-full"
-                    onClick={() => handleBuyPack(recommended)}
+                    onClick={() => handleBuyPack(recommended as any)}
                     disabled={loadingPack === recommended.id}
                   >
                     {loadingPack === recommended.id ? (
@@ -182,50 +174,26 @@ export function UpgradePrompt({
                 </div>
               )}
 
-              {/* "Or get more" section */}
-              {canUseBoost && (
+              {/* Alternative options */}
+              {canUseQuickTopUp && (
                 <div className="text-center space-y-2">
                   <p className="text-xs text-muted-foreground">Or get more:</p>
                   <div className="flex items-center justify-center gap-3 text-xs">
                     <button 
-                      onClick={() => handleBuyPack(CREDIT_PACKS[0])}
+                      onClick={() => handleBuyPack(FLEXIBLE_CREDITS[1] as any)}
                       className="text-primary hover:underline"
                       disabled={!!loadingPack}
                     >
-                      {formatCredits(CREDIT_PACKS[0].credits)} for ${CREDIT_PACKS[0].price}
+                      {formatCredits(FLEXIBLE_CREDITS[1].credits)} for ${FLEXIBLE_CREDITS[1].price}
                     </button>
                     <span className="text-muted-foreground">·</span>
                     <button 
-                      onClick={() => handleBuyPack(CREDIT_PACKS[1])}
+                      onClick={() => handleBuyPack(VOYANCE_CLUB_PACKS[0] as any)}
                       className="text-primary hover:underline"
                       disabled={!!loadingPack}
                     >
-                      {formatCredits(CREDIT_PACKS[1].credits)} for ${CREDIT_PACKS[1].price}
+                      {formatCredits(VOYANCE_CLUB_PACKS[0].totalCredits)} for ${VOYANCE_CLUB_PACKS[0].price}
                     </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Smaller option when boost doesn't apply */}
-              {!canUseBoost && recommended.id !== 'single' && (
-                <div className="rounded-lg border border-border p-3 hover:border-primary/50 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Ticket className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">Single · 200 credits</span>
-                    </div>
-                    <Button 
-                      size="sm" 
-                      variant="ghost"
-                      onClick={() => handleBuyPack(CREDIT_PACKS[0])}
-                      disabled={loadingPack === 'single'}
-                    >
-                      {loadingPack === 'single' ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        '${CREDIT_PACKS[0].price}'
-                      )}
-                    </Button>
                   </div>
                 </div>
               )}
@@ -240,18 +208,18 @@ export function UpgradePrompt({
                 </button>
               </p>
                
-               {/* Manual builder option for unlock_day or when explicitly requested */}
-               {(showManualOption || context === 'trip_generation') && tripId && (
-                 <div className="pt-3 mt-2 border-t border-border">
-                   <button
-                     onClick={handleManualBuild}
-                     className="flex items-center justify-center gap-2 w-full text-xs text-muted-foreground hover:text-foreground py-2 transition-colors"
-                   >
-                     <Pencil className="h-3 w-3" />
-                     I'll build it myself
-                   </button>
-                 </div>
-               )}
+              {/* Manual builder option */}
+              {(showManualOption || context === 'trip_generation') && tripId && (
+                <div className="pt-3 mt-2 border-t border-border">
+                  <button
+                    onClick={handleManualBuild}
+                    className="flex items-center justify-center gap-2 w-full text-xs text-muted-foreground hover:text-foreground py-2 transition-colors"
+                  >
+                    <Pencil className="h-3 w-3" />
+                    I'll build it myself
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>
@@ -267,7 +235,7 @@ export function UpgradePrompt({
           }}
           priceId={checkoutConfig.priceId}
           mode="payment"
-          productName={`${checkoutConfig.name} - ${formatCredits(checkoutConfig.credits)} Credits`}
+          productName={`${checkoutConfig.name} — ${formatCredits(checkoutConfig.credits)} Credits`}
           returnPath="/profile?tab=subscription&credits_added=true"
           productId={checkoutConfig.productId}
           credits={checkoutConfig.credits}
