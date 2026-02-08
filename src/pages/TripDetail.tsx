@@ -608,8 +608,13 @@ export default function TripDetail() {
 
   // Handle itinerary generation complete - also force-save to backend
   const handleGenerationComplete = useCallback(async (generatedDays: GeneratedDay[], generatedOverview?: TripOverview) => {
-    // Detect if this is a preview itinerary (check metadata on first day)
-    const isPreview = generatedDays.some(d => (d.metadata as any)?.isPreview === true);
+    // Detect if this is a preview itinerary — only check non-locked days.
+    // Locked placeholder days always have isPreview:true but that doesn't mean
+    // the actual generated days are previews (e.g., first-trip free 2-day generation).
+    const nonLockedDays = generatedDays.filter(d => !(d.metadata as any)?.isLocked);
+    const isPreview = nonLockedDays.length > 0
+      ? nonLockedDays.every(d => (d.metadata as any)?.isPreview === true)
+      : false;
     
     const itineraryPayload = { 
       days: generatedDays,
