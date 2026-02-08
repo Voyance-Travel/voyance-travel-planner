@@ -979,6 +979,99 @@ export default function UnitEconomics() {
           </div>
         )}
 
+        {/* Credit Consumption by Action — tracks what actions are being charged */}
+        {econData && (
+          <details style={{
+            marginBottom: 24,
+            background: "rgba(30, 41, 59, 0.5)",
+            borderRadius: 12,
+            border: "1px solid rgba(168, 85, 247, 0.2)",
+            overflow: "hidden",
+          }} open>
+            <summary style={{ padding: "16px 20px", cursor: "pointer", fontSize: 14, fontWeight: 600, color: "#A855F7", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 10, transition: "transform 0.2s" }}>▶</span>
+              ⚡ Credit Consumption by Action
+              <span style={{ fontSize: 11, color: "#94A3B8", fontWeight: 400, marginLeft: 8 }}>
+                {econData.revenue.spendByAction ? `${Object.values(econData.revenue.spendByAction).reduce((s, a) => s + a.count, 0)} actions · ${Object.values(econData.revenue.spendByAction).reduce((s, a) => s + a.credits, 0).toLocaleString()} cr spent` : 'No data'}
+              </span>
+            </summary>
+            <div style={{ padding: "12px 20px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid rgba(100, 116, 139, 0.2)" }}>
+                    <th style={{ textAlign: "left", padding: "6px 8px", color: "#94A3B8", fontWeight: 500 }}>Action</th>
+                    <th style={{ textAlign: "right", padding: "6px 8px", color: "#94A3B8", fontWeight: 500 }}>Uses</th>
+                    <th style={{ textAlign: "right", padding: "6px 8px", color: "#94A3B8", fontWeight: 500 }}>Credits</th>
+                    <th style={{ textAlign: "right", padding: "6px 8px", color: "#94A3B8", fontWeight: 500 }}>Avg/Use</th>
+                    <th style={{ textAlign: "right", padding: "6px 8px", color: "#94A3B8", fontWeight: 500 }}>Est. Cost</th>
+                    <th style={{ textAlign: "center", padding: "6px 8px", color: "#94A3B8", fontWeight: 500 }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(econData.revenue.spendByAction || {})
+                    .sort(([, a], [, b]) => b.credits - a.credits)
+                    .map(([action, data]) => {
+                      const costPerUse = ACTION_COSTS[action as keyof typeof ACTION_COSTS] || 0.01;
+                      const estCost = data.count * costPerUse;
+                      const avgCredits = data.count > 0 ? (data.credits / data.count).toFixed(1) : '0';
+                      const isTracked = data.credits > 0;
+                      const isFreeOnly = data.credits === 0 && data.count > 0;
+                      
+                      return (
+                        <tr key={action} style={{ borderBottom: "1px solid rgba(100, 116, 139, 0.1)" }}>
+                          <td style={{ padding: "8px", color: "#E2E8F0", fontWeight: 500, textTransform: "capitalize" }}>
+                            {action.replace(/_/g, ' ')}
+                          </td>
+                          <td style={{ padding: "8px", textAlign: "right", color: "#CBD5E1", fontFamily: "'JetBrains Mono', monospace" }}>
+                            {data.count}
+                          </td>
+                          <td style={{ padding: "8px", textAlign: "right", color: isTracked ? "#A855F7" : "#64748B", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>
+                            {data.credits.toLocaleString()}
+                          </td>
+                          <td style={{ padding: "8px", textAlign: "right", color: "#94A3B8", fontFamily: "'JetBrains Mono', monospace" }}>
+                            {avgCredits}
+                          </td>
+                          <td style={{ padding: "8px", textAlign: "right", color: "#F87171", fontFamily: "'JetBrains Mono', monospace" }}>
+                            ${estCost.toFixed(3)}
+                          </td>
+                          <td style={{ padding: "8px", textAlign: "center" }}>
+                            {isFreeOnly ? (
+                              <span style={{ fontSize: 10, background: "rgba(52, 211, 153, 0.15)", color: "#34D399", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>FREE CAP</span>
+                            ) : isTracked ? (
+                              <span style={{ fontSize: 10, background: "rgba(168, 85, 247, 0.15)", color: "#A855F7", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>CHARGED</span>
+                            ) : (
+                              <span style={{ fontSize: 10, background: "rgba(248, 113, 113, 0.15)", color: "#F87171", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>NOT TRACKED</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  {/* Show expected actions that are MISSING from spend tracking */}
+                  {['regenerate_day', 'swap_activity', 'transport_mode_change'].filter(
+                    a => !(econData.revenue.spendByAction || {})[a]
+                  ).map(action => (
+                    <tr key={action} style={{ borderBottom: "1px solid rgba(100, 116, 139, 0.1)", opacity: 0.6 }}>
+                      <td style={{ padding: "8px", color: "#F87171", fontWeight: 500, textTransform: "capitalize" }}>
+                        ⚠️ {action.replace(/_/g, ' ')}
+                      </td>
+                      <td style={{ padding: "8px", textAlign: "right", color: "#64748B", fontFamily: "'JetBrains Mono', monospace" }}>0</td>
+                      <td style={{ padding: "8px", textAlign: "right", color: "#64748B", fontFamily: "'JetBrains Mono', monospace" }}>0</td>
+                      <td style={{ padding: "8px", textAlign: "right", color: "#64748B", fontFamily: "'JetBrains Mono', monospace" }}>-</td>
+                      <td style={{ padding: "8px", textAlign: "right", color: "#64748B", fontFamily: "'JetBrains Mono', monospace" }}>-</td>
+                      <td style={{ padding: "8px", textAlign: "center" }}>
+                        <span style={{ fontSize: 10, background: "rgba(248, 113, 113, 0.15)", color: "#F87171", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>NEVER FIRED</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p style={{ fontSize: 10, color: "#64748B", marginTop: 8, fontStyle: "italic" }}>
+                "FREE CAP" = within per-trip free allowance (0 credits charged). "NEVER FIRED" = action bypassed spend-credits (now fixed). "CHARGED" = credits deducted.
+              </p>
+            </div>
+          </details>
+        )}
+
         {/* Global Controls - Volume & Conversion */}
         <div style={{ 
           display: "grid", 
