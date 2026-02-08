@@ -349,14 +349,10 @@ async function getStaticFallback(
       };
     }
 
-    const arch = getRandomArchetype();
+    // No static fallback — return error so we don't show generic content
     return {
       destination: destination,
-      days: [
-        { dayNumber: 1, headline: "Explore the Local Scene", description: "Discover hidden gems and local favorites in the heart of the city." },
-        { dayNumber: 2, headline: "Cultural Immersion", description: "Dive into history, art, and the stories that shape this place." },
-        { dayNumber: 3, headline: "Neighborhood Wandering", description: "Get lost on purpose. The best finds aren't on any map." },
-      ],
+      days: [],
       totalDays: 7,
       archetypeUsed: arch.name,
       archetypeTagline: arch.tagline,
@@ -588,31 +584,35 @@ async function generateItineraryPreview(destination: string, archetype: { name: 
       messages: [
         {
           role: "system",
-          content: `You are a travel expert creating quick trip previews. Generate a 2-day taste of what a trip could look like.
+          content: `You are a travel expert creating quick trip previews. Generate a 3-day taste of what a trip could look like.
 
 You are building this preview as a "${archetype.name}" — ${archetype.style}.
 
 CRITICAL RULES:
 1. Match the "${archetype.name}" style throughout: ${archetype.style}
-2. Be SPECIFIC to the destination - use real neighborhood names, real landmarks
-3. Keep each day to ONE headline (5-7 words) and ONE description (15-25 words)
-4. Show the CONTRAST with typical rushed tourism
-5. Make it feel like insider knowledge
+2. Be HYPER-SPECIFIC: name REAL places, REAL restaurants, REAL neighborhoods, REAL landmarks
+3. Example of BAD generic headline: "Explore the Local Scene" or "Cultural Immersion"
+4. Example of GOOD specific headline: "Morning at Tsukiji Outer Market" or "Sunset from Supertree Grove"
+5. Each headline should reference a SPECIFIC real place or activity (5-8 words)
+6. Each description should mention 2-3 REAL venues, streets, or neighborhoods by name (20-30 words)
+7. Show insider knowledge — things only a local or experienced traveler would know
+8. NO generic phrases like "hidden gems", "local favorites", "immerse yourself", "explore the city"
 
-TONE: Confident, warm, slightly irreverent. Like a well-traveled friend sharing secrets.
+TONE: Confident, specific, like a friend who lived there for a year sharing their actual favorites.
 
 OUTPUT FORMAT (JSON only, no markdown):
 {
   "days": [
     { "dayNumber": 1, "headline": "...", "description": "..." },
-    { "dayNumber": 2, "headline": "...", "description": "..." }
+    { "dayNumber": 2, "headline": "...", "description": "..." },
+    { "dayNumber": 3, "headline": "...", "description": "..." }
   ],
   "totalDays": 7
 }`
         },
         {
           role: "user",
-          content: `Create a quick 2-day preview for: ${destination}`
+          content: `Create a quick 3-day preview for: ${destination}`
         }
       ],
       temperature: 0.7,
