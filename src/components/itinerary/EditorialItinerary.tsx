@@ -12,6 +12,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronUp, ChevronDown, MapPin, Clock, Star, Save,
@@ -63,6 +64,7 @@ import { PaymentsTab } from './PaymentsTab';
 import { BudgetTab } from '@/components/planner/budget/BudgetTab';
 import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useTripBudget } from '@/hooks/useTripBudget';
+import { syncItineraryToBudget } from '@/services/tripBudgetService';
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { useAuth } from '@/contexts/AuthContext';
 import { UpgradePrompt } from '@/components/checkout/UpgradePrompt';
@@ -834,6 +836,7 @@ export function EditorialItinerary({
   onUnlockComplete,
   parsedMetadata,
 }: EditorialItineraryProps) {
+  const queryClient = useQueryClient();
   const [days, setDays] = useState<EditorialDay[]>(initialDays);
   const [expandedDays, setExpandedDays] = useState<number[]>(initialDays.map(d => d.dayNumber));
   const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'payments' | 'details' | 'needtoknow' | 'collab'>('itinerary');
@@ -1630,6 +1633,26 @@ export function EditorialItinerary({
         setHasChanges(false);
         setLastSaved(new Date());
         toast.success('Itinerary saved!');
+        
+        // Re-sync budget ledger with updated itinerary
+        try {
+          const daysForSync = days.map(day => ({
+            dayNumber: day.dayNumber,
+            date: day.date || '',
+            activities: day.activities.map(act => ({
+              id: act.id,
+              title: act.title || 'Activity',
+              category: act.category || act.type || 'activities',
+              cost: act.cost ? (typeof act.cost === 'number' ? { amount: act.cost, currency: 'USD' } : act.cost) : undefined,
+            })),
+          }));
+          await syncItineraryToBudget(tripId, daysForSync);
+          queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
+          queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
+          queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
+        } catch (syncErr) {
+          console.error('[EditorialItinerary] Budget sync after save failed:', syncErr);
+        }
       } else {
         toast.error('Could not find trip to save');
       }
@@ -2774,6 +2797,15 @@ export function EditorialItinerary({
             travelers={travelers}
             totalDays={days.length}
             itineraryDays={days}
+            onActivityRemove={(activityId) => {
+              // Remove the activity from itinerary days when deleted from budget
+              setDays(prev => prev.map(day => ({
+                ...day,
+                activities: day.activities.filter(act => act.id !== activityId),
+              })));
+              setHasChanges(true);
+              toast.success('Activity removed from itinerary');
+            }}
           />
         )}
 

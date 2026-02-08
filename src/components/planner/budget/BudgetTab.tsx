@@ -60,6 +60,8 @@ interface BudgetTabProps {
   totalDays: number;
   /** Pass itinerary days to auto-sync planned costs to budget ledger */
   itineraryDays?: ItineraryDay[];
+  /** Called when a planned budget entry is removed so the linked activity can be removed from the itinerary */
+  onActivityRemove?: (activityId: string) => void;
 }
 
 const categoryIcons: Record<BudgetCategory, React.ReactNode> = {
@@ -89,7 +91,7 @@ const categoryColors: Record<BudgetCategory, string> = {
   misc: 'bg-slate-500',
 };
 
-export function BudgetTab({ tripId, travelers, totalDays, itineraryDays }: BudgetTabProps) {
+export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove }: BudgetTabProps) {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
   const syncAttempted = useRef(false);
   
@@ -442,7 +444,13 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays }: Budge
                         variant="ghost"
                         size="icon"
                         className="h-6 w-6"
-                        onClick={() => removeEntry(entry.id)}
+                        onClick={() => {
+                          // If this is a planned entry linked to an itinerary activity, notify parent
+                          if (entry.entry_type === 'planned' && entry.activity_id && onActivityRemove) {
+                            onActivityRemove(entry.activity_id);
+                          }
+                          removeEntry(entry.id);
+                        }}
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
