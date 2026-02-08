@@ -55,7 +55,7 @@ const CreditPacksGrid = React.forwardRef<HTMLDivElement, CreditPacksGridProps>(f
       setCheckoutConfig({ 
         priceId: pack.priceId, 
         mode: 'payment', 
-        productName: `${pack.name} — ${formatCredits(pack.credits)} Credits`, 
+        productName: `${pack.name} - ${formatCredits(pack.credits)} Credits`, 
         returnPath,
         productId: pack.productId,
         credits: pack.credits,

@@ -340,7 +340,7 @@ export default function UserTracking() {
                   .sort((a, b) => b[1].count - a[1].count)
                   .slice(0, 10)
                   .map(([path, data]) => {
-                    const avgTime = data.timeEntries > 0 ? formatDuration(data.totalTime / data.timeEntries) : '—';
+                    const avgTime = data.timeEntries > 0 ? formatDuration(data.totalTime / data.timeEntries) : '-';
                     return (
                       <Row key={path} label={niceName(path)} sublabel={path} value={data.count} total={analytics.totalSessions}
                         extra={
@@ -371,8 +371,8 @@ export default function UserTracking() {
                     <div key={path} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 4, padding: '5px 0', borderBottom: '1px solid #1E293B' }}>
                       <span style={{ fontSize: 12, color: '#E2E8F0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{niceName(path)}</span>
                       <span style={{ fontSize: 12, color: '#38BDF8', textAlign: 'right', fontFamily: 'monospace' }}>{data.views}</span>
-                      <span style={{ fontSize: 12, color: '#94A3B8', textAlign: 'right', fontFamily: 'monospace' }}>{data.avgTime ? formatDuration(data.avgTime) : '—'}</span>
-                      <span style={{ fontSize: 12, color: data.avgScroll > 70 ? '#34D399' : data.avgScroll > 30 ? '#FBBF24' : '#F87171', textAlign: 'right', fontFamily: 'monospace' }}>{data.avgScroll ? `${data.avgScroll}%` : '—'}</span>
+                      <span style={{ fontSize: 12, color: '#94A3B8', textAlign: 'right', fontFamily: 'monospace' }}>{data.avgTime ? formatDuration(data.avgTime) : '-'}</span>
+                      <span style={{ fontSize: 12, color: data.avgScroll > 70 ? '#34D399' : data.avgScroll > 30 ? '#FBBF24' : '#F87171', textAlign: 'right', fontFamily: 'monospace' }}>{data.avgScroll ? `${data.avgScroll}%` : '-'}</span>
                     </div>
                   ))}
               </Panel>
@@ -465,8 +465,8 @@ export default function UserTracking() {
                             <td style={{ padding: '7px 10px', textAlign: 'right', color: '#F87171', fontFamily: 'monospace' }}>{row.exits}</td>
                             <td style={{ padding: '7px 10px', textAlign: 'right', color: '#94A3B8', fontFamily: 'monospace' }}>{row.bounces}</td>
                             <td style={{ padding: '7px 10px', textAlign: 'right', color: row.bounceRate > 60 ? '#F87171' : row.bounceRate > 30 ? '#FBBF24' : '#34D399', fontFamily: 'monospace' }}>{row.bounceRate}%</td>
-                            <td style={{ padding: '7px 10px', textAlign: 'right', color: '#94A3B8', fontFamily: 'monospace' }}>{row.avgTime ? formatDuration(row.avgTime) : '—'}</td>
-                            <td style={{ padding: '7px 10px', textAlign: 'right', color: row.avgScroll > 70 ? '#34D399' : row.avgScroll > 30 ? '#FBBF24' : '#F87171', fontFamily: 'monospace' }}>{row.avgScroll ? `${row.avgScroll}%` : '—'}</td>
+                            <td style={{ padding: '7px 10px', textAlign: 'right', color: '#94A3B8', fontFamily: 'monospace' }}>{row.avgTime ? formatDuration(row.avgTime) : '-'}</td>
+                            <td style={{ padding: '7px 10px', textAlign: 'right', color: row.avgScroll > 70 ? '#34D399' : row.avgScroll > 30 ? '#FBBF24' : '#F87171', fontFamily: 'monospace' }}>{row.avgScroll ? `${row.avgScroll}%` : '-'}</td>
                             <td style={{ padding: '7px 10px', textAlign: 'right', color: row.exitRate > 50 ? '#F87171' : '#94A3B8', fontFamily: 'monospace' }}>{row.exitRate}%</td>
                           </tr>
                         ));

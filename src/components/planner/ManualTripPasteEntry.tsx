@@ -55,7 +55,7 @@ export function ManualTripPasteEntry() {
     }
 
     if (pasteText.trim().length < 50) {
-      toast.error('Please paste more content — we need at least a few activities to organize');
+      toast.error('Please paste more content - we need at least a few activities to organize');
       return;
     }
 
@@ -201,7 +201,7 @@ export function ManualTripPasteEntry() {
 
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">
-                {pasteText.length > 0 ? `${pasteText.length.toLocaleString()} characters` : 'Free — no credits needed'}
+                {pasteText.length > 0 ? `${pasteText.length.toLocaleString()} characters` : 'Free - no credits needed'}
               </span>
               <Button
                 onClick={handleParse}

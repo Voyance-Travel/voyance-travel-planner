@@ -248,7 +248,7 @@ const CREDIT_TIERS = [
     credits: 600, // 500 base + 100 bonus
     color: "#A78BFA", 
     type: "club" as const,
-    description: "Club entry — 500 + 100 bonus",
+    description: "Club entry - 500 + 100 bonus",
     // 6 days = 540cr, leaving 60cr → 4 swaps (60cr)
     typicalUsage: { daysUnlocked: 6, swaps: 4, regenerates: 0, restaurants: 0, aiMessages: 0 },
     // Cost: 6×$0.018 + 4×$0.009 = $0.144
@@ -262,7 +262,7 @@ const CREDIT_TIERS = [
     credits: 1600, // 1200 base + 400 bonus
     color: "#34D399", 
     type: "club" as const,
-    description: "Popular — 1,200 + 400 bonus",
+    description: "Popular - 1,200 + 400 bonus",
     // 17 days = 1530cr, leaving 70cr → 4 swaps (60cr) + 1 AI (10cr)
     typicalUsage: { daysUnlocked: 17, swaps: 4, regenerates: 0, restaurants: 0, aiMessages: 1 },
     // Cost: 17×$0.018 + 4×$0.009 + 1×$0.005 = $0.347
@@ -276,7 +276,7 @@ const CREDIT_TIERS = [
     credits: 3200, // 2500 base + 700 bonus
     color: "#F59E0B", 
     type: "club" as const,
-    description: "Best value — 2,500 + 700 bonus",
+    description: "Best value - 2,500 + 700 bonus",
     // 35 days = 3150cr, leaving 50cr → 3 swaps (45cr) + 5cr leftover
     typicalUsage: { daysUnlocked: 35, swaps: 3, regenerates: 0, restaurants: 0, aiMessages: 0 },
     // Cost: 35×$0.018 + 3×$0.009 = $0.657
@@ -815,7 +815,7 @@ export default function UnitEconomics() {
             color: metricsError ? "#F87171" : "#94A3B8",
           }}>
             {metricsLoading && "⏳ Loading..."}
-            {metricsError && "⚠️ Failed to load metrics — using fallback data"}
+            {metricsError && "⚠️ Failed to load metrics - using fallback data"}
             {dataQualityWarning && !metricsLoading && !metricsError && `📊 ${dataQualityWarning}`}
             {!hasRealData && !metricsLoading && !metricsError && !dataQualityWarning && "📋 Using fallback baseline (61-trip sample)"}
           </div>
@@ -831,7 +831,7 @@ export default function UnitEconomics() {
           }}>
             {[
               { label: "API Spend", value: `$${econData.costs.totalCost.toFixed(2)}`, sub: `${econData.dataQuality.costDataDays}d tracked`, color: "#F87171" },
-              { label: "Revenue", value: econData.revenue.totalRevenue > 0 ? `$${econData.revenue.totalRevenue.toFixed(2)}` : "—", sub: econData.revenue.purchaseCount > 0 ? `${econData.revenue.purchaseCount} purchases` : "No purchases", color: "#34D399" },
+              { label: "Revenue", value: econData.revenue.totalRevenue > 0 ? `$${econData.revenue.totalRevenue.toFixed(2)}` : "-", sub: econData.revenue.purchaseCount > 0 ? `${econData.revenue.purchaseCount} purchases` : "No purchases", color: "#34D399" },
               { label: "Users", value: `${econData.users.totalUsers}`, sub: `${econData.users.paidUsers} paid`, color: "#38BDF8" },
               { label: "Trips", value: `${econData.trips.totalTrips}`, sub: `${econData.trips.uniqueTripUsers} creators`, color: "#A855F7" },
               { label: "Credit Liability", value: `${(econData.users.outstandingPurchased + econData.users.outstandingFree).toLocaleString()}`, sub: `${econData.users.outstandingPurchased.toLocaleString()} paid · ${econData.users.outstandingFree.toLocaleString()} free`, color: "#FBBF24", expandable: true },
@@ -881,7 +881,7 @@ export default function UnitEconomics() {
                 <p style={{ fontSize: 20, fontWeight: 700, color: "#94A3B8", fontFamily: "'JetBrains Mono', monospace", margin: "0 0 2px" }}>
                   {econData.users.outstandingFree.toLocaleString()}
                 </p>
-                <p style={{ fontSize: 10, color: "#64748B", margin: 0 }}>No cash liability — expires naturally</p>
+                <p style={{ fontSize: 10, color: "#64748B", margin: 0 }}>No cash liability - expires naturally</p>
               </div>
             </div>
           </details>
@@ -1501,8 +1501,8 @@ export default function UnitEconomics() {
             {/* Clean cost model breakdown */}
             {[
               { label: "Paid Trip Cost", value: 0.091, color: "#38BDF8", note: "From trip_cost_tracking: 567 entries / 41 trips", breakdown: "Photos $0.085 + Hotels $0.005 + Perplexity $0.001" },
-              { label: "Monthly Grant (ALL users)", value: FREE_USER_ECONOMICS.recurringCostPerMonth, color: "#F87171", note: "150cr/mo for ALL users (free + paid), 2-month expiry, 60% usage rate", breakdown: "Blended: unlock 1 day ($0.10) or swaps ($0.02) — avg $0.04 if used. Purchased credits never expire." },
-              { label: "Acquisition (one-time)", value: FREE_USER_ECONOMICS.acquisitionCostBlended, color: "#FB923C", note: "First trip bypasses credits entirely — full 2-day enriched trip + ~2.1 edits", breakdown: `Base $0.043 + 2 days $0.200 + edits $0.025 + DNA $0.010. Subsequent trip previews always free ($0.01 AI-only).` },
+              { label: "Monthly Grant (ALL users)", value: FREE_USER_ECONOMICS.recurringCostPerMonth, color: "#F87171", note: "150cr/mo for ALL users (free + paid), 2-month expiry, 60% usage rate", breakdown: "Blended: unlock 1 day ($0.10) or swaps ($0.02) - avg $0.04 if used. Purchased credits never expire." },
+              { label: "Acquisition (one-time)", value: FREE_USER_ECONOMICS.acquisitionCostBlended, color: "#FB923C", note: "First trip bypasses credits entirely - full 2-day enriched trip + ~2.1 edits", breakdown: `Base $0.043 + 2 days $0.200 + edits $0.025 + DNA $0.010. Subsequent trip previews always free ($0.01 AI-only).` },
               { label: "Fixed Monthly", value: 49, color: "#F59E0B", note: "Cloud $25 + Domain $4 + DevOps $20", breakdown: `$${(49 / volume).toFixed(2)}/trip at ${volume} trips/mo` },
             ].map((item, i) => {
               const maxVal = 49;
@@ -1915,7 +1915,7 @@ export default function UnitEconomics() {
                         {tier.credits}
                       </td>
                       <td style={{ padding: "8px 10px", color: tier.typicalUsage.daysUnlocked === 0 ? "#F87171" : "#34D399", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                        {tier.typicalUsage.daysUnlocked === 0 ? "—" : tier.typicalUsage.daysUnlocked}
+                        {tier.typicalUsage.daysUnlocked === 0 ? "-" : tier.typicalUsage.daysUnlocked}
                       </td>
                       <td style={{ padding: "8px 10px", color: "#94A3B8", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                         {tier.typicalUsage.swaps}

@@ -571,7 +571,7 @@ export default function TestSuites() {
               • Test results shown are from the most recent E2E browser testing session.
             </p>
             <p>
-              • "Run Suite" buttons are placeholders—actual test execution happens via browser automation.
+              • "Run Suite" buttons are placeholders - actual test execution happens via browser automation.
             </p>
             <p>
               • Edge function health is verified by checking for 200/201 responses on key endpoints.

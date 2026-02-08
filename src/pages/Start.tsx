@@ -1702,7 +1702,7 @@ export default function Start() {
                       const chatEndDate = details.endDate ? parseISO(details.endDate) : null;
 
                       if (!dest || !chatStartDate || !chatEndDate) {
-                        toast.error('Missing trip details — please provide destination and dates');
+                        toast.error('Missing trip details - please provide destination and dates');
                         return;
                       }
 
@@ -1893,7 +1893,7 @@ export default function Start() {
               One last thing before we generate this
             </DialogTitle>
             <DialogDescription className="text-sm leading-relaxed pt-2">
-              We don't have your Travel DNA yet — we don't know what makes you, <em>you</em>. 
+              We don't have your Travel DNA yet - we don't know what makes you, <em>you</em>. 
               This trip probably won't be as customized without it.
             </DialogDescription>
           </DialogHeader>

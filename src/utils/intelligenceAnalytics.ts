@@ -291,7 +291,7 @@ export function getDestinationSkippedItems(destination: string): SkippedItem[] {
     rome: [
       {
         name: 'Piazza Navona restaurants',
-        reason: 'Testaccio and the Jewish Ghetto offer authentic Roman cuisine at honest prices — where Romans actually eat.',
+        reason: 'Testaccio and the Jewish Ghetto offer authentic Roman cuisine at honest prices - where Romans actually eat.',
         category: 'local-favorite',
         savingsEstimate: { money: '$40' },
         betterAlternative: 'Trattoria in Testaccio or Jewish Ghetto',
@@ -314,7 +314,7 @@ export function getDestinationSkippedItems(destination: string): SkippedItem[] {
     paris: [
       {
         name: 'Champs-Élysées restaurants',
-        reason: 'Le Marais and Canal Saint-Martin have Paris\'s best dining scenes — locals flock there for a reason.',
+        reason: 'Le Marais and Canal Saint-Martin have Paris\'s best dining scenes - locals flock there for a reason.',
         category: 'local-favorite',
         savingsEstimate: { money: '$30' },
         betterAlternative: 'Le Marais or Canal Saint-Martin',
@@ -339,7 +339,7 @@ export function getDestinationSkippedItems(destination: string): SkippedItem[] {
     barcelona: [
       {
         name: 'La Rambla restaurants',
-        reason: 'El Born and Gràcia have Barcelona\'s best tapas bars — more authentic, better food, friendlier vibe.',
+        reason: 'El Born and Gràcia have Barcelona\'s best tapas bars - more authentic, better food, friendlier vibe.',
         category: 'local-favorite',
         savingsEstimate: { money: '$25' },
         betterAlternative: 'El Born or Gràcia tapas bars',

@@ -165,7 +165,7 @@ function scoreAndRankHotels(
     // Generate match reasons
     const matchReasons: string[] = [];
     if (profile.idealNeighborhoods.some(n => lowerNeighborhood.includes(n.toLowerCase()))) {
-      matchReasons.push(`In ${hotel.neighborhood} — one of your ideal neighborhoods`);
+      matchReasons.push(`In ${hotel.neighborhood} - one of your ideal neighborhoods`);
     }
     if (metadata.priceScore >= 0.9) matchReasons.push('Great value for your budget');
     if (traitScores.comfort >= 0.7 && metadata.comfortScore >= 0.8) matchReasons.push('Matches your comfort-first style');

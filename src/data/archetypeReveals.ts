@@ -94,7 +94,7 @@ The trips that stay with you aren't the ones with the best hotels. They're the o
 
 When other people say "getting away from it all," they mean a beach resort. You mean somewhere you can't get cell service. Real nature, not a manicured version of it.
 
-Your trips will take you off the beaten path—literally. Trails over tourist sites. Remote locations over convenient ones. Experiences that challenge you physically and reward you with the kind of beauty you can't reach by car.`,
+Your trips will take you off the beaten path, literally. Trails over tourist sites. Remote locations over convenient ones. Experiences that challenge you physically and reward you with the kind of beauty you can't reach by car.`,
     youProbably: [
       "Have hiked in the rain and called it the best day",
       "Choose destinations based on trail access, not hotel ratings",
@@ -118,13 +118,13 @@ Your trips will take you off the beaten path—literally. Trails over tourist si
     id: 'digital_explorer',
     name: 'The Digital Explorer',
     category: 'EXPLORER',
-    revealParagraph: `You see the world through a frame—and that's not a bad thing.
+    revealParagraph: `You see the world through a frame - and that's not a bad thing.
 
 For you, photography isn't just documentation. It's how you experience a place. You scout locations, time visits for golden hour, and notice details that others walk right past. The hunt for the perfect shot sharpens your attention and leads you to places you'd never find otherwise.
 
 Some people roll their eyes at travelers who "just want photos." They don't understand. The camera makes you look closer, stay longer, see better. Your photos aren't just memories. They're proof that you were really paying attention.
 
-Your trips will include the iconic spots (you want the shot), but also the hidden angles, the less-photographed gems, the moments that require patience and presence. We'll think about light, timing, and composition—because that's how you think.`,
+Your trips will include the iconic spots (you want the shot), but also the hidden angles, the less-photographed gems, the moments that require patience and presence. We'll think about light, timing, and composition, because that's how you think.`,
     youProbably: [
       "Scout locations and time visits for golden hour",
       "Notice details others walk right past",
@@ -248,7 +248,7 @@ You've felt it: how being somewhere new together strips away the routine, the di
 
 You care about atmosphere. The view from the room, the table at the restaurant, the timing of a sunset walk. These aren't frivolous details. They're the setting for what you're actually there for: each other.
 
-Your trips will be designed for two. Romance isn't just about luxury (though we're not afraid of that)—it's about intention. Experiences that bring you closer, environments that invite intimacy, and enough unscheduled time to actually be present with each other.`,
+Your trips will be designed for two. Romance isn't just about luxury (though we're not afraid of that). It's about intention. Experiences that bring you closer, environments that invite intimacy, and enough unscheduled time to actually be present with each other.`,
     youProbably: [
       "Request specific tables at restaurants",
       "Plan activities around sunset timing",
@@ -342,7 +342,7 @@ The trips that stay with you are the ones where something happened, where you pu
 
 Other people need to "recover" from vacation. You come back charged. The discomfort, the challenge, the not-knowing-how-it-would-turn-out. That's not a bug. That's the feature.
 
-Your trips will have edge. We'll find the experiences that require something from you and give something back. Not reckless—but not safe either. You want to feel alive, and we'll make sure you do.`,
+Your trips will have edge. We'll find the experiences that require something from you and give something back. Not reckless, but not safe either. You want to feel alive, and we'll make sure you do.`,
     youProbably: [
       "Have a story that starts with 'So I signed the waiver...'",
       "Feel restless after two hours on a beach",
@@ -400,9 +400,9 @@ Your trips will feed your focus. We'll build around your interest, not despite i
 
 Not because you're showing off, though you're not embarrassed by nice things, but because access opens doors that regular travel can't reach. The private tour after hours. The table that's not on the reservation system. The room that most guests don't know exists.
 
-You've worked hard. You've earned the right to travel at a level that matches your life. The premium isn't wasted on you—you actually notice the difference, appreciate the details, and take full advantage of what you're paying for.
+You've worked hard. You've earned the right to travel at a level that matches your life. The premium isn't wasted on you. You actually notice the difference, appreciate the details, and take full advantage of what you're paying for.
 
-Your trips will reflect that. VIP access, exclusive experiences, the insider track that most travelers never see. Not flashy for flashy's sake—but premium where it actually matters.`,
+Your trips will reflect that. VIP access, exclusive experiences, the insider track that most travelers never see. Not flashy for flashy's sake, but premium where it actually matters.`,
     youProbably: [
       "Know which credit card points get the best upgrades",
       "Have a preferred hotel chain (and status to match)",
@@ -466,7 +466,7 @@ Left to your own devices, you'd still check email on the beach, squeeze in one m
 
 That's why retreats, spas, and wellness resorts work for you. They give you permission to do what you actually need: nothing. Yoga at 7am. Massage at 2pm. Dinner at a set time. The structure liberates you from having to decide.
 
-Your trips will be restoration-forward. We'll find the places that know how to take care of you—where everything is designed to help you let go, not keep going.`,
+Your trips will be restoration-forward. We'll find the places that know how to take care of you, where everything is designed to help you let go, not keep going.`,
     youProbably: [
       "Have a go-to retreat you return to",
       "Consider spa time essential, not extra",
@@ -558,7 +558,7 @@ Your trips will have room to breathe. Fewer destinations, more depth. Time built
 
 Food isn't fuel. It's the point. Where others see eating as an interruption to sightseeing, you see sightseeing as what you do between meals. Your travel research is mostly menus, reviews, and reservation availability.
 
-You've probably eaten things that made other people uncomfortable. You've waited in lines that weren't worth it—and lines that absolutely were. You know the difference between a tourist trap and the real thing, and you'll walk an extra mile for the latter.
+You've probably eaten things that made other people uncomfortable. You've waited in lines that weren't worth it, and lines that absolutely were. You know the difference between a tourist trap and the real thing, and you'll walk an extra mile for the latter.
 
 Your trips will be built around food. We'll organize your days around meals, not the other way around. The reservations, the hidden gems, the places you can't find on the first page of Google—that's where we'll take you.`,
     youProbably: [
@@ -623,7 +623,7 @@ You're not trying to impress anyone. You just appreciate the difference between 
 Your trips will reflect your discerning eye. Not luxury for its own sake, but quality where it matters. The places, experiences, and accommodations that earn their reputation—not the ones that just charge for it.`,
     youProbably: [
       "Can tell the difference between expensive and excellent",
-      "Notice details others miss—thread count, glassware, service timing",
+      "Notice details others miss - thread count, glassware, service timing",
       "Have been underwhelmed by 'luxury' and delighted by unexpected quality",
       "Believe travel should be seamless, not stressful"
     ],
