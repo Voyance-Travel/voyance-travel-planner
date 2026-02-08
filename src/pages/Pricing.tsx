@@ -77,8 +77,8 @@ const everythingIncluded = [
     { icon: CalendarClock, text: '5-7 activities per day' },
     { icon: UtensilsCrossed, text: 'Restaurant picks with dish recommendations' },
     { icon: DollarSign, text: 'Budget tiers: Safe ($) / Stretch ($$) / Splurge ($$$)' },
-    { icon: ShieldAlert, text: 'Trap warnings — overhyped spots flagged' },
-    { icon: Clock, text: 'Timing strategies — when to arrive, when to book' },
+    { icon: ShieldAlert, text: 'Trap warnings - overhyped spots flagged' },
+    { icon: Clock, text: 'Timing strategies - when to arrive, when to book' },
   ]},
   { title: 'Logistics', items: [
     { icon: Route, text: 'Route optimization' },
@@ -110,8 +110,8 @@ const sampleDay = [
 ];
 
 const faqs = [
-  { q: 'How do credits work?', a: 'Credits unlock your full itinerary — all days plus actionable details like addresses, costs, and booking links. Your first trip is free with everything included.' },
-  { q: "What's the difference between Quick Top-Up and Voyance Club?", a: "Quick Top-Up credits are simple and transactional — buy what you need, they expire in 12 months. Voyance Club packs give you bonus credits, a Club badge, credits that never expire (as long as your account is active), and exclusive perks like priority support and early feature access." },
+  { q: 'How do credits work?', a: 'Credits unlock your full itinerary - all days plus actionable details like addresses, costs, and booking links. Your first trip is free with everything included.' },
+  { q: "What's the difference between Quick Top-Up and Voyance Club?", a: "Quick Top-Up credits are simple and transactional - buy what you need, they expire in 12 months. Voyance Club packs give you bonus credits, a Club badge, credits that never expire (as long as your account is active), and exclusive perks like priority support and early feature access." },
   { q: 'Do I get free credits?', a: 'Yes! Every user gets 150 free credits every month. Free credits expire after 2 months if unused, so use them or bank up to 300.' },
   { q: 'Do purchased credits expire?', a: "Quick Top-Up credits expire after 12 months. Voyance Club base credits never expire as long as your account is active (login once per year). Bonus credits from Club packs expire after 6 months." },
   { q: 'What is the Founding Member badge?', a: "The first 1,000 Adventurer pack buyers receive an exclusive Founding Member badge. Once all 1,000 are claimed, the badge is retired forever." },
@@ -151,7 +151,7 @@ export default function Pricing() {
       }
       setCheckoutConfig({ 
         priceId: pack.priceId, mode: 'payment', 
-        productName: `${pack.name} — ${formatCredits(pack.credits)} Credits`, 
+        productName: `${pack.name} - ${formatCredits(pack.credits)} Credits`, 
         returnPath: '/pricing?success=true',
         productId: pack.productId, credits: pack.credits,
       });
@@ -175,7 +175,7 @@ export default function Pricing() {
         <div className="relative max-w-3xl mx-auto px-4 text-center">
           <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="text-xs font-medium tracking-widest text-primary uppercase mb-4">Pricing</motion.p>
           <motion.h1 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="text-3xl sm:text-4xl md:text-5xl font-serif font-medium text-foreground mb-5 text-balance">Your first trip is on us. Full power, every detail.</motion.h1>
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="text-muted-foreground text-base sm:text-lg max-w-xl mx-auto leading-relaxed">2 full days with addresses, photos, costs, tips, and booking links — completely free. After that, use credits to unlock future trips.</motion.p>
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="text-muted-foreground text-base sm:text-lg max-w-xl mx-auto leading-relaxed">2 full days with addresses, photos, costs, tips, and booking links - completely free. After that, use credits to unlock future trips.</motion.p>
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="mt-8">
             <Button asChild size="lg"><Link to={ROUTES.QUIZ}>Start Free<ArrowRight className="ml-2 h-4 w-4" /></Link></Button>
             <p className="text-xs text-muted-foreground mt-3">No credit card required</p>
@@ -425,7 +425,7 @@ export default function Pricing() {
               ))}
             </div>
             <div className="p-4 bg-primary/5 border-t border-primary/10">
-              <p className="text-xs text-primary text-center font-medium">✓ Addresses, costs, photos, tips, and booking links — all included on your first trip.</p>
+              <p className="text-xs text-primary text-center font-medium">✓ Addresses, costs, photos, tips, and booking links - all included on your first trip.</p>
             </div>
           </motion.div>
         </div>

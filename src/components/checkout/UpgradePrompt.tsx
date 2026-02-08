@@ -235,7 +235,7 @@ export function UpgradePrompt({
           }}
           priceId={checkoutConfig.priceId}
           mode="payment"
-          productName={`${checkoutConfig.name} — ${formatCredits(checkoutConfig.credits)} Credits`}
+          productName={`${checkoutConfig.name} - ${formatCredits(checkoutConfig.credits)} Credits`}
           returnPath="/profile?tab=subscription&credits_added=true"
           productId={checkoutConfig.productId}
           credits={checkoutConfig.credits}

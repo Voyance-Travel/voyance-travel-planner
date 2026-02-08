@@ -182,7 +182,7 @@ export function AddActivityModal({ isOpen, onClose, onAdd, currency = 'USD', des
                     className="text-xs gap-1.5 w-full text-muted-foreground hover:text-foreground"
                   >
                     <Globe className="h-3 w-3" />
-                    {results.length === 0 ? 'No results — try Google Places' : 'Search Google Places instead'}
+                    {results.length === 0 ? 'No results - try Google Places' : 'Search Google Places instead'}
                   </Button>
                 )}
               </div>

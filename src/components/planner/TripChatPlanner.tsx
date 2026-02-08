@@ -41,7 +41,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: 'assistant',
-      content: "Hey! ✈️ Where are you thinking of going? Tell me anything — a city, a vibe, a dream trip. We'll figure it out together.",
+      content: "Hey! ✈️ Where are you thinking of going? Tell me anything - a city, a vibe, a dream trip. We'll figure it out together.",
     },
   ]);
   const [input, setInput] = useState('');
@@ -152,7 +152,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
           // If the AI didn't produce a text response alongside the tool call,
           // add a friendly confirmation message
           if (!assistantContent) {
-            assistantContent = "Got it! I have everything I need — generating your trip now! 🎉";
+            assistantContent = "Got it! I have everything I need - generating your trip now! 🎉";
             setMessages(prev => [...prev, { role: 'assistant', content: assistantContent }]);
           }
 
