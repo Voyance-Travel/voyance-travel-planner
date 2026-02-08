@@ -1,15 +1,15 @@
 /**
  * Trip Collaborators Panel
  * 
- * Shows trip owner and collaborators with permission management,
- * DNA status, compatibility scores, and blend toggle
+ * Compact avatar stack for large groups, expandable for detail management.
+ * Shows owner + collaborators with permission management, DNA status, and blend toggle.
  */
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Crown, Users, Eye, Edit3, UserPlus, MoreVertical, 
-  Check, X, Shield, ChevronDown, Dna 
+  X, Shield, ChevronDown, ChevronUp, Dna 
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -59,22 +58,12 @@ interface TripCollaboratorsPanelProps {
 }
 
 const permissionLabels: Record<CollaboratorPermission, { label: string; icon: typeof Eye; description: string }> = {
-  view: { 
-    label: 'Viewer', 
-    icon: Eye, 
-    description: 'Can view the itinerary only' 
-  },
-  edit: { 
-    label: 'Editor', 
-    icon: Edit3, 
-    description: 'Can edit activities and make changes' 
-  },
-  admin: { 
-    label: 'Admin', 
-    icon: Edit3, 
-    description: 'Full access to trip settings' 
-  },
+  view: { label: 'Viewer', icon: Eye, description: 'Can view the itinerary only' },
+  edit: { label: 'Editor', icon: Edit3, description: 'Can edit activities and make changes' },
+  admin: { label: 'Admin', icon: Edit3, description: 'Full access to trip settings' },
 };
+
+const MAX_VISIBLE_AVATARS = 5;
 
 export function TripCollaboratorsPanel({
   tripId,
@@ -88,11 +77,13 @@ export function TripCollaboratorsPanel({
   const { data: permission } = useTripPermission(tripId);
   const updatePermission = useUpdateCollaboratorPermission();
   const removeCollaborator = useRemoveTripCollaborator();
-  const [expanded, setExpanded] = useState(!compact);
+  const [showDetails, setShowDetails] = useState(false);
   const [collaboratorDNA, setCollaboratorDNA] = useState<Record<string, { hasDNA: boolean; compatibility: number | null }>>({});
   const [updatingPreferences, setUpdatingPreferences] = useState<string | null>(null);
 
   const isOwner = permission?.isOwner ?? false;
+  const totalMembers = 1 + collaborators.length;
+  const resolvedOwnerName = ownerName || ownerEmail?.split('@')[0] || 'Trip Owner';
 
   // Fetch DNA status for all collaborators
   useEffect(() => {
@@ -123,10 +114,7 @@ export function TripCollaboratorsPanel({
   }, [collaborators]);
 
   const handlePermissionChange = async (collaborator: TripCollaborator, newPermission: CollaboratorPermission) => {
-    updatePermission.mutate({ 
-      collaboratorId: collaborator.id, 
-      permission: newPermission 
-    });
+    updatePermission.mutate({ collaboratorId: collaborator.id, permission: newPermission });
   };
 
   const handleRemove = async (collaborator: TripCollaborator) => {
@@ -137,289 +125,311 @@ export function TripCollaboratorsPanel({
 
   const handleTogglePreferences = async (collaborator: TripCollaborator) => {
     setUpdatingPreferences(collaborator.id);
-    
     const newValue = !(collaborator.include_preferences ?? true);
-    
     const { error } = await supabase
       .from('trip_collaborators')
       .update({ include_preferences: newValue })
       .eq('id', collaborator.id);
-    
     if (error) {
       toast.error('Failed to update preference setting');
     } else {
       toast.success(newValue ? 'Preferences will be included' : 'Preferences excluded from blend');
     }
-    
     setUpdatingPreferences(null);
   };
 
   const getInitials = (name?: string, email?: string) => {
-    if (name) {
-      return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-    }
+    if (name) return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
     return email?.charAt(0).toUpperCase() || '?';
   };
 
-  if (compact && !expanded) {
-    return (
-      <button
-        onClick={() => setExpanded(true)}
-        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors text-sm"
-      >
-        <Users className="h-4 w-4 text-muted-foreground" />
-        <span className="font-medium">{1 + collaborators.length} travelers</span>
-        <div className="flex -space-x-2">
-          <Avatar className="h-6 w-6 border-2 border-background">
-            {ownerAvatarUrl ? (
-              <AvatarImage src={ownerAvatarUrl} />
-            ) : null}
-            <AvatarFallback className="text-xs bg-primary text-primary-foreground">
-              {getInitials(ownerName, ownerEmail)}
-            </AvatarFallback>
-          </Avatar>
-          {collaborators.slice(0, 3).map(c => (
-            <Avatar key={c.id} className="h-6 w-6 border-2 border-background">
-              {c.profile?.avatar_url ? (
-                <AvatarImage src={c.profile.avatar_url} />
-              ) : null}
-              <AvatarFallback className="text-xs bg-muted">
-                {getInitials(c.profile?.display_name, c.profile?.handle)}
-              </AvatarFallback>
-            </Avatar>
-          ))}
-          {collaborators.length > 3 && (
-            <div className="h-6 w-6 rounded-full bg-muted border-2 border-background flex items-center justify-center text-xs font-medium">
-              +{collaborators.length - 3}
-            </div>
-          )}
-        </div>
-        <ChevronDown className="h-4 w-4 text-muted-foreground ml-auto" />
-      </button>
-    );
-  }
+  const getShortName = (name?: string, email?: string) => {
+    if (name) return name.split(' ')[0];
+    if (email) return email.split('@')[0];
+    return 'Guest';
+  };
+
+  // Build all members array for the avatar stack
+  const allMembers = [
+    { id: '__owner__', name: resolvedOwnerName, email: ownerEmail, avatarUrl: ownerAvatarUrl, isOwner: true },
+    ...collaborators.map(c => ({
+      id: c.id,
+      name: c.profile?.display_name || c.profile?.handle || undefined,
+      email: undefined as string | undefined,
+      avatarUrl: c.profile?.avatar_url || undefined,
+      isOwner: false,
+    })),
+  ];
+
+  const visibleMembers = allMembers.slice(0, MAX_VISIBLE_AVATARS);
+  const overflowCount = Math.max(0, allMembers.length - MAX_VISIBLE_AVATARS);
 
   return (
     <Card className={cn(compact && "border-0 shadow-none bg-transparent")}>
       {!compact && (
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
               <Users className="h-4 w-4" />
               Trip Members
+              <Badge variant="secondary" className="text-xs ml-1">{totalMembers}</Badge>
             </CardTitle>
-            {compact && (
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setExpanded(false)} aria-label="Close panel">
-                <X className="h-4 w-4" />
-              </Button>
-            )}
           </div>
         </CardHeader>
       )}
-      
+
       <CardContent className={cn(compact && "p-0")}>
         <div className="space-y-3">
-          {/* Owner */}
-          <div className="flex items-center justify-between py-2">
-            <div className="flex items-center gap-3">
-              <Avatar className="h-9 w-9">
-                {ownerAvatarUrl ? (
-                  <AvatarImage src={ownerAvatarUrl} />
-                ) : null}
-                <AvatarFallback className="bg-primary text-primary-foreground">
-                  {getInitials(ownerName, ownerEmail)}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-sm">{ownerName || ownerEmail?.split('@')[0] || 'Trip Owner'}</span>
-                  <Badge variant="secondary" className="text-xs gap-1">
-                    <Crown className="h-3 w-3" />
-                    Owner
-                  </Badge>
+          {/* Compact Avatar Stack — always visible */}
+          <button
+            onClick={() => setShowDetails(!showDetails)}
+            className="flex items-center gap-3 w-full py-2 hover:bg-muted/30 rounded-lg px-2 -mx-2 transition-colors"
+          >
+            {/* Avatar row */}
+            <div className="flex -space-x-2.5">
+              {visibleMembers.map((member) => (
+                <Tooltip key={member.id}>
+                  <TooltipTrigger asChild>
+                    <Avatar className={cn(
+                      "h-8 w-8 border-2 border-background ring-0 transition-transform hover:scale-110 hover:z-10",
+                      member.isOwner && "ring-2 ring-primary/30"
+                    )}>
+                      {member.avatarUrl && <AvatarImage src={member.avatarUrl} />}
+                      <AvatarFallback className={cn(
+                        "text-xs",
+                        member.isOwner ? "bg-primary text-primary-foreground" : "bg-muted"
+                      )}>
+                        {getInitials(member.name, member.email)}
+                      </AvatarFallback>
+                    </Avatar>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">
+                    {member.name || member.email?.split('@')[0] || 'Guest'}
+                    {member.isOwner && ' (Owner)'}
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+              {overflowCount > 0 && (
+                <div className="h-8 w-8 rounded-full bg-muted border-2 border-background flex items-center justify-center text-xs font-medium text-muted-foreground">
+                  +{overflowCount}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Full control over the trip
-                </p>
-              </div>
+              )}
             </div>
-          </div>
 
-          {/* Collaborators */}
-          {isLoading ? (
-            <div className="flex items-center justify-center py-4">
-              <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full" />
+            {/* Names summary */}
+            <div className="flex-1 text-left min-w-0">
+              <p className="text-sm text-muted-foreground truncate">
+                {allMembers.length <= 3
+                  ? allMembers.map(m => getShortName(m.name, m.email)).join(', ')
+                  : `${allMembers.slice(0, 2).map(m => getShortName(m.name, m.email)).join(', ')} & ${allMembers.length - 2} more`
+                }
+              </p>
             </div>
-          ) : (
-            <AnimatePresence>
-              {collaborators.map(collaborator => {
-                const permInfo = permissionLabels[collaborator.permission] || permissionLabels.view;
-                const PermIcon = permInfo.icon;
-                const dnaInfo = collaboratorDNA[collaborator.user_id];
-                const hasDNA = dnaInfo?.hasDNA ?? false;
-                const compatibility = dnaInfo?.compatibility;
-                const includesPrefs = collaborator.include_preferences ?? true;
-                
-                return (
-                  <motion.div
-                    key={collaborator.id}
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="py-2 border-t border-border/50 space-y-2"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-9 w-9">
-                          {collaborator.profile?.avatar_url ? (
-                            <AvatarImage src={collaborator.profile.avatar_url} />
-                          ) : null}
-                          <AvatarFallback className="bg-muted">
-                            {getInitials(collaborator.profile?.display_name, collaborator.profile?.handle)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm">
-                              {collaborator.profile?.display_name || collaborator.profile?.handle || 'Guest'}
-                            </span>
-                            {hasDNA && compatibility !== null && (
-                              <Badge variant="secondary" className="text-xs gap-1 bg-primary/10 text-primary border-primary/20">
-                                <Dna className="h-3 w-3" />
-                                {compatibility}%
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <PermIcon className="h-3 w-3" />
-                            <span>{permInfo.label}</span>
-                          </div>
-                        </div>
-                      </div>
 
-                      {isOwner && (
+            {showDetails
+              ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />
+              : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+            }
+          </button>
+
+          {/* Expanded Details */}
+          <AnimatePresence>
+            {showDetails && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="space-y-1 pt-1">
+                  {/* Owner Row */}
+                  <div className="flex items-center justify-between py-2 px-2 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-9 w-9 ring-2 ring-primary/30">
+                        {ownerAvatarUrl && <AvatarImage src={ownerAvatarUrl} />}
+                        <AvatarFallback className="bg-primary text-primary-foreground">
+                          {getInitials(resolvedOwnerName, ownerEmail)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
                         <div className="flex items-center gap-2">
-                          <Select
-                            value={collaborator.permission}
-                            onValueChange={(value: CollaboratorPermission) => handlePermissionChange(collaborator, value)}
-                          >
-                            <SelectTrigger className="h-8 w-[110px] text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="viewer">
-                                <div className="flex items-center gap-2">
-                                  <Eye className="h-3 w-3" />
-                                  Viewer
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="editor">
-                                <div className="flex items-center gap-2">
-                                  <Edit3 className="h-3 w-3" />
-                                  Editor
-                                </div>
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Member options">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem 
-                                className="text-destructive focus:text-destructive"
-                                onClick={() => handleRemove(collaborator)}
-                              >
-                                <X className="h-4 w-4 mr-2" />
-                                Remove from trip
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <span className="font-medium text-sm">{resolvedOwnerName}</span>
+                          <Badge variant="secondary" className="text-[10px] gap-0.5 px-1.5 py-0">
+                            <Crown className="h-2.5 w-2.5" />
+                            Owner
+                          </Badge>
                         </div>
-                      )}
-                    </div>
-
-                    {/* DNA Status and Blend Toggle */}
-                    {isOwner && (
-                      <div className="ml-12">
-                        {hasDNA ? (
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <Dna className="h-3 w-3" />
-                              <span>Include in blend</span>
-                            </div>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Switch
-                                  checked={includesPrefs}
-                                  onCheckedChange={() => handleTogglePreferences(collaborator)}
-                                  disabled={updatingPreferences === collaborator.id}
-                                  className="scale-90"
-                                />
-                              </TooltipTrigger>
-                              <TooltipContent side="left">
-                                <p className="text-xs">
-                                  {includesPrefs 
-                                    ? 'Their preferences will be blended into the itinerary'
-                                    : 'Preferences excluded from generation'
-                                  }
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                        ) : (
-                          <DNAQuizPrompt
-                            guestName={collaborator.profile?.display_name || 'Guest'}
-                            compact
-                          />
+                        {ownerEmail && resolvedOwnerName !== ownerEmail?.split('@')[0] && (
+                          <p className="text-xs text-muted-foreground">{ownerEmail}</p>
                         )}
                       </div>
-                    )}
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
-          )}
+                    </div>
+                  </div>
 
-          {/* Invite Button */}
-          {isOwner && onInviteClick && (
-            <Button 
-              variant="outline" 
-              className="w-full mt-2"
-              onClick={onInviteClick}
-            >
-              <UserPlus className="h-4 w-4 mr-2" />
-              Invite Guest
-            </Button>
-          )}
+                  {/* Collaborators */}
+                  {isLoading ? (
+                    <div className="flex items-center justify-center py-4">
+                      <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full" />
+                    </div>
+                  ) : (
+                    collaborators.map(collaborator => {
+                      const permInfo = permissionLabels[collaborator.permission] || permissionLabels.view;
+                      const PermIcon = permInfo.icon;
+                      const dnaInfo = collaboratorDNA[collaborator.user_id];
+                      const hasDNA = dnaInfo?.hasDNA ?? false;
+                      const compatibility = dnaInfo?.compatibility;
+                      const includesPrefs = collaborator.include_preferences ?? true;
 
-          {/* Current user permission indicator (for non-owners) */}
-          {!isOwner && permission?.permission && (
-            <div className="mt-3 pt-3 border-t border-border/50">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Shield className="h-3 w-3" />
-                <span>
-                  You have <strong>{permission.permission}</strong> access
-                  {permission.canEdit ? ' - you can edit this itinerary' : ' - view only'}
-                </span>
-              </div>
-            </div>
-          )}
+                      return (
+                        <div
+                          key={collaborator.id}
+                          className="py-2 px-2 rounded-lg border border-border/50 space-y-2"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <Avatar className="h-9 w-9">
+                                {collaborator.profile?.avatar_url && (
+                                  <AvatarImage src={collaborator.profile.avatar_url} />
+                                )}
+                                <AvatarFallback className="bg-muted">
+                                  {getInitials(collaborator.profile?.display_name, collaborator.profile?.handle)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-sm">
+                                    {collaborator.profile?.display_name || collaborator.profile?.handle || 'Guest'}
+                                  </span>
+                                  {hasDNA && compatibility !== null && (
+                                    <Badge variant="secondary" className="text-[10px] gap-0.5 px-1.5 py-0 bg-primary/10 text-primary border-primary/20">
+                                      <Dna className="h-2.5 w-2.5" />
+                                      {compatibility}%
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <PermIcon className="h-3 w-3" />
+                                  <span>{permInfo.label}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {isOwner && (
+                              <div className="flex items-center gap-1">
+                                <Select
+                                  value={collaborator.permission}
+                                  onValueChange={(value: CollaboratorPermission) => handlePermissionChange(collaborator, value)}
+                                >
+                                  <SelectTrigger className="h-7 w-[90px] text-xs">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="viewer">
+                                      <div className="flex items-center gap-2">
+                                        <Eye className="h-3 w-3" />
+                                        Viewer
+                                      </div>
+                                    </SelectItem>
+                                    <SelectItem value="editor">
+                                      <div className="flex items-center gap-2">
+                                        <Edit3 className="h-3 w-3" />
+                                        Editor
+                                      </div>
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Member options">
+                                      <MoreVertical className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                      className="text-destructive focus:text-destructive"
+                                      onClick={() => handleRemove(collaborator)}
+                                    >
+                                      <X className="h-4 w-4 mr-2" />
+                                      Remove from trip
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* DNA Status and Blend Toggle */}
+                          {isOwner && (
+                            <div className="ml-12">
+                              {hasDNA ? (
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <Dna className="h-3 w-3" />
+                                    <span>Include in blend</span>
+                                  </div>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Switch
+                                        checked={includesPrefs}
+                                        onCheckedChange={() => handleTogglePreferences(collaborator)}
+                                        disabled={updatingPreferences === collaborator.id}
+                                        className="scale-90"
+                                      />
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left">
+                                      <p className="text-xs">
+                                        {includesPrefs
+                                          ? 'Their preferences will be blended into the itinerary'
+                                          : 'Preferences excluded from generation'
+                                        }
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </div>
+                              ) : (
+                                <DNAQuizPrompt
+                                  guestName={collaborator.profile?.display_name || 'Guest'}
+                                  compact
+                                />
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+
+                  {/* Invite Button */}
+                  {isOwner && onInviteClick && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full mt-2 gap-2"
+                      onClick={onInviteClick}
+                    >
+                      <UserPlus className="h-3.5 w-3.5" />
+                      Invite Guest
+                    </Button>
+                  )}
+
+                  {/* Non-owner permission indicator */}
+                  {!isOwner && permission?.permission && (
+                    <div className="mt-2 pt-2 border-t border-border/50">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Shield className="h-3 w-3" />
+                        <span>
+                          You have <strong>{permission.permission}</strong> access
+                          {permission.canEdit ? ' — you can edit this itinerary' : ' — view only'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
-
-        {compact && expanded && (
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="w-full mt-3 text-xs"
-            onClick={() => setExpanded(false)}
-          >
-            Collapse
-          </Button>
-        )}
       </CardContent>
     </Card>
   );

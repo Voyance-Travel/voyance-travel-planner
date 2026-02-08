@@ -1012,8 +1012,8 @@ export function EditorialItinerary({
   const collaboratorColorMap = useMemo(() => {
     if (collaborators.length === 0) return undefined;
     const ownerId = user?.id || '__owner__';
-    const ownerName = user?.email || 'You';
-    return buildCollaboratorColorMap(ownerId, ownerName, collaborators);
+    const ownerDisplayName = user?.name || user?.email?.split('@')[0] || 'You';
+    return buildCollaboratorColorMap(ownerId, ownerDisplayName, collaborators);
   }, [collaborators, user]);
 
   // Calculate intelligence value stats for the itinerary
@@ -3260,6 +3260,8 @@ export function EditorialItinerary({
             <TripCollaboratorsPanel
               tripId={tripId}
               ownerName={tripPermission?.isOwner ? 'You' : undefined}
+              ownerEmail={user?.email}
+              ownerAvatarUrl={user?.avatar}
               onInviteClick={handleCreateShareLink}
             />
 
