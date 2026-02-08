@@ -102,39 +102,31 @@ function ArchetypeHeroCard({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="relative overflow-hidden rounded-2xl p-6 md:p-8 bg-foreground/[0.03] dark:bg-foreground/[0.04] border border-border"
+      className="relative overflow-hidden rounded-2xl bg-foreground dark:bg-foreground/95"
     >
-      {/* Editorial accent line */}
-      <div className="absolute top-0 left-6 md:left-8 w-12 h-[3px] bg-primary rounded-b" />
+      {/* Subtle editorial texture */}
+      <div className="absolute inset-0 opacity-[0.03] bg-[radial-gradient(circle_at_70%_30%,white_0.5px,transparent_0.5px)] bg-[size:20px_20px]" />
+      
+      {/* Primary accent strip on left edge */}
+      <div className="absolute top-0 left-0 w-1 h-full bg-primary" />
 
-      <div className="relative z-10 space-y-5 pt-2">
-        {/* Editorial kicker + badges */}
-        <div className="flex items-center justify-between">
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.15 }}
-            className="text-[11px] font-medium tracking-[0.2em] uppercase text-primary"
-          >
-            Travel DNA
-          </motion.p>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] tracking-wide text-muted-foreground">
-              {rarity}
-            </span>
-            <span className="text-muted-foreground/30">|</span>
-            <span className="text-[11px] tracking-wide text-muted-foreground">
-              {confidence}% match
-            </span>
-          </div>
-        </div>
+      <div className="relative z-10 p-7 md:p-10 space-y-6">
+        {/* Kicker */}
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.15 }}
+          className="text-[11px] font-medium tracking-[0.25em] uppercase text-primary"
+        >
+          Your Travel DNA
+        </motion.p>
 
-        {/* Archetype name - large editorial serif */}
+        {/* Archetype name - editorial impact */}
         <motion.h2 
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25 }}
-          className="font-serif text-4xl md:text-5xl font-semibold text-foreground leading-[1.1] tracking-tight"
+          className="font-serif text-4xl md:text-5xl lg:text-[3.5rem] font-bold text-background leading-[1.05] tracking-tight"
         >
           {narrative.name}
         </motion.h2>
@@ -144,45 +136,48 @@ function ArchetypeHeroCard({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.35 }}
-          className="text-lg md:text-xl text-foreground/60 italic max-w-xl leading-relaxed font-serif"
+          className="text-lg md:text-xl text-background/50 italic max-w-lg leading-relaxed font-serif"
         >
           "{narrative.hookLine}"
         </motion.p>
 
-        {/* Divider + secondary + retake */}
+        {/* Metadata row */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.45 }}
-          className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-2 border-t border-border"
+          className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-4 border-t border-background/10"
         >
-          {/* Category icon + label */}
           <div className="flex items-center gap-2">
             <CategoryIcon className="h-4 w-4 text-primary" strokeWidth={1.5} />
-            <span className="text-xs font-medium tracking-wide uppercase text-foreground/50">
+            <span className="text-xs font-medium tracking-wide uppercase text-background/40">
               {narrative.category.charAt(0) + narrative.category.slice(1).toLowerCase()}
             </span>
           </div>
 
-          {/* Secondary archetype */}
+          <span className="text-background/15">|</span>
+          <span className="text-xs text-background/35">{rarity}</span>
+
+          <span className="text-background/15">|</span>
+          <span className="text-xs text-background/35">{confidence}% match</span>
+
           {secondaryNarrative && SecondaryIcon && (
             <>
-              <span className="text-foreground/15">|</span>
+              <span className="text-background/15">|</span>
               <div className="flex items-center gap-1.5">
-                <SecondaryIcon className="h-3.5 w-3.5 text-foreground/40" />
-                <span className="text-xs text-foreground/50">hints of</span>
-                <span className="text-xs font-medium text-foreground/70">{secondaryNarrative.name}</span>
+                <SecondaryIcon className="h-3.5 w-3.5 text-background/30" />
+                <span className="text-xs text-background/35">hints of</span>
+                <span className="text-xs font-medium text-background/55">{secondaryNarrative.name}</span>
               </div>
             </>
           )}
 
-          {/* Retake */}
-          <span className="text-foreground/15 hidden sm:inline">|</span>
+          <span className="text-background/15 hidden sm:inline">|</span>
           <Button 
             variant="ghost" 
             size="sm" 
             asChild 
-            className="px-0 h-auto py-0 text-xs text-foreground/40 hover:text-foreground hover:bg-transparent"
+            className="px-0 h-auto py-0 text-xs text-background/30 hover:text-background hover:bg-transparent"
           >
             <Link to={ROUTES.QUIZ}>
               <RefreshCw className="h-3 w-3 mr-1" />
