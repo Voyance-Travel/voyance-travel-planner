@@ -2,7 +2,7 @@
  * Unlock Trip Hook
  * 
  * Handles the full unlock flow for preview itineraries:
- * 1. Calculate trip cost (days × 90 credits per day)
+ * 1. Calculate trip cost (days × 60 credits per day via CREDIT_COSTS.UNLOCK_DAY)
  * 2. Spend credits via spend-credits edge function
  * 3. Re-generate each day with full enrichment via generate-itinerary
  * 4. Save enriched itinerary and clear isPreview flag

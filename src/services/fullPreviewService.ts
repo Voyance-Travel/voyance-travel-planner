@@ -9,7 +9,7 @@
  * - Personalized reasoning
  * - Full day structure
  * 
- * What users PAY for:
+ * What users PAY for (Smart Finish, credits, or unlocked trip):
  * - Addresses, hours, tips
  * - Photos and booking links
  * - Map coordinates

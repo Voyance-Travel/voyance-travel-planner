@@ -134,10 +134,10 @@ export function ItineraryGenerator({
       console.error('[ItineraryGenerator] Gate error, defaulting to preview:', err);
       gateResult = {
         mode: 'preview',
-        tripCost: totalDays * 90,
+        tripCost: totalDays * 60,
         creditsCharged: 0,
         currentBalance: 0,
-        shortfall: totalDays * 90,
+        shortfall: totalDays * 60,
         recommendedPack: null,
         requestedDays: totalDays,
         generateDays: Math.min(totalDays, 2),
