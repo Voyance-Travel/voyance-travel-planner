@@ -5189,8 +5189,11 @@ function DayCard({
   collaboratorColorMap,
   aiLocked,
 }: DayCardProps) {
+  // Per-day preview: a day is preview only if the global flag is set AND the day itself is a preview
+  // Fully generated days (e.g., first 2 free days) should NOT be gated even if other days are locked
+  const dayIsPreview = isPreview && !!(day.metadata?.isPreview);
   const allLocked = day.activities.every(a => a.isLocked);
-  const totalCost = isPreview ? 0 : getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry);
+  const totalCost = dayIsPreview ? 0 : getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry);
   
   // Transport details toggle - collapsed by default to reduce visual noise
   const [showTransportDetails, setShowTransportDetails] = useState(false);
@@ -5381,7 +5384,7 @@ function DayCard({
                       totalDays={totalDays}
                       isLast={activityIndex === day.activities.length - 1}
                       isEditable={isEditable}
-                      isPreview={isPreview}
+                      isPreview={dayIsPreview}
                       travelers={travelers}
                       budgetTier={budgetTier}
                       tripCurrency={tripCurrency}
@@ -5413,7 +5416,7 @@ function DayCard({
 
             {/* Day Footer */}
             <div className="px-6 py-4 bg-gradient-to-r from-secondary/30 via-secondary/20 to-secondary/30 border-t border-border">
-              {isPreview ? (
+              {dayIsPreview ? (
                 /* Preview Per-Day Unlock CTA */
                 <div className="flex flex-col items-center gap-3 py-2">
                   {unlockingDayNumber === day.dayNumber ? (
