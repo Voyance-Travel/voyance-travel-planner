@@ -236,7 +236,7 @@ function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => voi
                 className="h-14 px-8 text-lg"
               >
                 <MessageCircle className="w-5 h-5 mr-2" />
-                Just Tell Us Your Story
+                Just Tell Us
               </Button>
             </motion.div>
           </div>
