@@ -6860,6 +6860,55 @@ RULES FOR HIDDEN GEMS:
       }
       
       // =======================================================================
+      // STAGE 1.93: Voyance Picks — Founder-curated must-include experiences
+      // These are non-negotiable recommendations from the Voyance team
+      // =======================================================================
+      let voyancePicksContext = '';
+      try {
+        console.log("[Stage 1.93] Fetching Voyance Picks for", destination);
+        const { data: voyancePicks, error: vpError } = await supabase
+          .from('voyance_picks')
+          .select('*')
+          .eq('is_active', true)
+          .ilike('destination', `%${destination.split(',')[0].trim()}%`);
+        
+        if (vpError) {
+          console.warn("[Stage 1.93] DB error:", vpError.message);
+        } else if (voyancePicks && voyancePicks.length > 0) {
+          const pickLines = voyancePicks.map((p: any, i: number) => 
+            `${i + 1}. **${p.name}** (${p.category}) in ${p.neighborhood || destination}
+   WHY: ${p.why_essential}
+   TIP: ${p.insider_tip || 'No specific tip'}
+   BEST TIME: ${p.best_time || 'Any time'}
+   PRICE: ${p.price_range || 'Varies'}`
+          ).join('\n');
+          
+          voyancePicksContext = `
+${'='.repeat(70)}
+⭐ VOYANCE PICKS — FOUNDER-CURATED MUST-INCLUDES (HIGHEST PRIORITY)
+${'='.repeat(70)}
+These are hand-picked by the Voyance founders as ESSENTIAL experiences for ${destination}. 
+They MUST be included in the itinerary regardless of traveler archetype or budget tier.
+DO NOT SKIP THESE. Schedule them at their optimal time.
+
+${pickLines}
+
+RULES FOR VOYANCE PICKS:
+- MUST appear in the itinerary — this is non-negotiable
+- Mark with "isHiddenGem": true (these are curated discoveries)
+- Set "voyanceInsight" to the WHY text above
+- Use the TIP as the "tips" field
+- In "personalization.whyThisFits", write "Voyance Founder Pick — [reason it fits this specific traveler]"
+`;
+          console.log(`[Stage 1.93] Injecting ${voyancePicks.length} Voyance Picks into prompt`);
+        } else {
+          console.log("[Stage 1.93] No Voyance Picks found for this destination");
+        }
+      } catch (vpErr) {
+        console.warn("[Stage 1.93] Failed to fetch Voyance Picks:", vpErr);
+      }
+      
+      // =======================================================================
       // STAGE 1.95: Cold Start Detection (simplified - using profile-loader)
       // Cold start handling is now integrated into loadTravelerProfile() which
       // provides dataCompleteness and isFallback flags. No separate module needed.
@@ -7096,7 +7145,7 @@ RULES FOR HIDDEN GEMS:
       // Order: ARCHETYPE CONSTRAINTS → TRIP TYPE → SKIP LIST → DIETARY ENFORCEMENT → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → HIDDEN GEMS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE
       // NOTE: generationHierarchy includes destination essentials, archetype behavioral rules, budget guardrails (Phase 2 Fix)
       // Phase 2 Fix: Removed unifiedDNAContext - all traveler data now comes from generationHierarchy via unified profile
-      const preferenceContext = generationHierarchy + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + hiddenGemsContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt;
+      const preferenceContext = generationHierarchy + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + hiddenGemsContext + voyancePicksContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt;
 
       // STAGE 2: AI Generation (batch with validation and retry)
       let aiResult;
@@ -8290,6 +8339,29 @@ FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
       const maxActivitiesFromArchetype = archetypeContext.definition.dayStructure.maxScheduledActivities;
 
       // ==========================================================================
+      // VOYANCE PICKS: Founder-curated must-includes for this destination
+      // ==========================================================================
+      let voyancePicksPrompt = '';
+      try {
+        const destCity = destination.split(',')[0].trim();
+        const { data: vpRows } = await supabase
+          .from('voyance_picks')
+          .select('*')
+          .eq('is_active', true)
+          .ilike('destination', `%${destCity}%`);
+        
+        if (vpRows && vpRows.length > 0) {
+          const pickLines = vpRows.map((p: any, i: number) => 
+            `${i + 1}. **${p.name}** (${p.category}) in ${p.neighborhood || destination} — ${p.why_essential}${p.insider_tip ? ` TIP: ${p.insider_tip}` : ''}${p.best_time ? ` BEST TIME: ${p.best_time}` : ''}`
+          ).join('\n');
+          voyancePicksPrompt = `\n${'='.repeat(70)}\n⭐ VOYANCE PICKS — MUST INCLUDE (HIGHEST PRIORITY)\n${'='.repeat(70)}\n${pickLines}\n- These MUST appear in the itinerary. Mark as isHiddenGem: true.\n`;
+          console.log(`[generate-day] Injecting ${vpRows.length} Voyance Picks`);
+        }
+      } catch (e) {
+        console.warn("[generate-day] Voyance Picks fetch failed:", e);
+      }
+
+      // ==========================================================================
       // COLLABORATOR ATTRIBUTION: Load collaborators for suggestedFor coloring
       // ==========================================================================
       let collaboratorAttributionPrompt = '';
@@ -8348,7 +8420,8 @@ General Requirements:
 - All times MUST be in 24-hour HH:MM format
 - MAX ${maxActivitiesFromArchetype} scheduled activities (from archetype day structure - HARD LIMIT)
 ${lockedActivities.length > 0 ? '- DO NOT generate activities for locked time slots listed above' : ''}
-${collaboratorAttributionPrompt}`;
+${collaboratorAttributionPrompt}
+${voyancePicksPrompt}`;
 
       const userPrompt = `Generate Day ${dayNumber} of ${totalDays} in ${destination}${destinationCountry ? `, ${destinationCountry}` : ''}.
 
