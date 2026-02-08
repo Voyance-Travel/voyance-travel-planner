@@ -6,20 +6,20 @@ import { buildRoute } from '@/config/routes';
 // Unique images for each destination to avoid duplicates across site
 const destinations = [
   {
-    slug: 'kyoto',
-    name: 'Kyoto',
-    country: 'Japan',
-    image: 'https://images.unsplash.com/photo-1478436127897-769e1b3f0f36?w=600',
-    rating: 4.9,
-    category: 'Culture',
+    slug: 'austin',
+    name: 'Austin',
+    country: 'USA',
+    image: 'https://images.unsplash.com/photo-1531218150217-54595bc2b934?w=600',
+    rating: 4.7,
+    category: 'Urban',
   },
   {
-    slug: 'santorini',
-    name: 'Santorini',
-    country: 'Greece',
-    image: 'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=600',
+    slug: 'lisbon',
+    name: 'Lisbon',
+    country: 'Portugal',
+    image: 'https://images.unsplash.com/photo-1585208798174-6cedd86e019a?w=600',
     rating: 4.8,
-    category: 'Romance',
+    category: 'Culture',
   },
   {
     slug: 'bali',
@@ -30,12 +30,12 @@ const destinations = [
     category: 'Wellness',
   },
   {
-    slug: 'paris',
-    name: 'Paris',
-    country: 'France',
-    image: 'https://images.unsplash.com/photo-1431274172761-fca41d930114?w=600',
+    slug: 'cape-town',
+    name: 'Cape Town',
+    country: 'South Africa',
+    image: 'https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=600',
     rating: 4.8,
-    category: 'Culture',
+    category: 'Adventure',
   },
   {
     slug: 'marrakech',
@@ -46,12 +46,12 @@ const destinations = [
     category: 'Adventure',
   },
   {
-    slug: 'new-york',
-    name: 'New York',
+    slug: 'new-orleans',
+    name: 'New Orleans',
     country: 'USA',
-    image: 'https://images.unsplash.com/photo-1534430480872-3498386e7856?w=600',
+    image: 'https://images.unsplash.com/photo-1568402102990-bc541580b59f?w=600',
     rating: 4.7,
-    category: 'Urban',
+    category: 'Culinary',
   },
 ];
 
