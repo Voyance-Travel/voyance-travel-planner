@@ -138,15 +138,24 @@ serve(async (req) => {
     }
     const totalCredits = purchasedCredits + freeCredits;
 
-    if (totalCredits < cost) {
+    // ── "Round-up" logic ──
+    // If the user can cover more than half the cost, let them proceed and
+    // drain their balance to zero so they never see a tiny leftover.
+    const canCoverHalf = totalCredits >= cost / 2;
+
+    if (totalCredits < cost && !canCoverHalf) {
       return new Response(
         JSON.stringify({ error: 'Insufficient credits', required: cost, available: totalCredits, action }),
         { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    // If they can't fully afford it but passed the half-threshold, charge
+    // whatever they have (drain to zero).
+    const effectiveCost = totalCredits < cost ? totalCredits : cost;
+
     // Deduct: free credits first, then purchased
-    let remainingCost = cost;
+    let remainingCost = effectiveCost;
     let newFreeCredits = freeCredits;
     let newPurchasedCredits = purchasedCredits;
     let usedFreeCredits = 0;
@@ -181,24 +190,28 @@ serve(async (req) => {
       );
     }
 
+    const wasRoundedUp = effectiveCost < cost;
+
     // Create ledger entry
     const { error: ledgerError } = await supabaseAdmin
       .from('credit_ledger')
       .insert({
         user_id: user.id,
         transaction_type: 'spend',
-        credits_delta: -cost,
+        credits_delta: -effectiveCost,
         is_free_credit: usedFreeCredits > 0 && usedPurchasedCredits === 0,
         action_type: action,
         trip_id: tripId || null,
         activity_id: activityId || null,
-        notes: `${action.replace(/_/g, ' ')} - ${cost} credits`,
+        notes: `${action.replace(/_/g, ' ')} - ${effectiveCost} credits${wasRoundedUp ? ` (rounded up from ${totalCredits}/${cost})` : ''}`,
         metadata: {
           ...metadata,
           day_index: dayIndex,
           used_free_credits: usedFreeCredits,
           used_purchased_credits: usedPurchasedCredits,
           is_variable_cost: isVariable,
+          original_cost: cost,
+          rounded_up: wasRoundedUp,
         },
       });
 
@@ -211,8 +224,10 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        spent: cost,
+        spent: effectiveCost,
         action,
+        roundedUp: wasRoundedUp,
+        originalCost: wasRoundedUp ? cost : undefined,
         newBalance: { total: newTotal, purchased: newPurchasedCredits, free: newFreeCredits },
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
