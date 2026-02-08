@@ -2095,21 +2095,23 @@ export function EditorialItinerary({
             )}
             {/* Currency Toggle + Total */}
             <div className="flex items-center gap-0 shrink-0">
-              <button
-                onClick={() => setShowLocalCurrency((v) => !v)}
-                data-tour="currency-toggle"
-                className="flex items-center gap-1 px-1.5 sm:px-2 py-1 sm:py-1.5 rounded-l-md bg-secondary/50 border border-r-0 border-border text-xs font-medium hover:bg-secondary transition-colors"
-                title={`Switch to ${showLocalCurrency ? 'USD' : localCurrency}`}
-              >
-                <span className={showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>
-                  {localCurrency}
-                </span>
-                <span className="text-muted-foreground/50">/</span>
-                <span className={!showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>
-                  USD
-                </span>
-              </button>
-              <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-r-md bg-primary/10 border border-primary/20 text-xs sm:text-sm">
+              {localCurrency !== 'USD' && (
+                <button
+                  onClick={() => setShowLocalCurrency((v) => !v)}
+                  data-tour="currency-toggle"
+                  className="flex items-center gap-1 px-1.5 sm:px-2 py-1 sm:py-1.5 rounded-l-md bg-secondary/50 border border-r-0 border-border text-xs font-medium hover:bg-secondary transition-colors"
+                  title={`Switch to ${showLocalCurrency ? 'USD' : localCurrency}`}
+                >
+                  <span className={showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>
+                    {localCurrency}
+                  </span>
+                  <span className="text-muted-foreground/50">/</span>
+                  <span className={!showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>
+                    USD
+                  </span>
+                </button>
+              )}
+              <div className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 bg-primary/10 border border-primary/20 text-xs sm:text-sm ${localCurrency !== 'USD' ? 'rounded-r-md' : 'rounded-md'}`}>
                 <span className="text-muted-foreground hidden sm:inline">Total:</span>
                 <span className="font-semibold text-primary">{formatCurrency(displayCost(totalCost), tripCurrency)}</span>
               </div>
