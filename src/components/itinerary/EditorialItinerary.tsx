@@ -21,13 +21,14 @@ import {
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
-  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus
+  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
 import { CREDIT_COSTS } from '@/config/pricing';
 import { CreditNudge } from './CreditNudge';
 import { UnlockBanner } from './UnlockBanner';
+import { useUnlockDay } from '@/hooks/useUnlockDay';
 import { HotelGalleryModal } from './HotelGalleryModal';
 import { DraggableActivityList } from './DraggableActivityList';
 import { Badge } from '@/components/ui/badge';
@@ -902,7 +903,42 @@ export function EditorialItinerary({
   const { data: creditData } = useCredits();
   const spendCredits = useSpendCredits();
   const totalCredits = creditData?.totalCredits ?? 0;
+  
+  // Per-day unlock for preview itineraries
+  const { unlockDay, isUnlocking: isUnlockingDay, unlockingDayNumber } = useUnlockDay();
+  
   const [changingTransportActivityId, setChangingTransportActivityId] = useState<string | null>(null);
+
+  // Handle per-day unlock from preview mode
+  const handleUnlockDay = useCallback((dayNumber: number) => {
+    unlockDay({
+      tripId,
+      dayNumber,
+      totalDays: days.length,
+      destination,
+      destinationCountry,
+      travelers,
+      startDate,
+      budgetTier,
+      tripType,
+    }, (unlockedDayNumber, enrichedDay) => {
+      // Merge the enriched day back into state
+      setDays(prev => prev.map(d => {
+        if (d.dayNumber === unlockedDayNumber && enrichedDay) {
+          const merged = {
+            ...d,
+            ...enrichedDay,
+            dayNumber: unlockedDayNumber,
+            _unlocked: true, // Mark as individually unlocked
+          };
+          return merged;
+        }
+        return d;
+      }));
+      setHasChanges(true);
+    });
+  }, [unlockDay, tripId, days.length, destination, destinationCountry, travelers, startDate, budgetTier, tripType]);
+
 
   // Handle transport mode change for a specific activity route segment
   const handleTransportModeChange = useCallback(async (dayIndex: number, activityId: string, newMode: string) => {
@@ -2512,7 +2548,9 @@ export function EditorialItinerary({
                   isEditable={effectiveIsEditable}
                   isPreview={isPreview}
                   tripId={tripId}
-                  onUnlockTrip={() => setCreditNudge({ action: 'UNLOCK_DAY' })}
+                   onUnlockTrip={() => setCreditNudge({ action: 'UNLOCK_DAY' })}
+                   onUnlockDay={handleUnlockDay}
+                   unlockingDayNumber={unlockingDayNumber}
                   getPaymentForItem={getPaymentForItem}
                   refreshPayments={refreshPayments}
                   onToggle={() => toggleDay(days[selectedDayIndex].dayNumber)}
@@ -4862,6 +4900,8 @@ interface DayCardProps {
   onBookingStateChange?: (activityId: string, newState: BookingItemState) => void;
   onViewReviews?: (activity: EditorialActivity) => void;
   onUnlockTrip?: () => void;
+  onUnlockDay?: (dayNumber: number) => void;
+  unlockingDayNumber?: number | null;
   onTransportModeChange?: (dayIndex: number, activityId: string, newMode: string) => Promise<void>;
   changingTransportActivityId?: string | null;
   collaboratorColorMap?: Map<string, CollaboratorAttribution>;
@@ -4901,6 +4941,8 @@ function DayCard({
   onBookingStateChange,
   onViewReviews,
   onUnlockTrip,
+  onUnlockDay,
+  unlockingDayNumber,
   onTransportModeChange,
   changingTransportActivityId,
   collaboratorColorMap,
@@ -5087,22 +5129,31 @@ function DayCard({
             {/* Day Footer */}
             <div className="px-6 py-4 bg-gradient-to-r from-secondary/30 via-secondary/20 to-secondary/30 border-t border-border">
               {isPreview ? (
-                /* Preview Unlock CTA */
+                /* Preview Per-Day Unlock CTA */
                 <div className="flex flex-col items-center gap-3 py-2">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Lock className="h-4 w-4" />
-                    <span>Addresses, photos, tips & booking links are locked</span>
-                  </div>
-                  <Button 
-                    size="sm" 
-                    className="gap-2"
-                    onClick={() => {
-                      onUnlockTrip?.();
-                    }}
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    Unlock Full Itinerary
-                  </Button>
+                  {unlockingDayNumber === day.dayNumber ? (
+                    <div className="flex items-center gap-2 text-sm text-primary">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Enriching Day {day.dayNumber}...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Lock className="h-4 w-4" />
+                        <span>Addresses, photos, tips & booking links are locked</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button 
+                          size="sm" 
+                          className="gap-2"
+                          onClick={() => onUnlockDay?.(day.dayNumber)}
+                        >
+                          <Sparkles className="h-4 w-4" />
+                          Unlock Day {day.dayNumber} · {CREDIT_COSTS.UNLOCK_DAY} credits
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ) : (
                 <div className="flex items-center justify-between text-sm">

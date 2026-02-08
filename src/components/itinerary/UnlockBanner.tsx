@@ -1,8 +1,11 @@
 /**
  * UnlockBanner — Sticky CTA shown on preview itineraries
  * 
+ * Offers two unlock paths:
+ * 1. Unlock ALL days at once (bulk discount feel)
+ * 2. Per-day unlock (handled by parent via onUnlockDay)
+ * 
  * Shows credit cost, progress during unlock, and handles the full flow.
- * Displays inline CreditNudge when user can't afford it.
  */
 
 import { useState } from 'react';
@@ -12,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { useUnlockTrip, type UnlockTripParams } from '@/hooks/useUnlockTrip';
 import { CreditNudge } from './CreditNudge';
-import { formatCredits } from '@/config/pricing';
+import { formatCredits, CREDIT_COSTS } from '@/config/pricing';
 
 interface UnlockBannerProps {
   tripId: string;
@@ -42,8 +45,9 @@ export function UnlockBanner({
 
   const unlockCost = getUnlockCost(totalDays);
   const affordable = canAfford(totalDays);
+  const perDayCost = CREDIT_COSTS.UNLOCK_DAY;
 
-  const handleUnlock = async () => {
+  const handleUnlockAll = async () => {
     if (!affordable) {
       setShowNudge(true);
       return;
@@ -85,7 +89,7 @@ export function UnlockBanner({
     );
   }
 
-  // After unlock complete — show nothing (parent will re-render with full itinerary)
+  // After unlock complete — show nothing
   if (state.step === 'complete') {
     return null;
   }
@@ -97,7 +101,7 @@ export function UnlockBanner({
         <p className="text-sm text-destructive font-medium">
           Something went wrong during unlock. Your credits were not charged.
         </p>
-        <Button size="sm" variant="outline" className="mt-2" onClick={handleUnlock}>
+        <Button size="sm" variant="outline" className="mt-2" onClick={handleUnlockAll}>
           Try Again
         </Button>
       </div>
@@ -111,24 +115,33 @@ export function UnlockBanner({
         animate={{ opacity: 1, y: 0 }}
         className="rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10 p-4"
       >
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col gap-3">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10">
               <Lock className="h-5 w-5 text-primary" />
             </div>
-            <div>
+            <div className="flex-1">
               <p className="font-medium text-sm text-foreground">
                 Preview Mode — Details Locked
               </p>
               <p className="text-xs text-muted-foreground">
-                Unlock addresses, photos, tips & booking links for all {totalDays} days
+                Unlock days to see addresses, photos, tips & booking links
               </p>
             </div>
           </div>
-          <Button onClick={handleUnlock} className="gap-2 shrink-0">
-            <Sparkles className="h-4 w-4" />
-            Unlock · {formatCredits(unlockCost)} credits
-          </Button>
+          
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            {/* Unlock all days */}
+            <Button onClick={handleUnlockAll} className="gap-2 flex-1">
+              <Sparkles className="h-4 w-4" />
+              Unlock All {totalDays} Days · {formatCredits(unlockCost)} credits
+            </Button>
+            
+            {/* Per-day hint */}
+            <p className="text-xs text-muted-foreground text-center sm:text-left self-center">
+              or unlock individual days for {formatCredits(perDayCost)} credits each
+            </p>
+          </div>
         </div>
       </motion.div>
 
