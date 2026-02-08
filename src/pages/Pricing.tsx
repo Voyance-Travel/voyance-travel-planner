@@ -3,11 +3,11 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, ChevronDown, Loader2, ArrowRight, ShieldCheck, Info } from 'lucide-react';
+import { Check, ChevronDown, Loader2, ArrowRight, Lock, Sparkles, MapPin, Clock, Utensils } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
 import { CREDIT_PACKS, TOPUP_PACK, formatCredits } from '@/config/pricing';
-import { EXAMPLE_TRIP_COSTS, COMPLEXITY_TIERS, BASE_RATE_PER_DAY } from '@/lib/tripCostCalculator';
+import { EXAMPLE_TRIP_COSTS, BASE_RATE_PER_DAY } from '@/lib/tripCostCalculator';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { EmbeddedCheckoutModal } from '@/components/checkout';
@@ -22,117 +22,149 @@ interface CheckoutConfig {
   credits?: number;
 }
 
-// Enhanced tier data with formula-based translations
+// Revised tiers with outcome-based naming
 const tiers = [
   {
     id: 'single',
-    name: 'Starter',
+    name: 'City Break',
     credits: 200,
     price: 15.99,
-    translates: '~2 days of curated itinerary',
-    useCase: 'Generate a 2-day city break, or add extra days to an existing trip.',
-    breakdown: {
-      options: [
-        'A complete 2-day city break',
-        'Add 2 days to any existing trip',
-        'Multiple activity swaps and regenerations',
-      ],
-      example: 'A 2-day Paris weekend: Montmartre → Marais',
-    },
+    bestFor: 'Quick 2-day escape',
+    covers: '~2 days',
+    breakdown: [
+      'A complete 2-day city break',
+      'Add 2 days to any existing trip',
+      'Multiple activity swaps',
+    ],
+    example: '2-day Paris weekend: Montmartre to Marais',
   },
   {
     id: 'weekend',
-    name: 'Weekend',
+    name: 'Getaway',
     credits: 500,
     price: 29.99,
     featured: true,
-    translates: '3-5 day trip',
-    useCase: 'Generate a complete long weekend trip, or plan a 5-day getaway with room for swaps and extras.',
-    breakdown: {
-      options: [
-        'A complete 5-day standard trip',
-        'A 3-day custom trip with hotel search',
-        'Extend any trip by 3-5 days',
-      ],
-      example: 'A 5-day Tokyo trip: Shibuya → Asakusa → Akihabara → Tsukiji → Harajuku',
-    },
+    bestFor: 'Long weekend',
+    covers: '~3-5 days',
+    breakdown: [
+      'A complete 5-day standard trip',
+      'A 3-day custom trip with hotel search',
+      'Extend any trip by 3-5 days',
+    ],
+    example: '5-day Tokyo: Shibuya, Asakusa, Akihabara, Tsukiji, Harajuku',
   },
   {
     id: 'explorer',
-    name: 'Explorer',
+    name: 'Journey',
     credits: 1200,
     price: 65.99,
-    translates: 'Week+ trip or multi-trip',
-    useCase: 'Generate a full week-long multi-city trip, or plan multiple shorter getaways across any destinations.',
-    breakdown: {
-      options: [
-        'One 7-day multi-city trip with hotels',
-        'Two separate 5-day vacations',
-        'Mix and match across any destinations',
-      ],
-      example: '7 days: Tokyo (4) → Kyoto (3), both fully curated with hotels',
-    },
+    bestFor: 'Full week abroad',
+    covers: '~7 days + hotels',
+    breakdown: [
+      'One 7-day multi-city trip with hotels',
+      'Two separate 5-day vacations',
+      'Mix and match across destinations',
+    ],
+    example: '7 days: Tokyo (4) then Kyoto (3), fully curated',
   },
   {
     id: 'adventurer',
-    name: 'Adventurer',
+    name: 'Expedition',
     credits: 2500,
     price: 99.99,
-    translates: 'Multiple vacations',
-    useCase: 'Generate up to three complete vacations, or one epic multi-week trip, or mix and match across the whole year.',
-    breakdown: {
-      options: [
-        'Three complete 7-day vacations',
-        'One epic 21+ day adventure',
-        'Mix and match all year long',
-      ],
-      example: 'Tokyo (7) + Barcelona (7) + Iceland (7), all fully curated',
-    },
+    bestFor: 'Multiple trips',
+    covers: '2-3 full vacations',
+    breakdown: [
+      'Three complete 7-day vacations',
+      'One epic 21+ day adventure',
+      'Mix and match all year long',
+    ],
+    example: 'Tokyo + Barcelona + Iceland, all fully curated',
   },
 ];
 
-const whatsInADay = [
-  { icon: '📍', label: '4-5 curated activities', desc: 'Timed to avoid crowds, ordered for efficient routing' },
-  { icon: '🍽️', label: 'Restaurant picks with dish recs', desc: 'Not just where, but what to order and what to skip' },
-  { icon: '💰', label: 'Three budget tiers', desc: 'Safe ($) · Stretch ($$) · Splurge ($$$) for every stop' },
-  { icon: '🛡️', label: 'Trap Avoided warnings', desc: 'We flag overhyped spots and suggest better alternatives' },
-  { icon: '🕐', label: 'Timing strategies', desc: 'Best arrival windows, crowd patterns, booking lead times' },
-  { icon: '🔗', label: 'Booking links included', desc: 'Direct links to reserve. No searching, no middlemen' },
+// Free vs Paid comparison
+const freeFeatures = [
+  { icon: MapPin, label: 'Full itinerary outline', desc: 'Every day mapped with activities' },
+  { icon: Clock, label: 'Activity timing', desc: '"Arrive at 8am to avoid crowds"' },
+  { icon: Utensils, label: 'Restaurant picks', desc: 'Where to eat each meal' },
+  { icon: Sparkles, label: 'Trap warnings', desc: '"Skip this tourist trap"' },
+  { label: 'Route optimization', desc: 'Logical order, minimal backtracking' },
+  { label: 'Regenerate outline', desc: "Don't like it? Regenerate free" },
 ];
 
-const faqs = [
+const paidFeatures = [
+  { label: 'Booking links', desc: 'Direct links to reserve activities and restaurants' },
+  { label: 'Budget breakdowns', desc: 'Safe ($) / Stretch ($$) / Splurge ($$$) for every stop' },
+  { label: 'Reservation windows', desc: '"Book 30+ days ahead" with exact timing' },
+  { label: '"What to order" specifics', desc: 'Specific dishes at each restaurant' },
+  { label: 'Hotel recommendations', desc: 'Curated picks that match your style' },
+  { label: 'PDF export', desc: 'Download your complete, polished itinerary' },
+];
+
+// What one unlocked day looks like
+const dayDetails = [
   {
-    q: 'How many credits does a trip use?',
-    a: `Trip cost is based on a simple formula: ${BASE_RATE_PER_DAY} credits per day, plus a small fee for multi-city routes. Trips with dietary needs, kids, or special occasions use a Custom (1.15×) or Highly Curated (1.30×) multiplier. You always see the exact cost before generating.`,
+    category: 'Activities',
+    items: [
+      '4-5 curated stops, timed to avoid crowds',
+      'Route-optimized order (no backtracking)',
+      '"Why this" context for each pick',
+      'Alternative swaps if you don\'t like something',
+    ],
   },
   {
-    q: 'Do credits expire?',
-    a: 'Never. Purchased credits are yours until you use them. Only the free 150 monthly credits refresh each month (with a 2-month expiry window).',
+    category: 'Restaurants',
+    items: [
+      'Breakfast, lunch, dinner picks',
+      'What to order (specific dishes)',
+      'What to skip (tourist traps, overpriced items)',
+      'Reservation timing ("book 2 weeks out")',
+    ],
   },
   {
-    q: 'What if my trip has special requirements?',
-    a: 'Trips with vegan/halal/kosher dietary needs, kids, pets, strict budgets, or special occasions use slightly more credits because our AI does extra work to match venues to your specific needs. Accessibility is always free, no upcharge, ever.',
-  },
-  {
-    q: 'What about multi-city trips?',
-    a: 'Multi-city trips add a small routing fee: +60 credits for 2 cities, +120 for 3, capped at +180 for 4+. This covers cross-city logistics, transfers, and optimized sequencing.',
-  },
-  {
-    q: 'Can I regenerate a trip if I don\'t like it?',
-    a: 'Yes! Day regeneration costs 90 credits per day. Activity swaps cost 15 credits each. Both are designed to let you fine-tune without regenerating the entire trip.',
-  },
-  {
-    q: 'What\'s included free?',
-    a: 'PDF export, trip sharing, route optimization, AI companion chat, group blending, budget tracking, and weather forecasts are all free with any credit balance.',
+    category: 'Budget Tiers',
+    items: [
+      'Safe ($): Great experience, budget-friendly',
+      'Stretch ($$): Worth the upgrade',
+      'Splurge ($$$): Once-in-a-lifetime',
+    ],
   },
 ];
 
 const sampleDay = [
-  { time: '8:00 AM', name: 'Meiji Shrine', note: 'Private guide, before tourist buses arrive', cost: 'Free–$175' },
-  { time: '12:00 PM', name: 'Afuri Harajuku', note: 'Yuzu shio ramen · skip Takeshita St tourist traps', cost: '$11–$20' },
-  { time: '1:45 PM', name: 'Omotesando Architecture Walk', note: 'Prada → Dior → Ando\'s Omotesando Hills', cost: 'Free–$210' },
+  { time: '8:00 AM', name: 'Meiji Shrine', note: 'Private guide, before tourist buses arrive', cost: 'Free-$175' },
+  { time: '12:00 PM', name: 'Afuri Harajuku', note: 'Yuzu shio ramen. Skip Takeshita St tourist traps', cost: '$11-$20' },
+  { time: '1:45 PM', name: 'Omotesando Architecture Walk', note: 'Prada, Dior, Ando\'s Omotesando Hills', cost: 'Free-$210' },
   { time: '5:00 PM', name: 'teamLab Planets', note: 'Weekday 5 PM = 40% fewer visitors', cost: '$22' },
-  { time: '7:30 PM', name: 'Sushi Sora, 38th Floor', note: '8-seat omakase · book 30+ days ahead', cost: '$105–$280' },
+  { time: '7:30 PM', name: 'Sushi Sora, 38th Floor', note: '8-seat omakase. Book 30+ days ahead', cost: '$105-$280' },
+];
+
+const faqs = [
+  {
+    q: 'How do credits work?',
+    a: 'Credits unlock the full details of your trip: booking links, budget breakdowns, reservation timing, and PDF export. 1 day of itinerary is roughly 100 credits. Trips with dietary needs or multiple cities use slightly more.',
+  },
+  {
+    q: 'What\'s free?',
+    a: 'Your complete itinerary outline is always free: every day mapped with activities, timing tips, and restaurant picks. You see the full plan before you pay anything.',
+  },
+  {
+    q: 'Do credits expire?',
+    a: 'Never. Buy once, use whenever you\'re ready.',
+  },
+  {
+    q: 'Can I regenerate if I don\'t like my trip?',
+    a: 'Yes. Regenerating your outline is free. If you\'ve already unlocked details, regenerating those sections uses credits.',
+  },
+  {
+    q: 'What if my trip has special requirements?',
+    a: 'Dietary restrictions, accessibility needs, traveling with kids, group trips: we handle it. These trips use slightly more credits because they require more tailored research. Accessibility is never upcharged.',
+  },
+  {
+    q: 'What about multi-city trips?',
+    a: 'Trips with multiple destinations use more credits because we plan transit, timing between cities, and optimize your route. A 7-day Tokyo to Kyoto trip uses roughly 690 credits.',
+  },
 ];
 
 export default function Pricing() {
@@ -191,7 +223,7 @@ export default function Pricing() {
     <MainLayout>
       <Head 
         title="Pricing | Voyance" 
-        description="Preview any trip free. Use credits to generate full itineraries with photos, hours, and booking links. Buy once, use anytime." 
+        description="Plan your trip free. See your personalized itinerary outline with activities, timing, and restaurant picks. Unlock full details when you're ready to book." 
         canonical="https://travelwithvoyance.com/pricing"
       />
       
@@ -212,49 +244,195 @@ export default function Pricing() {
             transition={{ delay: 0.05 }}
             className="text-3xl sm:text-4xl md:text-5xl font-serif font-medium text-foreground mb-5 text-balance"
           >
-            Credits that translate to trips.
+            Plan free. Unlock when you're ready.
           </motion.h1>
           
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.1 }}
-            className="text-muted-foreground text-base sm:text-lg max-w-lg mx-auto"
+            className="text-muted-foreground text-base sm:text-lg max-w-xl mx-auto leading-relaxed"
           >
-            See your personalized trip preview free. Unlock full details when you're ready.
-            <br className="hidden sm:block" />
-            <span className="sm:inline block mt-1 sm:mt-0">Buy once, use anytime. Credits never expire.</span>
+            See your personalized itinerary outline: activities, timing strategies, and restaurant picks. Completely free.
           </motion.p>
-        </div>
-      </section>
-
-      {/* Free Tier Banner */}
-      <section className="py-6 sm:py-8">
-        <div className="max-w-2xl mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="bg-primary/5 border border-primary/20 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4"
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.15 }}
+            className="text-muted-foreground text-base sm:text-lg max-w-xl mx-auto mt-2"
           >
-            <div className="text-center sm:text-left">
-              <p className="text-primary font-semibold text-sm mb-1">
-                Free: 150 credits / month
-              </p>
-              <p className="text-muted-foreground text-sm">
-                Get your personalized trip preview every month. Unlock details when ready.
-              </p>
-            </div>
-            <Button asChild variant="outline" size="sm" className="shrink-0 border-primary/30 text-primary hover:bg-primary/5">
-              <Link to={ROUTES.QUIZ}>Start Free</Link>
+            When you want the full details, use credits to unlock your complete trip.
+          </motion.p>
+
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="mt-8"
+          >
+            <Button asChild size="lg">
+              <Link to={ROUTES.QUIZ}>
+                Build My Free Trip
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
             </Button>
+            <p className="text-xs text-muted-foreground mt-3">No credit card required</p>
           </motion.div>
         </div>
       </section>
 
-      {/* Pricing Cards */}
-      <section className="py-10 sm:py-14">
+      {/* How It Works */}
+      <section className="py-12 sm:py-16">
+        <div className="max-w-4xl mx-auto px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-10"
+          >
+            <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-2">
+              How Voyance Works
+            </h2>
+          </motion.div>
+
+          <div className="grid sm:grid-cols-3 gap-6">
+            {[
+              {
+                step: '01',
+                title: 'Tell us about your trip',
+                desc: 'Destination, dates, who\'s going, what you love, what you hate. Takes 2 minutes.',
+              },
+              {
+                step: '02',
+                title: 'Get your itinerary outline',
+                desc: 'See every day planned: activities, restaurants, timing tips. This is yours to keep. Free.',
+              },
+              {
+                step: '03',
+                title: 'Unlock full details when ready',
+                desc: 'Use credits to reveal booking links, budget breakdowns, reservation windows, and PDF export.',
+              },
+            ].map((item, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 12 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.08 }}
+                className="text-center"
+              >
+                <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-primary/10 text-primary text-sm font-bold mb-4">
+                  {item.step}
+                </span>
+                <h3 className="font-semibold text-foreground mb-2">{item.title}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
+              </motion.div>
+            ))}
+          </div>
+
+          <motion.p
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="text-center text-xs text-muted-foreground mt-8 max-w-md mx-auto"
+          >
+            We want you to see exactly what you're getting before you pay. No bait-and-switch.
+          </motion.p>
+        </div>
+      </section>
+
+      {/* Free vs Paid Split */}
+      <section className="py-12 sm:py-16 bg-muted/30">
         <div className="max-w-5xl mx-auto px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-10"
+          >
+            <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-2">
+              What's free vs. what credits unlock
+            </h2>
+            <p className="text-sm text-muted-foreground max-w-lg mx-auto">
+              You see the plan free. You pay to unlock the details you need to actually book.
+            </p>
+          </motion.div>
+
+          <div className="grid md:grid-cols-2 gap-5">
+            {/* Free Column */}
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="bg-card border border-border rounded-2xl p-5 sm:p-6"
+            >
+              <div className="flex items-center gap-2 mb-5">
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary/10">
+                  <Check className="w-4 h-4 text-primary" />
+                </span>
+                <h3 className="font-semibold text-foreground">Always Free</h3>
+              </div>
+              <div className="space-y-3">
+                {freeFeatures.map((f, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{f.label}</p>
+                      <p className="text-xs text-muted-foreground">{f.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* Paid Column */}
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.05 }}
+              className="bg-card border border-primary/20 rounded-2xl p-5 sm:p-6"
+            >
+              <div className="flex items-center gap-2 mb-5">
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary/10">
+                  <Lock className="w-4 h-4 text-primary" />
+                </span>
+                <h3 className="font-semibold text-foreground">Unlock with Credits</h3>
+              </div>
+              <div className="space-y-3">
+                {paidFeatures.map((f, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <Lock className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{f.label}</p>
+                      <p className="text-xs text-muted-foreground">{f.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing Cards */}
+      <section className="py-12 sm:py-16">
+        <div className="max-w-5xl mx-auto px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-10"
+          >
+            <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-2">
+              Pick your adventure
+            </h2>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto">
+              1 day of itinerary is roughly 100 credits. Complex trips use slightly more.
+              <br />Credits never expire.
+            </p>
+          </motion.div>
+
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
             {tiers.map((tier, index) => {
               const isFeatured = tier.featured;
@@ -278,34 +456,28 @@ export default function Pricing() {
                     </span>
                   )}
 
-                  <div className="flex items-start justify-between mb-3">
-                    <h3 className="font-semibold text-foreground">{tier.name}</h3>
-                    <span className="text-2xl font-bold text-foreground">${tier.price}</span>
+                  <div className="mb-3">
+                    <h3 className="font-semibold text-foreground text-lg">{tier.name}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">{tier.bestFor}</p>
                   </div>
 
+                  <div className="flex items-baseline gap-1 mb-1">
+                    <span className="text-3xl font-bold text-foreground">${tier.price}</span>
+                  </div>
                   <p className="text-xs text-muted-foreground mb-4">
-                    {formatCredits(tier.credits)} credits
+                    {formatCredits(tier.credits)} credits. Covers {tier.covers}
                   </p>
 
-                  <div className="border-t border-border pt-4 mb-4">
-                    <p className="font-medium text-foreground text-sm mb-1">
-                      {tier.translates}
-                    </p>
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      {tier.useCase}
-                    </p>
-                  </div>
-
-                  <div className="space-y-1.5 text-xs text-muted-foreground pb-4 border-b border-border mb-4">
-                    {tier.breakdown.options.map((option, i) => (
-                      <p key={i} className="flex items-start gap-2">
+                  <div className="border-t border-border pt-4 mb-4 space-y-1.5">
+                    {tier.breakdown.map((option, i) => (
+                      <p key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
                         <Check className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
                         <span>{option}</span>
                       </p>
                     ))}
-                    <p className="flex items-start gap-2 pt-1">
-                      <span>💡</span>
-                      <span className="italic">{tier.breakdown.example}</span>
+                    <p className="flex items-start gap-2 pt-1 text-xs text-muted-foreground">
+                      <span className="shrink-0">e.g.</span>
+                      <span className="italic">{tier.example}</span>
                     </p>
                   </div>
 
@@ -321,7 +493,7 @@ export default function Pricing() {
                     {loadingPlan === tier.id ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      `Get ${formatCredits(tier.credits)} Credits`
+                      `Get ${tier.name}`
                     )}
                   </Button>
                 </motion.div>
@@ -342,14 +514,14 @@ export default function Pricing() {
               disabled={loadingPlan === 'boost'}
               className="text-primary font-medium hover:underline disabled:opacity-50"
             >
-              {loadingPlan === 'boost' ? 'Loading...' : 'Boost · $8.99'}
+              {loadingPlan === 'boost' ? 'Loading...' : '+100 credits for $8.99'}
             </button>
-            : 100 credits for swaps, regenerations, or extending a trip.
+            {' '}for swaps, extensions, or upgrades.
           </motion.p>
         </div>
       </section>
 
-      {/* What Can You Build? */}
+      {/* Real Examples */}
       <section className="py-12 sm:py-16 bg-muted/30">
         <div className="max-w-4xl mx-auto px-4">
           <motion.div
@@ -359,10 +531,10 @@ export default function Pricing() {
             className="text-center mb-10"
           >
             <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-2">
-              What can you build with credits?
+              What credits actually buy
             </h2>
             <p className="text-sm text-muted-foreground max-w-lg mx-auto">
-              Real trip examples so you know exactly what you're getting.
+              Real trips, real costs. No mystery math.
             </p>
           </motion.div>
 
@@ -377,19 +549,29 @@ export default function Pricing() {
                 <div key={i} className="flex items-center justify-between px-5 sm:px-6 py-4">
                   <span className="text-sm text-muted-foreground">{example.label}</span>
                   <div className="flex items-center gap-3 shrink-0">
-                    <span className="font-medium text-foreground text-sm">{formatCredits(example.credits)}</span>
+                    <span className="font-medium text-foreground text-sm">~{formatCredits(example.credits)}</span>
                     <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">{example.pack}</span>
                   </div>
                 </div>
               ))}
             </div>
           </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="mt-6 text-xs text-muted-foreground max-w-lg mx-auto space-y-1"
+          >
+            <p className="font-medium text-foreground/80">Why the range?</p>
+            <p>More days = more credits. Dietary/accessibility needs = slightly more (extra research). Multi-city = slightly more (transit planning). Simple city break = fewer credits.</p>
+          </motion.div>
         </div>
       </section>
 
-      {/* All Features Included */}
+      {/* What One Day Looks Like */}
       <section className="py-12 sm:py-16">
-        <div className="max-w-5xl mx-auto px-4">
+        <div className="max-w-4xl mx-auto px-4">
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -397,83 +579,32 @@ export default function Pricing() {
             className="text-center mb-10"
           >
             <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-2">
-              Everything included with credits
-            </h2>
-            <p className="text-sm text-muted-foreground max-w-lg mx-auto">
-              No hidden tiers. No feature gates. Every credit unlocks the full Voyance experience.
-            </p>
-          </motion.div>
-
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { icon: '👥', label: 'Group Trip Blending', desc: 'Combine travel preferences across multiple travelers into one balanced itinerary' },
-              { icon: '🔗', label: 'Share & Collaborate', desc: 'Invite friends to view or edit trips together in real-time' },
-              { icon: '💸', label: 'Split Costs', desc: 'Track who owes what, assign payments, and settle up easily' },
-              { icon: '📊', label: 'Budget Tracking', desc: 'Set trip budgets, see spending by category, get alerts before you overspend' },
-              { icon: '🌤️', label: 'Weather Forecasts', desc: 'See daily weather for your destination dates built into your itinerary' },
-              { icon: '🍜', label: 'Restaurant Search', desc: 'AI-powered restaurant recommendations with what to order and what to skip' },
-              { icon: '➕', label: 'Add Your Own', desc: 'Insert custom activities, notes, or reservations into any day' },
-              { icon: '🔄', label: 'Swap Alternatives', desc: 'Don\'t like a pick? Swap it instantly with curated alternatives' },
-              { icon: '🗺️', label: 'Route Optimization', desc: 'Activities ordered to minimize backtracking and maximize your time' },
-              { icon: '🤖', label: 'AI Trip Companion', desc: 'Ask questions, get suggestions, and refine your trip with AI chat' },
-              { icon: '📄', label: 'PDF Export', desc: 'Download your full itinerary as a polished PDF' },
-              { icon: '🔒', label: 'Lock Activities', desc: 'Pin must-do activities so regenerations keep them in place' },
-            ].map((feature, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 12 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.03 }}
-                className="bg-card border border-border rounded-xl p-4"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-lg">{feature.icon}</span>
-                  <h3 className="font-medium text-foreground text-sm">{feature.label}</h3>
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  {feature.desc}
-                </p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* What's In One Day */}
-      <section className="py-12 sm:py-16 bg-muted/30">
-        <div className="max-w-4xl mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-8"
-          >
-            <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-2">
-              Every day includes
+              What one unlocked day looks like
             </h2>
             <p className="text-sm text-muted-foreground">
-              This is what one day of itinerary actually produces.
+              When you unlock a day, here's what you get.
             </p>
           </motion.div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {whatsInADay.map((item, i) => (
+          <div className="grid sm:grid-cols-3 gap-4">
+            {dayDetails.map((section, i) => (
               <motion.div
                 key={i}
                 initial={{ opacity: 0, y: 12 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.05 }}
-                className="bg-card border border-border rounded-xl p-4"
+                className="bg-card border border-border rounded-xl p-5"
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-lg">{item.icon}</span>
-                  <h3 className="font-medium text-foreground text-sm">{item.label}</h3>
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  {item.desc}
-                </p>
+                <h3 className="font-semibold text-foreground text-sm mb-3">{section.category}</h3>
+                <ul className="space-y-2">
+                  {section.items.map((item, j) => (
+                    <li key={j} className="flex items-start gap-2 text-xs text-muted-foreground">
+                      <Check className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
               </motion.div>
             ))}
           </div>
@@ -481,7 +612,7 @@ export default function Pricing() {
       </section>
 
       {/* Sample Day Preview */}
-      <section className="py-12 sm:py-16">
+      <section className="py-12 sm:py-16 bg-muted/30">
         <div className="max-w-2xl mx-auto px-4">
           <motion.div
             initial={{ opacity: 0, y: 12 }}
@@ -493,7 +624,7 @@ export default function Pricing() {
               Real example
             </p>
             <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground">
-              Here's what your Tokyo preview looks like:
+              A day in Tokyo, unlocked
             </h2>
           </motion.div>
 
@@ -505,13 +636,13 @@ export default function Pricing() {
           >
             <div className="flex items-center justify-between p-4 border-b border-border bg-muted/30">
               <div>
-                <p className="text-xs text-muted-foreground">Day 1 · Preview</p>
+                <p className="text-xs text-muted-foreground">Day 1</p>
                 <p className="font-medium text-foreground">Cultural Immersion</p>
               </div>
               <div className="text-right">
-                <p className="text-xs text-muted-foreground">Your on-the-ground spending</p>
+                <p className="text-xs text-muted-foreground">On-the-ground spending</p>
                 <p className="font-medium text-foreground">$33 - $560</p>
-                <p className="text-[10px] text-muted-foreground">Safe → Splurge at each stop</p>
+                <p className="text-[10px] text-muted-foreground">Safe to Splurge at each stop</p>
               </div>
             </div>
 
@@ -534,13 +665,12 @@ export default function Pricing() {
 
             <div className="p-4 bg-muted/30 border-t border-border">
               <p className="text-xs text-muted-foreground text-center">
-                Preview your full trip free. Generate full details with credits when ready.
+                Booking links and full budget breakdowns included with every unlocked day.
               </p>
             </div>
           </motion.div>
         </div>
       </section>
-
 
       {/* FAQ */}
       <section className="py-12 sm:py-16">
@@ -554,9 +684,6 @@ export default function Pricing() {
             <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-2">
               Common questions
             </h2>
-            <p className="text-sm text-muted-foreground">
-              How credits work, what they buy, and what to expect.
-            </p>
           </motion.div>
 
           <div className="border border-border rounded-2xl overflow-hidden bg-card divide-y divide-border">
@@ -601,10 +728,20 @@ export default function Pricing() {
             initial={{ opacity: 0, y: 12 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-4"
+            className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-3"
           >
-            Your trip preview is always free. Every month.
+            Your trip is waiting.
           </motion.h2>
+          <motion.p
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.05 }}
+            className="text-sm text-muted-foreground mb-6"
+          >
+            Start free. See your personalized itinerary outline in 2 minutes.
+            <br />Unlock when ready. Credits never expire.
+          </motion.p>
           <motion.div
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
@@ -613,7 +750,7 @@ export default function Pricing() {
           >
             <Button asChild size="lg">
               <Link to={ROUTES.QUIZ}>
-                Build My Itinerary
+                Build My Trip
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
@@ -623,9 +760,9 @@ export default function Pricing() {
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
             transition={{ delay: 0.15 }}
-            className="text-sm text-muted-foreground mt-4"
+            className="text-xs text-muted-foreground mt-3"
           >
-            No credit card. 150 free credits. Takes 2 minutes.
+            No credit card required
           </motion.p>
         </div>
       </section>
