@@ -1,240 +1,101 @@
 
-# Voyance Credit System Overhaul - Implementation Plan
+
+# Pricing Overhaul: Flexible Credits + Voyance Club
 
 ## Overview
 
-Migrate from flat per-action credit costs (150/day unlock) to a dynamic formula-based model where trip cost = `roundUpTo10((Days x 90 + MultiCityFee) x TierMultiplier) + AddOns`. This touches pricing config, edge functions, database triggers, Stripe products, and multiple UI components.
+Replace the current flat 4-pack credit system with a two-tier model:
+- **Flexible Credits** (3 quick top-ups: 100/$9, 300/$25, 500/$39)
+- **Voyance Club** (3 premium packs with bonus credits and perks: Voyager, Explorer, Adventurer)
 
-## What's Changing
+## Step 1: Create Stripe Products & Prices
 
-### Credit Costs (Old vs New)
+Create **3 new Stripe products** for Flexible Credits:
+- Flexible 100 credits -- $9.00
+- Flexible 300 credits -- $25.00
+- Flexible 500 credits -- $39.00
 
-| Action | Old | New |
-|--------|-----|-----|
-| Trip generation | 150/day (UNLOCK_DAY) | Formula: (Days x 90 + MultiCityFee) x Multiplier |
-| Activity swap | 10 | 15 |
-| Day regeneration | 20 | 90 |
-| Hotel search | N/A | 40/city (new) |
-| Restaurant rec | 15 | Removed |
-| AI message | 10 | Removed |
-| PDF export | 0 | 0 (no change) |
+Update existing Stripe products for the Club packs (reuse existing product IDs, create new prices):
+- **Voyager** (reuse prod_TwRGf3nmLa70Ad "Weekend"): $29.99, 600 total credits (500 base + 100 bonus)
+- **Explorer** (reuse prod_TwRGVa9L5UFQBt): $59.99, 1600 total credits (1200 base + 400 bonus)
+- **Adventurer** (reuse prod_TwRGzFgQz5RIzr): $99.99, 3200 total credits (2500 base + 700 bonus)
 
-### Package Changes
+## Step 2: Rewrite `src/config/pricing.ts`
 
-| Pack | Old Price | Old Credits | New Price | New Credits |
-|------|-----------|-------------|-----------|-------------|
-| Boost | $8.99 | 80 | $8.99 | 100 |
-| Starter | $15.99 | 200 | $15.99 | 200 (no change) |
-| Weekend | $29.99 | 500 | $29.99 | 500 (no change) |
-| Explorer | $59.99 | 1,200 | $65.99 | 1,200 |
-| Adventurer | $99.99 | 2,500 | $99.99 | 2,500 (no change) |
+Replace `CREDIT_PACKS`, `BOOST_PACK`, `TOPUP_PACK` with:
 
-### Signup Bonus
+- `FLEXIBLE_CREDITS` array: 3 items (100/$9, 300/$25, 500/$39) with `expirationMonths: 12`
+- `VOYANCE_CLUB_PACKS` array: 3 items (Voyager/Explorer/Adventurer) with `baseCredits`, `bonusCredits`, `totalCredits`, `perks[]`, `tier`, `expiresNever: true`, `bonusExpirationMonths: 6`
+- `VOYANCE_CLUB_PERKS` config defining cumulative perks per tier
+- Keep `CREDIT_PACKS` as a combined export for backward compatibility (`[...FLEXIBLE_CREDITS, ...VOYANCE_CLUB_PACKS]`)
+- Update `BOOST_PACK` / `TOPUP_PACK` to point to the smallest flexible credit (100/$9)
+- Update `getRecommendedPack` to search both arrays, preferring Club packs when value is better
+- Update `ALL_CREDIT_PACKS` accordingly
+- Update FAQ text constants if any are stored here
 
-| | Old | New |
-|--|-----|-----|
-| Signup bonus | 500 credits | 150 credits |
-| Expiration | 6 months | 2 months |
+## Step 3: Rebuild Credit Packs section in `src/pages/Pricing.tsx`
 
----
+Replace the current 4-card grid (lines 484-591) with two distinct sections:
 
-## Preserved Sections (User Request)
+**Section A -- "Quick Top-Up"**: Clean, compact rows showing the 3 flexible options. Simple "Buy" buttons. Subtext: "Buy exactly what you need. Credits expire in 12 months."
 
-The following sections of the current Pricing page will be **kept as-is** (with minor content updates):
-- "Everything included with credits" (12-feature grid with icons and descriptions)
-- "Every day includes" (6-item whatsInADay grid)
-- Pack description cards with breakdown options and examples
-- Sample day preview (Tokyo)
-- Guarantee section
-- Bottom CTA
+**Section B -- "Voyance Club"**: Three premium cards:
+- **Voyager** ($29.99): "500 + 100 bonus = 600 credits" with perks: Club badge, Credits never expire
+- **Explorer** ($59.99, "Popular" badge): "1,200 + 400 bonus = 1,600 credits" with perks: Everything in Voyager + Priority support + Early feature access
+- **Adventurer** ($99.99, "Best Value"): "2,500 + 700 bonus = 3,200 credits" with perks: Everything in Explorer + Founding Member badge (X of 1,000 remaining) + Beta access
 
----
+Replace the local `tiers` array (lines 37-67) with data driven from the new config. Remove the "Boost" upsell link at bottom. Update the monthly free credits callout to mention expiration differences.
 
-## Implementation Phases (Ordered to Avoid Breakage)
+## Step 4: Update `src/components/profile/CreditPacksGrid.tsx`
 
-### Phase 1: Create New Stripe Prices
+Restructure to show both tiers:
+- Compact row/list for Flexible Credits at top
+- Featured cards for Voyance Club packs below
+- Remove the old "Quick boost" footer section (now part of Flexible Credits)
 
-Before any code changes, create two new Stripe prices:
-1. **Boost**: $8.99 for 100 credits (replaces 80-credit Boost)
-2. **Explorer**: $65.99 for 1,200 credits (replaces $59.99 Explorer)
+## Step 5: Update `src/components/home/PricingPreview.tsx`
 
-Record the new Price IDs for use in Phase 2.
+Change the one-liner from "Start free. Unlock when ready. $24.99 per trip." to something like: "Start free. Top up from $9. Join the Voyance Club from $29.99."
 
-### Phase 2: Shared Logic and Config
+## Step 6: Update `src/components/checkout/AddCreditsModal.tsx`
 
-**New file: `src/lib/tripCostCalculator.ts`**
-- `calculateComplexity(dna, tripParams)` -- returns tier, multiplier, factors array
-- `calculateMultiCityFee(cityCount)` -- returns 0/60/120/180
-- `calculateTripCredits(days, cities, dna, tripParams, includeHotels)` -- returns full estimate breakdown
-- `getRecommendedPackForEstimate(creditsNeeded, currentBalance)` -- suggests best pack
-- `roundUpTo10(n)` -- rounding helper
-- Pure functions, no side effects, importable by both frontend and referenced conceptually by edge functions
+- Update `PRESET_AMOUNTS` from `[8, 12, 29, 55]` to `[9, 25, 39]`
+- Update `BOOST_MINIMUM` from `$8` to `$9`
 
-**Update: `src/config/pricing.ts`**
-- Replace `CREDIT_COSTS` object: remove `UNLOCK_DAY`, `RESTAURANT_REC`, `AI_MESSAGE`; add `TRIP_GENERATION` (variable), `HOTEL_SEARCH` (40), update `SWAP_ACTIVITY` (15), `REGENERATE_DAY` (90)
-- Add constants: `BASE_RATE_PER_DAY = 90`, `MULTI_CITY_FEES = {1: 0, 2: 60, 3: 120, 4: 180}`, `COMPLEXITY_TIERS`
-- Update `STRIPE_PRODUCTS.CREDITS_80` to 100 credits with new Price ID
-- Update `STRIPE_PRODUCTS.CREDITS_1200` to $65.99 with new Price ID
-- Update `FREE_TIER.signupBonus` from 500 to 150; `freeExpirationMonths` stays at 2
-- Update `CREDIT_PACKS` and `BOOST_PACK` arrays accordingly
-- Rewrite `TRIP_COST_EXAMPLES` with formula-based examples (Paris 3-day 270, Tokyo 5-day 450, etc.)
+## Step 7: Update `src/lib/tripCostCalculator.ts`
 
-### Phase 3: Database Changes
+Update `getRecommendedPackForEstimate` to search both `FLEXIBLE_CREDITS` and `VOYANCE_CLUB_PACKS`, recommending the best value option for the shortfall.
 
-**Migration 1: Create `trip_complexity` table**
-```text
-trip_complexity
-  trip_id UUID PRIMARY KEY (FK -> trips.id)
-  factor_count INTEGER NOT NULL
-  tier TEXT NOT NULL ('standard' | 'custom' | 'highly_curated')
-  multiplier NUMERIC(3,2) NOT NULL
-  factors JSONB NOT NULL
-  base_credits INTEGER NOT NULL
-  multi_city_fee INTEGER NOT NULL
-  total_credits INTEGER NOT NULL
-  created_at TIMESTAMPTZ DEFAULT now()
-```
-- RLS policy: users can read their own trip complexity via trip ownership
+## Step 8: Update `src/components/checkout/UpgradePrompt.tsx`
 
-**Migration 2: Update `handle_new_user()` function**
-- Change signup bonus from 500 to 150 free credits
-- Change expiration from 6 months to 2 months
-- Update ledger note to "Welcome bonus - 150 free credits"
+Update pack references from old `CREDIT_PACKS[0]`, `CREDIT_PACKS[1]` index-based lookups to use the new named exports. Update the recommendation logic to work with both tiers.
 
-### Phase 4: Backend Edge Functions
+## Step 9: Update `src/components/itinerary/CreditNudge.tsx`
 
-**Update: `supabase/functions/spend-credits/index.ts`**
-- Replace `CREDIT_COSTS` map:
-  - Remove `unlock_day` (replaced by `trip_generation`)
-  - Add `trip_generation` as variable-cost action (accepts `creditsAmount` in request body, validates server-side)
-  - Add `hotel_search` as variable-cost action (40 x cityCount)
-  - Update `swap_activity` to 15
-  - Update `regenerate_day` to 90
-  - Remove `restaurant_rec` and `ai_message`
-- For variable-cost actions, accept and validate a `creditsAmount` field
-- Store complexity breakdown in ledger metadata
+Update `BOOST_PACK` references to use the new smallest flexible credit. Update recommendation logic for the two-tier system.
 
-**Update: `supabase/functions/get-entitlements/index.ts`**
-- Update `CREDIT_COSTS` references used for feature flags (lines ~245-250)
-- Replace `build_full_trip` / `build_day` with new trip-generation logic
+## Step 10: Update FAQ section in `src/pages/Pricing.tsx`
 
-### Phase 5: Frontend Hooks
+Update FAQ answers to reflect:
+- Two ways to buy: Quick Top-Up (12-month expiry) vs Voyance Club (never expire + perks)
+- Bonus credits expire in 6 months
+- Club badge and perks explanation
+- "Never expire" caveat (account must be active -- 1 login/year)
 
-**Update: `src/hooks/useSpendCredits.ts`**
-- Update `ACTION_MAP`: remove `UNLOCK_DAY`, add `TRIP_GENERATION`, `HOTEL_SEARCH`
-- Support passing `creditsAmount` in request body for variable-cost actions
-
-**Update: `src/hooks/useFreeTierLimits.ts`**
-- Remove `canUnlockDay` and `daysAffordable` (no longer flat per-day)
-- Remove `canGetRestaurantRec` and `canSendAiMessage`
-- Update `canSwapActivity` threshold to 15, `canRegenerateDay` to 90
-- Add `canAffordTrip(estimate: number)` or keep generic `needsCredits` based on minimum action cost
-
-**Update: `src/hooks/useDraftLimitCheck.ts`**
-- Remove all `CREDIT_COSTS.UNLOCK_DAY` references
-- Replace with estimate-aware messaging (e.g., "Your trip costs X credits")
-
-**New: `src/hooks/useTripEstimate.ts`**
-- Takes trip params (days, cities, DNA profile) and returns full credit estimate
-- Uses `calculateTripCredits` from shared calculator
-- Provides `canAfford`, `creditsNeeded`, `recommendedPack`
-
-### Phase 6: Frontend UI Components
-
-**Update: `src/pages/Pricing.tsx`**
-- Update `tiers` array: Boost credits 80 -> 100, Explorer price $55 -> $65.99
-- Update tier descriptions to use formula language ("~2 days" instead of "1 full day")
-- Add "What Do Credits Cover?" section: base rate (90/day), multi-city fees, complexity tiers, add-ons table
-- Add "Example Trip Costs" table (Paris 3-day 270, Tokyo->Kyoto 7-day 690, etc.)
-- Add complexity tier explainer with "Accessibility is always free" messaging
-- Update FAQs to reflect formula-based pricing
-- **Keep**: "Everything included with credits" grid, "Every day includes" grid, sample day preview, guarantee, bottom CTA
-
-**Update: `src/components/checkout/UpgradePrompt.tsx`**
-- Remove `unlock_day` context option
-- Add `trip_generation` and `hotel_search` contexts
-- Update `ACTION_LABELS` with new costs (swap 15, regenerate 90, remove restaurant/ai_message)
-- Support dynamic `creditsNeeded` display for variable-cost actions
-- Update Boost display from "80 credits" to "100 credits"
-
-**Update: `src/components/common/DraftLimitBanner.tsx`**
-- Remove `CREDIT_COSTS.UNLOCK_DAY` references
-- Base low-credit threshold on minimum useful action (e.g., swap at 15 credits)
-- Update messaging from "unlock a day" to "generate a trip"
-
-**Update: `src/components/itinerary/EditorialItinerary.tsx`**
-- Swap cost references auto-update from `CREDIT_COSTS.SWAP_ACTIVITY` (now 15)
-- Regenerate cost references auto-update from `CREDIT_COSTS.REGENERATE_DAY` (now 90)
-- These read from the config so they update automatically
-
-**Update: `src/components/itinerary/ItineraryAssistant.tsx`**
-- Remove AI message credit check (AI messages no longer cost credits, or remove gating entirely)
-
-### Phase 7: Admin/Internal Config
-
-**Update: `src/config/unitEconomics.ts`**
-- Update `CREDIT_ACTION_MAPPING` with new credit values
-- Update `REVENUE_CONFIG.creditPacks` with new prices
-- Update `freeTier.signupBonus` to 150
-
-**Update: `src/config/userLifecycleCosts.ts`**
-- Update `CREDIT_TO_COST_MAPPING` with new credit values and actions
-- Add `trip_generation` and `hotel_search` entries
-- Remove `restaurant_rec` and `ai_message`
-
-### Phase 8: Migration for Existing Users
-
-**Database migration**: Grant 150 free credits to all existing users who have 0 balance
-- One-time script via migration SQL
-- Does not affect users who already have purchased credits
-
----
-
-## Complete File Impact List
+## Files Modified
 
 | File | Change |
 |------|--------|
-| `src/config/pricing.ts` | Major rewrite of costs, packages, free tier |
-| `src/lib/tripCostCalculator.ts` | **New file** - shared calculation logic |
-| `src/hooks/useTripEstimate.ts` | **New file** - trip cost estimation hook |
-| `src/hooks/useSpendCredits.ts` | Update action map, add variable-cost support |
-| `src/hooks/useFreeTierLimits.ts` | Remove UNLOCK_DAY, update thresholds |
-| `src/hooks/useDraftLimitCheck.ts` | Remove UNLOCK_DAY references |
-| `src/pages/Pricing.tsx` | Update tiers, add cost table, update FAQs |
-| `src/components/checkout/UpgradePrompt.tsx` | New contexts, updated costs |
-| `src/components/common/DraftLimitBanner.tsx` | Remove UNLOCK_DAY references |
-| `src/components/itinerary/EditorialItinerary.tsx` | Costs auto-update from config |
-| `src/components/itinerary/ItineraryAssistant.tsx` | Remove AI message credit gate |
-| `src/config/unitEconomics.ts` | Update credit action mapping |
-| `src/config/userLifecycleCosts.ts` | Update credit cost mapping |
-| `supabase/functions/spend-credits/index.ts` | Major update - new actions, variable costs |
-| `supabase/functions/get-entitlements/index.ts` | Update feature flag credit checks |
-| DB: `handle_new_user()` | 500 -> 150 signup bonus, 6mo -> 2mo expiry |
-| DB: `trip_complexity` table | New table with RLS |
+| `src/config/pricing.ts` | Core pricing data restructure |
+| `src/pages/Pricing.tsx` | Full credit packs section rebuild |
+| `src/components/profile/CreditPacksGrid.tsx` | Two-tier layout |
+| `src/components/home/PricingPreview.tsx` | Updated one-liner |
+| `src/components/checkout/AddCreditsModal.tsx` | New presets |
+| `src/components/checkout/UpgradePrompt.tsx` | Updated pack references |
+| `src/components/itinerary/CreditNudge.tsx` | Updated pack references |
+| `src/lib/tripCostCalculator.ts` | Updated recommendation logic |
 
----
+## No Database Changes Required
 
-## Edge Cases Handled
+The existing `credit_ledger` and `credit_balances` tables handle credits generically -- no schema changes needed. Badge display and Club membership tracking can be added as a future enhancement.
 
-| Scenario | Handling |
-|----------|----------|
-| User has exactly enough credits | Allow, show "0 remaining" |
-| User has 0 credits | Show purchase options only |
-| Mid-generation failure | Refund credits automatically |
-| 21+ day trip | Same formula, no cap |
-| 6+ city trip | Multi-city fee capped at 180 |
-| 10+ complexity factors | Multiplier capped at 1.30x |
-| Existing users with old balance | Keep current balance, no disruption |
-
-## Implementation Order (Critical Path)
-
-1. Create Stripe prices (Boost 100, Explorer $65.99)
-2. Create `src/lib/tripCostCalculator.ts` (safe - new file, no imports yet)
-3. Update `src/config/pricing.ts` (all downstream reads from here)
-4. Database migrations (trip_complexity table + handle_new_user update)
-5. Update `spend-credits` edge function + deploy
-6. Update frontend hooks (useSpendCredits, useFreeTierLimits, useDraftLimitCheck)
-7. Create `useTripEstimate` hook
-8. Update UI components (Pricing page, UpgradePrompt, DraftLimitBanner)
-9. Update admin configs (unitEconomics, userLifecycleCosts)
-10. Test end-to-end: signup flow, trip generation, swaps, regeneration, purchases
