@@ -2125,9 +2125,6 @@ export type Database = {
           created_at: string
           free_credits: number
           free_credits_expires_at: string | null
-          free_edits_limit: number
-          free_edits_used: number
-          free_trip_claimed: boolean
           id: string
           last_free_credit_at: string | null
           purchased_credits: number
@@ -2138,9 +2135,6 @@ export type Database = {
           created_at?: string
           free_credits?: number
           free_credits_expires_at?: string | null
-          free_edits_limit?: number
-          free_edits_used?: number
-          free_trip_claimed?: boolean
           id?: string
           last_free_credit_at?: string | null
           purchased_credits?: number
@@ -2151,9 +2145,6 @@ export type Database = {
           created_at?: string
           free_credits?: number
           free_credits_expires_at?: string | null
-          free_edits_limit?: number
-          free_edits_used?: number
-          free_trip_claimed?: boolean
           id?: string
           last_free_credit_at?: string | null
           purchased_credits?: number
@@ -3210,6 +3201,48 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      free_tier_status: {
+        Row: {
+          created_at: string
+          free_edits_remaining: number
+          free_trip_id: string | null
+          free_trip_used: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          free_edits_remaining?: number
+          free_trip_id?: string | null
+          free_trip_used?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          free_edits_remaining?: number
+          free_trip_id?: string | null
+          free_trip_used?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "free_tier_status_free_trip_id_fkey"
+            columns: ["free_trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "free_tier_status_free_trip_id_fkey"
+            columns: ["free_trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       friendships: {
         Row: {
@@ -7350,6 +7383,7 @@ export type Database = {
       cleanup_expired_search_cache: { Args: never; Returns: number }
       cleanup_expired_venues: { Args: never; Returns: number }
       cleanup_rate_limits: { Args: never; Returns: undefined }
+      consume_free_edit: { Args: { p_user_id: string }; Returns: Json }
       generate_booking_reference: { Args: never; Returns: string }
       generate_intake_token: { Args: never; Returns: string }
       generate_invoice_number: { Args: never; Returns: string }
@@ -7389,7 +7423,6 @@ export type Database = {
         Args: { p_action_type: string; p_usage_date: string; p_user_id: string }
         Returns: number
       }
-      increment_free_edits: { Args: { p_user_id: string }; Returns: Json }
       insert_audit_log: {
         Args: {
           p_action: string
