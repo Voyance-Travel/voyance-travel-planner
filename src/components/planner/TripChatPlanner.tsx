@@ -187,99 +187,115 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
 
   return (
     <div className={cn('flex flex-col max-w-md mx-auto', className)}>
-      {/* Chat messages */}
-      <div className="flex-1 space-y-3 mb-4 max-h-[400px] overflow-y-auto pr-1">
-        <AnimatePresence initial={false}>
-          {messages.map((msg, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2 }}
-              className={cn(
-                'flex gap-2.5',
-                msg.role === 'user' ? 'justify-end' : 'justify-start'
-              )}
-            >
-              {msg.role === 'assistant' && (
-                <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                  <Sparkles className="h-3.5 w-3.5 text-primary" />
-                </div>
-              )}
-              <div
+      {/* Chat container — looks like a proper chat window */}
+      <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col" style={{ height: '420px' }}>
+        {/* Chat header */}
+        <div className="px-4 py-2.5 border-b border-border bg-muted/30 flex items-center gap-2">
+          <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
+            <Sparkles className="h-3 w-3 text-primary" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-foreground">Voyance Travel AI</p>
+            <p className="text-[10px] text-muted-foreground">Describe your trip or paste your research</p>
+          </div>
+        </div>
+
+        {/* Chat messages */}
+        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+          <AnimatePresence initial={false}>
+            {messages.map((msg, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2 }}
                 className={cn(
-                  'max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed',
-                  msg.role === 'user'
-                    ? 'bg-primary text-primary-foreground rounded-br-md'
-                    : 'bg-muted text-foreground rounded-bl-md'
+                  'flex gap-2',
+                  msg.role === 'user' ? 'justify-end' : 'justify-start'
                 )}
               >
-                {msg.role === 'assistant' ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:m-0 [&>p+p]:mt-1.5">
-                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                {msg.role === 'assistant' && (
+                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                    <Sparkles className="h-3 w-3 text-primary" />
                   </div>
-                ) : (
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
                 )}
-              </div>
-              {msg.role === 'user' && (
-                <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
-                  <User className="h-3.5 w-3.5 text-muted-foreground" />
+                <div
+                  className={cn(
+                    'max-w-[80%] rounded-2xl px-3 py-2 text-sm leading-relaxed',
+                    msg.role === 'user'
+                      ? 'bg-primary text-primary-foreground rounded-br-sm'
+                      : 'bg-muted text-foreground rounded-bl-sm'
+                  )}
+                >
+                  {msg.role === 'assistant' ? (
+                    <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:m-0 [&>p+p]:mt-1.5">
+                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                  )}
                 </div>
-              )}
-            </motion.div>
-          ))}
-        </AnimatePresence>
+                {msg.role === 'user' && (
+                  <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
+                    <User className="h-3 w-3 text-muted-foreground" />
+                  </div>
+                )}
+              </motion.div>
+            ))}
+          </AnimatePresence>
 
-        {isStreaming && messages[messages.length - 1]?.role !== 'assistant' && (
-          <div className="flex gap-2.5">
-            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
+          {isStreaming && messages[messages.length - 1]?.role !== 'assistant' && (
+            <div className="flex gap-2">
+              <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <Sparkles className="h-3 w-3 text-primary" />
+              </div>
+              <div className="bg-muted rounded-2xl rounded-bl-sm px-3 py-2">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              </div>
             </div>
-            <div className="bg-muted rounded-2xl rounded-bl-md px-3.5 py-2.5">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input area — pinned to bottom of chat box */}
+        <div className="border-t border-border p-2 bg-background">
+          <div className="relative">
+            <Textarea
+              ref={textareaRef}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Tell us about your trip..."
+              className="min-h-[44px] max-h-[80px] resize-none pr-16 text-sm border-0 bg-muted/50 focus-visible:ring-1"
+              disabled={isStreaming}
+            />
+            <div className="absolute right-1.5 bottom-1.5 flex items-center gap-0.5">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7"
+                onClick={handlePaste}
+                title="Paste your research"
+              >
+                <ClipboardPaste className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                type="button"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => sendMessage(input)}
+                disabled={!input.trim() || isStreaming}
+              >
+                {isStreaming ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Send className="h-3.5 w-3.5" />
+                )}
+              </Button>
             </div>
           </div>
-        )}
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input area — always visible */}
-      <div className="relative">
-        <Textarea
-          ref={textareaRef}
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Tell us about your trip..."
-          className="min-h-[60px] max-h-[120px] resize-none pr-20 text-sm"
-          disabled={isStreaming}
-        />
-        <div className="absolute right-2 bottom-2 flex items-center gap-1">
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="h-7 w-7"
-            onClick={handlePaste}
-            title="Paste your research"
-          >
-            <ClipboardPaste className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            type="button"
-            size="icon"
-            className="h-7 w-7"
-            onClick={() => sendMessage(input)}
-            disabled={!input.trim() || isStreaming}
-          >
-            {isStreaming ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Send className="h-3.5 w-3.5" />
-            )}
-          </Button>
         </div>
       </div>
     </div>

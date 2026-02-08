@@ -164,10 +164,13 @@ export function ManualTripPasteEntry() {
     >
       <div className="text-center">
         <h2 className="text-xl sm:text-2xl font-serif font-semibold text-foreground mb-1">
-          I'll Build It Myself
+          Build It Yourself
         </h2>
         <p className="text-sm text-muted-foreground">
-          Paste your research - we'll organize it into a trip you can edit
+          Paste your research and we'll organize it. No AI generation - you're in full control.
+        </p>
+        <p className="text-xs text-muted-foreground/70 mt-1">
+          Perfect for travelers who already have their plan and just need a clean organizer.
         </p>
       </div>
 
