@@ -10,6 +10,7 @@ import {
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { QuizCompletion } from '@/components/quiz/QuizCompletion';
 import QuizFeedbackV3 from '@/components/quiz/QuizFeedbackV3';
 import { useAuth } from '@/contexts/AuthContext';
@@ -432,6 +433,7 @@ export default function Quiz() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [travelDNA, setTravelDNA] = useState<TravelDNAPayload | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showAuthGate, setShowAuthGate] = useState(false);
   const { user, setPreferences } = useAuth();
   const navigate = useNavigate();
 
@@ -615,7 +617,13 @@ export default function Quiz() {
         
         <AnimatePresence mode="wait">
           {!hasStarted ? (
-            <QuizIntro key="intro" onStart={() => setHasStarted(true)} onSkip={() => navigate(ROUTES.START)} />
+            <QuizIntro key="intro" onStart={() => {
+              if (!user) {
+                setShowAuthGate(true);
+                return;
+              }
+              setHasStarted(true);
+            }} onSkip={() => navigate(ROUTES.START)} />
           ) : isComplete ? (
             <motion.div
               key="completion"
@@ -774,6 +782,37 @@ export default function Quiz() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Auth Gate Dialog */}
+      <Dialog open={showAuthGate} onOpenChange={setShowAuthGate}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Compass className="h-5 w-5 text-primary" />
+              Sign up to discover your Travel DNA
+            </DialogTitle>
+            <DialogDescription>
+              Create a free account so we can save your results. It takes two seconds — just your name and email, no credit card.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 pt-2">
+            <Button
+              onClick={() => navigate(ROUTES.SIGNUP + '?redirect=' + encodeURIComponent('/quiz'))}
+              className="w-full gap-2"
+            >
+              Create Free Account
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => navigate(ROUTES.SIGNIN + '?redirect=' + encodeURIComponent('/quiz'))}
+              className="w-full"
+            >
+              I already have an account
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }
