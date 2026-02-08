@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MapPin, Calendar as CalendarIcon, Users, Loader2, DollarSign, 
   Sparkles, ChevronDown, ChevronUp, PartyPopper, ArrowRight, Check, Clock,
-  Eye, Gem, Utensils, Building2, Plane, Upload, Hotel, Search, PenLine, Globe, Star, Route
+  Eye, Gem, Utensils, Building2, Plane, Upload, Hotel, Search, PenLine, Globe, Star, Route, UserPlus
 } from 'lucide-react';
 import { addDays as addDaysUtil } from 'date-fns';
 import MultiCitySelector from '@/components/planner/MultiCitySelector';
@@ -36,7 +36,7 @@ import { AirportAutocomplete } from '@/components/common/AirportAutocomplete';
 import { HotelAutocomplete } from '@/components/common/HotelAutocomplete';
 import { FlightImportModal } from '@/components/itinerary/FlightImportModal';
 import type { ManualFlightEntry } from '@/components/itinerary/AddBookingInline';
-import GuestLinker, { type SelectedGuest } from '@/components/start/GuestLinker';
+import GuestLinkModal, { type LinkedGuest } from '@/components/planner/GuestLinkModal';
 
 // Types
 interface LocationSelection {
@@ -239,8 +239,8 @@ function TripDetailsStep({
   setEndDate,
   travelers,
   setTravelers,
-  selectedGuests,
-  onGuestsChange,
+  onOpenGuestModal,
+  linkedGuestCount,
   tripType,
   setTripType,
   celebrationDay,
@@ -263,8 +263,8 @@ function TripDetailsStep({
   setEndDate: (d: Date | undefined) => void;
   travelers: number;
   setTravelers: (n: number) => void;
-  selectedGuests: SelectedGuest[];
-  onGuestsChange: (guests: SelectedGuest[]) => void;
+  onOpenGuestModal: () => void;
+  linkedGuestCount: number;
   tripType: string;
   setTripType: (t: string) => void;
   celebrationDay: number | undefined;
@@ -499,11 +499,20 @@ function TripDetailsStep({
         </div>
 
         {/* Link Friends */}
-        <GuestLinker
-          selectedGuests={selectedGuests}
-          onGuestsChange={onGuestsChange}
-          maxGuests={Math.max(0, travelers - 1)}
-        />
+        {travelers > 1 && (
+          <button
+            type="button"
+            onClick={onOpenGuestModal}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors mt-1"
+          >
+            <UserPlus className="h-3.5 w-3.5" />
+            <span>
+              {linkedGuestCount > 0
+                ? `${linkedGuestCount} companion${linkedGuestCount > 1 ? 's' : ''} linked`
+                : 'Link friends to this trip'}
+            </span>
+          </button>
+        )}
         </div>
 
         {/* Trip Type - mobile optimized */}
@@ -1268,7 +1277,8 @@ export default function Start() {
   const [tripType, setTripType] = useState<string>('leisure');
   const [celebrationDay, setCelebrationDay] = useState<number | undefined>(undefined);
   const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount);
-  const [selectedGuests, setSelectedGuests] = useState<SelectedGuest[]>([]);
+  const [linkedGuests, setLinkedGuests] = useState<LinkedGuest[]>([]);
+  const [showGuestModal, setShowGuestModal] = useState(false);
 
   // Multi-city state
   const [isMultiCity, setIsMultiCity] = useState(plannerState.basics.isMultiCity || false);
@@ -1468,22 +1478,26 @@ export default function Start() {
       }
 
       // Insert linked guests as trip collaborators
-      if (selectedGuests.length > 0) {
-        const collabRows = selectedGuests.map((g) => ({
-          trip_id: trip.id,
-          user_id: g.userId,
-          permission: 'edit' as const,
-          invited_by: user.id,
-          accepted_at: new Date().toISOString(),
-          include_preferences: true,
-        }));
-        const { error: collabError } = await supabase
-          .from('trip_collaborators')
-          .insert(collabRows);
-        if (collabError) {
-          console.error('[Start] Failed to insert collaborators:', collabError);
-        } else {
-          console.log(`[Start] Linked ${collabRows.length} guests to trip ${trip.id}`);
+      if (linkedGuests.length > 0) {
+        const collabRows = linkedGuests
+          .filter((g) => g.isVoyanceUser) // Only insert Voyance users; email invites handled separately
+          .map((g) => ({
+            trip_id: trip.id,
+            user_id: g.id,
+            permission: g.permission,
+            invited_by: user.id,
+            accepted_at: new Date().toISOString(),
+            include_preferences: g.includePreferences,
+          }));
+        if (collabRows.length > 0) {
+          const { error: collabError } = await supabase
+            .from('trip_collaborators')
+            .insert(collabRows);
+          if (collabError) {
+            console.error('[Start] Failed to insert collaborators:', collabError);
+          } else {
+            console.log(`[Start] Linked ${collabRows.length} guests to trip ${trip.id}`);
+          }
         }
       }
 
@@ -1527,8 +1541,8 @@ export default function Start() {
                     setEndDate={setEndDate}
                     travelers={travelers}
                     setTravelers={setTravelers}
-                    selectedGuests={selectedGuests}
-                    onGuestsChange={setSelectedGuests}
+                    onOpenGuestModal={() => setShowGuestModal(true)}
+                    linkedGuestCount={linkedGuests.length}
                     tripType={tripType}
                     setTripType={setTripType}
                     celebrationDay={celebrationDay}
@@ -1630,6 +1644,16 @@ export default function Start() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Guest Link Modal */}
+      <GuestLinkModal
+        open={showGuestModal}
+        onOpenChange={setShowGuestModal}
+        maxGuests={Math.max(0, travelers - 1) + 1}
+        currentTravelers={travelers}
+        initialGuests={linkedGuests}
+        onGuestsConfirmed={setLinkedGuests}
+      />
     </MainLayout>
   );
 }
