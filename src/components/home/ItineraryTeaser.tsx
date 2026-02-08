@@ -305,7 +305,7 @@ export function ItineraryTeaser({
         transition={{ delay: 1 }}
         className="text-center text-xs text-white/50 mt-4"
       >
-        No credit card required. Free monthly credits to get started.
+        No credit card required.
       </motion.p>
     </motion.div>
   );
