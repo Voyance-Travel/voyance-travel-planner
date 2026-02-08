@@ -3362,16 +3362,20 @@ function buildPreferenceContext(insights: any, prefs: any): string {
         'relaxed': `RELAXED PACE: 
    → Maximum 4-5 activities per day (including meals)
    → Include 2+ hour downtime blocks for rest/exploration
-   → No back-to-back activities - allow 30+ min buffers
-   → Prioritize quality over quantity`,
+   → No back-to-back activities - allow 30+ min REST buffers AFTER travel time
+   → Prioritize quality over quantity
+   → TRAVEL TIME IS SEPARATE: Add realistic travel/transit time (15-45 min depending on distance) BETWEEN activities, then add rest buffer ON TOP`,
         'balanced': `BALANCED PACE:
    → 5-6 activities per day (including meals)
    → Include at least one 1-hour downtime block
-   → 15-20 min buffers between activities`,
+   → TRAVEL TIME IS SEPARATE from rest buffers: Add realistic travel time (15-30 min for nearby, 30-60 min for cross-city) BETWEEN activities, plus 10-15 min settling buffer
+   → If two activities are in different neighborhoods, the gap should be 30-60 min, NOT 15 min
+   → A 15-min gap is ONLY acceptable for activities within walking distance of each other`,
         'active': `ACTIVE PACE:
    → Can handle 7-8 activities per day
    → Minimal downtime needed - keep them moving
-   → Pack the day with experiences`,
+   → Pack the day with experiences
+   → Still account for realistic travel time between locations (10-30 min minimum depending on distance)`,
       };
       coreItems.push(paceInstructions[prefs.travel_pace] || `Travel pace: ${prefs.travel_pace}`);
     }
@@ -8296,7 +8300,7 @@ ${lockedSlotsInstruction}
 General Requirements:
 - Include FULL street addresses for all locations
 - Provide realistic cost estimates in local currency
-- Account for travel time between activities
+- Account for REALISTIC travel time between activities — if two places are in different neighborhoods, leave 30-60 min gap (not 15 min). Only use 15 min gaps for locations within walking distance. Travel time and rest buffers are SEPARATE.
 - Include meals (breakfast, lunch, dinner as appropriate for the time of day)
 - ONLY recommend restaurants and dining spots with 4+ star ratings - no low-quality or poorly-reviewed venues
 - Every activity MUST have a "title" field (the display name)
