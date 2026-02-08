@@ -9,7 +9,43 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ROUTES } from '@/config/routes';
 import { ARCHETYPE_NARRATIVES, CATEGORY_DESCRIPTIONS, type ArchetypeNarrative } from '@/data/archetypeNarratives';
+import { ARCHETYPE_DETAILS, type ArchetypeDetail } from '@/data/archetypeDetailContent';
+import ArchetypeDetailSheet from '@/components/archetypes/ArchetypeDetailSheet';
 import React from 'react';
+
+/**
+ * Maps existing narrative IDs to detail content IDs.
+ * Not all narrative IDs have a 1:1 match; we do best-effort mapping.
+ */
+const NARRATIVE_TO_DETAIL: Record<string, string> = {
+  cultural_anthropologist: 'culture_collector',
+  urban_nomad: 'voyager',
+  wilderness_pioneer: 'nature_purist',
+  digital_explorer: 'workationer',
+  social_butterfly: 'connector',
+  family_architect: 'family_captain',
+  romantic_curator: 'romantic',
+  story_seeker: 'photographer',
+  bucket_list_conqueror: 'bucket_lister',
+  adrenaline_architect: 'explorer',
+  collection_curator: 'curator',
+  status_seeker: 'luxurian',
+  zen_seeker: 'restorer',
+  slow_traveler: 'wanderer',
+  beach_therapist: 'restorer',
+  sanctuary_seeker: 'restorer',
+  escape_artist: 'solo_seeker',
+  retreat_regular: 'restorer',
+  culinary_cartographer: 'epicurean',
+  luxury_luminary: 'luxurian',
+  art_aficionado: 'curator',
+  eco_ethicist: 'eco_traveler',
+  gap_year_graduate: 'wanderer',
+  midlife_explorer: 'celebrator',
+  healing_journeyer: 'restorer',
+  sabbatical_scholar: 'voyager',
+  retirement_ranger: 'bucket_lister',
+};
 
 const CATEGORY_ORDER = ['EXPLORER', 'CONNECTOR', 'ACHIEVER', 'RESTORER', 'CURATOR', 'TRANSFORMER'] as const;
 
@@ -26,9 +62,13 @@ const ARCHETYPES_BY_CATEGORY: Record<string, string[]> = {
 // All archetype IDs for the carousel
 const ALL_ARCHETYPE_IDS = Object.values(ARCHETYPES_BY_CATEGORY).flat();
 
-function SpotlightCard({ archetype, isSelected }: { archetype: ArchetypeNarrative; isSelected?: boolean }) {
+function SpotlightCard({ archetype, isSelected, onClick }: { archetype: ArchetypeNarrative; isSelected?: boolean; onClick?: () => void }) {
   return (
-    <div className="flex-[0_0_280px] sm:flex-[0_0_300px] min-w-0 px-2 transition-all duration-300" style={{ transform: isSelected ? 'translateY(-4px)' : 'translateY(0)' }}>
+    <div
+      className="flex-[0_0_280px] sm:flex-[0_0_300px] min-w-0 px-2 transition-all duration-300 cursor-pointer"
+      style={{ transform: isSelected ? 'translateY(-4px)' : 'translateY(0)' }}
+      onClick={onClick}
+    >
       <div className={`bg-card rounded-2xl border overflow-hidden transition-all duration-300 h-full ${isSelected ? 'border-primary/50 shadow-elevated ring-1 ring-primary/20' : 'border-border hover:shadow-lg hover:border-primary/30 hover:-translate-y-1'}`}>
         <div className={`h-1.5 bg-gradient-to-r ${isSelected ? 'from-primary via-accent to-primary' : 'from-primary/60 via-primary to-primary/60'}`} />
         <div className="p-5">
@@ -53,14 +93,15 @@ function SpotlightCard({ archetype, isSelected }: { archetype: ArchetypeNarrativ
   );
 }
 
-function ArchetypeCard({ archetype, index }: { archetype: ArchetypeNarrative; index: number }) {
+function ArchetypeCard({ archetype, index, onClick }: { archetype: ArchetypeNarrative; index: number; onClick?: () => void }) {
   return (
     <motion.article
       initial={{ opacity: 0, y: 16 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-30px" }}
       transition={{ delay: index * 0.03, duration: 0.4 }}
-      className="group"
+      className="group cursor-pointer"
+      onClick={onClick}
     >
       <div className="relative bg-card rounded-xl border border-border p-5 h-full transition-all duration-300 hover:border-primary/40 hover:shadow-md hover:-translate-y-0.5">
         {/* Subtle hover glow */}
@@ -89,14 +130,15 @@ function ArchetypeCard({ archetype, index }: { archetype: ArchetypeNarrative; in
   );
 }
 
-function CategorySection({ category, archetypeIds, categoryIndex }: { 
+function CategorySection({ category, archetypeIds, categoryIndex, onSelectArchetype }: { 
   category: string; 
   archetypeIds: string[];
   categoryIndex: number;
+  onSelectArchetype: (narrativeId: string) => void;
 }) {
   const archetypes = archetypeIds
-    .map(id => ARCHETYPE_NARRATIVES[id])
-    .filter(Boolean);
+    .map(id => ({ ...ARCHETYPE_NARRATIVES[id], narrativeId: id }))
+    .filter(a => a.id);
   
   const isEven = categoryIndex % 2 === 0;
   
@@ -137,7 +179,12 @@ function CategorySection({ category, archetypeIds, categoryIndex }: {
         {/* Archetypes grid */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {archetypes.map((archetype, index) => (
-            <ArchetypeCard key={archetype.id} archetype={archetype} index={index} />
+            <ArchetypeCard
+              key={archetype.id}
+              archetype={archetype}
+              index={index}
+              onClick={() => onSelectArchetype(archetype.narrativeId)}
+            />
           ))}
         </div>
       </div>
@@ -158,6 +205,16 @@ export default function Archetypes() {
   const [canScrollPrev, setCanScrollPrev] = useState(false);
   const [canScrollNext, setCanScrollNext] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [detailArchetype, setDetailArchetype] = useState<ArchetypeDetail | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+
+  const handleSelectArchetype = useCallback((narrativeId: string) => {
+    const detailId = NARRATIVE_TO_DETAIL[narrativeId];
+    if (detailId && ARCHETYPE_DETAILS[detailId]) {
+      setDetailArchetype(ARCHETYPE_DETAILS[detailId]);
+      setDetailOpen(true);
+    }
+  }, []);
 
   const onSelect = useCallback(() => {
     if (!emblaApi) return;
@@ -226,7 +283,12 @@ export default function Archetypes() {
             <div className="overflow-hidden" ref={emblaRef}>
               <div className="flex -ml-2">
                 {allArchetypes.map((archetype, index) => (
-                  <SpotlightCard key={archetype.id} archetype={archetype} isSelected={index === selectedIndex} />
+                  <SpotlightCard
+                    key={archetype.id}
+                    archetype={archetype}
+                    isSelected={index === selectedIndex}
+                    onClick={() => handleSelectArchetype(ALL_ARCHETYPE_IDS[index])}
+                  />
                 ))}
               </div>
             </div>
@@ -398,6 +460,7 @@ export default function Archetypes() {
           category={category}
           archetypeIds={ARCHETYPES_BY_CATEGORY[category]}
           categoryIndex={index}
+          onSelectArchetype={handleSelectArchetype}
         />
       ))}
 
@@ -452,6 +515,11 @@ export default function Archetypes() {
           </motion.div>
         </div>
       </section>
+      <ArchetypeDetailSheet
+        archetype={detailArchetype}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+      />
     </MainLayout>
   );
 }
