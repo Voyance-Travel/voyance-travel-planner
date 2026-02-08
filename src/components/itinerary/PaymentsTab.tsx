@@ -49,6 +49,9 @@ interface PaymentsTabProps {
   travelers: number;
   /** Budget limit in cents from BudgetTab - shows spending limit */
   budgetLimitCents?: number;
+  /** Trip owner info for Split Bill */
+  ownerId?: string;
+  ownerName?: string;
 }
 
 interface PayableItem {
@@ -67,7 +70,9 @@ export function PaymentsTab({
   flightSelection, 
   hotelSelection,
   travelers,
-  budgetLimitCents 
+  budgetLimitCents,
+  ownerId,
+  ownerName,
 }: PaymentsTabProps) {
   const [payments, setPayments] = useState<TripPayment[]>([]);
   const [totals, setTotals] = useState<PaymentTotals>({ paid: 0, pending: 0, total: 0 });
@@ -93,13 +98,28 @@ export function PaymentsTab({
   const { data: rawTripMembers = [], isLoading: membersLoading } = useTripMembers(tripId);
   const { data: collaborators = [] } = useTripCollaborators(tripId);
 
-  // Merge collaborators into trip members so they appear in Split Bill automatically
+  // Merge owner + collaborators into trip members so they appear in Split Bill automatically
   const tripMembers: TripMember[] = useMemo(() => {
     const memberUserIds = new Set(rawTripMembers.map(m => m.userId).filter(Boolean));
     const memberEmails = new Set(rawTripMembers.map(m => m.email?.toLowerCase()).filter(Boolean));
     
     // Start with existing trip_members
     const merged = [...rawTripMembers];
+
+    // Always include the trip owner if not already present
+    if (ownerId && !memberUserIds.has(ownerId)) {
+      merged.unshift({
+        id: `owner-${ownerId}`,
+        tripId,
+        userId: ownerId,
+        email: ownerName || 'Owner',
+        name: ownerName || 'Trip Owner',
+        role: 'primary' as const,
+        invitedAt: new Date().toISOString(),
+        acceptedAt: new Date().toISOString(),
+      });
+      memberUserIds.add(ownerId);
+    }
     
     // Add collaborators that aren't already in trip_members
     for (const collab of collaborators) {
@@ -119,7 +139,7 @@ export function PaymentsTab({
     }
     
     return merged;
-  }, [rawTripMembers, collaborators]);
+  }, [rawTripMembers, collaborators, ownerId, ownerName, tripId]);
 
   // Fetch payments
   const fetchPayments = useCallback(async () => {
