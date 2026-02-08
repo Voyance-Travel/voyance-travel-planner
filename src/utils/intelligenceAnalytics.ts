@@ -2,8 +2,9 @@
  * Intelligence Analytics Utility
  * 
  * Analyzes itinerary data to extract and quantify the intelligence layers.
- * Only counts genuine intelligence signals from the AI generation pipeline —
- * NOT text-pattern heuristics that produce false positives.
+ * Uses a hybrid approach: trusts explicit AI flags when present,
+ * but also derives insights from activity metadata (tips, personalization,
+ * crowd levels, timing) when explicit flags are missing.
  */
 
 import type { ItineraryValueStats } from '@/components/itinerary/ItineraryValueHeader';
@@ -24,9 +25,26 @@ export function getTimeOfDay(time: string): 'morning' | 'afternoon' | 'evening' 
   return 'night';
 }
 
+// Keywords indicating a timing optimization
+const TIMING_KEYWORDS = [
+  'before the crowds', 'avoid the rush', 'golden hour', 'sunrise', 'early morning',
+  'before tour buses', 'less crowded', 'off-peak', 'before it gets busy',
+  'best time', 'optimal time', 'quiet hours', 'before the lines',
+];
+
+// Keywords indicating a hidden gem / unique find
+const GEM_KEYWORDS = [
+  'hidden', 'secret', 'locals only', 'off the beaten', 'lesser-known',
+  'under the radar', 'undiscovered', 'tucked away', 'neighborhood favorite',
+  'local favorite', 'insider', "locals' choice", 'boutique',
+];
+
+// Categories that are never "hidden gems" (mainstream logistics)
+const NON_GEM_CATEGORIES = ['transport', 'accommodation', 'downtime', 'free_time', 'logistics'];
+
 /**
  * Analyze a single activity for intelligence signals.
- * Only trusts explicit flags from the AI, not text matching.
+ * Hybrid: trusts explicit AI flags first, then derives from metadata.
  */
 export function analyzeActivityIntelligence(activity: {
   name?: string;
@@ -43,31 +61,70 @@ export function analyzeActivityIntelligence(activity: {
   isHiddenGem?: boolean;
   hasTimingHack?: boolean;
   voyanceInsight?: string;
+  category?: string;
 }): ActivityIntelligence {
   const tips = activity.tips || '';
+  const description = activity.description || '';
+  const whyThisFits = activity.personalization?.whyThisFits || '';
+  const combinedText = `${tips} ${description} ${whyThisFits} ${activity.voyanceInsight || ''}`.toLowerCase();
+  const category = (activity.category || '').toLowerCase();
   
-  // Only trust explicit AI flags — no text-matching heuristics
-  const hiddenGem = activity.isHiddenGem === true;
-  const timingHack = activity.hasTimingHack === true;
-  const isPersonalized = !!(activity.personalization?.whyThisFits);
-  const hasSubstantialTip = !!tips && tips.length > 30; // Must be a real tip, not filler
+  // === Hidden Gem Detection ===
+  // Explicit flag first, then heuristic
+  const explicitGem = activity.isHiddenGem === true;
+  const heuristicGem = !explicitGem && 
+    !NON_GEM_CATEGORIES.includes(category) &&
+    GEM_KEYWORDS.some(kw => combinedText.includes(kw));
+  const isHiddenGem = explicitGem || heuristicGem;
+  
+  // === Timing Hack Detection ===
+  const explicitTiming = activity.hasTimingHack === true;
+  const heuristicTiming = !explicitTiming && 
+    TIMING_KEYWORDS.some(kw => combinedText.includes(kw));
+  const hasTimingHack = explicitTiming || heuristicTiming;
+  
+  // === Personalization Detection ===
+  const isPersonalized = !!(whyThisFits && whyThisFits.length > 10);
+  
+  // === Insider Tip Detection ===
+  // Substantial, specific tip (not just "enjoy!")
+  const hasSubstantialTip = tips.length > 30;
+  const hasInsiderTip = hasSubstantialTip;
   
   return {
-    isHiddenGem: hiddenGem,
-    hasTimingHack: timingHack,
-    hasInsiderTip: hasSubstantialTip && isPersonalized, // Only count tips that are personalized
-    isOffThePath: hiddenGem && activity.crowdLevel === 'low',
+    isHiddenGem,
+    hasTimingHack,
+    hasInsiderTip,
+    isOffThePath: isHiddenGem && activity.crowdLevel === 'low',
     isPersonalized,
-    timingReason: timingHack ? (activity.bestTime || undefined) : undefined,
+    timingReason: hasTimingHack ? (activity.bestTime || extractTimingReason(combinedText)) : undefined,
     insiderTip: hasSubstantialTip ? tips : undefined,
-    personalizationReason: activity.personalization?.whyThisFits,
+    personalizationReason: whyThisFits || undefined,
     crowdLevel: activity.crowdLevel as 'low' | 'moderate' | 'high' | undefined,
   };
 }
 
 /**
+ * Extract a brief timing reason from text
+ */
+function extractTimingReason(text: string): string | undefined {
+  for (const kw of TIMING_KEYWORDS) {
+    const idx = text.indexOf(kw);
+    if (idx >= 0) {
+      // Get ~60 chars of context around the keyword
+      const start = Math.max(0, idx - 10);
+      const end = Math.min(text.length, idx + kw.length + 50);
+      const snippet = text.slice(start, end).trim();
+      // Capitalize first letter
+      return snippet.charAt(0).toUpperCase() + snippet.slice(1);
+    }
+  }
+  return undefined;
+}
+
+/**
  * Calculate aggregate value stats for an entire itinerary.
- * Conservative: only counts items with explicit AI-generated intelligence flags.
+ * Hybrid: uses explicit AI flags + heuristic analysis for comprehensive coverage.
  */
 export function calculateItineraryValueStats(
   days: Array<{
@@ -78,6 +135,7 @@ export function calculateItineraryValueStats(
       tips?: string;
       bestTime?: string;
       crowdLevel?: string;
+      category?: string;
       personalization?: {
         whyThisFits?: string;
         tags?: string[];
@@ -116,7 +174,7 @@ export function calculateItineraryValueStats(
         timingOptimizations++;
         timingDetails.push({
           title: activityName,
-          reason: intelligence.timingReason || 'Scheduled to avoid peak crowds',
+          reason: intelligence.timingReason || 'Scheduled to beat crowds',
           savingsTime: '20-30 min',
         });
       }
@@ -131,9 +189,9 @@ export function calculateItineraryValueStats(
     });
   });
 
-  // Convert skipped items to detail format
+  // Convert skipped items to detail format (now "Local Picks")
   const trapsAvoidedDetails = skippedItems?.map(item => ({
-    title: item.name,
+    title: item.localAlternative || item.betterAlternative || item.name,
     reason: item.reason,
     savingsTime: item.savingsEstimate?.time,
     savingsMoney: item.savingsEstimate?.money,
@@ -164,15 +222,15 @@ export function calculateItineraryValueStats(
  */
 function calculateEstimatedSavings(
   timingOptimizations: number,
-  trapsAvoided: number,
+  localPicks: number,
   hiddenGems: number,
 ): { time: string; money?: string } | undefined {
   const timingMinutes = timingOptimizations * 25;
-  const trapMoney = trapsAvoided * 35;
+  const localPickMoney = localPicks * 35;
   const hiddenGemMoney = hiddenGems * 18;
   
   const totalMinutes = timingMinutes;
-  const totalMoney = trapMoney + hiddenGemMoney;
+  const totalMoney = localPickMoney + hiddenGemMoney;
   
   if (totalMinutes === 0 && totalMoney === 0) return undefined;
   

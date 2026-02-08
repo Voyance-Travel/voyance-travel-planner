@@ -163,6 +163,17 @@ export interface EditorialActivity {
   /** Option group fields for parsed either/or activities */
   isOption?: boolean;
   optionGroup?: string;
+  // Intelligence fields from AI generation
+  isHiddenGem?: boolean;
+  hasTimingHack?: boolean;
+  bestTime?: string;
+  crowdLevel?: string;
+  voyanceInsight?: string;
+  personalization?: {
+    whyThisFits?: string;
+    tags?: string[];
+    confidence?: number;
+  };
 }
 
 export interface EditorialDay {
