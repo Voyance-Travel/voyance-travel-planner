@@ -26,11 +26,11 @@ const ARCHETYPES_BY_CATEGORY: Record<string, string[]> = {
 // All archetype IDs for the carousel
 const ALL_ARCHETYPE_IDS = Object.values(ARCHETYPES_BY_CATEGORY).flat();
 
-function SpotlightCard({ archetype }: { archetype: ArchetypeNarrative }) {
+function SpotlightCard({ archetype, isSelected }: { archetype: ArchetypeNarrative; isSelected?: boolean }) {
   return (
-    <div className="flex-[0_0_280px] sm:flex-[0_0_300px] min-w-0 px-2">
-      <div className="bg-card rounded-2xl border border-border overflow-hidden transition-all duration-300 hover:shadow-lg hover:border-primary/30 hover:-translate-y-1 h-full">
-        <div className="h-1.5 bg-gradient-to-r from-primary/60 via-primary to-primary/60" />
+    <div className="flex-[0_0_280px] sm:flex-[0_0_300px] min-w-0 px-2 transition-all duration-300" style={{ transform: isSelected ? 'translateY(-4px)' : 'translateY(0)' }}>
+      <div className={`bg-card rounded-2xl border overflow-hidden transition-all duration-300 h-full ${isSelected ? 'border-primary/50 shadow-elevated ring-1 ring-primary/20' : 'border-border hover:shadow-lg hover:border-primary/30 hover:-translate-y-1'}`}>
+        <div className={`h-1.5 bg-gradient-to-r ${isSelected ? 'from-primary via-accent to-primary' : 'from-primary/60 via-primary to-primary/60'}`} />
         <div className="p-5">
           <div className="flex items-center gap-3 mb-3">
             <span className="text-2xl">{archetype.emoji}</span>
@@ -157,11 +157,13 @@ export default function Archetypes() {
   });
   const [canScrollPrev, setCanScrollPrev] = useState(false);
   const [canScrollNext, setCanScrollNext] = useState(true);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   const onSelect = useCallback(() => {
     if (!emblaApi) return;
     setCanScrollPrev(emblaApi.canScrollPrev());
     setCanScrollNext(emblaApi.canScrollNext());
+    setSelectedIndex(emblaApi.selectedScrollSnap());
   }, [emblaApi]);
 
   useEffect(() => {
@@ -223,8 +225,8 @@ export default function Archetypes() {
           >
             <div className="overflow-hidden" ref={emblaRef}>
               <div className="flex -ml-2">
-                {allArchetypes.map((archetype) => (
-                  <SpotlightCard key={archetype.id} archetype={archetype} />
+                {allArchetypes.map((archetype, index) => (
+                  <SpotlightCard key={archetype.id} archetype={archetype} isSelected={index === selectedIndex} />
                 ))}
               </div>
             </div>
