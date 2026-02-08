@@ -1652,7 +1652,13 @@ export default function Start() {
         maxGuests={Math.max(0, travelers - 1) + 1}
         currentTravelers={travelers}
         initialGuests={linkedGuests}
-        onGuestsConfirmed={setLinkedGuests}
+        onGuestsConfirmed={(guests) => {
+          setLinkedGuests(guests);
+          // Auto-bump traveler count if guests exceed current count
+          if (guests.length + 1 > travelers) {
+            setTravelers(guests.length + 1);
+          }
+        }}
       />
     </MainLayout>
   );

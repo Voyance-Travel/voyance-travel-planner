@@ -84,8 +84,10 @@ export default function GuestLinkModal({
   const { data: friendsData, isLoading: isLoadingFriends } = useFriends();
   const friends = friendsData || [];
 
-  const maxLinkedGuests = Math.max(0, currentTravelers - 1);
-  const remainingSlots = maxLinkedGuests - linkedGuests.length;
+  const suggestedSlots = Math.max(0, currentTravelers - 1);
+  const isOverSuggested = linkedGuests.length >= suggestedSlots;
+  // No hard cap — allow adding beyond traveler count (count auto-adjusts)
+  const remainingSlots = Infinity;
 
   const availableFriends = friends.filter(
     (f) => !linkedGuests.some((g) => g.id === f.friend.id)
@@ -116,10 +118,6 @@ export default function GuestLinkModal({
   }, [open, user?.id, friends]);
 
   const handleSelectFriend = useCallback(async (friend: FriendWithProfile) => {
-    if (remainingSlots <= 0) {
-      toast.error(`Maximum ${maxLinkedGuests} additional travelers allowed`);
-      return;
-    }
 
     let matchScore = compatibilityScores[friend.friend.id];
     if (matchScore === undefined && user?.id) {
@@ -139,15 +137,11 @@ export default function GuestLinkModal({
 
     setLinkedGuests((prev) => [...prev, newGuest]);
     toast.success(`${newGuest.name} added`);
-  }, [remainingSlots, maxLinkedGuests, compatibilityScores, user?.id]);
+  }, [compatibilityScores, user?.id]);
 
   const handleInviteByEmail = async () => {
     if (!email || !email.includes('@')) {
       toast.error('Please enter a valid email address');
-      return;
-    }
-    if (remainingSlots <= 0) {
-      toast.error(`Maximum ${maxLinkedGuests} companions for a group of ${currentTravelers}`);
       return;
     }
     if (linkedGuests.some((g) => g.email.toLowerCase() === email.toLowerCase())) {
@@ -211,9 +205,9 @@ export default function GuestLinkModal({
             Link Travel Companions
           </DialogTitle>
           <DialogDescription>
-            {maxLinkedGuests > 0
-              ? `Add up to ${maxLinkedGuests} companion${maxLinkedGuests !== 1 ? 's' : ''} from your friends or invite by email.`
-              : 'Increase your traveler count to add companions.'}
+            {suggestedSlots > 0
+              ? `${suggestedSlots} companion spot${suggestedSlots !== 1 ? 's' : ''} based on your traveler count. Add more and we'll adjust automatically.`
+              : 'Add companions and the traveler count will adjust automatically.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -222,7 +216,7 @@ export default function GuestLinkModal({
           {linkedGuests.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                Linked ({linkedGuests.length}/{maxLinkedGuests})
+                Linked ({linkedGuests.length}{suggestedSlots > 0 ? `/${suggestedSlots} suggested` : ''})
               </p>
               <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
                 {linkedGuests.map((guest) => (
@@ -311,14 +305,7 @@ export default function GuestLinkModal({
           )}
 
           {/* ── Add guests ── */}
-          {maxLinkedGuests === 0 ? (
-            <div className="p-4 bg-muted/50 rounded-lg text-center">
-              <Users className="h-8 w-8 mx-auto mb-2 text-muted-foreground opacity-50" />
-              <p className="text-sm text-muted-foreground">
-                Solo trip selected. Increase travelers to add companions.
-              </p>
-            </div>
-          ) : remainingSlots > 0 ? (
+          {(
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'friends' | 'invite')}>
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="friends" className="gap-1.5">
@@ -407,10 +394,6 @@ export default function GuestLinkModal({
                 </p>
               </TabsContent>
             </Tabs>
-          ) : (
-            <div className="p-3 bg-muted/50 rounded-lg text-center">
-              <p className="text-sm text-muted-foreground">All {maxLinkedGuests} companion spots filled</p>
-            </div>
           )}
 
           {/* Info note */}
@@ -424,11 +407,9 @@ export default function GuestLinkModal({
           {/* Footer */}
           <div className="flex items-center justify-between pt-3 border-t border-border">
             <p className="text-xs text-muted-foreground">
-              {remainingSlots > 0
-                ? `${remainingSlots} spot${remainingSlots !== 1 ? 's' : ''} remaining`
-                : maxLinkedGuests === 0
-                  ? 'Solo trip'
-                  : 'All spots filled'}
+              {linkedGuests.length === 0
+                ? 'No companions linked'
+                : `${linkedGuests.length} companion${linkedGuests.length !== 1 ? 's' : ''} linked`}
             </p>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
