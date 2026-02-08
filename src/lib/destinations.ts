@@ -1,6 +1,13 @@
 import nolaHero1 from '@/assets/destinations/new-orleans-1.jpg';
 import nolaHero2 from '@/assets/destinations/new-orleans-2.jpg';
 import nolaHero3 from '@/assets/destinations/new-orleans-3.jpg';
+import { DESTINATION_STORAGE_IMAGES } from '@/data/destinationStorageImages';
+
+// Helper to get storage images with Unsplash fallback
+function si(slug: string, fallbackUrl: string, fallbackImages: string[]): { imageUrl: string; images: string[] } {
+  const stored = DESTINATION_STORAGE_IMAGES[slug];
+  return stored || { imageUrl: fallbackUrl, images: fallbackImages };
+}
 
 export interface Destination {
   id: string;
@@ -41,12 +48,11 @@ export const destinations: Destination[] = [
     description: 'A city that invented the art of living well. Paris offers world-class museums, café culture perfected over centuries, Michelin-starred bistros alongside perfect croissants, and neighborhoods that reward endless exploration.',
     timezone: 'Europe/Paris',
     currency: 'EUR',
-    imageUrl: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=1200&q=80',
-    images: [
+    ...si('paris', 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=1200&q=80', [
       'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=1200&q=80',
       'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=1200&q=80',
       'https://images.unsplash.com/photo-1431274172761-fca41d930114?w=1200&q=80',
-    ],
+    ]),
     climate: 'Oceanic climate with mild winters and warm summers. Rain is possible year-round.',
     bestMonths: ['Apr', 'May', 'Jun', 'Sep', 'Oct'],
     gettingAround: 'Excellent metro system reaches most attractions. Walking is the best way to experience neighborhoods.',
@@ -66,12 +72,11 @@ export const destinations: Destination[] = [
     description: 'A volcanic island that defines Mediterranean beauty. Santorini offers sunset views that stop conversation, cliffside villages, ancient ruins, and wine from vines rooted in volcanic soil.',
     timezone: 'Europe/Athens',
     currency: 'EUR',
-    imageUrl: 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=1200&q=80',
-    images: [
+    ...si('santorini', 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=1200&q=80', [
       'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=1200&q=80',
       'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=1200&q=80',
       'https://images.unsplash.com/photo-1533105079780-92b9be482077?w=1200&q=80',
-    ],
+    ]),
     climate: 'Mediterranean climate with hot, dry summers and mild winters. Very little rain May-September.',
     bestMonths: ['Apr', 'May', 'Jun', 'Sep', 'Oct'],
     gettingAround: 'Rent an ATV or car. Public buses run between villages but are infrequent. Walking between Fira and Oia takes 3 hours.',
@@ -91,12 +96,11 @@ export const destinations: Destination[] = [
     description: 'An island where spirituality infuses daily life. Bali offers temple ceremonies at sunrise, rice terraces that define green, surf beaches, wellness retreats, and a warmth that extends beyond the tropical climate.',
     timezone: 'Asia/Makassar',
     currency: 'IDR',
-    imageUrl: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=1200&q=80',
-    images: [
+    ...si('bali', 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=1200&q=80', [
       'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=1200&q=80',
       'https://images.unsplash.com/photo-1573790387438-4da905039392?w=1200&q=80',
       'https://images.unsplash.com/photo-1552733407-5d5c46c3bb3b?w=1200&q=80',
-    ],
+    ]),
     climate: 'Tropical with wet (Nov-Mar) and dry (Apr-Oct) seasons. Expect humidity year-round.',
     bestMonths: ['Apr', 'May', 'Jun', 'Sep'],
     gettingAround: 'Hire a driver for day trips. Very affordable. Scooters are common but traffic is chaotic. Grab app works for rides.',
@@ -116,12 +120,11 @@ export const destinations: Destination[] = [
     description: 'A city of neighborhoods, each a world unto itself. New York offers Broadway brilliance, art museums that require multiple visits, food from every corner of the globe, and an energy that charges through every block.',
     timezone: 'America/New_York',
     currency: 'USD',
-    imageUrl: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=1200&q=80',
-    images: [
+    ...si('new-york', 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=1200&q=80', [
       'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=1200&q=80',
       'https://images.unsplash.com/photo-1534430480872-3498386e7856?w=1200&q=80',
       'https://images.unsplash.com/photo-1522083165195-3424ed129620?w=1200&q=80',
-    ],
+    ]),
     climate: 'Humid continental with cold winters and hot, humid summers. All four seasons are distinct.',
     bestMonths: ['Apr', 'May', 'Sep', 'Oct', 'Dec'],
     gettingAround: 'Subway is fast and runs 24/7. Walking is the best way to experience neighborhoods. Avoid taxis in rush hour.',
@@ -141,12 +144,11 @@ export const destinations: Destination[] = [
     description: 'A city where centuries-old traditions flow seamlessly into modern life. Kyoto offers meditative temple gardens, refined kaiseki dining, and neighborhoods that reveal their character only to those who wander slowly.',
     timezone: 'Asia/Tokyo',
     currency: 'JPY',
-    imageUrl: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=1200&q=80',
-    images: [
+    ...si('kyoto', 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=1200&q=80', [
       'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=1200&q=80',
       'https://images.unsplash.com/photo-1545569341-9eb8b30979d9?w=1200&q=80',
       'https://images.unsplash.com/photo-1624253321171-1be53e12f5f4?w=1200&q=80',
-    ],
+    ]),
     climate: 'Humid subtropical with hot summers and cool winters. Cherry blossoms in spring, vibrant colors in autumn.',
     bestMonths: ['Mar', 'Apr', 'May', 'Oct', 'Nov'],
     gettingAround: 'Buses and trains reach most temples. Rent a bicycle for Arashiyama and Philosopher\'s Path areas.',
@@ -166,12 +168,11 @@ export const destinations: Destination[] = [
     description: 'A city of seven hills where pastel facades catch the afternoon light. Lisbon rewards the curious with hidden miradouros, neighborhood tascas, and a rhythm that moves between fado melancholy and Atlantic optimism.',
     timezone: 'Europe/Lisbon',
     currency: 'EUR',
-    imageUrl: 'https://images.unsplash.com/photo-1585208798174-6cedd86e019a?w=1200&q=80',
-    images: [
+    ...si('lisbon', 'https://images.unsplash.com/photo-1585208798174-6cedd86e019a?w=1200&q=80', [
       'https://images.unsplash.com/photo-1585208798174-6cedd86e019a?w=1200&q=80',
       'https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=1200&q=80',
       'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1200&q=80',
-    ],
+    ]),
     climate: 'Mediterranean climate with warm, dry summers and mild, rainy winters. Temperature ranges from 10°C to 28°C.',
     bestMonths: ['Mar', 'Apr', 'May', 'Sep', 'Oct'],
     gettingAround: 'Metro covers main areas efficiently. Historic Tram 28 is iconic but crowded. Walking the hills is rewarding but steep.',
@@ -191,12 +192,11 @@ export const destinations: Destination[] = [
     description: 'Dramatic geography defines every view. Cape Town offers world-class wine estates within an hour, beaches that change character by the mile, and a culinary scene that draws on the whole continent.',
     timezone: 'Africa/Johannesburg',
     currency: 'ZAR',
-    imageUrl: 'https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=1200&q=80',
-    images: [
+    ...si('cape-town', 'https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=1200&q=80', [
       'https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=1200&q=80',
       'https://images.unsplash.com/photo-1576485290814-1c72aa4bbb8e?w=1200&q=80',
       'https://images.unsplash.com/photo-1516026672322-bc52d61a55d5?w=1200&q=80',
-    ],
+    ]),
     climate: 'Mediterranean climate with warm, dry summers (Dec-Feb) and cool, wet winters. Notorious "Cape Doctor" wind in summer.',
     bestMonths: ['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr'],
     gettingAround: 'Rent a car for peninsula and winelands day trips. MyCiti buses serve main routes. Uber is reliable and affordable.',
@@ -216,12 +216,11 @@ export const destinations: Destination[] = [
     description: 'Layer upon layer of history, art, and flavor. Mexico City surprises with world-class museums, markets that demand multiple visits, and a dining scene that ranges from street-side tacos to destinations worth planning trips around.',
     timezone: 'America/Mexico_City',
     currency: 'MXN',
-    imageUrl: 'https://images.unsplash.com/photo-1518659526054-190340b32735?w=1200&q=80',
-    images: [
+    ...si('mexico-city', 'https://images.unsplash.com/photo-1518659526054-190340b32735?w=1200&q=80', [
       'https://images.unsplash.com/photo-1518659526054-190340b32735?w=1200&q=80',
       'https://images.unsplash.com/photo-1585464231875-d9ef1f5ad396?w=1200&q=80',
       'https://images.unsplash.com/photo-1547995886-6dc09384c6e6?w=1200&q=80',
-    ],
+    ]),
     climate: 'Subtropical highland with mild temperatures year-round. Rainy season (Jun-Sep) brings afternoon showers.',
     bestMonths: ['Mar', 'Apr', 'May', 'Nov'],
     gettingAround: 'Metro is extensive and cheap but crowded. Uber/DiDi are safe and affordable. Walking works in Roma/Condesa.',
@@ -241,12 +240,11 @@ export const destinations: Destination[] = [
     description: 'A city that has thought carefully about how to live well. Copenhagen offers cycling culture, waterfront swimming, smørrebrød traditions, and a new Nordic cuisine movement that changed how the world thinks about restaurants.',
     timezone: 'Europe/Copenhagen',
     currency: 'DKK',
-    imageUrl: 'https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=1200&q=80',
-    images: [
+    ...si('copenhagen', 'https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=1200&q=80', [
       'https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=1200&q=80',
       'https://images.unsplash.com/photo-1552560880-2482cef14240?w=1200&q=80',
       'https://images.unsplash.com/photo-1551516594-56cb78394645?w=1200&q=80',
-    ],
+    ]),
     climate: 'Oceanic climate with cold winters and mild summers. Temperature ranges from -1°C to 22°C. Long summer days, short winter ones.',
     bestMonths: ['May', 'Jun', 'Jul', 'Aug', 'Sep'],
     gettingAround: 'Cycling is king. Rent a bike. Metro and S-train cover outer areas. Walking is pleasant in the compact center.',
@@ -266,12 +264,11 @@ export const destinations: Destination[] = [
     description: 'A walled city where colonial architecture meets Caribbean energy. Cartagena offers rooftop evenings, seafood ceviche, salsa rhythms, and nearby islands that feel genuinely remote.',
     timezone: 'America/Bogota',
     currency: 'COP',
-    imageUrl: 'https://images.unsplash.com/photo-1533690519961-46e5a84f1c17?w=1200&q=80',
-    images: [
+    ...si('cartagena', 'https://images.unsplash.com/photo-1533690519961-46e5a84f1c17?w=1200&q=80', [
       'https://images.unsplash.com/photo-1533690519961-46e5a84f1c17?w=1200&q=80',
       'https://images.unsplash.com/photo-1569012871812-f38ee64cd54c?w=1200&q=80',
       'https://images.unsplash.com/photo-1547149600-a6cdf8fce60c?w=1200&q=80',
-    ],
+    ]),
     climate: 'Tropical with consistent heat and humidity year-round. Temperature around 28-32°C. Short rainy seasons Oct-Nov.',
     bestMonths: ['Dec', 'Jan', 'Feb', 'Mar', 'Apr'],
     gettingAround: 'Walk within the walled city. Taxis are cheap, but agree on price before. Boats to Rosario Islands from the port.',
@@ -316,12 +313,11 @@ export const destinations: Destination[] = [
     description: 'Mountains visible from downtown streets. Vancouver offers morning hikes that end at craft breweries, Asian fusion that reflects the Pacific Rim, and a relationship with nature that shapes daily life.',
     timezone: 'America/Vancouver',
     currency: 'CAD',
-    imageUrl: 'https://images.unsplash.com/photo-1609825488888-3a766db05542?w=1200&q=80',
-    images: [
+    ...si('vancouver', 'https://images.unsplash.com/photo-1609825488888-3a766db05542?w=1200&q=80', [
       'https://images.unsplash.com/photo-1609825488888-3a766db05542?w=1200&q=80',
       'https://images.unsplash.com/photo-1578469550956-0e16b69c6a3d?w=1200&q=80',
       'https://images.unsplash.com/photo-1560814304-4f05976ef22e?w=1200&q=80',
-    ],
+    ]),
     climate: 'Oceanic climate with mild, wet winters and warm, dry summers. Rain is common Oct-Apr.',
     bestMonths: ['Jun', 'Jul', 'Aug', 'Sep'],
     gettingAround: 'SkyTrain connects airport and main areas. SeaBus to North Van is scenic. Rent a car for mountain and island trips.',
@@ -341,12 +337,11 @@ export const destinations: Destination[] = [
     description: 'A city of contrasts that somehow harmonize. Bangkok offers temple complexes that demand silence, markets that demand haggling, and a street food culture that has produced some of the world\'s most celebrated flavors.',
     timezone: 'Asia/Bangkok',
     currency: 'THB',
-    imageUrl: 'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=1200&q=80',
-    images: [
+    ...si('bangkok', 'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=1200&q=80', [
       'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=1200&q=80',
       'https://images.unsplash.com/photo-1563492065599-3520f775eeed?w=1200&q=80',
       'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=1200&q=80',
-    ],
+    ]),
     climate: 'Tropical monsoon with hot, humid weather year-round. Temperature 26-35°C. Heavy rain Jun-Oct.',
     bestMonths: ['Nov', 'Dec', 'Jan', 'Feb'],
     gettingAround: 'BTS Skytrain and MRT cover main areas. Grab app for taxis. River boats and tuk-tuks for short trips.',
@@ -366,12 +361,11 @@ export const destinations: Destination[] = [
     description: 'A city that stays up late and rewards those who do the same. Buenos Aires offers tango milongas, steakhouse traditions, bookstore wandering, and neighborhoods that each feel like their own small city.',
     timezone: 'America/Argentina/Buenos_Aires',
     currency: 'ARS',
-    imageUrl: 'https://images.unsplash.com/photo-1612294037637-ec328d0e075e?w=1200&q=80',
-    images: [
+    ...si('buenos-aires', 'https://images.unsplash.com/photo-1612294037637-ec328d0e075e?w=1200&q=80', [
       'https://images.unsplash.com/photo-1612294037637-ec328d0e075e?w=1200&q=80',
       'https://images.unsplash.com/photo-1589909202802-8f4aadce1849?w=1200&q=80',
       'https://images.unsplash.com/photo-1536086845234-586b4f845fa8?w=1200&q=80',
-    ],
+    ]),
     climate: 'Humid subtropical with hot summers and mild winters. Temperature ranges 8-30°C. No real rainy season.',
     bestMonths: ['Mar', 'Apr', 'May', 'Sep', 'Oct', 'Nov'],
     gettingAround: 'Subte (metro) is efficient and cheap. Walking is ideal for Palermo and Recoleta. Taxis are affordable.',
@@ -391,12 +385,11 @@ export const destinations: Destination[] = [
     description: 'The world\'s most northern capital anchors access to geological drama. Reykjavík offers hot spring culture, creative dining, and day trips to waterfalls, glaciers, and volcanic terrain that looks borrowed from another planet.',
     timezone: 'Atlantic/Reykjavik',
     currency: 'ISK',
-    imageUrl: 'https://images.unsplash.com/photo-1529963183134-61a90db47eaf?w=1200&q=80',
-    images: [
+    ...si('reykjavik', 'https://images.unsplash.com/photo-1529963183134-61a90db47eaf?w=1200&q=80', [
       'https://images.unsplash.com/photo-1529963183134-61a90db47eaf?w=1200&q=80',
       'https://images.unsplash.com/photo-1504233529578-6d46baba6d34?w=1200&q=80',
       'https://images.unsplash.com/photo-1476610182048-b716b8518aae?w=1200&q=80',
-    ],
+    ]),
     climate: 'Subpolar oceanic, milder than expected but highly changeable. Temperature 0-13°C. Prepare for all weather in one day.',
     bestMonths: ['Jun', 'Jul', 'Aug'],
     gettingAround: 'Rent a car for Golden Circle and beyond. City is walkable. Limited public transit outside Reykjavík.',
@@ -416,12 +409,11 @@ export const destinations: Destination[] = [
     description: 'A city-state that has turned efficiency into an art form. Singapore offers hawker centers with century-old recipes, gardens that blur the line between nature and architecture, and neighborhoods that preserve distinct cultural identities.',
     timezone: 'Asia/Singapore',
     currency: 'SGD',
-    imageUrl: 'https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=1200&q=80',
-    images: [
+    ...si('singapore', 'https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=1200&q=80', [
       'https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=1200&q=80',
       'https://images.unsplash.com/photo-1496939376851-89342e90adcd?w=1200&q=80',
       'https://images.unsplash.com/photo-1508964942454-1a56651d54ac?w=1200&q=80',
-    ],
+    ]),
     climate: 'Tropical rainforest, hot and humid year-round. Temperature 24-32°C. Brief afternoon showers common.',
     bestMonths: ['Feb', 'Mar', 'Apr'],
     gettingAround: 'MRT is spotless, cheap, and extensive. Walking works in city center. Grab for taxis.',
