@@ -1,101 +1,66 @@
 
+# Update Admin Margins Page for New Pricing Model
 
-# Pricing Overhaul: Flexible Credits + Voyance Club
+## Problem
+The `src/pages/admin/UnitEconomics.tsx` page still references the old 5-tier pricing (Boost, Single, Weekend, Explorer, Adventurer) with outdated prices. It needs to reflect the new two-tier model: **Flexible Credits** (100/$9, 300/$25, 500/$39) and **Voyance Club** (Voyager $29.99, Explorer $59.99, Adventurer $99.99).
 
-## Overview
+## Changes to `src/pages/admin/UnitEconomics.tsx`
 
-Replace the current flat 4-pack credit system with a two-tier model:
-- **Flexible Credits** (3 quick top-ups: 100/$9, 300/$25, 500/$39)
-- **Voyance Club** (3 premium packs with bonus credits and perks: Voyager, Explorer, Adventurer)
+### 1. Replace `CREDIT_TIERS` array (lines 199-264)
 
-## Step 1: Create Stripe Products & Prices
+Replace the old 5-tier array with the new 6-tier structure (3 Flexible + 3 Club):
 
-Create **3 new Stripe products** for Flexible Credits:
-- Flexible 100 credits -- $9.00
-- Flexible 300 credits -- $25.00
-- Flexible 500 credits -- $39.00
+| Old Tier | New Tier | Price | Credits | Type |
+|----------|----------|-------|---------|------|
+| Boost $8.99 | Flex 100 | $9 | 100 | Flexible |
+| Single $15.99 | Flex 300 | $25 | 300 | Flexible |
+| Weekend $29.99 | Flex 500 | $39 | 500 | Flexible |
+| Explorer $65.99 | Voyager | $29.99 | 600 | Club |
+| Adventurer $99.99 | Explorer | $59.99 | 1,600 | Club |
+| -- | Adventurer | $99.99 | 3,200 | Club |
 
-Update existing Stripe products for the Club packs (reuse existing product IDs, create new prices):
-- **Voyager** (reuse prod_TwRGf3nmLa70Ad "Weekend"): $29.99, 600 total credits (500 base + 100 bonus)
-- **Explorer** (reuse prod_TwRGVa9L5UFQBt): $59.99, 1600 total credits (1200 base + 400 bonus)
-- **Adventurer** (reuse prod_TwRGzFgQz5RIzr): $99.99, 3200 total credits (2500 base + 700 bonus)
+Each entry keeps `typicalUsage`, `estimatedCostToUs`, and `notes` recalculated for the new credit amounts.
 
-## Step 2: Rewrite `src/config/pricing.ts`
+### 2. Update `FALLBACK_DATA.revenue` (line 64)
 
-Replace `CREDIT_PACKS`, `BOOST_PACK`, `TOPUP_PACK` with:
+Replace:
+```
+{ boost: 8.99, single: 15.99, weekend: 29.99, explorer: 65.99, adventurer: 99.99 }
+```
+With:
+```
+{ flex_100: 9, flex_300: 25, flex_500: 39, voyager: 29.99, explorer: 59.99, adventurer: 99.99 }
+```
 
-- `FLEXIBLE_CREDITS` array: 3 items (100/$9, 300/$25, 500/$39) with `expirationMonths: 12`
-- `VOYANCE_CLUB_PACKS` array: 3 items (Voyager/Explorer/Adventurer) with `baseCredits`, `bonusCredits`, `totalCredits`, `perks[]`, `tier`, `expiresNever: true`, `bonusExpirationMonths: 6`
-- `VOYANCE_CLUB_PERKS` config defining cumulative perks per tier
-- Keep `CREDIT_PACKS` as a combined export for backward compatibility (`[...FLEXIBLE_CREDITS, ...VOYANCE_CLUB_PACKS]`)
-- Update `BOOST_PACK` / `TOPUP_PACK` to point to the smallest flexible credit (100/$9)
-- Update `getRecommendedPack` to search both arrays, preferring Club packs when value is better
-- Update `ALL_CREDIT_PACKS` accordingly
-- Update FAQ text constants if any are stored here
+### 3. Update `REVENUE_MIX_PRESETS` (lines 70-75)
 
-## Step 3: Rebuild Credit Packs section in `src/pages/Pricing.tsx`
+Replace the 5-tier mix percentages (boost/single/weekend/explorer/adventurer) with 6-tier percentages (flex_100/flex_300/flex_500/voyager/explorer/adventurer). The presets model how revenue distributes across the new tiers:
 
-Replace the current 4-card grid (lines 484-591) with two distinct sections:
+- **Pessimistic**: Heavy flex buying, low club adoption
+- **Conservative**: Moderate flex, growing club
+- **Balanced**: Most revenue from Club (Voyager/Explorer)
+- **Optimistic**: Heavy Explorer/Adventurer adoption
 
-**Section A -- "Quick Top-Up"**: Clean, compact rows showing the 3 flexible options. Simple "Buy" buttons. Subtext: "Buy exactly what you need. Credits expire in 12 months."
+### 4. Update blended AOV calculation (lines 327-337)
 
-**Section B -- "Voyance Club"**: Three premium cards:
-- **Voyager** ($29.99): "500 + 100 bonus = 600 credits" with perks: Club badge, Credits never expire
-- **Explorer** ($59.99, "Popular" badge): "1,200 + 400 bonus = 1,600 credits" with perks: Everything in Voyager + Priority support + Early feature access
-- **Adventurer** ($99.99, "Best Value"): "2,500 + 700 bonus = 3,200 credits" with perks: Everything in Explorer + Founding Member badge (X of 1,000 remaining) + Beta access
+Update the `useMemo` that computes `blendedAOV` and `blendedCostPerUser` to reference the 6 new tier keys instead of the old 5.
 
-Replace the local `tiers` array (lines 37-67) with data driven from the new config. Remove the "Boost" upsell link at bottom. Update the monthly free credits callout to mention expiration differences.
+### 5. Update `verifiedMargins` (lines 722-738)
 
-## Step 4: Update `src/components/profile/CreditPacksGrid.tsx`
+This maps over `CREDIT_TIERS` to show per-tier margin. Will automatically work once `CREDIT_TIERS` is updated, but verify the margin calculation still makes sense with Club packs (where bonus credits affect cost).
 
-Restructure to show both tiers:
-- Compact row/list for Flexible Credits at top
-- Featured cards for Voyance Club packs below
-- Remove the old "Quick boost" footer section (now part of Flexible Credits)
+### 6. Update insights engine references (lines 706-717)
 
-## Step 5: Update `src/components/home/PricingPreview.tsx`
+The "Boost tier" insight check references `CREDIT_TIERS.find(t => t.key === 'boost')`. Replace with a check for the smallest flexible pack (`flex_100`).
 
-Change the one-liner from "Start free. Unlock when ready. $24.99 per trip." to something like: "Start free. Top up from $9. Join the Voyance Club from $29.99."
+### 7. Update tier selector dropdown
 
-## Step 6: Update `src/components/checkout/AddCreditsModal.tsx`
+The `tier` state and any dropdown/selector that lets admin pick a tier for single-tier analysis needs to show the new 6 options instead of the old 5.
 
-- Update `PRESET_AMOUNTS` from `[8, 12, 29, 55]` to `[9, 25, 39]`
-- Update `BOOST_MINIMUM` from `$8` to `$9`
+### 8. Add Club vs Flexible distinction in margin table
 
-## Step 7: Update `src/lib/tripCostCalculator.ts`
+Add a visual indicator (column or row grouping) in the per-tier margin table to distinguish Flexible Credits from Voyance Club packs, making it clear which tier type each row belongs to.
 
-Update `getRecommendedPackForEstimate` to search both `FLEXIBLE_CREDITS` and `VOYANCE_CLUB_PACKS`, recommending the best value option for the shortfall.
+## No Other Files Changed
 
-## Step 8: Update `src/components/checkout/UpgradePrompt.tsx`
-
-Update pack references from old `CREDIT_PACKS[0]`, `CREDIT_PACKS[1]` index-based lookups to use the new named exports. Update the recommendation logic to work with both tiers.
-
-## Step 9: Update `src/components/itinerary/CreditNudge.tsx`
-
-Update `BOOST_PACK` references to use the new smallest flexible credit. Update recommendation logic for the two-tier system.
-
-## Step 10: Update FAQ section in `src/pages/Pricing.tsx`
-
-Update FAQ answers to reflect:
-- Two ways to buy: Quick Top-Up (12-month expiry) vs Voyance Club (never expire + perks)
-- Bonus credits expire in 6 months
-- Club badge and perks explanation
-- "Never expire" caveat (account must be active -- 1 login/year)
-
-## Files Modified
-
-| File | Change |
-|------|--------|
-| `src/config/pricing.ts` | Core pricing data restructure |
-| `src/pages/Pricing.tsx` | Full credit packs section rebuild |
-| `src/components/profile/CreditPacksGrid.tsx` | Two-tier layout |
-| `src/components/home/PricingPreview.tsx` | Updated one-liner |
-| `src/components/checkout/AddCreditsModal.tsx` | New presets |
-| `src/components/checkout/UpgradePrompt.tsx` | Updated pack references |
-| `src/components/itinerary/CreditNudge.tsx` | Updated pack references |
-| `src/lib/tripCostCalculator.ts` | Updated recommendation logic |
-
-## No Database Changes Required
-
-The existing `credit_ledger` and `credit_balances` tables handle credits generically -- no schema changes needed. Badge display and Club membership tracking can be added as a future enhancement.
-
+This is isolated to `src/pages/admin/UnitEconomics.tsx`. The new pricing config in `src/config/pricing.ts` is already correct and can be imported if desired, but the admin page uses its own internal cost modeling constants.
