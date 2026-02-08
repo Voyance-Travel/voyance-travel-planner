@@ -49,7 +49,7 @@ const destinations = [
     slug: 'new-orleans',
     name: 'New Orleans',
     country: 'USA',
-    image: 'https://images.unsplash.com/photo-1568402102990-bc541580b59f?w=600',
+    image: 'https://images.unsplash.com/photo-1551632436-cbf8dd35adfa?w=600',
     rating: 4.7,
     category: 'Culinary',
   },

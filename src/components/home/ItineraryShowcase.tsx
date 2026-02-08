@@ -55,7 +55,7 @@ const SAMPLE_ITINERARIES = [
     destination: 'New Orleans',
     country: 'Louisiana',
     duration: '4 days',
-    image: 'https://images.unsplash.com/photo-1568402102990-bc541580b59f?w=800',
+    image: 'https://images.unsplash.com/photo-1551632436-cbf8dd35adfa?w=800',
     archetype: 'Culinary Cartographer',
     archetypeCategory: 'CURATOR',
     budgetTier: 'Stretch',
