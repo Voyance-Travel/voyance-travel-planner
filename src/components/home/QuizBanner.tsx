@@ -25,7 +25,7 @@ export default function QuizBanner() {
           <div className="flex items-center gap-2 text-white">
             <Sparkles className="w-4 h-4 flex-shrink-0" />
             <span className="text-sm sm:text-base font-medium">
-              <span className="hidden sm:inline">Discover your Travel DNA: 5 min quiz — </span>
+              <span className="hidden sm:inline">Discover your Travel DNA: 5 minute quiz — </span>
               <span className="sm:hidden">Discover your Travel DNA: </span>
               <span className="text-white/80">We can customize your experience</span>
             </span>
