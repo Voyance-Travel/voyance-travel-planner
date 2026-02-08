@@ -68,7 +68,7 @@ const FALLBACK_DATA = {
 // Now includes per-tier COSTS to calculate true blended margin
 // NOTE: Boost ($8.99) replaces Top-Up ($5) - less cannibalization risk
 const REVENUE_MIX_PRESETS = {
-  pessimistic: { boost: 40, single: 30, weekend: 18, explorer: 10, adventurer: 2, label: "Pessimistic", description: "40% buy $8.99 boosts" },
+  pessimistic: { boost: 20, single: 40, weekend: 25, explorer: 12, adventurer: 3, label: "Pessimistic", description: "Most buy Single, low commitment" },
   conservative: { boost: 25, single: 30, weekend: 28, explorer: 14, adventurer: 3, label: "Conservative", description: "25% boosts, spread across tiers" },
   balanced: { boost: 12, single: 25, weekend: 32, explorer: 23, adventurer: 8, label: "Balanced", description: "Most buy Weekend/Explorer" },
   optimistic: { boost: 5, single: 15, weekend: 25, explorer: 35, adventurer: 20, label: "Optimistic", description: "Heavy Explorer/Adventurer" },
