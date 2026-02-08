@@ -22,10 +22,10 @@ const PRICE_TO_PLAN: Record<string, { plan: string; type: 'subscription' | 'paym
 
 // Credit costs for feature flags (v2 pricing)
 const CREDIT_COSTS = {
-  swap_activity: 15,
-  regenerate_day: 90,
+  swap_activity: 5,
+  regenerate_day: 10,
   hotel_search_per_city: 40,
-  base_rate_per_day: 90,
+  base_rate_per_day: 60,
 };
 
 // Plan features configuration
