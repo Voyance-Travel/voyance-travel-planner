@@ -1,11 +1,10 @@
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plane, Hotel, Clock, CheckCircle2, PenLine, Sparkles, Loader2, X } from 'lucide-react';
+import { Hotel, CheckCircle2, PenLine, Sparkles, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { TransportModeSelector, EMPTY_TRANSPORT_FORM, buildTransportSelection, type TransportFormData } from './TransportModeSelector';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -31,11 +30,7 @@ interface TripConfirmationBannerProps {
 interface LogisticsFormData {
   hotelName: string;
   hotelNeighborhood: string;
-  arrivalTime: string;
-  arrivalAirport: string;
-  departureTime: string;
-  departureAirport: string;
-  hasFlights: 'yes' | 'no' | '';
+  transport: TransportFormData;
 }
 
 export function TripConfirmationBanner({
@@ -66,11 +61,7 @@ export function TripConfirmationBanner({
   const [form, setForm] = useState<LogisticsFormData>({
     hotelName: '',
     hotelNeighborhood: '',
-    arrivalTime: '',
-    arrivalAirport: '',
-    departureTime: '',
-    departureAirport: '',
-    hasFlights: '',
+    transport: { ...EMPTY_TRANSPORT_FORM },
   });
 
   // Don't show for non-draft trips or dismissed
@@ -218,17 +209,9 @@ export function TripConfirmationBanner({
       };
     }
 
-    if (form.hasFlights === 'yes' && (form.arrivalTime || form.departureTime)) {
-      logistics.flight_selection = {
-        outbound: form.arrivalTime ? {
-          arrivalTime: form.arrivalTime,
-          arrival: { time: form.arrivalTime, airport: form.arrivalAirport || undefined },
-        } : undefined,
-        return: form.departureTime ? {
-          departureTime: form.departureTime,
-          departure: { time: form.departureTime, airport: form.departureAirport || undefined },
-        } : undefined,
-      };
+    const transportSelection = buildTransportSelection(form.transport);
+    if (transportSelection) {
+      logistics.flight_selection = transportSelection;
     }
 
     confirmUpcoming(Object.keys(logistics).length > 0 ? logistics : undefined);
@@ -325,59 +308,11 @@ export function TripConfirmationBanner({
             )}
 
             {!hasFlightSelection && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Plane className="h-4 w-4 text-primary" />
-                  Do you have flights booked?
-                </div>
-
-                <Select
-                  value={form.hasFlights}
-                  onValueChange={(val) => setForm(prev => ({ ...prev, hasFlights: val as 'yes' | 'no' }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="yes">Yes, I have flights</SelectItem>
-                    <SelectItem value="no">No flights yet</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <AnimatePresence>
-                  {form.hasFlights === 'yes' && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="space-y-3 overflow-hidden"
-                    >
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          Arrival time in {destination}
-                        </Label>
-                        <Input
-                          type="time"
-                          value={form.arrivalTime}
-                          onChange={(e) => setForm(prev => ({ ...prev, arrivalTime: e.target.value }))}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          Departure time from {destination}
-                        </Label>
-                        <Input
-                          type="time"
-                          value={form.departureTime}
-                          onChange={(e) => setForm(prev => ({ ...prev, departureTime: e.target.value }))}
-                        />
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+              <TransportModeSelector
+                form={form.transport}
+                onChange={(transport) => setForm(prev => ({ ...prev, transport }))}
+                destination={destination}
+              />
             )}
 
             <div className="flex gap-2 pt-2">
@@ -391,7 +326,7 @@ export function TripConfirmationBanner({
               <Button
                 className="flex-1 gap-1.5"
                 onClick={handleLogisticsSubmit}
-                disabled={isSaving || (!form.hotelName.trim() && form.hasFlights !== 'yes')}
+                disabled={isSaving || (!form.hotelName.trim() && !form.transport.mode)}
               >
                 {isSaving ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
