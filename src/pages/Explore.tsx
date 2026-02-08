@@ -159,7 +159,11 @@ export default function Explore() {
     });
     
     // Navigate to destination detail page
-    const slug = destination.id || destination.city.toLowerCase().replace(/\s+/g, '-');
+    // For featured (static) destinations, use their known slug id
+    // For database destinations, use city name as slug so DestinationDetail can look it up
+    const slug = destination.source === 'featured' 
+      ? destination.id 
+      : destination.city.toLowerCase().replace(/\s+/g, '-');
     navigate(`/destination/${slug}`);
   };
 
