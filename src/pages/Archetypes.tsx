@@ -22,7 +22,7 @@ const ARCHETYPES_BY_CATEGORY: Record<string, string[]> = {
 };
 
 // Featured archetypes for the hero spotlight
-const SPOTLIGHT_ARCHETYPES = ['slow_traveler', 'adrenaline_architect', 'culinary_cartographer'];
+const SPOTLIGHT_ARCHETYPES = ['cultural_anthropologist', 'adrenaline_architect', 'culinary_cartographer'];
 
 function SpotlightCard({ archetype, index }: { archetype: ArchetypeNarrative; index: number }) {
   const isCenter = index === 1;
@@ -163,7 +163,7 @@ export default function Archetypes() {
     <MainLayout>
       <Head
         title="Travel Archetypes | Voyance - Discover Your Travel DNA"
-        description="Explore 27 unique traveler personalities and discover which one matches your travel style. From Slow Travelers to Adrenaline Architects, find your travel DNA."
+        description="Explore 27 unique traveler personalities and discover which one matches your travel style. From Cultural Anthropologists to Adrenaline Architects, find your travel DNA."
         canonical="https://travelwithvoyance.com/archetypes"
       />
       {/* Hero with spotlight cards */}
