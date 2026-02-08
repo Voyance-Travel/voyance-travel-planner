@@ -210,7 +210,7 @@ function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => voi
             </motion.div>
           )}
           
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <div className="flex flex-col items-center gap-4">
             <motion.div
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.98 }}
@@ -224,21 +224,30 @@ function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => voi
                 Start Quiz
               </Button>
             </motion.div>
-            
-            <motion.div
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <Button
-                size="lg"
-                variant="outline"
-                onClick={() => window.location.href = ROUTES.ONBOARD_CONVERSATION}
-                className="h-14 px-8 text-lg"
+
+            {canEarnBonus && (
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.6 }}
+                className="text-sm font-medium text-primary flex items-center gap-1.5"
               >
-                <MessageCircle className="w-5 h-5 mr-2" />
-                Just Tell Us
+                <Gift className="w-4 h-4" />
+                Earn 100 credits for completing
+              </motion.p>
+            )}
+
+            <div className="flex items-center gap-3 text-muted-foreground text-sm">
+              <span>or</span>
+              <Button
+                variant="link"
+                onClick={() => window.location.href = ROUTES.ONBOARD_CONVERSATION}
+                className="text-sm px-0 h-auto font-medium"
+              >
+                <MessageCircle className="w-4 h-4 mr-1.5" />
+                Just Tell Us Your Story
               </Button>
-            </motion.div>
+            </div>
           </div>
 
           <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground mt-4">
