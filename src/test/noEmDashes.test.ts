@@ -48,6 +48,14 @@ function findEmDashesInRenderedText(filePath: string): { line: number; text: str
     // Skip pure comment lines (// or * or /*)
     if (/^\s*(\/\/|\/\*|\*)/.test(trimmed)) continue;
 
+    // Skip JSX comments {/* ... */}
+    if (/^\{\/\*.*\*\/\}$/.test(trimmed)) continue;
+
+    // Skip lines where em dash only appears inside a regex pattern
+    if (/\/.*—.*\/[gimsuy]*/.test(trimmed) && !trimmed.includes("'") && !trimmed.includes('"') && !trimmed.includes('`')) continue;
+    // Skip lines where em dash is only inside a regex literal (e.g. /[-–—]/) or .replace() regex
+    if (/\[.*—.*\]/.test(trimmed) && (/^\s*(const|let|var|\/\/)/.test(trimmed) || /\.replace\(/.test(trimmed))) continue;
+
     // Has an em dash in non-comment code (could be JSX text, string literal, etc.)
     violations.push({ line: i + 1, text: trimmed });
   }

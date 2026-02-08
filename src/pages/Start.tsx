@@ -1898,7 +1898,7 @@ export default function Start() {
             </DialogDescription>
           </DialogHeader>
           <div className="py-2 text-sm text-muted-foreground">
-            Take a quick 5-minute quiz so we can make this trip truly yours — personalized to your pace, 
+            Take a quick 5-minute quiz so we can make this trip truly yours, personalized to your pace, 
             style, and the things you actually care about.
           </div>
           <DialogFooter className="flex-col gap-2 sm:flex-col">

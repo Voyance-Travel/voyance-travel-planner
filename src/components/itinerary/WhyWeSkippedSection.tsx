@@ -167,7 +167,7 @@ export function WhyWeSkippedSection({
 
               {/* Trust Statement */}
               <p className="text-xs text-muted-foreground text-center pt-2 italic">
-                These picks come from local insights — the spots residents actually love.
+                These picks come from local insights - the spots residents actually love.
               </p>
             </div>
           </motion.div>

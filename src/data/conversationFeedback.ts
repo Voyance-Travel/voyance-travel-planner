@@ -142,7 +142,7 @@ export const destinationFeedback: Record<string, string> = {
   // Major destinations
   tokyo: "Tokyo. Excellent choice.",
   kyoto: "Kyoto. Temples, gardens, and soul.",
-  paris: "The eternal city. Always a good idea.",
+  paris: "The City of Light. Always a good idea.",
   rome: "When in Rome... you know the rest.",
   florence: "Art, food, and magic around every corner.",
   barcelona: "Good food, great vibes.",

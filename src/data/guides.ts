@@ -28,10 +28,10 @@ export const guides: Guide[] = [
     category: "Smart Travel",
     readTime: "6 min read",
     coverImage: "https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=800&q=80",
-    summary: "Strategic approaches to experiencing iconic attractions like the Eiffel Tower, Times Square, and the Taj Mahal the way locals do — with better timing, hidden viewpoints, and authentic nearby dining.",
+    summary: "Strategic approaches to experiencing iconic attractions like the Eiffel Tower, Times Square, and the Taj Mahal the way locals do - with better timing, hidden viewpoints, and authentic nearby dining.",
     content: `# Experience Iconic Attractions Like a Local
 
-Iconic attractions become famous for a reason — they often represent extraordinary beauty, cultural significance, or historical importance. The key is experiencing them intelligently, with the insider knowledge that transforms a standard visit into something memorable.
+Iconic attractions become famous for a reason. They often represent extraordinary beauty, cultural significance, or historical importance. The key is experiencing them intelligently, with the insider knowledge that transforms a standard visit into something memorable.
 
 ## The Local Approach
 
@@ -46,10 +46,10 @@ Locals experience their city's landmarks differently:
 ### Insider Timing
 - **Best window:** Tuesday and Wednesday mornings (8:30-10am) see approximately 40% less attendance
 - **Approach:** Enter from the less crowded Trocadéro side for the classic postcard view across the Seine
-- **Experience:** Consider ascending to only the first level — less crowded, better photography angles of Paris
+- **Experience:** Consider ascending to only the first level - less crowded, better photography angles of Paris
 
 ### Local's Dining Pick
-Skip tower-adjacent restaurants in favor of authentic options on nearby Rue Saint-Dominique. For the best sunset photos of the tower itself, visit the rooftop terrace at Galeries Lafayette department store — it's free, uncrowded, and offers spectacular views.
+Skip tower-adjacent restaurants in favor of authentic options on nearby Rue Saint-Dominique. For the best sunset photos of the tower itself, visit the rooftop terrace at Galeries Lafayette department store - it's free, uncrowded, and offers spectacular views.
 
 ## Times Square - The New Yorker's Way
 
@@ -58,7 +58,7 @@ Skip tower-adjacent restaurants in favor of authentic options on nearby Rue Sain
 - **Position:** Stand at the northern end (around 47th Street) facing south for comprehensive views with significantly less congestion
 
 ### Local's Dining Pick
-Visit Restaurant Row (46th Street between 8th and 9th Avenues) for quality dining at 40% lower prices. For Broadway shows, use the TKTS booth at Lincoln Center instead of the Times Square location — nearly identical inventory with typically 75% shorter lines.
+Visit Restaurant Row (46th Street between 8th and 9th Avenues) for quality dining at 40% lower prices. For Broadway shows, use the TKTS booth at Lincoln Center instead of the Times Square location - nearly identical inventory with typically 75% shorter lines.
 
 ## The Taj Mahal - An Insider's Visit
 
@@ -93,7 +93,7 @@ Visit Mehtab Bagh garden across the river for sunset views with 90% fewer visito
 
 ## The Mindset Shift
 
-The most important insight is this: iconic attractions became famous for legitimate reasons. Your goal is approaching them with intention — combining their intrinsic beauty with local knowledge for a richer experience.
+The most important insight is this: iconic attractions became famous for legitimate reasons. Your goal is approaching them with intention, combining their intrinsic beauty with local knowledge for a richer experience.
 
 By applying even a few of these strategies, you can transform your visit into a meaningful travel moment that feels more like an insider experience than a standard tourist stop.`,
     datePublished: "2024-05-19T14:15:00Z",
@@ -109,10 +109,10 @@ By applying even a few of these strategies, you can transform your visit into a 
     category: "Destinations",
     readTime: "5 min read",
     coverImage: "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?w=800&q=80", // Street market scene
-    summary: "Move beyond tourist hotspots and experience destinations authentically—from morning routines to evening traditions—creating deeper connections and more meaningful travel experiences.",
+    summary: "Move beyond tourist hotspots and experience destinations authentically, from morning routines to evening traditions, creating deeper connections and more meaningful travel experiences.",
     content: `# Travel Like a Local
 
-The difference between being a tourist and experiencing a place like a local isn't about avoiding famous sights—it's about approaching a destination with curiosity, respect, and intentional immersion. The most memorable travel experiences often come not from checking landmarks off a list, but from those moments when you feel genuinely connected to a place and its people.
+The difference between being a tourist and experiencing a place like a local isn't about avoiding famous sights. It's about approaching a destination with curiosity, respect, and intentional immersion. The most memorable travel experiences often come not from checking landmarks off a list, but from those moments when you feel genuinely connected to a place and its people.
 
 ## Morning Routines: Start Your Day Like a Local
 
@@ -120,7 +120,7 @@ How a city wakes up reveals its true character:
 
 - **Visit local markets** during morning setup (7-8am), when vendors are arranging their stands and locals are selecting the freshest ingredients
 
-- **Find neighborhood coffee spots** where people read newspapers or take meetings—observe local morning rituals and cadences
+- **Find neighborhood coffee spots** where people read newspapers or take meetings. Observe local morning rituals and cadences
 
 - **Use public transportation during rush hour** (though perhaps not at peak crush) to observe commuter culture
 
@@ -156,7 +156,7 @@ Shift from passive observation to active participation:
 
 Meaningful interactions create the memories that last longest:
 
-- **Frequent the same places** multiple times—return to a café or restaurant where staff will begin to recognize you
+- **Frequent the same places** multiple times. Return to a café or restaurant where staff will begin to recognize you
 
 - **Learn 10-15 phrases** in the local language, even (especially) if you'll mispronounce them
 
@@ -252,10 +252,10 @@ The most rewarding travel doesn't require abandoning tourist activities entirely
     category: "Packing",
     readTime: "5 min read",
     coverImage: "https://images.unsplash.com/photo-1553531384-cc64ac80f931?w=800&q=80", // Travel backpack
-    summary: "Master the art of traveling with just one bag—reducing stress, saving money on baggage fees, and gaining mobility without sacrificing essentials or style.",
+    summary: "Master the art of traveling with just one bag, reducing stress, saving money on baggage fees, and gaining mobility without sacrificing essentials or style.",
     content: `# Packing for One-Bag Travel
 
-Traveling with just one bag isn't merely about packing less—it's about packing smarter. This approach transforms your journey by eliminating baggage fees, reducing wait times, increasing mobility, and simplifying your entire travel experience.
+Traveling with just one bag isn't merely about packing less. It's about packing smarter. This approach transforms your journey by eliminating baggage fees, reducing wait times, increasing mobility, and simplifying your entire travel experience.
 
 ## The Perfect Bag
 
@@ -312,7 +312,7 @@ Always wear, rather than pack, your heaviest shoes and outerwear during transit.
 
 - **Solid toiletries** (shampoo bars, solid cologne, etc.) save space and eliminate liquids concerns
 - **Multipurpose products** reduce overall quantity (e.g., Dr. Bronner's soap for body/hair/laundry)
-- **Decant essentials** into 10-15ml containers—most products require far less than you think for a week
+- **Decant essentials** into 10-15ml containers. Most products require far less than you think for a week
 - **Eliminate redundancies** by researching what your accommodation provides
 
 ## Tech Essentials Without Bulk
@@ -394,7 +394,7 @@ Remember that true one-bag mastery comes not from following a rigid formula, but
     summary: "Strategic advice for converting layovers into valuable exploration time at cities like Singapore, Istanbul, and Seoul, including time calculations, transit options, and practical tips.",
     content: `# How to Maximize Long Layovers
 
-What if your next layover became a bonus mini-vacation instead of a tedious wait? Long connections offer a unique opportunity to sample destinations you might otherwise never experience—if you approach them strategically.
+What if your next layover became a bonus mini-vacation instead of a tedious wait? Long connections offer a unique opportunity to sample destinations you might otherwise never experience, if you approach them strategically.
 
 ## Is Your Layover Long Enough?
 
@@ -480,10 +480,10 @@ With strategic planning, your next long layover could transform from dead time i
     category: "Destinations",
     readTime: "6 min read",
     coverImage: "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&q=80", // London hidden alley
-    summary: "Venture beyond the iconic landmarks to discover authentic local experiences in the world's most visited cities—from secret gardens and underground speakeasies to neighborhood eateries where tourists rarely tread.",
+    summary: "Venture beyond the iconic landmarks to discover authentic local experiences in the world's most visited cities, from secret gardens and underground speakeasies to neighborhood eateries where tourists rarely tread.",
     content: `# Hidden Gems in Big Cities
 
-Every major city harbors secrets—spaces, experiences, and moments that exist just beyond the well-trodden tourist paths. While iconic landmarks deserve their reputation, the true character of a city often reveals itself in these hidden corners, where locals outnumber visitors and authenticity thrives.
+Every major city harbors secrets: spaces, experiences, and moments that exist just beyond the well-trodden tourist paths. While iconic landmarks deserve their reputation, the true character of a city often reveals itself in these hidden corners, where locals outnumber visitors and authenticity thrives.
 
 ## Paris: Beyond the Eiffel Tower
 
@@ -502,7 +502,7 @@ While visitors queue for hours at the Louvre and Orsay, this free museum set in 
 One of the few areas spared from WWII bombings, this neighborhood preserves old Tokyo with traditional wooden houses, artisan workshops, and the atmospheric Yanaka Cemetery with its famous sakura trees.
 
 ### Shimokitazawa
-A labyrinth of vintage stores, independent music venues, and tiny izakayas just a few stops from Shibuya. This is where Tokyo's creative class shops, dines, and socializes—all without the Harajuku crowds.
+A labyrinth of vintage stores, independent music venues, and tiny izakayas just a few stops from Shibuya. This is where Tokyo's creative class shops, dines, and socializes, all without the Harajuku crowds.
 
 ### Golden Gai After Midnight
 While tourists visit the famous drinking alleys of Golden Gai earlier in the evening, the authentic experience happens after midnight when local chefs, bartenders, and night owls finish their shifts and gather in these tiny bars.
@@ -524,7 +524,7 @@ A pocket-sized waterfall park on East 51st Street provides a moment of zen betwe
 While Borough Market draws the tourists, Londoners head under the railway arches near Bermondsey for this weekend food market featuring craft distilleries, small-batch producers, and outstanding street food without the overwhelming crowds.
 
 ### Postman's Park
-Tucked away near St. Paul's Cathedral, this small park houses the moving Watts Memorial, featuring ceramic plaques commemorating ordinary people who died saving others—a deeply touching hidden memorial.
+Tucked away near St. Paul's Cathedral, this small park houses the moving Watts Memorial, featuring ceramic plaques commemorating ordinary people who died saving others. A deeply touching hidden memorial.
 
 ### God's Own Junkyard
 In unfashionable Walthamstow, this warehouse-gallery showcases the late Chris Bracey's neon wonderland of signs, movie props, and salvaged pieces. The adjacent café makes it worth the journey to Zone 3.

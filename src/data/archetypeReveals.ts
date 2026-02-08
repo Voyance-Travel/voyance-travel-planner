@@ -312,7 +312,7 @@ You know where you want to go before you die, and each trip is a chance to check
 
 Some people call it tourist-y. You don't care. You're not traveling to prove you're different. You're traveling to witness the things that everyone should see at least once.
 
-Your trips will include the icons—without the amateur mistakes. We'll get you there, but at the right time, from the right angle, with the right context. No waiting in unnecessary lines or missing the thing you came for. You want to see it all, and we'll make sure you do.`,
+Your trips will include the icons, without the amateur mistakes. We'll get you there, but at the right time, from the right angle, with the right context. No waiting in unnecessary lines or missing the thing you came for. You want to see it all, and we'll make sure you do.`,
     youProbably: [
       "Have a written list of places you'll visit before you die",
       "Feel genuine satisfaction when you cross something off",
@@ -524,7 +524,7 @@ Your trips will prioritize sun, water, and simplicity. We won't overload you wit
 
 For you, the best moments happen when you're not trying to get somewhere else. The three-hour lunch. The morning at a café with nowhere to be. The second day in a neighborhood, when you start to recognize faces.
 
-You've been told you're "wasting time" by not seeing more. You know better. You're not missing anything. You're actually there—which is more than most travelers can say.
+You've been told you're "wasting time" by not seeing more. You know better. You're not missing anything. You're actually there, which is more than most travelers can say.
 
 Your trips will have room to breathe. Fewer destinations, more depth. Time built in for the unscheduled, the spontaneous, the nothing. We'll never pack your days so tight that you're always rushing to the next thing.`,
     youProbably: [
@@ -560,7 +560,7 @@ Food isn't fuel. It's the point. Where others see eating as an interruption to s
 
 You've probably eaten things that made other people uncomfortable. You've waited in lines that weren't worth it, and lines that absolutely were. You know the difference between a tourist trap and the real thing, and you'll walk an extra mile for the latter.
 
-Your trips will be built around food. We'll organize your days around meals, not the other way around. The reservations, the hidden gems, the places you can't find on the first page of Google—that's where we'll take you.`,
+Your trips will be built around food. We'll organize your days around meals, not the other way around. The reservations, the hidden gems, the places you can't find on the first page of Google. That's where we'll take you.`,
     youProbably: [
       "Have a list of restaurants in cities you haven't even booked yet",
       "Know the difference between 'authentic' and 'touristy' by smell alone",
@@ -620,7 +620,7 @@ You're not impressed by price tags or brand names. You've stayed in overpriced h
 
 You're not trying to impress anyone. You just appreciate the difference between excellence and mediocrity, and you're willing to invest in the former.
 
-Your trips will reflect your discerning eye. Not luxury for its own sake, but quality where it matters. The places, experiences, and accommodations that earn their reputation—not the ones that just charge for it.`,
+Your trips will reflect your discerning eye. Not luxury for its own sake, but quality where it matters. The places, experiences, and accommodations that earn their reputation, not the ones that just charge for it.`,
     youProbably: [
       "Can tell the difference between expensive and excellent",
       "Notice details others miss - thread count, glassware, service timing",
@@ -652,7 +652,7 @@ Your trips will reflect your discerning eye. Not luxury for its own sake, but qu
 
 It's not that you're preachy about it. You've just done the math. You know that tourism can damage the places we claim to love, and you're not willing to pretend otherwise. So you ask questions, do research, make choices that reflect what you actually value.
 
-Some people think this makes travel less fun. For you, it makes it more meaningful. Knowing that your trip enriched a local community, preserved rather than degraded, contributed instead of extracted—that's not a burden. That's the point.
+Some people think this makes travel less fun. For you, it makes it more meaningful. Knowing that your trip enriched a local community, preserved rather than degraded, contributed instead of extracted. That's not a burden. That's the point.
 
 Your trips will align with your values. Locally-owned, environmentally-conscious, community-positive. We'll find the experiences that let you travel well in both senses of the word.`,
     youProbably: [
@@ -684,7 +684,7 @@ Budget isn't a limitation for you. It's a strategy. You've learned to stretch mo
 
 You've probably earned some incredulous looks from people who don't get it. "You went there? And stayed where?" But you know what they don't: that the best experiences aren't the most expensive ones, and that discomfort is a small price for adventure.
 
-Your trips will maximize experience per dollar. We'll find the places where budget doesn't mean compromise—where your money goes to what actually matters.`,
+Your trips will maximize experience per dollar. We'll find the places where budget doesn't mean compromise, where your money goes to what actually matters.`,
     youProbably: [
       "Know which day of the week flights are cheapest",
       "Have slept in airports more than once",
@@ -708,13 +708,13 @@ Your trips will maximize experience per dollar. We'll find the places where budg
     id: 'midlife_explorer',
     name: 'The Midlife Explorer',
     category: 'TRANSFORMER',
-    revealParagraph: `You've reached the point where you know what you want—and you're done apologizing for it.
+    revealParagraph: `You've reached the point where you know what you want, and you're done apologizing for it.
 
 You've traveled enough to understand your own preferences. You're not interested in proving anything or chasing what's cool. You want comfort without stuffiness, quality without pretension, experiences that match who you actually are.
 
 You've earned the right to travel exactly how you want. No guilt about skipping the thing everyone says you "have to see." No pressure to keep up with a pace that doesn't work for you. Just good travel, your way.
 
-Your trips will reflect your self-knowledge. We won't give you the same itinerary we'd give a 25-year-old backpacker. We'll give you what actually works for who you are now—thoughtfully designed for someone who's past the phase of figuring it out.`,
+Your trips will reflect your self-knowledge. We won't give you the same itinerary we'd give a 25-year-old backpacker. We'll give you what actually works for who you are now, thoughtfully designed for someone who's past the phase of figuring it out.`,
     youProbably: [
       "No longer compromise on comfort",
       "Choose destinations that interest YOU, not what's trending",
@@ -774,7 +774,7 @@ At some point, getting away wasn't just a vacation. It was survival. A breakup, 
 
 Not everyone travels for healing. Some people can't understand why you'd go somewhere hard when you're already hurting. But you know: sometimes the distance is the treatment. Sometimes you need to be a stranger to find yourself again.
 
-Your trips will be gentle where they need to be and restorative by design. We'll create space for processing, for solitude, for the kind of travel that helps you come back different—not just rested.`,
+Your trips will be gentle where they need to be and restorative by design. We'll create space for processing, for solitude, for the kind of travel that helps you come back different, not just rested.`,
     youProbably: [
       "Have traveled specifically to process something",
       "Find distance from home clarifying",
@@ -804,7 +804,7 @@ For years, travel was squeezed into vacations between obligations. Now the oblig
 
 You want to do it right. Not rushed, not uncomfortable, not compromised. You've earned the version of travel that works for your body and your preferences, without apology.
 
-Your trips will honor both your ambition and your needs. The bucket list items, done smartly. The pacing that works for this chapter. Experiences that feel earned, not grueling—because you've put in enough grueling to last a lifetime.`,
+Your trips will honor both your ambition and your needs. The bucket list items, done smartly. The pacing that works for this chapter. Experiences that feel earned, not grueling, because you've put in enough grueling to last a lifetime.`,
     youProbably: [
       "Have a list of 'someday' destinations you're finally visiting",
       "Appreciate comfort more than you used to",
@@ -828,13 +828,13 @@ Your trips will honor both your ambition and your needs. The bucket list items, 
     id: 'balanced_story_collector',
     name: 'The Balanced Story Collector',
     category: 'TRANSFORMER',
-    revealParagraph: `You're not easily categorized—and that's a good thing.
+    revealParagraph: `You're not easily categorized, and that's a good thing.
 
 You don't have a single dominant travel priority. You like good food, but you're not obsessed. You enjoy being active, but also value rest. You want cultural experiences, but not at the expense of having fun. You're the friend who's up for anything.
 
 Some quizzes probably frustrate you with their forced choices. You want the balance, a little of this, a little of that, because variety is what makes travel interesting.
 
-Your trips will reflect your range. We won't pigeonhole you into one type of experience. We'll build itineraries that mix adventure with relaxation, culture with pleasure, famous sites with hidden gems. A little of everything, well-executed—because that's what actually works for you.`,
+Your trips will reflect your range. We won't pigeonhole you into one type of experience. We'll build itineraries that mix adventure with relaxation, culture with pleasure, famous sites with hidden gems. A little of everything, well-executed, because that's what actually works for you.`,
     youProbably: [
       "Enjoy a mix of activities on any trip",
       "Get bored with too much of any one thing",

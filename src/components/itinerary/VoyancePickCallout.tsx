@@ -29,7 +29,7 @@ export function VoyancePickCallout({ tip, className }: VoyancePickCalloutProps) 
               Voyance Pick
             </span>
             <span className="text-[10px] text-primary/60 italic">
-              — Vetted by our founders
+              Vetted by our founders
             </span>
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
