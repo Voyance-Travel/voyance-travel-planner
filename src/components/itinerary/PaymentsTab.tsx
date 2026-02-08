@@ -430,6 +430,32 @@ export function PaymentsTab({
   const resolveRealMemberId = async (memberId: string): Promise<string | null> => {
     if (!memberId) return null;
     
+    // If it's a synthetic owner ID, resolve to a real trip_members row
+    if (memberId.startsWith('owner-')) {
+      const member = tripMembers.find(m => m.id === memberId);
+      if (!member) return null;
+      
+      // Check if a trip_members row already exists for this user
+      const existingReal = rawTripMembers.find(
+        m => member.userId && m.userId === member.userId
+      );
+      if (existingReal) return existingReal.id;
+      
+      // Create a real trip_members row for the owner
+      try {
+        const newMember = await addTripMember({
+          tripId,
+          email: member.email || member.userId || 'unknown',
+          name: member.name || undefined,
+          role: 'primary',
+        });
+        return newMember.id;
+      } catch (err) {
+        console.error('Failed to create trip member for owner:', err);
+        return null;
+      }
+    }
+    
     // If it's not a synthetic collab ID, it's already a real trip_members ID
     if (!memberId.startsWith('collab-')) return memberId;
     
