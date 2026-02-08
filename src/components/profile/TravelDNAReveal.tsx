@@ -80,17 +80,15 @@ interface TravelDNAData {
 // SUB-COMPONENTS
 // ============================================================================
 
-/** Archetype Hero Card with gradient background */
+/** Archetype Hero Card */
 function ArchetypeHeroCard({ 
   narrative, 
   secondaryNarrative,
-  colors,
   confidence,
   rarity,
 }: { 
   narrative: ArchetypeNarrative;
   secondaryNarrative: ArchetypeNarrative | null;
-  colors: ReturnType<typeof getCategoryColors>;
   confidence: number;
   rarity: string;
 }) {
@@ -104,15 +102,8 @@ function ArchetypeHeroCard({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className={cn(
-        "relative overflow-hidden rounded-2xl p-6 md:p-8",
-        "bg-gradient-to-br",
-        colors.primary,
-      )}
+      className="relative overflow-hidden rounded-2xl p-6 md:p-8 bg-card border border-border"
     >
-      {/* Subtle pattern overlay */}
-      <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_30%_20%,white_1px,transparent_1px)] bg-[size:24px_24px]" />
-      
       <div className="relative z-10 space-y-4">
         {/* Top row: icon + badges */}
         <div className="flex items-start justify-between">
@@ -120,15 +111,15 @@ function ArchetypeHeroCard({
             initial={{ scale: 0.7, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.2 }}
-            className="w-14 h-14 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center"
+            className="w-14 h-14 rounded-xl bg-muted flex items-center justify-center"
           >
-            <CategoryIcon className="h-7 w-7 text-white" strokeWidth={1.5} />
+            <CategoryIcon className="h-7 w-7 text-foreground/70" strokeWidth={1.5} />
           </motion.div>
           <div className="flex items-center gap-2">
-            <Badge className="bg-white/20 text-white border-white/30 backdrop-blur-sm text-xs">
+            <Badge variant="outline" className="text-xs font-normal">
               {rarity}
             </Badge>
-            <Badge className="bg-white/20 text-white border-white/30 backdrop-blur-sm text-xs">
+            <Badge variant="outline" className="text-xs font-normal">
               {confidence}% match
             </Badge>
           </div>
@@ -139,7 +130,7 @@ function ArchetypeHeroCard({
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="font-serif text-3xl md:text-4xl font-semibold text-white leading-tight"
+          className="font-serif text-3xl md:text-4xl font-semibold text-foreground leading-tight"
         >
           {narrative.name}
         </motion.h2>
@@ -149,7 +140,7 @@ function ArchetypeHeroCard({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
-          className="text-lg text-white/85 italic max-w-xl leading-relaxed"
+          className="text-lg text-muted-foreground italic max-w-xl leading-relaxed"
         >
           "{narrative.hookLine}"
         </motion.p>
@@ -162,11 +153,11 @@ function ArchetypeHeroCard({
             transition={{ delay: 0.5 }}
             className="flex items-center gap-2 pt-1"
           >
-            <div className="w-6 h-6 rounded-md bg-white/15 flex items-center justify-center">
-              <SecondaryIcon className="h-3.5 w-3.5 text-white/80" />
+            <div className="w-6 h-6 rounded-md bg-muted flex items-center justify-center">
+              <SecondaryIcon className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
-            <span className="text-sm text-white/70">with hints of</span>
-            <span className="text-sm font-medium text-white">{secondaryNarrative.name}</span>
+            <span className="text-sm text-muted-foreground">with hints of</span>
+            <span className="text-sm font-medium text-foreground">{secondaryNarrative.name}</span>
           </motion.div>
         )}
 
@@ -180,7 +171,7 @@ function ArchetypeHeroCard({
             variant="ghost" 
             size="sm" 
             asChild 
-            className="px-0 text-white/60 hover:text-white hover:bg-transparent"
+            className="px-0 text-muted-foreground hover:text-foreground hover:bg-transparent"
           >
             <Link to={ROUTES.QUIZ}>
               <RefreshCw className="h-3 w-3 mr-1.5" />
@@ -490,7 +481,6 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
       <ArchetypeHeroCard
         narrative={narrative}
         secondaryNarrative={secondaryNarrative}
-        colors={colors}
         confidence={confidence}
         rarity={rarity}
       />
