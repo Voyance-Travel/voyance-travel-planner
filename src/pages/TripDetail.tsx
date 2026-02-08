@@ -13,6 +13,7 @@ import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
 import { ItineraryAssistant } from '@/components/itinerary/ItineraryAssistant';
 import { TripDebriefModal } from '@/components/trip/TripDebriefModal';
 import { TripConfirmationBanner } from '@/components/trip/TripConfirmationBanner';
+import type { SwapSuggestion } from '@/components/trip/SwapReviewDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useScheduleNotifications } from '@/services/tripNotificationsAPI';
 import { useTripLearning } from '@/services/tripLearningsAPI';
@@ -655,6 +656,50 @@ export default function TripDetail() {
     handleShowGenerator(true);
   }, []);
 
+  // Handle applying hotel-based swap suggestions to itinerary
+  const handleApplySwaps = useCallback((swaps: SwapSuggestion[]) => {
+    if (!trip) return;
+    const metadata = trip.itinerary_data as Record<string, unknown> | null;
+    const days = [...((metadata?.days as any[]) || [])];
+
+    for (const swap of swaps) {
+      const dayIdx = days.findIndex((d: any) => d.dayNumber === swap.dayNumber);
+      if (dayIdx === -1) continue;
+      const day = { ...days[dayIdx] };
+      const activities = [...(day.activities || [])];
+      const actIdx = activities.findIndex((a: any) => a.id === swap.activityId);
+      if (actIdx === -1) continue;
+
+      // Replace the activity name/location, keep everything else
+      activities[actIdx] = {
+        ...activities[actIdx],
+        name: swap.suggestedActivity,
+        location: {
+          ...(activities[actIdx].location || {}),
+          name: swap.suggestedLocation || activities[actIdx].location?.name,
+        },
+        swappedFrom: swap.currentActivity,
+        swapReason: swap.reason,
+      };
+      day.activities = activities;
+      days[dayIdx] = day;
+    }
+
+    const newItineraryData = { ...(metadata || {}), days };
+    
+    // Update local state
+    setTrip(prev => prev ? { ...prev, itinerary_data: newItineraryData as any } : null);
+
+    // Persist to backend
+    supabase
+      .from('trips')
+      .update({ itinerary_data: newItineraryData as any, updated_at: new Date().toISOString() })
+      .eq('id', tripId!)
+      .then(({ error }) => {
+        if (error) console.error('[TripDetail] Failed to save swaps:', error);
+      });
+  }, [trip, tripId]);
+
   const handleActivityComplete = async (activityId: string) => {
     try {
       // Update activity status in database
@@ -790,8 +835,10 @@ export default function TripDetail() {
               currentStatus={trip.status as string}
               hasFlightSelection={!!trip.flight_selection}
               hasHotelSelection={!!trip.hotel_selection}
+              itineraryDays={itineraryDays}
               onStatusUpdate={(status) => setTrip(prev => prev ? { ...prev, status } as any : null)}
               onTripDataUpdate={(data) => setTrip(prev => prev ? { ...prev, ...data } as any : null)}
+              onApplySwaps={handleApplySwaps}
               onRegenerateTrip={handleRegenerateTrip}
               className="mb-6"
             />

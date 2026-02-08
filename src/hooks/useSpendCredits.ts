@@ -21,6 +21,7 @@ const ACTION_MAP: Record<string, string> = {
   REGENERATE_DAY: 'regenerate_day',
   RESTAURANT_REC: 'restaurant_rec',
   AI_MESSAGE: 'ai_message',
+  HOTEL_OPTIMIZATION: 'hotel_optimization',
   MYSTERY_GETAWAY: 'mystery_getaway',
   MYSTERY_LOGISTICS: 'mystery_logistics',
   TRANSPORT_MODE_CHANGE: 'transport_mode_change',
