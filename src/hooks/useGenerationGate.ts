@@ -36,6 +36,10 @@ export interface GateResult {
   shortfall: number;
   recommendedPack: ReturnType<typeof getRecommendedPackForEstimate>;
   isFirstTrip?: boolean;
+  /** Total days the user requested */
+  requestedDays: number;
+  /** How many days to actually generate (2 for first trip / preview, all for credited) */
+  generateDays: number;
 }
 
 export interface GenerationGateParams {
@@ -108,7 +112,7 @@ export function useGenerationGate() {
     if (user?.id) {
       const isFirstTrip = await checkIsFirstTrip(user.id);
       if (isFirstTrip) {
-        console.log('[GenerationGate] First trip detected — granting free full generation');
+        console.log('[GenerationGate] First trip detected — granting free 2-day generation');
         return {
           mode: 'full',
           tripCost: 0,
@@ -117,6 +121,8 @@ export function useGenerationGate() {
           shortfall: 0,
           recommendedPack: null,
           isFirstTrip: true,
+          requestedDays: params.days,
+          generateDays: Math.min(params.days, 2), // First trip: only 2 days free
         };
       }
     }
@@ -135,6 +141,8 @@ export function useGenerationGate() {
         currentBalance,
         shortfall,
         recommendedPack: getRecommendedPackForEstimate(tripCost, currentBalance),
+        requestedDays: params.days,
+        generateDays: Math.min(params.days, 2),
       };
     }
 
@@ -164,6 +172,8 @@ export function useGenerationGate() {
           currentBalance,
           shortfall: 0,
           recommendedPack: null,
+          requestedDays: params.days,
+          generateDays: Math.min(params.days, 2),
         };
       }
 
@@ -178,6 +188,8 @@ export function useGenerationGate() {
           currentBalance: available,
           shortfall,
           recommendedPack: getRecommendedPackForEstimate(tripCost, available),
+          requestedDays: params.days,
+          generateDays: Math.min(params.days, 2),
         };
       }
 
@@ -190,6 +202,8 @@ export function useGenerationGate() {
           currentBalance,
           shortfall: 0,
           recommendedPack: null,
+          requestedDays: params.days,
+          generateDays: Math.min(params.days, 2),
         };
       }
 
@@ -206,6 +220,8 @@ export function useGenerationGate() {
         currentBalance: data.newBalance?.total ?? (currentBalance - tripCost),
         shortfall: 0,
         recommendedPack: null,
+        requestedDays: params.days,
+        generateDays: params.days, // Paid: generate ALL days
       };
     } catch (err) {
       console.error('[GenerationGate] Unexpected error:', err);
@@ -216,6 +232,8 @@ export function useGenerationGate() {
         currentBalance,
         shortfall: Math.max(0, tripCost - currentBalance),
         recommendedPack: getRecommendedPackForEstimate(tripCost, currentBalance),
+        requestedDays: params.days,
+        generateDays: Math.min(params.days, 2),
       };
     }
   }, [user, creditData, queryClient]);

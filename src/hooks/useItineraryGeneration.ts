@@ -58,6 +58,10 @@ export interface GeneratedDay {
     totalEstimatedCost?: number;
     mealsIncluded?: number;
     pacingLevel?: 'relaxed' | 'moderate' | 'packed';
+    /** True if this day is a preview (not fully enriched) */
+    isPreview?: boolean;
+    /** True if this day is locked and has no generated content */
+    isLocked?: boolean;
   };
   narrative?: {
     theme: string;

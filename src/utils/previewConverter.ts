@@ -27,13 +27,48 @@ export function convertPreviewToGeneratedDays(preview: FullPreview): GeneratedDa
     ),
     metadata: {
       theme: day.theme,
-      totalEstimatedCost: 0, // Not available in preview
+      totalEstimatedCost: 0,
       mealsIncluded: day.activities.filter(a => a.venueType === 'dining').length,
       pacingLevel: 'moderate' as const,
-      // Flag entire day as preview
       isPreview: true,
     },
   }));
+}
+
+/**
+ * Create locked placeholder days for days beyond what was generated.
+ * These show in the itinerary as empty locked days with an unlock CTA,
+ * making it clear the trip continues but requires credits.
+ */
+export function createLockedPlaceholderDays(
+  startDate: string,
+  generatedDayCount: number,
+  totalDays: number,
+  destination: string,
+): GeneratedDay[] {
+  const lockedDays: GeneratedDay[] = [];
+  const start = new Date(startDate);
+
+  for (let i = generatedDayCount; i < totalDays; i++) {
+    const dayDate = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
+    lockedDays.push({
+      dayNumber: i + 1,
+      date: dayDate.toISOString().split('T')[0],
+      title: `Day ${i + 1} in ${destination}`,
+      theme: 'Locked',
+      activities: [],
+      metadata: {
+        theme: 'Locked',
+        totalEstimatedCost: 0,
+        mealsIncluded: 0,
+        pacingLevel: 'moderate' as const,
+        isPreview: true,
+        isLocked: true,
+      },
+    });
+  }
+
+  return lockedDays;
 }
 
 function convertPreviewActivity(
@@ -41,7 +76,6 @@ function convertPreviewActivity(
   dayNumber: number,
   index: number
 ): GeneratedActivity {
-  // Parse time to create approximate endTime
   const startTime = act.time;
   const endTime = calculateEndTime(startTime, act.durationMinutes);
 
@@ -56,13 +90,11 @@ function convertPreviewActivity(
     durationMinutes: act.durationMinutes,
     location: {
       name: act.venueName,
-      address: '', // GATED
+      address: '',
     },
     bookingRequired: false,
     tags: [act.venueType, act.neighborhood],
-    // Preview metadata — signals to the UI to show locked state
     type: act.venueType,
-    // Gated fields are explicitly absent
   };
 }
 
@@ -80,7 +112,6 @@ function mapVenueTypeToCategory(venueType: string): string {
 }
 
 function calculateEndTime(startTime: string, durationMinutes: number): string {
-  // Parse "9:00 AM" format
   const match = startTime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
   if (!match) return startTime;
 
