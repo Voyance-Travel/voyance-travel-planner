@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ROUTES } from '@/config/routes';
+import nolaHero1 from '@/assets/destinations/new-orleans-1.jpg';
 
 // Sample itineraries with computed intelligence metrics
 const SAMPLE_ITINERARIES = [
@@ -55,7 +56,7 @@ const SAMPLE_ITINERARIES = [
     destination: 'New Orleans',
     country: 'Louisiana',
     duration: '4 days',
-    image: 'https://images.unsplash.com/photo-1551632436-cbf8dd35adfa?w=800',
+    image: nolaHero1,
     archetype: 'Culinary Cartographer',
     archetypeCategory: 'CURATOR',
     budgetTier: 'Stretch',

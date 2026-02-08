@@ -11,6 +11,11 @@ import romeHero3 from '@/assets/destinations/rome-hero-3.jpg';
 import romeHero4 from '@/assets/destinations/rome-hero-4.jpg';
 import romeHero5 from '@/assets/destinations/rome-hero-5.jpg';
 
+// New Orleans: local curated images
+import nolaHero1 from '@/assets/destinations/new-orleans-1.jpg';
+import nolaHero2 from '@/assets/destinations/new-orleans-2.jpg';
+import nolaHero3 from '@/assets/destinations/new-orleans-3.jpg';
+
 // Curated high-quality images for popular destinations
 const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
   // Europe
@@ -312,14 +317,14 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1547149600-a6cdf8fce60c?w=1200',
   ],
   'new orleans': [
-    'https://images.unsplash.com/photo-1551632436-cbf8dd35adfa?w=1200',
-    'https://images.unsplash.com/photo-1560507074-b9eb4b818538?w=1200',
-    'https://images.unsplash.com/photo-1565214975484-3cfa370c43ed?w=1200',
+    nolaHero1,
+    nolaHero2,
+    nolaHero3,
   ],
   'new-orleans': [
-    'https://images.unsplash.com/photo-1551632436-cbf8dd35adfa?w=1200',
-    'https://images.unsplash.com/photo-1560507074-b9eb4b818538?w=1200',
-    'https://images.unsplash.com/photo-1565214975484-3cfa370c43ed?w=1200',
+    nolaHero1,
+    nolaHero2,
+    nolaHero3,
   ],
   'cusco': [
     'https://images.unsplash.com/photo-1526392060635-9d6019884377?w=1200',
