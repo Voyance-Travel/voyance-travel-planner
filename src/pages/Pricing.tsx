@@ -79,7 +79,7 @@ const unlockGroups = [
   {
     title: 'Full Trip',
     items: [
-      { icon: CalendarClock, text: 'All days built out (not just Day 1)' },
+      { icon: CalendarClock, text: 'All remaining days built out (beyond your free 2)' },
       { icon: Route, text: 'Complete activity schedule' },
     ],
   },
@@ -182,12 +182,12 @@ const faqs = [
     a: 'Never. Purchased credits are yours forever. Only the monthly free credits have a 2-month expiration.',
   },
   {
-    q: 'What if I don\'t like Day 1?',
-    a: 'Adjust your preferences and regenerate \u2014 previews are free. Or switch to manual mode and build your own.',
+    q: 'What if I don\'t like the preview?',
+    a: 'Adjust your preferences and regenerate — your first 2 days are always free. Or switch to manual mode and build your own.',
   },
   {
-    q: 'Can I mix unlocked days with manual planning?',
-    a: 'Yes. Unlock what you want, build the rest yourself.',
+    q: 'Can I unlock individual days?',
+    a: 'Yes! You can unlock days one at a time or all at once. Mix unlocked days with manual planning however you like.',
   },
   {
     q: 'What about dietary, accessibility, or special occasions?',
@@ -255,7 +255,7 @@ export default function Pricing() {
     <MainLayout>
       <Head 
         title="Pricing | Voyance" 
-        description="See your first day free with real venues and timing. Unlock the full itinerary when you're ready, or build it yourself." 
+        description="See your first 2 days free with real venues and timing. Unlock the full itinerary when you're ready, or build it yourself." 
         canonical="https://travelwithvoyance.com/pricing"
       />
       
@@ -282,7 +282,7 @@ export default function Pricing() {
             transition={{ delay: 0.05 }}
             className="text-3xl sm:text-4xl md:text-5xl font-serif font-medium text-foreground mb-5 text-balance"
           >
-            See your first day. Unlock the rest when you're ready.
+            See your first 2 days. Unlock the rest when you're ready.
           </motion.h1>
           
           <motion.p
@@ -291,7 +291,7 @@ export default function Pricing() {
             transition={{ delay: 0.1 }}
             className="text-muted-foreground text-base sm:text-lg max-w-xl mx-auto leading-relaxed"
           >
-            We'll build your Day 1 for free: real venues, real timing, curated for you. Love it? Unlock your complete itinerary. Want control? Build it yourself.
+            We'll build your first 2 days for free: real venues, real timing, curated for you. Love it? Unlock the rest of your itinerary. Want control? Build it yourself.
           </motion.p>
 
           <motion.div
@@ -328,8 +328,8 @@ export default function Pricing() {
           <div className="grid sm:grid-cols-3 gap-6">
             {[
               { step: '01', title: 'Tell us about your trip', desc: 'Destination, dates, who\'s going, what you love, what you skip. 2 minutes.' },
-              { step: '02', title: 'Preview your first day \u2014 free', desc: 'See 3-4 curated activities with real venues, timing, and ratings. Get a feel for how we plan before you commit.' },
-              { step: '03', title: 'Choose your path', desc: 'Unlock: Use credits to reveal your full itinerary \u2014 every day, every detail, ready to book. Build: Use our framework to create your own itinerary manually.' },
+              { step: '02', title: 'Preview your first 2 days — free', desc: 'See 3-4 curated activities per day with real venues, timing, and ratings. Get a feel for how we plan before you commit.' },
+              { step: '03', title: 'Choose your path', desc: 'Unlock: Use credits to reveal the rest of your itinerary — every day, every detail, ready to book. Build: Use our framework to create your own itinerary manually.' },
             ].map((item, i) => (
               <motion.div
                 key={i}
@@ -365,7 +365,7 @@ export default function Pricing() {
               Your Free Preview
             </h2>
             <p className="text-sm text-muted-foreground max-w-lg mx-auto">
-              Your first day includes:
+              Your first 2 days include:
             </p>
           </motion.div>
 
@@ -616,10 +616,10 @@ export default function Pricing() {
               Example
             </p>
             <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground">
-              Day 1 Preview
+              Free Preview: Days 1 & 2
             </h2>
             <p className="text-sm text-muted-foreground mt-2">
-              What you see free:
+              What you see free (per day):
             </p>
           </motion.div>
 
@@ -682,7 +682,7 @@ export default function Pricing() {
               Or Build It Yourself
             </h2>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto mb-4">
-              Don't want to pay? Use our manual builder: start with our Day 1 framework, add your own activities, and research at your own pace.
+              Don't want to pay? Use our manual builder: start with your free 2-day preview, add your own activities, and research at your own pace.
             </p>
             <p className="text-xs text-muted-foreground italic">
               Credits unlock our curation. The builder is always free.
@@ -761,7 +761,7 @@ export default function Pricing() {
             transition={{ delay: 0.05 }}
             className="text-sm text-muted-foreground mb-6"
           >
-            Preview your first day in 2 minutes, free. Unlock the full trip when you're ready.
+            Preview your first 2 days in 2 minutes, free. Unlock the full trip when you're ready.
           </motion.p>
           <motion.div
             initial={{ opacity: 0 }}
