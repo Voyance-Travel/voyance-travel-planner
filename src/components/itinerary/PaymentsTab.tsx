@@ -301,8 +301,28 @@ export function PaymentsTab({
     // Add "unassigned" category
     breakdown.set('unassigned', { assigned: 0, paid: 0, items: [] });
 
+    // Build a lookup from real IDs (trip_members UUID or userId) → synthetic member.id
+    // so we can match DB assigned_member_id to the correct member bucket
+    const realIdToSyntheticId = new Map<string, string>();
+    tripMembers.forEach(m => {
+      // Map the synthetic id itself
+      realIdToSyntheticId.set(m.id, m.id);
+      // Map the userId (real auth user id)
+      if (m.userId) realIdToSyntheticId.set(m.userId, m.id);
+    });
+    // Also map real trip_members row IDs to their synthetic counterparts
+    rawTripMembers.forEach(rm => {
+      if (rm.userId) {
+        const syntheticId = realIdToSyntheticId.get(rm.userId);
+        if (syntheticId) {
+          realIdToSyntheticId.set(rm.id, syntheticId);
+        }
+      }
+    });
+
     payableItems.forEach(item => {
-      const memberId = item.assignedMemberId || 'unassigned';
+      const rawId = item.assignedMemberId;
+      const memberId = rawId ? (realIdToSyntheticId.get(rawId) || 'unassigned') : 'unassigned';
       const current = breakdown.get(memberId) || { assigned: 0, paid: 0, items: [] };
       
       current.assigned += item.amountCents;
@@ -315,7 +335,7 @@ export function PaymentsTab({
     });
 
     return breakdown;
-  }, [tripMembers, payableItems]);
+  }, [tripMembers, rawTripMembers, payableItems]);
 
   const handleMarkAsPaid = async () => {
     if (!markPaidModal) return;
