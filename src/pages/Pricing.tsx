@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import pricingHero from '@/assets/pricing-hero.jpg';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -211,8 +212,17 @@ export default function Pricing() {
       />
       
       {/* Hero */}
-      <section className="pt-20 pb-12 sm:pt-24 sm:pb-16 bg-gradient-to-b from-muted/50 to-background">
-        <div className="max-w-3xl mx-auto px-4 text-center">
+      <section className="relative pt-20 pb-12 sm:pt-24 sm:pb-16 overflow-hidden">
+        {/* Background image */}
+        <div className="absolute inset-0">
+          <img 
+            src={pricingHero} 
+            alt="" 
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
+        </div>
+        <div className="relative max-w-3xl mx-auto px-4 text-center">
           <motion.p
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
