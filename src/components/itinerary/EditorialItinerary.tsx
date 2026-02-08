@@ -5367,16 +5367,38 @@ function ActivityRow({
           <span className="text-xs text-muted-foreground">• {activity.duration}</span>
         )}
         {/* Collaborator attribution dot (mobile) */}
-        {activity.suggestedFor && collaboratorColorMap?.has(activity.suggestedFor) && (() => {
-          const attr = collaboratorColorMap.get(activity.suggestedFor!)!;
-          const colors = getCollaboratorColor(attr.colorIndex);
+        {activity.suggestedFor && collaboratorColorMap && (() => {
+          const ids = activity.suggestedFor!.split(',').map(s => s.trim()).filter(id => collaboratorColorMap.has(id));
+          if (ids.length === 0) return null;
+          if (ids.length === 1) {
+            const attr = collaboratorColorMap.get(ids[0])!;
+            const colors = getCollaboratorColor(attr.colorIndex);
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className={cn("h-2.5 w-2.5 rounded-full shrink-0", colors.dot)} />
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  Suggested for {attr.name}
+                </TooltipContent>
+              </Tooltip>
+            );
+          }
+          // Multiple travelers — show stacked dots
+          const names = ids.map(id => collaboratorColorMap.get(id)!.name);
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className={cn("h-2.5 w-2.5 rounded-full shrink-0", colors.dot)} />
+                <span className="inline-flex -space-x-1 shrink-0">
+                  {ids.map(id => {
+                    const attr = collaboratorColorMap.get(id)!;
+                    const colors = getCollaboratorColor(attr.colorIndex);
+                    return <span key={id} className={cn("h-2.5 w-2.5 rounded-full ring-1 ring-background", colors.dot)} />;
+                  })}
+                </span>
               </TooltipTrigger>
               <TooltipContent side="top" className="text-xs">
-                Suggested for {attr.name}
+                Inspired by {names.join(' & ')}
               </TooltipContent>
             </Tooltip>
           );
@@ -5433,19 +5455,44 @@ function ActivityRow({
               <span className="p-1 rounded bg-primary/10 text-primary">{style.icon}</span>
               <span className="text-xs text-primary/80 uppercase tracking-wider font-medium">{style.label}</span>
               {/* Collaborator attribution dot (desktop) */}
-              {activity.suggestedFor && collaboratorColorMap?.has(activity.suggestedFor) && (() => {
-                const attr = collaboratorColorMap.get(activity.suggestedFor!)!;
-                const colors = getCollaboratorColor(attr.colorIndex);
+              {activity.suggestedFor && collaboratorColorMap && (() => {
+                const ids = activity.suggestedFor!.split(',').map(s => s.trim()).filter(id => collaboratorColorMap.has(id));
+                if (ids.length === 0) return null;
+                if (ids.length === 1) {
+                  const attr = collaboratorColorMap.get(ids[0])!;
+                  const colors = getCollaboratorColor(attr.colorIndex);
+                  return (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className={cn("inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full", colors.bg, colors.text)}>
+                          <span className={cn("h-2 w-2 rounded-full", colors.dot)} />
+                          {attr.name}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        Suggested for {attr.name}'s travel style
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                }
+                // Multiple travelers — show combined badge
+                const attrs = ids.map(id => collaboratorColorMap.get(id)!);
+                const names = attrs.map(a => a.name);
                 return (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className={cn("inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full", colors.bg, colors.text)}>
-                        <span className={cn("h-2 w-2 rounded-full", colors.dot)} />
-                        {attr.name}
+                      <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
+                        <span className="inline-flex -space-x-0.5">
+                          {attrs.map(attr => {
+                            const colors = getCollaboratorColor(attr.colorIndex);
+                            return <span key={attr.userId} className={cn("h-2 w-2 rounded-full ring-1 ring-background", colors.dot)} />;
+                          })}
+                        </span>
+                        {names.join(' & ')}
                       </span>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="text-xs">
-                      Suggested for {attr.name}'s travel style
+                      Inspired by both travelers' profiles
                     </TooltipContent>
                   </Tooltip>
                 );
