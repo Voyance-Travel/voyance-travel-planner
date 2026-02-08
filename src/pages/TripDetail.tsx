@@ -78,7 +78,7 @@ export default function TripDetail() {
   const [destinationMeta, setDestinationMeta] = useState<Destination | null>(null);
   const [showDebriefModal, setShowDebriefModal] = useState(false);
   const [hasCollaborators, setHasCollaborators] = useState(false);
-  const [showChat, setShowChat] = useState(false);
+  const [showChat, setShowChat] = useState(true);
   const [collabTab, setCollabTab] = useState<'suggestions' | 'chat'>('suggestions');
   const scheduleNotifications = useScheduleNotifications();
   const { user } = useAuth();
