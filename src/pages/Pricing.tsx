@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, ChevronDown, Loader2, ArrowRight, Lock, Sparkles, MapPin, Clock, Utensils } from 'lucide-react';
+import { Check, ChevronDown, Loader2, ArrowRight, Lock, Sparkles, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
 import { CREDIT_PACKS, TOPUP_PACK, formatCredits } from '@/config/pricing';
@@ -83,24 +83,7 @@ const tiers = [
   },
 ];
 
-// Free vs Paid comparison
-const freeFeatures = [
-  { icon: MapPin, label: 'Full itinerary outline', desc: 'Every day mapped with activities' },
-  { icon: Clock, label: 'Activity timing', desc: '"Arrive at 8am to avoid crowds"' },
-  { icon: Utensils, label: 'Restaurant picks', desc: 'Where to eat each meal' },
-  { icon: Sparkles, label: 'Trap warnings', desc: '"Skip this tourist trap"' },
-  { label: 'Route optimization', desc: 'Logical order, minimal backtracking' },
-  { label: 'Regenerate outline', desc: "Don't like it? Regenerate free" },
-];
-
-const paidFeatures = [
-  { label: 'Booking links', desc: 'Direct links to reserve activities and restaurants' },
-  { label: 'Budget breakdowns', desc: 'Safe ($) / Stretch ($$) / Splurge ($$$) for every stop' },
-  { label: 'Reservation windows', desc: '"Book 30+ days ahead" with exact timing' },
-  { label: '"What to order" specifics', desc: 'Specific dishes at each restaurant' },
-  { label: 'Hotel recommendations', desc: 'Curated picks that match your style' },
-  { label: 'PDF export', desc: 'Download your complete, polished itinerary' },
-];
+// What one unlocked day looks like (moved up, old free/paid arrays removed)
 
 // What one unlocked day looks like
 const dayDetails = [
@@ -338,80 +321,6 @@ export default function Pricing() {
           >
             We want you to see exactly what you're getting before you pay. No bait-and-switch.
           </motion.p>
-        </div>
-      </section>
-
-      {/* Free vs Paid Split */}
-      <section className="py-12 sm:py-16 bg-muted/30">
-        <div className="max-w-5xl mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-10"
-          >
-            <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-2">
-              What's free vs. what credits unlock
-            </h2>
-            <p className="text-sm text-muted-foreground max-w-lg mx-auto">
-              You see the plan free. You pay to unlock the details you need to actually book.
-            </p>
-          </motion.div>
-
-          <div className="grid md:grid-cols-2 gap-5">
-            {/* Free Column */}
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="bg-card border border-border rounded-2xl p-5 sm:p-6"
-            >
-              <div className="flex items-center gap-2 mb-5">
-                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary/10">
-                  <Check className="w-4 h-4 text-primary" />
-                </span>
-                <h3 className="font-semibold text-foreground">Always Free</h3>
-              </div>
-              <div className="space-y-3">
-                {freeFeatures.map((f, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{f.label}</p>
-                      <p className="text-xs text-muted-foreground">{f.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-
-            {/* Paid Column */}
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.05 }}
-              className="bg-card border border-primary/20 rounded-2xl p-5 sm:p-6"
-            >
-              <div className="flex items-center gap-2 mb-5">
-                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary/10">
-                  <Lock className="w-4 h-4 text-primary" />
-                </span>
-                <h3 className="font-semibold text-foreground">Unlock with Credits</h3>
-              </div>
-              <div className="space-y-3">
-                {paidFeatures.map((f, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <Lock className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{f.label}</p>
-                      <p className="text-xs text-muted-foreground">{f.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          </div>
         </div>
       </section>
 
