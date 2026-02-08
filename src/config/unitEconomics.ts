@@ -73,7 +73,7 @@ export const AI_COSTS = {
   // Per-feature costs (from PRICE_SHEET.md)
   features: {
     // Pre-signup (free to user, cost to us)
-    quick_preview: { min: 0.003, max: 0.01, model: 'gemini-2.5-flash', desc: '3-day teaser on homepage' },
+    quick_preview: { min: 0.003, max: 0.01, model: 'gemini-2.5-flash', desc: '2-day teaser on homepage' },
     analyze_itinerary: { min: 0.003, max: 0.01, model: 'gemini-2.5-flash', desc: 'Roast existing itinerary' },
     
     // One-time per user
@@ -137,7 +137,7 @@ export const EXTERNAL_API_COSTS = {
 
 export const USER_LIFECYCLE_COSTS = {
   bounce: { min: 0.001, max: 0.003, desc: 'Visitor who leaves without signup' },
-  freeUser: { min: 0.34, max: 0.41, desc: 'One-time acquisition: free 3-day trip + up to 5 edits. Subsequent trips: $0.03 each (locked preview)' },
+  freeUser: { min: 0.24, max: 0.31, desc: 'One-time acquisition: free 2-day trip + up to 5 edits. Subsequent trips: $0.03 each (locked preview)' },
   singlePurchase: { min: 0.30, max: 1.25, desc: 'Buys one credit pack' },
   repeatUser: { min: 0.92, max: 3.40, desc: '3 trips per year' },
   powerUser: { min: 3.11, max: 11.38, desc: '10+ trips per year' },
@@ -197,17 +197,17 @@ export const REVENUE_CONFIG = {
   },
   
   // Conversion funnel:
-  // 1. First trip: bypasses credits (full 3-day enriched, one-time)
+  // 1. First trip: bypasses credits (full 2-day enriched, one-time)
   // 2. Subsequent trips: Day 1 preview always free (AI-only, no enrichment)
   // 3. Monthly grant: 150cr/mo for ALL users (free + paid), 2-month expiry
   // 4. Purchased credits never expire
   // 5. User runs out of free credits → buys pack (conversion)
   freeTier: {
-    freeTripDays: 3,
+    freeTripDays: 2,
     freeEditsLimit: 5,
     oneFreeTripPerAccount: true,
-    acquisitionCostBlended: 0.378,     // One-time per new user
-    acquisitionCostWorstCase: 0.413,   // All 5 edits used
+    acquisitionCostBlended: 0.278,     // One-time per new user
+    acquisitionCostWorstCase: 0.313,   // All 5 edits used
     day1PreviewCost: 0.010,            // AI-only lightweight preview (always free)
     monthlyGrantCredits: 150,          // Credits per month (ALL users)
     monthlyGrantExpiry: 2,             // Months until free credits expire

@@ -87,14 +87,14 @@ const PHOTO_CACHE_SAVINGS_RATIO = 0.33; // Estimated, not yet verified post-depl
 //
 // FUNNEL FLOW:
 //   1. FIRST TRIP (one-time, bypasses credits entirely):
-//      Full 3-day enriched itinerary + up to 5 edits. No credits deducted.
+//      Full 2-day enriched itinerary + up to 5 edits. No credits deducted.
 //      Purpose: Hook the user with real quality.
 //        - Trip base (Perplexity + AI setup):      $0.043
-//        - 3 days × $0.100/day (Google + AI):      $0.300
+//        - 2 days × $0.100/day (Google + AI):      $0.200
 //        - 5 edits (avg $0.012/edit):              $0.060
 //        - DNA lookup:                             $0.010
-//        - Total worst case:                       ~$0.41
-//        - Blended (avg ~2.1 edits):               ~$0.38
+//        - Total worst case:                       ~$0.31
+//        - Blended (avg ~2.1 edits):               ~$0.28
 //
 //   2. SUBSEQUENT TRIPS — DAY 1 PREVIEW (always free, no credits):
 //      Lightweight preview: AI-generated venue names + timing. No enrichment.
@@ -120,7 +120,7 @@ const PHOTO_CACHE_SAVINGS_RATIO = 0.33; // Estimated, not yet verified post-depl
 // =============================================================================
 const FREE_USER_ECONOMICS = {
   // Step 1: One-time free trip (bypasses credits entirely)
-  freeTripDays: 3,
+  freeTripDays: 2,
   freeEditsLimit: 5,
   oneFreeTripPerAccount: true,
 
@@ -133,10 +133,10 @@ const FREE_USER_ECONOMICS = {
   },
 
   // Blended one-time acquisition cost (assuming ~2.1 edits avg)
-  acquisitionCostBlended: 0.378,
+  acquisitionCostBlended: 0.278,
 
   // Worst case acquisition (all 5 edits used)
-  acquisitionCostWorstCase: 0.413,
+  acquisitionCostWorstCase: 0.313,
 
   // Step 2: Day 1 preview cost (always free, lightweight AI-only)
   day1PreviewCost: 0.010,   // AI-only, no enrichment
@@ -1094,7 +1094,7 @@ export default function UnitEconomics() {
             const breakEvenPaying = Math.ceil(costs.fixed.total / (blendedAOV - PAID_COST));
             return [
               { label: "Monthly Grant", value: `$${FREE_COST_RECURRING.toFixed(3)}`, sub: `150cr/mo × 60% usage (ALL users, 2mo expiry)`, accent: "#F87171", icon: "🎁" },
-              { label: "Acquisition", value: `$${FREE_USER_ECONOMICS.acquisitionCostBlended.toFixed(2)}`, sub: `One-time: free 3-day enriched trip (bypasses credits)`, accent: "#FB923C", icon: "🆓" },
+              { label: "Acquisition", value: `$${FREE_USER_ECONOMICS.acquisitionCostBlended.toFixed(2)}`, sub: `One-time: free 2-day enriched trip (bypasses credits)`, accent: "#FB923C", icon: "🆓" },
               { label: "Paid Trip Cost", value: `$${PAID_COST.toFixed(3)}`, sub: `Photos $0.085 · Hotels $0.005 · AI ~$0`, accent: "#38BDF8", icon: "💎" },
               { label: "Fixed / Trip", value: `$${costs.fixed.perTrip.toFixed(2)}`, sub: `$${costs.fixed.total.toFixed(0)}/mo ÷ ${volume} trips`, accent: "#F59E0B", icon: "🏗" },
               { label: "Monthly Burn", value: `$${totalCost.toFixed(2)}`, sub: `Free $${freeVarCost.toFixed(2)} + Paid $${paidVarCost.toFixed(2)} + Fixed $${costs.fixed.total.toFixed(0)}`, accent: "#F87171", icon: "🔥" },
@@ -1478,7 +1478,7 @@ export default function UnitEconomics() {
             {[
               { label: "Paid Trip Cost", value: 0.091, color: "#38BDF8", note: "From trip_cost_tracking: 567 entries / 41 trips", breakdown: "Photos $0.085 + Hotels $0.005 + Perplexity $0.001" },
               { label: "Monthly Grant (ALL users)", value: FREE_USER_ECONOMICS.recurringCostPerMonth, color: "#F87171", note: "150cr/mo for ALL users (free + paid), 2-month expiry, 60% usage rate", breakdown: "Blended: unlock 1 day ($0.10) or swaps ($0.02) — avg $0.04 if used. Purchased credits never expire." },
-              { label: "Acquisition (one-time)", value: FREE_USER_ECONOMICS.acquisitionCostBlended, color: "#FB923C", note: "First trip bypasses credits entirely — full 3-day enriched trip + ~2.1 edits", breakdown: `Base $0.043 + 3 days $0.300 + edits $0.025 + DNA $0.010. Day 1 preview always free after ($0.01 AI-only).` },
+              { label: "Acquisition (one-time)", value: FREE_USER_ECONOMICS.acquisitionCostBlended, color: "#FB923C", note: "First trip bypasses credits entirely — full 2-day enriched trip + ~2.1 edits", breakdown: `Base $0.043 + 2 days $0.200 + edits $0.025 + DNA $0.010. Day 1 preview always free after ($0.01 AI-only).` },
               { label: "Fixed Monthly", value: 49, color: "#F59E0B", note: "Cloud $25 + Domain $4 + DevOps $20", breakdown: `$${(49 / volume).toFixed(2)}/trip at ${volume} trips/mo` },
             ].map((item, i) => {
               const maxVal = 49;
@@ -1899,7 +1899,7 @@ export default function UnitEconomics() {
                     </tr>
                   );
                 })}
-                {/* Free user row - one free 3-day full-power trip */}
+                {/* Free user row - one free 2-day full-power trip */}
                 <tr style={{ background: "rgba(248, 113, 113, 0.08)" }}>
                   <td style={{ padding: "8px 10px", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

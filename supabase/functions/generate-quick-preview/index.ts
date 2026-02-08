@@ -588,7 +588,7 @@ async function generateItineraryPreview(destination: string, archetype: { name: 
       messages: [
         {
           role: "system",
-          content: `You are a travel expert creating quick trip previews. Generate a 3-day taste of what a trip could look like.
+          content: `You are a travel expert creating quick trip previews. Generate a 2-day taste of what a trip could look like.
 
 You are building this preview as a "${archetype.name}" — ${archetype.style}.
 
@@ -605,15 +605,14 @@ OUTPUT FORMAT (JSON only, no markdown):
 {
   "days": [
     { "dayNumber": 1, "headline": "...", "description": "..." },
-    { "dayNumber": 2, "headline": "...", "description": "..." },
-    { "dayNumber": 3, "headline": "...", "description": "..." }
+    { "dayNumber": 2, "headline": "...", "description": "..." }
   ],
   "totalDays": 7
 }`
         },
         {
           role: "user",
-          content: `Create a quick 3-day preview for: ${destination}`
+          content: `Create a quick 2-day preview for: ${destination}`
         }
       ],
       temperature: 0.7,
