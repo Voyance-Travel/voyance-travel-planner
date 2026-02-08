@@ -11,7 +11,12 @@ const STORAGE_KEY = 'voyance_auth_return_path';
  */
 export function saveReturnPath(path: string): void {
   try {
-    if (path && path !== '/signin' && path !== '/signup' && path !== '/forgot-password') {
+    // Don't save auth pages or admin pages as return destinations
+    if (path && 
+        path !== '/signin' && 
+        path !== '/signup' && 
+        path !== '/forgot-password' &&
+        !path.startsWith('/admin')) {
       sessionStorage.setItem(STORAGE_KEY, path);
     }
   } catch {
