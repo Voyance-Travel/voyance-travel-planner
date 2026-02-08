@@ -184,9 +184,9 @@ export function getRecommendedPackForEstimate(creditsNeeded: number, currentBala
 // ============================================================================
 
 export const EXAMPLE_TRIP_COSTS = [
-  { label: 'Paris, 3 days, simple', credits: 270, pack: 'Starter' },
-  { label: 'Tokyo, 5 days, vegetarian', credits: 450, pack: 'Weekend' },
-  { label: 'Tokyo → Kyoto, 7 days', credits: 690, pack: 'Explorer' },
-  { label: 'Barcelona, anniversary + vegan', credits: 420, pack: 'Weekend' },
-  { label: 'Japan honeymoon, 3 cities, 10 days', credits: 1330, pack: 'Adventurer' },
+  { label: 'Paris, 3 days, simple', credits: 270, pack: 'City Break' },
+  { label: 'Tokyo, 5 days, vegetarian', credits: 450, pack: 'Getaway' },
+  { label: 'Tokyo to Kyoto, 7 days', credits: 690, pack: 'Journey' },
+  { label: 'Barcelona, anniversary + vegan', credits: 420, pack: 'Getaway' },
+  { label: 'Japan honeymoon, 3 cities, 10 days', credits: 1330, pack: 'Expedition' },
 ] as const;
