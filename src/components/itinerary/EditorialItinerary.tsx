@@ -70,6 +70,7 @@ import { type CollaboratorAttribution, getCollaboratorColor, buildCollaboratorCo
 import { useTripPermission, useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import TripChat from '@/components/chat/TripChat';
 import TripSuggestions from '@/components/suggestions/TripSuggestions';
+import { ProposeReplacementDialog } from '@/components/suggestions/ProposeReplacementDialog';
 import type { BookingItemState, TravelerInfo } from '@/services/bookingStateMachine';
 import OptimizePreferencesDialog, { type OptimizePreferences } from './OptimizePreferencesDialog';
 import ReviewsDrawer from '@/components/reviews/ReviewsDrawer';
@@ -5152,6 +5153,7 @@ function ActivityRow({
   changingTransportActivityId,
   collaboratorColorMap,
 }: ActivityRowProps) {
+  const [showProposeReplacement, setShowProposeReplacement] = useState(false);
   const activityType = getActivityType(activity);
   const style = activityStyles[activityType] || activityStyles.activity;
   const rawRating = getActivityRating(activity);
@@ -5670,6 +5672,14 @@ function ActivityRow({
                       )}
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
+                        onClick={() => setShowProposeReplacement(true)}
+                        className="cursor-pointer gap-2"
+                      >
+                        <MessageCircle className="h-4 w-4" />
+                        Propose Replacement
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
                         onClick={() => onRemove(dayIndex, activity.id)}
                         className="cursor-pointer gap-2 text-destructive focus:text-destructive"
                       >
@@ -5679,6 +5689,15 @@ function ActivityRow({
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
+                
+                {/* Propose Replacement Dialog */}
+                <ProposeReplacementDialog
+                  isOpen={showProposeReplacement}
+                  onClose={() => setShowProposeReplacement(false)}
+                  tripId={tripId}
+                  activityId={activity.id}
+                  activityTitle={sanitizeActivityName(activity.title || '')}
+                />
               </div>
             )}
           </div>
