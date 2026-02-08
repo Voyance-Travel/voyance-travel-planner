@@ -99,7 +99,7 @@ const everythingIncluded = [
   {
     title: 'Your Itinerary',
     items: [
-      { icon: CalendarClock, text: '4-5 activities per day, timed to avoid crowds' },
+      { icon: CalendarClock, text: 'Activities tailored to your pace, timed to avoid crowds' },
       { icon: UtensilsCrossed, text: 'Restaurant picks: where to eat, what to order, what to skip' },
       { icon: DollarSign, text: 'Budget tiers: Safe ($), Stretch ($$), Splurge ($$$) for every stop' },
       { icon: ShieldAlert, text: 'Trap warnings: we flag overhyped spots and suggest alternatives' },
@@ -243,7 +243,7 @@ export default function Pricing() {
       <section className="relative pt-20 pb-12 sm:pt-24 sm:pb-16 overflow-hidden">
         <div className="absolute inset-0">
           <img src={pricingHero} alt="" className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-background/70" />
         </div>
         <div className="relative max-w-3xl mx-auto px-4 text-center">
           <motion.p
