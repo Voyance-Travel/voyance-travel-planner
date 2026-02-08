@@ -21,7 +21,7 @@ import {
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
-  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle
+  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
@@ -69,6 +69,7 @@ import { TripCollaboratorsPanel } from './TripCollaboratorsPanel';
 import { GuestDNABanner } from './GuestDNABanner';
 import { type CollaboratorAttribution, getCollaboratorColor, buildCollaboratorColorMap } from '@/utils/collaboratorAttribution';
 import { useTripPermission, useTripCollaborators } from '@/services/tripCollaboratorsAPI';
+import { useGuestEditMode } from '@/hooks/useGuestEditMode';
 import TripChat from '@/components/chat/TripChat';
 import TripSuggestions from '@/components/suggestions/TripSuggestions';
 import { ProposeReplacementDialog } from '@/components/suggestions/ProposeReplacementDialog';
@@ -995,12 +996,17 @@ export function EditorialItinerary({
   // Get trip permission for current user
   const { data: tripPermission } = useTripPermission(tripId);
   const { data: collaborators = [] } = useTripCollaborators(tripId);
+  const { guestEditMode, isPropose, setGuestEditMode, isUpdating: isUpdatingEditMode } = useGuestEditMode(tripId);
   
   // Get budget settings to pass limit to PaymentsTab
   const { settings: budgetSettings } = useTripBudget({ tripId, totalDays: days.length, enabled: true });
   
-  // Determine effective editability based on permission
-  const effectiveIsEditable = !isPreview && isEditable && (tripPermission?.isOwner || tripPermission?.canEdit);
+  // Determine effective editability based on permission + guest edit mode
+  // Owner always can edit. Guests can edit freely only if mode is 'free_edit' AND they have edit permission.
+  // In 'propose_approve' mode, guests can only propose changes (not directly edit).
+  const guestCanDirectEdit = tripPermission?.canEdit && guestEditMode === 'free_edit';
+  const effectiveIsEditable = !isPreview && isEditable && (tripPermission?.isOwner || guestCanDirectEdit);
+  const guestMustPropose = !isPreview && isEditable && !tripPermission?.isOwner && tripPermission?.canEdit && isPropose;
 
   // Build collaborator color map for activity attribution (only for group trips)
   const collaboratorColorMap = useMemo(() => {
@@ -2196,7 +2202,7 @@ export function EditorialItinerary({
       </div>
 
       {/* View-Only Mode Indicator */}
-      {isEditable && !effectiveIsEditable && tripPermission && !tripPermission.isOwner && (
+      {isEditable && !effectiveIsEditable && !guestMustPropose && tripPermission && !tripPermission.isOwner && (
         <div className="bg-muted/50 border border-border rounded-lg px-4 py-3 flex items-center gap-3">
           <Eye className="h-4 w-4 text-muted-foreground" />
           <div className="flex-1">
@@ -2208,14 +2214,27 @@ export function EditorialItinerary({
         </div>
       )}
 
-      {/* Collaborator Edit Mode Info */}
+      {/* Propose & Approve Mode Indicator (guest has edit perms but mode requires proposals) */}
+      {guestMustPropose && (
+        <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg px-4 py-3 flex items-center gap-3">
+          <MessageSquarePlus className="h-4 w-4 text-amber-600" />
+          <div className="flex-1">
+            <p className="text-sm font-medium">Propose Changes</p>
+            <p className="text-xs text-muted-foreground">
+              This trip requires proposals for changes. Use "Propose Replacement" on any activity — the owner and group will vote.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Collaborator Edit Mode Info (free edit) */}
       {effectiveIsEditable && tripPermission && !tripPermission.isOwner && (
         <div className="bg-primary/5 border border-primary/20 rounded-lg px-4 py-3 flex items-center gap-3">
           <Sparkles className="h-4 w-4 text-primary" />
           <div className="flex-1">
-            <p className="text-sm font-medium">Editing as Guest</p>
+            <p className="text-sm font-medium">Editing Freely</p>
             <p className="text-xs text-muted-foreground">
-              You can edit this itinerary. AI actions (swap, regenerate) will use your credits.
+              You can edit this itinerary directly. AI actions will use your credits.
             </p>
           </div>
         </div>
@@ -3242,6 +3261,43 @@ export function EditorialItinerary({
               ownerName={tripPermission?.isOwner ? 'You' : undefined}
               onInviteClick={handleCreateShareLink}
             />
+
+            {/* Guest Edit Mode Toggle - only for owner */}
+            {tripPermission?.isOwner && (
+              <div className="pt-4 border-t border-border space-y-3">
+                <label className="text-sm font-medium">Guest Permissions</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setGuestEditMode('free_edit')}
+                    disabled={isUpdatingEditMode}
+                    className={cn(
+                      "flex flex-col items-center gap-1.5 p-3 rounded-lg border text-center transition-colors",
+                      guestEditMode === 'free_edit'
+                        ? "border-primary bg-primary/5 text-foreground"
+                        : "border-border bg-background text-muted-foreground hover:border-primary/50"
+                    )}
+                  >
+                    <Edit3 className="h-4 w-4" />
+                    <span className="text-xs font-medium">Edit Freely</span>
+                    <span className="text-[10px] text-muted-foreground">Guests can change the itinerary directly</span>
+                  </button>
+                  <button
+                    onClick={() => setGuestEditMode('propose_approve')}
+                    disabled={isUpdatingEditMode}
+                    className={cn(
+                      "flex flex-col items-center gap-1.5 p-3 rounded-lg border text-center transition-colors",
+                      guestEditMode === 'propose_approve'
+                        ? "border-primary bg-primary/5 text-foreground"
+                        : "border-border bg-background text-muted-foreground hover:border-primary/50"
+                    )}
+                  >
+                    <MessageSquarePlus className="h-4 w-4" />
+                    <span className="text-xs font-medium">Propose & Vote</span>
+                    <span className="text-[10px] text-muted-foreground">Guests propose, you approve with group voting</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Invite Link Section - only for owner */}
             {tripPermission?.isOwner && (
