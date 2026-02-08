@@ -1,66 +1,173 @@
 
-# Update Admin Margins Page for New Pricing Model
 
-## Problem
-The `src/pages/admin/UnitEconomics.tsx` page still references the old 5-tier pricing (Boost, Single, Weekend, Explorer, Adventurer) with outdated prices. It needs to reflect the new two-tier model: **Flexible Credits** (100/$9, 300/$25, 500/$39) and **Voyance Club** (Voyager $29.99, Explorer $59.99, Adventurer $99.99).
+# Two Paths, One Parser — Full Implementation Plan
 
-## Changes to `src/pages/admin/UnitEconomics.tsx`
+## Confirmed Design Decisions
 
-### 1. Replace `CREDIT_TIERS` array (lines 199-264)
+| Decision | Resolution |
+|----------|-----------|
+| Either/Or options | Radio-style "Choose one:" groups via `optionGroup` field |
+| Currency | Display as-parsed, no conversion |
+| Preferences vs DNA | Keep separate (Option A), merge only at generation time |
+| Validation | Editable chips before save, "Save to profile" checkbox |
+| Conflicts | Explicit prompt preferences override DNA per-trip only |
 
-Replace the old 5-tier array with the new 6-tier structure (3 Flexible + 3 Club):
+## New Files to Create
 
-| Old Tier | New Tier | Price | Credits | Type |
-|----------|----------|-------|---------|------|
-| Boost $8.99 | Flex 100 | $9 | 100 | Flexible |
-| Single $15.99 | Flex 300 | $25 | 300 | Flexible |
-| Weekend $29.99 | Flex 500 | $39 | 500 | Flexible |
-| Explorer $65.99 | Voyager | $29.99 | 600 | Club |
-| Adventurer $99.99 | Explorer | $59.99 | 1,600 | Club |
-| -- | Adventurer | $99.99 | 3,200 | Club |
+### 1. `supabase/functions/parse-trip-input/index.ts`
 
-Each entry keeps `typicalUsage`, `estimatedCostToUs`, and `notes` recalculated for the new credit amounts.
+Edge function using Gemini Flash with tool calling for structured extraction.
 
-### 2. Update `FALLBACK_DATA.revenue` (line 64)
+- Accepts `{ text: string }` body
+- System prompt instructs the model to:
+  - Detect prompt vs output sections (looks for "I want...", "Build me...", separators)
+  - Extract preferences from prompt section (budget, dietary, pace, avoids, walkability)
+  - Extract itinerary from output section (days, activities, times, costs, options)
+  - Handle tables, bullets, prose, mixed formats, emoji formatting
+  - Map custom column headers dynamically ("Vibe" to notes, "Where" to location)
+  - Detect either/or options and assign shared `optionGroup` IDs
+  - Capture accommodation notes and practical tips as separate arrays
+- Tool-calling schema defines `extract_trip_data` function with full `ParsedTripInput` shape including `ParsedPreferences`
+- Returns structured JSON with `preferences` (nullable) + itinerary data
+- Handles 429/402 errors from Lovable AI gateway
+- No auth required (free operation)
+- Cost: ~$0.005-0.03 per paste depending on complexity
+- Register in `supabase/config.toml`
 
-Replace:
+### 2. `src/types/parsedTrip.ts`
+
+TypeScript interfaces:
+
+```text
+ParsedPreferences {
+  budget?: string
+  budgetLevel?: "budget" | "mid-range" | "luxury"
+  focus?: string[]
+  avoid?: string[]
+  dietary?: string[]
+  walkability?: string
+  pace?: string
+  accessibility?: string[]
+  rawPreferenceText?: string
+}
+
+ParsedTripInput {
+  preferences?: ParsedPreferences
+  destination?: string
+  dates?: { start: string, end: string }
+  duration?: number
+  travelers?: number
+  tripType?: string
+  days: ParsedDay[]
+  accommodationNotes?: string[]
+  practicalTips?: string[]
+  unparsed?: string[]
+}
+
+ParsedDay {
+  dayNumber: number
+  date?: string
+  theme?: string
+  dailyBudget?: number
+  activities: ParsedActivity[]
+}
+
+ParsedActivity {
+  name: string
+  time?: string
+  location?: string
+  cost?: number
+  currency?: string
+  notes?: string
+  description?: string
+  category?: string
+  isOption?: boolean
+  optionGroup?: string
+  bookingRequired?: boolean
+  source: 'parsed'
+}
 ```
-{ boost: 8.99, single: 15.99, weekend: 29.99, explorer: 65.99, adventurer: 99.99 }
+
+### 3. `src/components/planner/ManualTripPasteEntry.tsx`
+
+New component for the "I'll Build Myself" tab:
+
+- Large textarea with placeholder showing example paste format
+- "Organize My Research" button
+- Calls `parse-trip-input` edge function
+- Loading state during parsing
+- **Preference review step** (when preferences detected):
+  - Shows extracted values as editable chips/tags
+  - "Save to my profile for future trips" checkbox
+  - User can edit/remove any extracted preference
+- **Itinerary preview** showing parsed days and activity count
+- On confirm: creates trip in DB with `manual_builder` flag, redirects to itinerary view
+- No credit check, no auth gate (but saving preferences requires auth)
+
+### 4. `src/utils/createTripFromParsed.ts`
+
+Utility to convert `ParsedTripInput` to the existing trip/itinerary_data format:
+
+- Maps `ParsedDay[]` to the `itinerary_data.days` JSONB structure
+- Handles either/or options: first option becomes primary, alternatives stored in activity metadata as `alternativeOptions`
+- Sets `[Add address]` placeholders for missing locations
+- Sets `source: 'parsed'` on all activities
+- Stores `accommodationNotes` and `practicalTips` in `itinerary_data` metadata
+- Creates trip record via existing Supabase insert flow
+- Enables manual builder mode via Zustand store
+
+## Files to Modify
+
+### 5. `src/pages/Start.tsx`
+
+- Add 4th tab button: "I'll Build Myself" with `PenLine` icon
+- `planMode` type changes from `'single' | 'multi' | 'chat'` to `'single' | 'multi' | 'chat' | 'manual'`
+- When `planMode === 'manual'`, render `ManualTripPasteEntry` component
+- Hide the form fields (destination, dates, etc.) in manual mode — the parser extracts them
+
+### 6. `src/components/itinerary/EditorialItinerary.tsx`
+
+- Detect activities with `isOption: true` and matching `optionGroup`
+- Render grouped options as radio-style selection blocks:
+  ```text
+  Dinner -- Choose one:
+  ( ) Uchi (elevated)
+  ( ) Loro (casual but excellent)
+  ```
+- When user selects an option, update the activity in state (selected becomes primary)
+- Show `accommodationNotes` and `practicalTips` (from `itinerary_data` metadata) in collapsible sections at the bottom of the itinerary for manually parsed trips
+- Smart Finish banner already shows for manual mode trips -- verify it works with this new entry path
+
+### 7. `supabase/config.toml`
+
+Register the new `parse-trip-input` function with `verify_jwt = false` (free, no auth required).
+
+## No Database Changes
+
+Existing infrastructure covers everything:
+- `trips` table with `itinerary_data` JSONB handles the parsed scaffold
+- `user_preferences` table stores extracted preferences (if user opts to save)
+- `manual_builder` tracked client-side in Zustand persist store
+- `smart_finish_purchased` flag already exists on trips
+
+## Implementation Sequence
+
+```text
+Step 1: Create types (parsedTrip.ts)
+Step 2: Create edge function (parse-trip-input) + deploy
+Step 3: Create utility (createTripFromParsed.ts)
+Step 4: Create ManualTripPasteEntry component
+Step 5: Add 4th tab to Start.tsx
+Step 6: Update EditorialItinerary for option groups + notes sections
+Step 7: Test end-to-end with the Austin example paste
 ```
-With:
-```
-{ flex_100: 9, flex_300: 25, flex_500: 39, voyager: 29.99, explorer: 59.99, adventurer: 99.99 }
-```
 
-### 3. Update `REVENUE_MIX_PRESETS` (lines 70-75)
+## Cost Model
 
-Replace the 5-tier mix percentages (boost/single/weekend/explorer/adventurer) with 6-tier percentages (flex_100/flex_300/flex_500/voyager/explorer/adventurer). The presets model how revenue distributes across the new tiers:
+| Operation | Cost | Paid By |
+|-----------|------|---------|
+| Parse paste input | ~$0.005-0.03 | Free (absorbed) |
+| View organized itinerary | $0 | Free |
+| Smart Finish enrichment | $6.99 | User |
+| Full AI build (Just Tell Us) | Credits | User |
 
-- **Pessimistic**: Heavy flex buying, low club adoption
-- **Conservative**: Moderate flex, growing club
-- **Balanced**: Most revenue from Club (Voyager/Explorer)
-- **Optimistic**: Heavy Explorer/Adventurer adoption
-
-### 4. Update blended AOV calculation (lines 327-337)
-
-Update the `useMemo` that computes `blendedAOV` and `blendedCostPerUser` to reference the 6 new tier keys instead of the old 5.
-
-### 5. Update `verifiedMargins` (lines 722-738)
-
-This maps over `CREDIT_TIERS` to show per-tier margin. Will automatically work once `CREDIT_TIERS` is updated, but verify the margin calculation still makes sense with Club packs (where bonus credits affect cost).
-
-### 6. Update insights engine references (lines 706-717)
-
-The "Boost tier" insight check references `CREDIT_TIERS.find(t => t.key === 'boost')`. Replace with a check for the smallest flexible pack (`flex_100`).
-
-### 7. Update tier selector dropdown
-
-The `tier` state and any dropdown/selector that lets admin pick a tier for single-tier analysis needs to show the new 6 options instead of the old 5.
-
-### 8. Add Club vs Flexible distinction in margin table
-
-Add a visual indicator (column or row grouping) in the per-tier margin table to distinguish Flexible Credits from Voyance Club packs, making it clear which tier type each row belongs to.
-
-## No Other Files Changed
-
-This is isolated to `src/pages/admin/UnitEconomics.tsx`. The new pricing config in `src/config/pricing.ts` is already correct and can be imported if desired, but the admin page uses its own internal cost modeling constants.
