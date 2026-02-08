@@ -178,8 +178,8 @@ export function ItineraryTeaser({
         <h2 className="text-2xl md:text-3xl font-serif font-normal mb-2 text-white drop-shadow-lg">
           Your {destination} Preview
         </h2>
-        <p className="text-white/70 text-sm">
-          Built as a <span className="text-primary font-medium">{archetypeUsed}</span>
+        <p className="text-white/90 text-sm">
+          Built as a <span className="text-primary font-semibold">{archetypeUsed}</span>
         </p>
         <p className="text-white/60 text-xs mt-1 italic">
           "{archetypeTagline}"
