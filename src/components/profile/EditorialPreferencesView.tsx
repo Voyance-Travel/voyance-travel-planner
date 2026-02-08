@@ -269,6 +269,21 @@ export default function EditorialPreferencesView() {
             ? `You're now: ${result.dna.primary_archetype_display}`
             : undefined,
         });
+
+        // Grant preferences_completion bonus if not yet claimed
+        if (!prefsCompletionGranted.current && !hasClaimedBonus('preferences_completion')) {
+          prefsCompletionGranted.current = true;
+          try {
+            const bonusResult = await claimBonus('preferences_completion');
+            if (bonusResult.granted) {
+              toast.success(`+${bonusResult.credits} credits earned!`, {
+                description: 'Thanks for setting your preferences!',
+              });
+            }
+          } catch (e) {
+            console.warn('[Preferences] Could not grant completion bonus:', e);
+          }
+        }
       } else {
         toast.error('Failed to recalculate Travel DNA');
       }
