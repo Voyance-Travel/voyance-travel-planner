@@ -65,19 +65,35 @@ export default function DestinationEntry() {
 
       if (error) {
         console.error('Preview generation error:', error);
-        // Check for validation errors
+        // Supabase client puts 4xx response body in error.context.body or error.message
+        const errorMsg = error.message || '';
+        
+        // Try parsing the error message as JSON (Supabase wraps 400 body here)
+        let parsed: { error?: string; message?: string } | null = null;
         try {
-          const errBody = JSON.parse(error.message || '{}');
-          if (errBody.error === 'unknown_destination' || errBody.error === 'invalid_destination') {
-            setErrorMessage(errBody.message || "We couldn't recognize that destination. Try a well-known city or country.");
-            return;
+          // error.message might be the raw JSON or prefixed with status info
+          const jsonMatch = errorMsg.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            parsed = JSON.parse(jsonMatch[0]);
           }
         } catch { /* not JSON */ }
+
+        if (parsed?.error === 'unknown_destination' || parsed?.error === 'invalid_destination') {
+          setErrorMessage(parsed.message || "We couldn't recognize that destination. Try a well-known city or country.");
+          return;
+        }
+
+        // Also check if data was returned despite the error (some Supabase versions)
+        if (data?.error === 'unknown_destination' || data?.error === 'invalid_destination') {
+          setErrorMessage(data.message || "We couldn't recognize that destination.");
+          return;
+        }
+
         setErrorMessage("Something went wrong. Please try again.");
         return;
       }
 
-      // Check if data itself contains an error (400 responses)
+      // Check if data itself contains an error (some 400 responses populate data)
       if (data?.error === 'unknown_destination' || data?.error === 'invalid_destination') {
         setErrorMessage(data.message || "We couldn't recognize that destination.");
         return;
