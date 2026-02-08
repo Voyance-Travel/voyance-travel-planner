@@ -8,16 +8,15 @@
  * Shows credit cost, progress during unlock, and handles the full flow.
  */
 
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Lock, Sparkles, Loader2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { toast } from 'sonner';
 import { Progress } from '@/components/ui/progress';
 import { useUnlockTrip, type UnlockTripParams } from '@/hooks/useUnlockTrip';
-import { CreditNudge } from './CreditNudge';
-import { formatCredits, CREDIT_COSTS } from '@/config/pricing';
+import { useOutOfCredits } from '@/contexts/OutOfCreditsContext';
+import { CREDIT_COSTS } from '@/config/pricing';
 
 interface UnlockBannerProps {
   tripId: string;
@@ -44,11 +43,10 @@ export function UnlockBanner({
 }: UnlockBannerProps) {
   const { state, unlock, isUnlocking, getUnlockCost, canAfford, totalCredits } = useUnlockTrip();
   const { enableManualBuilder } = useManualBuilderStore();
-  const [showNudge, setShowNudge] = useState(false);
+  const { showOutOfCredits } = useOutOfCredits();
 
   const unlockCost = getUnlockCost(totalDays);
   const affordable = canAfford(totalDays);
-  const perDayCost = CREDIT_COSTS.UNLOCK_DAY;
 
   const handleManualBuild = () => {
     enableManualBuilder(tripId);
@@ -57,7 +55,12 @@ export function UnlockBanner({
 
   const handleUnlockAll = async () => {
     if (!affordable) {
-      setShowNudge(true);
+      showOutOfCredits({
+        action: 'UNLOCK_DAY',
+        creditsNeeded: unlockCost,
+        creditsAvailable: totalCredits,
+        tripId,
+      });
       return;
     }
 
@@ -150,22 +153,6 @@ export function UnlockBanner({
           </div>
         </div>
       </motion.div>
-
-      <AnimatePresence>
-        {(showNudge || state.error === 'insufficient_credits') && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-          >
-            <CreditNudge
-              action="UNLOCK_DAY"
-              currentBalance={totalCredits}
-              onDismiss={() => setShowNudge(false)}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

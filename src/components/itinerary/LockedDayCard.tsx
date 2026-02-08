@@ -12,8 +12,8 @@ import { Lock, Sparkles, Clock, MapPinOff, Target, Pencil, CreditCard, Gift, Loa
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
-import { useNavigate } from 'react-router-dom';
-import { ROUTES } from '@/config/routes';
+import { useOutOfCredits } from '@/contexts/OutOfCreditsContext';
+import { CREDIT_COSTS } from '@/config/pricing';
 import { toast } from 'sonner';
 
 interface LockedDayCardProps {
@@ -56,8 +56,8 @@ export function LockedDayCard({
   currentBalance = 0,
 }: LockedDayCardProps) {
   const { enableManualBuilder } = useManualBuilderStore();
-  const navigate = useNavigate();
-    
+  const { showOutOfCredits } = useOutOfCredits();
+     
   const totalBadges = 
     intelligenceBadges.finds + 
     intelligenceBadges.timingHacks + 
@@ -73,7 +73,12 @@ export function LockedDayCard({
   };
 
   const handleGetCredits = () => {
-    navigate(ROUTES.PRICING);
+    showOutOfCredits({
+      action: 'UNLOCK_DAY',
+      creditsNeeded: CREDIT_COSTS.UNLOCK_DAY,
+      creditsAvailable: currentBalance,
+      tripId,
+    });
   };
 
   return (

@@ -1,8 +1,8 @@
  import { Lock, Sparkles, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useNavigate } from 'react-router-dom';
-import { ROUTES } from '@/config/routes';
  import { useManualBuilderStore } from '@/stores/manual-builder-store';
+ import { useOutOfCredits } from '@/contexts/OutOfCreditsContext';
+ import { CREDIT_COSTS } from '@/config/pricing';
  import { toast } from 'sonner';
 
 interface DayLockOverlayProps {
@@ -11,21 +11,27 @@ interface DayLockOverlayProps {
   onUnlock?: () => void;
    tripId?: string;
    onManualBuild?: () => void;
+   currentBalance?: number;
 }
 
 /**
  * Overlay shown on locked days for free users.
  * Shows a teaser of what's in the day with a call to unlock.
  */
- export function DayLockOverlay({ dayNumber, totalDays, onUnlock, tripId, onManualBuild }: DayLockOverlayProps) {
-  const navigate = useNavigate();
+ export function DayLockOverlay({ dayNumber, totalDays, onUnlock, tripId, onManualBuild, currentBalance = 0 }: DayLockOverlayProps) {
    const { enableManualBuilder } = useManualBuilderStore();
+   const { showOutOfCredits } = useOutOfCredits();
 
   const handleUnlock = () => {
     if (onUnlock) {
       onUnlock();
     } else {
-      navigate(ROUTES.PRICING);
+      showOutOfCredits({
+        action: 'UNLOCK_DAY',
+        creditsNeeded: CREDIT_COSTS.UNLOCK_DAY,
+        creditsAvailable: currentBalance,
+        tripId,
+      });
     }
   };
 
