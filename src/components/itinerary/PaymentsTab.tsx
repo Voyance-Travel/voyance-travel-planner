@@ -1121,20 +1121,20 @@ export function PaymentsTab({
 
               <div className="space-y-2">
                 <Label>Assign to</Label>
-                <Select value={assignMemberId} onValueChange={setAssignMemberId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select member" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Unassigned</SelectItem>
-                    {tripMembers.map(member => (
-                      <SelectItem key={member.id} value={member.id}>
-                        {member.name || member.email?.split('@')[0]}
-                        {member.role === 'primary' && ' (Organizer)'}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Select value={assignMemberId || 'unassigned'} onValueChange={(val) => setAssignMemberId(val === 'unassigned' ? '' : val)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select member" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unassigned">Unassigned</SelectItem>
+                      {tripMembers.map(member => (
+                        <SelectItem key={member.id} value={member.id}>
+                          {member.name || member.email?.split('@')[0]}
+                          {member.role === 'primary' && ' (Organizer)'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
               </div>
             </div>
           )}
