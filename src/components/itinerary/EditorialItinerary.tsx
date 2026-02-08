@@ -97,6 +97,8 @@ import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { AddActivityModal } from './AddActivityModal';
 import { ImportActivitiesModal } from './ImportActivitiesModal';
 import { SmartFinishBanner } from './SmartFinishBanner';
+import { OptionGroupBlock } from './OptionGroupBlock';
+import { ParsedTripNotesSection } from './ParsedTripNotesSection';
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -158,6 +160,9 @@ export interface EditorialActivity {
   suggestedFor?: string;
   /** Founder-curated Voyance Pick */
   isVoyancePick?: boolean;
+  /** Option group fields for parsed either/or activities */
+  isOption?: boolean;
+  optionGroup?: string;
 }
 
 export interface EditorialDay {
@@ -275,6 +280,8 @@ export interface EditorialItineraryProps {
   onPaymentRequest?: (activityId: string) => void;
   /** Called when preview trip is unlocked with full enrichment */
   onUnlockComplete?: (enrichedItinerary: any) => void;
+  /** Metadata from parsed trip input (accommodation notes, practical tips) */
+  parsedMetadata?: { accommodationNotes?: string[]; practicalTips?: string[]; unparsed?: string[]; source?: string };
 }
 
 // =============================================================================
@@ -814,6 +821,7 @@ export function EditorialItinerary({
   onBookingAdded,
   onPaymentRequest,
   onUnlockComplete,
+  parsedMetadata,
 }: EditorialItineraryProps) {
   const [days, setDays] = useState<EditorialDay[]>(initialDays);
   const [expandedDays, setExpandedDays] = useState<number[]>(initialDays.map(d => d.dayNumber));
@@ -2508,6 +2516,11 @@ export function EditorialItinerary({
               skippedItems={skippedItems}
               destination={destination}
             />
+
+            {/* Accommodation Notes & Practical Tips from parsed trip input */}
+            {parsedMetadata && (
+              <ParsedTripNotesSection metadata={parsedMetadata} />
+            )}
 
             {/* Skip List Violation Warning - Activities that match our skip list */}
             {validationIssues.filter(i => i.type === 'skip_list').length > 0 && (
@@ -5238,7 +5251,46 @@ function DayCard({
                 onReorder={(reordered) => onActivityReorder?.(reordered)}
                 highlightedIds={highlightedActivityIds}
                 disabled={!isEditable}
-                renderItem={(activity, activityIndex, isDragging, isHighlighted) => (
+                renderItem={(activity, activityIndex, isDragging, isHighlighted) => {
+                  // Option group handling: render OptionGroupBlock for first activity in a group,
+                  // skip subsequent activities in the same group
+                  if (activity.isOption && activity.optionGroup) {
+                    // Check if this is the first activity in the group
+                    const firstInGroup = day.activities.findIndex(
+                      a => a.optionGroup === activity.optionGroup
+                    );
+                    if (firstInGroup !== activityIndex) {
+                      // Not the first — already rendered by the group block
+                      return null;
+                    }
+                    // Gather all options in this group
+                    const groupOptions = day.activities.filter(
+                      a => a.optionGroup === activity.optionGroup
+                    );
+                    return (
+                      <div className="px-6 py-3">
+                        <OptionGroupBlock
+                          options={groupOptions}
+                          selectedId={groupOptions[0]?.id}
+                          currency={tripCurrency}
+                          onSelect={(selectedId) => {
+                            // Reorder: put selected first in the group
+                            const reordered = [...day.activities];
+                            const groupIds = new Set(groupOptions.map(o => o.id));
+                            const nonGroup = reordered.filter(a => !groupIds.has(a.id));
+                            const selected = groupOptions.find(o => o.id === selectedId);
+                            const rest = groupOptions.filter(o => o.id !== selectedId);
+                            // Insert group at original position
+                            const insertAt = reordered.findIndex(a => groupIds.has(a.id));
+                            nonGroup.splice(insertAt, 0, ...(selected ? [selected, ...rest] : groupOptions));
+                            onActivityReorder?.(nonGroup);
+                          }}
+                        />
+                      </div>
+                    );
+                  }
+
+                  return (
                   <div className={cn(
                     "transition-all duration-300",
                     isHighlighted && "bg-primary/5"
@@ -5278,7 +5330,8 @@ function DayCard({
                        aiLocked={aiLocked}
                      />
                   </div>
-                )}
+                  );
+                }}
               />
             </div>
 

@@ -1045,6 +1045,11 @@ export default function TripDetail() {
                         }
                       : undefined
                   }
+                  parsedMetadata={(() => {
+                    const meta = (trip.itinerary_data as any)?.metadata;
+                    if (meta?.source === 'manual_paste') return meta;
+                    return undefined;
+                  })()}
                   isEditable={true}
                   isPreview={!!(trip.itinerary_data as any)?.isPreview}
                   onBookingAdded={() => window.location.reload()}
