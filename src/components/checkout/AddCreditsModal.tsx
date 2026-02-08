@@ -6,8 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Wallet, Loader2, Plus, Minus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-// Minimum boost amount in dollars (matches $8 Boost pack)
-const BOOST_MINIMUM = 8;
+
+// Minimum boost amount in dollars (matches $9 Flex 100 pack)
+const BOOST_MINIMUM = 9;
 
 interface AddCreditsModalProps {
   isOpen: boolean;
@@ -15,10 +16,10 @@ interface AddCreditsModalProps {
   currentBalance?: number;
 }
 
-const PRESET_AMOUNTS = [8, 12, 29, 55];
+const PRESET_AMOUNTS = [9, 25, 39];
 
 export function AddCreditsModal({ isOpen, onClose, currentBalance = 0 }: AddCreditsModalProps) {
-  const [amount, setAmount] = useState(10);
+  const [amount, setAmount] = useState(9);
   const [isLoading, setIsLoading] = useState(false);
   const [customAmount, setCustomAmount] = useState('');
   const [showCustom, setShowCustom] = useState(false);
@@ -39,18 +40,9 @@ export function AddCreditsModal({ isOpen, onClose, currentBalance = 0 }: AddCred
         body: { amount_cents: amountCents },
       });
 
-      if (error) {
-        throw new Error(error.message);
-      }
-
-      if (data?.error) {
-        throw new Error(data.error);
-      }
-
-      if (data?.url) {
-        // Redirect to Stripe checkout
-        window.location.href = data.url;
-      }
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      if (data?.url) window.location.href = data.url;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to start checkout';
       toast.error(message);
@@ -94,7 +86,7 @@ export function AddCreditsModal({ isOpen, onClose, currentBalance = 0 }: AddCred
           {!showCustom ? (
             <div className="space-y-3">
               <Label className="text-sm font-medium">Select amount</Label>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 {PRESET_AMOUNTS.map((preset) => (
                   <Button
                     key={preset}
@@ -197,7 +189,7 @@ export function AddCreditsModal({ isOpen, onClose, currentBalance = 0 }: AddCred
           </div>
 
           <p className="text-xs text-center text-muted-foreground">
-            Minimum is ${BOOST_MINIMUM}. Credits never expire.
+            Minimum is ${BOOST_MINIMUM}. Top-up credits expire in 12 months.
           </p>
         </div>
       </DialogContent>

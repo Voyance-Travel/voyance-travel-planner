@@ -343,7 +343,7 @@ export default function Profile() {
   // Get current tier (check credit packs)
   const getCurrentTier = () => {
     if (!subscription?.product_id) return null;
-    const products = [STRIPE_PRODUCTS.CREDITS_200, STRIPE_PRODUCTS.CREDITS_500, STRIPE_PRODUCTS.CREDITS_1200, STRIPE_PRODUCTS.CREDITS_2500];
+    const products = [STRIPE_PRODUCTS.FLEX_100, STRIPE_PRODUCTS.FLEX_300, STRIPE_PRODUCTS.FLEX_500, STRIPE_PRODUCTS.VOYAGER, STRIPE_PRODUCTS.EXPLORER, STRIPE_PRODUCTS.ADVENTURER];
     return products.find(p => p.productId === subscription.product_id);
   };
 

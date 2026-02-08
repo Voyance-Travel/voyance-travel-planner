@@ -1,6 +1,6 @@
 // ============================================================
-// Pricing Configuration - Credit-Based Model (v2)
-// Dynamic trip pricing: roundUpTo10((Days × 90 + MultiCityFee) × TierMultiplier)
+// Pricing Configuration - Two-Tier Credit Model
+// Flexible Credits (top-up) + Voyance Club (packs with perks)
 // ============================================================
 
 // Credit Costs for Actions
@@ -27,85 +27,183 @@ export const CREDIT_COSTS = {
   REAL_TIME_MODE: 0,
 } as const;
 
-// Credit Packs - Stripe Products (Live)
-export const STRIPE_PRODUCTS = {
-  // Boost (convenience pack - upsell)
-  CREDITS_100: {
-    productId: 'prod_TwRGQ76iS0Wd01',
-    priceId: 'price_1SyYNaJytioXyqq9bndv2gqC',
-    name: 'Boost',
+// ============================================================
+// FLEXIBLE CREDITS — Quick Top-Up (transactional, no perks)
+// ============================================================
+
+export type FlexibleCreditPack = {
+  id: string;
+  productId: string;
+  priceId: string;
+  name: string;
+  credits: number;
+  price: number;
+  perCredit: string;
+  expirationMonths: 12;
+  mode: 'payment';
+  type: 'flexible';
+};
+
+export const FLEXIBLE_CREDITS: FlexibleCreditPack[] = [
+  {
+    id: 'flex_100',
+    productId: 'prod_TwV6DLU2wY20SS',
+    priceId: 'price_1Syc68JytioXyqq9KfhrbugR',
+    name: 'Top-Up 100',
     credits: 100,
-    price: 8.99,
-    description: 'Quick boost for swaps & extras',
-    mode: 'payment' as const,
+    price: 9,
+    perCredit: '0.090',
+    expirationMonths: 12,
+    mode: 'payment',
+    type: 'flexible',
   },
-  // Credit Packs
-  CREDITS_200: {
-    productId: 'prod_TwRGN02u7c5CH2',
-    priceId: 'price_1SyYNbJytioXyqq9FOlmMOGX',
-    name: 'Starter',
-    credits: 200,
-    price: 15.99,
-    description: 'Quick city break',
-    mode: 'payment' as const,
+  {
+    id: 'flex_300',
+    productId: 'prod_TwV6R1eib5j9Wq',
+    priceId: 'price_1Syc69JytioXyqq9RyuXQAQm',
+    name: 'Top-Up 300',
+    credits: 300,
+    price: 25,
+    perCredit: '0.083',
+    expirationMonths: 12,
+    mode: 'payment',
+    type: 'flexible',
   },
-  CREDITS_500: {
+  {
+    id: 'flex_500',
+    productId: 'prod_TwV6Z5Bmoox7SK',
+    priceId: 'price_1Syc6AJytioXyqq98l10fqXn',
+    name: 'Top-Up 500',
+    credits: 500,
+    price: 39,
+    perCredit: '0.078',
+    expirationMonths: 12,
+    mode: 'payment',
+    type: 'flexible',
+  },
+];
+
+// ============================================================
+// VOYANCE CLUB — Premium Packs (perks, bonus, identity)
+// ============================================================
+
+export type ClubTier = 'voyager' | 'explorer' | 'adventurer';
+
+export type VoyanceClubPack = {
+  id: string;
+  productId: string;
+  priceId: string;
+  name: string;
+  tier: ClubTier;
+  baseCredits: number;
+  bonusCredits: number;
+  totalCredits: number;
+  credits: number; // alias for totalCredits (backward compat)
+  price: number;
+  perCredit: string;
+  bonusExpirationMonths: 6;
+  baseExpiresNever: true;
+  mode: 'payment';
+  type: 'club';
+  featured?: boolean;
+  perks: string[];
+};
+
+export const VOYANCE_CLUB_PACKS: VoyanceClubPack[] = [
+  {
+    id: 'voyager',
     productId: 'prod_TwRGf3nmLa70Ad',
     priceId: 'price_1SyYNdJytioXyqq9ffAGMFYc',
-    name: 'Weekend',
-    credits: 500,
+    name: 'Voyager',
+    tier: 'voyager',
+    baseCredits: 500,
+    bonusCredits: 100,
+    totalCredits: 600,
+    credits: 600,
     price: 29.99,
-    description: 'Long weekend or short trip',
-    mode: 'payment' as const,
+    perCredit: '0.050',
+    bonusExpirationMonths: 6,
+    baseExpiresNever: true,
+    mode: 'payment',
+    type: 'club',
+    perks: [
+      'Voyance Club badge',
+      'Credits never expire',
+    ],
   },
-  CREDITS_1200: {
-    productId: 'prod_TwRGVa9L5UFQBt',
-    priceId: 'price_1SyYNeJytioXyqq9nxSsWkjh',
+  {
+    id: 'explorer',
+    productId: 'prod_TwV64eVEzBSLgC',
+    priceId: 'price_1Syc6OJytioXyqq9YMJSNDyb',
     name: 'Explorer',
-    credits: 1200,
-    price: 65.99,
-    description: 'Week-long adventure or multi-city',
+    tier: 'explorer',
+    baseCredits: 1200,
+    bonusCredits: 400,
+    totalCredits: 1600,
+    credits: 1600,
+    price: 59.99,
+    perCredit: '0.037',
+    bonusExpirationMonths: 6,
+    baseExpiresNever: true,
+    mode: 'payment',
+    type: 'club',
     featured: true,
-    mode: 'payment' as const,
+    perks: [
+      'Everything in Voyager',
+      'Priority support',
+      'Early feature access',
+    ],
   },
-  CREDITS_2500: {
+  {
+    id: 'adventurer',
     productId: 'prod_TwRGzFgQz5RIzr',
     priceId: 'price_1SyYNfJytioXyqq95k9ymT2X',
     name: 'Adventurer',
-    credits: 2500,
+    tier: 'adventurer',
+    baseCredits: 2500,
+    bonusCredits: 700,
+    totalCredits: 3200,
+    credits: 3200,
     price: 99.99,
-    description: 'Multiple trips throughout the year',
-    mode: 'payment' as const,
+    perCredit: '0.031',
+    bonusExpirationMonths: 6,
+    baseExpiresNever: true,
+    mode: 'payment',
+    type: 'club',
+    perks: [
+      'Everything in Explorer',
+      'Founding Member badge (first 1,000)',
+      'Beta access',
+    ],
   },
+];
 
-  // Legacy - Travel Agent (unchanged)
-  TRAVEL_AGENT: {
-    productId: 'prod_TravelAgent',
-    priceId: 'price_TravelAgent',
-    name: 'Travel Agent',
-    price: 79,
-    mode: 'subscription' as const,
-  },
-} as const;
+// ============================================================
+// BACKWARD-COMPATIBLE EXPORTS
+// ============================================================
 
-// Monthly Credit Grant — ALL USERS (free & paid)
-// Conversion funnel:
-//   1. First trip: bypasses credits entirely (full 2-day enriched, one-time hook)
-//   2. Subsequent trips: Day 1 preview always free (AI-only, no enrichment — just a mold)
-//   3. Monthly grant: 150cr/mo for ALL users, free credits expire in 2 months
-//   4. User can apply free credits to unlock additional days (e.g., Day 2 = 90cr)
-//   5. Purchased credits NEVER expire
-//   6. User runs out of free credits → buys credit pack (conversion!)
+/** All purchasable packs (both flexible + club) */
+export const CREDIT_PACKS = [...FLEXIBLE_CREDITS, ...VOYANCE_CLUB_PACKS] as const;
+export const ALL_CREDIT_PACKS = CREDIT_PACKS;
+
+/** Smallest quick top-up (replaces old BOOST_PACK / TOPUP_PACK) */
+export const BOOST_PACK = FLEXIBLE_CREDITS[0];
+export const TOPUP_PACK = FLEXIBLE_CREDITS[0];
+
+// ============================================================
+// MONTHLY CREDIT GRANT
+// ============================================================
+
 export const MONTHLY_CREDIT_GRANT = {
   monthlyCredits: 150,
-  maxBankedFree: 300,       // Can hold up to 2 months worth
-  freeExpirationMonths: 2,  // Free credits expire after 2 months
+  maxBankedFree: 300,
+  freeExpirationMonths: 2,
   purchasedNeverExpire: true,
-  appliesToAllUsers: true,  // Not just free users
+  appliesToAllUsers: true,
   referralBonus: 200,
 } as const;
 
-// Free Tier — first-time acquisition + ongoing monthly grant
+// Free Tier
 export const FREE_TIER = {
   signupBonus: 150,
   monthlyFree: 150,
@@ -142,89 +240,117 @@ export const FREE_TIER = {
   },
 } as const;
 
-// Boost Pack
-export const BOOST_PACK = {
-  id: 'boost' as const,
-  ...STRIPE_PRODUCTS.CREDITS_100,
-  perCredit: (8.99 / 100).toFixed(3),
+// ============================================================
+// STRIPE PRODUCTS (raw reference — kept for edge function lookups)
+// ============================================================
+
+export const STRIPE_PRODUCTS = {
+  // Flexible Credits
+  FLEX_100: {
+    productId: 'prod_TwV6DLU2wY20SS',
+    priceId: 'price_1Syc68JytioXyqq9KfhrbugR',
+    name: 'Top-Up 100',
+    credits: 100,
+    price: 9,
+    mode: 'payment' as const,
+  },
+  FLEX_300: {
+    productId: 'prod_TwV6R1eib5j9Wq',
+    priceId: 'price_1Syc69JytioXyqq9RyuXQAQm',
+    name: 'Top-Up 300',
+    credits: 300,
+    price: 25,
+    mode: 'payment' as const,
+  },
+  FLEX_500: {
+    productId: 'prod_TwV6Z5Bmoox7SK',
+    priceId: 'price_1Syc6AJytioXyqq98l10fqXn',
+    name: 'Top-Up 500',
+    credits: 500,
+    price: 39,
+    mode: 'payment' as const,
+  },
+  // Voyance Club
+  VOYAGER: {
+    productId: 'prod_TwRGf3nmLa70Ad',
+    priceId: 'price_1SyYNdJytioXyqq9ffAGMFYc',
+    name: 'Voyager',
+    credits: 600,
+    price: 29.99,
+    mode: 'payment' as const,
+  },
+  EXPLORER: {
+    productId: 'prod_TwV64eVEzBSLgC',
+    priceId: 'price_1Syc6OJytioXyqq9YMJSNDyb',
+    name: 'Explorer',
+    credits: 1600,
+    price: 59.99,
+    mode: 'payment' as const,
+  },
+  ADVENTURER: {
+    productId: 'prod_TwRGzFgQz5RIzr',
+    priceId: 'price_1SyYNfJytioXyqq95k9ymT2X',
+    name: 'Adventurer',
+    credits: 3200,
+    price: 99.99,
+    mode: 'payment' as const,
+  },
+  // Legacy - Travel Agent (unchanged)
+  TRAVEL_AGENT: {
+    productId: 'prod_TravelAgent',
+    priceId: 'price_TravelAgent',
+    name: 'Travel Agent',
+    price: 79,
+    mode: 'subscription' as const,
+  },
 } as const;
 
-// Legacy alias
-export const TOPUP_PACK = BOOST_PACK;
+// ============================================================
+// TRIP COST EXAMPLES
+// ============================================================
 
-// Credit Pack Definitions for Display
-export const CREDIT_PACKS = [
-  {
-    id: 'single' as const,
-    ...STRIPE_PRODUCTS.CREDITS_200,
-    perCredit: (15.99 / 200).toFixed(3),
-    featured: false,
-  },
-  {
-    id: 'weekend' as const,
-    ...STRIPE_PRODUCTS.CREDITS_500,
-    perCredit: (29.99 / 500).toFixed(3),
-    featured: false,
-  },
-  {
-    id: 'explorer' as const,
-    ...STRIPE_PRODUCTS.CREDITS_1200,
-    perCredit: (65.99 / 1200).toFixed(3),
-    featured: true,
-  },
-  {
-    id: 'adventurer' as const,
-    ...STRIPE_PRODUCTS.CREDITS_2500,
-    perCredit: (99.99 / 2500).toFixed(3),
-    featured: false,
-  },
-] as const;
-
-export const ALL_CREDIT_PACKS = [
-  ...CREDIT_PACKS,
-  BOOST_PACK,
-] as const;
-
-// Trip cost examples (for pricing page — formula-based)
 export const TRIP_COST_EXAMPLES = {
   twoDay: {
     label: 'Paris, 2 days, standard',
     days: 2,
     cities: 1,
     tier: 'standard' as const,
-    total: 180, // 2×90 = 180, ×1.0 = 180
+    total: 180,
   },
   fiveDay: {
     label: 'Tokyo, 5 days, standard',
     days: 5,
     cities: 1,
     tier: 'standard' as const,
-    total: 450, // 5×90 = 450
+    total: 450,
   },
   multiCity: {
     label: 'Tokyo → Kyoto, 7 days',
     days: 7,
     cities: 2,
     tier: 'standard' as const,
-    total: 690, // 7×90+60 = 690
+    total: 690,
   },
   custom: {
     label: 'Barcelona anniversary + vegan',
     days: 3,
     cities: 1,
     tier: 'custom' as const,
-    total: 320, // 3×90=270, ×1.15=310.5, roundUp10=320
+    total: 320,
   },
   curated: {
     label: 'Japan honeymoon, 3 cities, 10 days',
     days: 10,
     cities: 3,
     tier: 'highly_curated' as const,
-    total: 1330, // (10×90+120)×1.3=1326, roundUp10=1330
+    total: 1330,
   },
 } as const;
 
-// Helper functions
+// ============================================================
+// HELPER FUNCTIONS
+// ============================================================
+
 export function formatCredits(credits: number): string {
   return credits.toLocaleString();
 }
@@ -233,13 +359,23 @@ export function canAfford(balance: number, cost: number): boolean {
   return balance >= cost;
 }
 
-export function getRecommendedPack(creditsNeeded: number): typeof CREDIT_PACKS[number] | null {
-  for (const pack of CREDIT_PACKS) {
-    if (pack.credits >= creditsNeeded) {
-      return pack;
-    }
+/** Recommend the best pack for a given credit need — prefers Club packs for value */
+export function getRecommendedPack(creditsNeeded: number): (FlexibleCreditPack | VoyanceClubPack) | null {
+  // First check if any flexible pack covers it
+  const flexMatch = FLEXIBLE_CREDITS.find(p => p.credits >= creditsNeeded);
+  // Then check club packs
+  const clubMatch = VOYANCE_CLUB_PACKS.find(p => p.totalCredits >= creditsNeeded);
+
+  if (!flexMatch && !clubMatch) {
+    return VOYANCE_CLUB_PACKS[VOYANCE_CLUB_PACKS.length - 1]; // Largest
   }
-  return CREDIT_PACKS[CREDIT_PACKS.length - 1];
+  if (!flexMatch) return clubMatch!;
+  if (!clubMatch) return flexMatch;
+
+  // If both cover it, prefer club if price-per-credit is better
+  const flexPpc = flexMatch.price / flexMatch.credits;
+  const clubPpc = clubMatch.price / clubMatch.totalCredits;
+  return clubPpc <= flexPpc ? clubMatch : flexMatch;
 }
 
 // ============================================

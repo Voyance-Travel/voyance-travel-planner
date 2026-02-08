@@ -6,19 +6,15 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Coins, Sparkles, X, Zap } from 'lucide-react';
+import { Coins, Crown, X, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { CREDIT_COSTS, CREDIT_PACKS, BOOST_PACK, getRecommendedPack, formatCredits } from '@/config/pricing';
+import { CREDIT_COSTS, FLEXIBLE_CREDITS, VOYANCE_CLUB_PACKS, BOOST_PACK, getRecommendedPack, formatCredits } from '@/config/pricing';
 import { EmbeddedCheckoutModal } from '@/components/checkout/EmbeddedCheckoutModal';
 
 interface CreditNudgeProps {
-  /** The action the user tried to perform */
   action: keyof typeof CREDIT_COSTS;
-  /** User's current credit balance */
   currentBalance: number;
-  /** Called when the user dismisses the nudge */
   onDismiss: () => void;
-  /** Optional: compact variant for tighter spaces */
   compact?: boolean;
 }
 
@@ -35,6 +31,8 @@ export function CreditNudge({ action, currentBalance, onDismiss, compact }: Cred
   const [checkoutPack, setCheckoutPack] = useState<{
     priceId: string;
     name: string;
+    credits: number;
+    productId: string;
     mode: 'payment';
   } | null>(null);
 
@@ -43,9 +41,9 @@ export function CreditNudge({ action, currentBalance, onDismiss, compact }: Cred
   const recommended = getRecommendedPack(deficit);
   const actionLabel = ACTION_LABELS[action] || 'perform this action';
 
-  // Show boost if deficit is small, otherwise recommended pack
-  const showBoost = deficit <= BOOST_PACK.credits;
-  const primaryPack = showBoost ? BOOST_PACK : recommended;
+  // Show smallest flex credit if deficit is small
+  const showQuickTopUp = deficit <= BOOST_PACK.credits;
+  const primaryPack = showQuickTopUp ? BOOST_PACK : recommended;
 
   if (!primaryPack) return null;
 
@@ -92,6 +90,8 @@ export function CreditNudge({ action, currentBalance, onDismiss, compact }: Cred
                 onClick={() => setCheckoutPack({
                   priceId: primaryPack.priceId,
                   name: primaryPack.name,
+                  credits: primaryPack.credits,
+                  productId: primaryPack.productId,
                   mode: 'payment',
                 })}
               >
@@ -99,25 +99,8 @@ export function CreditNudge({ action, currentBalance, onDismiss, compact }: Cred
                 {primaryPack.name} · {formatCredits(primaryPack.credits)} credits · ${primaryPack.price}
               </Button>
 
-              {/* Show alternative if boost isn't the primary */}
-              {!showBoost && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5"
-                  onClick={() => setCheckoutPack({
-                    priceId: BOOST_PACK.priceId,
-                    name: BOOST_PACK.name,
-                    mode: 'payment',
-                  })}
-                >
-                  <Sparkles size={13} />
-                  Quick Boost · {BOOST_PACK.credits} credits · ${BOOST_PACK.price}
-                </Button>
-              )}
-
-              {/* Show a bigger pack if primary is boost */}
-              {showBoost && recommended && (recommended as any).priceId !== BOOST_PACK.priceId && (
+              {/* Show Club option if primary is a flex credit */}
+              {showQuickTopUp && recommended && recommended.id !== BOOST_PACK.id && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -125,10 +108,32 @@ export function CreditNudge({ action, currentBalance, onDismiss, compact }: Cred
                   onClick={() => setCheckoutPack({
                     priceId: recommended.priceId,
                     name: recommended.name,
+                    credits: recommended.credits,
+                    productId: recommended.productId,
                     mode: 'payment',
                   })}
                 >
+                  <Crown size={13} />
                   {recommended.name} · {formatCredits(recommended.credits)} credits · ${recommended.price}
+                </Button>
+              )}
+
+              {/* Show quick top-up if primary is a club pack */}
+              {!showQuickTopUp && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  onClick={() => setCheckoutPack({
+                    priceId: BOOST_PACK.priceId,
+                    name: BOOST_PACK.name,
+                    credits: BOOST_PACK.credits,
+                    productId: BOOST_PACK.productId,
+                    mode: 'payment',
+                  })}
+                >
+                  <Zap size={13} />
+                  Quick Top-Up · {BOOST_PACK.credits} credits · ${BOOST_PACK.price}
                 </Button>
               )}
             </div>
@@ -145,6 +150,8 @@ export function CreditNudge({ action, currentBalance, onDismiss, compact }: Cred
           mode="payment"
           productName={checkoutPack.name}
           returnPath={window.location.pathname + window.location.search}
+          productId={checkoutPack.productId}
+          credits={checkoutPack.credits}
         />
       )}
     </>

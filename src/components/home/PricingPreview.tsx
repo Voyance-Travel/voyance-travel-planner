@@ -20,8 +20,8 @@ export default function PricingPreview() {
           {/* Main pricing message */}
           <p className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-serif text-foreground leading-relaxed">
             Start free.{' '}
-            <span className="text-muted-foreground">Unlock when ready.</span>{' '}
-            <span className="text-primary font-medium">$24.99 per trip.</span>
+            <span className="text-muted-foreground">Top up from $9.</span>{' '}
+            <span className="text-primary font-medium">Join the Club from $29.99.</span>
           </p>
           
           {/* Link to pricing */}
