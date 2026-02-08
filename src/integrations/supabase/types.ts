@@ -2125,6 +2125,9 @@ export type Database = {
           created_at: string
           free_credits: number
           free_credits_expires_at: string | null
+          free_edits_limit: number
+          free_edits_used: number
+          free_trip_claimed: boolean
           id: string
           last_free_credit_at: string | null
           purchased_credits: number
@@ -2135,6 +2138,9 @@ export type Database = {
           created_at?: string
           free_credits?: number
           free_credits_expires_at?: string | null
+          free_edits_limit?: number
+          free_edits_used?: number
+          free_trip_claimed?: boolean
           id?: string
           last_free_credit_at?: string | null
           purchased_credits?: number
@@ -2145,6 +2151,9 @@ export type Database = {
           created_at?: string
           free_credits?: number
           free_credits_expires_at?: string | null
+          free_edits_limit?: number
+          free_edits_used?: number
+          free_trip_claimed?: boolean
           id?: string
           last_free_credit_at?: string | null
           purchased_credits?: number
@@ -6329,6 +6338,7 @@ export type Database = {
           hotel_selection: Json | null
           id: string
           is_agent_trip: boolean | null
+          is_free_tier_trip: boolean
           is_multi_city: boolean | null
           itinerary_data: Json | null
           itinerary_status:
@@ -6371,6 +6381,7 @@ export type Database = {
           hotel_selection?: Json | null
           id?: string
           is_agent_trip?: boolean | null
+          is_free_tier_trip?: boolean
           is_multi_city?: boolean | null
           itinerary_data?: Json | null
           itinerary_status?:
@@ -6413,6 +6424,7 @@ export type Database = {
           hotel_selection?: Json | null
           id?: string
           is_agent_trip?: boolean | null
+          is_free_tier_trip?: boolean
           is_multi_city?: boolean | null
           itinerary_data?: Json | null
           itinerary_status?:
@@ -7377,6 +7389,7 @@ export type Database = {
         Args: { p_action_type: string; p_usage_date: string; p_user_id: string }
         Returns: number
       }
+      increment_free_edits: { Args: { p_user_id: string }; Returns: Json }
       insert_audit_log: {
         Args: {
           p_action: string
