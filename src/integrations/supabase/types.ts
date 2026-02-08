@@ -4228,6 +4228,38 @@ export type Database = {
         }
         Relationships: []
       }
+      suggestion_votes: {
+        Row: {
+          created_at: string
+          id: string
+          suggestion_id: string
+          user_id: string
+          vote: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          suggestion_id: string
+          user_id: string
+          vote: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          suggestion_id?: string
+          user_id?: string
+          vote?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "suggestion_votes_suggestion_id_fkey"
+            columns: ["suggestion_id"]
+            isOneToOne: false
+            referencedRelation: "trip_suggestions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       travel_dna_history: {
         Row: {
           created_at: string | null
@@ -6206,10 +6238,13 @@ export type Database = {
       }
       trip_suggestions: {
         Row: {
+          auto_applied: boolean
           created_at: string
           description: string | null
           display_name: string
           id: string
+          owner_decided_at: string | null
+          owner_decision: string | null
           replacement_reason: string | null
           status: string
           suggestion_type: string
@@ -6221,12 +6256,17 @@ export type Database = {
           updated_at: string
           user_id: string | null
           vote_deadline: string | null
+          votes_against: number
+          votes_for: number
         }
         Insert: {
+          auto_applied?: boolean
           created_at?: string
           description?: string | null
           display_name: string
           id?: string
+          owner_decided_at?: string | null
+          owner_decision?: string | null
           replacement_reason?: string | null
           status?: string
           suggestion_type?: string
@@ -6238,12 +6278,17 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
           vote_deadline?: string | null
+          votes_against?: number
+          votes_for?: number
         }
         Update: {
+          auto_applied?: boolean
           created_at?: string
           description?: string | null
           display_name?: string
           id?: string
+          owner_decided_at?: string | null
+          owner_decision?: string | null
           replacement_reason?: string | null
           status?: string
           suggestion_type?: string
@@ -6255,6 +6300,8 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
           vote_deadline?: string | null
+          votes_against?: number
+          votes_for?: number
         }
         Relationships: []
       }
@@ -6278,6 +6325,7 @@ export type Database = {
           destinations: Json | null
           end_date: string
           flight_selection: Json | null
+          guest_edit_mode: string
           hotel_selection: Json | null
           id: string
           is_agent_trip: boolean | null
@@ -6319,6 +6367,7 @@ export type Database = {
           destinations?: Json | null
           end_date: string
           flight_selection?: Json | null
+          guest_edit_mode?: string
           hotel_selection?: Json | null
           id?: string
           is_agent_trip?: boolean | null
@@ -6360,6 +6409,7 @@ export type Database = {
           destinations?: Json | null
           end_date?: string
           flight_selection?: Json | null
+          guest_edit_mode?: string
           hotel_selection?: Json | null
           id?: string
           is_agent_trip?: boolean | null
