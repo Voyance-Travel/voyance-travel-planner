@@ -87,7 +87,17 @@ export const STRIPE_PRODUCTS = {
   },
 } as const;
 
-// Free Tier - "FULL PREVIEW, NO DETAILS" MODEL
+// Monthly Credit Grant — ALL USERS (free & paid)
+// Every user gets 150 credits/month. Free credits expire in 2 months.
+// Only purchased credits never expire.
+export const MONTHLY_CREDIT_GRANT = {
+  monthlyCredits: 150,
+  maxBankedFree: 300,       // Can hold up to 2 months worth
+  freeExpirationMonths: 2,  // Free credits expire after 2 months
+  referralBonus: 200,
+} as const;
+
+// Free Tier — first-time acquisition + ongoing monthly grant
 export const FREE_TIER = {
   signupBonus: 150,
   monthlyFree: 150,
@@ -101,6 +111,7 @@ export const FREE_TIER = {
     'Travel DNA quiz and archetype',
     'Full day-by-day structure preview',
     'DNA alignment explanations',
+    '150 free credits every month',
   ],
 
   paidFeatures: [

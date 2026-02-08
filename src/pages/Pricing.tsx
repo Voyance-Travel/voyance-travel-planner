@@ -174,8 +174,12 @@ const faqs = [
     a: 'Credits unlock your full itinerary \u2014 all days plus actionable details like addresses, costs, and booking links. You see the exact credit cost for your specific trip before you unlock.',
   },
   {
-    q: 'Do credits expire?',
-    a: 'Never.',
+    q: 'Do I get free credits?',
+    a: 'Yes! Every user gets 150 free credits every month. Free credits expire after 2 months if unused, so use them or bank up to 300.',
+  },
+  {
+    q: 'Do purchased credits expire?',
+    a: 'Never. Purchased credits are yours forever. Only the monthly free credits have a 2-month expiration.',
   },
   {
     q: 'What if I don\'t like Day 1?',
@@ -456,7 +460,7 @@ export default function Pricing() {
               Credit Packs
             </h2>
             <p className="text-sm text-muted-foreground">
-              Buy once. Use anytime. Never expires.
+              Purchased credits never expire. Plus, every user gets 150 free credits monthly.
             </p>
           </motion.div>
 
@@ -531,6 +535,17 @@ export default function Pricing() {
             </button>
           </motion.p>
 
+          <motion.div
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="text-center mt-6 bg-card border border-border rounded-xl p-4 max-w-lg mx-auto"
+          >
+            <p className="text-sm font-medium text-foreground mb-1">🎁 150 free credits every month</p>
+            <p className="text-xs text-muted-foreground">
+              Every user gets 150 credits monthly (expire in 2 months). Purchased credits never expire.
+            </p>
+          </motion.div>
           <motion.p
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}

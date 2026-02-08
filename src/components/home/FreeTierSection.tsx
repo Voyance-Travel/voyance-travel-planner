@@ -44,12 +44,12 @@ export default function FreeTierSection() {
           className="space-y-4"
         >
           <h2 className="text-2xl sm:text-3xl font-serif font-normal text-foreground">
-            Try before you buy
+            150 free credits every month
           </h2>
           
           <p className="text-muted-foreground font-light max-w-lg mx-auto">
-            Every month, get free credits to preview and customize trips. 
-            No credit card required. No commitment.
+            Every user gets 150 credits monthly to unlock days, swap activities, and explore.
+            Purchased credits never expire. No credit card required.
           </p>
 
           {/* Quick value props - inline */}
