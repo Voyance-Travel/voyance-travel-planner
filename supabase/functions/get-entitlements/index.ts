@@ -225,7 +225,7 @@ serve(async (req) => {
       unlocked_trips: unlockedTrips,
       
       // Feature flags - v2 credit-based checks
-      // Trip generation: paid users always can; free users need enough credits for at least a 1-day trip (90 credits)
+      // Trip generation: paid users always can; free users need enough credits for at least a 1-day trip (60 credits)
       can_build_itinerary: activePlan !== 'free' || freeBuildsRemaining > 0 || totalCredits >= CREDIT_COSTS.base_rate_per_day,
       can_swap_activity: activePlan !== 'free' || totalCredits >= CREDIT_COSTS.swap_activity,
       can_regenerate_day: activePlan !== 'free' || totalCredits >= CREDIT_COSTS.regenerate_day,
