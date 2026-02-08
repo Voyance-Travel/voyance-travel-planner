@@ -192,7 +192,7 @@ export function UpgradePrompt({
                       className="text-primary hover:underline"
                       disabled={!!loadingPack}
                     >
-                      200 for $12
+                      {formatCredits(CREDIT_PACKS[0].credits)} for ${CREDIT_PACKS[0].price}
                     </button>
                     <span className="text-muted-foreground">·</span>
                     <button 
@@ -200,7 +200,7 @@ export function UpgradePrompt({
                       className="text-primary hover:underline"
                       disabled={!!loadingPack}
                     >
-                      500 for $29
+                      {formatCredits(CREDIT_PACKS[1].credits)} for ${CREDIT_PACKS[1].price}
                     </button>
                   </div>
                 </div>
@@ -223,7 +223,7 @@ export function UpgradePrompt({
                       {loadingPack === 'single' ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       ) : (
-                        '$12'
+                        '${CREDIT_PACKS[0].price}'
                       )}
                     </Button>
                   </div>

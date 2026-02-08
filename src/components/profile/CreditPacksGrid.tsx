@@ -120,7 +120,7 @@ const CreditPacksGrid = React.forwardRef<HTMLDivElement, CreditPacksGridProps>(f
             <div className="flex items-center justify-between gap-4 text-sm">
               <div>
                 <span className="text-muted-foreground">Quick boost: </span>
-                <span className="text-foreground font-medium">80 credits for $8</span>
+                <span className="text-foreground font-medium">{formatCredits(BOOST_PACK.credits)} credits for ${BOOST_PACK.price}</span>
               </div>
               <Button 
                 variant="ghost"
