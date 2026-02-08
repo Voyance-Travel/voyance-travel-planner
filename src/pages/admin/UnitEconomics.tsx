@@ -104,7 +104,7 @@ const PHOTO_CACHE_SAVINGS_RATIO = 0.33; // Estimated, not yet verified post-depl
 //   3. MONTHLY GRANT (150 credits, 2-month expiry — ALL users):
 //      Every user (free + paid) gets 150cr/mo. Free credits expire in 2 months.
 //      Purchased credits never expire.
-//      Typical free user: unlocks 1 day (90cr) + a few swaps = hooked.
+//      Typical free user: unlocks 1 day (60cr) + a few swaps (5cr each) = hooked.
 //      Cost to us depends on what they spend credits on:
 //        - If unlock 1 day: ~$0.10 (Google + AI enrichment)
 //        - If swaps only: ~$0.02 (AI-only, no enrichment)
@@ -194,7 +194,8 @@ const SCENARIOS: Record<Scenario, { name: string; description: string; fullDescr
 };
 
 // Credit pack tiers with USAGE-BASED COST MODELING
-// Action costs: Unlock/Regen Day = 90cr/$0.018, Swap = 15cr/$0.009, Restaurant = 15cr/$0.015, AI = 10cr/$0.005, Hotel = 40cr/$0.020
+// Action costs (CURRENT): Unlock Day = 60cr/$0.018, Regen Day = 10cr/$0.018, Swap = 5cr/$0.009, Restaurant = 5cr/$0.015, AI = 5cr/$0.005, Hotel = 40cr/$0.020
+// Free caps per trip: swap 10, regen 5, ai_message 20, restaurant 5, transport_mode_change 5
 // Cost derivations from production data: $0.091 total ÷ 5 days = $0.018/day
 const CREDIT_TIERS = [
   // ── Flexible Credits ──
@@ -206,11 +207,11 @@ const CREDIT_TIERS = [
     color: "#94A3B8", 
     type: "flexible" as const,
     description: "Quick top-up for swaps & extras",
-    // 1 day = 90cr, leaving 10cr → 1 AI message (10cr)
-    typicalUsage: { daysUnlocked: 1, swaps: 0, regenerates: 0, restaurants: 0, aiMessages: 1 },
-    // Cost: 1×$0.018 + 1×$0.005 = $0.023
-    estimatedCostToUs: 0.023,
-    notes: "1 day + 1 AI message (10cr leftover)",
+    // 1 day = 60cr, leaving 40cr → 8 swaps (40cr)
+    typicalUsage: { daysUnlocked: 1, swaps: 8, regenerates: 0, restaurants: 0, aiMessages: 0 },
+    // Cost: 1×$0.018 + 8×$0.009 = $0.090
+    estimatedCostToUs: 0.090,
+    notes: "1 day + 8 swaps (60cr + 40cr)",
   },
   { 
     key: "flex_300", 
@@ -219,12 +220,12 @@ const CREDIT_TIERS = [
     credits: 300, 
     color: "#38BDF8", 
     type: "flexible" as const,
-    description: "~3 days of itinerary",
-    // 3 days = 270cr, leaving 30cr → 2 swaps (30cr)
-    typicalUsage: { daysUnlocked: 3, swaps: 2, regenerates: 0, restaurants: 0, aiMessages: 0 },
-    // Cost: 3×$0.018 + 2×$0.009 = $0.072
-    estimatedCostToUs: 0.072,
-    notes: "3 days + 2 swaps",
+    description: "~5 days of itinerary",
+    // 5 days = 300cr, no extras
+    typicalUsage: { daysUnlocked: 5, swaps: 0, regenerates: 0, restaurants: 0, aiMessages: 0 },
+    // Cost: 5×$0.018 = $0.090
+    estimatedCostToUs: 0.090,
+    notes: "5 days exactly (5×60cr)",
   },
   { 
     key: "flex_500", 
@@ -233,12 +234,12 @@ const CREDIT_TIERS = [
     credits: 500, 
     color: "#60A5FA", 
     type: "flexible" as const,
-    description: "5-day trip",
-    // 5 days = 450cr, leaving 50cr → 2 swaps (30cr) + 1 restaurant (15cr) + 5cr leftover
-    typicalUsage: { daysUnlocked: 5, swaps: 2, regenerates: 0, restaurants: 1, aiMessages: 0 },
-    // Cost: 5×$0.018 + 2×$0.009 + 1×$0.015 = $0.123
-    estimatedCostToUs: 0.123,
-    notes: "5 days + 2 swaps + 1 restaurant rec",
+    description: "8-day trip + extras",
+    // 8 days = 480cr, leaving 20cr → 4 swaps (20cr)
+    typicalUsage: { daysUnlocked: 8, swaps: 4, regenerates: 0, restaurants: 0, aiMessages: 0 },
+    // Cost: 8×$0.018 + 4×$0.009 = $0.180
+    estimatedCostToUs: 0.180,
+    notes: "8 days + 4 swaps (480cr + 20cr)",
   },
   // ── Voyance Club ──
   { 
@@ -249,11 +250,11 @@ const CREDIT_TIERS = [
     color: "#A78BFA", 
     type: "club" as const,
     description: "Club entry - 500 + 100 bonus",
-    // 6 days = 540cr, leaving 60cr → 4 swaps (60cr)
-    typicalUsage: { daysUnlocked: 6, swaps: 4, regenerates: 0, restaurants: 0, aiMessages: 0 },
-    // Cost: 6×$0.018 + 4×$0.009 = $0.144
-    estimatedCostToUs: 0.144,
-    notes: "6 days + 4 swaps (500 base + 100 bonus)",
+    // 10 days = 600cr
+    typicalUsage: { daysUnlocked: 10, swaps: 0, regenerates: 0, restaurants: 0, aiMessages: 0 },
+    // Cost: 10×$0.018 = $0.180
+    estimatedCostToUs: 0.180,
+    notes: "10 days (500 base + 100 bonus, all on unlocks)",
   },
   { 
     key: "explorer", 
@@ -263,11 +264,11 @@ const CREDIT_TIERS = [
     color: "#34D399", 
     type: "club" as const,
     description: "Popular - 1,200 + 400 bonus",
-    // 17 days = 1530cr, leaving 70cr → 4 swaps (60cr) + 1 AI (10cr)
-    typicalUsage: { daysUnlocked: 17, swaps: 4, regenerates: 0, restaurants: 0, aiMessages: 1 },
-    // Cost: 17×$0.018 + 4×$0.009 + 1×$0.005 = $0.347
-    estimatedCostToUs: 0.347,
-    notes: "17 days + 4 swaps + 1 AI (1,200 base + 400 bonus)",
+    // 26 days = 1560cr, leaving 40cr → 8 swaps (40cr)
+    typicalUsage: { daysUnlocked: 26, swaps: 8, regenerates: 0, restaurants: 0, aiMessages: 0 },
+    // Cost: 26×$0.018 + 8×$0.009 = $0.540
+    estimatedCostToUs: 0.540,
+    notes: "26 days + 8 swaps (1,200 base + 400 bonus)",
   },
   { 
     key: "adventurer", 
@@ -277,22 +278,28 @@ const CREDIT_TIERS = [
     color: "#F59E0B", 
     type: "club" as const,
     description: "Best value - 2,500 + 700 bonus",
-    // 35 days = 3150cr, leaving 50cr → 3 swaps (45cr) + 5cr leftover
-    typicalUsage: { daysUnlocked: 35, swaps: 3, regenerates: 0, restaurants: 0, aiMessages: 0 },
-    // Cost: 35×$0.018 + 3×$0.009 = $0.657
-    estimatedCostToUs: 0.657,
-    notes: "35 days + 3 swaps (2,500 base + 700 bonus)",
+    // 53 days = 3180cr, leaving 20cr → 4 swaps (20cr)
+    typicalUsage: { daysUnlocked: 53, swaps: 4, regenerates: 0, restaurants: 0, aiMessages: 0 },
+    // Cost: 53×$0.018 + 4×$0.009 = $0.990
+    estimatedCostToUs: 0.990,
+    notes: "53 days + 4 swaps (2,500 base + 700 bonus)",
   },
 ];
 
-// Cost per action (verified from 41-trip production data, $0.091 avg/trip)
-const ACTION_COSTS = {
-  dayUnlock: 0.018,     // $0.091 ÷ 5 days avg
-  swap: 0.009,          // 1 Places ($0.004) + 1 Photo ($0.005)
-  regenerate: 0.018,    // Same as unlock (full day regen)
-  restaurant: 0.015,    // 1 Perplexity call
-  aiMessage: 0.005,     // 1 Gemini call
-  hotelSearch: 0.020,   // ~2-3 Places calls per city
+// Cost per action (verified from production data, $0.091 avg/trip)
+// Credit costs: Unlock=60, Regen=10, Swap=5, Restaurant=5, AI=5, Hotel=40, SmartFinish=50, MysteryGetaway=15, MysteryLogistics=5, Transport=5
+const ACTION_COSTS: Record<string, number> = {
+  unlock_day: 0.018,      // $0.091 ÷ 5 days avg
+  day_unlock: 0.018,      // alias
+  swap_activity: 0.009,   // 1 Places ($0.004) + 1 Photo ($0.005)
+  regenerate_day: 0.018,  // Same as unlock (full day regen)
+  restaurant_rec: 0.015,  // 1 Perplexity call
+  ai_message: 0.005,      // 1 Gemini call
+  hotel_search: 0.020,    // ~2-3 Places calls per city
+  smart_finish: 0.040,    // Smart Finish enrichment
+  mystery_getaway: 0.025, // AI destination suggestions
+  mystery_logistics: 0.015, // Flight + hotel estimates
+  transport_mode_change: 0.005, // Route recalculation
 };
 
 // Column definitions with tooltips for per-trip scaling table
@@ -2119,8 +2126,8 @@ export default function UnitEconomics() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div style={{ padding: 12, background: "rgba(52, 211, 153, 0.1)", border: "1px solid rgba(52, 211, 153, 0.3)", borderRadius: 8 }}>
               <p style={{ fontSize: 11, color: "#34D399", margin: 0, lineHeight: 1.6 }}>
-                <strong>💰 Paid User Economics:</strong> Flex 100 ($9) = 1 day, <strong>$0.02 cost (99.7% margin)</strong>. 
-                Club Adventurer ($99.99) = 35 days, <strong>$0.66 cost (99.3% margin)</strong>. All 6 tiers &gt;90% margin.
+                <strong>💰 Paid User Economics:</strong> Flex 100 ($9) = 1 day + 8 swaps, <strong>$0.09 cost (99.0% margin)</strong>. 
+                Club Adventurer ($99.99) = 53 days, <strong>$0.99 cost (99.0% margin)</strong>. All 6 tiers &gt;90% margin.
               </p>
             </div>
             <div style={{ padding: 12, background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.3)", borderRadius: 8 }}>
