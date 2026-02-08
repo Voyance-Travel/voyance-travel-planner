@@ -63,7 +63,7 @@ export default function ExploreByStyle() {
             to="/destinations"
             className="hidden md:flex items-center gap-1 text-sm font-medium text-foreground hover:text-primary transition-colors"
           >
-            View all
+            Featured Destinations
             <ArrowRight className="h-4 w-4" />
           </Link>
         </motion.div>
