@@ -114,6 +114,18 @@ export default function TripChat({ tripId, tripType, shareToken, className }: Tr
 
     setSending(true);
     try {
+      // Optimistic update: show message immediately
+      const optimisticMsg: ChatMessage = {
+        id: `optimistic-${Date.now()}`,
+        display_name: isAnon ? anonName.trim() : displayName,
+        avatar_url: null,
+        message: trimmed,
+        user_id: user?.id ?? null,
+        created_at: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, optimisticMsg]);
+      setNewMessage('');
+
       if (isAnon && shareToken) {
         // Anonymous: use edge function
         const { error } = await supabase.functions.invoke('trip-chat', {
@@ -127,7 +139,7 @@ export default function TripChat({ tripId, tripType, shareToken, className }: Tr
         if (error) throw error;
       } else if (user) {
         // Authenticated: direct insert
-        const { error } = await supabase
+        const { data: inserted, error } = await supabase
           .from('trip_chat_messages')
           .insert({
             trip_id: tripId,
@@ -135,10 +147,17 @@ export default function TripChat({ tripId, tripType, shareToken, className }: Tr
             user_id: user.id,
             display_name: displayName,
             message: trimmed,
-          });
+          })
+          .select('id')
+          .single();
         if (error) throw error;
+        // Replace optimistic ID with real ID
+        if (inserted) {
+          setMessages(prev => prev.map(m =>
+            m.id === optimisticMsg.id ? { ...m, id: inserted.id } : m
+          ));
+        }
       }
-      setNewMessage('');
     } catch (err) {
       console.error('Failed to send message:', err);
     } finally {

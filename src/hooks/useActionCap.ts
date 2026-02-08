@@ -8,13 +8,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { CREDIT_COSTS, FREE_ACTION_CAPS } from '@/config/pricing';
 
-type CappedAction = 'swap_activity' | 'regenerate_day' | 'ai_message' | 'restaurant_rec';
+type CappedAction = 'swap_activity' | 'regenerate_day' | 'ai_message' | 'restaurant_rec' | 'transport_mode_change';
 
 const ACTION_TO_COST_KEY: Record<CappedAction, keyof typeof CREDIT_COSTS> = {
   swap_activity: 'SWAP_ACTIVITY',
   regenerate_day: 'REGENERATE_DAY',
   ai_message: 'AI_MESSAGE',
   restaurant_rec: 'RESTAURANT_REC',
+  transport_mode_change: 'TRANSPORT_MODE_CHANGE',
 };
 
 export function useActionCap(tripId: string | undefined, actionType: CappedAction) {

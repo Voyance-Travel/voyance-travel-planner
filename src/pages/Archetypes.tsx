@@ -234,8 +234,8 @@ export default function Archetypes() {
   return (
     <MainLayout>
       <Head
-        title="Travel Archetypes | Voyance - Discover Your Travel DNA"
-        description="Explore 27 unique traveler personalities and discover which one matches your travel style. From Cultural Anthropologists to Adrenaline Architects, find your travel DNA."
+        title="Travel Types | Voyance - Discover Your Travel DNA"
+        description="Explore 27 unique traveler types and discover which one matches your travel style. From Cultural Anthropologists to Adrenaline Architects, find your travel DNA."
         canonical="https://travelwithvoyance.com/archetypes"
       />
       {/* Hero with spotlight cards */}
@@ -476,7 +476,7 @@ export default function Archetypes() {
             Don't see yourself?
           </h3>
           <p className="text-muted-foreground mb-6 leading-relaxed">
-            Your Travel DNA is unique. Take the quiz. You might be a blend of multiple archetypes, 
+            Your Travel DNA is unique. Take the quiz. You might be a blend of multiple types, 
             with hints of personalities that make you one of a kind.
           </p>
           <Button asChild variant="outline" className="rounded-full px-6">
@@ -503,7 +503,7 @@ export default function Archetypes() {
               Ready to find yours?
             </h2>
             <p className="text-lg text-white/60 mb-8 max-w-xl mx-auto">
-              Take our 5-minute quiz. We'll match you to your archetype and start 
+              Take our 5-minute quiz. We'll match you to your travel type and start 
               building trips that actually fit how you travel.
             </p>
             <Button asChild size="lg" className="rounded-full px-8 bg-white text-slate-900 hover:bg-white/90">

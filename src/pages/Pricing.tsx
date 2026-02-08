@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ROUTES } from '@/config/routes';
 import { FLEXIBLE_CREDITS, VOYANCE_CLUB_PACKS, formatCredits } from '@/config/pricing';
+import { useFoundingMemberCount } from '@/hooks/useFoundingMemberCount';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { EmbeddedCheckoutModal } from '@/components/checkout';
@@ -118,6 +119,19 @@ const faqs = [
   { q: 'Can I unlock individual days?', a: "Yes! You can unlock days one at a time or all at once. Mix unlocked days with manual planning however you like." },
   { q: 'What about dietary, accessibility, or special occasions?', a: 'We handle it. Tell us your needs and your itinerary reflects them.' },
 ];
+
+function FoundingMemberBadge() {
+  const { remaining, isSoldOut, isLoading } = useFoundingMemberCount();
+  if (isLoading) return null;
+  return (
+    <div className="flex items-center gap-2 text-xs text-primary mb-4 bg-primary/5 rounded-lg px-3 py-2">
+      <Award className="h-3.5 w-3.5 shrink-0" />
+      <span className="font-medium">
+        {isSoldOut ? 'Founding Member badge — sold out!' : `Founding Member badge — ${remaining} of 1,000 remaining`}
+      </span>
+    </div>
+  );
+}
 
 export default function Pricing() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
@@ -351,10 +365,7 @@ export default function Pricing() {
                     </ul>
 
                     {isAdventurer && (
-                      <div className="flex items-center gap-2 text-xs text-primary mb-4 bg-primary/5 rounded-lg px-3 py-2">
-                        <Award className="h-3.5 w-3.5 shrink-0" />
-                        <span className="font-medium">Limited: first 1,000 buyers only</span>
-                      </div>
+                      <FoundingMemberBadge />
                     )}
 
                     <Button className="w-full" variant={isFeatured ? 'default' : 'outline'} onClick={() => openCheckout({ ...pack, credits: pack.totalCredits })} disabled={loadingPlan === pack.id}>
