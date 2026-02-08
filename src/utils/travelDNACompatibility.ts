@@ -28,20 +28,50 @@ interface TravelDNAProfile {
  * Fetch Travel DNA profile for a user
  */
 export async function fetchTravelDNA(userId: string): Promise<TravelDNAProfile | null> {
+  // Try travel_dna_profiles table first
   const { data, error } = await supabase
     .from('travel_dna_profiles')
     .select('user_id, trait_scores, primary_archetype_name, emotional_drivers')
     .eq('user_id', userId)
     .maybeSingle();
 
-  if (error || !data) return null;
-  
-  return {
-    user_id: data.user_id,
-    trait_scores: data.trait_scores as TraitScores | null,
-    primary_archetype_name: data.primary_archetype_name,
-    emotional_drivers: data.emotional_drivers,
-  };
+  if (!error && data) {
+    return {
+      user_id: data.user_id,
+      trait_scores: data.trait_scores as TraitScores | null,
+      primary_archetype_name: data.primary_archetype_name,
+      emotional_drivers: data.emotional_drivers,
+    };
+  }
+
+  // Fallback: check profiles.travel_dna (legacy column)
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, travel_dna, quiz_completed')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (profile?.travel_dna && typeof profile.travel_dna === 'object') {
+    const dna = profile.travel_dna as Record<string, unknown>;
+    return {
+      user_id: userId,
+      trait_scores: (dna.trait_scores as TraitScores) || null,
+      primary_archetype_name: (dna.primary_archetype_name as string) || null,
+      emotional_drivers: (dna.emotional_drivers as string[]) || null,
+    };
+  }
+
+  // Final fallback: if quiz_completed is true, return a minimal profile
+  if (profile?.quiz_completed) {
+    return {
+      user_id: userId,
+      trait_scores: null,
+      primary_archetype_name: null,
+      emotional_drivers: null,
+    };
+  }
+
+  return null;
 }
 
 /**
