@@ -26,7 +26,7 @@ const NUDGE_MESSAGES = [
   'How was it? Your feedback improves future trips.',
   'Quick take? Helps us learn what you love.',
   'Worth it? A quick rating helps us get smarter.',
-  'Rate this one — it takes 5 seconds.',
+  'Rate this one, it takes 5 seconds.',
 ];
 
 export function PostActivityNudge({

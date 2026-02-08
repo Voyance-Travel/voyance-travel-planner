@@ -27,7 +27,7 @@ export function OfflineBanner() {
           )}
         >
           <WifiOff className="w-4 h-4" />
-          <span>You're offline — viewing cached trip data</span>
+          <span>You're offline. Viewing cached trip data</span>
           <CloudOff className="w-4 h-4 opacity-60" />
         </motion.div>
       )}
@@ -46,7 +46,7 @@ export function OfflineBanner() {
           )}
         >
           <Wifi className="w-4 h-4" />
-          <span>Back online — syncing your data</span>
+          <span>Back online. Syncing your data</span>
         </motion.div>
       )}
     </AnimatePresence>

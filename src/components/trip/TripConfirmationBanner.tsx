@@ -21,7 +21,7 @@ interface TripConfirmationBannerProps {
   currentStatus: string;
   hasFlightSelection: boolean;
   hasHotelSelection: boolean;
-  itineraryDays: any[]; // EditorialDay[] — current itinerary for swap analysis
+  itineraryDays: any[]; // EditorialDay[] - current itinerary for swap analysis
   onStatusUpdate: (status: string) => void;
   onTripDataUpdate: (data: { flight_selection?: any; hotel_selection?: any }) => void;
   onApplySwaps: (swaps: SwapSuggestion[]) => void;
@@ -299,7 +299,7 @@ export function TripConfirmationBanner({
               Tell us your travel details
             </DialogTitle>
             <DialogDescription>
-              We'll suggest optimizations based on your hotel location — locked activities stay put.
+              We'll suggest optimizations based on your hotel location. Locked activities stay put.
             </DialogDescription>
           </DialogHeader>
 

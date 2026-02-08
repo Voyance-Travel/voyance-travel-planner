@@ -208,7 +208,7 @@ export function ProposeReplacementDialog({
         </DialogContent>
       </Dialog>
 
-      {/* AI Alternatives Drawer — reuses existing swap drawer */}
+      {/* AI Alternatives Drawer - reuses existing swap drawer */}
       <ActivityAlternativesDrawer
         open={showAlternatives}
         onClose={() => setShowAlternatives(false)}

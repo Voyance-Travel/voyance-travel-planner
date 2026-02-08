@@ -341,7 +341,7 @@ export function FullPreviewItinerary({
                 'Processing...'
               ) : (
                 <>
-                  {conversionCopy.cta} — ${price}
+                  {conversionCopy.cta} - ${price}
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}

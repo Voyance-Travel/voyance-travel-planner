@@ -1265,7 +1265,7 @@ export function PaymentsTab({
         </DialogContent>
       </Dialog>
 
-      {/* Assign Member Modal — Multi-select with split */}
+      {/* Assign Member Modal - Multi-select with split */}
       <Dialog open={!!assigningItem} onOpenChange={() => { setAssigningItem(null); setAssignMemberIds([]); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>

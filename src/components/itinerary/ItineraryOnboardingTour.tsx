@@ -30,7 +30,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: 'welcome',
     title: 'Welcome to Your Itinerary! ✨',
-    description: 'This is your personalized travel plan — powered by AI and tailored to your Travel DNA. Let me show you how to make it perfect.',
+    description: 'This is your personalized travel plan, powered by AI and tailored to your Travel DNA. Let me show you how to make it perfect.',
     icon: <Sparkles className="h-5 w-5" />,
     position: 'center',
   },
@@ -53,7 +53,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: 'optimize',
     title: 'AI Route Optimization',
-    description: 'Click Optimize to intelligently reorder your day\'s activities, minimizing travel time between stops — typically saving ~30 minutes per day with smarter sequencing.',
+    description: 'Click Optimize to intelligently reorder your day\'s activities, minimizing travel time between stops. Typically saving ~30 minutes per day with smarter sequencing.',
     icon: <Route className="h-5 w-5" />,
     selector: '[data-tour="optimize-button"]',
     position: 'bottom',
@@ -61,7 +61,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: 'find-alternative',
     title: 'AI-Powered Alternatives',
-    description: 'Don\'t love a suggestion? Click "Find Alternative" and our AI instantly swaps it for something that matches your travel style, pace, and budget — no generic replacements.',
+    description: 'Don\'t love a suggestion? Click "Find Alternative" and our AI instantly swaps it for something that matches your travel style, pace, and budget. No generic replacements.',
     icon: <ArrowRightLeft className="h-5 w-5" />,
     selector: '[data-tour="find-alternative"]',
     position: 'left',
@@ -69,7 +69,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: 'regenerate',
     title: 'Regenerate Entire Days',
-    description: 'Want a completely fresh take? Hit "Regenerate" to get an entirely new set of AI-curated activities for any day. Locked activities stay put — everything else gets reimagined.',
+    description: 'Want a completely fresh take? Hit "Regenerate" to get an entirely new set of AI-curated activities for any day. Locked activities stay put, everything else gets reimagined.',
     icon: <RefreshCw className="h-5 w-5" />,
     selector: '[data-tour="regenerate-button"]',
     position: 'bottom',
@@ -77,7 +77,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: 'lock-activity',
     title: 'Lock Your Favorites',
-    description: 'Love an activity? Lock it down. Locked activities are protected when you regenerate or optimize — they\'ll never be moved or replaced.',
+    description: 'Love an activity? Lock it down. Locked activities are protected when you regenerate or optimize. They\'ll never be moved or replaced.',
     icon: <Lock className="h-5 w-5" />,
     selector: '[data-tour="lock-button"]',
     position: 'left',

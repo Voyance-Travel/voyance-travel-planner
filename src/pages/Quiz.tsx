@@ -792,7 +792,7 @@ export default function Quiz() {
               Sign up to discover your Travel DNA
             </DialogTitle>
             <DialogDescription>
-              Create a free account so we can save your results. It takes two seconds — just your name and email, no credit card.
+              Create a free account so we can save your results. It takes two seconds, just your name and email, no credit card.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3 pt-2">

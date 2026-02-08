@@ -825,7 +825,7 @@ export default function TripDetail() {
             </div>
           )}
 
-          {/* Trip Confirmation Banner — ask if draft trip is real */}
+          {/* Trip Confirmation Banner - ask if draft trip is real */}
           {hasItinerary && (
             <TripConfirmationBanner
               tripId={trip.id}

@@ -14,10 +14,10 @@ interface DailyProgressBarProps {
 }
 
 function getMotivationalMessage(percent: number, completedCount: number, totalCount: number, dayNumber: number, isLastDay: boolean) {
-  if (totalCount === 0) return { text: 'Free day — explore at your own pace!', icon: Sparkles };
+  if (totalCount === 0) return { text: 'Free day, explore at your own pace!', icon: Sparkles };
   if (percent === 100) return { text: isLastDay ? 'Perfect finale! 🎉 You nailed this trip!' : 'Day crushed! You\'re on fire 🔥', icon: PartyPopper };
   if (percent >= 75) return { text: `Almost there! Just ${totalCount - completedCount} left`, icon: Trophy };
-  if (percent >= 50) return { text: `Halfway through day ${dayNumber} — keep going!`, icon: TrendingUp };
+  if (percent >= 50) return { text: `Halfway through day ${dayNumber}, keep going!`, icon: TrendingUp };
   if (percent >= 25) return { text: `Great start! ${completedCount} down, ${totalCount - completedCount} to go`, icon: Flame };
   if (completedCount > 0) return { text: `You're off! ${totalCount - completedCount} adventures ahead`, icon: Sparkles };
   return { text: `${totalCount} experiences waiting for you today`, icon: Sparkles };

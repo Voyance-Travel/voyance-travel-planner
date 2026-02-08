@@ -435,7 +435,7 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
               </DialogHeader>
               <p className="text-muted-foreground text-lg mb-8 max-w-md mx-auto">
                 Based on your Travel DNA and preferences, we'll suggest 3 destinations, 
-                help you pick dates, estimate flights, and suggest hotels — all in one flow.
+                help you pick dates, estimate flights, and suggest hotels, all in one flow.
               </p>
               {credits && credits.totalCredits < 15 && (
                 <p className="text-sm text-destructive mb-4">You don't have enough credits for this feature.</p>
@@ -674,7 +674,7 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
                     <span>{flightEstimate.typicalAirline}</span>
                   </div>
                   <p className="text-xs text-muted-foreground mt-2 italic">
-                    AI estimate — actual prices may vary. You can add real flight details later.
+                    AI estimate. Actual prices may vary. You can add real flight details later.
                   </p>
                 </div>
               )}
@@ -686,7 +686,7 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
                     <Hotel className="h-4 w-4 text-primary" />
                     <h3 className="font-semibold text-sm">Suggested Hotels</h3>
                   </div>
-                  <p className="text-xs text-muted-foreground">Optional — you can add from itinerary</p>
+                  <p className="text-xs text-muted-foreground">Optional. You can add from itinerary</p>
                 </div>
 
                 <div className="space-y-3">
@@ -768,7 +768,7 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
                   <div className="flex items-center gap-3">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <div>
-                      <p className="text-sm font-medium">{new Date(startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} — {new Date(endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                      <p className="text-sm font-medium">{new Date(startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to {new Date(endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                       <p className="text-xs text-muted-foreground">{totalDays} days</p>
                     </div>
                   </div>
@@ -800,7 +800,7 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
                   {selectedHotelIndex === null && (
                     <div className="flex items-center gap-3">
                       <Hotel className="h-4 w-4 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">No hotel selected — you can add one from the itinerary</p>
+                      <p className="text-sm text-muted-foreground">No hotel selected. You can add one from the itinerary</p>
                     </div>
                   )}
                 </div>

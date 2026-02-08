@@ -180,7 +180,7 @@ export function TripCollaboratorsPanel({
 
       <CardContent className={cn(compact && "p-0")}>
         <div className="space-y-3">
-          {/* Compact Avatar Stack — always visible */}
+          {/* Compact Avatar Stack - always visible */}
           <button
             onClick={() => setShowDetails(!showDetails)}
             className="flex items-center gap-3 w-full py-2 hover:bg-muted/30 rounded-lg px-2 -mx-2 transition-colors"
@@ -420,7 +420,7 @@ export function TripCollaboratorsPanel({
                         <Shield className="h-3 w-3" />
                         <span>
                           You have <strong>{permission.permission}</strong> access
-                          {permission.canEdit ? ' — you can edit this itinerary' : ' — view only'}
+                          {permission.canEdit ? ' - you can edit this itinerary' : ' - view only'}
                         </span>
                       </div>
                     </div>
