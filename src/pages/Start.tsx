@@ -38,6 +38,7 @@ import { FlightImportModal } from '@/components/itinerary/FlightImportModal';
 import type { ManualFlightEntry } from '@/components/itinerary/AddBookingInline';
 import GuestLinkModal, { type LinkedGuest } from '@/components/planner/GuestLinkModal';
 import { TripChatPlanner } from '@/components/planner/TripChatPlanner';
+import { ManualTripPasteEntry } from '@/components/planner/ManualTripPasteEntry';
 
 // Types
 interface LocationSelection {
@@ -283,8 +284,8 @@ function TripDetailsStep({
   setDestinations: (d: TripDestination[]) => void;
   transports: InterCityTransport[];
   setTransports: (t: InterCityTransport[]) => void;
-  planMode: 'single' | 'multi' | 'chat';
-  setPlanMode: (m: 'single' | 'multi' | 'chat') => void;
+  planMode: 'single' | 'multi' | 'chat' | 'manual';
+  setPlanMode: (m: 'single' | 'multi' | 'chat' | 'manual') => void;
   onChatDetailsExtracted: (details: any) => void;
   onContinue: () => void;
 }) {
@@ -387,6 +388,19 @@ function TripDetailsStep({
             <MessageSquareText className="h-3.5 w-3.5" />
             Just Tell Us
           </button>
+          <button
+            type="button"
+            onClick={() => setPlanMode('manual')}
+            className={cn(
+              'px-3 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-1.5',
+              planMode === 'manual'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <PenLine className="h-3.5 w-3.5" />
+            I'll Build Myself
+          </button>
         </div>
 
         {/* Chat Mode */}
@@ -394,8 +408,13 @@ function TripDetailsStep({
           <TripChatPlanner onDetailsExtracted={onChatDetailsExtracted} />
         )}
 
+        {/* Manual Build Mode */}
+        {planMode === 'manual' && (
+          <ManualTripPasteEntry />
+        )}
+
         {/* Destination - Single City Mode */}
-        {planMode !== 'chat' && !isMultiCity && (
+        {planMode !== 'chat' && planMode !== 'manual' && !isMultiCity && (
         <div className="space-y-1.5 sm:space-y-2">
           <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
             Destination
@@ -409,7 +428,7 @@ function TripDetailsStep({
         )}
 
         {/* Multi-City Selector */}
-        {planMode !== 'chat' && isMultiCity && (
+        {planMode !== 'chat' && planMode !== 'manual' && isMultiCity && (
           <div className="space-y-1.5 sm:space-y-2">
             <MultiCitySelector
               destinations={destinations}
@@ -422,7 +441,7 @@ function TripDetailsStep({
         )}
 
         {/* Dates - mobile optimized */}
-        {planMode !== 'chat' && (
+        {planMode !== 'chat' && planMode !== 'manual' && (
         <div className="grid grid-cols-2 gap-3 sm:gap-4">
           <div className="space-y-1.5 sm:space-y-2">
             <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
@@ -491,7 +510,7 @@ function TripDetailsStep({
         )}
 
         {/* Travelers - mobile optimized touch targets */}
-        {(
+        {planMode !== 'manual' && (
         <div className="space-y-1.5 sm:space-y-2">
           <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
             Travelers
@@ -547,7 +566,7 @@ function TripDetailsStep({
         )}
 
         {/* Trip Type - mobile optimized */}
-        {planMode !== 'chat' && (
+        {planMode !== 'chat' && planMode !== 'manual' && (
         <div className="space-y-2 sm:space-y-3">
           <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
             Trip Type
@@ -603,7 +622,7 @@ function TripDetailsStep({
         )}
 
         {/* Celebration Day */}
-        {planMode !== 'chat' && CELEBRATION_TRIP_TYPES.includes(tripType as typeof CELEBRATION_TRIP_TYPES[number]) && startDate && endDate && (
+        {planMode !== 'chat' && planMode !== 'manual' && CELEBRATION_TRIP_TYPES.includes(tripType as typeof CELEBRATION_TRIP_TYPES[number]) && startDate && endDate && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
@@ -637,7 +656,7 @@ function TripDetailsStep({
         )}
 
         {/* Budget Section - Collapsible */}
-        {planMode !== 'chat' && (
+        {planMode !== 'chat' && planMode !== 'manual' && (
         <Collapsible open={showBudget} onOpenChange={setShowBudget}>
           <CollapsibleTrigger asChild>
             <button
@@ -698,7 +717,7 @@ function TripDetailsStep({
       </div>
 
       {/* Navigation — only in form mode */}
-      {planMode !== 'chat' && (
+      {planMode !== 'chat' && planMode !== 'manual' && (
         <div className="flex justify-end pt-6 max-w-md mx-auto">
           <Button onClick={onContinue} disabled={!isValid} className="gap-2">
             Continue
@@ -1342,7 +1361,7 @@ export default function Start() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAuthGate, setShowAuthGate] = useState(false);
   const [showDNAPrompt, setShowDNAPrompt] = useState(false);
-  const [planMode, setPlanMode] = useState<'single' | 'multi' | 'chat'>('single');
+  const [planMode, setPlanMode] = useState<'single' | 'multi' | 'chat' | 'manual'>('single');
 
   // Trip state
   const destinationFromQuery = searchParams.get('destination');
@@ -1674,6 +1693,7 @@ export default function Start() {
                       setPlanMode(m);
                       if (m === 'single') setIsMultiCity(false);
                       else if (m === 'multi') setIsMultiCity(true);
+                      // 'chat' and 'manual' don't affect multi-city state
                     }}
                     onChatDetailsExtracted={(details) => {
                       // Populate form state from chat-extracted details

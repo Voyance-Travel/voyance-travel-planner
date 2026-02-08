@@ -245,3 +245,6 @@ verify_jwt = false
 
 [functions.enrich-manual-trip]
 verify_jwt = false
+
+[functions.parse-trip-input]
+verify_jwt = false
