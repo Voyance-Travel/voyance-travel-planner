@@ -964,6 +964,9 @@ export function EditorialItinerary({
     }
   }, [tripId]);
 
+  // AI features are locked for manual/imported trips until Smart Finish is purchased
+  const aiLocked = isManualMode && !smartFinishPurchased;
+
   const [changingTransportActivityId, setChangingTransportActivityId] = useState<string | null>(null);
 
   // Auto-unlock locked days when user has sufficient credits
@@ -2688,7 +2691,7 @@ export function EditorialItinerary({
                     getPaymentForItem={getPaymentForItem}
                     refreshPayments={refreshPayments}
                     onToggle={() => toggleDay(days[selectedDayIndex].dayNumber)}
-                    onActivitySwap={openSwapDrawer}
+                    onActivitySwap={aiLocked ? undefined : openSwapDrawer}
                     onActivityLock={handleActivityLock}
                     onActivityMove={handleActivityMove}
                     onActivityReorder={(reordered) => handleActivityReorder(selectedDayIndex, reordered)}
@@ -2701,10 +2704,11 @@ export function EditorialItinerary({
                     onTimeEdit={(dIdx, aIdx, activity) => setTimeEditModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
                     onActivityEdit={(dIdx, aIdx, activity) => setEditActivityModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
                     onPaymentRequest={onPaymentRequest}
-                     onViewReviews={openReviewsDrawer}
+                     onViewReviews={aiLocked ? undefined : openReviewsDrawer}
                      onTransportModeChange={handleTransportModeChange}
                      changingTransportActivityId={changingTransportActivityId}
                      collaboratorColorMap={collaboratorColorMap}
+                     aiLocked={aiLocked}
                    />
                 )}
               </div>
@@ -5051,6 +5055,7 @@ interface DayCardProps {
   onTransportModeChange?: (dayIndex: number, activityId: string, newMode: string) => Promise<void>;
   changingTransportActivityId?: string | null;
   collaboratorColorMap?: Map<string, CollaboratorAttribution>;
+  aiLocked?: boolean;
 }
 
 function DayCard({
@@ -5093,6 +5098,7 @@ function DayCard({
   onTransportModeChange,
   changingTransportActivityId,
   collaboratorColorMap,
+  aiLocked,
 }: DayCardProps) {
   const allLocked = day.activities.every(a => a.isLocked);
   const totalCost = isPreview ? 0 : getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry);
@@ -5188,6 +5194,7 @@ function DayCard({
                 >
                   {allLocked ? <Lock className="h-3.5 sm:h-4 w-3.5 sm:w-4 text-primary" /> : <Unlock className="h-3.5 sm:h-4 w-3.5 sm:w-4" />}
                 </Button>
+                {!aiLocked && (
                 <Button
                   variant="ghost"
                   size="icon"
@@ -5199,6 +5206,7 @@ function DayCard({
                 >
                   <RefreshCw className={cn("h-3.5 sm:h-4 w-3.5 sm:w-4", isRegenerating && "animate-spin text-accent")} />
                 </Button>
+                )}
                 {/* Save to Library button removed - agent features disabled */}
               </>
             )}
@@ -5263,10 +5271,11 @@ function DayCard({
                       onEdit={onActivityEdit}
                       onPaymentRequest={onPaymentRequest}
                       onBookingStateChange={onBookingStateChange}
-                       onViewReviews={onViewReviews}
+                       onViewReviews={aiLocked ? undefined : onViewReviews}
                        onTransportModeChange={onTransportModeChange}
                        changingTransportActivityId={changingTransportActivityId}
                        collaboratorColorMap={collaboratorColorMap}
+                       aiLocked={aiLocked}
                      />
                   </div>
                 )}
@@ -5387,6 +5396,7 @@ interface ActivityRowProps {
   changingTransportActivityId?: string | null;
   /** Color map for collaborator attribution badges */
   collaboratorColorMap?: Map<string, CollaboratorAttribution>;
+  aiLocked?: boolean;
 }
 
 function ActivityRow({
@@ -5421,6 +5431,7 @@ function ActivityRow({
   onTransportModeChange,
   changingTransportActivityId,
   collaboratorColorMap,
+  aiLocked,
 }: ActivityRowProps) {
   const [showProposeReplacement, setShowProposeReplacement] = useState(false);
   const activityType = getActivityType(activity);
@@ -5722,7 +5733,7 @@ function ActivityRow({
                   activityTypeLower.includes(t) || titleLower.includes(t)
                 ) || titleLower.includes('check in') || titleLower.includes('check out');
                 
-                if (isNonReviewable) return null;
+                if (isNonReviewable || aiLocked) return null;
                 
                 // Show rating badge if we have a rating, otherwise show "See Reviews" button
                 // Always allow viewing reviews for reviewable activities - the edge function fetches them on-demand
@@ -5990,6 +6001,8 @@ function ActivityRow({
                           </DropdownMenuSub>
                         </>
                       )}
+                      {!aiLocked && (
+                      <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         onClick={() => setShowProposeReplacement(true)}
@@ -5998,6 +6011,8 @@ function ActivityRow({
                         <MessageCircle className="h-4 w-4" />
                         Propose Replacement
                       </DropdownMenuItem>
+                      </>
+                      )}
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         onClick={() => onRemove(dayIndex, activity.id)}
