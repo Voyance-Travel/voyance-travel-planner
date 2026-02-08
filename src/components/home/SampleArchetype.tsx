@@ -250,12 +250,12 @@ export default function SampleArchetype() {
             Take the quiz and let us match you perfectly.
           </p>
           
-          <Button asChild size="lg" className="font-sans text-sm sm:text-base px-6 sm:px-8 min-h-[48px]">
-            <Link to={ROUTES.QUIZ}>
+          <Link to={ROUTES.QUIZ}>
+            <Button size="lg" className="font-sans text-sm sm:text-base px-6 sm:px-8 min-h-[48px]">
               Take the 5-Minute Quiz
               <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
-          </Button>
+            </Button>
+          </Link>
           
           <p className="text-[10px] sm:text-xs text-muted-foreground mt-3 sm:mt-4">
             Take once. Your profile stays with you.
