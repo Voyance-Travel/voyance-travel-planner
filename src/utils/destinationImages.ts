@@ -16,13 +16,20 @@ import nolaHero1 from '@/assets/destinations/new-orleans-1.jpg';
 import nolaHero2 from '@/assets/destinations/new-orleans-2.jpg';
 import nolaHero3 from '@/assets/destinations/new-orleans-3.jpg';
 
+// Paris: local curated images
+import parisHero from '@/assets/destinations/paris-hero.jpg';
+import parisMid from '@/assets/destinations/paris-mid.jpg';
+
+// Lisbon: local curated images
+import lisbonHero from '@/assets/destinations/lisbon-hero.jpg';
+import lisbonMid from '@/assets/destinations/lisbon-mid.jpg';
+
 // Curated high-quality images for popular destinations
 const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
   // Europe
   'paris': [
-    'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=1200',
-    'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=1200',
-    'https://images.unsplash.com/photo-1431274172761-fca41d930114?w=1200',
+    parisHero,
+    parisMid,
   ],
   'london': [
     'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=1200',
@@ -46,10 +53,8 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1533105079780-92b9be482077?w=1200',
   ],
   'lisbon': [
-    'https://images.unsplash.com/photo-1585208798174-6cedd86e019a?w=1200', // Belém Tower
-    'https://images.unsplash.com/photo-1555881400-69b4f7a5f3b1?w=1200', // Alfama rooftops
-    'https://images.unsplash.com/photo-1548707309-dcebeab9ea9b?w=1200', // Tram 28 in Alfama
-    'https://images.unsplash.com/photo-1575373647588-50fa8fc2d16f?w=1200', // Colorful tiles
+    lisbonHero,
+    lisbonMid,
   ],
   'amsterdam': [
     'https://images.unsplash.com/photo-1534351590666-13e3e96b5017?w=1200',
