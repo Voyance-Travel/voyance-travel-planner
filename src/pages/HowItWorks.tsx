@@ -123,7 +123,7 @@ function ArchetypeCarousel() {
         onClick={() => emblaApi?.scrollPrev()}
         disabled={!canScrollPrev}
         className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 z-10 w-10 h-10 rounded-full bg-card border border-border shadow-md flex items-center justify-center text-foreground hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-        aria-label="Previous archetypes"
+        aria-label="Previous types"
       >
         <ChevronLeft className="w-5 h-5" />
       </button>
@@ -131,7 +131,7 @@ function ArchetypeCarousel() {
         onClick={() => emblaApi?.scrollNext()}
         disabled={!canScrollNext}
         className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 z-10 w-10 h-10 rounded-full bg-card border border-border shadow-md flex items-center justify-center text-foreground hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-        aria-label="Next archetypes"
+        aria-label="Next types"
       >
         <ChevronRight className="w-5 h-5" />
       </button>
@@ -236,13 +236,13 @@ export default function HowItWorks() {
                 how you plan, how you recharge, what thrills you, what bores you.
               </p>
               <p className="text-lg text-muted-foreground leading-relaxed">
-                In 5 minutes, we identify your archetype from 27 distinct traveler personalities. 
+                In 5 minutes, we identify your type from 27 distinct traveler types. 
                 Not a horoscope. A blueprint.
               </p>
               <div className="mt-8 flex items-center gap-4 text-sm text-muted-foreground">
-                <span className="px-3 py-1 bg-muted rounded-full">We remember forever</span>
+                <span className="px-3 py-1 bg-muted rounded-full">Your profile stays with you</span>
                 <span className="px-3 py-1 bg-muted rounded-full">5 minutes</span>
-                <span className="px-3 py-1 bg-muted rounded-full">27 archetypes</span>
+                <span className="px-3 py-1 bg-muted rounded-full">27 types</span>
               </div>
             </div>
             <div className="relative">
@@ -311,12 +311,12 @@ export default function HowItWorks() {
               </p>
               <div className="mt-8 grid grid-cols-3 gap-4 text-center">
                 <div className="p-4 bg-muted/50 rounded-xl">
-                  <p className="text-2xl font-bold text-primary">30-45</p>
-                  <p className="text-xs text-muted-foreground">min saved daily</p>
+                  <p className="text-2xl font-bold text-primary">Hours</p>
+                  <p className="text-xs text-muted-foreground">of planning saved</p>
                 </div>
                 <div className="p-4 bg-muted/50 rounded-xl">
-                  <p className="text-2xl font-bold text-primary">2,200+</p>
-                  <p className="text-xs text-muted-foreground">destinations</p>
+                  <p className="text-2xl font-bold text-primary">Global</p>
+                  <p className="text-xs text-muted-foreground">coverage</p>
                 </div>
                 <div className="p-4 bg-muted/50 rounded-xl">
                   <p className="text-2xl font-bold text-primary">Real</p>
@@ -350,10 +350,10 @@ export default function HowItWorks() {
               Travel DNA
             </div>
             <h2 className="text-3xl md:text-4xl font-serif font-bold text-foreground mb-4">
-              27 traveler personalities
+              27 traveler types
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Every trip is shaped by who you are. Discover your archetype and see how 
+              Every trip is shaped by who you are. Discover your type and see how 
               it transforms every recommendation.
             </p>
           </motion.div>
@@ -370,7 +370,7 @@ export default function HowItWorks() {
             <Button asChild size="lg" variant="outline" className="gap-2">
               <Link to={ROUTES.ARCHETYPES}>
                 <Sparkles className="h-4 w-4" />
-                Explore all 27 archetypes
+                Explore all 27 types
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
@@ -516,7 +516,7 @@ export default function HowItWorks() {
               className="mt-10 flex items-center justify-center gap-2 text-sm text-muted-foreground"
             >
               <CheckCircle className="w-4 h-4 text-emerald-500" />
-              <span>No account required to start</span>
+              <span>Free to start — takes 5 minutes</span>
             </motion.div>
           </motion.div>
         </div>

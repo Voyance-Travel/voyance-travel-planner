@@ -9,7 +9,7 @@ const STEPS = [
     number: '1',
     icon: Dna,
     title: 'Discover your Travel DNA',
-    description: 'Take our 5-minute quiz. We analyze your preferences across 10 traits to identify your unique travel personality from 27 archetypes.',
+    description: 'Take our 5-minute quiz. We analyze your preferences across 10 traits to identify your unique travel type from 27 types.',
     highlight: '5-min quiz',
   },
   {
@@ -23,7 +23,7 @@ const STEPS = [
     number: '3',
     icon: MapPin,
     title: 'Get matched trips',
-    description: 'We build itineraries designed around your DNA - not generic templates. Every recommendation fits your pace, style, and interests.',
+    description: 'We build itineraries designed around your type - not generic templates. Every recommendation fits your pace, style, and interests.',
     highlight: 'Custom itineraries',
   },
   {

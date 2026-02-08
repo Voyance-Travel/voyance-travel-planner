@@ -258,7 +258,7 @@ export default function SampleArchetype() {
           </Button>
           
           <p className="text-[10px] sm:text-xs text-muted-foreground mt-3 sm:mt-4">
-            Take once. We remember forever.
+            Take once. Your profile stays with you.
           </p>
         </motion.div>
       </div>
