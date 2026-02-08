@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, X, ChevronRight, MessageSquare, Plane, Flag, Cloud, RefreshCw } from 'lucide-react';
+import { Bell, X, ChevronRight, MessageSquare, Plane, Flag, Cloud, RefreshCw, UserPlus, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -18,6 +18,9 @@ import {
 } from '@/services/tripNotificationsAPI';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 // Helper to create readable name from activity ID
 function humanizeActivityId(id: string): string {
@@ -25,8 +28,8 @@ function humanizeActivityId(id: string): string {
   return id
     .replace(/_/g, ' ')
     .replace(/-/g, ' ')
-    .replace(/\d+/g, '') // Remove numbers
-    .replace(/:/g, '') // Remove colons from time-based IDs
+    .replace(/\d+/g, '')
+    .replace(/:/g, '')
     .split(' ')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ')
@@ -51,23 +54,101 @@ function sanitizeNotificationText(text: string, activityId?: string): string {
     .replace(/\s+/g, ' ') // Normalize whitespace
     .trim();
 }
-const iconMap = {
+
+const iconMap: Record<string, typeof Bell> = {
   activity_reminder: Bell,
   weather_alert: Cloud,
   feedback_prompt: MessageSquare,
   trip_start: Plane,
   trip_end: Flag,
-  activity_change: RefreshCw
+  activity_change: RefreshCw,
+  friend_request: UserPlus,
 };
 
-const colorMap = {
+const colorMap: Record<string, string> = {
   activity_reminder: 'text-blue-500 bg-blue-500/10',
   weather_alert: 'text-amber-500 bg-amber-500/10',
   feedback_prompt: 'text-purple-500 bg-purple-500/10',
   trip_start: 'text-emerald-500 bg-emerald-500/10',
   trip_end: 'text-rose-500 bg-rose-500/10',
-  activity_change: 'text-orange-500 bg-orange-500/10'
+  activity_change: 'text-orange-500 bg-orange-500/10',
+  friend_request: 'text-primary bg-primary/10',
 };
+
+interface FriendRequest {
+  id: string;
+  requester_id: string;
+  created_at: string;
+  requesterName: string;
+  requesterAvatar?: string;
+}
+
+function usePendingFriendRequests(userId: string | null) {
+  return useQuery({
+    queryKey: ['pending-friend-requests', userId],
+    queryFn: async (): Promise<FriendRequest[]> => {
+      if (!userId) return [];
+      
+      const { data, error } = await supabase
+        .from('friendships')
+        .select('id, requester_id, created_at')
+        .eq('addressee_id', userId)
+        .eq('status', 'pending');
+      
+      if (error) {
+        console.error('Failed to fetch friend requests:', error);
+        return [];
+      }
+      
+      if (!data || data.length === 0) return [];
+      
+      // Fetch requester profiles
+      const requesterIds = data.map(r => r.requester_id);
+      const { data: profiles } = await supabase
+        .from('profiles_friends')
+        .select('id, display_name, avatar_url')
+        .in('id', requesterIds);
+      
+      const profileMap = new Map(
+        (profiles || []).map(p => [p.id, p])
+      );
+      
+      return data.map(r => ({
+        id: r.id,
+        requester_id: r.requester_id,
+        created_at: r.created_at,
+        requesterName: profileMap.get(r.requester_id)?.display_name || 'Someone',
+        requesterAvatar: profileMap.get(r.requester_id)?.avatar_url || undefined,
+      }));
+    },
+    enabled: !!userId,
+    refetchInterval: 60000,
+    staleTime: 30000,
+  });
+}
+
+function useRespondToFriendRequest() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ requestId, response }: { requestId: string; response: 'accepted' | 'declined' }) => {
+      const { error } = await supabase
+        .from('friendships')
+        .update({ status: response, updated_at: new Date().toISOString() })
+        .eq('id', requestId);
+      
+      if (error) throw error;
+    },
+    onSuccess: (_, { response }) => {
+      queryClient.invalidateQueries({ queryKey: ['pending-friend-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['friendships'] });
+      toast.success(response === 'accepted' ? 'Friend request accepted!' : 'Friend request declined');
+    },
+    onError: () => {
+      toast.error('Failed to respond to friend request');
+    },
+  });
+}
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
@@ -75,7 +156,9 @@ export function NotificationBell() {
   const navigate = useNavigate();
   
   const { data: rawNotifications = [], isLoading } = useUserNotifications(user?.id || null);
+  const { data: friendRequests = [], isLoading: friendRequestsLoading } = usePendingFriendRequests(user?.id || null);
   const dismissMutation = useDismissNotification();
+  const respondMutation = useRespondToFriendRequest();
 
   // Sanitize notifications to clean up any bad data from old notifications
   const notifications = useMemo(() => {
@@ -86,7 +169,7 @@ export function NotificationBell() {
     }));
   }, [rawNotifications]);
 
-  const unreadCount = notifications.filter(n => !n.sent).length;
+  const unreadCount = notifications.filter(n => !n.sent).length + friendRequests.length;
 
   const handleNotificationClick = (notification: TripNotification) => {
     // Navigate to trip or activity
@@ -106,7 +189,15 @@ export function NotificationBell() {
     });
   };
 
+  const handleFriendResponse = (e: React.MouseEvent, requestId: string, response: 'accepted' | 'declined') => {
+    e.stopPropagation();
+    respondMutation.mutate({ requestId, response });
+  };
+
   if (!user) return null;
+
+  const allLoading = isLoading && friendRequestsLoading;
+  const hasContent = notifications.length > 0 || friendRequests.length > 0;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -141,11 +232,11 @@ export function NotificationBell() {
         </div>
 
         <ScrollArea className="h-[300px]">
-          {isLoading ? (
+          {allLoading ? (
             <div className="flex items-center justify-center h-20">
               <div className="animate-pulse text-muted-foreground">Loading...</div>
             </div>
-          ) : notifications.length === 0 ? (
+          ) : !hasContent ? (
             <div className="flex flex-col items-center justify-center h-32 text-center px-4">
               <Bell className="h-8 w-8 text-muted-foreground/50 mb-2" />
               <p className="text-sm text-muted-foreground">No notifications yet</p>
@@ -155,6 +246,57 @@ export function NotificationBell() {
             </div>
           ) : (
             <div className="divide-y">
+              {/* Friend Requests - shown first */}
+              {friendRequests.map((request) => (
+                <motion.div
+                  key={`fr-${request.id}`}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="px-4 py-3 hover:bg-muted/50 transition-colors group"
+                >
+                  <div className="flex gap-3">
+                    <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0', colorMap.friend_request)}>
+                      <UserPlus className="w-4 h-4" />
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium line-clamp-1">
+                        Friend Request
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        <span className="font-medium text-foreground">{request.requesterName}</span> wants to connect
+                      </p>
+                      
+                      <div className="flex items-center gap-2 mt-2">
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="h-6 px-3 text-xs gap-1"
+                          disabled={respondMutation.isPending}
+                          onClick={(e) => handleFriendResponse(e, request.id, 'accepted')}
+                        >
+                          <Check className="h-3 w-3" />
+                          Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-3 text-xs"
+                          disabled={respondMutation.isPending}
+                          onClick={(e) => handleFriendResponse(e, request.id, 'declined')}
+                        >
+                          Decline
+                        </Button>
+                        <span className="text-[10px] text-muted-foreground/60 ml-auto">
+                          {formatNotificationTime(request.created_at)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+              
+              {/* Trip Notifications */}
               {notifications.map((notification) => {
                 const Icon = iconMap[notification.type] || Bell;
                 const colorClass = colorMap[notification.type] || 'text-muted-foreground bg-muted';
