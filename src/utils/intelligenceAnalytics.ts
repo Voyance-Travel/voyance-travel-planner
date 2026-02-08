@@ -30,6 +30,8 @@ const TIMING_KEYWORDS = [
   'before the crowds', 'avoid the rush', 'golden hour', 'sunrise', 'early morning',
   'before tour buses', 'less crowded', 'off-peak', 'before it gets busy',
   'best time', 'optimal time', 'quiet hours', 'before the lines',
+  'at dusk', 'at dawn', 'at sunset', 'at sunrise', 'right when', 'opens at',
+  'arrive early', 'beat the', 'ahead of', 'before it fills',
 ];
 
 // Keywords indicating a hidden gem / unique find
@@ -37,6 +39,9 @@ const GEM_KEYWORDS = [
   'hidden', 'secret', 'locals only', 'off the beaten', 'lesser-known',
   'under the radar', 'undiscovered', 'tucked away', 'neighborhood favorite',
   'local favorite', 'insider', "locals' choice", 'boutique',
+  'like a local', 'curated', 'unique find', 'only the locals',
+  'working-class', 'off-the-tourist', 'zero tourists', 'nobody knows',
+  'local haunt', 'neighborhood gem', 'under-the-radar', 'local institution',
 ];
 
 // Categories that are never "hidden gems" (mainstream logistics)
