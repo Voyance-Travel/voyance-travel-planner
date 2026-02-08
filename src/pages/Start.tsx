@@ -491,7 +491,7 @@ function TripDetailsStep({
         )}
 
         {/* Travelers - mobile optimized touch targets */}
-        {planMode !== 'chat' && (
+        {(
         <div className="space-y-1.5 sm:space-y-2">
           <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
             Travelers

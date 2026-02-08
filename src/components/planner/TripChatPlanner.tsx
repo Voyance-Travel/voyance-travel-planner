@@ -1,14 +1,14 @@
 /**
  * TripChatPlanner — Inline chat UI for "Just Tell Us" trip planning mode.
- * Users describe their trip naturally or paste research, and the AI extracts structured details.
+ * Purely conversational — users describe their trip naturally and the AI chats back.
+ * When enough details are gathered, the AI extracts them via tool calling.
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Loader2, Sparkles, User, ClipboardPaste, CheckCircle2, MapPin, Calendar as CalendarIcon, Users, DollarSign, Hotel, Pencil } from 'lucide-react';
+import { Send, Loader2, Sparkles, User, ClipboardPaste } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 
@@ -41,12 +41,11 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: 'assistant',
-      content: "Welcome to Voyance! ✈️ Tell us about the trip you're planning — where you're headed, when, who's going, what kind of trip it is. Share as much or as little as you'd like.\n\nYou can also paste in your research or notes and we'll take it from there.",
+      content: "Hey! ✈️ Where are you thinking of going? Tell me anything — a city, a vibe, a dream trip. We'll figure it out together.",
     },
   ]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
-  const [extractedDetails, setExtractedDetails] = useState<TripDetails | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -145,17 +144,20 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
         }
       }
 
-      // Handle tool call result
+      // Handle tool call result — extract details silently and trigger generation
       if (isToolCall && toolCallArgs) {
         try {
           const details = JSON.parse(toolCallArgs) as TripDetails;
-          setExtractedDetails(details);
 
-          // Add a confirmation message if no assistant content was generated
+          // If the AI didn't produce a text response alongside the tool call,
+          // add a friendly confirmation message
           if (!assistantContent) {
-            const confirmMsg = buildConfirmationMessage(details);
-            setMessages(prev => [...prev, { role: 'assistant', content: confirmMsg }]);
+            assistantContent = "Got it! I have everything I need — generating your trip now! 🎉";
+            setMessages(prev => [...prev, { role: 'assistant', content: assistantContent }]);
           }
+
+          // Small delay so the user sees the confirmation before redirect
+          setTimeout(() => onDetailsExtracted(details), 800);
         } catch (e) {
           console.error('Failed to parse tool call args:', e);
         }
@@ -180,7 +182,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
 
   const handlePaste = () => {
     textareaRef.current?.focus();
-    setInput(prev => prev || ''); // Focus the textarea so they can paste
+    setInput(prev => prev || '');
   };
 
   return (
@@ -243,133 +245,44 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Extracted details summary */}
-      {extractedDetails && (
-        <TripDetailsSummary
-          details={extractedDetails}
-          onConfirm={() => onDetailsExtracted(extractedDetails)}
-          onEdit={() => {
-            setExtractedDetails(null);
-            sendMessage("I'd like to make some changes to the details.");
-          }}
+      {/* Input area — always visible */}
+      <div className="relative">
+        <Textarea
+          ref={textareaRef}
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Tell us about your trip..."
+          className="min-h-[60px] max-h-[120px] resize-none pr-20 text-sm"
+          disabled={isStreaming}
         />
-      )}
-
-      {/* Input area */}
-      {!extractedDetails && (
-        <div className="relative">
-          <Textarea
-            ref={textareaRef}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Tell us about your trip, or paste in your research..."
-            className="min-h-[60px] max-h-[120px] resize-none pr-20 text-sm"
-            disabled={isStreaming}
-          />
-          <div className="absolute right-2 bottom-2 flex items-center gap-1">
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7"
-              onClick={handlePaste}
-              title="Paste your research"
-            >
-              <ClipboardPaste className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              type="button"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => sendMessage(input)}
-              disabled={!input.trim() || isStreaming}
-            >
-              {isStreaming ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Send className="h-3.5 w-3.5" />
-              )}
-            </Button>
-          </div>
+        <div className="absolute right-2 bottom-2 flex items-center gap-1">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7"
+            onClick={handlePaste}
+            title="Paste your research"
+          >
+            <ClipboardPaste className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => sendMessage(input)}
+            disabled={!input.trim() || isStreaming}
+          >
+            {isStreaming ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Send className="h-3.5 w-3.5" />
+            )}
+          </Button>
         </div>
-      )}
+      </div>
     </div>
-  );
-}
-
-function buildConfirmationMessage(details: TripDetails): string {
-  const parts: string[] = ["Here's what I've gathered:"];
-  if (details.destination) parts.push(`📍 **Destination:** ${details.destination}`);
-  if (details.startDate && details.endDate) parts.push(`📅 **Dates:** ${details.startDate} → ${details.endDate}`);
-  else if (details.startDate) parts.push(`📅 **Start:** ${details.startDate}`);
-  if (details.travelers) parts.push(`👥 **Travelers:** ${details.travelers}`);
-  if (details.tripType) parts.push(`✨ **Trip type:** ${details.tripType.replace(/_/g, ' ')}`);
-  if (details.budgetAmount) parts.push(`💰 **Budget:** $${details.budgetAmount.toLocaleString()}`);
-  if (details.hotelName) parts.push(`🏨 **Hotel:** ${details.hotelName}`);
-  if (details.mustDoActivities) parts.push(`⭐ **Must-dos:** ${details.mustDoActivities}`);
-  parts.push('\nLook good? Hit **Generate Trip** below to get started, or tell me if you want to change anything.');
-  return parts.join('\n');
-}
-
-function TripDetailsSummary({
-  details,
-  onConfirm,
-  onEdit,
-}: {
-  details: TripDetails;
-  onConfirm: () => void;
-  onEdit: () => void;
-}) {
-  const items = [
-    { icon: MapPin, label: 'Destination', value: details.destination },
-    { icon: CalendarIcon, label: 'Dates', value: details.startDate && details.endDate ? `${details.startDate} → ${details.endDate}` : details.startDate },
-    { icon: Users, label: 'Travelers', value: details.travelers?.toString() },
-    { icon: Sparkles, label: 'Trip type', value: details.tripType?.replace(/_/g, ' ') },
-    { icon: DollarSign, label: 'Budget', value: details.budgetAmount ? `$${details.budgetAmount.toLocaleString()}` : undefined },
-    { icon: Hotel, label: 'Hotel', value: details.hotelName },
-  ].filter(item => item.value);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="border border-primary/20 rounded-xl bg-primary/5 p-4 space-y-3"
-    >
-      <div className="flex items-center gap-2">
-        <CheckCircle2 className="h-4 w-4 text-primary" />
-        <span className="text-sm font-semibold text-foreground">Trip Details</span>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        {items.map(({ icon: Icon, label, value }) => (
-          <div key={label} className="flex items-start gap-1.5 text-xs">
-            <Icon className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
-            <div>
-              <span className="text-muted-foreground">{label}</span>
-              <p className="font-medium text-foreground">{value}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {details.mustDoActivities && (
-        <p className="text-xs text-muted-foreground">
-          <span className="font-medium">Must-dos:</span> {details.mustDoActivities}
-        </p>
-      )}
-
-      <div className="flex gap-2 pt-1">
-        <Button onClick={onConfirm} className="flex-1 gap-2" size="sm">
-          <Sparkles className="h-3.5 w-3.5" />
-          Generate Trip
-        </Button>
-        <Button variant="outline" onClick={onEdit} size="sm" className="gap-1.5">
-          <Pencil className="h-3 w-3" />
-          Edit
-        </Button>
-      </div>
-    </motion.div>
   );
 }
 
