@@ -1,14 +1,12 @@
 /**
  * Locked Day Card
  * 
- * Shown for days beyond the free 2-day preview.
- * Two variants:
- * 1. First-trip users (0 credits) → explain free preview, offer manual build or get credits
- * 2. Returning users without enough credits → buy credits CTA, then auto-generate
+ * Clean blank canvas shown for days beyond the free preview.
+ * Two clear paths: let Voyance finish it (credits) or build manually.
  */
 
 import { motion } from 'framer-motion';
-import { Lock, Sparkles, Clock, MapPinOff, Target, Pencil, CreditCard, Gift, Loader2 } from 'lucide-react';
+import { Sparkles, Pencil, CreditCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
@@ -32,20 +30,14 @@ interface LockedDayCardProps {
   className?: string;
   tripId?: string;
   onManualBuild?: () => void;
-  /** Whether this is the user's first trip (got 2 free days) */
   isFirstTrip?: boolean;
-  /** Whether user can afford to unlock this day */
   canAfford?: boolean;
-  /** Current credit balance */
   currentBalance?: number;
 }
 
 export function LockedDayCard({
   dayNumber,
   title,
-  activityCount,
-  teaserLine,
-  intelligenceBadges,
   onUnlock,
   creditsNeeded,
   className,
@@ -57,13 +49,7 @@ export function LockedDayCard({
 }: LockedDayCardProps) {
   const { enableManualBuilder } = useManualBuilderStore();
   const { showOutOfCredits } = useOutOfCredits();
-     
-  const totalBadges = 
-    intelligenceBadges.finds + 
-    intelligenceBadges.timingHacks + 
-    intelligenceBadges.trapsAvoided + 
-    intelligenceBadges.tips;
- 
+
   const handleManualBuild = () => {
     if (tripId) {
       enableManualBuilder(tripId);
@@ -72,181 +58,82 @@ export function LockedDayCard({
     onManualBuild?.();
   };
 
-  const handleGetCredits = () => {
-    showOutOfCredits({
-      action: 'UNLOCK_DAY',
-      creditsNeeded: CREDIT_COSTS.UNLOCK_DAY,
-      creditsAvailable: currentBalance,
-      tripId,
-    });
+  const handleFinishForMe = () => {
+    if (canAfford) {
+      onUnlock();
+    } else {
+      showOutOfCredits({
+        action: 'UNLOCK_DAY',
+        creditsNeeded: CREDIT_COSTS.UNLOCK_DAY,
+        creditsAvailable: currentBalance,
+        tripId,
+      });
+    }
   };
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
       className={cn(
-        "relative rounded-2xl border border-border bg-card overflow-hidden",
+        "flex flex-col items-center justify-center text-center py-16 px-6 min-h-[400px]",
         className
       )}
     >
-      {/* Blurred background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-muted/30 to-muted/50 backdrop-blur-sm" />
-      
-      {/* Content */}
-      <div className="relative p-6">
-        {/* Header */}
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Day {dayNumber}
-              </span>
-              <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-            </div>
-            <h3 className="text-xl font-serif font-medium text-foreground">
-              {title}
-            </h3>
-          </div>
-          
-          {/* Activity count */}
-          <div className="text-right">
-            <span className="text-2xl font-bold text-foreground">{activityCount}</span>
-            <span className="text-xs text-muted-foreground block">activities</span>
-          </div>
-        </div>
+      {/* Day label */}
+      <span className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
+        Day {dayNumber}
+      </span>
 
-        {/* Teaser line */}
-        <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
-          {teaserLine}
-        </p>
+      {/* Title */}
+      <h3 className="text-2xl font-serif font-medium text-foreground mb-2">
+        {title || `Day ${dayNumber}`}
+      </h3>
 
-        {/* Intelligence badges */}
-        {totalBadges > 0 && (
-          <div className="flex items-center gap-3 mb-6">
-            {intelligenceBadges.finds > 0 && (
-              <div className="flex items-center gap-1 text-xs text-primary">
-                <Sparkles className="h-3 w-3" />
-                <span>{intelligenceBadges.finds}</span>
-              </div>
-            )}
-            {intelligenceBadges.timingHacks > 0 && (
-              <div className="flex items-center gap-1 text-xs text-accent">
-                <Clock className="h-3 w-3" />
-                <span>{intelligenceBadges.timingHacks}</span>
-              </div>
-            )}
-            {intelligenceBadges.trapsAvoided > 0 && (
-              <div className="flex items-center gap-1 text-xs text-primary">
-                <Sparkles className="h-3 w-3" />
-                <span>{intelligenceBadges.trapsAvoided}</span>
-              </div>
-            )}
-            {intelligenceBadges.tips > 0 && (
-              <div className="flex items-center gap-1 text-xs text-gold">
-                <Target className="h-3 w-3" />
-                <span>{intelligenceBadges.tips}</span>
-              </div>
-            )}
-            <span className="text-xs text-muted-foreground">insights waiting</span>
-          </div>
-        )}
+      {/* Subtitle */}
+      <p className="text-sm text-muted-foreground max-w-sm mb-10">
+        {isFirstTrip
+          ? "Your first 2 days are free. Want us to plan this day too?"
+          : "This day hasn't been planned yet."}
+      </p>
 
-        {/* Blurred activity previews - decorative */}
-        <div className="space-y-2 mb-6 opacity-40 blur-[2px] pointer-events-none">
-          {[1, 2, 3].map((i) => (
-            <div 
-              key={i} 
-              className="flex items-center gap-3 p-2 rounded-lg bg-muted/50"
-            >
-              <div className="w-8 h-8 rounded-lg bg-muted" />
-              <div className="flex-1">
-                <div className="h-3 w-24 bg-muted rounded" />
-                <div className="h-2 w-16 bg-muted/50 rounded mt-1" />
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* Two clear CTA buttons */}
+      <div className="flex flex-col gap-3 w-full max-w-xs">
+        <Button
+          onClick={handleFinishForMe}
+          className="w-full gap-2.5 rounded-xl h-12 text-sm font-medium"
+          size="lg"
+        >
+          <Sparkles className="h-4 w-4" />
+          {canAfford ? 'Plan this day for me' : 'Finish it for me'}
+        </Button>
 
-        {/* === CTA SECTION - depends on user state === */}
-        {isFirstTrip ? (
-          /* FIRST TRIP: Explain free preview + offer paths */
-          <div className="space-y-3">
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-primary/5 border border-primary/10">
-              <Gift className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-              <p className="text-xs text-muted-foreground">
-                Your first 2 days are <span className="font-medium text-foreground">free</span>! 
-                Unlock remaining days with credits to get full venue details, photos & tips.
-              </p>
-            </div>
-
-            <Button
-              onClick={handleGetCredits}
-              className="w-full gap-2 rounded-xl"
-              size="lg"
-            >
-              <CreditCard className="h-4 w-4" />
-              Get Credits to Unlock
-            </Button>
-
-            {tripId && (
-              <Button
-                variant="outline"
-                onClick={handleManualBuild}
-                className="w-full gap-2 rounded-xl"
-                size="lg"
-              >
-                <Pencil className="h-4 w-4" />
-                I'll build it myself
-              </Button>
-            )}
-          </div>
-        ) : canAfford ? (
-          /* HAS CREDITS: Auto-unlock handles it. Show loading fallback. */
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-sm text-primary">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Unlocking...</span>
-            </div>
-          </div>
-        ) : (
-          /* NO CREDITS: Buy credits then generate */
-          <div className="space-y-3">
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/5 border border-amber-500/10">
-              <CreditCard className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-              <p className="text-xs text-muted-foreground">
-                You need more credits to unlock this day.
-              </p>
-            </div>
-
-            <Button
-              onClick={handleGetCredits}
-              className="w-full gap-2 rounded-xl"
-              size="lg"
-            >
-              <CreditCard className="h-4 w-4" />
-              Get Credits to Unlock
-            </Button>
-
-            {tripId && (
-              <Button
-                variant="outline"
-                onClick={handleManualBuild}
-                className="w-full gap-2 rounded-xl"
-                size="lg"
-              >
-                <Pencil className="h-4 w-4" />
-                I'll build it myself
-              </Button>
-            )}
-          </div>
+        {tripId && (
+          <Button
+            variant="ghost"
+            onClick={handleManualBuild}
+            className="w-full gap-2.5 rounded-xl h-12 text-sm font-medium text-muted-foreground hover:text-foreground"
+            size="lg"
+          >
+            <Pencil className="h-4 w-4" />
+            I'll do it myself
+          </Button>
         )}
       </div>
 
-      {/* Decorative lock overlay */}
-      <div className="absolute top-4 right-4 w-12 h-12 rounded-full bg-muted/80 flex items-center justify-center">
-        <Lock className="h-5 w-5 text-muted-foreground" />
-      </div>
+      {/* Subtle credit hint - only when they can't afford */}
+      {!canAfford && !isFirstTrip && (
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="text-xs text-muted-foreground/60 mt-6 flex items-center gap-1.5"
+        >
+          <CreditCard className="h-3 w-3" />
+          {creditsNeeded} credits per day
+        </motion.p>
+      )}
     </motion.div>
   );
 }
