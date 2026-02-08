@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { Json } from '@/integrations/supabase/types';
+import { syncFlightToLedger, syncHotelToLedger } from '@/services/budgetLedgerSync';
 
 // ============================================================================
 // TYPES
@@ -464,11 +465,16 @@ export function useSaveFlightSelection() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ tripId, flight }: { tripId: string; flight: FlightSelection }) =>
-      saveFlightSelection(tripId, flight),
+    mutationFn: async ({ tripId, flight }: { tripId: string; flight: FlightSelection }) => {
+      const trip = await saveFlightSelection(tripId, flight);
+      // Sync flight price to budget ledger
+      await syncFlightToLedger(tripId, flight);
+      return trip;
+    },
     onSuccess: (_, { tripId }) => {
       toast.success('Flight selection saved');
       queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+      queryClient.invalidateQueries({ queryKey: ['budget', tripId] });
     },
   });
 }
@@ -477,11 +483,16 @@ export function useSaveHotelSelection() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ tripId, hotel }: { tripId: string; hotel: HotelSelection }) =>
-      saveHotelSelection(tripId, hotel),
+    mutationFn: async ({ tripId, hotel }: { tripId: string; hotel: HotelSelection }) => {
+      const trip = await saveHotelSelection(tripId, hotel);
+      // Sync hotel price to budget ledger
+      await syncHotelToLedger(tripId, hotel);
+      return trip;
+    },
     onSuccess: (_, { tripId }) => {
       toast.success('Hotel selection saved');
       queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+      queryClient.invalidateQueries({ queryKey: ['budget', tripId] });
     },
   });
 }
