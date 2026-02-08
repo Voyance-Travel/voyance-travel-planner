@@ -1,10 +1,10 @@
 /**
  * ProposeReplacementDialog — Modal for proposing a replacement for an itinerary activity.
- * Submits as a trip_suggestion with target_activity context.
+ * Submits as a trip_suggestion with target_activity context and optional vote deadline.
  */
 
 import { useState } from 'react';
-import { MessageSquarePlus, Loader2 } from 'lucide-react';
+import { MessageSquarePlus, Loader2, CalendarClock } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,9 +32,13 @@ export function ProposeReplacementDialog({
   const { user } = useAuth();
   const [replacement, setReplacement] = useState('');
   const [reason, setReason] = useState('');
+  const [deadline, setDeadline] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const displayName = user?.name || user?.email?.split('@')[0] || 'Traveler';
+
+  // Minimum deadline is 1 hour from now
+  const minDeadline = new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16);
 
   const handleSubmit = async () => {
     if (!replacement.trim() || !user) return;
@@ -54,6 +58,7 @@ export function ProposeReplacementDialog({
           target_activity_id: activityId,
           target_activity_title: activityTitle,
           replacement_reason: reason.trim() || null,
+          vote_deadline: deadline ? new Date(deadline).toISOString() : null,
         });
 
       if (error) throw error;
@@ -61,6 +66,7 @@ export function ProposeReplacementDialog({
       toast.success('Replacement proposed! Your group can now vote on it.');
       setReplacement('');
       setReason('');
+      setDeadline('');
       onClose();
     } catch (err) {
       console.error('Failed to propose replacement:', err);
@@ -112,6 +118,30 @@ export function ProposeReplacementDialog({
               rows={3}
               className="resize-none"
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="deadline" className="flex items-center gap-1.5">
+              <CalendarClock className="h-3.5 w-3.5" />
+              Vote by <span className="text-muted-foreground font-normal">(optional)</span>
+            </Label>
+            <Input
+              id="deadline"
+              type="datetime-local"
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+              min={minDeadline}
+              className="w-full"
+            />
+            {deadline && (
+              <button
+                type="button"
+                onClick={() => setDeadline('')}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Remove deadline
+              </button>
+            )}
           </div>
         </div>
 

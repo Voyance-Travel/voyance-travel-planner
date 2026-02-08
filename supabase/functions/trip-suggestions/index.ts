@@ -50,7 +50,7 @@ serve(async (req) => {
     }
 
     if (action === "create_suggestion") {
-      const { title, description, suggestionType, targetActivityId, targetActivityTitle, replacementReason } = body;
+      const { title, description, suggestionType, targetActivityId, targetActivityTitle, replacementReason, voteDeadline } = body;
       if (!title || title.length > 200) {
         return new Response(
           JSON.stringify({ error: "Title required (max 200 chars)" }),
@@ -71,6 +71,7 @@ serve(async (req) => {
           target_activity_id: targetActivityId || null,
           target_activity_title: targetActivityTitle?.trim()?.slice(0, 200) || null,
           replacement_reason: replacementReason?.trim()?.slice(0, 500) || null,
+          vote_deadline: voteDeadline || null,
         })
         .select()
         .single();
