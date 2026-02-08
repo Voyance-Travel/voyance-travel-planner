@@ -87,7 +87,8 @@ import type { ItineraryDay } from '@/services/itineraryActionExecutor';
 import { ItineraryValueHeader } from './ItineraryValueHeader';
 import { ItineraryUtilityBar } from './ItineraryUtilityBar';
 import { WhyWeSkippedSection } from './WhyWeSkippedSection';
-import { calculateItineraryValueStats, getDestinationSkippedItems } from '@/utils/intelligenceAnalytics';
+import { calculateItineraryValueStats } from '@/utils/intelligenceAnalytics';
+import { useSkipList } from '@/hooks/useSkipList';
 import { validateItinerary, matchesSkipList, type ValidationIssue } from '@/utils/itineraryValidator';
 import { VoyanceInsight } from './VoyanceInsight';
 import { TransitBadge } from './TransitBadge';
@@ -1059,7 +1060,7 @@ export function EditorialItinerary({
   }, [collaborators, user]);
 
   // Calculate intelligence value stats for the itinerary
-  const skippedItems = useMemo(() => getDestinationSkippedItems(destination), [destination]);
+  const { skippedItems } = useSkipList(destination);
   const valueStats = useMemo(() => calculateItineraryValueStats(days, skippedItems), [days, skippedItems]);
 
   // Dynamic itinerary validation - detect skip list violations and other issues
