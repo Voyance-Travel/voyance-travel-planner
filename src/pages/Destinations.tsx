@@ -76,56 +76,6 @@ const popularDestinations = [
   },
 ];
 
-const allDestinations = [
-  {
-    id: 'lisbon',
-    city: 'Lisbon',
-    country: 'Portugal',
-    image: 'https://images.unsplash.com/photo-1585208798174-6cedd86e019a?w=600&q=80',
-  },
-  {
-    id: 'cape-town',
-    city: 'Cape Town',
-    country: 'South Africa',
-    image: 'https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=600&q=80',
-  },
-  {
-    id: 'copenhagen',
-    city: 'Copenhagen',
-    country: 'Denmark',
-    image: 'https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=600&q=80',
-  },
-  {
-    id: 'bangkok',
-    city: 'Bangkok',
-    country: 'Thailand',
-    image: 'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=600&q=80',
-  },
-  {
-    id: 'buenos-aires',
-    city: 'Buenos Aires',
-    country: 'Argentina',
-    image: 'https://images.unsplash.com/photo-1612294037637-ec328d0e075e?w=600&q=80',
-  },
-  {
-    id: 'singapore',
-    city: 'Singapore',
-    country: 'Singapore',
-    image: 'https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=600&q=80',
-  },
-  {
-    id: 'florence',
-    city: 'Florence',
-    country: 'Italy',
-    image: 'https://images.unsplash.com/photo-1541370976299-4d24ebbc9077?w=600&q=80',
-  },
-  {
-    id: 'reykjavik',
-    city: 'Reykjavík',
-    country: 'Iceland',
-    image: 'https://images.unsplash.com/photo-1529963183134-61a90db47eaf?w=600&q=80',
-  },
-];
 
 const regions = [
   { id: 'europe', name: 'Europe', image: 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=100&h=100&fit=crop' },
@@ -408,68 +358,6 @@ export default function Destinations() {
         </div>
       </section>
       
-      {/* All Destinations */}
-      <section className="py-16 bg-muted/30">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-end justify-between mb-10">
-            <div>
-              <h2 className="text-2xl md:text-3xl font-display font-bold text-foreground mb-2">
-                All Destinations
-              </h2>
-              <p className="text-muted-foreground">
-                Every destination is ready for your custom itinerary
-              </p>
-            </div>
-            <Link 
-              to="/explore" 
-              className="hidden md:flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-            >
-              Advanced Search
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-          
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {allDestinations.map((destination, index) => (
-              <motion.div
-                key={destination.id}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.05 }}
-                className="group cursor-pointer"
-                onClick={() => handleDestinationClick(destination.id)}
-              >
-                <div className="relative aspect-[4/3] rounded-xl overflow-hidden mb-3">
-                  <DestinationImage
-                    src={destination.image}
-                    alt={destination.city}
-                    className="w-full h-full transition-transform duration-500 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                  <div className="absolute bottom-3 left-3 right-3">
-                    <h3 className="font-semibold text-white">
-                      {destination.city}
-                    </h3>
-                    <p className="text-sm text-white/80">
-                      {destination.country}
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-          
-          <div className="text-center mt-10">
-            <Link to="/explore">
-              <Button size="lg" variant="outline">
-                <Compass className="mr-2 h-4 w-4" />
-                Explore All Destinations
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </section>
     </MainLayout>
   );
 }
