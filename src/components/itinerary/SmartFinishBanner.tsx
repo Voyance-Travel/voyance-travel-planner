@@ -1,19 +1,21 @@
 /**
- * Smart Finish Banner
+ * Smart Finish Review Dialog
  * 
- * Shows DNA gap analysis teaser for manual/imported itineraries.
+ * Shows DNA gap analysis in a popup dialog for manual/imported itineraries.
  * "Your research. Our polish. $6.99"
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { 
   Sparkles, AlertTriangle, Info, CheckCircle2, 
-  Loader2, ChevronDown, ChevronUp, Zap
+  Loader2, Zap, X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -48,16 +50,15 @@ export function SmartFinishBanner({
   tripId,
   isManualMode,
   smartFinishPurchased,
-  className,
   onPurchaseComplete,
 }: SmartFinishBannerProps) {
   const [analysis, setAnalysis] = useState<GapAnalysis | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isPurchasing, setIsPurchasing] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
   const [hasAnalyzed, setHasAnalyzed] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
 
-  // Don't show if not manual mode or already purchased
   const shouldShow = isManualMode && !smartFinishPurchased;
 
   const runAnalysis = useCallback(async () => {
@@ -71,6 +72,10 @@ export function SmartFinishBanner({
       if (data) {
         setAnalysis(data);
         setHasAnalyzed(true);
+        // Auto-open dialog if gaps found
+        if (data.gapCount > 0) {
+          setIsOpen(true);
+        }
       }
     } catch (err) {
       console.error('Gap analysis failed:', err);
@@ -107,115 +112,129 @@ export function SmartFinishBanner({
     }
   };
 
+  const handleDismiss = () => {
+    setIsOpen(false);
+    setDismissed(true);
+  };
+
   if (!shouldShow) return null;
 
-  // Show compact teaser while loading or no gaps
-  if (isLoading) {
-    return (
-      <Card className={cn('border-amber-200/50 bg-amber-50/30 dark:bg-amber-950/20 dark:border-amber-800/30', className)}>
-        <CardContent className="py-4 flex items-center gap-3">
-          <Loader2 className="h-5 w-5 animate-spin text-amber-500" />
-          <p className="text-sm text-muted-foreground">Analyzing your itinerary against your Travel DNA...</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!analysis || analysis.gapCount === 0) {
-    if (hasAnalyzed) {
-      return (
-        <Card className={cn('border-green-200/50 bg-green-50/30 dark:bg-green-950/20 dark:border-green-800/30', className)}>
-          <CardContent className="py-4 flex items-center gap-3">
-            <CheckCircle2 className="h-5 w-5 text-green-500" />
-            <p className="text-sm text-foreground">Your itinerary aligns well with your Travel DNA. Nice work!</p>
-          </CardContent>
-        </Card>
-      );
-    }
-    return null;
-  }
+  // Small inline trigger button (shown when dialog is closed)
+  const triggerButton = hasAnalyzed && analysis && analysis.gapCount > 0 && !isOpen && (
+    <button
+      onClick={() => setIsOpen(true)}
+      className={cn(
+        "flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all",
+        "border border-amber-200/50 bg-amber-50/50 hover:bg-amber-100/60",
+        "dark:border-amber-800/30 dark:bg-amber-950/20 dark:hover:bg-amber-950/40",
+        "text-amber-700 dark:text-amber-300"
+      )}
+    >
+      <Sparkles className="h-4 w-4" />
+      <span>
+        {analysis.gapCount} gap{analysis.gapCount !== 1 ? 's' : ''} found
+      </span>
+      <Badge variant="outline" className="text-[10px] border-amber-300 dark:border-amber-700">
+        Review
+      </Badge>
+    </button>
+  );
 
   return (
-    <Card className={cn(
-      'border-amber-200/50 bg-gradient-to-r from-amber-50/50 to-orange-50/30',
-      'dark:from-amber-950/30 dark:to-orange-950/20 dark:border-amber-800/30',
-      'overflow-hidden',
-      className
-    )}>
-      <CardContent className="py-4 space-y-3">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3 flex-1">
-            <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/40 shrink-0 mt-0.5">
-              <Sparkles className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+    <>
+      {/* Compact inline trigger */}
+      {triggerButton}
+
+      {/* Loading state inline */}
+      {isLoading && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+          <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
+          Analyzing your itinerary...
+        </div>
+      )}
+
+      {/* No gaps — small success note */}
+      {hasAnalyzed && (!analysis || analysis.gapCount === 0) && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+          <CheckCircle2 className="h-4 w-4 text-green-500" />
+          Your itinerary aligns well with your Travel DNA.
+        </div>
+      )}
+
+      {/* Review Dialog */}
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/40">
+                <Sparkles className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <DialogTitle className="text-base">
+                  Here's what we found
+                </DialogTitle>
+                <DialogDescription className="text-xs mt-0.5">
+                  {analysis?.dnaArchetype && `Based on your ${analysis.dnaArchetype} profile, `}
+                  we spotted{' '}
+                  <span className="font-semibold text-amber-600 dark:text-amber-400">
+                    {analysis?.gapCount ?? 0} potential gap{(analysis?.gapCount ?? 0) !== 1 ? 's' : ''}
+                  </span>{' '}
+                  in your itinerary.
+                </DialogDescription>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-foreground text-sm">
-                We analyzed your itinerary against your Travel DNA
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {analysis.dnaArchetype && `As a ${analysis.dnaArchetype}, `}
-                we found{' '}
-                <span className="font-semibold text-amber-600 dark:text-amber-400">
-                  {analysis.gapCount} potential gap{analysis.gapCount !== 1 ? 's' : ''}
-                </span>
-              </p>
-            </div>
+          </DialogHeader>
+
+          {/* Gap list */}
+          <div className="space-y-2 max-h-[50vh] overflow-y-auto py-2">
+            {analysis?.gaps.map((gap, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.06 }}
+                className="flex items-start gap-2.5 p-2.5 rounded-lg bg-muted/50"
+              >
+                {severityIcon[gap.severity]}
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm text-foreground leading-snug">{gap.hint}</span>
+                  {gap.category && (
+                    <Badge variant="outline" className="ml-2 text-[10px] align-middle">
+                      {gap.category}
+                    </Badge>
+                  )}
+                </div>
+              </motion.div>
+            ))}
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="shrink-0"
-            onClick={() => setIsExpanded(!isExpanded)}
-          >
-            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </Button>
-        </div>
 
-        {/* Gap hints (always show first 2, expand for rest) */}
-        <div className="space-y-1.5 pl-[52px]">
-          {analysis.gaps.slice(0, isExpanded ? undefined : 2).map((gap, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.08 }}
-              className="flex items-start gap-2 text-sm"
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button
+              onClick={handlePurchase}
+              disabled={isPurchasing}
+              className="w-full gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 shadow-md"
             >
-              {severityIcon[gap.severity]}
-              <span className="text-muted-foreground leading-tight">{gap.hint}</span>
-            </motion.div>
-          ))}
-          {!isExpanded && analysis.gaps.length > 2 && (
-            <button 
-              onClick={() => setIsExpanded(true)}
-              className="text-xs text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
+              {isPurchasing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Zap className="h-4 w-4" />
+              )}
+              Smart Finish — $6.99
+            </Button>
+            <p className="text-[11px] text-center text-muted-foreground">
+              Your research. Our polish. Route optimization, reviews, tips & DNA fixes.
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground"
+              onClick={handleDismiss}
             >
-              +{analysis.gaps.length - 2} more gap{analysis.gaps.length - 2 !== 1 ? 's' : ''}
-            </button>
-          )}
-        </div>
-
-        {/* CTA */}
-        <div className="pl-[52px] pt-1">
-          <Button
-            onClick={handlePurchase}
-            disabled={isPurchasing}
-            className="gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 shadow-md"
-            size="sm"
-          >
-            {isPurchasing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Zap className="h-4 w-4" />
-            )}
-            Smart Finish — $6.99
-          </Button>
-          <p className="text-[11px] text-muted-foreground mt-1.5">
-            Your research. Our polish. Route optimization, reviews, tips & DNA fixes.
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+              Dismiss
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
