@@ -111,8 +111,15 @@ export function PaymentsTab({
     // Start with existing trip_members
     const merged = [...rawTripMembers];
 
-    // Always include the trip owner if not already present
-    if (ownerId && !memberUserIds.has(ownerId)) {
+    // Always include the trip owner if not already present (check userId AND name)
+    const ownerAlreadyInMembers = ownerId && (
+      memberUserIds.has(ownerId) ||
+      merged.some(m => 
+        (ownerName && m.name?.toLowerCase() === ownerName.toLowerCase()) ||
+        (ownerName && m.email?.toLowerCase() === ownerName.toLowerCase())
+      )
+    );
+    if (ownerId && !ownerAlreadyInMembers) {
       merged.unshift({
         id: `owner-${ownerId}`,
         tripId,
