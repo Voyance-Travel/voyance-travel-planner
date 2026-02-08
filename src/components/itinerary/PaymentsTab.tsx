@@ -61,7 +61,11 @@ interface PayableItem {
   amountCents: number;
   dayNumber?: number;
   payment?: TripPayment;
+  /** All payments associated with this item (for split tracking) */
+  allPayments: TripPayment[];
   assignedMemberId?: string;
+  /** All assigned member IDs (for split assignments) */
+  assignedMemberIds: string[];
 }
 
 export function PaymentsTab({ 
@@ -87,6 +91,7 @@ export function PaymentsTab({
   const [isSendingInvite, setIsSendingInvite] = useState(false);
   const [assigningItem, setAssigningItem] = useState<PayableItem | null>(null);
   const [assignMemberId, setAssignMemberId] = useState<string>('');
+  const [assignMemberIds, setAssignMemberIds] = useState<string[]>([]);
   
   // Manual entry states
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
@@ -177,31 +182,41 @@ export function PaymentsTab({
     // Flight from selection
     if (flightSelection?.totalPrice) {
       const flightId = 'flight-selection';
-      const flightPayment = payments.find(p => p.item_type === 'flight' && p.item_id === flightId);
+      const flightPayments = payments.filter(p => p.item_type === 'flight' && p.item_id === flightId);
+      const flightPayment = flightPayments[0];
+      const assignedIds = flightPayments
+        .map(p => (p as any)?.assigned_member_id)
+        .filter(Boolean) as string[];
       items.push({
         id: flightId,
         type: 'flight',
         name: `Round-trip Flight${flightSelection.outbound?.airline ? ` (${flightSelection.outbound.airline})` : ''}`,
         amountCents: Math.round((flightSelection.totalPrice || 0) * 100),
         payment: flightPayment,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        assignedMemberId: (flightPayment as any)?.assigned_member_id,
+        allPayments: flightPayments,
+        assignedMemberId: assignedIds[0],
+        assignedMemberIds: [...new Set(assignedIds)],
       });
     }
 
     // Hotel from selection
     if (hotelSelection?.totalPrice || hotelSelection?.pricePerNight) {
       const hotelId = 'hotel-selection';
-      const hotelPayment = payments.find(p => p.item_type === 'hotel' && p.item_id === hotelId);
+      const hotelPayments = payments.filter(p => p.item_type === 'hotel' && p.item_id === hotelId);
+      const hotelPayment = hotelPayments[0];
       const hotelPrice = hotelSelection.totalPrice || (hotelSelection.pricePerNight || 0) * days.length;
+      const assignedIds = hotelPayments
+        .map(p => (p as any)?.assigned_member_id)
+        .filter(Boolean) as string[];
       items.push({
         id: hotelId,
         type: 'hotel',
         name: hotelSelection.name || 'Hotel Accommodation',
         amountCents: Math.round(hotelPrice * 100),
         payment: hotelPayment,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        assignedMemberId: (hotelPayment as any)?.assigned_member_id,
+        allPayments: hotelPayments,
+        assignedMemberId: assignedIds[0],
+        assignedMemberIds: [...new Set(assignedIds)],
       });
     }
 
@@ -209,36 +224,53 @@ export function PaymentsTab({
     const manualFlights = payments.filter(p => 
       p.item_type === 'flight' && p.item_id.startsWith('manual-')
     );
+    // Group manual payments by item_id
+    const manualFlightGroups = new Map<string, TripPayment[]>();
     manualFlights.forEach(p => {
+      const group = manualFlightGroups.get(p.item_id) || [];
+      group.push(p);
+      manualFlightGroups.set(p.item_id, group);
+    });
+    manualFlightGroups.forEach((group, itemId) => {
+      const primary = group[0];
+      const assignedIds = group.map(p => (p as any)?.assigned_member_id).filter(Boolean) as string[];
       items.push({
-        id: p.item_id,
+        id: itemId,
         type: 'flight',
-        name: p.item_name,
-        amountCents: p.amount_cents,
-        payment: p,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        assignedMemberId: (p as any)?.assigned_member_id,
+        name: primary.item_name,
+        amountCents: primary.amount_cents,
+        payment: primary,
+        allPayments: group,
+        assignedMemberId: assignedIds[0],
+        assignedMemberIds: [...new Set(assignedIds)],
       });
     });
 
     const manualHotels = payments.filter(p => 
       p.item_type === 'hotel' && p.item_id.startsWith('manual-')
     );
+    const manualHotelGroups = new Map<string, TripPayment[]>();
     manualHotels.forEach(p => {
+      const group = manualHotelGroups.get(p.item_id) || [];
+      group.push(p);
+      manualHotelGroups.set(p.item_id, group);
+    });
+    manualHotelGroups.forEach((group, itemId) => {
+      const primary = group[0];
+      const assignedIds = group.map(p => (p as any)?.assigned_member_id).filter(Boolean) as string[];
       items.push({
-        id: p.item_id,
+        id: itemId,
         type: 'hotel',
-        name: p.item_name,
-        amountCents: p.amount_cents,
-        payment: p,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        assignedMemberId: (p as any)?.assigned_member_id,
+        name: primary.item_name,
+        amountCents: primary.amount_cents,
+        payment: primary,
+        allPayments: group,
+        assignedMemberId: assignedIds[0],
+        assignedMemberIds: [...new Set(assignedIds)],
       });
     });
 
-    // Activities from itinerary - include ALL activities with costs (not just bookingRequired)
-    // Filter out non-payable activities like free time, downtime, check-in/out
-    // NOTE: Transport activities WITH costs (taxis, metro, transfers) ARE included
+    // Activities from itinerary
     const NON_PAYABLE_KEYWORDS = [
       'free time', 'downtime', 'leisure time', 'at leisure', 'rest', 'sleep',
       'check-in', 'check-out', 'checkin', 'checkout', 'check in', 'check out',
@@ -250,7 +282,6 @@ export function PaymentsTab({
       day.activities.forEach(activity => {
         const cost = activity.cost?.amount || activity.estimatedCost?.amount || 0;
         if (cost > 0) {
-          // Skip non-payable activities
           const titleLower = (activity.title || '').toLowerCase();
           const catLower = (activity.type || activity.category || '').toLowerCase();
           const isNonPayable = NON_PAYABLE_KEYWORDS.some(kw => titleLower.includes(kw)) ||
@@ -258,7 +289,11 @@ export function PaymentsTab({
             activity.timeBlockType === 'downtime';
           if (isNonPayable) return;
 
-          const activityPayment = payments.find(p => p.item_type === 'activity' && p.item_id === activity.id);
+          const activityPayments = payments.filter(p => p.item_type === 'activity' && p.item_id === activity.id);
+          const activityPayment = activityPayments[0];
+          const assignedIds = activityPayments
+            .map(p => (p as any)?.assigned_member_id)
+            .filter(Boolean) as string[];
           items.push({
             id: activity.id,
             type: 'activity',
@@ -266,8 +301,9 @@ export function PaymentsTab({
             amountCents: Math.round(cost * 100),
             dayNumber: day.dayNumber,
             payment: activityPayment,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            assignedMemberId: (activityPayment as any)?.assigned_member_id,
+            allPayments: activityPayments,
+            assignedMemberId: assignedIds[0],
+            assignedMemberIds: [...new Set(assignedIds)],
           });
         }
       });
@@ -277,15 +313,24 @@ export function PaymentsTab({
     const manualActivities = payments.filter(p => 
       p.item_type === 'activity' && p.item_id.startsWith('manual-')
     );
+    const manualActivityGroups = new Map<string, TripPayment[]>();
     manualActivities.forEach(p => {
+      const group = manualActivityGroups.get(p.item_id) || [];
+      group.push(p);
+      manualActivityGroups.set(p.item_id, group);
+    });
+    manualActivityGroups.forEach((group, itemId) => {
+      const primary = group[0];
+      const assignedIds = group.map(p => (p as any)?.assigned_member_id).filter(Boolean) as string[];
       items.push({
-        id: p.item_id,
+        id: itemId,
         type: 'activity',
-        name: p.item_name,
-        amountCents: p.amount_cents,
-        payment: p,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        assignedMemberId: (p as any)?.assigned_member_id,
+        name: primary.item_name,
+        amountCents: primary.amount_cents,
+        payment: primary,
+        allPayments: group,
+        assignedMemberId: assignedIds[0],
+        assignedMemberIds: [...new Set(assignedIds)],
       });
     });
 
@@ -440,13 +485,19 @@ export function PaymentsTab({
   };
 
   const handleUnmarkPaid = async (item: PayableItem) => {
-    if (!item.payment) return;
+    if (item.allPayments.length === 0 && !item.payment) return;
 
     try {
+      const idsToDelete = item.allPayments.length > 0 
+        ? item.allPayments.map(p => p.id)
+        : item.payment ? [item.payment.id] : [];
+      
+      if (idsToDelete.length === 0) return;
+
       const { error } = await supabase
         .from('trip_payments')
         .delete()
-        .eq('id', item.payment.id);
+        .in('id', idsToDelete);
 
       if (error) throw error;
 
@@ -524,44 +575,58 @@ export function PaymentsTab({
     if (!assigningItem) return;
     
     try {
-      // Resolve synthetic collab IDs to real trip_members IDs
-      const realMemberId = assignMemberId ? await resolveRealMemberId(assignMemberId) : null;
-      
-      if (assignMemberId && !realMemberId) {
-        toast.error('Could not resolve member. Please try again.');
-        return;
-      }
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
 
-      if (assigningItem.payment) {
+      const selectedIds = assignMemberIds.length > 0 ? assignMemberIds : (assignMemberId ? [assignMemberId] : []);
+      
+      // Resolve all synthetic IDs to real member IDs
+      const resolvedIds: (string | null)[] = [];
+      for (const id of selectedIds) {
+        const realId = await resolveRealMemberId(id);
+        resolvedIds.push(realId);
+      }
+      const validResolvedIds = resolvedIds.filter(Boolean) as string[];
+
+      // Delete all existing payments for this item to replace with new split
+      if (assigningItem.allPayments.length > 0) {
+        const deleteIds = assigningItem.allPayments.map(p => p.id);
         const { error } = await supabase
           .from('trip_payments')
-          .update({ assigned_member_id: realMemberId })
-          .eq('id', assigningItem.payment.id);
-        
+          .delete()
+          .in('id', deleteIds);
         if (error) throw error;
-      } else {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('Not authenticated');
+      }
 
-        const { error } = await supabase.from('trip_payments').insert({
+      // Create new payment rows - one per assigned member with split amount
+      if (validResolvedIds.length > 0) {
+        const splitAmount = Math.round(assigningItem.amountCents / validResolvedIds.length);
+        const remainder = assigningItem.amountCents - (splitAmount * validResolvedIds.length);
+        
+        const rows = validResolvedIds.map((realMemberId, i) => ({
           trip_id: tripId,
           user_id: user.id,
           item_type: assigningItem.type,
           item_id: assigningItem.id,
           item_name: assigningItem.name,
-          amount_cents: assigningItem.amountCents,
+          amount_cents: splitAmount + (i === 0 ? remainder : 0), // Give remainder to first
           currency: 'USD',
           quantity: 1,
-          status: 'pending',
+          status: assigningItem.payment?.status || 'pending',
           assigned_member_id: realMemberId,
-        });
+        }));
 
+        const { error } = await supabase.from('trip_payments').insert(rows);
         if (error) throw error;
       }
 
-      toast.success('Assignment updated');
+      toast.success(validResolvedIds.length > 1 
+        ? `Split between ${validResolvedIds.length} members` 
+        : 'Assignment updated'
+      );
       setAssigningItem(null);
       setAssignMemberId('');
+      setAssignMemberIds([]);
       fetchPayments();
     } catch (err) {
       console.error('Error assigning member:', err);
@@ -599,7 +664,19 @@ export function PaymentsTab({
 
   const renderPayableItem = (item: PayableItem) => {
     const isPaid = item.payment?.status === 'paid';
-    const assignedMember = item.assignedMemberId ? tripMembers.find(m => m.id === item.assignedMemberId) : null;
+    const assignedMembers = item.assignedMemberIds
+      .map(id => {
+        // Try synthetic ID first, then check if a raw member maps to this ID
+        const member = tripMembers.find(m => m.id === id);
+        if (member) return member;
+        // Check if this is a raw trip_members ID that maps to a synthetic member
+        const raw = rawTripMembers.find(rm => rm.id === id);
+        if (raw?.userId) {
+          return tripMembers.find(m => m.userId === raw.userId) || null;
+        }
+        return null;
+      })
+      .filter(Boolean) as TripMember[];
     
     return (
       <motion.div
@@ -623,12 +700,6 @@ export function PaymentsTab({
             </p>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               {item.dayNumber && <span>Day {item.dayNumber}</span>}
-              {assignedMember && (
-                <span className="flex items-center gap-1 text-primary">
-                  <User className="h-3 w-3" />
-                  {getMemberName(assignedMember.id)}
-                </span>
-              )}
               {item.payment?.external_provider === 'external' && (
                 <span className="flex items-center gap-0.5">
                   <ExternalLink className="h-3 w-3" />
@@ -637,6 +708,27 @@ export function PaymentsTab({
               )}
             </div>
           </div>
+          
+          {/* Assigned member avatars */}
+          {assignedMembers.length > 0 && (
+            <div className="flex items-center -space-x-1.5 ml-1">
+              {assignedMembers.map(member => (
+                <Avatar key={member.id} className="h-6 w-6 border-2 border-background" title={member.name || member.email?.split('@')[0]}>
+                  <AvatarFallback className={cn(
+                    "text-[9px] font-medium",
+                    member.role === 'primary' ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                  )}>
+                    {getMemberInitials(member)}
+                  </AvatarFallback>
+                </Avatar>
+              ))}
+              {assignedMembers.length > 1 && (
+                <span className="text-[10px] text-muted-foreground ml-2 whitespace-nowrap">
+                  Split {assignedMembers.length} ways
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -653,10 +745,11 @@ export function PaymentsTab({
               onClick={() => {
                 setAssigningItem(item);
                 setAssignMemberId(item.assignedMemberId || '');
+                setAssignMemberIds(item.assignedMemberIds.length > 0 ? [...item.assignedMemberIds] : []);
               }}
               title="Assign to member"
             >
-              <User className="h-3.5 w-3.5" />
+              {assignedMembers.length > 0 ? <Users className="h-3.5 w-3.5" /> : <User className="h-3.5 w-3.5" />}
             </Button>
           )}
           
@@ -1134,13 +1227,13 @@ export function PaymentsTab({
         </DialogContent>
       </Dialog>
 
-      {/* Assign Member Modal */}
-      <Dialog open={!!assigningItem} onOpenChange={() => setAssigningItem(null)}>
+      {/* Assign Member Modal — Multi-select with split */}
+      <Dialog open={!!assigningItem} onOpenChange={() => { setAssigningItem(null); setAssignMemberIds([]); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Assign to Member</DialogTitle>
+            <DialogTitle>Assign to Members</DialogTitle>
             <DialogDescription>
-              Choose who is responsible for paying this item.
+              Select one or more members. Selecting multiple splits the cost equally.
             </DialogDescription>
           </DialogHeader>
           
@@ -1156,30 +1249,72 @@ export function PaymentsTab({
 
               <div className="space-y-2">
                 <Label>Assign to</Label>
-                <Select value={assignMemberId || 'unassigned'} onValueChange={(val) => setAssignMemberId(val === 'unassigned' ? '' : val)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select member" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="unassigned">Unassigned</SelectItem>
-                      {tripMembers.filter(m => m.id).map(member => (
-                        <SelectItem key={member.id} value={member.id}>
-                          {member.name || member.email?.split('@')[0]}
-                          {member.role === 'primary' && ' (Organizer)'}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {tripMembers.filter(m => m.id).map(member => {
+                    const isSelected = assignMemberIds.includes(member.id);
+                    return (
+                      <button
+                        key={member.id}
+                        type="button"
+                        onClick={() => {
+                          setAssignMemberIds(prev => 
+                            isSelected 
+                              ? prev.filter(id => id !== member.id)
+                              : [...prev, member.id]
+                          );
+                        }}
+                        className={cn(
+                          "w-full flex items-center gap-3 p-2.5 rounded-lg border transition-colors text-left",
+                          isSelected 
+                            ? "border-primary bg-primary/5" 
+                            : "border-border hover:border-muted-foreground/30"
+                        )}
+                      >
+                        <Avatar className="h-7 w-7">
+                          <AvatarFallback className={cn(
+                            "text-[10px] font-medium",
+                            isSelected ? "bg-primary text-primary-foreground" : "bg-muted"
+                          )}>
+                            {getMemberInitials(member)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {member.name || member.email?.split('@')[0]}
+                            {member.role === 'primary' && <span className="text-muted-foreground font-normal"> (Organizer)</span>}
+                          </p>
+                        </div>
+                        <div className={cn(
+                          "w-5 h-5 rounded border flex items-center justify-center transition-colors",
+                          isSelected ? "bg-primary border-primary" : "border-muted-foreground/30"
+                        )}>
+                          {isSelected && <Check className="h-3 w-3 text-primary-foreground" />}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
+
+              {/* Split preview */}
+              {assignMemberIds.length > 1 && (
+                <div className="flex items-center gap-2 p-3 bg-primary/5 border border-primary/10 rounded-lg">
+                  <Split className="h-4 w-4 text-primary shrink-0" />
+                  <p className="text-sm text-foreground">
+                    <span className="font-medium">{formatCurrency(Math.round(assigningItem.amountCents / assignMemberIds.length))}</span>
+                    {' '}per person ({assignMemberIds.length}-way split)
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setAssigningItem(null)}>
+            <Button variant="outline" onClick={() => { setAssigningItem(null); setAssignMemberIds([]); }}>
               Cancel
             </Button>
             <Button onClick={handleAssignMember}>
-              Save Assignment
+              {assignMemberIds.length > 1 ? `Split ${assignMemberIds.length} Ways` : 'Save Assignment'}
             </Button>
           </DialogFooter>
         </DialogContent>
