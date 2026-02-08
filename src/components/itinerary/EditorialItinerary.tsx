@@ -851,6 +851,18 @@ export function EditorialItinerary({
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [regeneratingDay, setRegeneratingDay] = useState<number | null>(null);
+
+  // Sync days from parent when initialDays prop changes (e.g., from ItineraryAssistant apply)
+  // Only sync if there are no unsaved local changes to avoid overwriting user edits
+  const initialDaysRef = useRef(initialDays);
+  useEffect(() => {
+    if (initialDays !== initialDaysRef.current) {
+      initialDaysRef.current = initialDays;
+      if (!hasChanges) {
+        setDays(initialDays);
+      }
+    }
+  }, [initialDays, hasChanges]);
   const [addActivityModal, setAddActivityModal] = useState<{ dayIndex: number } | null>(null);
   const [importModal, setImportModal] = useState<{ dayIndex: number } | null>(null);
   const [editActivityModal, setEditActivityModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
