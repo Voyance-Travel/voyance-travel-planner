@@ -204,7 +204,7 @@ export function ImportActivitiesModal({ isOpen, onClose, onImport, currency = 'U
           </DialogTitle>
           <DialogDescription>
             {step === 'paste' 
-              ? 'Paste an itinerary from ChatGPT, notes, or any text. One activity per line works best.'
+              ? 'Paste an itinerary from your research, notes, or any text. One activity per line works best.'
               : `${includedCount} of ${parsed.length} activities selected for import`
             }
           </DialogDescription>
