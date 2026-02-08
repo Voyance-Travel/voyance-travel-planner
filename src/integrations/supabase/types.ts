@@ -6362,6 +6362,7 @@ export type Database = {
           budget_warnings_enabled: boolean | null
           client_id: string | null
           created_at: string
+          creation_source: string | null
           destination: string
           destination_country: string | null
           destinations: Json | null
@@ -6408,6 +6409,7 @@ export type Database = {
           budget_warnings_enabled?: boolean | null
           client_id?: string | null
           created_at?: string
+          creation_source?: string | null
           destination: string
           destination_country?: string | null
           destinations?: Json | null
@@ -6454,6 +6456,7 @@ export type Database = {
           budget_warnings_enabled?: boolean | null
           client_id?: string | null
           created_at?: string
+          creation_source?: string | null
           destination?: string
           destination_country?: string | null
           destinations?: Json | null

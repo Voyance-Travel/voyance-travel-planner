@@ -1537,6 +1537,7 @@ export default function Start() {
           is_multi_city: isMultiCity || null,
           destinations: isMultiCity ? multiCityDestinations as any : null,
           transportation_preferences: isMultiCity && multiCityTransports.length > 0 ? multiCityTransports as any : null,
+          creation_source: isMultiCity ? 'multi_city' : 'single_city',
           status: 'draft',
           metadata: {
             isFirstTimeVisitor,
@@ -1741,6 +1742,7 @@ export default function Start() {
                             budget_tier: chatBudget ? (chatBudget < 750 ? 'budget' : chatBudget < 2000 ? 'moderate' : chatBudget < 4000 ? 'premium' : 'luxury') : 'moderate',
                             budget_total_cents: chatBudget ? chatBudget * 100 : null,
                             hotel_selection: hotelSelection,
+                            creation_source: 'chat',
                             status: 'draft',
                             metadata: {
                               mustDoActivities: details.mustDoActivities || null,
