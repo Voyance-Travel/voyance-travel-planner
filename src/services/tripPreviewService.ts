@@ -110,7 +110,7 @@ export async function generateTripPreview(
     const start = new Date(params.startDate);
     const end = new Date(params.endDate);
     const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    const cappedDays = Math.min(totalDays, 7);
+    const cappedDays = Math.min(totalDays, 2); // Free preview limited to 2 days
 
     // FIRST: Try static template ($0 cost)
     const template = getDestinationTemplate(params.destination);

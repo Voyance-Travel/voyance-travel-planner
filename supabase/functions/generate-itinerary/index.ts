@@ -6208,10 +6208,10 @@ serve(async (req) => {
         }
       }
       
-      // Limit free users to Day 1 only
+      // Limit free users to 2 days only — additional days require credits
       if (isFreeUser) {
-        context.totalDays = 1;
-        console.log(`[generate-full] 🔒 FREE USER: Limiting generation to Day 1 only (original: ${originalTotalDays} days)`);
+        context.totalDays = Math.min(originalTotalDays, 2);
+        console.log(`[generate-full] 🔒 FREE USER: Limiting generation to ${context.totalDays} days (original: ${originalTotalDays} days)`);
       }
 
       // Get user preferences for personalization
