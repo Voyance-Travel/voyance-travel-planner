@@ -31,8 +31,8 @@ export const CREDIT_COSTS = {
 export const STRIPE_PRODUCTS = {
   // Boost (convenience pack - upsell)
   CREDITS_100: {
-    productId: 'prod_TwGKDHs7qmtj5e',
-    priceId: 'price_1SyNnsFYxIg9jcJU8liR9U4q',
+    productId: 'prod_TwR9AgntlpQCYJ',
+    priceId: 'price_1SyYGpFYxIg9jcJUMYP9rwz7',
     name: 'Boost',
     credits: 100,
     price: 8.99,
@@ -41,8 +41,8 @@ export const STRIPE_PRODUCTS = {
   },
   // Credit Packs
   CREDITS_200: {
-    productId: 'prod_TwGK4pMK63nWTa',
-    priceId: 'price_1SyNntFYxIg9jcJUmgg1WxQj',
+    productId: 'prod_TwR9nCHSWg9NT5',
+    priceId: 'price_1SyYGqFYxIg9jcJUeICNJCfH',
     name: 'Starter',
     credits: 200,
     price: 15.99,
@@ -50,8 +50,8 @@ export const STRIPE_PRODUCTS = {
     mode: 'payment' as const,
   },
   CREDITS_500: {
-    productId: 'prod_TwGKzA5WHtXwfd',
-    priceId: 'price_1SyNnuFYxIg9jcJUxauD9duf',
+    productId: 'prod_TwR9VmuEyrc72m',
+    priceId: 'price_1SyYGrFYxIg9jcJUWfMcMkCy',
     name: 'Weekend',
     credits: 500,
     price: 29.99,
@@ -59,8 +59,8 @@ export const STRIPE_PRODUCTS = {
     mode: 'payment' as const,
   },
   CREDITS_1200: {
-    productId: 'prod_TwGKNMEjOuaSpP',
-    priceId: 'price_1SyNnvFYxIg9jcJUGCwmoN5X',
+    productId: 'prod_TwR9EUXqkaASmm',
+    priceId: 'price_1SyYGsFYxIg9jcJUyhgmYe2B',
     name: 'Explorer',
     credits: 1200,
     price: 65.99,
@@ -69,8 +69,8 @@ export const STRIPE_PRODUCTS = {
     mode: 'payment' as const,
   },
   CREDITS_2500: {
-    productId: 'prod_TwGKXEDW9zpagA',
-    priceId: 'price_1SyNnwFYxIg9jcJU6LcXq0zl',
+    productId: 'prod_TwR99NHZIBLgGM',
+    priceId: 'price_1SyYGtFYxIg9jcJUigqjmHzM',
     name: 'Adventurer',
     credits: 2500,
     price: 99.99,
