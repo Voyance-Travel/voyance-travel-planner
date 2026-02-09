@@ -27,11 +27,6 @@ interface PaymentInfo {
   paymentTips: string;
 }
 
-interface NeedToKnow {
-  visaSummary: string;
-  safetyLevel: string;
-  keyRequirement?: string;
-}
 
 interface PreviewData {
   destination: string;
@@ -41,7 +36,7 @@ interface PreviewData {
   archetypeTagline: string;
   budgetEstimate?: BudgetEstimate;
   paymentInfo?: PaymentInfo;
-  needToKnow?: NeedToKnow;
+  
 }
 
 export default function DestinationEntry() {
@@ -108,7 +103,7 @@ export default function DestinationEntry() {
         archetypeTagline: data?.archetypeTagline || "Fewer things, done well.",
         budgetEstimate: data?.budgetEstimate,
         paymentInfo: data?.paymentInfo,
-        needToKnow: data?.needToKnow,
+        
       });
     } catch (err) {
       console.error('Preview error:', err);
@@ -145,7 +140,7 @@ export default function DestinationEntry() {
         archetypeTagline={previewData.archetypeTagline}
         budgetEstimate={previewData.budgetEstimate}
         paymentInfo={previewData.paymentInfo}
-        needToKnow={previewData.needToKnow}
+        
         onTakeQuiz={handleTakeQuiz}
         onStartOver={handleStartOver}
       />
