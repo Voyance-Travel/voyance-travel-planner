@@ -6,6 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ROUTES } from '@/config/routes';
 import nolaHero1 from '@/assets/destinations/new-orleans-1.jpg';
+import denverHero from '@/assets/destinations/denver-hero.jpg';
+import baliHero from '@/assets/destinations/bali-hero.jpg';
+import romeHero from '@/assets/destinations/rome-hero.jpg';
+import tokyoHero from '@/assets/destinations/tokyo-hero.jpg';
 
 // Sample itineraries with computed intelligence metrics
 const SAMPLE_ITINERARIES = [
@@ -14,7 +18,7 @@ const SAMPLE_ITINERARIES = [
     destination: 'Denver',
     country: 'Colorado',
     duration: '3 days',
-    image: 'https://images.unsplash.com/photo-1546156929-a4c0ac411f47?w=800',
+    image: denverHero,
     archetype: 'Social Butterfly',
     archetypeCategory: 'CONNECTOR',
     budgetTier: 'Safe',
@@ -56,7 +60,7 @@ const SAMPLE_ITINERARIES = [
     destination: 'Bali',
     country: 'Indonesia',
     duration: '6 days',
-    image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=800',
+    image: baliHero,
     archetype: 'Adrenaline Architect',
     archetypeCategory: 'EXPLORER',
     budgetTier: 'Safe',
@@ -77,7 +81,7 @@ const SAMPLE_ITINERARIES = [
     destination: 'Rome',
     country: 'Italy',
     duration: '4 days',
-    image: 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=800',
+    image: romeHero,
     archetype: 'Culinary Explorer',
     archetypeCategory: 'CURATOR',
     budgetTier: 'Stretch',
@@ -98,7 +102,7 @@ const SAMPLE_ITINERARIES = [
     destination: 'Tokyo',
     country: 'Japan',
     duration: '7 days',
-    image: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800',
+    image: tokyoHero,
     archetype: 'Slow Traveler',
     archetypeCategory: 'CURATOR',
     budgetTier: 'Stretch',
