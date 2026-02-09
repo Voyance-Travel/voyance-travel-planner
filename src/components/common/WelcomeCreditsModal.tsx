@@ -142,9 +142,18 @@ export function WelcomeCreditsModal({ open, onClose }: WelcomeCreditsModalProps)
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.3 }}
-                className="text-muted-foreground mb-6"
+                className="text-muted-foreground mb-2"
               >
-                We've added some credits to get you started
+                Here are your free credits to get started.
+              </motion.p>
+
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.35 }}
+                className="text-sm text-muted-foreground mb-6"
+              >
+                You'll get <span className="font-semibold text-foreground">150 free credits every month</span> just for being a member.
               </motion.p>
 
               {/* Credit breakdown */}
