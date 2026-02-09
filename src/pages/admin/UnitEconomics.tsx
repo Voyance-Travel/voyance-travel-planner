@@ -843,7 +843,7 @@ export default function UnitEconomics() {
     const fixedPerTrip = costs.fixed.perTrip;
     const fullyLoadedCost = PAID_TRIP_COST + fixedPerTrip;
     
-    return CREDIT_TIERS.map((tierData) => {
+    return CREDIT_TIERS.filter(t => t.type !== 'group').map((tierData) => {
       const rev = tierData.price;
       return { 
         tier: tierData.key, 
@@ -1999,9 +1999,9 @@ export default function UnitEconomics() {
                 <th style={{ textAlign: "right", padding: "8px 6px", color: "#EF4444", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)", fontSize: 10 }}>
                   Free<br/><span style={{ color: "#475569", fontWeight: 400 }}>$0/cr</span>
                 </th>
-                {CREDIT_TIERS.map(t => (
+                {CREDIT_TIERS.filter(t => t.type !== 'group').map(t => (
                   <th key={t.key} style={{ textAlign: "right", padding: "8px 6px", color: t.color || "#94A3B8", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)", fontSize: 10 }}>
-                    {t.label}<br/><span style={{ color: "#475569", fontWeight: 400 }}>{t.credits > 0 ? `$${(t.price / t.credits).toFixed(3)}/cr` : 'Fixed $'}</span>
+                    {t.label}<br/><span style={{ color: "#475569", fontWeight: 400 }}>${(t.price / t.credits).toFixed(3)}/cr</span>
                   </th>
                 ))}
               </tr>
@@ -2040,28 +2040,7 @@ export default function UnitEconomics() {
                     <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)", fontSize: 11, color: "#EF4444" }}>
                       <><span style={{ color: "#64748B", fontWeight: 400, fontSize: 10 }}>$0</span>{" "}-100%</>
                     </td>
-                    {CREDIT_TIERS.map(t => {
-                      if (t.credits === 0 || t.price === 0) {
-                        // Group pools: show cost per pool instead of $/credit margin
-                        if (t.type === 'group') {
-                          const poolCredits = t.credits;
-                          const poolCost = t.estimatedCostToUs;
-                          const creditValue = poolCredits * 0.09; // at Flex 100 rate
-                          const margin = creditValue > 0 ? ((creditValue - poolCost) / creditValue) * 100 : 0;
-                          return (
-                            <td key={t.key} style={{ padding: "8px 6px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)", fontSize: 11,
-                              color: margin > 90 ? "#34D399" : margin > 70 ? "#FBBF24" : "#F87171",
-                            }}>
-                              <span style={{ color: "#94A3B8", fontWeight: 400, fontSize: 10 }}>{t.credits}cr</span>
-                            </td>
-                          );
-                        }
-                        return (
-                          <td key={t.key} style={{ padding: "8px 6px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)", fontSize: 11, color: "#64748B" }}>
-                            <span style={{ fontSize: 9 }}>N/A</span>
-                          </td>
-                        );
-                      }
+                    {CREDIT_TIERS.filter(t => t.type !== 'group').map(t => {
                       const perCredit = t.price / t.credits;
                       const userPays = (row.credits ?? 0) * perCredit;
                       const margin = userPays > 0 ? ((userPays - avgCost) / userPays) * 100 : -100;
@@ -2082,7 +2061,8 @@ export default function UnitEconomics() {
           </table>
            <p style={{ fontSize: 10, color: "#64748B", marginBottom: 24 }}>
             Each cell shows <span style={{ color: "#94A3B8" }}>user pays</span> + <span style={{ color: "#34D399" }}>margin %</span> at that tier's $/credit rate.
-            *Free caps vary by tier: Free/Flex (3/1/5/1 = 10 total), Voyager (6/2/10/2 = 20), Explorer (9/3/15/3 = 30), Adventurer (15/5/25/5 = 50). Free/Flex caps scale with trip length. Group pools share 40 free actions before pool credits are deducted.
+            *Free caps vary by tier: Free/Flex (3/1/5/1 = 10 total), Voyager (6/2/10/2 = 20), Explorer (9/3/15/3 = 30), Adventurer (15/5/25/5 = 50). Free/Flex caps scale with trip length.
+            Group tiers excluded — they use a shared credit pool model (see Group Budgets section).
           </p>
 
           {/* TIER-BASED COST BREAKDOWN TABLE */}
