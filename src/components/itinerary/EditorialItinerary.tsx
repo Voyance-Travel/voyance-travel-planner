@@ -6246,7 +6246,7 @@ function ActivityRow({
                           </DropdownMenuSub>
                         </>
                       )}
-                      {!aiLocked && (
+                      {!aiLocked && collaboratorColorMap && collaboratorColorMap.size > 0 && (
                       <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
