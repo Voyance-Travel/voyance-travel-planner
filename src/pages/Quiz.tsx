@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { consumeReturnPath } from '@/utils/authReturnPath';
+import { consumeReturnPath, saveReturnPath } from '@/utils/authReturnPath';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, ArrowRight, Check, Compass, Plane,
@@ -626,8 +626,9 @@ export default function Quiz() {
         
         <AnimatePresence mode="wait">
           {!hasStarted ? (
-            <QuizIntro key="intro" onStart={() => {
+          <QuizIntro key="intro" onStart={() => {
               if (!user) {
+                saveReturnPath('/quiz');
                 setShowAuthGate(true);
                 return;
               }
