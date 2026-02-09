@@ -10,27 +10,6 @@ import nolaHero1 from '@/assets/destinations/new-orleans-1.jpg';
 // Sample itineraries with computed intelligence metrics
 const SAMPLE_ITINERARIES = [
   {
-    id: 'rio-explorer',
-    destination: 'Rio de Janeiro',
-    country: 'Brazil',
-    duration: '5 days',
-    image: 'https://images.unsplash.com/photo-1483729558449-99ef09a8c325?w=800',
-    archetype: 'Adrenaline Architect',
-    archetypeCategory: 'EXPLORER',
-    budgetTier: 'Safe',
-    totalCost: 1750,
-    intelligence: {
-      finds: 4,
-      timingHacks: 3,
-      trapsAvoided: 3,
-    },
-    highlights: [
-      'Sunrise hike to Pedra da Gávea',
-      'Hidden samba bar in Lapa (locals only)',
-      'Street food tour through Santa Teresa',
-    ],
-  },
-  {
     id: 'denver-social',
     destination: 'Denver',
     country: 'Colorado',
@@ -137,10 +116,10 @@ const SAMPLE_ITINERARIES = [
   },
 ];
 
-const DESTINATIONS = ['Rio de Janeiro', 'Denver', 'New Orleans', 'Bali', 'Rome', 'Tokyo'];
+const DESTINATIONS = ['Denver', 'New Orleans', 'Bali', 'Rome', 'Tokyo'];
 
 // All destinations have sample itineraries
-const HAS_REAL_SAMPLE = new Set(['rio-explorer', 'denver-social', 'new-orleans-romantic', 'bali-adventurer', 'rome-foodie', 'tokyo-slow']);
+const HAS_REAL_SAMPLE = new Set(['denver-social', 'new-orleans-romantic', 'bali-adventurer', 'rome-foodie', 'tokyo-slow']);
 function ItineraryCard({ itinerary }: { itinerary: typeof SAMPLE_ITINERARIES[0] }) {
   return (
     <motion.div
@@ -255,7 +234,7 @@ function ItineraryCard({ itinerary }: { itinerary: typeof SAMPLE_ITINERARIES[0] 
 }
 
 export default function ItineraryShowcase() {
-  const [activeDestination, setActiveDestination] = useState('Rio de Janeiro');
+  const [activeDestination, setActiveDestination] = useState('Denver');
 
   return (
     <section className="py-24 px-6 bg-muted/30">
