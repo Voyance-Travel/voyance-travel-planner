@@ -161,12 +161,27 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 // Credit action to tier mapping (from Stripe metadata or known action_types)
 const PURCHASE_TIER_MAP: Record<string, string> = {
+  // Flexible packs
+  purchase_flex_100: 'flex_100',
+  purchase_flex_300: 'flex_300',
+  purchase_flex_500: 'flex_500',
+  // Voyance Club packs
+  purchase_voyager: 'voyager',
+  purchase_explorer: 'explorer',
+  purchase_adventurer: 'adventurer',
+  // Group unlocks
+  purchase_group_small: 'group_small',
+  purchase_group_medium: 'group_medium',
+  purchase_group_large: 'group_large',
+  group_unlock: 'group_unlock',
+  // Smart Finish
+  purchase_smart_finish: 'smart_finish',
+  smart_finish: 'smart_finish',
+  // Legacy
   purchase_boost: 'boost',
   purchase_single: 'single',
   purchase_starter: 'starter',
   purchase_weekend: 'weekend',
-  purchase_explorer: 'explorer',
-  purchase_adventurer: 'adventurer',
   stripe_purchase: 'unknown',
   purchase: 'unknown',
 };
