@@ -23,10 +23,12 @@ export function WelcomeBonusManager() {
   // Helper to check if welcome modal should be allowed
   const shouldShowWelcome = () => {
     if (!user) return false;
-    if (sessionStorage.getItem(POPUP_STORAGE.WELCOME_SHOWN)) return false;
-    // Per-user check: store user ID instead of generic flag
+    // Per-user session check: prevents re-showing within the same tab session
+    const shownForUser = sessionStorage.getItem(POPUP_STORAGE.WELCOME_SHOWN);
+    if (shownForUser === user.id) return false;
+    // Per-user persistent check
     const claimedBy = localStorage.getItem('voyance_welcome_bonus_claimed');
-    if (claimedBy && claimedBy === user.id) return false;
+    if (claimedBy === user.id) return false;
     if (hasClaimedBonus('welcome')) return false;
     return true;
   };
@@ -42,7 +44,7 @@ export function WelcomeBonusManager() {
       const allowed = requestPopup('welcome_credits');
       if (allowed) {
         setShowWelcomeModal(true);
-        sessionStorage.setItem(POPUP_STORAGE.WELCOME_SHOWN, 'true');
+        sessionStorage.setItem(POPUP_STORAGE.WELCOME_SHOWN, user.id);
       }
     }, 500); // Fire quickly - welcome has highest priority
     return () => clearTimeout(timer);
@@ -53,7 +55,7 @@ export function WelcomeBonusManager() {
   useEffect(() => {
     if (activePopup === 'welcome_credits' && !showWelcomeModal && shouldShowWelcome()) {
       setShowWelcomeModal(true);
-      sessionStorage.setItem(POPUP_STORAGE.WELCOME_SHOWN, 'true');
+      sessionStorage.setItem(POPUP_STORAGE.WELCOME_SHOWN, user?.id ?? 'true');
     }
   }, [activePopup, showWelcomeModal, user, hasClaimedBonus]);
 
