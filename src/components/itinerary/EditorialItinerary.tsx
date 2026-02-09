@@ -285,6 +285,8 @@ export interface EditorialItineraryProps {
   originCity?: string;
   /** Activity IDs to highlight (e.g., from chatbot suggestions) */
   highlightedActivityIds?: string[];
+  /** How this trip was created — controls which features are available */
+  creationSource?: string | null;
   onSave?: (days: EditorialDay[]) => Promise<void>;
   onRegenerateDay?: (dayNumber: number) => Promise<EditorialDay | null>;
   onBookingAdded?: () => void;
@@ -905,6 +907,7 @@ export function EditorialItinerary({
   isEditable = true,
   isPreview = false,
   originCity,
+  creationSource,
   onSave,
   onRegenerateDay,
   onBookingAdded,
@@ -2867,7 +2870,7 @@ export function EditorialItinerary({
                     onDayLock={handleDayLock}
                     onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
                     onAddActivity={() => setAddActivityModal({ dayIndex: selectedDayIndex })}
-                    onImportActivities={() => setImportModal({ dayIndex: selectedDayIndex })}
+                    onImportActivities={creationSource === 'manual_paste' ? () => setImportModal({ dayIndex: selectedDayIndex }) : undefined}
                     onTimeEdit={(dIdx, aIdx, activity) => setTimeEditModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
                     onActivityEdit={(dIdx, aIdx, activity) => setEditActivityModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
                     onPaymentRequest={onPaymentRequest}

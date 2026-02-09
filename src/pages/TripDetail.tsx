@@ -1057,6 +1057,7 @@ export default function TripDetail() {
                   })()}
                   isEditable={true}
                   isPreview={!!(trip.itinerary_data as any)?.isPreview}
+                  creationSource={trip.creation_source}
                   onBookingAdded={() => window.location.reload()}
                   onUnlockComplete={(enrichedItinerary) => {
                     // Refresh trip with enriched data — reload to re-parse
