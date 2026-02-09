@@ -1,130 +1,96 @@
 
-# Full Pricing Spec Implementation — Gap Analysis and Plan
 
-## Current State vs Spec — What's Real
+# Itinerary Flow Cleanup — Fix All Inconsistent Paths
 
-### Already Working (no changes needed)
-- Credit costs (UNLOCK_DAY: 60, SWAP: 5, REGEN: 10, AI_MESSAGE: 5, RESTAURANT: 5, HOTEL_SEARCH: 40, SMART_FINISH: 50, HOTEL_OPT: 100, MYSTERY: 15/5, TRANSPORT: 5)
-- Per-trip free action caps (10 swaps, 5 regens, 20 messages, 5 recs) via `trip_action_usage` table
-- Trip cost calculator with multi-city fees and complexity multipliers
-- Flex credit packs (100/$9, 300/$25, 500/$39) with working Stripe prices
-- Club packs structure (Voyager/Explorer/Adventurer) with base/bonus credit splits
-- Founding member tracker table + `award_founding_member` RPC
-- Credit balance tracking (`credit_balances` + `credit_ledger`)
-- Spend logic (free credits first, then purchased)
-- Monthly credit grants (150/month, 300 cap, 2-month expiry)
-- Signup bonus (150 credits)
-- Out-of-credits modal with purchase options
-- Embedded checkout flow
-- Webhook fulfillment for credit purchases
-- Pricing page with Flex + Club sections
-- `useFoundingMemberCount` hook
+## Problems Found
 
-### Needs Price Update Only (Step 1)
-| Pack | Current | New |
-|------|---------|-----|
-| Voyager | $29.99 | $49.99 |
-| Explorer | $59.99 | $89.99 |
-| Adventurer | $99.99 | $149.99 |
+### 1. Round-Up Logic Exists in TWO Places (Both Must Go)
+- **`useGenerationGate.ts` (line 135-136):** `canCoverHalf = currentBalance >= tripCost / 2` -- if user has 50%+ of trip cost, it tries to spend and falls through to full generation. This creates an unpredictable partial-payment scenario.
+- **`spend-credits/index.ts` (line 79-81):** `canCoverHalf = totalAvailable >= cost / 2` -- the FIFO deduction also has round-up logic, draining balance to 0 if user has 50%+ of cost.
 
-Create 3 new Stripe prices on existing products, update `src/config/pricing.ts` with new price IDs and amounts.
+**Fix:** Remove both. Simple rule: `balance >= cost` or BLOCKED.
 
-### Missing: New Features Required
+### 2. Preview Generation Still Calls AI for Zero-Credit Users ($0.10 wasted)
+- **`ItineraryGenerator.tsx` (line 184-217):** When gate returns `mode='preview'`, it calls `generateFullPreview()` which hits the AI. Your rule: "No credits = no AI. Do NOT call any APIs."
 
-#### A. `credit_purchases` Table + FIFO Spending (Large Change)
-**Current:** Single counter in `credit_balances` (purchased_credits, free_credits). No per-purchase expiration tracking.
-**Spec requires:** Individual purchase rows with different expiration dates (12mo for flex, never for club_base, 6mo for club_bonus), deducted in FIFO order by expiration.
+**Fix:** When gate returns `mode='preview'`, skip AI entirely. Create all days as locked placeholders and immediately show the Out of Credits modal.
 
-**What this involves:**
-1. New `credit_purchases` table with RLS
-2. Rewrite `spend-credits` edge function to query `credit_purchases` rows ordered by `expires_at ASC NULLS LAST` and deduct across rows
-3. Update `stripe-webhook` to insert into `credit_purchases` (flex = 1 row, club = 2 rows for base + bonus)
-4. Update `grant-monthly-credits` to insert a `credit_purchases` row instead of just incrementing counter
-5. Keep `credit_balances` as denormalized cache for fast reads
-6. Migration script to convert existing purchased_credits into a single `credit_purchases` row
-7. Update `useCredits` hook to optionally show breakdown by type/expiration
+### 3. `freeBuildsRemaining` Gate Blocks Users Who Have Credits
+- **`ItineraryGenerator.tsx` (line 80, 432-456):** Uses `freeBuildsRemaining` from entitlements to disable the Generate button. This is a separate counter from the generation gate's `checkIsFirstTrip()` logic. They can disagree -- user with 300 credits gets blocked because `freeBuildsRemaining = 0`.
 
-#### B. Group Unlocks (New Feature)
-**Current:** Does not exist at all. No table, no UI, no Stripe products, no cap enforcement.
-**Spec requires:** Per-trip group unlock purchase (Small $19.99 / Medium $34.99 / Large $79.99) with shared action caps (swaps, regens, chat, recs).
+**Fix:** Remove the `freeBuildsRemaining` gate entirely. The generation gate is the single source of truth (first trip check + credit balance).
 
-**What this involves:**
-1. Create 3 new Stripe products + prices for group tiers
-2. New `group_unlocks` table with RLS (collaborators can view)
-3. Add `GROUP_CAPS` and `GROUP_UNLOCK_TIERS` config to `pricing.ts`
-4. Update `spend-credits` to check group caps when a collaborator performs an action
-5. Update `stripe-webhook` to handle group unlock fulfillment
-6. Update `create-embedded-checkout` to pass group metadata (trip_id, tier)
-7. New `GroupUnlockModal` UI component
-8. New `useGroupUnlock` hook
-9. Integration with existing collaboration system
+### 4. Stale Copy References Wrong Pricing Model
+- **Line 303-304:** "Free accounts get 1 itinerary build per month" -- incorrect. Should reference 150 free credits/month.
+- **Line 447:** "You have used your free itinerary build this month. Upgrade to continue." -- incorrect. Should say "You're out of credits."
 
-#### C. `user_badges` Table (New Feature)
-**Current:** `founding_member_tracker` exists but there's no general badge system.
-**Spec requires:** `user_badges` table for club badges and founding member badges, displayed on profiles.
+### 5. `get-entitlements` Feature Flags Are Partially Stale
+- `can_swap_activity` and `can_regenerate_day` check `totalCredits >= cost` but these actions have per-trip free caps. Users should ALWAYS be allowed to click (server checks free cap). Currently a user with 0 credits gets `can_swap_activity: false` even though they have 10 free swaps per trip.
 
-**What this involves:**
-1. New `user_badges` table with RLS
-2. Update `stripe-webhook` to award badges on club pack purchase
-3. Badge display in profile UI
+**Fix:** Always return `true` for cap-gated actions. The `spend-credits` function already handles the free cap logic correctly.
 
-#### D. Voyager Perks Update (Small Change)
-**Current perks:** `['Voyance Club badge', 'Credits never expire']`
-**Spec perks:** Add "Priority support"
-
-**Explorer perks** already include "Early access to new features" -- just verify alignment.
+### 6. Auto-Start Blocked by `freeBuildsRemaining`
+- **Line 227:** `if (autoStart && !autoStartTriggered.current && user && (isPaid || freeBuildsRemaining > 0))` -- same stale gate prevents auto-start for users with credits but `freeBuildsRemaining = 0`.
 
 ---
 
-## Implementation Plan (Phased)
+## Implementation Plan
 
-### Phase 1: Stripe Prices + Config Update
-- Create 3 new Stripe prices (Voyager $49.99, Explorer $89.99, Adventurer $149.99)
-- Create 3 new Stripe products + prices for Group Unlocks (Small $19.99, Medium $34.99, Large $79.99)
-- Update `src/config/pricing.ts`:
-  - New price IDs and amounts for Club packs
-  - Add `GROUP_UNLOCK_TIERS` and `GROUP_CAPS` config
-  - Add `FREE_ACTION_CAPS` for `transport_mode_change: 5` (spec says no free cap for this, remove if present)
-  - Update Voyager perks to include "Priority support"
-  - Update `perCredit` values
+### File 1: `src/hooks/useGenerationGate.ts`
+- Remove `canCoverHalf` logic (lines 134-148)
+- Replace with simple check: `if (currentBalance < tripCost || !user)` then return `mode: 'preview'`
+- Rename `mode: 'preview'` to `mode: 'locked'` for clarity (add `'locked'` to `GenerationMode` type)
+- Update `generateDays` to 0 for locked mode (no AI generation at all)
 
-### Phase 2: Database Tables
-- Create `credit_purchases` table (id, user_id, credit_type, amount, remaining, expires_at, source, stripe_payment_id, created_at, updated_at) with RLS (SELECT only for own rows)
-- Create `group_unlocks` table (id, trip_id UNIQUE, purchased_by, tier, stripe_payment_id, caps JSONB, usage JSONB, created_at) with RLS (collaborators + owner can SELECT)
-- Create `user_badges` table (id, user_id, badge_type, awarded_at, source, UNIQUE on user_id + badge_type) with RLS (SELECT own)
-- Data migration: convert existing `credit_balances.purchased_credits` into `credit_purchases` rows for existing users
+### File 2: `supabase/functions/spend-credits/index.ts`
+- Remove round-up logic in `deductFIFO` (lines 79-81, 89)
+- Simple check: if `totalAvailable < cost`, throw `INSUFFICIENT_CREDITS`
+- Remove `effectiveCost` -- always deduct the full `cost`
+- Remove `wasRoundedUp` and `roundedUp` from response
 
-### Phase 3: Backend Edge Functions
-- **`stripe-webhook`**: Update credit_purchase fulfillment to:
-  - Insert into `credit_purchases` (flex: 1 row with 12mo expiry; club: 2 rows - base with NULL expiry, bonus with 6mo expiry)
-  - Award badges via `user_badges`
-  - Handle group unlock purchases (insert into `group_unlocks`)
-  - Continue updating `credit_balances` as denormalized cache
-- **`spend-credits`**: Rewrite deduction logic to:
-  - Query `credit_purchases WHERE remaining > 0 AND (expires_at IS NULL OR expires_at > now())` ordered by expiration
-  - Deduct FIFO across rows
-  - Update `credit_balances` totals to stay in sync
-  - For collaborator actions on group-unlocked trips, check group caps before charging
-- **`grant-monthly-credits`**: Insert a `credit_purchases` row (type: free_monthly, 2mo expiry) in addition to updating `credit_balances`
-- **`create-embedded-checkout`**: Add group unlock metadata (trip_id, tier) support
+### File 3: `src/components/itinerary/ItineraryGenerator.tsx`
+- Remove `freeBuildsRemaining` / `freeBuildsLimit` variables and all their UI (lines 80-81, 431-449, 456)
+- Remove `UsageLimitNotice` import and usage
+- Update auto-start condition (line 227) to just `autoStart && !autoStartTriggered.current && user`
+- Change preview path (lines 183-218): when `gateResult.mode === 'preview'` (or `'locked'`):
+  - Do NOT call `generateFullPreview()`
+  - Create ALL days as locked placeholders via `createLockedPlaceholderDays(startDate, 0, totalRequestedDays, destination, false)`
+  - Show the Out of Credits modal immediately via `showOutOfCredits()`
+  - Pass placeholders to `onComplete()`
+- Update sign-in prompt copy from "1 itinerary build per month" to "Your first trip includes 2 free days. Get 150 credits every month."
+- Remove the "used your free build" warning block entirely
+- Add `useOutOfCredits` import and call
 
-### Phase 4: Frontend Hooks and Components
-- Update `useCredits` to query `credit_purchases` for expiration breakdown
-- New `useGroupUnlock(tripId)` hook to check if a trip has group editing and remaining caps
-- New `GroupUnlockModal` component (auto-selects tier based on collaborator count)
-- Update `CreditBalanceCard` to show breakdown by credit type with expiration dates
-- Badge display components for profiles
+### File 4: `supabase/functions/get-entitlements/index.ts`
+- Change `can_swap_activity` to always `true` (server checks free cap)
+- Change `can_regenerate_day` to always `true` (server checks free cap)
+- Add `can_unlock_day: totalCredits >= 60` for explicit day unlock gating
+- Add `can_smart_finish: totalCredits >= 50`
+- Add `costs` object to response so frontend never hardcodes stale values:
+```
+costs: {
+  unlock_day: 60,
+  smart_finish: 50,
+  swap_activity: 5,
+  regenerate_day: 10,
+  ai_message: 5,
+  hotel_search: 40,
+}
+```
 
-### Phase 5: Pricing Page Updates
-- Update displayed prices to $49.99/$89.99/$149.99
-- Add Group Unlock section
-- Add "What credits buy" reference table
-- Update FAQ if needed
+### File 5: `src/hooks/useEntitlements.ts`
+- Update types to include `costs` and new flags (`can_unlock_day`, `can_smart_finish`)
+- Remove `freeBuildsRemaining` from QA mode defaults (or set to -1)
 
 ---
 
-## Risk Notes
-- The FIFO spending logic is the most complex change. Race conditions during concurrent spending need to be handled (use row-level locking or transactions in the edge function).
-- The `credit_balances` table stays as a fast-read cache. Both systems must stay in sync.
-- Existing users with purchased credits need a one-time migration to create their initial `credit_purchases` row.
-- Group unlock caps are shared across all collaborators on a trip, so the `spend-credits` function needs to check and increment `group_unlocks.usage` atomically.
+## Summary of Behavioral Changes
+
+| Scenario | Before | After |
+|----------|--------|-------|
+| User with 50% of trip cost | Generates full trip (drains balance) | BLOCKED -- show modal |
+| User with 0 credits, not first trip | Calls AI for preview ($0.10) | No AI call. All days locked. Modal shown. |
+| User with 300 credits, freeBuilds=0 | Generate button DISABLED | Generate button works (gate handles it) |
+| User clicks Swap with 0 credits | Button disabled (entitlements) | Button enabled, server checks free cap first |
+| Auto-start with credits but freeBuilds=0 | Does not auto-start | Auto-starts correctly |
+
