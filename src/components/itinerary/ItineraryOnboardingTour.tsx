@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { usePopupCoordination } from '@/stores/popup-coordination-store';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -128,11 +129,21 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
   const [currentStep, setCurrentStep] = useState(0);
   const [highlightRect, setHighlightRect] = useState<DOMRect | null>(null);
   const { requestPopup, closePopup } = usePopupCoordination();
+  const { user } = useAuth();
 
-  // Show tour only once ever, gated through popup coordination
+  // Clear stale tour flags when a different user signs in
   useEffect(() => {
-    const completed = localStorage.getItem(STORAGE_KEY);
-    if (completed === 'true') return;
+    if (!user) return;
+    const completedVal = localStorage.getItem(STORAGE_KEY);
+    if (completedVal && completedVal !== user.id) {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }, [user]);
+
+  // Show tour only once per user, gated through popup coordination
+  useEffect(() => {
+    if (!user) return;
+    if (localStorage.getItem(STORAGE_KEY) === user.id) return;
 
     const timer = setTimeout(() => {
       const allowed = requestPopup('itinerary_tour');
@@ -141,7 +152,7 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
       }
     }, 1000);
     return () => clearTimeout(timer);
-  }, [requestPopup]);
+  }, [user, requestPopup]);
 
   // Update highlight position when step changes
   useEffect(() => {
@@ -210,11 +221,11 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
   }, [currentStep]);
 
   const handleComplete = useCallback(() => {
-    localStorage.setItem(STORAGE_KEY, 'true');
+    if (user?.id) localStorage.setItem(STORAGE_KEY, user.id);
     setIsVisible(false);
     closePopup('itinerary_tour');
     onComplete?.();
-  }, [onComplete, closePopup]);
+  }, [onComplete, closePopup, user]);
 
   const handleSkip = useCallback(() => {
     handleComplete();

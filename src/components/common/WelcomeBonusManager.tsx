@@ -24,7 +24,9 @@ export function WelcomeBonusManager() {
   const shouldShowWelcome = () => {
     if (!user) return false;
     if (sessionStorage.getItem(POPUP_STORAGE.WELCOME_SHOWN)) return false;
-    if (localStorage.getItem('voyance_welcome_bonus_claimed')) return false;
+    // Per-user check: store user ID instead of generic flag
+    const claimedBy = localStorage.getItem('voyance_welcome_bonus_claimed');
+    if (claimedBy && claimedBy === user.id) return false;
     if (hasClaimedBonus('welcome')) return false;
     return true;
   };
@@ -58,7 +60,7 @@ export function WelcomeBonusManager() {
   const handleCloseWelcome = () => {
     setShowWelcomeModal(false);
     closePopup('welcome_credits');
-    localStorage.setItem('voyance_welcome_bonus_claimed', 'true');
+    if (user?.id) localStorage.setItem('voyance_welcome_bonus_claimed', user.id);
   };
 
   // Don't render anything if not authenticated
