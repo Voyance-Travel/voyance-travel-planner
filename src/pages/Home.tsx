@@ -6,6 +6,7 @@ import ScrollTarget from '@/components/common/ScrollTarget';
 import ValueFirstHero from '@/components/home/ValueFirstHero';
 import QuizBanner from '@/components/home/QuizBanner';
 import TheProblemSection from '@/components/home/TheProblemSection';
+import PersonalizationProof from '@/components/home/PersonalizationProof';
 import TheInsightSection from '@/components/home/TheInsightSection';
 import SampleArchetype from '@/components/home/SampleArchetype';
 import CustomizationShowcase from '@/components/home/CustomizationShowcase';
@@ -55,6 +56,9 @@ export default function Home() {
         
         {/* The Problem - Emotional resonance */}
         <TheProblemSection />
+        
+        {/* Personalization Proof - Same city, different journeys */}
+        <PersonalizationProof />
         
         {/* Sample Archetype - Travel DNA proof */}
         <SampleArchetype />
