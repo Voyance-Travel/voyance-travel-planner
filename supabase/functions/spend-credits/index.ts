@@ -76,9 +76,8 @@ async function deductFIFO(
 
   const totalAvailable = activeRows.reduce((sum, r) => sum + r.remaining, 0);
 
-  // Round-up logic: if user has >= 50% of cost, let them proceed
-  const canCoverHalf = totalAvailable >= cost / 2;
-  if (totalAvailable < cost && !canCoverHalf) {
+  // Simple rule: must have full cost or BLOCKED
+  if (totalAvailable < cost) {
     throw Object.assign(new Error('Insufficient credits'), {
       code: 'INSUFFICIENT_CREDITS',
       required: cost,
@@ -86,8 +85,7 @@ async function deductFIFO(
     });
   }
 
-  const effectiveCost = Math.min(cost, totalAvailable);
-  let remaining = effectiveCost;
+  let remaining = cost;
   const deductions: Array<{ id: string; deducted: number }> = [];
 
   for (const row of activeRows) {
@@ -112,7 +110,7 @@ async function deductFIFO(
     }
   }
 
-  return { deducted: effectiveCost, purchases: deductions };
+  return { deducted: cost, purchases: deductions };
 }
 
 /**
@@ -398,8 +396,6 @@ serve(async (req) => {
       throw err;
     }
 
-    const wasRoundedUp = deductResult.deducted < cost;
-
     // ── Sync balance cache ──
     const balance = await syncBalanceCache(supabaseAdmin, user.id);
 
@@ -414,13 +410,12 @@ serve(async (req) => {
         action_type: action,
         trip_id: tripId || null,
         activity_id: activityId || null,
-        notes: `${action.replace(/_/g, ' ')} - ${deductResult.deducted} credits${wasRoundedUp ? ` (rounded up from ${deductResult.deducted}/${cost})` : ''}`,
+        notes: `${action.replace(/_/g, ' ')} - ${deductResult.deducted} credits`,
         metadata: {
           ...metadata,
           day_index: dayIndex,
           is_variable_cost: isVariable,
           original_cost: cost,
-          rounded_up: wasRoundedUp,
           fifo_deductions: deductResult.purchases,
         },
       });
@@ -430,8 +425,6 @@ serve(async (req) => {
         success: true,
         spent: deductResult.deducted,
         action,
-        roundedUp: wasRoundedUp,
-        originalCost: wasRoundedUp ? cost : undefined,
         newBalance: { total: balance.total, purchased: balance.purchased, free: balance.free },
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

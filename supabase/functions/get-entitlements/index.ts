@@ -20,11 +20,14 @@ const PRICE_TO_PLAN: Record<string, { plan: string; type: 'subscription' | 'paym
   'price_1RpYWpFYxIg9jcJUPrSLmFsu': { plan: 'yearly', type: 'subscription' },
 };
 
-// Credit costs for feature flags (v2 pricing)
+// Credit costs for feature flags (v2 pricing) — single source of truth
 const CREDIT_COSTS = {
+  unlock_day: 60,
+  smart_finish: 50,
   swap_activity: 5,
   regenerate_day: 10,
-  hotel_search_per_city: 40,
+  ai_message: 5,
+  hotel_search: 40,
   base_rate_per_day: 60,
 };
 
@@ -225,15 +228,19 @@ serve(async (req) => {
       unlocked_trips: unlockedTrips,
       
       // Feature flags - v2 credit-based checks
-      // Trip generation: paid users always can; free users need enough credits for at least a 1-day trip (60 credits)
       can_build_itinerary: activePlan !== 'free' || freeBuildsRemaining > 0 || totalCredits >= CREDIT_COSTS.base_rate_per_day,
-      can_swap_activity: activePlan !== 'free' || totalCredits >= CREDIT_COSTS.swap_activity,
-      can_regenerate_day: activePlan !== 'free' || totalCredits >= CREDIT_COSTS.regenerate_day,
-      can_search_hotels: activePlan !== 'free' || totalCredits >= CREDIT_COSTS.hotel_search_per_city,
+      can_swap_activity: true, // Always allow — server checks free cap first
+      can_regenerate_day: true, // Always allow — server checks free cap first
+      can_unlock_day: totalCredits >= CREDIT_COSTS.unlock_day,
+      can_smart_finish: totalCredits >= CREDIT_COSTS.smart_finish,
+      can_search_hotels: activePlan !== 'free' || totalCredits >= CREDIT_COSTS.hotel_search,
       can_use_flight_hotel_optimization: limits.flightHotelOptimization,
       can_use_group_budgeting: limits.groupBudgeting,
       can_co_edit: limits.coEditCollaboration,
       can_optimize_routes: limits.routeOptimization,
+      
+      // Costs object — frontend should use these instead of hardcoding
+      costs: CREDIT_COSTS,
     };
 
     return new Response(JSON.stringify(response), {

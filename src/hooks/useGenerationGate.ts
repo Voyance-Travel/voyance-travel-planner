@@ -26,7 +26,7 @@ import { useCredits } from './useCredits';
 // TYPES
 // ============================================================================
 
-export type GenerationMode = 'full' | 'preview';
+export type GenerationMode = 'full' | 'preview' | 'locked';
 
 export interface GateResult {
   mode: GenerationMode;
@@ -129,21 +129,20 @@ export function useGenerationGate() {
 
     // ────────────────────────────────────────────────────
     // SUBSEQUENT TRIPS: Check credits
+    // Simple rule: balance >= cost or LOCKED (no AI, no API calls)
     // ────────────────────────────────────────────────────
-
-    // If user can't cover at least half the cost, skip to preview
-    const canCoverHalf = currentBalance >= tripCost / 2;
-    if ((!canCoverHalf && currentBalance < tripCost) || !user) {
+    if (!user || currentBalance < tripCost) {
       const shortfall = Math.max(0, tripCost - currentBalance);
+      console.log(`[GenerationGate] Insufficient credits: have ${currentBalance}, need ${tripCost} — LOCKED`);
       return {
-        mode: 'preview',
+        mode: 'locked',
         tripCost,
         creditsCharged: 0,
         currentBalance,
         shortfall,
         recommendedPack: getRecommendedPackForEstimate(tripCost, currentBalance),
         requestedDays: params.days,
-        generateDays: Math.min(params.days, 2),
+        generateDays: 0, // No AI generation at all
       };
     }
 
@@ -167,14 +166,14 @@ export function useGenerationGate() {
         // Network error — fall back to preview to avoid charging without generation
         console.error('[GenerationGate] Spend error:', error);
         return {
-          mode: 'preview',
+          mode: 'locked',
           tripCost,
           creditsCharged: 0,
           currentBalance,
           shortfall: 0,
           recommendedPack: null,
           requestedDays: params.days,
-          generateDays: Math.min(params.days, 2),
+          generateDays: 0,
         };
       }
 
@@ -183,28 +182,28 @@ export function useGenerationGate() {
         const available = data.available ?? currentBalance;
         const shortfall = Math.max(0, tripCost - available);
         return {
-          mode: 'preview',
+          mode: 'locked',
           tripCost,
           creditsCharged: 0,
           currentBalance: available,
           shortfall,
           recommendedPack: getRecommendedPackForEstimate(tripCost, available),
           requestedDays: params.days,
-          generateDays: Math.min(params.days, 2),
+          generateDays: 0,
         };
       }
 
       if (data?.error) {
         console.error('[GenerationGate] Spend error:', data.error);
         return {
-          mode: 'preview',
+          mode: 'locked',
           tripCost,
           creditsCharged: 0,
           currentBalance,
           shortfall: 0,
           recommendedPack: null,
           requestedDays: params.days,
-          generateDays: Math.min(params.days, 2),
+          generateDays: 0,
         };
       }
 
@@ -227,14 +226,14 @@ export function useGenerationGate() {
     } catch (err) {
       console.error('[GenerationGate] Unexpected error:', err);
       return {
-        mode: 'preview',
+        mode: 'locked',
         tripCost,
         creditsCharged: 0,
         currentBalance,
         shortfall: Math.max(0, tripCost - currentBalance),
         recommendedPack: getRecommendedPackForEstimate(tripCost, currentBalance),
         requestedDays: params.days,
-        generateDays: Math.min(params.days, 2),
+        generateDays: 0,
       };
     }
   }, [user, creditData, queryClient]);

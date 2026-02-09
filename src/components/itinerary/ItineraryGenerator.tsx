@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useItineraryGeneration, GeneratedDay, TripOverview } from '@/hooks/useItineraryGeneration';
 import type { GenerationStep } from '@/hooks/useLovableItinerary';
 import { useEntitlements } from '@/hooks/useEntitlements';
-import { UsageLimitNotice } from '@/components/common/UsageLimitNotice';
+import { useOutOfCredits } from '@/contexts/OutOfCreditsContext';
 import { PreferenceNudge, usePreferenceCompletion } from '@/components/common/PreferenceNudge';
 import { GenerationPhases } from '@/components/planner/shared/GenerationPhases';
 import { useAuth } from '@/contexts/AuthContext';
@@ -75,10 +75,11 @@ export function ItineraryGenerator({
     reset,
   } = useItineraryGeneration();
 
-  // Get entitlements for usage limits
+  // Get entitlements
   const { data: entitlements, isPaid } = useEntitlements();
-  const freeBuildsRemaining = entitlements?.limits?.freeBuildsRemaining ?? 1;
-  const freeBuildsLimit = entitlements?.limits?.fullBuilds ?? 1;
+
+  // Out of credits modal
+  const { showOutOfCredits } = useOutOfCredits();
 
   // Get auth state
   const { user } = useAuth();
@@ -133,14 +134,14 @@ export function ItineraryGenerator({
     } catch (err) {
       console.error('[ItineraryGenerator] Gate error, defaulting to preview:', err);
       gateResult = {
-        mode: 'preview',
+        mode: 'locked',
         tripCost: totalDays * 60,
         creditsCharged: 0,
         currentBalance: 0,
         shortfall: totalDays * 60,
         recommendedPack: null,
         requestedDays: totalDays,
-        generateDays: Math.min(totalDays, 2),
+        generateDays: 0,
       };
     }
 
@@ -181,40 +182,23 @@ export function ItineraryGenerator({
         await new Promise(resolve => setTimeout(resolve, 900));
         onComplete(allDays, overview);
       } else {
-        // PREVIEW GENERATION — cheap AI-only, no credits deducted
-        console.log(`[ItineraryGenerator] Generating preview (user has ${gateResult.currentBalance} credits, needs ${gateResult.tripCost})`);
+        // LOCKED — no credits, no AI, no API calls
+        console.log(`[ItineraryGenerator] LOCKED: user has ${gateResult.currentBalance} credits, needs ${gateResult.tripCost}. No AI generation.`);
         
-        const previewResponse = await generateFullPreview({
-          destination,
-          destinationCountry,
-          startDate,
-          endDate,
-          travelers,
-          tripType,
-          budgetTier,
-        });
-
+        // Create ALL days as locked placeholders (no AI call)
+        const lockedDays = createLockedPlaceholderDays(startDate, 0, totalRequestedDays, destination, false);
+        
         setPrePhase(null);
 
-        if (previewResponse.success && previewResponse.preview) {
-          // Convert preview data to GeneratedDay[] format with isPreview flag
-          const previewDays = convertPreviewToGeneratedDays(previewResponse.preview);
-          
-          // Append locked placeholder days for remaining days
-          const lockedDays = createLockedPlaceholderDays(startDate, previewDays.length, totalRequestedDays, destination, false);
-          const allDays = [...previewDays, ...lockedDays];
+        // Show out of credits modal immediately
+        showOutOfCredits({
+          creditsNeeded: gateResult.tripCost,
+          creditsAvailable: gateResult.currentBalance,
+          tripId,
+        });
 
-          // Pass to onComplete with preview metadata in overview
-          const previewOverview: TripOverview = {
-            highlights: previewResponse.preview.dnaAlignment,
-            localTips: previewResponse.preview.gatedFeatures,
-          };
-
-          await new Promise(resolve => setTimeout(resolve, 900));
-          onComplete(allDays, previewOverview);
-        } else {
-          throw new Error(previewResponse.error || 'Failed to generate preview');
-        }
+        // Pass locked placeholders to onComplete so the trip structure exists
+        onComplete(lockedDays);
       }
     } catch (err) {
       console.error('Generation failed:', err);
@@ -224,7 +208,7 @@ export function ItineraryGenerator({
   // Auto-start generation if prop is true and user has builds remaining AND is authenticated
   // BUT if user has no personalization, show warning first
   useEffect(() => {
-    if (autoStart && !autoStartTriggered.current && user && (isPaid || freeBuildsRemaining > 0)) {
+    if (autoStart && !autoStartTriggered.current && user) {
       autoStartTriggered.current = true;
       
       // If user has no/basic personalization, show warning instead of auto-starting
@@ -234,7 +218,7 @@ export function ItineraryGenerator({
         handleGenerate();
       }
     }
-  }, [autoStart, isPaid, freeBuildsRemaining, user, showPreferenceNudge]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [autoStart, user, showPreferenceNudge]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   const handleRetry = () => {
@@ -301,7 +285,7 @@ export function ItineraryGenerator({
             </div>
 
             <p className="text-xs text-muted-foreground mt-6">
-              Free accounts get 1 itinerary build per month
+              Your first trip includes 2 free days. Get 150 credits every month.
             </p>
           </div>
         </motion.div>
@@ -428,32 +412,12 @@ export function ItineraryGenerator({
             </div>
           )}
 
-          {/* Usage limit notice for free users */}
-          {!isPaid && freeBuildsRemaining > 0 && (
-            <div className="mb-6">
-              <UsageLimitNotice
-                featureName="itinerary build"
-                remaining={freeBuildsRemaining}
-                limit={freeBuildsLimit}
-                isPaid={isPaid}
-              />
-            </div>
-          )}
-
-          {/* No builds remaining warning */}
-          {!isPaid && freeBuildsRemaining <= 0 && (
-            <div className="mb-6 flex items-center gap-2 px-4 py-3 rounded-lg border border-destructive/50 bg-destructive/10 text-destructive text-sm">
-              <AlertCircle className="h-4 w-4 flex-shrink-0" />
-              <span>You have used your free itinerary build this month. Upgrade to continue.</span>
-            </div>
-          )}
           
           <div className="flex flex-col gap-3">
             <Button 
               size="lg" 
               onClick={handleGenerate} 
               className="gap-2"
-              disabled={!isPaid && freeBuildsRemaining <= 0}
             >
               <Sparkles className="h-5 w-5" />
               Generate Itinerary
