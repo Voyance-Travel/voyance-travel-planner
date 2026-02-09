@@ -5349,7 +5349,8 @@ function DayCard({
                 {day.weather.high && <span className="font-medium">{day.weather.high}°</span>}
               </div>
             )}
-            {/* Transport Details Toggle - now more prominent with text label */}
+            {/* Transport Details Toggle - hidden for preview/locked days */}
+            {!dayIsPreview && (
             <Button
               variant={showTransportDetails ? "default" : "outline"}
               size="sm"
@@ -5365,6 +5366,7 @@ function DayCard({
               <Route className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
               <span className="hidden sm:inline">{showTransportDetails ? 'Hide Routes' : 'Show Routes'}</span>
             </Button>
+            )}
             {isEditable && (
               <>
                 <Button
