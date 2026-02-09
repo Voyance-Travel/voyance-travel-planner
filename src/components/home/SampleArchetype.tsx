@@ -228,38 +228,7 @@ export default function SampleArchetype() {
           </button>
         </motion.div>
 
-        {/* Primary Quiz CTA - mobile-optimized */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ delay: 0.3 }}
-          className="bg-gradient-to-r from-primary/10 via-accent/5 to-primary/10 border border-primary/20 rounded-xl sm:rounded-2xl p-4 sm:p-6 md:p-10 text-center"
-        >
-          <div className="flex items-center justify-center gap-2 mb-2 sm:mb-3">
-            <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
-            <span className="text-[10px] sm:text-sm font-medium text-primary uppercase tracking-wider">
-              Discover Yours
-            </span>
-          </div>
-          
-          <h3 className="text-lg sm:text-xl md:text-3xl font-serif text-foreground mb-2 sm:mb-3">
-            Not sure which one you are?
-          </h3>
-          
-          <p className="text-muted-foreground mb-4 sm:mb-6 max-w-md mx-auto text-xs sm:text-base px-2">
-            Take the quiz and let us match you perfectly.
-          </p>
-          
-          <Button size="lg" className="font-sans text-sm sm:text-base px-6 sm:px-8 min-h-[48px]" onClick={() => navigate(ROUTES.QUIZ)}>
-              Take the 5-Minute Quiz
-              <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-          
-          <p className="text-[10px] sm:text-xs text-muted-foreground mt-3 sm:mt-4">
-            Take once. Your profile stays with you.
-          </p>
-        </motion.div>
+        {/* Quiz CTA removed */}
       </div>
     </section>
   );
