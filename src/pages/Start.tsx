@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { saveReturnPath } from '@/utils/authReturnPath';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -1714,6 +1715,7 @@ export default function Start() {
                           travelers: draft.travelers,
                           budgetAmount: draft.budgetAmount,
                         });
+                        saveReturnPath('/start');
                         setShowAuthGate(true);
                         return;
                       }
@@ -1792,6 +1794,7 @@ export default function Start() {
                           destinations: multiCityDestinations,
                           interCityTransports: multiCityTransports,
                         });
+                        saveReturnPath('/start');
                         setShowAuthGate(true);
                         return;
                       }
