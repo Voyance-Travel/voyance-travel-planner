@@ -1,96 +1,196 @@
 
+# Implementation Plan: Phases A + B + C (Feature Gating, Tier System, Free Actions UI)
 
-# Itinerary Flow Cleanup — Fix All Inconsistent Paths
+## Overview
 
-## Problems Found
+This rollout adds three interconnected capabilities:
+- **Phase A**: Gate premium content (photos, addresses, tips, reviews, booking links, PDF) behind purchase status
+- **Phase B**: Create a `user_tiers` table and make free action caps tier-aware
+- **Phase C**: Add `FreeActionsCounter` and `OutOfFreeActionsModal` UI components
 
-### 1. Round-Up Logic Exists in TWO Places (Both Must Go)
-- **`useGenerationGate.ts` (line 135-136):** `canCoverHalf = currentBalance >= tripCost / 2` -- if user has 50%+ of trip cost, it tries to spend and falls through to full generation. This creates an unpredictable partial-payment scenario.
-- **`spend-credits/index.ts` (line 79-81):** `canCoverHalf = totalAvailable >= cost / 2` -- the FIFO deduction also has round-up logic, draining balance to 0 if user has 50%+ of cost.
-
-**Fix:** Remove both. Simple rule: `balance >= cost` or BLOCKED.
-
-### 2. Preview Generation Still Calls AI for Zero-Credit Users ($0.10 wasted)
-- **`ItineraryGenerator.tsx` (line 184-217):** When gate returns `mode='preview'`, it calls `generateFullPreview()` which hits the AI. Your rule: "No credits = no AI. Do NOT call any APIs."
-
-**Fix:** When gate returns `mode='preview'`, skip AI entirely. Create all days as locked placeholders and immediately show the Out of Credits modal.
-
-### 3. `freeBuildsRemaining` Gate Blocks Users Who Have Credits
-- **`ItineraryGenerator.tsx` (line 80, 432-456):** Uses `freeBuildsRemaining` from entitlements to disable the Generate button. This is a separate counter from the generation gate's `checkIsFirstTrip()` logic. They can disagree -- user with 300 credits gets blocked because `freeBuildsRemaining = 0`.
-
-**Fix:** Remove the `freeBuildsRemaining` gate entirely. The generation gate is the single source of truth (first trip check + credit balance).
-
-### 4. Stale Copy References Wrong Pricing Model
-- **Line 303-304:** "Free accounts get 1 itinerary build per month" -- incorrect. Should reference 150 free credits/month.
-- **Line 447:** "You have used your free itinerary build this month. Upgrade to continue." -- incorrect. Should say "You're out of credits."
-
-### 5. `get-entitlements` Feature Flags Are Partially Stale
-- `can_swap_activity` and `can_regenerate_day` check `totalCredits >= cost` but these actions have per-trip free caps. Users should ALWAYS be allowed to click (server checks free cap). Currently a user with 0 credits gets `can_swap_activity: false` even though they have 10 free swaps per trip.
-
-**Fix:** Always return `true` for cap-gated actions. The `spend-credits` function already handles the free cap logic correctly.
-
-### 6. Auto-Start Blocked by `freeBuildsRemaining`
-- **Line 227:** `if (autoStart && !autoStartTriggered.current && user && (isPaid || freeBuildsRemaining > 0))` -- same stale gate prevents auto-start for users with credits but `freeBuildsRemaining = 0`.
+Group Unlocks stay on Stripe (Phase D skipped per margin analysis).
 
 ---
 
-## Implementation Plan
+## Phase A: Feature Gating by Purchase Status
 
-### File 1: `src/hooks/useGenerationGate.ts`
-- Remove `canCoverHalf` logic (lines 134-148)
-- Replace with simple check: `if (currentBalance < tripCost || !user)` then return `mode: 'preview'`
-- Rename `mode: 'preview'` to `mode: 'locked'` for clarity (add `'locked'` to `GenerationMode` type)
-- Update `generateDays` to 0 for locked mode (no AI generation at all)
+### What changes
 
-### File 2: `supabase/functions/spend-credits/index.ts`
-- Remove round-up logic in `deductFIFO` (lines 79-81, 89)
-- Simple check: if `totalAvailable < cost`, throw `INSUFFICIENT_CREDITS`
-- Remove `effectiveCost` -- always deduct the full `cost`
-- Remove `wasRoundedUp` and `roundedUp` from response
+Free users currently see everything on unlocked days. After this change, even on unlocked days, users who have **never purchased anything** will see locked placeholders for photos, addresses, insider tips, reviews, and booking links.
 
-### File 3: `src/components/itinerary/ItineraryGenerator.tsx`
-- Remove `freeBuildsRemaining` / `freeBuildsLimit` variables and all their UI (lines 80-81, 431-449, 456)
-- Remove `UsageLimitNotice` import and usage
-- Update auto-start condition (line 227) to just `autoStart && !autoStartTriggered.current && user`
-- Change preview path (lines 183-218): when `gateResult.mode === 'preview'` (or `'locked'`):
-  - Do NOT call `generateFullPreview()`
-  - Create ALL days as locked placeholders via `createLockedPlaceholderDays(startDate, 0, totalRequestedDays, destination, false)`
-  - Show the Out of Credits modal immediately via `showOutOfCredits()`
-  - Pass placeholders to `onComplete()`
-- Update sign-in prompt copy from "1 itinerary build per month" to "Your first trip includes 2 free days. Get 150 credits every month."
-- Remove the "used your free build" warning block entirely
-- Add `useOutOfCredits` import and call
+### Backend: `get-entitlements` edge function
 
-### File 4: `supabase/functions/get-entitlements/index.ts`
-- Change `can_swap_activity` to always `true` (server checks free cap)
-- Change `can_regenerate_day` to always `true` (server checks free cap)
-- Add `can_unlock_day: totalCredits >= 60` for explicit day unlock gating
-- Add `can_smart_finish: totalCredits >= 50`
-- Add `costs` object to response so frontend never hardcodes stale values:
+Add a `hasCompletedPurchase` check by querying `credit_purchases` for any non-free rows:
+
+```text
+SELECT 1 FROM credit_purchases
+WHERE user_id = $1
+  AND credit_type NOT IN ('free_monthly', 'signup_bonus', 'referral_bonus')
+LIMIT 1
 ```
-costs: {
-  unlock_day: 60,
-  smart_finish: 50,
-  swap_activity: 5,
-  regenerate_day: 10,
-  ai_message: 5,
-  hotel_search: 40,
+
+Return new flags in the response:
+- `has_completed_purchase: boolean`
+- `can_view_photos: boolean` (= hasCompletedPurchase)
+- `can_view_addresses: boolean`
+- `can_view_booking_links: boolean`
+- `can_view_tips: boolean`
+- `can_view_reviews: boolean`
+- `can_export_pdf: boolean`
+
+### Frontend: `useEntitlements.ts`
+
+Add new fields to `EntitlementsResponse` type:
+- `has_completed_purchase`, `can_view_photos`, `can_view_addresses`, `can_view_booking_links`, `can_view_tips`, `can_view_reviews`, `can_export_pdf`
+
+### Frontend: Activity card gating in `EditorialItinerary.tsx`
+
+Currently, `isPreview` (per-day lock) already gates these elements. The new purchase-based gate applies independently:
+
+- **Photos**: Update `shouldFetchRealPhoto` condition (line ~5755) to also require `can_view_photos` from entitlements. When false, show a `LockedPhotoPlaceholder`.
+- **Addresses**: Lines ~5987 and ~6019 already check `!isPreview`. Add `&& canViewAddresses` check. When gated, show "Unlock to see address" with lock icon.
+- **Tips/Insights**: Lines ~6042-6047 already check `!isPreview`. Add purchase gate. Show "Unlock to see insider tips" placeholder.
+- **Reviews/Ratings**: Lines ~5914-5967 show rating badges and "See Reviews" buttons. Gate behind `can_view_reviews`. Show locked badge placeholder.
+- **Booking links**: Lines ~6092-6126 show `InlineBookingActions`. Gate behind `can_view_booking_links`. Show "Unlock to book" placeholder.
+- **PDF export**: Line ~2670 already partially gates this. Add `can_export_pdf` check.
+
+### New components
+
+1. **`LockedPhotoPlaceholder.tsx`** -- Gradient background with lock icon and "Upgrade to view photos" text. Used in activity card thumbnail area.
+2. **`LockedField.tsx`** -- Compact inline component: icon + "Unlock to see [field]" + lock icon. Used for addresses, tips, reviews, booking links.
+
+Both components include a subtle CTA linking to the pricing page.
+
+### Entitlements flow through component tree
+
+`EditorialItinerary` already calls `useEntitlements()` (line ~1036). The entitlements data will be passed down to `DaySection` and `ActivityRow` as a new `purchaseGates` prop (a simple object with the boolean flags), keeping the prop interface clean.
+
+---
+
+## Phase B: Tier System and Tier-Based Free Caps
+
+### Database: Create `user_tiers` table
+
+```sql
+CREATE TABLE public.user_tiers (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  tier TEXT NOT NULL DEFAULT 'free',
+  first_purchase_at TIMESTAMPTZ,
+  highest_purchase TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.user_tiers ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can read own tier"
+  ON public.user_tiers FOR SELECT
+  USING (auth.uid() = user_id);
+```
+
+### Backend: `stripe-webhook` update
+
+After fulfilling a credit purchase, upsert into `user_tiers`:
+- Determine tier from product (flex, voyager, explorer, adventurer)
+- Only upgrade -- never downgrade (check if new tier is higher than current)
+
+Tier hierarchy: `free < flex < voyager < explorer < adventurer`
+
+### Backend: `spend-credits` update
+
+Replace the flat `FREE_CAPS` constant with a tier-aware lookup:
+
+```text
+TIER_CAPS = {
+  free:       { swap: 2,  regen: 1, ai: 4,  restaurant: 1 },
+  flex:       { swap: 2,  regen: 1, ai: 4,  restaurant: 1 },
+  voyager:    { swap: 4,  regen: 2, ai: 8,  restaurant: 2 },
+  explorer:   { swap: 6,  regen: 3, ai: 12, restaurant: 3 },
+  adventurer: { swap: 10, regen: 4, ai: 20, restaurant: 6 },
 }
 ```
 
-### File 5: `src/hooks/useEntitlements.ts`
-- Update types to include `costs` and new flags (`can_unlock_day`, `can_smart_finish`)
-- Remove `freeBuildsRemaining` from QA mode defaults (or set to -1)
+Before checking free caps, look up the user's tier from `user_tiers`. Fall back to `free` if no row exists.
+
+**Important**: Current production caps are `10/5/20/5` (flat). The new Adventurer caps are `10/4/20/6` -- nearly identical. Lower tiers get reduced caps. This is a **breaking change for free/flex users** who currently enjoy 10 free swaps and will now get 2. Consider the user experience carefully -- the spec explicitly calls for this reduction.
+
+### Backend: `get-entitlements` update
+
+Return tier info:
+- `tier: string`
+- `free_caps: { swaps, regenerates, ai_messages, restaurant_recs }`
+- `trip_usage: { swaps, regenerates, ai_messages, restaurant_recs }` (if tripId provided)
+- `remaining_free_actions: { swaps, regenerates, ai_messages, restaurant_recs }`
+
+This requires the edge function to accept an optional `tripId` query param and look up `trip_action_usage`.
 
 ---
 
-## Summary of Behavioral Changes
+## Phase C: Free Actions Counter and Out-of-Free-Actions Modal
 
-| Scenario | Before | After |
-|----------|--------|-------|
-| User with 50% of trip cost | Generates full trip (drains balance) | BLOCKED -- show modal |
-| User with 0 credits, not first trip | Calls AI for preview ($0.10) | No AI call. All days locked. Modal shown. |
-| User with 300 credits, freeBuilds=0 | Generate button DISABLED | Generate button works (gate handles it) |
-| User clicks Swap with 0 credits | Button disabled (entitlements) | Button enabled, server checks free cap first |
-| Auto-start with credits but freeBuilds=0 | Does not auto-start | Auto-starts correctly |
+### `FreeActionsCounter.tsx`
 
+A compact component showing remaining free actions per trip. Displays:
+- Swaps: X remaining
+- Regenerates: X remaining
+- AI messages: X remaining
+- Restaurant recs: X remaining
+- Club tier badge if applicable
+
+Placed in the itinerary sidebar or day header area. Shows a warning state when all free actions are exhausted, with a CTA to buy credits.
+
+### `OutOfFreeActionsModal.tsx`
+
+Triggered when a user attempts a capped action after exhausting free uses. Different from `OutOfCreditsModal`:
+- Title: "You've used your free [action]s"
+- Shows cost of continuing (e.g., "5 credits per swap")
+- If user can afford it: "Continue -- 5 credits" button
+- If user cannot: "Get more credits" button linking to pricing
+
+### Wiring into existing action handlers
+
+The swap, regenerate, AI chat, and restaurant recommendation handlers already call `spend-credits`. The response includes `freeCapUsed`, `usageCount`, and `freeCap`. Use these to:
+1. Update the `FreeActionsCounter` display after each action
+2. Show `OutOfFreeActionsModal` when `freeCapUsed` transitions from `true` to `false` (user just crossed the cap boundary)
+
+---
+
+## Files Modified
+
+| File | Changes |
+|------|---------|
+| `supabase/functions/get-entitlements/index.ts` | Add purchase check, feature flags, tier lookup, trip usage |
+| `supabase/functions/spend-credits/index.ts` | Replace flat FREE_CAPS with tier-aware lookup from user_tiers |
+| `supabase/functions/stripe-webhook/index.ts` | Upsert user_tiers on purchase fulfillment |
+| `src/hooks/useEntitlements.ts` | Add new types for feature gates, tier, caps |
+| `src/components/itinerary/EditorialItinerary.tsx` | Pass purchase gates to ActivityRow, gate photos/addresses/tips/reviews/booking |
+| `src/components/itinerary/LockedPhotoPlaceholder.tsx` | New component |
+| `src/components/itinerary/LockedField.tsx` | New component |
+| `src/components/itinerary/FreeActionsCounter.tsx` | New component |
+| `src/components/modals/OutOfFreeActionsModal.tsx` | New component |
+| Database migration | Create `user_tiers` table with RLS |
+
+## Migration: user_tiers backfill
+
+After creating the table, backfill existing users who have purchases:
+
+```sql
+INSERT INTO user_tiers (user_id, tier, first_purchase_at, highest_purchase, updated_at)
+SELECT DISTINCT cp.user_id, 'flex', MIN(cp.created_at), 'flex', NOW()
+FROM credit_purchases cp
+WHERE cp.credit_type NOT IN ('free_monthly', 'signup_bonus', 'referral_bonus')
+GROUP BY cp.user_id
+ON CONFLICT (user_id) DO NOTHING;
+```
+
+Club tier backfills would need to be matched against Stripe product IDs -- handled manually or via a one-time script.
+
+---
+
+## Risk Assessment
+
+| Risk | Mitigation |
+|------|-----------|
+| Free users lose 10 -> 2 free swaps suddenly | This is spec-intended. The reduced caps are the monetization lever. |
+| `user_tiers` lookup adds latency to `spend-credits` | Single indexed PK lookup -- negligible |
+| Existing users without tier row | Default to `free` tier caps |
+| Photo gating breaks visual appeal for free users | Category-based static fallbacks already exist in `useActivityImage` -- these will show instead |
