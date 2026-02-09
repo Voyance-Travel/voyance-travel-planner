@@ -42,7 +42,11 @@ export function SignUpForm() {
   const [error, setError] = useState('');
   
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { signup } = useAuth();
+  
+  // Check for redirect path in query param (e.g. from auth gate on /start)
+  const queryRedirect = searchParams.get('redirect') || searchParams.get('next');
   
   const passwordStrength = getPasswordStrength(password);
   
@@ -77,7 +81,7 @@ export function SignUpForm() {
     try {
       await signup(email, password, { firstName: firstName.trim(), lastName: lastName.trim() });
       // Return user to where they were; OnboardingRedirect will nudge them to take the quiz
-      navigate(consumeReturnPath('/'));
+      navigate(queryRedirect || consumeReturnPath('/'));
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create account. Please try again.';
       setError(errorMessage);
