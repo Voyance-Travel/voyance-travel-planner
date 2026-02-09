@@ -1104,7 +1104,7 @@ function FlightHotelStep({
                   )}
                   {manualHotel.pricePerNight && manualHotel.pricePerNight > 0 && (
                     <div className="text-xs text-muted-foreground">
-                      ${manualHotel.pricePerNight}/night
+                      ${manualHotel.pricePerNight} total
                       {manualHotel.includeInBudget && (
                         <span className="ml-1 text-primary">· In budget</span>
                       )}
@@ -1276,13 +1276,13 @@ function FlightHotelStep({
             {/* Price & Budget Inclusion */}
             <div className="space-y-3 pt-3 border-t border-border">
               <div>
-                <Label className="text-xs">Price per Night</Label>
+                <Label className="text-xs">Hotel Total Price</Label>
                 <div className="relative">
                   <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     type="number"
                     min={0}
-                    placeholder="e.g. 150"
+                    placeholder="e.g. 450"
                     className="pl-9"
                     value={manualHotel.pricePerNight || ''}
                     onChange={(e) => setManualHotel({ ...manualHotel, pricePerNight: e.target.value ? Number(e.target.value) : undefined })}
