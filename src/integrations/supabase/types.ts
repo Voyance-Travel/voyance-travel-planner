@@ -2207,6 +2207,48 @@ export type Database = {
         }
         Relationships: []
       }
+      credit_purchases: {
+        Row: {
+          amount: number
+          club_tier: string | null
+          created_at: string
+          credit_type: string
+          expires_at: string | null
+          id: string
+          remaining: number
+          source: string | null
+          stripe_session_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          club_tier?: string | null
+          created_at?: string
+          credit_type: string
+          expires_at?: string | null
+          id?: string
+          remaining: number
+          source?: string | null
+          stripe_session_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          club_tier?: string | null
+          created_at?: string
+          credit_type?: string
+          expires_at?: string | null
+          id?: string
+          remaining?: number
+          source?: string | null
+          stripe_session_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       credit_transactions: {
         Row: {
           action_key: string | null
@@ -3388,6 +3430,39 @@ export type Database = {
           lng?: number
           place_id?: string | null
           query_key?: string
+        }
+        Relationships: []
+      }
+      group_unlocks: {
+        Row: {
+          caps: Json
+          created_at: string
+          id: string
+          purchased_by: string
+          stripe_session_id: string | null
+          tier: string
+          trip_id: string
+          usage: Json
+        }
+        Insert: {
+          caps?: Json
+          created_at?: string
+          id?: string
+          purchased_by: string
+          stripe_session_id?: string | null
+          tier: string
+          trip_id: string
+          usage?: Json
+        }
+        Update: {
+          caps?: Json
+          created_at?: string
+          id?: string
+          purchased_by?: string
+          stripe_session_id?: string | null
+          tier?: string
+          trip_id?: string
+          usage?: Json
         }
         Relationships: []
       }
@@ -6564,6 +6639,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_badges: {
+        Row: {
+          awarded_at: string
+          badge_type: string
+          id: string
+          metadata: Json | null
+          source: string | null
+          user_id: string
+        }
+        Insert: {
+          awarded_at?: string
+          badge_type: string
+          id?: string
+          metadata?: Json | null
+          source?: string | null
+          user_id: string
+        }
+        Update: {
+          awarded_at?: string
+          badge_type?: string
+          id?: string
+          metadata?: Json | null
+          source?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       user_credit_bonuses: {
         Row: {

@@ -36,7 +36,6 @@ export const FREE_ACTION_CAPS: Record<string, number> = {
   regenerate_day: 5,
   ai_message: 20,
   restaurant_rec: 5,
-  transport_mode_change: 5,
 };
 
 // ============================================================
@@ -124,16 +123,16 @@ export type VoyanceClubPack = {
 export const VOYANCE_CLUB_PACKS: VoyanceClubPack[] = [
   {
     id: 'voyager',
-    productId: 'prod_TwRGf3nmLa70Ad',
-    priceId: 'price_1SyYNdJytioXyqq9ffAGMFYc',
+    productId: 'prod_TwpdsFwCQpA4ew',
+    priceId: 'price_1SyvxsJytioXyqq9Gzy5m2Hv',
     name: 'Voyager',
     tier: 'voyager',
     baseCredits: 500,
     bonusCredits: 100,
     totalCredits: 600,
     credits: 600,
-    price: 29.99,
-    perCredit: '0.050',
+    price: 49.99,
+    perCredit: '0.083',
     bonusExpirationMonths: 6,
     baseExpiresNever: true,
     mode: 'payment',
@@ -141,20 +140,21 @@ export const VOYANCE_CLUB_PACKS: VoyanceClubPack[] = [
     perks: [
       'Voyance Club badge',
       'Credits never expire',
+      'Priority support',
     ],
   },
   {
     id: 'explorer',
-    productId: 'prod_TwV64eVEzBSLgC',
-    priceId: 'price_1Syc6OJytioXyqq9YMJSNDyb',
+    productId: 'prod_TwpdzBlDJuJfbS',
+    priceId: 'price_1SyvxtJytioXyqq9Zlgc9GJ6',
     name: 'Explorer',
     tier: 'explorer',
     baseCredits: 1200,
     bonusCredits: 400,
     totalCredits: 1600,
     credits: 1600,
-    price: 59.99,
-    perCredit: '0.037',
+    price: 89.99,
+    perCredit: '0.056',
     bonusExpirationMonths: 6,
     baseExpiresNever: true,
     mode: 'payment',
@@ -168,16 +168,16 @@ export const VOYANCE_CLUB_PACKS: VoyanceClubPack[] = [
   },
   {
     id: 'adventurer',
-    productId: 'prod_TwRGzFgQz5RIzr',
-    priceId: 'price_1SyYNfJytioXyqq95k9ymT2X',
+    productId: 'prod_TwpdxFwT7d6EIc',
+    priceId: 'price_1SyvxuJytioXyqq9Ora5nFBS',
     name: 'Adventurer',
     tier: 'adventurer',
     baseCredits: 2500,
     bonusCredits: 700,
     totalCredits: 3200,
     credits: 3200,
-    price: 99.99,
-    perCredit: '0.031',
+    price: 149.99,
+    perCredit: '0.047',
     bonusExpirationMonths: 6,
     baseExpiresNever: true,
     mode: 'payment',
@@ -189,6 +189,91 @@ export const VOYANCE_CLUB_PACKS: VoyanceClubPack[] = [
     ],
   },
 ];
+
+// ============================================================
+// GROUP UNLOCKS — Per-trip shared editing for collaborators
+// ============================================================
+
+export type GroupUnlockTier = 'small' | 'medium' | 'large';
+
+export type GroupUnlockPack = {
+  id: string;
+  productId: string;
+  priceId: string;
+  name: string;
+  tier: GroupUnlockTier;
+  maxTravelers: number;
+  price: number;
+  mode: 'payment';
+  type: 'group_unlock';
+  caps: {
+    swap_activity: number;
+    regenerate_day: number;
+    ai_message: number;
+    restaurant_rec: number;
+  };
+};
+
+export const GROUP_UNLOCK_TIERS: GroupUnlockPack[] = [
+  {
+    id: 'group_small',
+    productId: 'prod_TwpdLWc2OUADWF',
+    priceId: 'price_1SyvxvJytioXyqq9qU0SubDW',
+    name: 'Small Group',
+    tier: 'small',
+    maxTravelers: 3,
+    price: 19.99,
+    mode: 'payment',
+    type: 'group_unlock',
+    caps: {
+      swap_activity: 15,
+      regenerate_day: 8,
+      ai_message: 30,
+      restaurant_rec: 10,
+    },
+  },
+  {
+    id: 'group_medium',
+    productId: 'prod_TwpdnmZV4SWa88',
+    priceId: 'price_1SyvxwJytioXyqq90haUDm6h',
+    name: 'Medium Group',
+    tier: 'medium',
+    maxTravelers: 6,
+    price: 34.99,
+    mode: 'payment',
+    type: 'group_unlock',
+    caps: {
+      swap_activity: 25,
+      regenerate_day: 12,
+      ai_message: 50,
+      restaurant_rec: 15,
+    },
+  },
+  {
+    id: 'group_large',
+    productId: 'prod_TwpdEoxWuAKPOB',
+    priceId: 'price_1SyvxxJytioXyqq96wrOYhKc',
+    name: 'Large Group',
+    tier: 'large',
+    maxTravelers: 99,
+    price: 79.99,
+    mode: 'payment',
+    type: 'group_unlock',
+    caps: {
+      swap_activity: 50,
+      regenerate_day: 20,
+      ai_message: 100,
+      restaurant_rec: 25,
+    },
+  },
+];
+
+// Group caps config for edge function reference
+export const GROUP_CAPS = {
+  small: { swap_activity: 15, regenerate_day: 8, ai_message: 30, restaurant_rec: 10 },
+  medium: { swap_activity: 25, regenerate_day: 12, ai_message: 50, restaurant_rec: 15 },
+  large: { swap_activity: 50, regenerate_day: 20, ai_message: 100, restaurant_rec: 25 },
+} as const;
 
 // ============================================================
 // BACKWARD-COMPATIBLE EXPORTS
@@ -284,27 +369,49 @@ export const STRIPE_PRODUCTS = {
   },
   // Voyance Club
   VOYAGER: {
-    productId: 'prod_TwRGf3nmLa70Ad',
-    priceId: 'price_1SyYNdJytioXyqq9ffAGMFYc',
+    productId: 'prod_TwpdsFwCQpA4ew',
+    priceId: 'price_1SyvxsJytioXyqq9Gzy5m2Hv',
     name: 'Voyager',
     credits: 600,
-    price: 29.99,
+    price: 49.99,
     mode: 'payment' as const,
   },
   EXPLORER: {
-    productId: 'prod_TwV64eVEzBSLgC',
-    priceId: 'price_1Syc6OJytioXyqq9YMJSNDyb',
+    productId: 'prod_TwpdzBlDJuJfbS',
+    priceId: 'price_1SyvxtJytioXyqq9Zlgc9GJ6',
     name: 'Explorer',
     credits: 1600,
-    price: 59.99,
+    price: 89.99,
     mode: 'payment' as const,
   },
   ADVENTURER: {
-    productId: 'prod_TwRGzFgQz5RIzr',
-    priceId: 'price_1SyYNfJytioXyqq95k9ymT2X',
+    productId: 'prod_TwpdxFwT7d6EIc',
+    priceId: 'price_1SyvxuJytioXyqq9Ora5nFBS',
     name: 'Adventurer',
     credits: 3200,
-    price: 99.99,
+    price: 149.99,
+    mode: 'payment' as const,
+  },
+  // Group Unlocks
+  GROUP_SMALL: {
+    productId: 'prod_TwpdLWc2OUADWF',
+    priceId: 'price_1SyvxvJytioXyqq9qU0SubDW',
+    name: 'Group Unlock - Small',
+    price: 19.99,
+    mode: 'payment' as const,
+  },
+  GROUP_MEDIUM: {
+    productId: 'prod_TwpdnmZV4SWa88',
+    priceId: 'price_1SyvxwJytioXyqq90haUDm6h',
+    name: 'Group Unlock - Medium',
+    price: 34.99,
+    mode: 'payment' as const,
+  },
+  GROUP_LARGE: {
+    productId: 'prod_TwpdEoxWuAKPOB',
+    priceId: 'price_1SyvxxJytioXyqq96wrOYhKc',
+    name: 'Group Unlock - Large',
+    price: 79.99,
     mode: 'payment' as const,
   },
   // Legacy - Travel Agent (unchanged)
