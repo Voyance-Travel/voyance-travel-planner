@@ -1,4 +1,10 @@
 import { useState, useEffect } from 'react';
+// Local hero images for sample destinations
+import denverHero from '@/assets/destinations/denver-hero.jpg';
+import nolaHero from '@/assets/destinations/new-orleans-1.jpg';
+import baliHero from '@/assets/destinations/bali-hero.jpg';
+import romeHero from '@/assets/destinations/rome-hero.jpg';
+import tokyoHero from '@/assets/destinations/tokyo-hero.jpg';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -38,10 +44,25 @@ const activityStyles: Record<ActivityType, { icon: React.ReactNode; label: strin
 // Sample destination images for carousel
 const destinationImages: Record<string, string[]> = {
   'Bali, Indonesia': [
-    'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=1200',
+    baliHero,
     'https://images.unsplash.com/photo-1555400038-63f5ba517a47?w=1200',
     'https://images.unsplash.com/photo-1552733407-5d5c46c3bb3b?w=1200',
     'https://images.unsplash.com/photo-1518548419970-58e3b4079ab2?w=1200',
+  ],
+  'Denver, Colorado': [
+    denverHero,
+    'https://images.unsplash.com/photo-1629163439121-18ada6494e00?w=1200',
+    'https://images.unsplash.com/photo-1596394516093-501ba68a0ba6?w=1200',
+  ],
+  'New Orleans, Louisiana': [
+    nolaHero,
+    'https://images.unsplash.com/photo-1568402102990-bc541580b59f?w=1200',
+    'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=1200',
+  ],
+  'Rome, Italy': [
+    romeHero,
+    'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=1200',
+    'https://images.unsplash.com/photo-1555992336-03a23c7b20ee?w=1200',
   ],
   'Kyoto, Japan': [
     'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=1200',
@@ -62,7 +83,7 @@ const destinationImages: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1483921020237-2ff51e8e4b22?w=1200',
   ],
   'Tokyo, Japan': [
-    'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=1200',
+    tokyoHero,
     'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=1200',
     'https://images.unsplash.com/photo-1536098561742-ca998e48cbcc?w=1200',
     'https://images.unsplash.com/photo-1542051841857-5f90071e7989?w=1200',
@@ -165,9 +186,7 @@ export default function SampleItinerary() {
     );
   }
 
-  const images = destinationImages[itineraryData.destination] || [
-    'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=1200'
-  ];
+  const images = destinationImages[itineraryData.destination] || [baliHero];
 
   const dailyCosts = itineraryData.days.reduce((sum, day) => sum + day.totalCost, 0);
   const totalCost = dailyCosts + itineraryData.flightCost + itineraryData.hotelCost;
