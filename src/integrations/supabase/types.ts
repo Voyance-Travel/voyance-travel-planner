@@ -7487,34 +7487,88 @@ export type Database = {
       }
       user_preferences_safe: {
         Row: {
+          accessibility_needs: string[] | null
+          accommodation_style: string | null
           activity_level: string | null
           budget_tier: string | null
+          climate_preferences: string[] | null
           created_at: string | null
+          dietary_restrictions: string[] | null
+          dining_style: string | null
+          eco_friendly: boolean | null
+          food_dislikes: string[] | null
+          food_likes: string[] | null
+          hotel_style: string | null
+          interests: string[] | null
+          mobility_level: string | null
+          planning_preference: string | null
+          preferred_regions: string[] | null
           quiz_completed: boolean | null
+          social_energy: string | null
           travel_pace: string | null
           travel_style: string | null
+          travel_vibes: string[] | null
+          traveler_type: string | null
+          trip_structure_preference: string | null
           updated_at: string | null
           user_id: string | null
+          weather_preferences: string[] | null
         }
         Insert: {
+          accessibility_needs?: string[] | null
+          accommodation_style?: string | null
           activity_level?: string | null
           budget_tier?: string | null
+          climate_preferences?: string[] | null
           created_at?: string | null
+          dietary_restrictions?: string[] | null
+          dining_style?: string | null
+          eco_friendly?: boolean | null
+          food_dislikes?: string[] | null
+          food_likes?: string[] | null
+          hotel_style?: string | null
+          interests?: string[] | null
+          mobility_level?: string | null
+          planning_preference?: string | null
+          preferred_regions?: string[] | null
           quiz_completed?: boolean | null
+          social_energy?: string | null
           travel_pace?: string | null
           travel_style?: string | null
+          travel_vibes?: string[] | null
+          traveler_type?: string | null
+          trip_structure_preference?: string | null
           updated_at?: string | null
           user_id?: string | null
+          weather_preferences?: string[] | null
         }
         Update: {
+          accessibility_needs?: string[] | null
+          accommodation_style?: string | null
           activity_level?: string | null
           budget_tier?: string | null
+          climate_preferences?: string[] | null
           created_at?: string | null
+          dietary_restrictions?: string[] | null
+          dining_style?: string | null
+          eco_friendly?: boolean | null
+          food_dislikes?: string[] | null
+          food_likes?: string[] | null
+          hotel_style?: string | null
+          interests?: string[] | null
+          mobility_level?: string | null
+          planning_preference?: string | null
+          preferred_regions?: string[] | null
           quiz_completed?: boolean | null
+          social_energy?: string | null
           travel_pace?: string | null
           travel_style?: string | null
+          travel_vibes?: string[] | null
+          traveler_type?: string | null
+          trip_structure_preference?: string | null
           updated_at?: string | null
           user_id?: string | null
+          weather_preferences?: string[] | null
         }
         Relationships: []
       }
