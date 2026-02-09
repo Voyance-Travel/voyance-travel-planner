@@ -267,7 +267,7 @@ export default function PersonalizationProof() {
 
         {/* 3-Way Archetype Toggle */}
         <div className="flex justify-center mb-8">
-          <div className="inline-flex bg-muted rounded-full p-1 gap-1 w-full max-w-lg">
+          <div className="inline-flex bg-muted rounded-full p-1 gap-1 w-full max-w-lg overflow-hidden">
             {ARCHETYPES.map((arch, idx) => {
               const Icon = arch.icon;
               const isActive = activeIdx === idx;
@@ -276,15 +276,14 @@ export default function PersonalizationProof() {
                   key={arch.id}
                   onClick={() => setActiveIdx(idx)}
                   className={cn(
-                    "flex items-center justify-center gap-1.5 flex-1 px-2 md:px-4 py-2.5 rounded-full text-[11px] md:text-sm font-medium transition-all duration-200",
+                    "flex items-center justify-center gap-1.5 flex-1 min-w-0 px-2 md:px-4 py-2.5 rounded-full text-[11px] md:text-sm font-medium transition-all duration-200",
                     isActive 
                       ? "bg-background shadow-md text-foreground" 
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
                   <Icon className={cn("h-4 w-4 shrink-0", isActive && arch.colorClass)} />
-                  <span className="truncate hidden sm:inline">{arch.name}</span>
-                  <span className="truncate sm:hidden">{arch.name.replace('The ', '')}</span>
+                  <span className="truncate">{arch.name.replace('The ', '')}</span>
                 </button>
               );
             })}
