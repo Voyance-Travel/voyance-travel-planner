@@ -75,9 +75,6 @@ export default function Home() {
         {/* Social Proof - Honest trust signals */}
         <SocialProofSection />
         
-        {/* Free Tier Visibility - Growth engine */}
-        <FreeTierSection />
-        
         {/* Final CTA - Still scrolling? */}
         <ScrollTarget id="cta-section" className="scroll-mt-16">
           <FinalCTA />
