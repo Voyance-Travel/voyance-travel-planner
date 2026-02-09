@@ -185,11 +185,22 @@ export async function searchAirports(query: string, limit = 20): Promise<Airport
  * Search destinations by city, country, or region
  */
 export async function searchDestinations(query: string, limit = 20): Promise<Destination[]> {
-  const { data, error } = await supabase
-    .from('destinations')
-    .select('*')
-    .or(`city.ilike.%${query}%,country.ilike.%${query}%,region.ilike.%${query}%`)
-    .limit(limit);
+  // Split on comma/space to handle "Lima, Peru" or "Lima Peru" style queries
+  const parts = query.split(/[,\s]+/).map(p => p.trim()).filter(p => p.length >= 2);
+  
+  let supabaseQuery = supabase.from('destinations').select('*');
+  
+  if (parts.length > 1) {
+    // Multi-part query: match ALL parts across city/country/region
+    // e.g. "Lima Peru" → city matches "Lima" AND country matches "Peru"
+    for (const part of parts) {
+      supabaseQuery = supabaseQuery.or(`city.ilike.%${part}%,country.ilike.%${part}%,region.ilike.%${part}%`);
+    }
+  } else {
+    supabaseQuery = supabaseQuery.or(`city.ilike.%${query}%,country.ilike.%${query}%,region.ilike.%${query}%`);
+  }
+
+  const { data, error } = await supabaseQuery.limit(limit);
 
   if (error) {
     console.error('[locationSearchAPI] Error:', error);
