@@ -1,10 +1,10 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plane, TrainFront, Car, Ship, Clock } from 'lucide-react';
+import { Bus, TrainFront, Car, CarTaxiFront, Ship, Clock } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 
-export type TransportMode = 'flight' | 'train' | 'car' | 'ferry' | '';
+export type TransportMode = 'flight' | 'train' | 'car' | 'ferry' | 'bus' | 'rideshare' | '';
 
 export interface TransportFormData {
   mode: TransportMode;
@@ -34,9 +34,10 @@ export const EMPTY_TRANSPORT_FORM: TransportFormData = {
 };
 
 const MODES = [
-  { value: 'flight' as const, label: 'Flight', icon: Plane },
   { value: 'train' as const, label: 'Train', icon: TrainFront },
   { value: 'car' as const, label: 'Car', icon: Car },
+  { value: 'bus' as const, label: 'Bus', icon: Bus },
+  { value: 'rideshare' as const, label: 'Rideshare', icon: CarTaxiFront },
   { value: 'ferry' as const, label: 'Ferry / Cruise', icon: Ship },
 ] as const;
 
@@ -83,13 +84,13 @@ export function TransportModeSelector({ form, onChange, destination }: Transport
             exit={{ opacity: 0, height: 0 }}
             className="space-y-3 overflow-hidden"
           >
-            {form.mode === 'flight' && (
-              <FlightFields form={form} onChange={update} destination={destination} />
-            )}
             {form.mode === 'train' && (
               <TrainFields form={form} onChange={update} destination={destination} />
             )}
             {form.mode === 'car' && (
+              <CarFields form={form} onChange={update} destination={destination} />
+            )}
+            {(form.mode === 'bus' || form.mode === 'rideshare') && (
               <CarFields form={form} onChange={update} destination={destination} />
             )}
             {form.mode === 'ferry' && (
@@ -104,16 +105,8 @@ export function TransportModeSelector({ form, onChange, destination }: Transport
 
 // --- Mode-specific field groups ---
 
-function FlightFields({ form, onChange, destination }: { form: TransportFormData; onChange: (p: Partial<TransportFormData>) => void; destination: string }) {
-  return (
-    <>
-      <TimeField label={`Arrival time in ${destination}`} value={form.arrivalTime} onChangeValue={(v) => onChange({ arrivalTime: v })} />
-      <Input placeholder="Arrival airport (e.g., NRT, FCO)" value={form.arrivalAirport} onChange={(e) => onChange({ arrivalAirport: e.target.value })} />
-      <TimeField label={`Departure time from ${destination}`} value={form.departureTime} onChangeValue={(v) => onChange({ departureTime: v })} />
-      <Input placeholder="Departure airport" value={form.departureAirport} onChange={(e) => onChange({ departureAirport: e.target.value })} />
-    </>
-  );
-}
+// Flight fields removed - platform doesn't handle flight booking
+
 
 function TrainFields({ form, onChange, destination }: { form: TransportFormData; onChange: (p: Partial<TransportFormData>) => void; destination: string }) {
   return (
@@ -162,18 +155,15 @@ function TimeField({ label, value, onChangeValue }: { label: string; value: stri
 export function buildTransportSelection(form: TransportFormData) {
   if (!form.mode || (!form.arrivalTime && !form.departureTime)) return undefined;
 
-  const terminalKey = form.mode === 'flight' ? 'airport'
-    : form.mode === 'train' ? 'station'
+  const terminalKey = form.mode === 'train' ? 'station'
     : form.mode === 'ferry' ? 'port'
     : undefined;
 
-  const arrivalTerminal = form.mode === 'flight' ? form.arrivalAirport
-    : form.mode === 'train' ? form.arrivalStation
+  const arrivalTerminal = form.mode === 'train' ? form.arrivalStation
     : form.mode === 'ferry' ? form.arrivalPort
     : undefined;
 
-  const departureTerminal = form.mode === 'flight' ? form.departureAirport
-    : form.mode === 'train' ? form.departureStation
+  const departureTerminal = form.mode === 'train' ? form.departureStation
     : form.mode === 'ferry' ? form.departurePort
     : undefined;
 
