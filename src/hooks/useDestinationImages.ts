@@ -1,6 +1,6 @@
 /**
- * Hook to fetch 2 distinct destination images for hero and mid-page sections.
- * Uses curated images directly for reliability.
+ * Hook to fetch a single destination hero image.
+ * The mid-page "second image" was removed to cut costs and fix consistency issues.
  */
 
 import { useState, useEffect, useMemo } from 'react';
@@ -9,18 +9,18 @@ import { getDestinationImages as getAPIImages } from '@/services/destinationImag
 
 interface DestinationImagesResult {
   heroImage: string | null;
+  /** @deprecated midImage has been removed — always returns null */
   midImage: string | null;
   isLoading: boolean;
 }
 
-// Helper to normalize destination strings (remove IATA codes like "(FCO)")
 function normalizeDestination(dest: string): string {
   return (dest || '')
     .replace(/\s*\([A-Z]{3}\)\s*$/i, '')
     .replace(/\b(international\s+)?airport\b/gi, '')
     .replace(/\s{2,}/g, ' ')
     .trim()
-    .toLowerCase(); // Ensure lowercase for curated image lookup
+    .toLowerCase();
 }
 
 function generateGradientDataUrl(label: string, variant: number = 0): string {
@@ -46,6 +46,26 @@ function generateGradientDataUrl(label: string, variant: number = 0): string {
   return `data:image/svg+xml;base64,${btoa(svg)}`;
 }
 
+function isBrowser(): boolean {
+  return typeof window !== 'undefined' && typeof Image !== 'undefined';
+}
+
+async function isUrlLoadable(url: string, timeoutMs: number = 4500): Promise<boolean> {
+  if (!url) return false;
+  if (url.startsWith('data:')) return true;
+  if (!isBrowser()) return true;
+
+  return await new Promise<boolean>((resolve) => {
+    const img = new Image();
+    let done = false;
+    const finish = (ok: boolean) => { if (done) return; done = true; resolve(ok); };
+    const t = window.setTimeout(() => finish(false), timeoutMs);
+    img.onload = () => { window.clearTimeout(t); finish(true); };
+    img.onerror = () => { window.clearTimeout(t); finish(false); };
+    img.src = url;
+  });
+}
+
 function hashString(input: string): number {
   let hash = 0;
   for (let i = 0; i < input.length; i++) {
@@ -54,122 +74,10 @@ function hashString(input: string): number {
   return Math.abs(hash);
 }
 
-function isBrowser(): boolean {
-  return typeof window !== 'undefined' && typeof Image !== 'undefined';
-}
-
-async function isUrlLoadable(url: string, timeoutMs: number = 4500): Promise<boolean> {
-  if (!url) return false;
-  // data: URLs always "load" for our purposes
-  if (url.startsWith('data:')) return true;
-
-  // During SSR/tests without DOM, don't block the UI; assume loadable.
-  if (!isBrowser()) return true;
-
-  return await new Promise<boolean>((resolve) => {
-    const img = new Image();
-    let done = false;
-
-    const finish = (ok: boolean) => {
-      if (done) return;
-      done = true;
-      resolve(ok);
-    };
-
-    const t = window.setTimeout(() => finish(false), timeoutMs);
-    img.onload = () => {
-      window.clearTimeout(t);
-      finish(true);
-    };
-    img.onerror = () => {
-      window.clearTimeout(t);
-      finish(false);
-    };
-    img.src = url;
-  });
-}
-
 function rotateDeterministic<T>(arr: T[], seed: string): T[] {
   if (arr.length <= 1) return arr;
   const start = hashString(seed) % arr.length;
   return [...arr.slice(start), ...arr.slice(0, start)];
-}
-
-async function pickTwoLoadableDistinct(
-  urls: string[],
-  fallbackLabel: string,
-  seed: string
-): Promise<{ hero: string; mid: string }> {
-  const unique = Array.from(new Set(urls.filter(Boolean)));
-
-  if (unique.length === 0) {
-    return {
-      hero: generateGradientDataUrl(fallbackLabel, 0),
-      mid: generateGradientDataUrl(fallbackLabel, 1),
-    };
-  }
-
-  const ordered = rotateDeterministic(unique, seed);
-
-  let hero: string | null = null;
-  for (const u of ordered) {
-    // eslint-disable-next-line no-await-in-loop
-    if (await isUrlLoadable(u)) {
-      hero = u;
-      break;
-    }
-  }
-
-  if (!hero) {
-    return {
-      hero: generateGradientDataUrl(fallbackLabel, 0),
-      mid: generateGradientDataUrl(fallbackLabel, 1),
-    };
-  }
-
-  // Pick a different, loadable mid image.
-  for (const u of ordered) {
-    if (u === hero) continue;
-    // eslint-disable-next-line no-await-in-loop
-    if (await isUrlLoadable(u)) {
-      return { hero, mid: u };
-    }
-  }
-
-  // Return null for mid so caller can fetch landmark fallback
-  return { hero, mid: null as unknown as string };
-}
-
-function pickTwoDistinct(
-  urls: string[],
-  fallbackLabel: string,
-  seed: string
-): { hero: string; mid: string } {
-  const unique = Array.from(new Set(urls.filter(Boolean)));
-
-  if (unique.length === 0) {
-    return {
-      hero: generateGradientDataUrl(fallbackLabel, 0),
-      mid: generateGradientDataUrl(fallbackLabel, 1),
-    };
-  }
-
-  if (unique.length === 1) {
-    return {
-      hero: unique[0],
-      mid: generateGradientDataUrl(fallbackLabel, 1),
-    };
-  }
-
-  const h = hashString(seed);
-  const heroIndex = h % unique.length;
-
-  // Choose a different index than heroIndex, but deterministically.
-  // Offset in range [1, unique.length - 1]
-  const offset = (h % (unique.length - 1)) + 1;
-  const midIndex = (heroIndex + offset) % unique.length;
-
-  return { hero: unique[heroIndex], mid: unique[midIndex] };
 }
 
 export function useDestinationImages(
@@ -178,7 +86,6 @@ export function useDestinationImages(
   seedKey?: string
 ): DestinationImagesResult {
   const [heroImage, setHeroImage] = useState<string | null>(null);
-  const [midImage, setMidImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const cleanDestination = useMemo(() => normalizeDestination(destination), [destination]);
@@ -195,43 +102,28 @@ export function useDestinationImages(
 
     let cancelled = false;
 
-    // Helper: get a second distinct image, preferring curated over unreliable API
-    // The API landmark fallback was returning random/irrelevant images, so we now
-    // skip it entirely and use a styled gradient as the mid-page accent instead.
-    function getMidFallback(): string {
-      return generateGradientDataUrl(cleanDestination, 1);
-    }
-
     async function fetchImages() {
       setIsLoading(true);
       try {
         const seed = seedKey || `${queryDestination}|default`;
 
-        // First, try to use curated images directly (faster and more reliable)
+        // Try curated images first
         if (hasCuratedImages(cleanDestination)) {
-          // Pull a larger set so we can avoid repeats deterministically.
-          const curatedUrls = getCuratedImages(cleanDestination, 8);
-          const chosen = await pickTwoLoadableDistinct(
-            curatedUrls,
-            cleanDestination,
-            `${seed}|curated`
-          );
-
-          let mid = chosen.mid;
-          if (!mid && chosen.hero) {
-            mid = getMidFallback();
+          const curatedUrls = getCuratedImages(cleanDestination, 4);
+          const ordered = rotateDeterministic(curatedUrls, seed);
+          
+          for (const u of ordered) {
+            if (await isUrlLoadable(u)) {
+              if (!cancelled) setHeroImage(u);
+              return;
+            }
           }
-
-          if (!cancelled) {
-            setHeroImage(chosen.hero);
-            setMidImage(mid);
-            setIsLoading(false);
-          }
+          // All curated failed — gradient
+          if (!cancelled) setHeroImage(generateGradientDataUrl(cleanDestination, 0));
           return;
         }
 
-        // For non-curated destinations, use a single API image for hero
-        // and a gradient for mid — the API's second image is often random/irrelevant
+        // Non-curated: single API image for hero
         const images = await getAPIImages({
           destination: queryDestination,
           imageType: 'hero',
@@ -245,26 +137,20 @@ export function useDestinationImages(
           : generateGradientDataUrl(cleanDestination, 0);
 
         setHeroImage(heroUrl);
-        setMidImage(generateGradientDataUrl(cleanDestination, 1));
       } catch (err) {
         console.error('[useDestinationImages] Failed to fetch images:', err);
         if (!cancelled) {
           setHeroImage(generateGradientDataUrl(cleanDestination, 0));
-          setMidImage(generateGradientDataUrl(cleanDestination, 1));
         }
       } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
+        if (!cancelled) setIsLoading(false);
       }
     }
 
     fetchImages();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [cleanDestination, queryDestination, seedKey]);
 
-  return { heroImage, midImage, isLoading };
+  // midImage kept as null for backward compatibility
+  return { heroImage, midImage: null, isLoading };
 }

@@ -1278,8 +1278,8 @@ export function EditorialItinerary({
     );
   }, [validationIssues]);
 
-  // Fetch 2 destination images for hero and mid-page sections
-  const { heroImage, midImage, isLoading: imagesLoading } = useDestinationImages(
+  // Fetch destination hero image
+  const { heroImage, isLoading: imagesLoading } = useDestinationImages(
     destination,
     destinationCountry,
     tripId
@@ -2961,13 +2961,6 @@ export function EditorialItinerary({
               tripDays={days.length}
             />
 
-            {/* Destination Mid-page Image */}
-            <DestinationMidImage 
-              destination={destination} 
-              destinationCountry={destinationCountry} 
-              imageUrl={midImage}
-              isLoading={imagesLoading}
-            />
 
             {/* FLIGHT SECTION - Editorial Style */}
             <section className="space-y-5">
@@ -3854,48 +3847,6 @@ function DestinationHeroImage({ destination, destinationCountry, imageUrl, isLoa
   );
 }
 
-// Mid-page image (second static image)
-function DestinationMidImage({ destination, destinationCountry, imageUrl, isLoading }: DestinationHeroImageProps) {
-  const [hasError, setHasError] = useState(false);
-  const cleanDestination = normalizeDestination(destination);
-  
-  const displayUrl = hasError ? generateGradientDataUrl(cleanDestination) : (imageUrl || generateGradientDataUrl(cleanDestination));
-
-  if (isLoading || !imageUrl) {
-    return (
-      <div className="relative overflow-hidden rounded-xl">
-        <div className="relative h-40 md:h-48 bg-gradient-to-br from-primary/20 to-accent/20 animate-pulse flex items-center justify-center">
-          <div className="text-center">
-            <h3 className="text-xl font-serif text-foreground">{cleanDestination}</h3>
-            {destinationCountry && (
-              <p className="text-muted-foreground text-sm">{destinationCountry}</p>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative overflow-hidden rounded-xl">
-      <div className="relative h-40 md:h-48">
-        <img
-          src={displayUrl}
-          alt={`${cleanDestination} overview`}
-          className="w-full h-full object-cover"
-          onError={() => setHasError(true)}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-        <div className="absolute bottom-4 left-4 right-4">
-          <h3 className="text-xl font-serif text-white drop-shadow-lg">{cleanDestination}</h3>
-          {destinationCountry && (
-            <p className="text-white/80 text-sm">{destinationCountry}</p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // =============================================================================
 // NEED TO KNOW SECTION COMPONENT
