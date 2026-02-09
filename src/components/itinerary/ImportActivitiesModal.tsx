@@ -1,13 +1,14 @@
 /**
  * ImportActivitiesModal — Paste text to import activities
  * Simple line-by-line parsing, no AI. User arranges manually.
+ * Supports Start Over (replace) or Merge (combine + sort by time) when day has existing activities.
  */
 
 import { useState, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { ClipboardPaste, Check, X, GripVertical } from 'lucide-react';
+import { ClipboardPaste, Check, X, RefreshCw, Merge, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ParsedActivity {
@@ -21,6 +22,8 @@ interface ParsedActivity {
   included: boolean;
 }
 
+export type ImportMode = 'replace' | 'merge';
+
 interface ImportActivitiesModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -32,8 +35,10 @@ interface ImportActivitiesModalProps {
     description?: string;
     location?: { name?: string; address?: string };
     cost?: { amount: number; currency: string };
-  }>) => void;
+  }>, mode: ImportMode) => void;
   currency?: string;
+  /** Number of existing activities on the target day — drives the merge/replace choice */
+  existingActivityCount?: number;
 }
 
 // Time patterns: "9:00 AM", "09:00", "9am", "9:00am - 10:30am", "9:00-10:30"
@@ -66,14 +71,12 @@ function normalizeTime(raw: string): string | undefined {
   if (!raw) return undefined;
   const cleaned = raw.trim().toLowerCase();
   
-  // Already 24h: "14:30"
   const match24 = cleaned.match(/^(\d{1,2}):(\d{2})$/);
   if (match24) {
     const h = parseInt(match24[1]);
     return h <= 23 ? `${h.toString().padStart(2, '0')}:${match24[2]}` : undefined;
   }
   
-  // 12h: "2:30pm", "2pm", "2:30 PM"
   const match12 = cleaned.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
   if (match12) {
     let h = parseInt(match12[1]);
@@ -84,7 +87,6 @@ function normalizeTime(raw: string): string | undefined {
     return `${h.toString().padStart(2, '0')}:${m}`;
   }
   
-  // Just a number: "9" → "09:00"
   const matchNum = cleaned.match(/^(\d{1,2})$/);
   if (matchNum) {
     const h = parseInt(matchNum[1]);
@@ -98,17 +100,12 @@ function normalizeTime(raw: string): string | undefined {
 // SMART PARSER — Handles ChatGPT / AI-formatted itineraries
 // =============================================================================
 
-// Lines that are structural noise (not actual activities)
 const SKIP_LINE_PATTERNS: RegExp[] = [
-  // Day headers: "Day 1 – Arrival", "## Day 2", "**Day 3**"
   /^[#*\s]*(?:\*\*)?day\s*\d+/i,
-  // Itinerary titles: "🌴 5-Day Aruba Itinerary", "## My Trip Plan"
   /^[#*\s🌴🏖️✈️🗺️📍]*\d+-day\s/i,
   /itinerary/i,
-  // Section dividers
   /^[-=*_]{3,}$/,
   /^#{1,4}\s*$/,
-  // Meta-commentary & explanations
   /^(?:\*\*)?why\s+this\s+works/i,
   /^(?:\*\*)?(?:pro\s+)?tips?(?:\s*:|\s+for)/i,
   /^(?:\*\*)?💡/,
@@ -117,21 +114,14 @@ const SKIP_LINE_PATTERNS: RegExp[] = [
   /^if\s+you\s+(?:want|need|like)/i,
   /^just\s+tell\s+me/i,
   /^let\s+me\s+know/i,
-  // Offer lines: "Tailor this to...", "Rework it for..."
   /^(?:tailor|rework|adjust|customize|align)\s/i,
-  // Section-only headers (single word time-of-day)
   /^(?:\*\*)?(?:morning|afternoon|evening|midday|lunch|departure|arrival|night)(?:\*\*)?$/i,
-  // Option labels: "Option A:", "Option B:"
   /^option\s+[a-c]\s*:/i,
-  // Pure formatting: "---", "***", empty bold
   /^(?:\*\*\s*\*\*|\*\*\*|---+|___+)$/,
-  // Best/avoid advisory lines
   /^(?:best|avoid|stay|book|don't)\s+(?:beaches|midday|dinner|location)/i,
-  // Bullet list suggestions at the end
   /^[-•]\s*(?:tailor|rework|align|customize)/i,
 ];
 
-// Section headers that provide time-of-day context (not activities themselves)
 const SECTION_TIME_MAP: Record<string, string> = {
   'morning': '09:00',
   'late morning': '10:30',
@@ -151,9 +141,7 @@ function detectSectionTime(line: string): string | null {
 
 function isSkipLine(line: string): boolean {
   const stripped = line.replace(/\*\*/g, '').replace(/^#+\s*/, '').trim();
-  // Very short non-content lines
   if (stripped.length <= 2) return true;
-  // Lines that are pure emoji
   if (/^[\p{Emoji}\s]+$/u.test(stripped)) return true;
   
   for (const pattern of SKIP_LINE_PATTERNS) {
@@ -164,27 +152,23 @@ function isSkipLine(line: string): boolean {
 
 function isDescriptionLine(line: string): boolean {
   const stripped = line.replace(/\*\*/g, '').replace(/^#+\s*/, '').trim();
-  // Indented sub-details, parenthetical notes, or lines starting with descriptors
-  if (/^[-•]\s/.test(line) && stripped.length < 60) return false; // Short bullets are likely activities
-  // Lines that look like parenthetical details
+  if (/^[-•]\s/.test(line) && stripped.length < 60) return false;
   if (/^[(\[]/.test(stripped)) return true;
-  // Lines that describe a previous item (starts lowercase, no verb-action pattern)
   if (/^[a-z]/.test(stripped) && stripped.length < 80) return true;
-  // Sub-bullets with pure descriptions (no proper nouns)
   if (/^[-•]\s+[a-z]/.test(line) && !/\b(?:visit|explore|go|head|drive|walk|swim|hike|tour|book|check|arrive|depart|stroll|browse|try)\b/i.test(stripped)) return true;
   return false;
 }
 
 function cleanMarkdown(line: string): string {
   return line
-    .replace(/^#+\s*/, '')        // Remove heading markers
-    .replace(/\*\*([^*]+)\*\*/g, '$1')  // Bold → plain
-    .replace(/\*([^*]+)\*/g, '$1')      // Italic → plain
-    .replace(/^[-•*]\s+/, '')     // List markers
-    .replace(/^\d+\.\s+/, '')     // Numbered lists
-    .replace(/^>\s*/, '')         // Blockquotes
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Links → text
-    .replace(/^[\p{Emoji}\s]{1,4}(?=\w)/u, '') // Leading emoji
+    .replace(/^#+\s*/, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/^[-•*]\s+/, '')
+    .replace(/^\d+\.\s+/, '')
+    .replace(/^>\s*/, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^[\p{Emoji}\s]{1,4}(?=\w)/u, '')
     .trim();
 }
 
@@ -197,21 +181,17 @@ function parsePastedText(text: string, currency: string): ParsedActivity[] {
     const raw = rawLines[i].trim();
     if (!raw) continue;
 
-    // Check if this line sets a time-of-day context
     const sectionTime = detectSectionTime(raw);
     if (sectionTime) {
       currentSectionTime = sectionTime;
       continue;
     }
 
-    // Skip noise lines
     if (isSkipLine(raw)) continue;
 
-    // Clean markdown formatting
     let workingLine = cleanMarkdown(raw);
     if (!workingLine || workingLine.length <= 2) continue;
 
-    // Check if this is a description/detail for the previous activity
     if (activities.length > 0 && isDescriptionLine(raw)) {
       const prev = activities[activities.length - 1];
       const detail = cleanMarkdown(raw);
@@ -221,7 +201,6 @@ function parsePastedText(text: string, currency: string): ParsedActivity[] {
       continue;
     }
 
-    // Extract time range
     let startTime: string | undefined;
     let endTime: string | undefined;
     const rangeMatch = workingLine.match(TIME_RANGE_PATTERN);
@@ -237,12 +216,10 @@ function parsePastedText(text: string, currency: string): ParsedActivity[] {
       }
     }
 
-    // Fall back to section time if no explicit time
     if (!startTime && currentSectionTime) {
       startTime = currentSectionTime;
     }
 
-    // Extract cost
     let costAmount = 0;
     const costMatch = workingLine.match(COST_PATTERN);
     if (costMatch) {
@@ -250,23 +227,18 @@ function parsePastedText(text: string, currency: string): ParsedActivity[] {
       workingLine = workingLine.replace(costMatch[0], '').trim();
     }
 
-    // Clean up separators
     workingLine = workingLine.replace(/^[-–—:,]\s*/, '').replace(/[-–—:,]\s*$/, '').trim();
 
-    // Skip if too short after cleanup
     if (workingLine.length <= 2) continue;
 
-    // Split title from description at first sentence break or dash
     let title = workingLine;
     let description: string | undefined;
     
-    // Parenthetical detail: "Lunch at Zeerovers (fresh seafood)"
     const parenMatch = workingLine.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
     if (parenMatch && parenMatch[1].length > 3) {
       title = parenMatch[1].trim();
       description = parenMatch[2].trim();
     } else {
-      // Dash/colon separator: "Visit Eagle Beach - great for sunsets"
       const separatorMatch = workingLine.match(/^([^-–—]+?)\s*[-–—]\s*(.+)$/);
       if (separatorMatch && separatorMatch[1].length > 3 && separatorMatch[1].length < 80) {
         title = separatorMatch[1].trim();
@@ -291,10 +263,38 @@ function parsePastedText(text: string, currency: string): ParsedActivity[] {
   return activities;
 }
 
-export function ImportActivitiesModal({ isOpen, onClose, onImport, currency = 'USD' }: ImportActivitiesModalProps) {
+// =============================================================================
+// COMPONENT
+// =============================================================================
+
+export function ImportActivitiesModal({ 
+  isOpen, onClose, onImport, currency = 'USD', existingActivityCount = 0 
+}: ImportActivitiesModalProps) {
   const [pastedText, setPastedText] = useState('');
-  const [step, setStep] = useState<'paste' | 'review'>('paste');
+  const [step, setStep] = useState<'mode' | 'paste' | 'review'>('paste');
   const [parsed, setParsed] = useState<ParsedActivity[]>([]);
+  const [importMode, setImportMode] = useState<ImportMode>('merge');
+
+  const hasExistingActivities = existingActivityCount > 0;
+
+  const handleOpen = () => {
+    // If day has activities, show mode choice first; otherwise go straight to paste
+    if (hasExistingActivities) {
+      setStep('mode');
+    } else {
+      setStep('paste');
+      setImportMode('replace'); // No existing activities, replace is the only option
+    }
+  };
+
+  // Reset to correct initial step when modal opens
+  const handleOpenChange = (open: boolean) => {
+    if (open) {
+      handleOpen();
+    } else {
+      handleClose();
+    }
+  };
 
   const handleParse = () => {
     const activities = parsePastedText(pastedText, currency);
@@ -310,7 +310,7 @@ export function ImportActivitiesModal({ isOpen, onClose, onImport, currency = 'U
     const toImport = parsed
       .filter(a => a.included)
       .map(({ included, ...rest }) => rest);
-    onImport(toImport);
+    onImport(toImport, importMode);
     handleClose();
   };
 
@@ -318,13 +318,14 @@ export function ImportActivitiesModal({ isOpen, onClose, onImport, currency = 'U
     setPastedText('');
     setParsed([]);
     setStep('paste');
+    setImportMode('merge');
     onClose();
   };
 
   const includedCount = parsed.filter(a => a.included).length;
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -332,15 +333,69 @@ export function ImportActivitiesModal({ isOpen, onClose, onImport, currency = 'U
             Import Activities
           </DialogTitle>
           <DialogDescription>
-            {step === 'paste' 
-              ? 'Paste an itinerary from your research, notes, or any text. One activity per line works best.'
-              : `${includedCount} of ${parsed.length} activities selected for import`
+            {step === 'mode' 
+              ? `This day already has ${existingActivityCount} ${existingActivityCount === 1 ? 'activity' : 'activities'}. How would you like to import?`
+              : step === 'paste'
+                ? 'Paste an itinerary from your research, notes, or any text. One activity per line works best.'
+                : `${includedCount} of ${parsed.length} activities selected for import`
             }
           </DialogDescription>
         </DialogHeader>
 
-        {step === 'paste' ? (
+        {step === 'mode' ? (
           <div className="space-y-3 py-2">
+            <button
+              onClick={() => { setImportMode('replace'); setStep('paste'); }}
+              className={cn(
+                'w-full flex items-start gap-4 p-4 rounded-xl border-2 text-left transition-all',
+                'hover:border-primary/40 hover:bg-primary/5 border-border'
+              )}
+            >
+              <div className="mt-0.5 h-10 w-10 rounded-lg bg-destructive/10 flex items-center justify-center shrink-0">
+                <RefreshCw className="h-5 w-5 text-destructive" />
+              </div>
+              <div>
+                <p className="font-semibold text-sm">Start Over</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Replace all {existingActivityCount} existing {existingActivityCount === 1 ? 'activity' : 'activities'} with the imported content
+                </p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => { setImportMode('merge'); setStep('paste'); }}
+              className={cn(
+                'w-full flex items-start gap-4 p-4 rounded-xl border-2 text-left transition-all',
+                'hover:border-primary/40 hover:bg-primary/5 border-border'
+              )}
+            >
+              <div className="mt-0.5 h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <Merge className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold text-sm">Merge</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Add imported activities alongside existing ones, sorted by time
+                </p>
+              </div>
+            </button>
+          </div>
+        ) : step === 'paste' ? (
+          <div className="space-y-3 py-2">
+            {hasExistingActivities && (
+              <div className={cn(
+                'flex items-center gap-2 px-3 py-2 rounded-lg text-xs',
+                importMode === 'replace' 
+                  ? 'bg-destructive/10 text-destructive' 
+                  : 'bg-primary/10 text-primary'
+              )}>
+                {importMode === 'replace' ? (
+                  <><RefreshCw className="h-3.5 w-3.5" /> Starting over — existing activities will be replaced</>
+                ) : (
+                  <><Merge className="h-3.5 w-3.5" /> Merging — imported activities will be added alongside existing ones</>
+                )}
+              </div>
+            )}
             <Textarea
               value={pastedText}
               onChange={(e) => setPastedText(e.target.value)}
@@ -400,9 +455,13 @@ export function ImportActivitiesModal({ isOpen, onClose, onImport, currency = 'U
         )}
 
         <DialogFooter>
-          {step === 'paste' ? (
+          {step === 'mode' ? (
+            <Button variant="outline" onClick={handleClose}>Cancel</Button>
+          ) : step === 'paste' ? (
             <>
-              <Button variant="outline" onClick={handleClose}>Cancel</Button>
+              <Button variant="outline" onClick={hasExistingActivities ? () => setStep('mode') : handleClose}>
+                {hasExistingActivities ? 'Back' : 'Cancel'}
+              </Button>
               <Button onClick={handleParse} disabled={pastedText.trim().length < 3}>
                 Parse Activities
               </Button>
@@ -411,7 +470,7 @@ export function ImportActivitiesModal({ isOpen, onClose, onImport, currency = 'U
             <>
               <Button variant="outline" onClick={() => setStep('paste')}>Back</Button>
               <Button onClick={handleImport} disabled={includedCount === 0}>
-                Import {includedCount} {includedCount === 1 ? 'Activity' : 'Activities'}
+                {importMode === 'replace' ? 'Replace with' : 'Merge'} {includedCount} {includedCount === 1 ? 'Activity' : 'Activities'}
               </Button>
             </>
           )}
