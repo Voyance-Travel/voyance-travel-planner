@@ -335,14 +335,20 @@ export function QuizCompletion({ onContinue, dnaResult }: QuizCompletionProps) {
           {/* Bonus earned notification */}
           {bonusGranted && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent/10 border border-accent/20 mb-4"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ type: 'spring', stiffness: 200 }}
+              className="mb-4 p-4 rounded-xl bg-accent/10 border border-accent/20"
             >
-              <Gift className="w-4 h-4 text-accent" />
-              <span className="text-sm font-medium text-accent">
-                +{BONUS_INFO.quiz_completion.credits} credits earned!
-              </span>
+              <div className="flex items-center justify-center gap-2 mb-1">
+                <Gift className="w-5 h-5 text-accent" />
+                <span className="text-lg font-bold text-accent">
+                  +{BONUS_INFO.quiz_completion.credits} credits earned!
+                </span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Congratulations! You've unlocked {BONUS_INFO.quiz_completion.credits} bonus credits for completing your Travel DNA quiz.
+              </p>
             </motion.div>
           )}
         </motion.div>
