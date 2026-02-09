@@ -2256,7 +2256,7 @@ export default function UnitEconomics() {
         </div>
 
         {/* Tier Distribution Section */}
-        <Collapsible>
+        {econData?.tierDistribution && <Collapsible>
           <div style={{
             background: "rgba(30, 41, 59, 0.5)",
             borderRadius: 12,
@@ -2303,10 +2303,10 @@ export default function UnitEconomics() {
               })()}
             </CollapsibleContent>
           </div>
-        </Collapsible>
+        </Collapsible>}
 
         {/* Group Budget Analytics Section */}
-        <Collapsible>
+        {econData?.groupBudgets && <Collapsible>
           <div style={{
             background: "rgba(30, 41, 59, 0.5)",
             borderRadius: 12,
@@ -2376,7 +2376,7 @@ export default function UnitEconomics() {
               })()}
             </CollapsibleContent>
           </div>
-        </Collapsible>
+        </Collapsible>}
 
         <div style={{
           background: "rgba(30, 41, 59, 0.5)",
