@@ -138,6 +138,17 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
     return () => clearTimeout(timer);
   }, [user, requestPopup, location.pathname]);
 
+  // React to being granted from the popup queue (e.g. after welcome modal closes)
+  const activePopup = usePopupCoordination((s) => s.activePopup);
+  useEffect(() => {
+    if (activePopup === 'site_tour' && !isVisible) {
+      const alreadyCompleted = localStorage.getItem(STORAGE_KEY) === 'true';
+      if (!alreadyCompleted && user) {
+        setIsVisible(true);
+      }
+    }
+  }, [activePopup, isVisible, user]);
+
   // Navigate to route when step changes
   useEffect(() => {
     if (!isVisible) return;
