@@ -262,6 +262,7 @@ function TripDetailsStep({
   setPlanMode,
   onChatDetailsExtracted,
   onContinue,
+  onManualAuthRequired,
 }: {
   destinationSelection: LocationSelection;
   setDestinationSelection: (s: LocationSelection) => void;
@@ -289,6 +290,7 @@ function TripDetailsStep({
   setPlanMode: (m: 'single' | 'multi' | 'chat' | 'manual') => void;
   onChatDetailsExtracted: (details: any) => void;
   onContinue: () => void;
+  onManualAuthRequired: () => void;
 }) {
   const today = startOfToday();
   const [calendarMonth, setCalendarMonth] = useState<Date>(() => 
@@ -394,7 +396,7 @@ function TripDetailsStep({
 
         {/* Manual Build Mode */}
         {planMode === 'manual' && (
-          <ManualTripPasteEntry />
+          <ManualTripPasteEntry onAuthRequired={onManualAuthRequired} />
         )}
 
         {/* Destination - Single City Mode */}
@@ -1445,6 +1447,8 @@ export default function Start() {
   // Handle return from auth — restore all fields from draft
   useEffect(() => {
     if (user && savedDraft && !searchParams.get('fromQuiz')) {
+      if (savedDraft.planMode) setPlanMode(savedDraft.planMode);
+      if (savedDraft.isMultiCity) setIsMultiCity(savedDraft.isMultiCity);
       if (savedDraft.outboundFlight) setOutboundFlight(savedDraft.outboundFlight);
       if (savedDraft.returnFlight) setReturnFlight(savedDraft.returnFlight);
       if (savedDraft.showReturnFlight) setShowReturnFlight(savedDraft.showReturnFlight);
@@ -1846,6 +1850,12 @@ export default function Start() {
                       sessionStorage.removeItem(DRAFT_STORAGE_KEY);
                       setCurrentStep(2);
                       window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+                    }}
+                    onManualAuthRequired={() => {
+                      const draft = { planMode: 'manual' as const };
+                      sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+                      saveReturnPath('/start');
+                      setShowAuthGate(true);
                     }}
                   />
                 )}
