@@ -379,6 +379,36 @@ serve(async (req) => {
                 ? `${clubInfo.tier} club pack - ${creditsToAdd} credits (${clubInfo.baseCredits} base + ${clubInfo.bonusCredits} bonus)`
                 : `Flex credit pack - ${creditsToAdd} credits`,
             });
+
+            // ── Upsert user_tiers (only upgrade, never downgrade) ──
+            const TIER_HIERARCHY: Record<string, number> = { free: 0, flex: 1, voyager: 2, explorer: 3, adventurer: 4 };
+            const newTier = clubInfo ? clubInfo.tier : 'flex';
+            const { data: currentTierData } = await supabaseAdmin
+              .from('user_tiers')
+              .select('tier')
+              .eq('user_id', userId)
+              .maybeSingle();
+            const currentTierRank = TIER_HIERARCHY[currentTierData?.tier || 'free'] || 0;
+            const newTierRank = TIER_HIERARCHY[newTier] || 0;
+
+            if (newTierRank > currentTierRank) {
+              await supabaseAdmin.from('user_tiers').upsert({
+                user_id: userId,
+                tier: newTier,
+                first_purchase_at: currentTierData ? undefined : new Date().toISOString(),
+                highest_purchase: newTier,
+                updated_at: new Date().toISOString(),
+              }, { onConflict: 'user_id' });
+              log("User tier upgraded", { userId, from: currentTierData?.tier || 'free', to: newTier });
+            } else if (!currentTierData) {
+              await supabaseAdmin.from('user_tiers').insert({
+                user_id: userId,
+                tier: newTier,
+                first_purchase_at: new Date().toISOString(),
+                highest_purchase: newTier,
+              });
+              log("User tier created", { userId, tier: newTier });
+            }
           }
         }
 

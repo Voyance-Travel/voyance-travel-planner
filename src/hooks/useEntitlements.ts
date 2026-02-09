@@ -13,21 +13,69 @@ import { useAuth } from '@/contexts/AuthContext';
 // Types
 // ============================================================================
 
-export interface Entitlement {
-  enabled: boolean;
-  limit?: number;
-  used?: number;
+export interface FreeCaps {
+  swaps: number;
+  regenerates: number;
+  ai_messages: number;
+  restaurant_recs: number;
 }
 
 export interface EntitlementsResponse {
   user_id: string;
-  plans: string[];
-  is_paid: boolean;
-  has_addon: boolean;
+  plan: string;
+  is_subscribed: boolean;
   subscription_end: string | null;
-  entitlements: Record<string, Entitlement>;
+  subscription_price_id: string | null;
+
+  // Tier
+  tier: 'free' | 'flex' | 'voyager' | 'explorer' | 'adventurer';
+
+  // Credits
+  credits_balance: number;
+  credits_purchased: number;
+  credits_free: number;
+
+  // Access gates
+  has_completed_purchase: boolean;
+  is_first_trip: boolean;
+  trip_has_smart_finish: boolean;
+
+  // Feature flags (computed from gates)
+  can_view_photos: boolean;
+  can_view_addresses: boolean;
+  can_view_booking_links: boolean;
+  can_view_tips: boolean;
+  can_view_reviews: boolean;
+  can_export_pdf: boolean;
+
+  // Credit-gated actions
+  can_build_itinerary: boolean;
+  can_unlock_day: boolean;
+  can_smart_finish: boolean;
+  can_search_hotels: boolean;
+  can_swap_activity: boolean;
+  can_regenerate_day: boolean;
+  can_send_message: boolean;
+  can_get_restaurant_rec: boolean;
+
+  // Free caps
+  free_caps: FreeCaps;
+  trip_usage: FreeCaps;
+  remaining_free_actions: FreeCaps;
+
+  // Legacy
   usage: Record<string, number>;
-  // Extended fields from get-entitlements
+  draft_trips_count: number;
+  unlocked_trips: string[];
+
+  // Costs (frontend should use these)
+  costs: Record<string, number>;
+
+  // Backward compat aliases
+  plans?: string[];
+  is_paid?: boolean;
+  has_addon?: boolean;
+  entitlements?: Record<string, Entitlement>;
   limits?: {
     fullBuilds?: number;
     draftTrips?: number;
@@ -41,33 +89,22 @@ export interface EntitlementsResponse {
     weatherTracker?: boolean;
     freeBuildsRemaining?: number;
   };
-  unlocked_trips?: string[];
   credit_balance?: number;
-  can_build_itinerary?: boolean;
   can_build_day?: boolean;
-  can_swap_activity?: boolean;
-  can_regenerate_day?: boolean;
-  can_unlock_day?: boolean;
-  can_smart_finish?: boolean;
   can_use_flight_hotel_optimization?: boolean;
   can_use_group_budgeting?: boolean;
   can_co_edit?: boolean;
   can_optimize_routes?: boolean;
-  // Server-provided costs — use these instead of hardcoding
-  costs?: {
-    unlock_day: number;
-    smart_finish: number;
-    swap_activity: number;
-    regenerate_day: number;
-    ai_message: number;
-    hotel_search: number;
-    base_rate_per_day: number;
-  };
+}
+
+export interface Entitlement {
+  enabled: boolean;
+  limit?: number;
+  used?: number;
 }
 
 // Feature flag keys for type safety
 export type FeatureFlag =
-  // AI / LLM
   | 'ai.itinerary.generate'
   | 'ai.itinerary.generate_quota_month'
   | 'ai.itinerary.regenerate'
@@ -75,16 +112,13 @@ export type FeatureFlag =
   | 'ai.itinerary.reasoning'
   | 'ai.dream_quiz'
   | 'ai.chat_assistant'
-  // Trip saving
   | 'trip.save.enabled'
   | 'trip.save.max_drafts'
   | 'trip.export'
-  // Booking
   | 'booking.flight_search'
   | 'booking.hotel_search'
   | 'booking.checkout'
   | 'booking.price_lock'
-  // Enrichment
   | 'enrich.venue_details'
   | 'enrich.photos'
   | 'enrich.reviews'
@@ -102,42 +136,57 @@ export function useEntitlements() {
   // QA MODE: Set to true to bypass all payment gates during testing
   const QA_MODE_PREMIUM = false;
 
-  // Refresh entitlements (e.g., after checkout)
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['entitlements'] });
   };
 
-  // QA Override: Return premium status immediately without API call
-  // This prevents 401 errors for unauthenticated users on public pages
   if (QA_MODE_PREMIUM) {
     return {
       data: {
         user_id: user?.id || 'demo',
+        plan: 'monthly',
+        is_subscribed: true,
+        subscription_end: null,
+        subscription_price_id: null,
+        tier: 'adventurer' as const,
+        credits_balance: 9999,
+        credits_purchased: 9999,
+        credits_free: 0,
+        has_completed_purchase: true,
+        is_first_trip: false,
+        trip_has_smart_finish: false,
+        can_view_photos: true,
+        can_view_addresses: true,
+        can_view_booking_links: true,
+        can_view_tips: true,
+        can_view_reviews: true,
+        can_export_pdf: true,
+        can_build_itinerary: true,
+        can_unlock_day: true,
+        can_smart_finish: true,
+        can_search_hotels: true,
+        can_swap_activity: true,
+        can_regenerate_day: true,
+        can_send_message: true,
+        can_get_restaurant_rec: true,
+        free_caps: { swaps: 999, regenerates: 999, ai_messages: 999, restaurant_recs: 999 },
+        trip_usage: { swaps: 0, regenerates: 0, ai_messages: 0, restaurant_recs: 0 },
+        remaining_free_actions: { swaps: 999, regenerates: 999, ai_messages: 999, restaurant_recs: 999 },
+        usage: {},
+        draft_trips_count: 0,
+        unlocked_trips: [],
+        costs: {},
         plans: ['monthly'],
         is_paid: true,
         has_addon: true,
-        subscription_end: null,
         entitlements: {},
-        usage: {},
-        can_build_itinerary: true,
-        can_build_day: true,
-        can_use_flight_hotel_optimization: true,
-        can_use_group_budgeting: true,
-        can_co_edit: true,
-        can_optimize_routes: true,
-        limits: {
-          freeBuildsRemaining: 999,
-          draftTripsRemaining: 999,
-          fullBuilds: 999,
-          draftTrips: 999,
-        },
+        limits: { freeBuildsRemaining: 999, draftTripsRemaining: 999 },
       } as EntitlementsResponse,
       isLoading: false,
       isError: false,
       error: null,
       refetch: () => Promise.resolve({ data: undefined, error: null }),
       refresh,
-      // Force premium status for QA
       isPaid: true,
       hasAddon: true,
       plans: ['monthly'],
@@ -151,35 +200,22 @@ export function useEntitlements() {
     queryFn: async (): Promise<EntitlementsResponse> => {
       const { data, error } = await supabase.functions.invoke('get-entitlements');
       
-      // Handle 401 auth errors - session is stale/invalid
       if (error) {
         const errorBody = error.message || '';
         if (errorBody.includes('401') || errorBody.includes('Session expired') || errorBody.includes('invalid')) {
           console.warn('[Entitlements] Session expired, user may need to re-authenticate');
-          // Don't throw - return empty entitlements to avoid blocking the UI
-          return {
-            user_id: user?.id || '',
-            plans: ['free'],
-            is_paid: false,
-            has_addon: false,
-            subscription_end: null,
-            entitlements: {},
-            usage: {},
-          };
+          return getDefaultEntitlements(user?.id || '');
         }
         throw error;
       }
       return data;
     },
     enabled: isAuthenticated && !!user?.id,
-    staleTime: 60000, // 1 minute
+    staleTime: 60000,
     refetchOnWindowFocus: true,
     retry: (failureCount, error) => {
-      // Don't retry auth errors
       const errorMsg = error?.message || '';
-      if (errorMsg.includes('401') || errorMsg.includes('Session expired')) {
-        return false;
-      }
+      if (errorMsg.includes('401') || errorMsg.includes('Session expired')) return false;
       return failureCount < 2;
     },
   });
@@ -187,80 +223,122 @@ export function useEntitlements() {
   return {
     ...query,
     refresh,
-    // Convenience accessors
-    isPaid: query.data?.is_paid ?? false,
-    hasAddon: query.data?.has_addon ?? false,
-    plans: query.data?.plans ?? ['free'],
+    isPaid: query.data?.is_subscribed ?? false,
+    hasAddon: false,
+    plans: query.data?.plan ? [query.data.plan] : ['free'],
     entitlements: query.data?.entitlements ?? {},
     usage: query.data?.usage ?? {},
   };
 }
 
 // ============================================================================
-// Utility Functions
+// Premium Content Helper
 // ============================================================================
 
-// QA MODE: Set to true to bypass all payment gates during testing
+/**
+ * Check if user can view premium content for a specific day.
+ * Premium = photos, addresses, tips, reviews, booking links.
+ */
+export function canViewPremiumContentForDay(
+  entitlements: EntitlementsResponse | undefined,
+  dayNumber: number
+): boolean {
+  if (!entitlements) return false;
+  if (entitlements.has_completed_purchase) return true;
+  if (entitlements.trip_has_smart_finish) return true;
+  if (entitlements.is_first_trip && dayNumber <= 2) return true;
+  return false;
+}
+
+// ============================================================================
+// Default Entitlements (for unauthenticated/error state)
+// ============================================================================
+
+function getDefaultEntitlements(userId: string): EntitlementsResponse {
+  return {
+    user_id: userId,
+    plan: 'free',
+    is_subscribed: false,
+    subscription_end: null,
+    subscription_price_id: null,
+    tier: 'free',
+    credits_balance: 0,
+    credits_purchased: 0,
+    credits_free: 0,
+    has_completed_purchase: false,
+    is_first_trip: true,
+    trip_has_smart_finish: false,
+    can_view_photos: true, // First trip = true
+    can_view_addresses: true,
+    can_view_booking_links: true,
+    can_view_tips: true,
+    can_view_reviews: true,
+    can_export_pdf: false,
+    can_build_itinerary: false,
+    can_unlock_day: false,
+    can_smart_finish: false,
+    can_search_hotels: false,
+    can_swap_activity: true,
+    can_regenerate_day: true,
+    can_send_message: true,
+    can_get_restaurant_rec: true,
+    free_caps: { swaps: 3, regenerates: 1, ai_messages: 5, restaurant_recs: 1 },
+    trip_usage: { swaps: 0, regenerates: 0, ai_messages: 0, restaurant_recs: 0 },
+    remaining_free_actions: { swaps: 3, regenerates: 1, ai_messages: 5, restaurant_recs: 1 },
+    usage: {},
+    draft_trips_count: 0,
+    unlocked_trips: [],
+    costs: {},
+    plans: ['free'],
+    is_paid: false,
+    has_addon: false,
+    entitlements: {},
+  };
+}
+
+// ============================================================================
+// Utility Functions (backward compat)
+// ============================================================================
+
 const QA_MODE_PREMIUM = false;
 
-/**
- * Check if a feature is enabled
- */
 export function canUse(
   entitlements: Record<string, Entitlement> | undefined,
   flag: FeatureFlag
 ): boolean {
-  // QA Override: Always allow all features
   if (QA_MODE_PREMIUM) return true;
-  
   if (!entitlements) return false;
   const ent = entitlements[flag];
   if (!ent) return false;
-  
-  // If it has a limit, check usage
   if (ent.limit !== undefined && ent.used !== undefined) {
     return ent.enabled && ent.used < ent.limit;
   }
-  
   return ent.enabled;
 }
 
-/**
- * Get remaining quota for a feature
- */
 export function getRemainingQuota(
   entitlements: Record<string, Entitlement> | undefined,
   flag: FeatureFlag
 ): number | null {
-  // QA Override: Always return high quota
   if (QA_MODE_PREMIUM) return 999;
-  
   if (!entitlements) return null;
   const ent = entitlements[flag];
   if (!ent || ent.limit === undefined) return null;
-  
   const used = ent.used ?? 0;
   return Math.max(0, ent.limit - used);
 }
 
-/**
- * Check if user has hit their limit
- */
 export function isAtLimit(
   entitlements: Record<string, Entitlement> | undefined,
   flag: FeatureFlag
 ): boolean {
-  // QA Override: Never at limit
   if (QA_MODE_PREMIUM) return false;
-  
   if (!entitlements) return true;
   const ent = entitlements[flag];
   if (!ent) return true;
-  
   if (ent.limit !== undefined && ent.used !== undefined) {
     return ent.used >= ent.limit;
   }
-  
   return !ent.enabled;
 }
 
@@ -280,7 +358,6 @@ export function useConsumeUsage() {
       return data;
     },
     onSuccess: () => {
-      // Refresh entitlements to get updated usage
       queryClient.invalidateQueries({ queryKey: ['entitlements'] });
     },
   });
@@ -303,39 +380,26 @@ export function checkFeatureAccess(
   isLoading: boolean,
   isAuthenticated: boolean
 ): FeatureGateResult {
-  // QA MODE: Allow all features for authenticated users
-  const QA_MODE_PREMIUM = false;
-  
   if (!isAuthenticated) {
     return { allowed: false, reason: 'unauthenticated' };
   }
-  
-  // QA Override: Always allow for authenticated users
   if (QA_MODE_PREMIUM) {
     return { allowed: true, reason: 'enabled', remaining: 999, limit: 999 };
   }
-  
   if (isLoading || !entitlements) {
     return { allowed: false, reason: 'loading' };
   }
 
   const ent = entitlements[flag];
-  if (!ent) {
-    return { allowed: false, reason: 'disabled' };
-  }
-
-  if (!ent.enabled) {
-    return { allowed: false, reason: 'disabled' };
-  }
+  if (!ent) return { allowed: false, reason: 'disabled' };
+  if (!ent.enabled) return { allowed: false, reason: 'disabled' };
 
   if (ent.limit !== undefined) {
     const used = ent.used ?? 0;
     const remaining = Math.max(0, ent.limit - used);
-    
     if (remaining <= 0) {
       return { allowed: false, reason: 'limit_reached', remaining: 0, limit: ent.limit };
     }
-    
     return { allowed: true, reason: 'enabled', remaining, limit: ent.limit };
   }
 
@@ -353,4 +417,5 @@ export default {
   getRemainingQuota,
   isAtLimit,
   checkFeatureAccess,
+  canViewPremiumContentForDay,
 };

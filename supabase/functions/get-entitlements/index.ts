@@ -12,61 +12,59 @@ const logStep = (step: string, details?: unknown) => {
   console.log(`[GET-ENTITLEMENTS] ${step}${detailsStr}`);
 };
 
-// Stripe price ID to plan mapping
-const PRICE_TO_PLAN: Record<string, { plan: string; type: 'subscription' | 'payment' }> = {
-  'price_1SrKz2FYxIg9jcJUVbrbOfFl': { plan: 'monthly', type: 'subscription' },
-  'price_1SrKz4FYxIg9jcJU8kMbZDSk': { plan: 'yearly', type: 'subscription' },
-  'price_1RpYVWFYxIg9jcJU4t3JVCy0': { plan: 'monthly', type: 'subscription' },
-  'price_1RpYWpFYxIg9jcJUPrSLmFsu': { plan: 'yearly', type: 'subscription' },
-};
-
-// Credit costs for feature flags (v2 pricing) — single source of truth
+// ============================================================================
+// Credit costs — single source of truth
+// ============================================================================
 const CREDIT_COSTS = {
   unlock_day: 60,
   smart_finish: 50,
   swap_activity: 5,
   regenerate_day: 10,
   ai_message: 5,
+  restaurant_rec: 5,
   hotel_search: 40,
+  hotel_optimization: 100,
+  transport_mode_change: 5,
+  mystery_getaway: 15,
+  mystery_logistics: 5,
   base_rate_per_day: 60,
+  group_small: 150,
+  group_medium: 300,
+  group_large: 500,
 };
 
-// Plan features configuration
-const PLAN_LIMITS = {
-  free: {
-    fullBuilds: 1,
-    draftTrips: 1,
-    dayRebuilds: 0,
-    tripVersions: 1,
-    flightHotelOptimization: false,
-    groupBudgeting: false,
-    coEditCollaboration: false,
-    routeOptimization: true,
-    weatherTracker: true,
-  },
-  monthly: {
-    fullBuilds: -1,
-    draftTrips: 5,
-    dayRebuilds: -1,
-    tripVersions: 4,
-    flightHotelOptimization: true,
-    groupBudgeting: true,
-    coEditCollaboration: true,
-    routeOptimization: true,
-    weatherTracker: true,
-  },
-  yearly: {
-    fullBuilds: -1,
-    draftTrips: -1,
-    dayRebuilds: -1,
-    tripVersions: -1,
-    flightHotelOptimization: true,
-    groupBudgeting: true,
-    coEditCollaboration: true,
-    routeOptimization: true,
-    weatherTracker: true,
-    preferenceLearning: true,
-  },
+// ============================================================================
+// Tier-based free action caps
+// ============================================================================
+const TIER_CAPS: Record<string, { swaps: number; regenerates: number; ai_messages: number; restaurant_recs: number }> = {
+  free:       { swaps: 3,  regenerates: 1, ai_messages: 5,  restaurant_recs: 1 },
+  flex:       { swaps: 3,  regenerates: 1, ai_messages: 5,  restaurant_recs: 1 },
+  voyager:    { swaps: 6,  regenerates: 2, ai_messages: 10, restaurant_recs: 2 },
+  explorer:   { swaps: 9,  regenerates: 3, ai_messages: 15, restaurant_recs: 3 },
+  adventurer: { swaps: 15, regenerates: 5, ai_messages: 25, restaurant_recs: 5 },
+};
+
+// Trip length scaling for Free/Flex only
+const FLEX_CAPS_BY_DAYS: Record<number, { swaps: number; regenerates: number; ai_messages: number; restaurant_recs: number }> = {
+  2:  { swaps: 3,  regenerates: 1, ai_messages: 5,  restaurant_recs: 1 },
+  4:  { swaps: 5,  regenerates: 2, ai_messages: 10, restaurant_recs: 2 },
+  6:  { swaps: 7,  regenerates: 3, ai_messages: 15, restaurant_recs: 3 },
+  8:  { swaps: 10, regenerates: 4, ai_messages: 20, restaurant_recs: 4 },
+};
+
+function getScaledCaps(unlockedDays: number) {
+  if (unlockedDays >= 7) return FLEX_CAPS_BY_DAYS[8];
+  if (unlockedDays >= 5) return FLEX_CAPS_BY_DAYS[6];
+  if (unlockedDays >= 3) return FLEX_CAPS_BY_DAYS[4];
+  return FLEX_CAPS_BY_DAYS[2];
+}
+
+// Stripe price ID to plan mapping (legacy subscription support)
+const PRICE_TO_PLAN: Record<string, { plan: string; type: 'subscription' | 'payment' }> = {
+  'price_1SrKz2FYxIg9jcJUVbrbOfFl': { plan: 'monthly', type: 'subscription' },
+  'price_1SrKz4FYxIg9jcJU8kMbZDSk': { plan: 'yearly', type: 'subscription' },
+  'price_1RpYVWFYxIg9jcJU4t3JVCy0': { plan: 'monthly', type: 'subscription' },
+  'price_1RpYWpFYxIg9jcJUPrSLmFsu': { plan: 'yearly', type: 'subscription' },
 };
 
 serve(async (req) => {
@@ -83,34 +81,40 @@ serve(async (req) => {
   try {
     logStep("Function started");
 
+    // ── Auth ──
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "No authorization header provided" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401,
       });
     }
 
     const token = authHeader.replace("Bearer ", "");
     const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
-    
     if (userError) {
       logStep("Auth error", { message: userError.message });
       return new Response(JSON.stringify({ error: "Session expired or invalid" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401,
       });
     }
-    
     const user = userData.user;
     if (!user?.email) {
       return new Response(JSON.stringify({ error: "User not authenticated" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401,
       });
     }
-    logStep("User authenticated", { userId: user.id, email: user.email });
+    logStep("User authenticated", { userId: user.id });
 
+    // ── Parse optional tripId from body ──
+    let tripId: string | null = null;
+    try {
+      const body = await req.json();
+      tripId = body?.tripId || null;
+    } catch {
+      // No body or not JSON — that's fine
+    }
+
+    // ── Stripe subscription check (legacy) ──
     let activePlan = 'free';
     let subscriptionEnd: string | null = null;
     let subscriptionPriceId: string | null = null;
@@ -119,85 +123,144 @@ serve(async (req) => {
     if (stripeKey) {
       const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
       const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-      
       if (customers.data.length > 0) {
         const customerId = customers.data[0].id;
-        const subscriptions = await stripe.subscriptions.list({
-          customer: customerId,
-          status: "active",
-          limit: 1,
-        });
-
+        const subscriptions = await stripe.subscriptions.list({ customer: customerId, status: "active", limit: 1 });
         if (subscriptions.data.length > 0) {
           const sub = subscriptions.data[0];
           subscriptionEnd = new Date(sub.current_period_end * 1000).toISOString();
           subscriptionPriceId = sub.items.data[0].price.id;
-          
           if (subscriptionPriceId) {
             const planInfo = PRICE_TO_PLAN[subscriptionPriceId];
-            if (planInfo) {
-              activePlan = planInfo.plan;
-            }
+            if (planInfo) activePlan = planInfo.plan;
           }
-          logStep("Active subscription found", { plan: activePlan, priceId: subscriptionPriceId });
         }
       }
     }
 
-    // Get user credit balance
-    const { data: creditBalance } = await supabaseAdmin
-      .from('credit_balances')
-      .select('purchased_credits, free_credits, free_credits_expires_at')
+    // ── Credit balance (from credit_purchases, FIFO source of truth) ──
+    const now = new Date().toISOString();
+    const { data: creditRows } = await supabaseAdmin
+      .from('credit_purchases')
+      .select('remaining, expires_at, credit_type')
       .eq('user_id', user.id)
-      .maybeSingle();
+      .gt('remaining', 0);
 
-    let purchasedCredits = creditBalance?.purchased_credits || 0;
-    let freeCredits = creditBalance?.free_credits || 0;
-    if (creditBalance?.free_credits_expires_at && new Date(creditBalance.free_credits_expires_at) < new Date()) {
-      freeCredits = 0;
+    let purchasedCredits = 0;
+    let freeCredits = 0;
+    for (const row of creditRows || []) {
+      if (row.expires_at && new Date(row.expires_at) < new Date()) continue;
+      if (['free_monthly', 'signup_bonus', 'referral_bonus'].includes(row.credit_type)) {
+        freeCredits += row.remaining;
+      } else {
+        purchasedCredits += row.remaining;
+      }
     }
     const totalCredits = purchasedCredits + freeCredits;
 
-    // Get user usage for free tier tracking
+    // ── User tier ──
+    const { data: tierData } = await supabaseAdmin
+      .from('user_tiers')
+      .select('tier')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    const tier = tierData?.tier || 'free';
+    const isClubMember = ['voyager', 'explorer', 'adventurer'].includes(tier);
+
+    // ── Access gates ──
+    // 1. Has completed purchase (any non-free credit purchase)
+    const { data: purchaseCheck } = await supabaseAdmin
+      .from('credit_purchases')
+      .select('id')
+      .eq('user_id', user.id)
+      .not('credit_type', 'in', '("free_monthly","signup_bonus","referral_bonus")')
+      .limit(1);
+    const hasCompletedPurchase = (purchaseCheck?.length || 0) > 0;
+
+    // 2. Is first trip (no trips with non-null itinerary_status)
+    const { data: existingTrips } = await supabaseAdmin
+      .from('trips')
+      .select('id')
+      .eq('user_id', user.id)
+      .not('itinerary_status', 'is', null)
+      .limit(1);
+    const isFirstTrip = (existingTrips?.length || 0) === 0;
+
+    // 3. Smart Finish + trip usage (if tripId provided)
+    let tripHasSmartFinish = false;
+    let unlockedDays = 0;
+    let tripUsage = { swaps: 0, regenerates: 0, ai_messages: 0, restaurant_recs: 0 };
+
+    if (tripId) {
+      const { data: tripData } = await supabaseAdmin
+        .from('trips')
+        .select('smart_finish_purchased, unlocked_day_count')
+        .eq('id', tripId)
+        .maybeSingle();
+
+      tripHasSmartFinish = tripData?.smart_finish_purchased || false;
+      unlockedDays = tripData?.unlocked_day_count || 0;
+
+      // Get trip action usage
+      const { data: usageData } = await supabaseAdmin
+        .from('trip_action_usage')
+        .select('action_type, usage_count')
+        .eq('trip_id', tripId)
+        .eq('user_id', user.id);
+
+      if (usageData) {
+        for (const row of usageData) {
+          if (row.action_type === 'swap_activity') tripUsage.swaps = row.usage_count;
+          if (row.action_type === 'regenerate_day') tripUsage.regenerates = row.usage_count;
+          if (row.action_type === 'ai_message') tripUsage.ai_messages = row.usage_count;
+          if (row.action_type === 'restaurant_rec') tripUsage.restaurant_recs = row.usage_count;
+        }
+      }
+    }
+
+    // ── Compute free caps based on tier + trip length ──
+    let freeCaps = TIER_CAPS[tier] || TIER_CAPS.free;
+    if (!isClubMember && tripId && unlockedDays > 0) {
+      freeCaps = getScaledCaps(unlockedDays);
+    }
+
+    const remainingFreeActions = {
+      swaps: Math.max(0, freeCaps.swaps - tripUsage.swaps),
+      regenerates: Math.max(0, freeCaps.regenerates - tripUsage.regenerates),
+      ai_messages: Math.max(0, freeCaps.ai_messages - tripUsage.ai_messages),
+      restaurant_recs: Math.max(0, freeCaps.restaurant_recs - tripUsage.restaurant_recs),
+    };
+
+    // ── Feature flags ──
+    const hasPaidAccess = hasCompletedPurchase || tripHasSmartFinish;
+
+    // ── Legacy usage/limits ──
     const { data: usage } = await supabaseAdmin
       .from('user_usage')
       .select('metric_key, count, period')
       .eq('user_id', user.id)
       .eq('period', 'lifetime');
 
-    // Get trip purchases (Trip Passes)
-    const { data: tripPurchases } = await supabaseAdmin
-      .from('trip_purchases')
-      .select('trip_id, purchase_type, features_unlocked')
-      .eq('user_id', user.id)
-      .eq('purchase_type', 'trip_pass');
+    const usageMap: Record<string, number> = {};
+    for (const u of usage || []) {
+      usageMap[u.metric_key] = u.count;
+    }
 
-    // Get draft trips count
     const { count: draftTripsCount } = await supabaseAdmin
       .from('trips')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)
       .eq('status', 'draft');
 
-    const usageMap: Record<string, number> = {};
-    for (const u of usage || []) {
-      usageMap[u.metric_key] = u.count;
-    }
+    const { data: tripPurchases } = await supabaseAdmin
+      .from('trip_purchases')
+      .select('trip_id')
+      .eq('user_id', user.id)
+      .eq('purchase_type', 'trip_pass');
 
-    const limits = PLAN_LIMITS[activePlan as keyof typeof PLAN_LIMITS] || PLAN_LIMITS.free;
     const unlockedTrips = (tripPurchases || []).map(p => p.trip_id);
 
-    const freeBuildsUsed = usageMap['full_builds'] || 0;
-    const freeBuildsRemaining = activePlan === 'free' 
-      ? Math.max(0, limits.fullBuilds - freeBuildsUsed)
-      : -1;
-
-    logStep("Resolved entitlements", { 
-      plan: activePlan, 
-      totalCredits,
-      draftTrips: draftTripsCount,
-      unlockedTrips: unlockedTrips.length,
-    });
+    logStep("Resolved entitlements", { tier, totalCredits, hasCompletedPurchase, isFirstTrip, tripHasSmartFinish });
 
     const response = {
       user_id: user.id,
@@ -205,54 +268,60 @@ serve(async (req) => {
       is_subscribed: activePlan !== 'free',
       subscription_end: subscriptionEnd,
       subscription_price_id: subscriptionPriceId,
-      
-      // Credits/wallet (v2 - credit_balances table)
+
+      // Tier
+      tier,
+
+      // Credits
       credits_balance: totalCredits,
       credits_purchased: purchasedCredits,
       credits_free: freeCredits,
-      
-      // Usage
-      usage: usageMap,
-      draft_trips_count: draftTripsCount || 0,
-      
-      // Limits
-      limits: {
-        ...limits,
-        freeBuildsRemaining,
-        draftTripsRemaining: limits.draftTrips === -1 
-          ? -1 
-          : Math.max(0, limits.draftTrips - (draftTripsCount || 0)),
-      },
-      
-      // Trip Passes
-      unlocked_trips: unlockedTrips,
-      
-      // Feature flags - v2 credit-based checks
-      can_build_itinerary: activePlan !== 'free' || freeBuildsRemaining > 0 || totalCredits >= CREDIT_COSTS.base_rate_per_day,
-      can_swap_activity: true, // Always allow — server checks free cap first
-      can_regenerate_day: true, // Always allow — server checks free cap first
+
+      // Access gates
+      has_completed_purchase: hasCompletedPurchase,
+      is_first_trip: isFirstTrip,
+      trip_has_smart_finish: tripHasSmartFinish,
+
+      // Feature flags (computed from gates)
+      can_view_photos: hasPaidAccess || isFirstTrip,
+      can_view_addresses: hasPaidAccess || isFirstTrip,
+      can_view_booking_links: hasPaidAccess || isFirstTrip,
+      can_view_tips: hasPaidAccess || isFirstTrip,
+      can_view_reviews: hasPaidAccess || isFirstTrip,
+      can_export_pdf: hasPaidAccess, // Never free on first trip
+
+      // Credit-gated actions
+      can_build_itinerary: activePlan !== 'free' || totalCredits >= CREDIT_COSTS.base_rate_per_day,
       can_unlock_day: totalCredits >= CREDIT_COSTS.unlock_day,
       can_smart_finish: totalCredits >= CREDIT_COSTS.smart_finish,
-      can_search_hotels: activePlan !== 'free' || totalCredits >= CREDIT_COSTS.hotel_search,
-      can_use_flight_hotel_optimization: limits.flightHotelOptimization,
-      can_use_group_budgeting: limits.groupBudgeting,
-      can_co_edit: limits.coEditCollaboration,
-      can_optimize_routes: limits.routeOptimization,
-      
-      // Costs object — frontend should use these instead of hardcoding
+      can_search_hotels: totalCredits >= CREDIT_COSTS.hotel_search,
+      can_swap_activity: true,
+      can_regenerate_day: true,
+      can_send_message: true,
+      can_get_restaurant_rec: true,
+
+      // Free caps
+      free_caps: freeCaps,
+      trip_usage: tripUsage,
+      remaining_free_actions: remainingFreeActions,
+
+      // Legacy
+      usage: usageMap,
+      draft_trips_count: draftTripsCount || 0,
+      unlocked_trips: unlockedTrips,
+
+      // Costs (frontend should use these instead of hardcoding)
       costs: CREDIT_COSTS,
     };
 
     return new Response(JSON.stringify(response), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR", { message: errorMessage });
     return new Response(JSON.stringify({ error: errorMessage }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500,
     });
   }
 });

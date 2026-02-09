@@ -26,13 +26,29 @@ const FIXED_COSTS: Record<string, number> = {
   transport_mode_change: 5,
 };
 
-// Per-trip free action caps (owner only — collaborators use group caps)
-const FREE_CAPS: Record<string, number> = {
-  swap_activity: 10,
-  regenerate_day: 5,
-  ai_message: 20,
-  restaurant_rec: 5,
+// Tier-based free action caps
+const TIER_CAPS: Record<string, Record<string, number>> = {
+  free:       { swap_activity: 3,  regenerate_day: 1, ai_message: 5,  restaurant_rec: 1 },
+  flex:       { swap_activity: 3,  regenerate_day: 1, ai_message: 5,  restaurant_rec: 1 },
+  voyager:    { swap_activity: 6,  regenerate_day: 2, ai_message: 10, restaurant_rec: 2 },
+  explorer:   { swap_activity: 9,  regenerate_day: 3, ai_message: 15, restaurant_rec: 3 },
+  adventurer: { swap_activity: 15, regenerate_day: 5, ai_message: 25, restaurant_rec: 5 },
 };
+
+// Trip length scaling for Free/Flex only
+const FLEX_CAPS_BY_DAYS: Record<number, Record<string, number>> = {
+  2:  { swap_activity: 3,  regenerate_day: 1, ai_message: 5,  restaurant_rec: 1 },
+  4:  { swap_activity: 5,  regenerate_day: 2, ai_message: 10, restaurant_rec: 2 },
+  6:  { swap_activity: 7,  regenerate_day: 3, ai_message: 15, restaurant_rec: 3 },
+  8:  { swap_activity: 10, regenerate_day: 4, ai_message: 20, restaurant_rec: 4 },
+};
+
+function getScaledCaps(unlockedDays: number): Record<string, number> {
+  if (unlockedDays >= 7) return FLEX_CAPS_BY_DAYS[8];
+  if (unlockedDays >= 5) return FLEX_CAPS_BY_DAYS[6];
+  if (unlockedDays >= 3) return FLEX_CAPS_BY_DAYS[4];
+  return FLEX_CAPS_BY_DAYS[2];
+}
 
 // Variable-cost actions
 const VARIABLE_COST_ACTIONS = ['trip_generation', 'hotel_search'];
@@ -272,8 +288,35 @@ serve(async (req) => {
       }
     }
 
-    // ── Free cap check (owner only) ──
-    const freeCap = FREE_CAPS[action];
+    // ── Tier-aware free cap check (owner only) ──
+    // Look up user tier and compute the correct free cap
+    let freeCap: number | undefined;
+    if (!isCollaborator && tripId && GROUP_CAP_ACTIONS.includes(action)) {
+      const { data: tierData } = await supabaseAdmin
+        .from('user_tiers')
+        .select('tier')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      const userTier = tierData?.tier || 'free';
+      const isClubMember = ['voyager', 'explorer', 'adventurer'].includes(userTier);
+
+      let caps = TIER_CAPS[userTier] || TIER_CAPS.free;
+
+      // For free/flex, scale with trip length
+      if (!isClubMember) {
+        const { data: tripInfo } = await supabaseAdmin
+          .from('trips')
+          .select('unlocked_day_count')
+          .eq('id', tripId)
+          .maybeSingle();
+        const days = tripInfo?.unlocked_day_count || 0;
+        if (days > 0) {
+          caps = getScaledCaps(days);
+        }
+      }
+
+      freeCap = caps[action];
+    }
     if (!isCollaborator && freeCap !== undefined && tripId) {
       const { data: usageRow } = await supabaseAdmin
         .from('trip_action_usage')
