@@ -6,6 +6,7 @@
  */
 
 import { useState, useMemo } from "react";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Link } from "react-router-dom";
 import { useRealCostMetrics } from "@/hooks/useRealCostMetrics";
 import { useUnitEconomicsData } from "@/hooks/useUnitEconomicsData";
@@ -2253,6 +2254,129 @@ export default function UnitEconomics() {
             </div>
           </div>
         </div>
+
+        {/* Tier Distribution Section */}
+        <Collapsible>
+          <div style={{
+            background: "rgba(30, 41, 59, 0.5)",
+            borderRadius: 12,
+            padding: "28px",
+            border: "1px solid rgba(100, 116, 139, 0.2)",
+            marginBottom: 32,
+          }}>
+            <CollapsibleTrigger style={{ width: "100%", background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 0 }}>
+                👤 User Tiers — {econData.tierDistribution.reduce((s, t) => s + t.count, 0).toLocaleString()} total users
+              </h3>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginTop: 16 }}>
+                <thead>
+                  <tr>
+                    {["Tier", "Users", "%", "Upgraded This Month"].map(h => (
+                      <th key={h} style={{ textAlign: h === "Tier" ? "left" : "right", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const total = econData.tierDistribution.reduce((s, t) => s + t.count, 0);
+                    return econData.tierDistribution.map(t => (
+                      <tr key={t.tier}>
+                        <td style={{ padding: "8px 10px", color: "#E2E8F0", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)", textTransform: "capitalize" }}>{t.tier}</td>
+                        <td style={{ padding: "8px 10px", color: "#CBD5E1", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>{t.count.toLocaleString()}</td>
+                        <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>{total > 0 ? ((t.count / total) * 100).toFixed(1) : 0}%</td>
+                        <td style={{ padding: "8px 10px", color: t.upgradedThisMonth > 0 ? "#34D399" : "#64748B", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>{t.tier === "free" ? "—" : `+${t.upgradedThisMonth}`}</td>
+                      </tr>
+                    ));
+                  })()}
+                </tbody>
+              </table>
+              {(() => {
+                const groupCreditsAllocated = econData.groupBudgets.pools.reduce((s, p) => s + p.allocated, 0);
+                const groupValueAtFlexRate = groupCreditsAllocated * 0.09;
+                return groupCreditsAllocated > 0 ? (
+                  <p style={{ fontSize: 11, color: "#A78BFA", margin: "12px 0 0 0" }}>
+                    Group pools absorbed <strong>{groupCreditsAllocated.toLocaleString()} credits</strong> (~${groupValueAtFlexRate.toFixed(2)} equivalent at Flex rate)
+                  </p>
+                ) : null;
+              })()}
+            </CollapsibleContent>
+          </div>
+        </Collapsible>
+
+        {/* Group Budget Analytics Section */}
+        <Collapsible>
+          <div style={{
+            background: "rgba(30, 41, 59, 0.5)",
+            borderRadius: 12,
+            padding: "28px",
+            border: "1px solid rgba(100, 116, 139, 0.2)",
+            marginBottom: 32,
+          }}>
+            <CollapsibleTrigger style={{ width: "100%", background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 600, color: "#E2E8F0", marginBottom: 0 }}>
+                👥 Group Budgets — {econData.groupBudgets.totalPools} active pools
+              </h3>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginTop: 16 }}>
+                <thead>
+                  <tr>
+                    {["Tier", "Pools", "Allocated", "Remaining", "Utilization %", "Depleted"].map(h => (
+                      <th key={h} style={{ textAlign: h === "Tier" ? "left" : "right", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {econData.groupBudgets.pools.map(p => {
+                    const util = p.allocated > 0 ? ((p.allocated - p.remaining) / p.allocated * 100) : 0;
+                    return (
+                      <tr key={p.tier}>
+                        <td style={{ padding: "8px 10px", color: "#E2E8F0", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)", textTransform: "capitalize" }}>{p.tier}</td>
+                        <td style={{ padding: "8px 10px", color: "#CBD5E1", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>{p.count}</td>
+                        <td style={{ padding: "8px 10px", color: "#CBD5E1", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>{p.allocated.toLocaleString()}</td>
+                        <td style={{ padding: "8px 10px", color: "#CBD5E1", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>{p.remaining.toLocaleString()}</td>
+                        <td style={{ padding: "8px 10px", color: util > 75 ? "#F87171" : util > 50 ? "#FBBF24" : "#34D399", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>{util.toFixed(0)}%</td>
+                        <td style={{ padding: "8px 10px", color: p.depleted > 0 ? "#F87171" : "#64748B", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: p.depleted > 0 ? 600 : 400, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>{p.depleted}</td>
+                      </tr>
+                    );
+                  })}
+                  {/* Total row */}
+                  {(() => {
+                    const totals = econData.groupBudgets.pools.reduce((acc, p) => ({
+                      count: acc.count + p.count,
+                      allocated: acc.allocated + p.allocated,
+                      remaining: acc.remaining + p.remaining,
+                      depleted: acc.depleted + p.depleted,
+                    }), { count: 0, allocated: 0, remaining: 0, depleted: 0 });
+                    const totalUtil = totals.allocated > 0 ? ((totals.allocated - totals.remaining) / totals.allocated * 100) : 0;
+                    return (
+                      <tr style={{ borderTop: "2px solid rgba(100, 116, 139, 0.3)" }}>
+                        <td style={{ padding: "8px 10px", color: "#E2E8F0", fontWeight: 700, borderBottom: "none" }}>TOTAL</td>
+                        <td style={{ padding: "8px 10px", color: "#E2E8F0", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, borderBottom: "none" }}>{totals.count}</td>
+                        <td style={{ padding: "8px 10px", color: "#E2E8F0", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, borderBottom: "none" }}>{totals.allocated.toLocaleString()}</td>
+                        <td style={{ padding: "8px 10px", color: "#E2E8F0", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, borderBottom: "none" }}>{totals.remaining.toLocaleString()}</td>
+                        <td style={{ padding: "8px 10px", color: "#E2E8F0", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, borderBottom: "none" }}>{totalUtil.toFixed(0)}%</td>
+                        <td style={{ padding: "8px 10px", color: totals.depleted > 0 ? "#F87171" : "#E2E8F0", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, borderBottom: "none" }}>{totals.depleted}</td>
+                      </tr>
+                    );
+                  })()}
+                </tbody>
+              </table>
+              {/* Pool health indicators */}
+              {(() => {
+                const healthy = econData.groupBudgets.pools.reduce((s, p) => s + Math.max(0, p.count - p.depleted), 0);
+                const depleted = econData.groupBudgets.pools.reduce((s, p) => s + p.depleted, 0);
+                return (
+                  <p style={{ fontSize: 11, color: "#94A3B8", margin: "12px 0 0 0" }}>
+                    Pool Health: <span style={{ color: "#34D399" }}>🟢 Active: {healthy}</span> · <span style={{ color: depleted > 0 ? "#F87171" : "#64748B" }}>🔴 Depleted: {depleted}</span>
+                  </p>
+                );
+              })()}
+            </CollapsibleContent>
+          </div>
+        </Collapsible>
 
         <div style={{
           background: "rgba(30, 41, 59, 0.5)",
