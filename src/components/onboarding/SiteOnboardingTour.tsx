@@ -122,8 +122,10 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
   ];
 
   // Request slot from popup coordination on first visit only
+  // Re-check on route changes so the tour can show after quiz completion
   useEffect(() => {
     if (!user) return;
+    if (isVisible) return; // Already showing
     const alreadyCompleted = localStorage.getItem(STORAGE_KEY) === 'true';
     if (alreadyCompleted) return;
 
@@ -134,7 +136,7 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
       }
     }, 1500);
     return () => clearTimeout(timer);
-  }, [user, requestPopup]);
+  }, [user, requestPopup, location.pathname]);
 
   // Navigate to route when step changes
   useEffect(() => {
