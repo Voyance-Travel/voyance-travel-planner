@@ -57,6 +57,7 @@ export default function DestinationEntry() {
 
     setIsGenerating(true);
     setErrorMessage(null);
+    setPreviewData(null);
     
     try {
       const { data, error } = await supabase.functions.invoke('generate-quick-preview', {
