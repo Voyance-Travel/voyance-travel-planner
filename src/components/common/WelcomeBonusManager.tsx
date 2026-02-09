@@ -39,8 +39,8 @@ export function WelcomeBonusManager() {
     if (authLoading || bonusLoading || !user) return;
     if (!shouldShowWelcome()) return;
 
-    // Request permission from coordination system immediately
-    // Welcome has highest priority (1) so it should win any race
+    // Welcome credits now fires AFTER the site tour (priority 2)
+    // Queue it — it will show once the tour closes its slot
     const timer = setTimeout(() => {
       const allowed = requestPopup('welcome_credits');
       if (allowed) {
@@ -48,9 +48,9 @@ export function WelcomeBonusManager() {
         setShowWelcomeModal(true);
         sessionStorage.setItem(POPUP_STORAGE.WELCOME_SHOWN, user.id);
       } else {
-        console.log('[WelcomeBonusManager] Popup slot denied, queuing...');
+        console.log('[WelcomeBonusManager] Popup slot denied, queued for after tour');
       }
-    }, 500); // Fire quickly - welcome has highest priority
+    }, 2000); // Delay to let tour claim slot first
     return () => clearTimeout(timer);
   }, [user, authLoading, bonusLoading, hasClaimedBonus, requestPopup]);
 
