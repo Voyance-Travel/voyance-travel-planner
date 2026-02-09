@@ -10,24 +10,24 @@ import nolaHero1 from '@/assets/destinations/new-orleans-1.jpg';
 // Sample itineraries with computed intelligence metrics
 const SAMPLE_ITINERARIES = [
   {
-    id: 'tokyo-slow',
-    destination: 'Tokyo',
-    country: 'Japan',
-    duration: '7 days',
-    image: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800',
-    archetype: 'Slow Traveler',
-    archetypeCategory: 'RESTORER',
-    budgetTier: 'Stretch',
-    totalCost: 2890,
+    id: 'rio-explorer',
+    destination: 'Rio de Janeiro',
+    country: 'Brazil',
+    duration: '5 days',
+    image: 'https://images.unsplash.com/photo-1483729558449-99ef09a8c325?w=800',
+    archetype: 'Adrenaline Architect',
+    archetypeCategory: 'EXPLORER',
+    budgetTier: 'Safe',
+    totalCost: 1750,
     intelligence: {
-      finds: 3,
-      timingHacks: 2,
+      finds: 4,
+      timingHacks: 3,
       trapsAvoided: 3,
     },
     highlights: [
-      'Morning at Tsukiji Outer Market (before 8am)',
-      'Private tea ceremony in Yanaka',
-      'Sunset from Shimokitazawa rooftops',
+      'Sunrise hike to Pedra da Gávea',
+      'Hidden samba bar in Lapa (locals only)',
+      'Street food tour through Santa Teresa',
     ],
   },
   {
@@ -116,10 +116,10 @@ const SAMPLE_ITINERARIES = [
   },
 ];
 
-const DESTINATIONS = ['Tokyo', 'Denver', 'New Orleans', 'Bali', 'Rome'];
+const DESTINATIONS = ['Rio de Janeiro', 'Denver', 'New Orleans', 'Bali', 'Rome'];
 
 // Destinations with real sample itinerary data
-const HAS_REAL_SAMPLE = new Set(['tokyo-slow', 'bali-adventurer']);
+const HAS_REAL_SAMPLE = new Set(['bali-adventurer']);
 function ItineraryCard({ itinerary }: { itinerary: typeof SAMPLE_ITINERARIES[0] }) {
   return (
     <motion.div
