@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Mail, Lock, User, ArrowRight, Eye, EyeOff, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { SocialLoginButtons } from '@/components/auth/SocialLoginButtons';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
+import { consumeReturnPath } from '@/utils/authReturnPath';
 
 interface PasswordStrength {
   score: number;
@@ -75,8 +76,8 @@ export function SignUpForm() {
     
     try {
       await signup(email, password, { firstName: firstName.trim(), lastName: lastName.trim() });
-      // Return path is preserved in sessionStorage for post-quiz redirect
-      navigate(ROUTES.QUIZ);
+      // Return user to where they were; OnboardingRedirect will nudge them to take the quiz
+      navigate(consumeReturnPath('/'));
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create account. Please try again.';
       setError(errorMessage);
