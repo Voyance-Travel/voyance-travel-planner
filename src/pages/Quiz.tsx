@@ -641,7 +641,7 @@ export default function Quiz() {
               exit={{ opacity: 0 }}
               className="flex-1 pt-28"
             >
-              <QuizCompletion onContinue={handleComplete} />
+              <QuizCompletion onContinue={handleComplete} dnaResult={travelDNA} />
             </motion.div>
           ) : (
             <motion.div
