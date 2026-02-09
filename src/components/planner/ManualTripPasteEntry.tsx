@@ -41,7 +41,7 @@ interface ManualTripPasteEntryProps {
   onAuthRequired?: () => void;
 }
 
-export function ManualTripPasteEntry({ onAuthRequired }: ManualTripPasteEntryProps = {}) {
+export function ManualTripPasteEntry({ }: ManualTripPasteEntryProps = {}) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [step, setStep] = useState<Step>('paste');
@@ -120,18 +120,7 @@ export function ManualTripPasteEntry({ onAuthRequired }: ManualTripPasteEntryPro
     if (!parsed) return;
 
     if (!user) {
-      if (onAuthRequired) {
-        // Save paste text so it survives the auth redirect
-        sessionStorage.setItem('voyance_manual_paste_draft', JSON.stringify({
-          pasteText,
-          parsed,
-          editedPreferences,
-          saveToProfile,
-        }));
-        onAuthRequired();
-      } else {
-        toast.error('Please sign in to save your trip');
-      }
+      toast.error('Please sign in to save your trip');
       return;
     }
 

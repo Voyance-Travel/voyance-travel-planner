@@ -183,7 +183,11 @@ function AnimatedRoutes() {
           
           {/* Onboarding Routes */}
           <Route path="/welcome" element={<Welcome />} />
-          <Route path="/start" element={<Start />} />
+          <Route path="/start" element={
+            <ProtectedRoute>
+              <Start />
+            </ProtectedRoute>
+          } />
           <Route path="/quiz" element={<Quiz />} />
           <Route path="/onboard/conversation" element={<OnboardConversation />} />
           
