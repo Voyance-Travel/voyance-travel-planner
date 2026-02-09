@@ -37,7 +37,11 @@ Lunch: Try the famous street food ($15)
 Afternoon: Walking tour of Old Town
 Evening: Dinner at a rooftop restaurant`;
 
-export function ManualTripPasteEntry() {
+interface ManualTripPasteEntryProps {
+  onAuthRequired?: () => void;
+}
+
+export function ManualTripPasteEntry({ onAuthRequired }: ManualTripPasteEntryProps = {}) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [step, setStep] = useState<Step>('paste');
@@ -48,6 +52,20 @@ export function ManualTripPasteEntry() {
   const [saveToProfile, setSaveToProfile] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
+  // Restore draft after auth redirect
+  useState(() => {
+    try {
+      const raw = sessionStorage.getItem('voyance_manual_paste_draft');
+      if (raw && user) {
+        const draft = JSON.parse(raw);
+        if (draft.pasteText) setPasteText(draft.pasteText);
+        if (draft.parsed) { setParsed(draft.parsed); setStep('review'); }
+        if (draft.editedPreferences) setEditedPreferences(draft.editedPreferences);
+        if (draft.saveToProfile) setSaveToProfile(draft.saveToProfile);
+        sessionStorage.removeItem('voyance_manual_paste_draft');
+      }
+    } catch { /* ignore */ }
+  });
   const handleParse = async () => {
     if (!pasteText.trim()) {
       toast.error('Please paste your trip research first');
@@ -102,7 +120,18 @@ export function ManualTripPasteEntry() {
     if (!parsed) return;
 
     if (!user) {
-      toast.error('Please sign in to save your trip');
+      if (onAuthRequired) {
+        // Save paste text so it survives the auth redirect
+        sessionStorage.setItem('voyance_manual_paste_draft', JSON.stringify({
+          pasteText,
+          parsed,
+          editedPreferences,
+          saveToProfile,
+        }));
+        onAuthRequired();
+      } else {
+        toast.error('Please sign in to save your trip');
+      }
       return;
     }
 
