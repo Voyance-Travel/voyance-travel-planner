@@ -660,10 +660,6 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
         </Tabs>
       </div>
 
-      {/* 5. Perfect Trip Preview */}
-      <PerfectTripPreview 
-        preview={dnaData.perfect_trip_preview || narrative.perfectTripPreview} 
-      />
     </motion.div>
   );
 }
