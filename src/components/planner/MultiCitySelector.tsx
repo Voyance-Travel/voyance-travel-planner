@@ -5,8 +5,8 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { motion, Reorder, AnimatePresence } from 'framer-motion';
-import { MapPin, Plus, GripVertical, Trash2, Globe, Train, Plane as PlaneIcon, Car, Bus, Sparkles, Clock, ArrowDown, ArrowRightLeft, Zap } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { MapPin, Plus, ChevronUp, ChevronDown, Trash2, Globe, Train, Plane as PlaneIcon, Car, Bus, Sparkles, Clock, ArrowDown, ArrowRightLeft, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -143,6 +143,14 @@ export default function MultiCitySelector({
     onTransportsChange(newTransports);
   }, [transports, onDestinationsChange, onTransportsChange]);
 
+  const handleMoveCity = useCallback((index: number, direction: 'up' | 'down') => {
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= destinations.length) return;
+    const reordered = [...destinations];
+    [reordered[index], reordered[newIndex]] = [reordered[newIndex], reordered[index]];
+    handleReorder(reordered);
+  }, [destinations, handleReorder]);
+
   const handleTransportTypeChange = useCallback((index: number, type: InterCityTransport['type']) => {
     const updated = transports.map((t, i) =>
       i === index ? { ...t, type } : t
@@ -271,18 +279,9 @@ export default function MultiCitySelector({
             </div>
           </div>
 
-          <Reorder.Group
-            axis="y"
-            values={destinations}
-            onReorder={handleReorder}
-            className="space-y-0"
-          >
+          <div className="space-y-0">
             {destinations.map((destination, index) => (
-              <Reorder.Item
-                key={destination.id}
-                value={destination}
-                className="list-none"
-              >
+              <div key={destination.id}>
                 <motion.div layout>
                   {/* City Card */}
                   <div className="flex items-stretch gap-3">
@@ -304,9 +303,24 @@ export default function MultiCitySelector({
                       <Card className="border-border hover:border-primary/50 transition-colors">
                         <CardContent className="p-4">
                           <div className="flex items-center gap-3">
-                            {/* Drag Handle */}
-                            <div className="cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground">
-                              <GripVertical className="h-4 w-4" />
+                            {/* Move Up/Down */}
+                            <div className="flex flex-col gap-0.5">
+                              <button
+                                type="button"
+                                onClick={() => handleMoveCity(index, 'up')}
+                                disabled={index === 0}
+                                className="text-muted-foreground/50 hover:text-muted-foreground disabled:opacity-20 transition-colors"
+                              >
+                                <ChevronUp className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleMoveCity(index, 'down')}
+                                disabled={index === destinations.length - 1}
+                                className="text-muted-foreground/50 hover:text-muted-foreground disabled:opacity-20 transition-colors"
+                              >
+                                <ChevronDown className="h-4 w-4" />
+                              </button>
                             </div>
 
                             {/* City Info */}
@@ -434,9 +448,9 @@ export default function MultiCitySelector({
                     </div>
                   </div>
                 </motion.div>
-              </Reorder.Item>
+              </div>
             ))}
-          </Reorder.Group>
+          </div>
         </motion.div>
       )}
 
