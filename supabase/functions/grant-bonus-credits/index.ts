@@ -225,6 +225,23 @@ serve(async (req) => {
       );
     }
 
+    // Create credit_purchases row for FIFO tracking (critical: get-entitlements reads from this table)
+    const { error: purchaseError } = await supabaseAdmin
+      .from('credit_purchases')
+      .insert({
+        user_id: user.id,
+        credit_type: bonusType === 'welcome' ? 'signup_bonus' : bonusType === 'launch' ? 'signup_bonus' : 'free_monthly',
+        amount: config.credits,
+        remaining: config.credits,
+        expires_at: expiresAt.toISOString(),
+        source: `bonus_${bonusType}`,
+      });
+
+    if (purchaseError) {
+      console.error('[grant-bonus-credits] Error creating credit_purchases row:', purchaseError);
+      // Non-fatal: credit_balances already updated, but FIFO won't track it
+    }
+
     // Log in credit ledger
     await supabaseAdmin
       .from('credit_ledger')

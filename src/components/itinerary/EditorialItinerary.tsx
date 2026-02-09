@@ -1035,7 +1035,7 @@ export function EditorialItinerary({
   const canGoNext = selectedDayIndex < days.length - 1;
 
   // Get entitlements for credit checking
-  const { data: entitlements, isPaid } = useEntitlements();
+  const { data: entitlements, isPaid } = useEntitlements(tripId);
   
   // Credit system hooks
   const { data: creditData } = useCredits();

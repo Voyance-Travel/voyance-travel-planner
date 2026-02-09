@@ -129,7 +129,7 @@ export type FeatureFlag =
 // Hook
 // ============================================================================
 
-export function useEntitlements() {
+export function useEntitlements(tripId?: string) {
   const { user, isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
 
@@ -196,9 +196,11 @@ export function useEntitlements() {
   }
 
   const query = useQuery({
-    queryKey: ['entitlements', user?.id],
+    queryKey: ['entitlements', user?.id, tripId],
     queryFn: async (): Promise<EntitlementsResponse> => {
-      const { data, error } = await supabase.functions.invoke('get-entitlements');
+      const { data, error } = await supabase.functions.invoke('get-entitlements', {
+        body: tripId ? { tripId } : undefined,
+      });
       
       if (error) {
         const errorBody = error.message || '';

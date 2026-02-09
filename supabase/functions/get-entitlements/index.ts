@@ -177,13 +177,18 @@ serve(async (req) => {
       .limit(1);
     const hasCompletedPurchase = (purchaseCheck?.length || 0) > 0;
 
-    // 2. Is first trip (no trips with non-null itinerary_status)
-    const { data: existingTrips } = await supabaseAdmin
+    // 2. Is first trip (no OTHER trips with non-null itinerary_status)
+    // Exclude the current tripId so viewing the generated trip doesn't invalidate first-trip status
+    let firstTripQuery = supabaseAdmin
       .from('trips')
       .select('id')
       .eq('user_id', user.id)
       .not('itinerary_status', 'is', null)
       .limit(1);
+    if (tripId) {
+      firstTripQuery = firstTripQuery.neq('id', tripId);
+    }
+    const { data: existingTrips } = await firstTripQuery;
     const isFirstTrip = (existingTrips?.length || 0) === 0;
 
     // 3. Smart Finish + trip usage (if tripId provided)
