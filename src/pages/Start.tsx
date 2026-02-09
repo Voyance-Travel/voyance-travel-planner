@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { saveReturnPath } from '@/utils/authReturnPath';
+
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -1335,51 +1335,39 @@ export default function Start() {
 
   const DRAFT_STORAGE_KEY = 'voyance_start_draft';
 
-  // Restore draft from sessionStorage (survives auth redirect)
-  const savedDraft = (() => {
-    try {
-      const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch { return null; }
-  })();
   // Current step: 1 = Trip Details, 2 = Flight & Hotel
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showAuthGate, setShowAuthGate] = useState(false);
   const [showDNAPrompt, setShowDNAPrompt] = useState(false);
   const [planMode, setPlanMode] = useState<'single' | 'multi' | 'chat' | 'manual'>('single');
 
   // Trip state
   const destinationFromQuery = searchParams.get('destination');
   const [destinationSelection, setDestinationSelection] = useState<LocationSelection>(() => ({
-    display: destinationFromQuery || plannerState.basics.destination || savedDraft?.destination || '',
-    cityName: destinationFromQuery || plannerState.basics.destination || savedDraft?.destination || '',
+    display: destinationFromQuery || plannerState.basics.destination || '',
+    cityName: destinationFromQuery || plannerState.basics.destination || '',
     airportCodes: undefined,
   }));
   const [startDate, setStartDate] = useState<Date | undefined>(
-    plannerState.basics.startDate ? parseISO(plannerState.basics.startDate)
-    : savedDraft?.startDate ? parseISO(savedDraft.startDate)
-    : undefined
+    plannerState.basics.startDate ? parseISO(plannerState.basics.startDate) : undefined
   );
   const [endDate, setEndDate] = useState<Date | undefined>(
-    plannerState.basics.endDate ? parseISO(plannerState.basics.endDate)
-    : savedDraft?.endDate ? parseISO(savedDraft.endDate)
-    : undefined
+    plannerState.basics.endDate ? parseISO(plannerState.basics.endDate) : undefined
   );
-  const [travelers, setTravelers] = useState(plannerState.basics.travelers || savedDraft?.travelers || 2);
-  const [tripType, setTripType] = useState<string>(savedDraft?.tripType || 'leisure');
-  const [celebrationDay, setCelebrationDay] = useState<number | undefined>(savedDraft?.celebrationDay);
-  const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount || savedDraft?.budgetAmount);
+  const [travelers, setTravelers] = useState(plannerState.basics.travelers || 2);
+  const [tripType, setTripType] = useState<string>('leisure');
+  const [celebrationDay, setCelebrationDay] = useState<number | undefined>();
+  const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount);
   const [linkedGuests, setLinkedGuests] = useState<LinkedGuest[]>([]);
   const [showGuestModal, setShowGuestModal] = useState(false);
 
   // Multi-city state
-  const [isMultiCity, setIsMultiCity] = useState(plannerState.basics.isMultiCity || savedDraft?.isMultiCity || false);
+  const [isMultiCity, setIsMultiCity] = useState(plannerState.basics.isMultiCity || false);
   const [multiCityDestinations, setMultiCityDestinations] = useState<TripDestination[]>(
-    plannerState.basics.destinations || savedDraft?.multiCityDestinations || []
+    plannerState.basics.destinations || []
   );
   const [multiCityTransports, setMultiCityTransports] = useState<InterCityTransport[]>(
-    plannerState.basics.interCityTransports || savedDraft?.multiCityTransports || []
+    plannerState.basics.interCityTransports || []
   );
   
   // Flight state
@@ -1429,36 +1417,34 @@ export default function Start() {
 
   // Handle return from quiz — restore step 2 and auto-submit
   useEffect(() => {
-    if (searchParams.get('fromQuiz') === 'true' && user?.quizCompleted && savedDraft) {
-      // Restore step 2 state from draft
-      if (savedDraft.outboundFlight) setOutboundFlight(savedDraft.outboundFlight);
-      if (savedDraft.returnFlight) setReturnFlight(savedDraft.returnFlight);
-      if (savedDraft.showReturnFlight) setShowReturnFlight(savedDraft.showReturnFlight);
-      if (savedDraft.hotelChoice) setHotelChoice(savedDraft.hotelChoice);
-      if (savedDraft.manualHotel) setManualHotel(savedDraft.manualHotel);
-      if (savedDraft.isFirstTimeVisitor !== undefined) setIsFirstTimeVisitor(savedDraft.isFirstTimeVisitor);
-      if (savedDraft.mustDoActivities) setMustDoActivities(savedDraft.mustDoActivities);
-      setCurrentStep(savedDraft.currentStep || 2);
-      // Clean up the query param
+    if (searchParams.get('fromQuiz') === 'true' && user?.quizCompleted) {
+      try {
+        const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY);
+        const savedDraft = raw ? JSON.parse(raw) : null;
+        if (savedDraft) {
+          if (savedDraft.outboundFlight) setOutboundFlight(savedDraft.outboundFlight);
+          if (savedDraft.returnFlight) setReturnFlight(savedDraft.returnFlight);
+          if (savedDraft.showReturnFlight) setShowReturnFlight(savedDraft.showReturnFlight);
+          if (savedDraft.hotelChoice) setHotelChoice(savedDraft.hotelChoice);
+          if (savedDraft.manualHotel) setManualHotel(savedDraft.manualHotel);
+          if (savedDraft.isFirstTimeVisitor !== undefined) setIsFirstTimeVisitor(savedDraft.isFirstTimeVisitor);
+          if (savedDraft.mustDoActivities) setMustDoActivities(savedDraft.mustDoActivities);
+          if (savedDraft.destination) setDestinationSelection({ display: savedDraft.destination, cityName: savedDraft.destination });
+          if (savedDraft.startDate) setStartDate(parseISO(savedDraft.startDate));
+          if (savedDraft.endDate) setEndDate(parseISO(savedDraft.endDate));
+          if (savedDraft.travelers) setTravelers(savedDraft.travelers);
+          if (savedDraft.tripType) setTripType(savedDraft.tripType);
+          if (savedDraft.budgetAmount) setBudgetAmount(savedDraft.budgetAmount);
+          if (savedDraft.isMultiCity) setIsMultiCity(savedDraft.isMultiCity);
+          if (savedDraft.multiCityDestinations) setMultiCityDestinations(savedDraft.multiCityDestinations);
+          if (savedDraft.multiCityTransports) setMultiCityTransports(savedDraft.multiCityTransports);
+          setCurrentStep(savedDraft.currentStep || 2);
+          sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+        }
+      } catch {}
       window.history.replaceState({}, '', '/start');
     }
   }, [searchParams, user]);
-
-  // Handle return from auth — restore all fields from draft
-  useEffect(() => {
-    if (user && savedDraft && !searchParams.get('fromQuiz')) {
-      if (savedDraft.planMode) setPlanMode(savedDraft.planMode);
-      if (savedDraft.isMultiCity) setIsMultiCity(savedDraft.isMultiCity);
-      if (savedDraft.outboundFlight) setOutboundFlight(savedDraft.outboundFlight);
-      if (savedDraft.returnFlight) setReturnFlight(savedDraft.returnFlight);
-      if (savedDraft.showReturnFlight) setShowReturnFlight(savedDraft.showReturnFlight);
-      if (savedDraft.hotelChoice) setHotelChoice(savedDraft.hotelChoice);
-      if (savedDraft.manualHotel) setManualHotel(savedDraft.manualHotel);
-      if (savedDraft.isFirstTimeVisitor !== undefined) setIsFirstTimeVisitor(savedDraft.isFirstTimeVisitor);
-      if (savedDraft.mustDoActivities) setMustDoActivities(savedDraft.mustDoActivities);
-      if (savedDraft.currentStep) setCurrentStep(savedDraft.currentStep);
-    }
-  }, [user]);
 
   // Check draft limit
   useEffect(() => {
@@ -1481,49 +1467,6 @@ export default function Start() {
     setIsSubmitting(true);
 
     try {
-      // Check if user needs to authenticate
-      if (!user) {
-        // Save all current input to sessionStorage so it survives the auth redirect
-        const dest = isMultiCity
-          ? (multiCityDestinations[0]?.city || destinationSelection.cityName)
-          : destinationSelection.cityName;
-        const draft = {
-          destination: dest,
-          startDate: format(startDate, 'yyyy-MM-dd'),
-          endDate: format(endDate, 'yyyy-MM-dd'),
-          travelers,
-          budgetAmount,
-          tripType,
-          celebrationDay,
-          isMultiCity,
-          multiCityDestinations,
-          multiCityTransports,
-          outboundFlight: outboundFlight.arrivalTime ? outboundFlight : undefined,
-          returnFlight: showReturnFlight && returnFlight.departureTime ? returnFlight : undefined,
-          showReturnFlight,
-          hotelChoice,
-          manualHotel: hotelChoice === 'own' ? manualHotel : undefined,
-          isFirstTimeVisitor,
-          mustDoActivities,
-          currentStep,
-        };
-        sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
-        setBasics({
-          destination: dest,
-          startDate: draft.startDate,
-          endDate: draft.endDate,
-          travelers,
-          budgetAmount,
-          isMultiCity,
-          destinations: multiCityDestinations,
-          interCityTransports: multiCityTransports,
-        });
-        saveReturnPath('/start');
-        setIsSubmitting(false);
-        setShowAuthGate(true);
-        return;
-      }
-
       // Check if user has Travel DNA — prompt if not
       if (!skipDNACheck && !user.quizCompleted) {
         setIsSubmitting(false);
@@ -1739,34 +1682,6 @@ export default function Start() {
                         return;
                       }
 
-                      if (!user) {
-                        // Populate state for post-auth resume, then show auth gate
-                        setDestinationSelection({ display: dest, cityName: dest });
-                        setStartDate(chatStartDate);
-                        setEndDate(chatEndDate);
-                        if (details.travelers) setTravelers(details.travelers);
-                        if (details.tripType) setTripType(details.tripType);
-                        if (details.budgetAmount) setBudgetAmount(details.budgetAmount);
-                        const draft = {
-                          destination: dest,
-                          startDate: format(chatStartDate, 'yyyy-MM-dd'),
-                          endDate: format(chatEndDate, 'yyyy-MM-dd'),
-                          travelers: details.travelers || travelers,
-                          budgetAmount: details.budgetAmount || budgetAmount,
-                          tripType: details.tripType || tripType,
-                        };
-                        sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
-                        setBasics({
-                          destination: dest,
-                          startDate: draft.startDate,
-                          endDate: draft.endDate,
-                          travelers: draft.travelers,
-                          budgetAmount: draft.budgetAmount,
-                        });
-                        saveReturnPath('/start');
-                        setShowAuthGate(true);
-                        return;
-                      }
 
                       setIsSubmitting(true);
                       try {
@@ -1814,48 +1729,11 @@ export default function Start() {
                       }
                     }}
                     onContinue={() => {
-                      if (!user) {
-                        const dest = isMultiCity
-                          ? (multiCityDestinations[0]?.city || '')
-                          : destinationSelection.cityName;
-                        // Persist draft to sessionStorage so it survives auth redirect
-                        const draft = {
-                          destination: dest,
-                          startDate: startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
-                          endDate: endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
-                          travelers,
-                          budgetAmount,
-                          tripType,
-                          celebrationDay,
-                          isMultiCity,
-                          multiCityDestinations,
-                          multiCityTransports,
-                        };
-                        sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
-                        setBasics({
-                          destination: dest,
-                          startDate: draft.startDate,
-                          endDate: draft.endDate,
-                          travelers,
-                          budgetAmount,
-                          isMultiCity,
-                          destinations: multiCityDestinations,
-                          interCityTransports: multiCityTransports,
-                        });
-                        saveReturnPath('/start');
-                        setShowAuthGate(true);
-                        return;
-                      }
-                      // Clear draft — user is authenticated and proceeding
-                      sessionStorage.removeItem(DRAFT_STORAGE_KEY);
                       setCurrentStep(2);
                       window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
                     }}
                     onManualAuthRequired={() => {
-                      const draft = { planMode: 'manual' as const };
-                      sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
-                      saveReturnPath('/start');
-                      setShowAuthGate(true);
+                      // User is already authenticated via ProtectedRoute, no-op
                     }}
                   />
                 )}
@@ -1895,36 +1773,6 @@ export default function Start() {
         </div>
       </section>
 
-      {/* Auth Gate Dialog */}
-      <Dialog open={showAuthGate} onOpenChange={setShowAuthGate}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-              Create a free account to save your trip
-            </DialogTitle>
-            <DialogDescription>
-              Sign in or create an account to save your trip details, build your itinerary, and access it anytime.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-3 pt-2">
-            <Button
-              onClick={() => navigate(ROUTES.SIGNUP + '?redirect=' + encodeURIComponent('/start'))}
-              className="w-full gap-2"
-            >
-              Create Free Account
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => navigate(ROUTES.SIGNIN + '?redirect=' + encodeURIComponent('/start'))}
-              className="w-full"
-            >
-              I already have an account
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Travel DNA Prompt Dialog */}
       <Dialog open={showDNAPrompt} onOpenChange={setShowDNAPrompt}>
