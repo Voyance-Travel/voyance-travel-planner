@@ -135,21 +135,26 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
   }, [user]);
 
   // Robust polling: keep trying to acquire the popup slot
+  // IMPORTANT: Wait for welcome credits to finish first (it has priority 1)
   useEffect(() => {
     if (!user) return;
     if (isVisible) return;
     const completedVal = localStorage.getItem(STORAGE_KEY);
     if (completedVal === user.id) return; // This user already completed tour
 
-    // Initial attempt after a short delay
+    // Wait longer to let welcome credits modal claim its slot first
+    // Welcome fires at 500ms, so we wait 3s to ensure it either showed or was skipped
     const initialTimer = setTimeout(() => {
+      // Only request if welcome is not currently active
+      const state = usePopupCoordination.getState();
+      if (state.activePopup === 'welcome_credits') return; // let it finish
       const allowed = requestPopup('site_tour');
       if (allowed) {
         setIsVisible(true);
       }
-    }, 2000);
+    }, 3000);
 
-    // Fallback: poll every 2s in case the initial attempt was blocked
+    // Fallback: poll every 2.5s in case the initial attempt was blocked
     const interval = setInterval(() => {
       const val = localStorage.getItem(STORAGE_KEY);
       if (val === user?.id) {
@@ -157,6 +162,8 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
         return;
       }
       const state = usePopupCoordination.getState();
+      // Don't try to grab slot while welcome is active
+      if (state.activePopup === 'welcome_credits') return;
       if (!state.activePopup) {
         const allowed = state.requestPopup('site_tour');
         if (allowed) {
