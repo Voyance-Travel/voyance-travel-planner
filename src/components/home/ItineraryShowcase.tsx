@@ -114,12 +114,33 @@ const SAMPLE_ITINERARIES = [
       'Family-run trattoria (no tourists)',
     ],
   },
+  {
+    id: 'tokyo-slow',
+    destination: 'Tokyo',
+    country: 'Japan',
+    duration: '7 days',
+    image: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800',
+    archetype: 'Slow Traveler',
+    archetypeCategory: 'CURATOR',
+    budgetTier: 'Stretch',
+    totalCost: 2890,
+    intelligence: {
+      finds: 3,
+      timingHacks: 2,
+      trapsAvoided: 3,
+    },
+    highlights: [
+      'Morning at Tsukiji Outer Market (before 8am)',
+      'Private tea ceremony in Yanaka',
+      'Sunset from Shimokitazawa rooftops',
+    ],
+  },
 ];
 
-const DESTINATIONS = ['Rio de Janeiro', 'Denver', 'New Orleans', 'Bali', 'Rome'];
+const DESTINATIONS = ['Rio de Janeiro', 'Denver', 'New Orleans', 'Bali', 'Rome', 'Tokyo'];
 
-// Destinations with real sample itinerary data
-const HAS_REAL_SAMPLE = new Set(['rio-explorer', 'bali-adventurer']);
+// All destinations have sample itineraries
+const HAS_REAL_SAMPLE = new Set(['rio-explorer', 'denver-social', 'new-orleans-romantic', 'bali-adventurer', 'rome-foodie', 'tokyo-slow']);
 function ItineraryCard({ itinerary }: { itinerary: typeof SAMPLE_ITINERARIES[0] }) {
   return (
     <motion.div
