@@ -18,7 +18,11 @@ import {
   Play,
   type LucideIcon,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  MapPin,
+  MessageCircle,
+  ClipboardPaste,
+  Globe
 } from 'lucide-react';
 import useEmblaCarousel from 'embla-carousel-react';
 import { ARCHETYPE_NARRATIVES, CATEGORY_DESCRIPTIONS, type ArchetypeNarrative } from '@/data/archetypeNarratives';
@@ -265,23 +269,68 @@ export default function HowItWorks() {
             <div className="lg:order-2">
               <span className="text-8xl font-serif font-bold text-primary/10">02</span>
               <h2 className="text-3xl md:text-4xl font-serif font-bold text-foreground -mt-8 mb-6">
-                Tell us your trip
+                Start your way
               </h2>
-              <p className="text-lg text-muted-foreground leading-relaxed mb-6">
-                Where you're going. When you arrive. Where you're staying. 
-                We need the constraints to build the canvas.
+              <p className="text-lg text-muted-foreground leading-relaxed mb-8">
+                No two planners are alike — so we give you four ways to begin. 
+                Pick the one that matches how you think.
               </p>
-              <p className="text-lg text-muted-foreground leading-relaxed">
-                Your flight lands at 2pm? We'll schedule accordingly. 
-                Hotel in the old town? We'll cluster activities nearby. 
-                Every detail shapes your days.
-              </p>
+
+              <div className="space-y-4">
+                <div className="flex items-start gap-4 p-4 rounded-xl bg-muted/50 border border-border hover:border-primary/30 transition-colors">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <MapPin className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-foreground mb-1">Pick a City</h4>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Choose your destination, dates, and budget. We build an AI-powered itinerary matched to your Travel DNA.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-4 p-4 rounded-xl bg-muted/50 border border-border hover:border-primary/30 transition-colors">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Globe className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-foreground mb-1">Multi-City</h4>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Hopping between cities? Plan a multi-stop trip with smart day allocation and transition-day logistics.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-4 p-4 rounded-xl bg-muted/50 border border-border hover:border-primary/30 transition-colors">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <MessageCircle className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-foreground mb-1">Just Tell Us</h4>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Describe your dream trip in plain English. Our AI extracts the details and builds your itinerary from conversation.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-4 p-4 rounded-xl bg-muted/50 border border-border hover:border-primary/30 transition-colors">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <ClipboardPaste className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-foreground mb-1">Build It Yourself</h4>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Already have an itinerary from ChatGPT, a blog, or a friend? Paste it in — we'll parse, structure, and enhance it.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="relative lg:order-1">
               <div className="absolute -inset-4 bg-gradient-to-br from-accent/20 to-primary/20 rounded-3xl blur-2xl" />
               <img 
                 src={planImage}
-                alt="Planning your destination"
+                alt="Multiple ways to plan your trip"
                 className="relative rounded-2xl shadow-2xl w-full aspect-[4/3] object-cover"
               />
             </div>
