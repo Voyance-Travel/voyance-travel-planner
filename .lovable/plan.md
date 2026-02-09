@@ -1,50 +1,130 @@
 
+# Full Pricing Spec Implementation — Gap Analysis and Plan
 
-## Archetype Count Audit: 27 vs Actual
+## Current State vs Spec — What's Real
 
-### Finding
+### Already Working (no changes needed)
+- Credit costs (UNLOCK_DAY: 60, SWAP: 5, REGEN: 10, AI_MESSAGE: 5, RESTAURANT: 5, HOTEL_SEARCH: 40, SMART_FINISH: 50, HOTEL_OPT: 100, MYSTERY: 15/5, TRANSPORT: 5)
+- Per-trip free action caps (10 swaps, 5 regens, 20 messages, 5 recs) via `trip_action_usage` table
+- Trip cost calculator with multi-city fees and complexity multipliers
+- Flex credit packs (100/$9, 300/$25, 500/$39) with working Stripe prices
+- Club packs structure (Voyager/Explorer/Adventurer) with base/bonus credit splits
+- Founding member tracker table + `award_founding_member` RPC
+- Credit balance tracking (`credit_balances` + `credit_ledger`)
+- Spend logic (free credits first, then purchased)
+- Monthly credit grants (150/month, 300 cap, 2-month expiry)
+- Signup bonus (150 credits)
+- Out-of-credits modal with purchase options
+- Embedded checkout flow
+- Webhook fulfillment for credit purchases
+- Pricing page with Flex + Club sections
+- `useFoundingMemberCount` hook
 
-The scoring engine (`calculate-travel-dna/index.ts`) contains **32 entries**, but they break down as:
+### Needs Price Update Only (Step 1)
+| Pack | Current | New |
+|------|---------|-----|
+| Voyager | $29.99 | $49.99 |
+| Explorer | $59.99 | $89.99 |
+| Adventurer | $99.99 | $149.99 |
 
-| Category | Displayed (27) | Missing from Display | Fallbacks |
-|----------|----------------|---------------------|-----------|
-| Explorer | 4 | - | 3 (balanced_story_collector, flexible_wanderer, explorer) |
-| Connector | 4 (missing community_builder) | 1 | - |
-| Achiever | 4 | - | - |
-| Restorer | 6 | - | - |
-| Curator | 4 (missing curated_luxe) | 1 | - |
-| Transformer | 5 | - | - |
+Create 3 new Stripe prices on existing products, update `src/config/pricing.ts` with new price IDs and amounts.
 
-- **27** are fully designed archetypes shown on the Archetypes page
-- **2** real archetypes exist in scoring but are hidden from display: `community_builder` (Connector) and `curated_luxe` (Curator)
-- **3** are fallback/catch-all archetypes for edge cases (not meant to be showcased)
+### Missing: New Features Required
 
-### Recommendation
+#### A. `credit_purchases` Table + FIFO Spending (Large Change)
+**Current:** Single counter in `credit_balances` (purchased_credits, free_credits). No per-purchase expiration tracking.
+**Spec requires:** Individual purchase rows with different expiration dates (12mo for flex, never for club_base, 6mo for club_bonus), deducted in FIFO order by expiration.
 
-Update the count to **29** by adding the 2 missing real archetypes to the display page. The 3 fallbacks are safety nets, not featured types.
+**What this involves:**
+1. New `credit_purchases` table with RLS
+2. Rewrite `spend-credits` edge function to query `credit_purchases` rows ordered by `expires_at ASC NULLS LAST` and deduct across rows
+3. Update `stripe-webhook` to insert into `credit_purchases` (flex = 1 row, club = 2 rows for base + bonus)
+4. Update `grant-monthly-credits` to insert a `credit_purchases` row instead of just incrementing counter
+5. Keep `credit_balances` as denormalized cache for fast reads
+6. Migration script to convert existing purchased_credits into a single `credit_purchases` row
+7. Update `useCredits` hook to optionally show breakdown by type/expiration
 
-### Changes Required
+#### B. Group Unlocks (New Feature)
+**Current:** Does not exist at all. No table, no UI, no Stripe products, no cap enforcement.
+**Spec requires:** Per-trip group unlock purchase (Small $19.99 / Medium $34.99 / Large $79.99) with shared action caps (swaps, regens, chat, recs).
 
-**1. Add missing archetypes to Archetypes page** (`src/pages/Archetypes.tsx`)
-- Add `community_builder` to CONNECTOR array
-- Add `curated_luxe` to CURATOR array
-- Update comment from "27" to "29"
+**What this involves:**
+1. Create 3 new Stripe products + prices for group tiers
+2. New `group_unlocks` table with RLS (collaborators can view)
+3. Add `GROUP_CAPS` and `GROUP_UNLOCK_TIERS` config to `pricing.ts`
+4. Update `spend-credits` to check group caps when a collaborator performs an action
+5. Update `stripe-webhook` to handle group unlock fulfillment
+6. Update `create-embedded-checkout` to pass group metadata (trip_id, tier)
+7. New `GroupUnlockModal` UI component
+8. New `useGroupUnlock` hook
+9. Integration with existing collaboration system
 
-**2. Update all "27" references across the site** (10 files):
+#### C. `user_badges` Table (New Feature)
+**Current:** `founding_member_tracker` exists but there's no general badge system.
+**Spec requires:** `user_badges` table for club badges and founding member badges, displayed on profiles.
 
-| File | What to change |
-|------|---------------|
-| `src/components/common/TopNav.tsx` | "See all 27 traveler types" -> "See all 29 traveler types" |
-| `src/components/home/TheInsightSection.tsx` | "27 Travel Archetypes" badge -> "29" |
-| `src/components/home/SampleArchetype.tsx` | "27 unique archetypes" and "See all 27" -> "29" |
-| `src/components/home/SocialProofSection.tsx` | `archetypesAvailable: 27` -> `29` |
-| `src/components/home/DNAHowItWorks.tsx` | "from 27 types" -> "from 29 types" |
-| `src/pages/HowItWorks.tsx` | "27 distinct traveler types" and "27 traveler types" -> "29" |
-| `src/pages/Archetypes.tsx` | Description meta + body text referencing "27" -> "29" |
-| `src/lib/strangerCopy.ts` | `typesCount: "27 traveler types"` -> "29" |
-| `src/config/quiz-questions-v3.json` | `targetArchetypes: 27` -> `29` |
-| `src/services/engines/travelDNA/archetype-matcher.ts` | Comment "27 travel archetypes" -> "29" |
-| `src/data/archetypeReveals.ts` | Comment "27 Archetype Reveals" -> "29" |
+**What this involves:**
+1. New `user_badges` table with RLS
+2. Update `stripe-webhook` to award badges on club pack purchase
+3. Badge display in profile UI
 
-**3. Ensure narrative data exists** for `community_builder` and `curated_luxe` in `archetypeNarratives.ts` (they likely already do since they're scoreable).
+#### D. Voyager Perks Update (Small Change)
+**Current perks:** `['Voyance Club badge', 'Credits never expire']`
+**Spec perks:** Add "Priority support"
 
+**Explorer perks** already include "Early access to new features" -- just verify alignment.
+
+---
+
+## Implementation Plan (Phased)
+
+### Phase 1: Stripe Prices + Config Update
+- Create 3 new Stripe prices (Voyager $49.99, Explorer $89.99, Adventurer $149.99)
+- Create 3 new Stripe products + prices for Group Unlocks (Small $19.99, Medium $34.99, Large $79.99)
+- Update `src/config/pricing.ts`:
+  - New price IDs and amounts for Club packs
+  - Add `GROUP_UNLOCK_TIERS` and `GROUP_CAPS` config
+  - Add `FREE_ACTION_CAPS` for `transport_mode_change: 5` (spec says no free cap for this, remove if present)
+  - Update Voyager perks to include "Priority support"
+  - Update `perCredit` values
+
+### Phase 2: Database Tables
+- Create `credit_purchases` table (id, user_id, credit_type, amount, remaining, expires_at, source, stripe_payment_id, created_at, updated_at) with RLS (SELECT only for own rows)
+- Create `group_unlocks` table (id, trip_id UNIQUE, purchased_by, tier, stripe_payment_id, caps JSONB, usage JSONB, created_at) with RLS (collaborators + owner can SELECT)
+- Create `user_badges` table (id, user_id, badge_type, awarded_at, source, UNIQUE on user_id + badge_type) with RLS (SELECT own)
+- Data migration: convert existing `credit_balances.purchased_credits` into `credit_purchases` rows for existing users
+
+### Phase 3: Backend Edge Functions
+- **`stripe-webhook`**: Update credit_purchase fulfillment to:
+  - Insert into `credit_purchases` (flex: 1 row with 12mo expiry; club: 2 rows - base with NULL expiry, bonus with 6mo expiry)
+  - Award badges via `user_badges`
+  - Handle group unlock purchases (insert into `group_unlocks`)
+  - Continue updating `credit_balances` as denormalized cache
+- **`spend-credits`**: Rewrite deduction logic to:
+  - Query `credit_purchases WHERE remaining > 0 AND (expires_at IS NULL OR expires_at > now())` ordered by expiration
+  - Deduct FIFO across rows
+  - Update `credit_balances` totals to stay in sync
+  - For collaborator actions on group-unlocked trips, check group caps before charging
+- **`grant-monthly-credits`**: Insert a `credit_purchases` row (type: free_monthly, 2mo expiry) in addition to updating `credit_balances`
+- **`create-embedded-checkout`**: Add group unlock metadata (trip_id, tier) support
+
+### Phase 4: Frontend Hooks and Components
+- Update `useCredits` to query `credit_purchases` for expiration breakdown
+- New `useGroupUnlock(tripId)` hook to check if a trip has group editing and remaining caps
+- New `GroupUnlockModal` component (auto-selects tier based on collaborator count)
+- Update `CreditBalanceCard` to show breakdown by credit type with expiration dates
+- Badge display components for profiles
+
+### Phase 5: Pricing Page Updates
+- Update displayed prices to $49.99/$89.99/$149.99
+- Add Group Unlock section
+- Add "What credits buy" reference table
+- Update FAQ if needed
+
+---
+
+## Risk Notes
+- The FIFO spending logic is the most complex change. Race conditions during concurrent spending need to be handled (use row-level locking or transactions in the edge function).
+- The `credit_balances` table stays as a fast-read cache. Both systems must stay in sync.
+- Existing users with purchased credits need a one-time migration to create their initial `credit_purchases` row.
+- Group unlock caps are shared across all collaborators on a trip, so the `spend-credits` function needs to check and increment `group_unlocks.usage` atomically.
