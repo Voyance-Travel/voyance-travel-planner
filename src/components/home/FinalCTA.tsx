@@ -81,11 +81,6 @@ export default function FinalCTA() {
               Or explore destinations first
             </Link>
 
-            {/* Trust text */}
-            <p className="mt-6 text-xs text-muted-foreground/70 font-sans">
-              No credit card required · Free credits every month
-            </p>
-
           </motion.div>
 
           {/* Right: Stacked Image Composition */}
