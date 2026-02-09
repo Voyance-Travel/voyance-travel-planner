@@ -61,7 +61,7 @@ const FALLBACK_DATA = {
     // Hidden fixed: your own testing, API testing, dev overhead
     devOps: 20.00, // Rough estimate for internal usage/testing that doesn't generate revenue
   },
-  revenue: { flex_100: 9, flex_300: 25, flex_500: 39, voyager: 29.99, explorer: 59.99, adventurer: 99.99 } as Record<string, number>,
+  revenue: { flex_100: 9, flex_300: 25, flex_500: 39, voyager: 49.99, explorer: 89.99, adventurer: 149.99 } as Record<string, number>,
 };
 
 // Revenue mix presets - what % of paying users buy each tier
@@ -245,7 +245,7 @@ const CREDIT_TIERS = [
   { 
     key: "voyager", 
     label: "Voyager", 
-    price: 29.99, 
+    price: 49.99, 
     credits: 600, // 500 base + 100 bonus
     color: "#A78BFA", 
     type: "club" as const,
@@ -259,7 +259,7 @@ const CREDIT_TIERS = [
   { 
     key: "explorer", 
     label: "Explorer", 
-    price: 59.99, 
+    price: 89.99, 
     credits: 1600, // 1200 base + 400 bonus
     color: "#34D399", 
     type: "club" as const,
@@ -273,7 +273,7 @@ const CREDIT_TIERS = [
   { 
     key: "adventurer", 
     label: "Adventurer", 
-    price: 99.99, 
+    price: 149.99, 
     credits: 3200, // 2500 base + 700 bonus
     color: "#F59E0B", 
     type: "club" as const,
