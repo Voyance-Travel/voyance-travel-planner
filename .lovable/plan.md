@@ -1,40 +1,50 @@
 
 
-# Fix Parser: Time Headers as Activities Bug
+## Archetype Count Audit: 27 vs Actual
 
-## Problem
-The `parse-trip-input` edge function's system prompt doesn't instruct the AI to treat time-of-day headers ("Dinner", "Morning", "Evening") as time slots rather than activities. This causes "Dinner" to appear as a separate activity from "Uchi".
+### Finding
 
-## Change
+The scoring engine (`calculate-travel-dna/index.ts`) contains **32 entries**, but they break down as:
 
-**Single file edit**: `supabase/functions/parse-trip-input/index.ts`
+| Category | Displayed (27) | Missing from Display | Fallbacks |
+|----------|----------------|---------------------|-----------|
+| Explorer | 4 | - | 3 (balanced_story_collector, flexible_wanderer, explorer) |
+| Connector | 4 (missing community_builder) | 1 | - |
+| Achiever | 4 | - | - |
+| Restorer | 6 | - | - |
+| Curator | 4 (missing curated_luxe) | 1 | - |
+| Transformer | 5 | - | - |
 
-Replace the existing `SYSTEM_PROMPT` constant with the comprehensive prompt you provided above. This adds:
+- **27** are fully designed archetypes shown on the Archetypes page
+- **2** real archetypes exist in scoring but are hidden from display: `community_builder` (Connector) and `curated_luxe` (Curator)
+- **3** are fallback/catch-all archetypes for edge cases (not meant to be showcased)
 
-1. **Time headers are NOT activities** -- "Dinner", "Morning", "Evening" etc. become the `time` field on the following activities
-2. **Merge time + content** -- "Dinner at Uchi" parses to `name: "Uchi", time: "Dinner"`
-3. **Meal words = dining category** -- Breakfast/Lunch/Dinner automatically set `category: "dining"`
-4. **Either/or grouping** -- "Uchi or Loro" gets shared `optionGroup` and `isOption: true`
-5. **Venue extraction** -- "Live music at The Continental Club" parses to `name: "The Continental Club"`
-6. **Parenthetical parsing** -- costs, notes, booking requirements extracted from parentheses
-7. **Day structure recognition** -- various "Day 1" formats parsed for dayNumber, date, theme
-8. **Table format handling** -- markdown table column headers mapped to fields
-9. **Practical tips separation** -- "Tips" sections go to `practicalTips`, not activities
-10. **Meta-content filtering** -- AI filler like "Let me know if..." is ignored
-11. **Prompt vs output detection** -- extracts preferences from user prompt section
+### Recommendation
 
-## Technical Details
+Update the count to **29** by adding the 2 missing real archetypes to the display page. The 3 fallbacks are safety nets, not featured types.
 
-- Only the `SYSTEM_PROMPT` string constant changes; no structural code changes
-- The tool schema (`EXTRACT_TOOL`) remains unchanged -- it already supports all the fields referenced by the new prompt
-- The edge function will be redeployed after the update
-- The new prompt adds a `timeOfDay` field in examples but this is not in the tool schema -- the AI may include it as extra data which will be harmlessly ignored, or we can add it to the schema if desired
+### Changes Required
 
-## Post-Update Validation
+**1. Add missing archetypes to Archetypes page** (`src/pages/Archetypes.tsx`)
+- Add `community_builder` to CONNECTOR array
+- Add `curated_luxe` to CURATOR array
+- Update comment from "27" to "29"
 
-After deploying, test with the 4 test cases from your message to confirm:
-- No time headers appear as activity names
-- Either/or options are properly grouped
-- Table formats parse correctly
-- User prompt sections extract preferences
+**2. Update all "27" references across the site** (10 files):
+
+| File | What to change |
+|------|---------------|
+| `src/components/common/TopNav.tsx` | "See all 27 traveler types" -> "See all 29 traveler types" |
+| `src/components/home/TheInsightSection.tsx` | "27 Travel Archetypes" badge -> "29" |
+| `src/components/home/SampleArchetype.tsx` | "27 unique archetypes" and "See all 27" -> "29" |
+| `src/components/home/SocialProofSection.tsx` | `archetypesAvailable: 27` -> `29` |
+| `src/components/home/DNAHowItWorks.tsx` | "from 27 types" -> "from 29 types" |
+| `src/pages/HowItWorks.tsx` | "27 distinct traveler types" and "27 traveler types" -> "29" |
+| `src/pages/Archetypes.tsx` | Description meta + body text referencing "27" -> "29" |
+| `src/lib/strangerCopy.ts` | `typesCount: "27 traveler types"` -> "29" |
+| `src/config/quiz-questions-v3.json` | `targetArchetypes: 27` -> `29` |
+| `src/services/engines/travelDNA/archetype-matcher.ts` | Comment "27 travel archetypes" -> "29" |
+| `src/data/archetypeReveals.ts` | Comment "27 Archetype Reveals" -> "29" |
+
+**3. Ensure narrative data exists** for `community_builder` and `curated_luxe` in `archetypeNarratives.ts` (they likely already do since they're scoreable).
 
