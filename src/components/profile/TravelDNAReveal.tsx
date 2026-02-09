@@ -29,6 +29,7 @@ import {
   type ArchetypeNarrative 
 } from '@/data/archetypeNarratives';
 import { supabase } from '@/integrations/supabase/client';
+import { getRarityLabel } from '@/config/typeRarity';
 import { cn } from '@/lib/utils';
 import TravelDNATransparency from './TravelDNATransparency';
 import DNAAccuracyFeedback from './DNAAccuracyFeedback';
@@ -473,7 +474,8 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
     : null;
   const colors = getCategoryColors(narrative.category);
   const confidence = dnaData.dna_confidence_score || 85;
-  const rarity = dnaData.dna_rarity || 'Uncommon';
+  const archetypeId = dnaData.primary_archetype_name || '';
+  const rarity = getRarityLabel(archetypeId) || dnaData.dna_rarity || 'Uncommon';
   const CategoryIcon = CATEGORY_ICONS[narrative.category] || Compass;
   const categoryInfo = CATEGORY_DESCRIPTIONS[narrative.category];
 

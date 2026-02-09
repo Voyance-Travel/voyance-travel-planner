@@ -5,6 +5,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { getTypeRarity } from '@/config/typeRarity';
 import type { Json } from '@/integrations/supabase/types';
 
 // ============================================================================
@@ -482,10 +483,11 @@ export function calculateTravelDNA(
   const answeredCount = Object.keys(answers).length;
   const confidence = Math.min(100, Math.round((answeredCount / 10) * 100 + 30));
 
-  // Determine rarity
-  let rarity = 'Common';
-  if (toneTags.length >= 4) rarity = 'Rare';
-  else if (toneTags.length >= 3) rarity = 'Uncommon';
+  // Determine rarity from type-specific data
+  const typeRarityData = getTypeRarity(primaryArchetype);
+  const rarity = typeRarityData
+    ? (typeRarityData.tier === 'very-rare' ? 'Very Rare' : typeRarityData.tier === 'very-common' ? 'Very Common' : typeRarityData.tier.charAt(0).toUpperCase() + typeRarityData.tier.slice(1))
+    : 'Uncommon';
 
   // Generate summary
   const summary = generateDNASummary(primaryArchetype, toneTags, pace);
