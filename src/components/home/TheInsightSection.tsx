@@ -81,7 +81,7 @@ export default function TheInsightSection() {
           className="flex justify-center mt-8"
         >
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-full border border-primary/20">
-            <span className="text-primary font-bold">27</span>
+            <span className="text-primary font-bold">29</span>
             <span className="text-sm text-muted-foreground">Travel Archetypes</span>
           </div>
         </motion.div>

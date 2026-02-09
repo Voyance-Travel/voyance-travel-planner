@@ -181,7 +181,7 @@ export default function SampleArchetype() {
             What Kind of Traveler Are You?
           </h2>
           <p className="text-xs sm:text-base text-muted-foreground max-w-lg mx-auto font-sans px-4">
-            Explore our 27 unique archetypes. See which one resonates.
+            Explore our 29 unique archetypes. See which one resonates.
           </p>
         </motion.div>
 
@@ -223,7 +223,7 @@ export default function SampleArchetype() {
             onClick={() => navigate(ROUTES.ARCHETYPES)}
             className="relative z-10 inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-primary/30 bg-primary/5 text-primary font-medium text-sm hover:bg-primary/10 hover:border-primary/50 transition-all"
           >
-            See all 27 archetypes
+            See all 29 archetypes
             <ArrowRight className="w-4 h-4" />
           </button>
         </motion.div>

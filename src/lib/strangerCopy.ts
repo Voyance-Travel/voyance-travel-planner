@@ -69,8 +69,8 @@ We ask.`,
     },
     
     proof: {
-      eyebrow: "27 Travel Styles",
-      headline: "27 ways to travel. Which one are you?",
+      eyebrow: "29 Travel Styles",
+      headline: "29 ways to travel. Which one are you?",
       archetypePreviews: [
         { name: "Slow Traveler", quote: "No trip worth taking is worth rushing." },
         { name: "Adrenaline Architect", quote: "I don't do relaxing vacations." },
@@ -130,7 +130,7 @@ Here's what we can promise:
     whatYouGet: {
       headline: "What you'll get:",
       items: [
-        "Your Travel DNA (1 of 27 types)",
+        "Your Travel DNA (1 of 29 types)",
         "A description that'll feel eerily accurate",
         "The foundation for trips that actually fit",
       ],
@@ -215,7 +215,7 @@ Here's what we can promise:
     noCreditCard: "No credit card required. Ever, for the quiz.",
     noDataSelling: "We don't sell your data. Subscriptions, not surveillance.",
     builtBy: "Built by travelers who were tired of the same generic advice.",
-    typesCount: "27 traveler types. Yours is one of them.",
+    typesCount: "29 traveler types. Yours is one of them.",
     timeCommitment: "5 minutes to find out. Free forever.",
   },
   

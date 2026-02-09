@@ -45,17 +45,19 @@ const NARRATIVE_TO_DETAIL: Record<string, string> = {
   healing_journeyer: 'restorer',
   sabbatical_scholar: 'voyager',
   retirement_ranger: 'bucket_lister',
+  community_builder: 'connector',
+  curated_luxe: 'luxurian',
 };
 
 const CATEGORY_ORDER = ['EXPLORER', 'CONNECTOR', 'ACHIEVER', 'RESTORER', 'CURATOR', 'TRANSFORMER'] as const;
 
-// All 27 archetypes grouped by category for organized display
+// All 29 archetypes grouped by category for organized display
 const ARCHETYPES_BY_CATEGORY: Record<string, string[]> = {
   EXPLORER: ['cultural_anthropologist', 'urban_nomad', 'wilderness_pioneer', 'digital_explorer'],
-  CONNECTOR: ['social_butterfly', 'family_architect', 'romantic_curator', 'story_seeker'],
+  CONNECTOR: ['social_butterfly', 'family_architect', 'romantic_curator', 'story_seeker', 'community_builder'],
   ACHIEVER: ['bucket_list_conqueror', 'adrenaline_architect', 'collection_curator', 'status_seeker'],
   RESTORER: ['zen_seeker', 'slow_traveler', 'beach_therapist', 'sanctuary_seeker', 'escape_artist', 'retreat_regular'],
-  CURATOR: ['culinary_cartographer', 'luxury_luminary', 'art_aficionado', 'eco_ethicist'],
+  CURATOR: ['culinary_cartographer', 'luxury_luminary', 'art_aficionado', 'eco_ethicist', 'curated_luxe'],
   TRANSFORMER: ['gap_year_graduate', 'midlife_explorer', 'healing_journeyer', 'sabbatical_scholar', 'retirement_ranger'],
 };
 
@@ -235,7 +237,7 @@ export default function Archetypes() {
     <MainLayout>
       <Head
         title="Travel Types | Voyance - Discover Your Travel DNA"
-        description="Explore 27 unique traveler types and discover which one matches your travel style. From Cultural Anthropologists to Adrenaline Architects, find your travel DNA."
+        description="Explore 29 unique traveler types and discover which one matches your travel style. From Cultural Anthropologists to Adrenaline Architects, find your travel DNA."
         canonical="https://travelwithvoyance.com/archetypes"
       />
       {/* Hero with spotlight cards */}
@@ -263,12 +265,13 @@ export default function Archetypes() {
             </motion.div>
             
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-serif font-bold text-foreground mb-5 leading-[1.1]">
-              Twenty-Seven Ways<br />
+
+              Twenty-Nine Ways<br />
               <span className="text-primary italic">to See the World</span>
             </h1>
             
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              Everyone travels differently. Discover which of our 27 traveler personalities 
+              Everyone travels differently. Discover which of our 29 traveler personalities 
               captures how <em>you</em> explore - and unlock trips designed around it.
             </p>
           </motion.div>
@@ -316,7 +319,7 @@ export default function Archetypes() {
             <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none z-[5]" />
           </motion.div>
           
-          <p className="text-center text-sm text-muted-foreground mb-6">Explore all 27 types below</p>
+          <p className="text-center text-sm text-muted-foreground mb-6">Explore all 29 types below</p>
           
           <motion.div
             initial={{ opacity: 0 }}
@@ -370,7 +373,7 @@ export default function Archetypes() {
               {
                 icon: Sliders,
                 title: 'Type Matching',
-                description: 'We score your profile against all 27 types to find your best fit.',
+                description: 'We score your profile against all 29 types to find your best fit.',
               },
               {
                 icon: MapPin,
@@ -404,7 +407,7 @@ export default function Archetypes() {
           >
             <div className="text-center mb-6">
               <Badge className="mb-3 bg-primary/10 text-primary border-primary/20">
-                Beyond the 27
+                Beyond the 29
               </Badge>
               <h3 className="text-xl font-serif font-bold text-foreground mb-2">
                 Your Type Is Just the Beginning

@@ -1,6 +1,6 @@
 /**
  * Archetype Matcher v3.1
- * Matches user trait scores to the 27 travel archetypes
+ * Matches user trait scores to the 29 travel archetypes
  * 
  * This module implements the scoring algorithm from the Travel DNA Quiz specification:
  * 1. Calculate trait scores from quiz answers (0-1 scale)
