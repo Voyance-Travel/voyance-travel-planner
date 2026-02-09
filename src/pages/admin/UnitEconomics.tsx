@@ -61,7 +61,7 @@ const FALLBACK_DATA = {
     // Hidden fixed: your own testing, API testing, dev overhead
     devOps: 20.00, // Rough estimate for internal usage/testing that doesn't generate revenue
   },
-  revenue: { flex_100: 9, flex_300: 25, flex_500: 39, voyager: 49.99, explorer: 89.99, adventurer: 149.99, smart_finish: 6.99, group_small: 19.99, group_medium: 34.99, group_large: 79.99 } as Record<string, number>,
+  revenue: { flex_100: 9, flex_300: 25, flex_500: 39, voyager: 49.99, explorer: 89.99, adventurer: 149.99, group_small: 19.99, group_medium: 34.99, group_large: 79.99 } as Record<string, number>,
 };
 
 // Revenue mix presets - what % of paying users buy each tier
@@ -207,11 +207,11 @@ const CREDIT_TIERS = [
     color: "#94A3B8", 
     type: "flexible" as const,
     description: "Quick top-up for swaps & extras",
-    // 1 day = 60cr, leaving 40cr → 8 swaps (40cr)
-    typicalUsage: { daysUnlocked: 1, swaps: 8, regenerates: 0, restaurants: 0, aiMessages: 0 },
-    // Cost: 1×$0.018 + 8×$0.009 = $0.090
-    estimatedCostToUs: 0.090,
-    notes: "1 day + 8 swaps (60cr + 40cr)",
+    // 1 day = 60cr, leaving 40cr → free swaps (10 free cap) + 4 paid swaps (20cr) + 4 paid AI msgs (20cr)
+    typicalUsage: { daysUnlocked: 1, swaps: 4, regenerates: 0, restaurants: 0, aiMessages: 4 },
+    // Cost: 1×$0.018 + 4×$0.009 + 4×$0.005 = $0.074
+    estimatedCostToUs: 0.074,
+    notes: "1 day (60cr) + 4 paid swaps (20cr) + 4 AI msgs (20cr). 10 free swaps used first.",
   },
   { 
     key: "flex_300", 
@@ -221,11 +221,11 @@ const CREDIT_TIERS = [
     color: "#38BDF8", 
     type: "flexible" as const,
     description: "~5 days of itinerary",
-    // 5 days = 300cr, no extras
+    // 5 days = 300cr. Free caps cover swaps/regens within each trip.
     typicalUsage: { daysUnlocked: 5, swaps: 0, regenerates: 0, restaurants: 0, aiMessages: 0 },
     // Cost: 5×$0.018 = $0.090
     estimatedCostToUs: 0.090,
-    notes: "5 days exactly (5×60cr)",
+    notes: "5 days exactly (5×60cr). Free swap/regen caps cover typical editing.",
   },
   { 
     key: "flex_500", 
@@ -235,11 +235,11 @@ const CREDIT_TIERS = [
     color: "#60A5FA", 
     type: "flexible" as const,
     description: "8-day trip + extras",
-    // 8 days = 480cr, leaving 20cr → 4 swaps (20cr)
+    // 8 days = 480cr, leaving 20cr → 4 paid swaps (20cr). Free caps: 10 swaps + 5 regens per trip.
     typicalUsage: { daysUnlocked: 8, swaps: 4, regenerates: 0, restaurants: 0, aiMessages: 0 },
     // Cost: 8×$0.018 + 4×$0.009 = $0.180
     estimatedCostToUs: 0.180,
-    notes: "8 days + 4 swaps (480cr + 20cr)",
+    notes: "8 days (480cr) + 4 paid swaps (20cr). 10 free swaps + 5 free regens per trip.",
   },
   // ── Voyance Club ──
   { 
@@ -250,11 +250,11 @@ const CREDIT_TIERS = [
     color: "#A78BFA", 
     type: "club" as const,
     description: "Club entry - 500 + 100 bonus",
-    // 10 days = 600cr
+    // 10 days = 600cr. Across 2 trips, free caps cover most micro-actions.
     typicalUsage: { daysUnlocked: 10, swaps: 0, regenerates: 0, restaurants: 0, aiMessages: 0 },
     // Cost: 10×$0.018 = $0.180
     estimatedCostToUs: 0.180,
-    notes: "10 days (500 base + 100 bonus, all on unlocks)",
+    notes: "10 days (500 base + 100 bonus). Free caps cover swaps/regens across trips.",
   },
   { 
     key: "explorer", 
@@ -264,11 +264,11 @@ const CREDIT_TIERS = [
     color: "#34D399", 
     type: "club" as const,
     description: "Popular - 1,200 + 400 bonus",
-    // 26 days = 1560cr, leaving 40cr → 8 swaps (40cr)
+    // 26 days = 1560cr, leaving 40cr → 8 paid swaps (40cr)
     typicalUsage: { daysUnlocked: 26, swaps: 8, regenerates: 0, restaurants: 0, aiMessages: 0 },
     // Cost: 26×$0.018 + 8×$0.009 = $0.540
     estimatedCostToUs: 0.540,
-    notes: "26 days + 8 swaps (1,200 base + 400 bonus)",
+    notes: "26 days (1560cr) + 8 paid swaps (40cr). Free caps per trip still apply.",
   },
   { 
     key: "adventurer", 
@@ -278,26 +278,13 @@ const CREDIT_TIERS = [
     color: "#F59E0B", 
     type: "club" as const,
     description: "Best value - 2,500 + 700 bonus",
-    // 53 days = 3180cr, leaving 20cr → 4 swaps (20cr)
+    // 53 days = 3180cr, leaving 20cr → 4 paid swaps (20cr)
     typicalUsage: { daysUnlocked: 53, swaps: 4, regenerates: 0, restaurants: 0, aiMessages: 0 },
     // Cost: 53×$0.018 + 4×$0.009 = $0.990
     estimatedCostToUs: 0.990,
-    notes: "53 days + 4 swaps (2,500 base + 700 bonus)",
+    notes: "53 days (3180cr) + 4 paid swaps (20cr). Free caps per trip still apply.",
   },
-  // ── Add-on Products ──
-  { 
-    key: "smart_finish", 
-    label: "Smart Finish", 
-    price: 6.99, 
-    credits: 50, // Fixed 50cr cost
-    color: "#EC4899", 
-    type: "addon" as const,
-    description: "Enrich manual/imported itinerary",
-    typicalUsage: { daysUnlocked: 0, swaps: 0, regenerates: 0, restaurants: 0, aiMessages: 0 },
-    // Route opt + reviews + tips + events + DNA gap fixes
-    estimatedCostToUs: 0.040,
-    notes: "One-shot enrichment: route optimization, reviews, tips, events",
-  },
+  // ── Add-on Products (fixed price, not credit-based) ──
   { 
     key: "group_small", 
     label: "Group Small", 
@@ -308,7 +295,7 @@ const CREDIT_TIERS = [
     description: "Group unlock - small (2-3 travelers)",
     typicalUsage: { daysUnlocked: 0, swaps: 0, regenerates: 0, restaurants: 0, aiMessages: 0 },
     estimatedCostToUs: 0.015,
-    notes: "Shared editing + increased action caps for 2-3 collaborators",
+    notes: "Fixed price product. Shared editing + increased action caps for 2-3 collaborators.",
   },
   { 
     key: "group_medium", 
@@ -320,7 +307,7 @@ const CREDIT_TIERS = [
     description: "Group unlock - medium (4-6 travelers)",
     typicalUsage: { daysUnlocked: 0, swaps: 0, regenerates: 0, restaurants: 0, aiMessages: 0 },
     estimatedCostToUs: 0.015,
-    notes: "Shared editing + increased action caps for 4-6 collaborators",
+    notes: "Fixed price product. Shared editing + increased action caps for 4-6 collaborators.",
   },
   { 
     key: "group_large", 
@@ -332,7 +319,7 @@ const CREDIT_TIERS = [
     description: "Group unlock - large (7+ travelers)",
     typicalUsage: { daysUnlocked: 0, swaps: 0, regenerates: 0, restaurants: 0, aiMessages: 0 },
     estimatedCostToUs: 0.015,
-    notes: "Shared editing + increased action caps for 7+ collaborators",
+    notes: "Fixed price product. Shared editing + increased action caps for 7+ collaborators.",
   },
 ];
 
@@ -1521,9 +1508,9 @@ export default function UnitEconomics() {
             {/* Visual Bar Chart */}
             <div style={{ marginBottom: 12 }}>
               <div style={{ display: "flex", height: 24, borderRadius: 6, overflow: "hidden", background: "rgba(15, 23, 42, 0.5)" }}>
-                {CREDIT_TIERS.map((tier) => {
+                {CREDIT_TIERS.filter(t => t.type !== 'addon').map((tier) => {
                   const pct = mixConfig[tier.key as keyof typeof mixConfig] as number;
-                  if (pct === 0) return null;
+                  if (!pct || pct === 0) return null;
                   return (
                     <div
                       key={tier.key}
@@ -1556,7 +1543,7 @@ export default function UnitEconomics() {
             
             {/* Tier Labels with $ - Compact for 6 tiers */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-              {CREDIT_TIERS.map((tier) => {
+              {CREDIT_TIERS.filter(t => t.type !== 'addon').map((tier) => {
                 const pct = mixConfig[tier.key as keyof typeof mixConfig] as number;
                 return (
                   <div key={tier.key} style={{ 
@@ -1970,45 +1957,72 @@ export default function UnitEconomics() {
                 </th>
                 {CREDIT_TIERS.map(t => (
                   <th key={t.key} style={{ textAlign: "right", padding: "8px 6px", color: t.color || "#94A3B8", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)", fontSize: 10 }}>
-                    {t.label}<br/><span style={{ color: "#475569", fontWeight: 400 }}>${(t.price / t.credits).toFixed(3)}/cr</span>
+                    {t.label}<br/><span style={{ color: "#475569", fontWeight: 400 }}>{t.credits > 0 ? `$${(t.price / t.credits).toFixed(3)}/cr` : 'Fixed $'}</span>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {[
-                { action: "Unlock 1 Day", credits: 90, cost: 0.018 },
-                { action: "Swap Activity", credits: 15, cost: 0.009 },
-                { action: "Regenerate Day", credits: 90, cost: 0.018 },
-                { action: "Restaurant Rec", credits: 15, cost: 0.015 },
-                { action: "AI Message", credits: 10, cost: 0.005 },
-                { action: "Hotel Search", credits: 40, cost: 0.020 },
-                { action: "Smart Finish", credits: 50, cost: 0.040 },
-                { action: "Group Unlock (Small)", credits: 0, cost: 0.015 },
-                { action: "Group Unlock (Medium)", credits: 0, cost: 0.015 },
-                { action: "Group Unlock (Large)", credits: 0, cost: 0.015 },
+                { action: "Unlock 1 Day", credits: 60, cost: 0.018, freeCap: null },
+                { action: "Swap Activity", credits: 5, cost: 0.009, freeCap: "10/trip" },
+                { action: "Regenerate Day", credits: 10, cost: 0.018, freeCap: "5/trip" },
+                { action: "Restaurant Rec", credits: 5, cost: 0.015, freeCap: "5/trip" },
+                { action: "AI Message", credits: 5, cost: 0.005, freeCap: "20/trip" },
+                { action: "Hotel Search", credits: 40, cost: 0.020, freeCap: null },
+                { action: "Smart Finish", credits: 50, cost: 0.040, freeCap: null },
+                { action: "Group Unlock (Small)", credits: null, cost: 0.015, freeCap: null, fixedPrice: 19.99 },
+                { action: "Group Unlock (Medium)", credits: null, cost: 0.015, freeCap: null, fixedPrice: 34.99 },
+                { action: "Group Unlock (Large)", credits: null, cost: 0.015, freeCap: null, fixedPrice: 79.99 },
               ].map((row, i) => {
                 const avgCost = row.cost;
+                const isFixedPrice = row.credits === null;
                 return (
                   <tr key={i} style={{ background: i % 2 === 0 ? "rgba(15, 23, 42, 0.3)" : "transparent" }}>
                     <td style={{ padding: "8px 10px", color: "#E2E8F0", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                       {row.action}
+                      {row.freeCap && (
+                        <span style={{ fontSize: 9, color: "#34D399", marginLeft: 6, background: "rgba(52, 211, 153, 0.1)", padding: "1px 5px", borderRadius: 3 }}>
+                          {row.freeCap} free
+                        </span>
+                      )}
                     </td>
-                    <td style={{ padding: "8px 10px", color: "#A78BFA", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                      {row.credits}
+                    <td style={{ padding: "8px 10px", color: isFixedPrice ? "#64748B" : "#A78BFA", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                      {isFixedPrice ? (
+                        <span title="Fixed price product, not credit-based">${(row as any).fixedPrice}</span>
+                      ) : row.credits}
                     </td>
                     <td style={{ padding: "8px 10px", color: "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                       ${avgCost.toFixed(3)}
                     </td>
                     {/* Free tier column - pure loss */}
                     <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)", fontSize: 11, color: "#EF4444" }}>
-                      <span style={{ color: "#64748B", fontWeight: 400, fontSize: 10 }}>$0</span>
-                      {" "}-100%
+                      {isFixedPrice ? (
+                        <span style={{ color: "#64748B", fontSize: 10 }}>N/A</span>
+                      ) : (
+                        <><span style={{ color: "#64748B", fontWeight: 400, fontSize: 10 }}>$0</span>{" "}-100%</>
+                      )}
                     </td>
                     {CREDIT_TIERS.map(t => {
+                      // Fixed price products can't be expressed as $/credit
+                      if (isFixedPrice) {
+                        const fixedMargin = (((row as any).fixedPrice - avgCost) / (row as any).fixedPrice) * 100;
+                        return (
+                          <td key={t.key} style={{ padding: "8px 6px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)", fontSize: 11, color: "#64748B" }}>
+                            <span style={{ fontSize: 9 }}>N/A</span>
+                          </td>
+                        );
+                      }
+                      if (t.credits === 0) {
+                        return (
+                          <td key={t.key} style={{ padding: "8px 6px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)", fontSize: 11, color: "#64748B" }}>
+                            <span style={{ fontSize: 9 }}>N/A</span>
+                          </td>
+                        );
+                      }
                       const perCredit = t.price / t.credits;
-                      const userPays = row.credits * perCredit;
-                      const margin = ((userPays - avgCost) / userPays) * 100;
+                      const userPays = (row.credits ?? 0) * perCredit;
+                      const margin = userPays > 0 ? ((userPays - avgCost) / userPays) * 100 : -100;
                       return (
                         <td key={t.key} style={{ padding: "8px 6px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)", fontSize: 11,
                           color: margin > 95 ? "#34D399" : margin > 85 ? "#FBBF24" : "#F87171",
@@ -2025,7 +2039,9 @@ export default function UnitEconomics() {
             </tbody>
           </table>
           <p style={{ fontSize: 10, color: "#64748B", marginBottom: 24 }}>
-            Each cell shows <span style={{ color: "#94A3B8" }}>user pays</span> + <span style={{ color: "#34D399" }}>margin %</span> at that tier's $/credit rate. Flex 100 ($0.090/cr) yields highest margin; Adventurer ($0.031/cr) lowest.
+            Each cell shows <span style={{ color: "#94A3B8" }}>user pays</span> + <span style={{ color: "#34D399" }}>margin %</span> at that tier's $/credit rate.
+            Group Unlocks are fixed-price products (not credit-based) — shown as N/A in credit columns.
+            Actions with <span style={{ color: "#34D399" }}>free caps</span> don't cost credits until the per-trip cap is exceeded.
           </p>
 
           {/* TIER-BASED COST BREAKDOWN TABLE */}
