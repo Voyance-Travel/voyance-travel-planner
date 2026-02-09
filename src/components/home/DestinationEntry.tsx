@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowRight, Loader2 } from 'lucide-react';
+import { ArrowRight, Loader2, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -236,13 +236,44 @@ export default function DestinationEntry() {
         </motion.p>
       )}
 
+      {/* Side-by-side CTAs: Preview + Find Your Style */}
+      {!isGenerating && !destination && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="mt-6 sm:mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4"
+        >
+          <Button
+            size="lg"
+            onClick={() => {
+              const input = document.querySelector<HTMLInputElement>('input[placeholder*="Preview"]');
+              input?.focus();
+            }}
+            className="rounded-full bg-white text-primary hover:bg-white/90 font-semibold px-8 min-h-[48px] shadow-lg"
+          >
+            Preview a Trip
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+          <Button
+            size="lg"
+            variant="outline"
+            onClick={() => navigate(ROUTES.QUIZ)}
+            className="rounded-full border-white/40 text-white hover:bg-white/20 font-semibold px-8 min-h-[48px] backdrop-blur-sm"
+          >
+            <Sparkles className="mr-2 h-4 w-4" />
+            Find Your Style
+          </Button>
+        </motion.div>
+      )}
+
       {/* Popular destinations - improved mobile touch targets */}
       {!destination && !isGenerating && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
-          className="mt-6 sm:mt-10 flex flex-wrap justify-center gap-2 px-2"
+          className="mt-4 sm:mt-6 flex flex-wrap justify-center gap-2 px-2"
         >
           {POPULAR_DESTINATIONS.map((city) => (
             <Button

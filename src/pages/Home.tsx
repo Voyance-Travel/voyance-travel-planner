@@ -4,7 +4,7 @@ import Footer from '@/components/common/Footer';
 import Head from '@/components/common/Head';
 import ScrollTarget from '@/components/common/ScrollTarget';
 import ValueFirstHero from '@/components/home/ValueFirstHero';
-import QuizBanner from '@/components/home/QuizBanner';
+
 import TheProblemSection from '@/components/home/TheProblemSection';
 import PersonalizationProof from '@/components/home/PersonalizationProof';
 import TheInsightSection from '@/components/home/TheInsightSection';
@@ -51,8 +51,7 @@ export default function Home() {
         {/* Hero - Destination Search + Demo CTA */}
         <ValueFirstHero onScrollToDemo={handleScrollToDemo} />
         
-        {/* Quiz Banner - Unmissable CTA right after hero */}
-        <QuizBanner />
+        
         
         {/* The Problem - Emotional resonance */}
         <TheProblemSection />
