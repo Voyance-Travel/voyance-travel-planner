@@ -60,10 +60,10 @@ function BeforeChaos() {
                 <div className="bg-neutral-200 px-1 py-0.5 font-semibold text-neutral-700">Status</div>
               </div>
               {[
-                ['1', 'Tsukiji Market', '6am?', '❌ CLOSED'],
-                ['1', 'Shibuya Sky', '??', 'sold out'],
-                ['2', 'Fushimi Inari', 'early', '⚠️ KYOTO'],
-                ['2', 'TeamLab', '???', 'need tix'],
+                ['1', 'La Boqueria', '9am?', '❌ PACKED'],
+                ['1', 'Sagrada Familia', '??', 'sold out'],
+                ['2', 'Park Güell', 'morning', '⚠️ TICKETS'],
+                ['2', 'Casa Batlló', '???', 'need tix'],
                 ['3', '???', '', 'research'],
               ].map((row, i) => (
                 <div key={i} className="grid grid-cols-4 gap-px text-[6px]">
@@ -90,16 +90,16 @@ function BeforeChaos() {
           <div className="col-span-2 bg-white rounded-md p-1.5 shadow-sm">
             <div className="flex items-center gap-1 text-orange-600 font-medium mb-1 text-[8px]">
               <MessageSquare className="w-2.5 h-2.5" />
-              r/JapanTravel
+              r/Barcelona
             </div>
             <div className="space-y-1 text-[6px]">
               <div className="flex items-start gap-1">
                 <span className="text-orange-500 font-medium">↑47</span>
-                <span className="text-neutral-600">Skip Shibuya, tourist trap</span>
+                <span className="text-neutral-600">Skip La Rambla, tourist trap</span>
               </div>
               <div className="flex items-start gap-1">
                 <span className="text-orange-500 font-medium">↑89</span>
-                <span className="text-neutral-600">No! Shibuya is essential</span>
+                <span className="text-neutral-600">No! La Rambla is essential</span>
               </div>
               <div className="flex items-start gap-1">
                 <span className="text-neutral-400 font-medium">↑23</span>
@@ -136,7 +136,7 @@ function BeforeChaos() {
             </div>
             <div className="space-y-0.5 text-[5px] text-neutral-500">
               <div className="truncate">• barcelona-guide.com/best-r...</div>
-              <div className="truncate">• reddit.com/r/japan/...</div>
+              <div className="truncate">• reddit.com/r/barcelona/...</div>
               <div className="truncate">• youtube.com/watch?...</div>
               <div className="text-neutral-600">+ 44 more tabs</div>
             </div>
@@ -217,16 +217,16 @@ function AfterVoyance() {
           <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-primary" />
             <span className="text-xs font-semibold text-foreground">Day 1</span>
-            <span className="text-xs text-muted-foreground">Yanaka & Ueno</span>
+            <span className="text-xs text-muted-foreground">El Born & Gothic Quarter</span>
           </div>
           <ChevronRight className="w-4 h-4 text-muted-foreground" />
         </div>
         
         <div className="space-y-2">
           {[
-            { time: '8:00', activity: 'Meiji Shrine, first light', badge: 'Voyance Find', badgeType: 'primary' },
-            { time: '10:30', activity: 'Kayaba Coffee (1938)', badge: null, badgeType: null },
-            { time: '13:00', activity: 'Ueno Park, east gate', badge: 'Crowd Hack', badgeType: 'secondary' },
+            { time: '9:00', activity: 'Santa Caterina Market, early', badge: 'Voyance Find', badgeType: 'primary' },
+            { time: '11:00', activity: 'Picasso Museum (skip the line)', badge: null, badgeType: null },
+            { time: '14:00', activity: 'El Born backstreet tapas crawl', badge: 'Local Pick', badgeType: 'secondary' },
           ].map((item, i) => (
             <div key={i} className="flex items-center gap-3 p-2.5 bg-background rounded-lg border border-border/60 hover:border-primary/30 transition-colors">
               <div className="flex items-center justify-center w-8">
