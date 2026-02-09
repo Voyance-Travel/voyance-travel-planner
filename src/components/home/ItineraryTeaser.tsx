@@ -13,7 +13,7 @@ import {
   RefreshCw,
   DollarSign,
   CreditCard,
-  Shield
+  
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
@@ -38,11 +38,6 @@ interface PaymentInfo {
   paymentTips: string;
 }
 
-interface NeedToKnow {
-  visaSummary: string;
-  safetyLevel: string;
-  keyRequirement?: string;
-}
 
 interface ItineraryTeaserProps {
   destination: string;
@@ -52,20 +47,10 @@ interface ItineraryTeaserProps {
   archetypeTagline: string;
   budgetEstimate?: BudgetEstimate;
   paymentInfo?: PaymentInfo;
-  needToKnow?: NeedToKnow;
   onStartOver: () => void;
   onTakeQuiz: () => void;
 }
 
-function getSafetyColor(level: string): string {
-  const colors: Record<string, string> = {
-    'low-risk': 'text-green-400',
-    'moderate': 'text-yellow-400',
-    'elevated': 'text-orange-400',
-    'high-risk': 'text-red-400',
-  };
-  return colors[level] || 'text-white/70';
-}
 
 function formatCostLevel(level: string): string {
   return level.charAt(0).toUpperCase() + level.slice(1);
@@ -74,14 +59,12 @@ function formatCostLevel(level: string): string {
 function TripSnapshotBar({ 
   budgetEstimate, 
   paymentInfo, 
-  needToKnow 
 }: { 
   budgetEstimate?: BudgetEstimate; 
-  paymentInfo?: PaymentInfo; 
-  needToKnow?: NeedToKnow;
+  paymentInfo?: PaymentInfo;
 }) {
   // Don't render if no data available
-  if (!budgetEstimate && !paymentInfo && !needToKnow) {
+  if (!budgetEstimate && !paymentInfo) {
     return null;
   }
 
@@ -129,23 +112,6 @@ function TripSnapshotBar({
           </div>
         )}
 
-        {/* Need to Know */}
-        {needToKnow && (
-          <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-              <Shield className="w-4 h-4 text-primary" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs text-white/60 uppercase tracking-wide mb-0.5">Need to Know</p>
-              <p className="text-sm text-white font-medium">
-                {needToKnow.visaSummary}
-              </p>
-              <p className={`text-xs ${getSafetyColor(needToKnow.safetyLevel)}`}>
-                {needToKnow.safetyLevel.charAt(0).toUpperCase() + needToKnow.safetyLevel.slice(1).replace('-', ' ')}
-              </p>
-            </div>
-          </div>
-        )}
       </div>
     </motion.div>
   );
@@ -159,7 +125,7 @@ export function ItineraryTeaser({
   archetypeTagline,
   budgetEstimate,
   paymentInfo,
-  needToKnow,
+  
   onStartOver,
   onTakeQuiz,
 }: ItineraryTeaserProps) {
@@ -190,7 +156,7 @@ export function ItineraryTeaser({
       <TripSnapshotBar 
         budgetEstimate={budgetEstimate}
         paymentInfo={paymentInfo}
-        needToKnow={needToKnow}
+        
       />
 
       {/* 3-Day Preview Cards */}
