@@ -377,7 +377,192 @@ If you cannot confidently recommend a specific venue (confidence < 0.5):
 - Mark as \`needsVerification: true\`
 - Provide 2-3 alternative venue names to try
 
-DO NOT hallucinate specific venues. Vague but honest > specific but wrong.`;
+DO NOT hallucinate specific venues. Vague but honest > specific but wrong.
+
+## OPENING HOURS AWARENESS - CRITICAL
+NEVER schedule a venue on a day/time when it is likely CLOSED. Common closures:
+- Many museums close on Mondays (e.g., Louvre, Prado, Uffizi, most European museums)
+- Some restaurants close on Sundays or specific weekdays
+- Markets often close early or have specific operating days
+- Religious sites may restrict access during services
+- Government buildings/banks close on weekends
+
+For EACH activity, you MUST consider:
+1. The DAY OF WEEK the activity is scheduled for (provided in day context)
+2. Whether the venue is known to close on that day
+3. Whether the scheduled TIME falls within typical operating hours
+
+If you know or strongly suspect a venue is closed on the scheduled day:
+- DO NOT include it. Choose an alternative that IS open on that day.
+- If you include it anyway, set \`closedRisk: true\` in the activity metadata.
+
+EXAMPLES OF WHAT TO AVOID:
+- Scheduling a museum visit on Monday in Europe (most are closed)
+- Scheduling a market visit on Sunday in many countries
+- Scheduling a restaurant for 3 PM (most close between lunch and dinner, ~2-5 PM)
+- Scheduling a church/cathedral during Sunday morning services for sightseeing`;
+}
+
+// =============================================================================
+// OPENING HOURS VALIDATION
+// =============================================================================
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/**
+ * Parse Google-style opening hours string to determine if venue is open
+ * Handles formats like "Monday: 9:00 AM – 5:00 PM" or "Monday: Closed"
+ */
+export function isVenueOpenOnDay(
+  openingHours: string[] | undefined,
+  dayOfWeek: number, // 0=Sunday, 6=Saturday
+  scheduledTimeHHMM?: string // "14:00" format
+): { isOpen: boolean; reason?: string } {
+  if (!openingHours || openingHours.length === 0) {
+    return { isOpen: true }; // No data = assume open
+  }
+
+  const dayName = DAY_NAMES[dayOfWeek];
+  if (!dayName) return { isOpen: true };
+
+  // Find the hours entry for this day
+  const dayEntry = openingHours.find(h => 
+    h.toLowerCase().startsWith(dayName.toLowerCase())
+  );
+
+  if (!dayEntry) return { isOpen: true }; // No entry for this day
+
+  // Check for "Closed" indicator
+  const entryLower = dayEntry.toLowerCase();
+  if (entryLower.includes('closed') || entryLower.includes('fermé') || entryLower.includes('cerrado') || entryLower.includes('chiuso') || entryLower.includes('geschlossen')) {
+    return { isOpen: false, reason: `${dayName}: Closed` };
+  }
+
+  // If we have a scheduled time, try to check if it falls within hours
+  if (scheduledTimeHHMM) {
+    const timeRanges = extractTimeRanges(dayEntry);
+    if (timeRanges.length > 0) {
+      const scheduledMins = parseHHMMToMinutes(scheduledTimeHHMM);
+      if (scheduledMins !== null) {
+        const withinRange = timeRanges.some(
+          range => scheduledMins >= range.open && scheduledMins <= range.close
+        );
+        if (!withinRange) {
+          return { 
+            isOpen: false, 
+            reason: `${dayName}: Open ${timeRanges.map(r => `${minutesToHHMM(r.open)}–${minutesToHHMM(r.close)}`).join(', ')}, but scheduled at ${scheduledTimeHHMM}` 
+          };
+        }
+      }
+    }
+  }
+
+  return { isOpen: true };
+}
+
+function parseHHMMToMinutes(hhmm: string): number | null {
+  const parts = hhmm.split(':');
+  if (parts.length !== 2) return null;
+  const h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  if (isNaN(h) || isNaN(m)) return null;
+  return h * 60 + m;
+}
+
+function minutesToHHMM(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Extract time ranges from a day entry like "Monday: 9:00 AM – 5:00 PM"
+ */
+function extractTimeRanges(entry: string): { open: number; close: number }[] {
+  // Remove day name prefix
+  const timePart = entry.replace(/^[a-z]+:\s*/i, '').trim();
+  if (!timePart || timePart.toLowerCase() === 'closed') return [];
+
+  const ranges: { open: number; close: number }[] = [];
+  
+  // Split by comma for multiple ranges (e.g., "9:00 AM – 2:00 PM, 5:00 PM – 10:00 PM")
+  const segments = timePart.split(',');
+  
+  for (const segment of segments) {
+    // Match patterns like "9:00 AM – 5:00 PM" or "09:00–17:00"
+    const match12h = segment.match(/(\d{1,2}):(\d{2})\s*(AM|PM)\s*[–\-−to]+\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    const match24h = segment.match(/(\d{1,2}):(\d{2})\s*[–\-−to]+\s*(\d{1,2}):(\d{2})/);
+
+    if (match12h) {
+      const openMins = convert12hToMinutes(parseInt(match12h[1]), parseInt(match12h[2]), match12h[3]);
+      const closeMins = convert12hToMinutes(parseInt(match12h[4]), parseInt(match12h[5]), match12h[6]);
+      if (openMins !== null && closeMins !== null) {
+        ranges.push({ open: openMins, close: closeMins });
+      }
+    } else if (match24h) {
+      const openMins = parseInt(match24h[1]) * 60 + parseInt(match24h[2]);
+      const closeMins = parseInt(match24h[3]) * 60 + parseInt(match24h[4]);
+      ranges.push({ open: openMins, close: closeMins });
+    }
+  }
+
+  return ranges;
+}
+
+function convert12hToMinutes(hour: number, minutes: number, period: string): number | null {
+  let h = hour;
+  const p = period.toUpperCase();
+  if (p === 'PM' && h !== 12) h += 12;
+  if (p === 'AM' && h === 12) h = 0;
+  return h * 60 + minutes;
+}
+
+/**
+ * Validate all activities in enriched days against their opening hours
+ * Returns warnings for activities scheduled when venues are closed
+ */
+export interface OpeningHoursViolation {
+  dayNumber: number;
+  activityTitle: string;
+  activityId: string;
+  reason: string;
+  category: string;
+}
+
+export function validateOpeningHours(
+  days: Array<{ activities: Array<{ id: string; title: string; category: string; startTime?: string; openingHours?: string[] }> }>,
+  tripStartDate: string
+): OpeningHoursViolation[] {
+  const violations: OpeningHoursViolation[] = [];
+  const startDate = new Date(tripStartDate);
+
+  for (let dayIdx = 0; dayIdx < days.length; dayIdx++) {
+    const day = days[dayIdx];
+    const currentDate = new Date(startDate);
+    currentDate.setDate(currentDate.getDate() + dayIdx);
+    const dayOfWeek = currentDate.getDay(); // 0=Sunday, 6=Saturday
+
+    for (const activity of day.activities) {
+      // Skip transport/free time
+      const skipCats = ['transport', 'transportation', 'downtime', 'free_time', 'accommodation'];
+      if (skipCats.includes(activity.category?.toLowerCase() || '')) continue;
+
+      if (!activity.openingHours || activity.openingHours.length === 0) continue;
+
+      const result = isVenueOpenOnDay(activity.openingHours, dayOfWeek, activity.startTime);
+      if (!result.isOpen) {
+        violations.push({
+          dayNumber: dayIdx + 1,
+          activityTitle: activity.title,
+          activityId: activity.id,
+          reason: result.reason || 'Venue appears to be closed',
+          category: activity.category,
+        });
+      }
+    }
+  }
+
+  return violations;
 }
 
 /**

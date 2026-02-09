@@ -29,7 +29,9 @@ import {
   generateFallback,
   buildTruthAnchorPrompt,
   validateTruthAnchors,
-  type TruthAnchor
+  validateOpeningHours,
+  type TruthAnchor,
+  type OpeningHoursViolation
 } from './truth-anchors.ts';
 
 import {
@@ -7470,6 +7472,33 @@ RULES FOR VOYANCE PICKS:
         enrichedDays = aiResult.days;
       }
 
+      // =======================================================================
+      // STAGE 4.5: Opening Hours Validation
+      // Flag activities scheduled when venues are known to be closed
+      // =======================================================================
+      if (context.startDate) {
+        const hoursViolations = validateOpeningHours(enrichedDays, context.startDate);
+        if (hoursViolations.length > 0) {
+          console.warn(`[Stage 4.5] ⚠️ ${hoursViolations.length} opening hours conflict(s) detected:`);
+          hoursViolations.forEach(v => {
+            console.warn(`  - Day ${v.dayNumber}: "${v.activityTitle}" (${v.category}) — ${v.reason}`);
+          });
+          
+          // Tag activities with closedRisk so frontend can display warnings
+          for (const violation of hoursViolations) {
+            const day = enrichedDays[violation.dayNumber - 1];
+            if (!day) continue;
+            const activity = day.activities.find((a: StrictActivity) => a.id === violation.activityId);
+            if (activity) {
+              (activity as any).closedRisk = true;
+              (activity as any).closedRiskReason = violation.reason;
+            }
+          }
+        } else {
+          console.log("[Stage 4.5] ✓ No opening hours conflicts detected");
+        }
+      }
+
       // STAGE 5: Trip Overview (with enriched data from Stage 1.9)
       const overview = generateTripOverview(enrichedDays, context, {
         travelAdvisory: fetchedTravelAdvisory,
@@ -8909,6 +8938,28 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           console.log(`[generate-day] Enrichment complete: ${enrichedWithRatings}/${activitiesToEnrich.length} activities got ratings`);
         } else if (!GOOGLE_MAPS_API_KEY) {
           console.log('[generate-day] Skipping enrichment: GOOGLE_MAPS_API_KEY not configured');
+        }
+
+        // =======================================================================
+        // Opening Hours Validation for single-day generation
+        // =======================================================================
+        if (date) {
+          const dayDate = new Date(date);
+          const dayOfWeek = dayDate.getDay();
+          const { isVenueOpenOnDay } = await import('./truth-anchors.ts');
+          
+          for (const act of normalizedActivities) {
+            if (!act.openingHours || act.openingHours.length === 0) continue;
+            const skipCats = ['transport', 'transportation', 'downtime', 'free_time', 'accommodation'];
+            if (skipCats.includes(act.category?.toLowerCase() || '')) continue;
+            
+            const result = isVenueOpenOnDay(act.openingHours, dayOfWeek, act.startTime);
+            if (!result.isOpen) {
+              console.warn(`[generate-day] ⚠️ "${act.title}" may be closed: ${result.reason}`);
+              (act as any).closedRisk = true;
+              (act as any).closedRiskReason = result.reason;
+            }
+          }
         }
 
         generatedDay.activities = normalizedActivities;

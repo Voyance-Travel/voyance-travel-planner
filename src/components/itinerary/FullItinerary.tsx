@@ -4,7 +4,8 @@ import {
   ChevronDown, ChevronUp, MapPin, Clock, Star, 
   Lock, Unlock, Edit2, Trash2, ArrowUp, ArrowDown,
   Sun, Cloud, CloudRain, Snowflake, Plane, Hotel,
-  Utensils, Camera, ShoppingBag, Palmtree, Car
+  Utensils, Camera, ShoppingBag, Palmtree, Car,
+  AlertTriangle
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -471,6 +472,14 @@ function ActivityCard({
             )}
           </div>
           <h4 className="font-medium text-sm">{sanitizeActivityName(activity.title)}</h4>
+          {(activity as any).closedRisk && (
+            <div className="flex items-center gap-1.5 mt-1 px-2 py-1 bg-destructive/10 border border-destructive/20 rounded-md">
+              <AlertTriangle className="h-3 w-3 text-destructive flex-shrink-0" />
+              <span className="text-xs text-destructive font-medium">
+                May be closed — {(activity as any).closedRiskReason || 'Check hours before visiting'}
+              </span>
+            </div>
+          )}
           <p className="text-xs mt-1 opacity-80">{activity.description}</p>
           <div className="flex items-center gap-2 mt-2">
             <MapPin className="h-3 w-3 opacity-60" />
