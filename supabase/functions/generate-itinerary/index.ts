@@ -7507,13 +7507,64 @@ RULES FOR VOYANCE PICKS:
       // Log QA metrics
       logGeographicQAMetrics(geoValidations, tripId);
 
+      // ── Access gate: determine if user qualifies for photo enrichment ──
+      let canEnrichPhotos = true;
+      try {
+        // Check 1: Has any paid purchase?
+        const { data: purchaseRow } = await supabase
+          .from('credit_purchases')
+          .select('id')
+          .eq('user_id', context.userId)
+          .not('credit_type', 'in', '("free_monthly","signup_bonus","referral_bonus")')
+          .gt('remaining', -1)
+          .limit(1)
+          .maybeSingle();
+        const hasCompletedPurchase = !!purchaseRow;
+
+        // Check 2: Is this the user's first trip?
+        const { count: tripCount } = await supabase
+          .from('trips')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', context.userId)
+          .not('itinerary_status', 'is', null);
+        const isFirstTrip = (tripCount ?? 0) <= 1;
+
+        // Check 3: Smart Finish purchased?
+        const { data: tripRow } = await supabase
+          .from('trips')
+          .select('smart_finish_purchased')
+          .eq('id', context.tripId)
+          .maybeSingle();
+        const tripHasSmartFinish = !!tripRow?.smart_finish_purchased;
+
+        canEnrichPhotos = hasCompletedPurchase || tripHasSmartFinish || isFirstTrip;
+        console.log(`[Stage 4] Photo enrichment gate: purchase=${hasCompletedPurchase}, firstTrip=${isFirstTrip}, smartFinish=${tripHasSmartFinish} → ${canEnrichPhotos ? 'ENRICH' : 'SKIP PHOTOS'}`);
+      } catch (gateErr) {
+        console.warn('[Stage 4] Access gate check failed, defaulting to enrich:', gateErr);
+        canEnrichPhotos = true; // Fail-open
+      }
+
       // STAGE 4: Enrichment (real photos + venue verification via Google Places API v1)
       let enrichedDays: StrictDay[];
       let enrichmentStats: EnrichmentStats | null = null;
       try {
-        const enrichmentResult = await enrichItinerary(aiResult.days, context.destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY);
-        enrichedDays = enrichmentResult.days;
-        enrichmentStats = enrichmentResult.stats;
+        if (canEnrichPhotos) {
+          const enrichmentResult = await enrichItinerary(aiResult.days, context.destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY);
+          enrichedDays = enrichmentResult.days;
+          enrichmentStats = enrichmentResult.stats;
+        } else {
+          // Skip photo enrichment but still do venue verification without photos
+          console.log('[Stage 4] Skipping photo enrichment for gated user — venue verification only');
+          const enrichmentResult = await enrichItinerary(aiResult.days, context.destination, supabaseUrl, supabaseKey, undefined, LOVABLE_API_KEY);
+          enrichedDays = enrichmentResult.days;
+          enrichmentStats = enrichmentResult.stats;
+          // Strip any photos that might have been added from cache
+          for (const day of enrichedDays) {
+            for (const act of day.activities) {
+              act.photos = [];
+            }
+          }
+        }
       } catch (enrichError) {
         console.warn('[generate-itinerary] Enrichment failed, using base itinerary:', enrichError);
         enrichedDays = aiResult.days;
