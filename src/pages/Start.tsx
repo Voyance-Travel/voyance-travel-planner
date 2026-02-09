@@ -1153,20 +1153,25 @@ function FlightHotelStep({
             </div>
           </div>
 
-          {/* Must-Do Activities */}
+          {/* Extra Details — Optional paste field for research/notes */}
           <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <Star className="w-4 h-4 text-muted-foreground" />
-              Must-Do Activities
-            </label>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+                <MessageSquareText className="w-4 h-4" />
+                Have extra details to share?
+              </label>
+              <span className="text-xs text-muted-foreground/60">(optional)</span>
+            </div>
             <Textarea
               value={mustDoActivities}
               onChange={(e) => setMustDoActivities(e.target.value)}
-              placeholder={`e.g., Visit the Colosseum, Eat authentic pasta, See the sunset from a rooftop...`}
-              className="min-h-[80px] resize-none"
+              placeholder={`Paste notes, other AI suggestions, or must-sees...
+
+Example: "We definitely want to visit teamLab, try ramen at Afuri, and see Meiji Shrine early morning. Skip Shibuya Crossing."`}
+              className="min-h-[100px] resize-none text-sm"
             />
             <p className="text-xs text-muted-foreground">
-              Tell us what you absolutely can't miss. We'll make sure it's in your itinerary.
+              Share must-sees, skip requests, or paste research from ChatGPT. Our AI will incorporate it into your itinerary.
             </p>
           </div>
         </div>

@@ -3822,6 +3822,8 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     jetLagSensitivity: trip.metadata?.jetLagSensitivity || 'moderate',
     // Celebration day from user selection
     celebrationDay: trip.metadata?.celebrationDay,
+    // User research notes / must-do activities from Page 2 paste field
+    mustDoActivities: trip.metadata?.mustDoActivities || undefined,
   };
 
   // Set daily budget based on tier (fallback)
@@ -7292,11 +7294,29 @@ RULES FOR VOYANCE PICKS:
         }
       }
       
+      // =======================================================================
+      // STAGE 1.999: User Research Notes / Must-Do Activities
+      // Inject user-provided must-sees, skip requests, and research notes
+      // =======================================================================
+      let userResearchPrompt = "";
+      if (context.mustDoActivities && context.mustDoActivities.trim()) {
+        const mustDoAnalysis = parseMustDoInput(context.mustDoActivities, context.destination);
+        if (mustDoAnalysis.length > 0) {
+          const scheduled = scheduleMustDos(mustDoAnalysis, context.totalDays);
+          userResearchPrompt = scheduled.promptSection;
+          console.log(`[Stage 1.999] ✓ User research notes parsed: ${mustDoAnalysis.length} items, ${scheduled.scheduled.length} scheduled`);
+        } else {
+          // Raw text fallback — inject as-is
+          userResearchPrompt = `\n## 📋 USER'S MUST-SEES & RESEARCH NOTES\nThe traveler shared these preferences/notes. INCORPORATE them into the itinerary:\n"${context.mustDoActivities.trim()}"\n\nRespect any "skip" or "avoid" requests. Include their must-sees on appropriate days.\n`;
+          console.log(`[Stage 1.999] ✓ User research notes injected as raw text (${context.mustDoActivities.length} chars)`);
+        }
+      }
+
       // Combine all context for maximum personalization
-      // Order: ARCHETYPE CONSTRAINTS → TRIP TYPE → SKIP LIST → DIETARY ENFORCEMENT → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → HIDDEN GEMS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE
+      // Order: ARCHETYPE CONSTRAINTS → TRIP TYPE → SKIP LIST → DIETARY ENFORCEMENT → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → HIDDEN GEMS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE → USER RESEARCH
       // NOTE: generationHierarchy includes destination essentials, archetype behavioral rules, budget guardrails (Phase 2 Fix)
       // Phase 2 Fix: Removed unifiedDNAContext - all traveler data now comes from generationHierarchy via unified profile
-      const preferenceContext = generationHierarchy + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + hiddenGemsContext + voyancePicksContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt;
+      const preferenceContext = generationHierarchy + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + hiddenGemsContext + voyancePicksContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt + userResearchPrompt;
 
       // STAGE 2: AI Generation (batch with validation and retry)
       let aiResult;
