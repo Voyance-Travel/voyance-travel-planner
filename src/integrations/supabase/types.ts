@@ -3433,6 +3433,92 @@ export type Database = {
         }
         Relationships: []
       }
+      group_budget_transactions: {
+        Row: {
+          action_type: string
+          created_at: string | null
+          credits_spent: number
+          group_budget_id: string
+          id: string
+          user_id: string
+          was_free: boolean | null
+        }
+        Insert: {
+          action_type: string
+          created_at?: string | null
+          credits_spent: number
+          group_budget_id: string
+          id?: string
+          user_id: string
+          was_free?: boolean | null
+        }
+        Update: {
+          action_type?: string
+          created_at?: string | null
+          credits_spent?: number
+          group_budget_id?: string
+          id?: string
+          user_id?: string
+          was_free?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_budget_transactions_group_budget_id_fkey"
+            columns: ["group_budget_id"]
+            isOneToOne: false
+            referencedRelation: "group_budgets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      group_budgets: {
+        Row: {
+          created_at: string | null
+          id: string
+          initial_credits: number
+          owner_id: string
+          remaining_credits: number
+          tier: string
+          trip_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          initial_credits: number
+          owner_id: string
+          remaining_credits: number
+          tier: string
+          trip_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          initial_credits?: number
+          owner_id?: string
+          remaining_credits?: number
+          tier?: string
+          trip_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_budgets_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: true
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "group_budgets_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: true
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       group_unlocks: {
         Row: {
           caps: Json
@@ -6533,6 +6619,7 @@ export type Database = {
           transportation_preferences: Json | null
           travelers: number | null
           trip_type: string | null
+          unlocked_day_count: number | null
           updated_at: string
           user_id: string
         }
@@ -6580,6 +6667,7 @@ export type Database = {
           transportation_preferences?: Json | null
           travelers?: number | null
           trip_type?: string | null
+          unlocked_day_count?: number | null
           updated_at?: string
           user_id: string
         }
@@ -6627,6 +6715,7 @@ export type Database = {
           transportation_preferences?: Json | null
           travelers?: number | null
           trip_type?: string | null
+          unlocked_day_count?: number | null
           updated_at?: string
           user_id?: string
         }
@@ -7130,6 +7219,30 @@ export type Database = {
           created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_tiers: {
+        Row: {
+          first_purchase_at: string | null
+          highest_purchase: string | null
+          tier: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          first_purchase_at?: string | null
+          highest_purchase?: string | null
+          tier?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          first_purchase_at?: string | null
+          highest_purchase?: string | null
+          tier?: string
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: []

@@ -30,12 +30,55 @@ export const CREDIT_COSTS = {
   REAL_TIME_MODE: 0,
 } as const;
 
-// Per-trip free action caps (actions free up to this count per trip)
+// Tier-based free action caps per trip
+export type UserTier = 'free' | 'flex' | 'voyager' | 'explorer' | 'adventurer';
+
+export interface TierCaps {
+  swaps: number;
+  regenerates: number;
+  ai_messages: number;
+  restaurant_recs: number;
+  total: number;
+}
+
+export const TIER_FREE_CAPS: Record<UserTier, TierCaps> = {
+  free:       { swaps: 3,  regenerates: 1, ai_messages: 5,  restaurant_recs: 1, total: 10 },
+  flex:       { swaps: 3,  regenerates: 1, ai_messages: 5,  restaurant_recs: 1, total: 10 },
+  voyager:    { swaps: 6,  regenerates: 2, ai_messages: 10, restaurant_recs: 2, total: 20 },
+  explorer:   { swaps: 9,  regenerates: 3, ai_messages: 15, restaurant_recs: 3, total: 30 },
+  adventurer: { swaps: 15, regenerates: 5, ai_messages: 25, restaurant_recs: 5, total: 50 },
+};
+
+// Trip length scaling for Free/Flex users only
+export const FLEX_CAPS_BY_DAYS: Record<number, TierCaps> = {
+  2:  { swaps: 3,  regenerates: 1, ai_messages: 5,  restaurant_recs: 1, total: 10 },
+  4:  { swaps: 5,  regenerates: 2, ai_messages: 10, restaurant_recs: 2, total: 19 },
+  6:  { swaps: 7,  regenerates: 3, ai_messages: 15, restaurant_recs: 3, total: 28 },
+  8:  { swaps: 10, regenerates: 4, ai_messages: 20, restaurant_recs: 4, total: 38 },
+};
+
+// Group unlock credit costs
+export const GROUP_UNLOCK_CREDITS: Record<string, number> = {
+  small: 150,
+  medium: 300,
+  large: 500,
+};
+
+// Group shared free caps (shared by all collaborators)
+export const GROUP_FREE_CAPS = {
+  swaps: 10,
+  regenerates: 5,
+  ai_messages: 20,
+  restaurant_recs: 5,
+  total: 40,
+};
+
+// Legacy flat caps (backward compat)
 export const FREE_ACTION_CAPS: Record<string, number> = {
-  swap_activity: 10,
-  regenerate_day: 5,
-  ai_message: 20,
-  restaurant_rec: 5,
+  swap_activity: 3,
+  regenerate_day: 1,
+  ai_message: 5,
+  restaurant_rec: 1,
 };
 
 // ============================================================
@@ -204,6 +247,7 @@ export type GroupUnlockPack = {
   tier: GroupUnlockTier;
   maxTravelers: number;
   price: number;
+  creditCost: number;
   mode: 'payment';
   type: 'group_unlock';
   caps: {
@@ -223,6 +267,7 @@ export const GROUP_UNLOCK_TIERS: GroupUnlockPack[] = [
     tier: 'small',
     maxTravelers: 3,
     price: 19.99,
+    creditCost: 150,
     mode: 'payment',
     type: 'group_unlock',
     caps: {
@@ -240,6 +285,7 @@ export const GROUP_UNLOCK_TIERS: GroupUnlockPack[] = [
     tier: 'medium',
     maxTravelers: 6,
     price: 34.99,
+    creditCost: 300,
     mode: 'payment',
     type: 'group_unlock',
     caps: {
@@ -257,6 +303,7 @@ export const GROUP_UNLOCK_TIERS: GroupUnlockPack[] = [
     tier: 'large',
     maxTravelers: 99,
     price: 79.99,
+    creditCost: 500,
     mode: 'payment',
     type: 'group_unlock',
     caps: {
