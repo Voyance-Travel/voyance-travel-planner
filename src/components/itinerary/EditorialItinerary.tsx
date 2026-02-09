@@ -562,15 +562,89 @@ function inferCurrencyFromCountry(country?: string): string | null {
   const eurozone = new Set([
     'austria', 'belgium', 'croatia', 'cyprus', 'estonia', 'finland', 'france',
     'germany', 'greece', 'ireland', 'italy', 'latvia', 'lithuania', 'luxembourg',
-    'malta', 'netherlands', 'portugal', 'slovakia', 'slovenia', 'spain',
+    'malta', 'netherlands', 'portugal', 'slovakia', 'slovenia', 'spain', 'andorra',
+    'monaco', 'san marino', 'vatican', 'vatican city', 'kosovo', 'montenegro',
   ]);
 
   if (eurozone.has(c)) return 'EUR';
-  if (c === 'united kingdom' || c === 'uk' || c === 'england' || c === 'scotland' || c === 'wales' || c === 'northern ireland') return 'GBP';
-  if (c === 'united states' || c === 'usa' || c === 'us') return 'USD';
-  if (c === 'japan') return 'JPY';
 
-  return null;
+  // Broad country → currency map
+  const countryMap: Record<string, string> = {
+    'united kingdom': 'GBP', 'uk': 'GBP', 'england': 'GBP', 'scotland': 'GBP', 'wales': 'GBP', 'northern ireland': 'GBP',
+    'united states': 'USD', 'usa': 'USD', 'us': 'USD',
+    'japan': 'JPY',
+    'canada': 'CAD',
+    'australia': 'AUD',
+    'new zealand': 'NZD',
+    'switzerland': 'CHF',
+    'china': 'CNY',
+    'south korea': 'KRW', 'korea': 'KRW',
+    'india': 'INR',
+    'mexico': 'MXN',
+    'brazil': 'BRL',
+    'argentina': 'ARS',
+    'colombia': 'COP',
+    'chile': 'CLP',
+    'peru': 'PEN',
+    'thailand': 'THB',
+    'vietnam': 'VND',
+    'indonesia': 'IDR', 'bali': 'IDR',
+    'malaysia': 'MYR',
+    'philippines': 'PHP',
+    'singapore': 'SGD',
+    'taiwan': 'TWD',
+    'hong kong': 'HKD',
+    'turkey': 'TRY', 'türkiye': 'TRY',
+    'south africa': 'ZAR',
+    'egypt': 'EGP',
+    'morocco': 'MAD',
+    'kenya': 'KES',
+    'tanzania': 'TZS',
+    'nigeria': 'NGN',
+    'ghana': 'GHS',
+    'israel': 'ILS',
+    'jordan': 'JOD',
+    'united arab emirates': 'AED', 'uae': 'AED',
+    'saudi arabia': 'SAR',
+    'qatar': 'QAR',
+    'oman': 'OMR',
+    'bahrain': 'BHD',
+    'kuwait': 'KWD',
+    'iceland': 'ISK',
+    'norway': 'NOK',
+    'sweden': 'SEK',
+    'denmark': 'DKK',
+    'poland': 'PLN',
+    'czech republic': 'CZK', 'czechia': 'CZK',
+    'hungary': 'HUF',
+    'romania': 'RON',
+    'bulgaria': 'BGN',
+    'russia': 'RUB',
+    'ukraine': 'UAH',
+    'sri lanka': 'LKR',
+    'nepal': 'NPR',
+    'cambodia': 'KHR',
+    'myanmar': 'MMK', 'burma': 'MMK',
+    'laos': 'LAK',
+    'pakistan': 'PKR',
+    'bangladesh': 'BDT',
+    'costa rica': 'CRC',
+    'panama': 'PAB',
+    'cuba': 'CUP',
+    'jamaica': 'JMD',
+    'dominican republic': 'DOP',
+    'guatemala': 'GTQ',
+    'uruguay': 'UYU',
+    'paraguay': 'PYG',
+    'bolivia': 'BOB',
+    'ecuador': 'USD',
+    'fiji': 'FJD',
+    'maldives': 'MVR',
+    'mauritius': 'MUR',
+    'seychelles': 'SCR',
+  };
+
+  return countryMap[c] ?? null;
 }
 
 function inferCurrencyFromDays(days: EditorialDay[]): string | null {
@@ -579,7 +653,8 @@ function inferCurrencyFromDays(days: EditorialDay[]): string | null {
   for (const day of days) {
     for (const act of day.activities ?? []) {
       const cur = normalizeCurrencyCode((act as any)?.cost?.currency);
-      if (cur) counts.set(cur, (counts.get(cur) ?? 0) + 1);
+      // Skip USD since backend normalizes all costs to USD — it doesn't reflect actual local currency
+      if (cur && cur !== 'USD') counts.set(cur, (counts.get(cur) ?? 0) + 1);
     }
   }
 
