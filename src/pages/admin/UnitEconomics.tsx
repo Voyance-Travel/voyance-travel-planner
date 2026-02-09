@@ -61,17 +61,17 @@ const FALLBACK_DATA = {
     // Hidden fixed: your own testing, API testing, dev overhead
     devOps: 20.00, // Rough estimate for internal usage/testing that doesn't generate revenue
   },
-  revenue: { flex_100: 9, flex_300: 25, flex_500: 39, voyager: 49.99, explorer: 89.99, adventurer: 149.99, group_small: 19.99, group_medium: 34.99, group_large: 79.99 } as Record<string, number>,
+  revenue: { flex_100: 9, flex_300: 25, flex_500: 39, voyager: 49.99, explorer: 89.99, adventurer: 149.99 } as Record<string, number>,
 };
 
 // Revenue mix presets - what % of paying users buy each tier
 // Now includes per-tier COSTS to calculate true blended margin
 // NOTE: Boost ($8.99) replaces Top-Up ($5) - less cannibalization risk
 const REVENUE_MIX_PRESETS = {
-  pessimistic: { flex_100: 25, flex_300: 30, flex_500: 20, voyager: 15, explorer: 8, adventurer: 2, label: "Pessimistic", description: "Heavy flex buying, low club adoption" },
-  conservative: { flex_100: 15, flex_300: 20, flex_500: 18, voyager: 25, explorer: 15, adventurer: 7, label: "Conservative", description: "Moderate flex, growing club" },
-  balanced: { flex_100: 8, flex_300: 12, flex_500: 12, voyager: 28, explorer: 25, adventurer: 15, label: "Balanced", description: "Most revenue from Club (Voyager/Explorer)" },
-  optimistic: { flex_100: 3, flex_300: 7, flex_500: 8, voyager: 18, explorer: 32, adventurer: 32, label: "Optimistic", description: "Heavy Explorer/Adventurer adoption" },
+  pessimistic: { flex_100: 30, flex_300: 35, flex_500: 22, voyager: 8, explorer: 4, adventurer: 1, label: "Pessimistic", description: "Heavy flex buying, low club adoption" },
+  conservative: { flex_100: 18, flex_300: 24, flex_500: 20, voyager: 22, explorer: 11, adventurer: 5, label: "Conservative", description: "Moderate flex, growing club" },
+  balanced: { flex_100: 10, flex_300: 14, flex_500: 14, voyager: 28, explorer: 22, adventurer: 12, label: "Balanced", description: "Most revenue from Club (Voyager/Explorer)" },
+  optimistic: { flex_100: 4, flex_300: 8, flex_500: 10, voyager: 20, explorer: 30, adventurer: 28, label: "Optimistic", description: "Heavy Explorer/Adventurer adoption" },
 };
 
 // Amadeus: 1 hotel list + 4 offer batches (~200 hotels) = 5 calls
@@ -195,7 +195,7 @@ const SCENARIOS: Record<Scenario, { name: string; description: string; fullDescr
 
 // Credit pack tiers with USAGE-BASED COST MODELING
 // Action costs (CURRENT): Unlock Day = 60cr/$0.018, Regen Day = 10cr/$0.018, Swap = 5cr/$0.009, Restaurant = 5cr/$0.015, AI = 5cr/$0.005, Hotel = 40cr/$0.020
-// Free caps per trip: swap 10, regen 5, ai_message 20, restaurant 5, transport_mode_change 5
+// Free caps per trip (tier-based): swap 3-15, regen 1-5, ai_message 5-25, restaurant 1-5
 // Cost derivations from production data: $0.091 total ÷ 5 days = $0.018/day
 const CREDIT_TIERS = [
   // ── Flexible Credits ──
@@ -284,42 +284,48 @@ const CREDIT_TIERS = [
     estimatedCostToUs: 0.990,
     notes: "53 days (3180cr) + 4 paid swaps (20cr). Free caps per trip still apply.",
   },
-  // ── Add-on Products (fixed price, not credit-based) ──
+  // ── Group Unlock (Credit Pool) ──
   { 
     key: "group_small", 
     label: "Group Small", 
-    price: 19.99, 
-    credits: 0, // Not credit-based, flat product
+    price: 0, 
+    credits: 150,
     color: "#14B8A6", 
-    type: "addon" as const,
-    description: "Group unlock - small (2-3 travelers)",
+    type: "group" as const,
+    description: "Credit pool (2-3 travelers)",
     typicalUsage: { daysUnlocked: 0, swaps: 0, regenerates: 0, restaurants: 0, aiMessages: 0 },
-    estimatedCostToUs: 0.015,
-    notes: "Fixed price product. Shared editing + increased action caps for 2-3 collaborators.",
+    estimatedCostToUs: 0.50,
+    sharedFreeCaps: 40,
+    typicalPaidActions: 20,
+    notes: "150 credit pool. 40 shared free actions (10 swap + 5 regen + 20 AI + 5 restaurant). ~20 paid actions after caps.",
   },
   { 
     key: "group_medium", 
     label: "Group Medium", 
-    price: 34.99, 
-    credits: 0,
+    price: 0, 
+    credits: 300,
     color: "#0EA5E9", 
-    type: "addon" as const,
-    description: "Group unlock - medium (4-6 travelers)",
+    type: "group" as const,
+    description: "Credit pool (4-6 travelers)",
     typicalUsage: { daysUnlocked: 0, swaps: 0, regenerates: 0, restaurants: 0, aiMessages: 0 },
-    estimatedCostToUs: 0.015,
-    notes: "Fixed price product. Shared editing + increased action caps for 4-6 collaborators.",
+    estimatedCostToUs: 1.00,
+    sharedFreeCaps: 40,
+    typicalPaidActions: 50,
+    notes: "300 credit pool. 40 shared free actions. ~50 paid actions after caps. Refillable by owner.",
   },
   { 
     key: "group_large", 
     label: "Group Large", 
-    price: 79.99, 
-    credits: 0,
+    price: 0, 
+    credits: 500,
     color: "#6366F1", 
-    type: "addon" as const,
-    description: "Group unlock - large (7+ travelers)",
+    type: "group" as const,
+    description: "Credit pool (7+ travelers)",
     typicalUsage: { daysUnlocked: 0, swaps: 0, regenerates: 0, restaurants: 0, aiMessages: 0 },
-    estimatedCostToUs: 0.015,
-    notes: "Fixed price product. Shared editing + increased action caps for 7+ collaborators.",
+    estimatedCostToUs: 1.50,
+    sharedFreeCaps: 40,
+    typicalPaidActions: 90,
+    notes: "500 credit pool. 40 shared free actions. ~90 paid actions after caps. Refillable by owner.",
   },
 ];
 
@@ -336,10 +342,10 @@ const ACTION_COSTS: Record<string, number> = {
   hotel_search: 0.020,    // ~2-3 Places calls per city
   smart_finish: 0.040,    // Smart Finish enrichment (route opt + reviews + tips)
   purchase_smart_finish: 0.040, // alias for ledger tracking
-  group_unlock: 0.015,    // Group unlock setup (minimal API cost)
-  purchase_group_small: 0.015,
-  purchase_group_medium: 0.015,
-  purchase_group_large: 0.015,
+  group_unlock: 0.50,     // Group unlock pool utilization cost
+  purchase_group_small: 0.50,
+  purchase_group_medium: 1.00,
+  purchase_group_large: 1.50,
   mystery_getaway: 0.025, // AI destination suggestions
   mystery_logistics: 0.015, // Flight + hotel estimates
   transport_mode_change: 0.005, // Route recalculation
@@ -400,13 +406,14 @@ export default function UnitEconomics() {
     const scenarioCfg = SCENARIOS[scenario];
 
     const tiers = FALLBACK_DATA.revenue;
+    // Groups no longer contribute to Stripe revenue (they consume credits)
     const aov = (
-      (mixConfig.flex_100 / 100) * tiers.flex_100 +
-      (mixConfig.flex_300 / 100) * tiers.flex_300 +
-      (mixConfig.flex_500 / 100) * tiers.flex_500 +
-      (mixConfig.voyager / 100) * tiers.voyager +
-      (mixConfig.explorer / 100) * tiers.explorer +
-      (mixConfig.adventurer / 100) * tiers.adventurer
+      (mixConfig.flex_100 / 100) * (tiers.flex_100 || 0) +
+      (mixConfig.flex_300 / 100) * (tiers.flex_300 || 0) +
+      (mixConfig.flex_500 / 100) * (tiers.flex_500 || 0) +
+      (mixConfig.voyager / 100) * (tiers.voyager || 0) +
+      (mixConfig.explorer / 100) * (tiers.explorer || 0) +
+      (mixConfig.adventurer / 100) * (tiers.adventurer || 0)
     );
 
     // Scenario-aware tier costs
@@ -790,6 +797,42 @@ export default function UnitEconomics() {
       }
     }
     
+    // Group pool depletion warning
+    if (econData?.groupBudgets) {
+      const depletedCount = econData.groupBudgets.pools.reduce((s, p) => s + p.depleted, 0);
+      if (depletedCount > 0) {
+        list.push({
+          type: 'warning',
+          title: `${depletedCount} group pool${depletedCount > 1 ? 's' : ''} depleted`,
+          description: `${depletedCount} group budget pool${depletedCount > 1 ? 's have' : ' has'} 0 credits remaining. Owners may need a nudge to top up.`,
+          impact: `${depletedCount} pools at 0`,
+          action: 'Send pool depletion notification to group owners.',
+        });
+      }
+
+      // Group credit absorption
+      const totalAllocated = econData.groupBudgets.pools.reduce((s, p) => s + p.allocated, 0);
+      if (totalAllocated > 0) {
+        list.push({
+          type: 'opportunity',
+          title: 'Group credit absorption',
+          description: `${totalAllocated.toLocaleString()} credits allocated to group pools (~$${(totalAllocated * 0.09).toFixed(2)} equivalent).`,
+          impact: `${econData.groupBudgets.totalPools} pools active`,
+        });
+      }
+    }
+
+    // Tier margin check
+    const allTiersAbove90 = CREDIT_TIERS.filter(t => t.price > 0).every(t => ((t.price - t.estimatedCostToUs) / t.price) * 100 > 90);
+    if (allTiersAbove90) {
+      list.push({
+        type: 'success',
+        title: 'All paid tiers maintain >90% margin',
+        description: 'Every pricing tier with a dollar price maintains healthy margins above 90%.',
+        impact: '✓ Margins healthy',
+      });
+    }
+
     return list;
   }, [hasRealData, realMetrics, scenarioConfig, costs, volume, conversionRate]);
 
@@ -1508,7 +1551,7 @@ export default function UnitEconomics() {
             {/* Visual Bar Chart */}
             <div style={{ marginBottom: 12 }}>
               <div style={{ display: "flex", height: 24, borderRadius: 6, overflow: "hidden", background: "rgba(15, 23, 42, 0.5)" }}>
-                {CREDIT_TIERS.filter(t => t.type !== 'addon').map((tier) => {
+                {CREDIT_TIERS.filter(t => t.type !== 'group').map((tier) => {
                   const pct = mixConfig[tier.key as keyof typeof mixConfig] as number;
                   if (!pct || pct === 0) return null;
                   return (
@@ -1543,7 +1586,7 @@ export default function UnitEconomics() {
             
             {/* Tier Labels with $ - Compact for 6 tiers */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-              {CREDIT_TIERS.filter(t => t.type !== 'addon').map((tier) => {
+              {CREDIT_TIERS.filter(t => t.type !== 'group').map((tier) => {
                 const pct = mixConfig[tier.key as keyof typeof mixConfig] as number;
                 return (
                   <div key={tier.key} style={{ 
@@ -1965,18 +2008,17 @@ export default function UnitEconomics() {
             <tbody>
               {[
                 { action: "Unlock 1 Day", credits: 60, cost: 0.018, freeCap: null },
-                { action: "Swap Activity", credits: 5, cost: 0.009, freeCap: "10/trip" },
-                { action: "Regenerate Day", credits: 10, cost: 0.018, freeCap: "5/trip" },
-                { action: "Restaurant Rec", credits: 5, cost: 0.015, freeCap: "5/trip" },
-                { action: "AI Message", credits: 5, cost: 0.005, freeCap: "20/trip" },
+                { action: "Swap Activity", credits: 5, cost: 0.009, freeCap: "3-15/trip*" },
+                { action: "Regenerate Day", credits: 10, cost: 0.018, freeCap: "1-5/trip*" },
+                { action: "Restaurant Rec", credits: 5, cost: 0.015, freeCap: "1-5/trip*" },
+                { action: "AI Message", credits: 5, cost: 0.005, freeCap: "5-25/trip*" },
                 { action: "Hotel Search", credits: 40, cost: 0.020, freeCap: null },
                 { action: "Smart Finish", credits: 50, cost: 0.040, freeCap: null },
-                { action: "Group Unlock (Small)", credits: null, cost: 0.015, freeCap: null, fixedPrice: 19.99 },
-                { action: "Group Unlock (Medium)", credits: null, cost: 0.015, freeCap: null, fixedPrice: 34.99 },
-                { action: "Group Unlock (Large)", credits: null, cost: 0.015, freeCap: null, fixedPrice: 79.99 },
+                { action: "Group Unlock (Small)", credits: 150, cost: 0.50, freeCap: null },
+                { action: "Group Unlock (Medium)", credits: 300, cost: 1.00, freeCap: null },
+                { action: "Group Unlock (Large)", credits: 500, cost: 1.50, freeCap: null },
               ].map((row, i) => {
                 const avgCost = row.cost;
-                const isFixedPrice = row.credits === null;
                 return (
                   <tr key={i} style={{ background: i % 2 === 0 ? "rgba(15, 23, 42, 0.3)" : "transparent" }}>
                     <td style={{ padding: "8px 10px", color: "#E2E8F0", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
@@ -1987,33 +2029,32 @@ export default function UnitEconomics() {
                         </span>
                       )}
                     </td>
-                    <td style={{ padding: "8px 10px", color: isFixedPrice ? "#64748B" : "#A78BFA", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                      {isFixedPrice ? (
-                        <span title="Fixed price product, not credit-based">${(row as any).fixedPrice}</span>
-                      ) : row.credits}
+                    <td style={{ padding: "8px 10px", color: "#A78BFA", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                      {row.credits}
                     </td>
                     <td style={{ padding: "8px 10px", color: "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                       ${avgCost.toFixed(3)}
                     </td>
                     {/* Free tier column - pure loss */}
                     <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)", fontSize: 11, color: "#EF4444" }}>
-                      {isFixedPrice ? (
-                        <span style={{ color: "#64748B", fontSize: 10 }}>N/A</span>
-                      ) : (
-                        <><span style={{ color: "#64748B", fontWeight: 400, fontSize: 10 }}>$0</span>{" "}-100%</>
-                      )}
+                      <><span style={{ color: "#64748B", fontWeight: 400, fontSize: 10 }}>$0</span>{" "}-100%</>
                     </td>
                     {CREDIT_TIERS.map(t => {
-                      // Fixed price products can't be expressed as $/credit
-                      if (isFixedPrice) {
-                        const fixedMargin = (((row as any).fixedPrice - avgCost) / (row as any).fixedPrice) * 100;
-                        return (
-                          <td key={t.key} style={{ padding: "8px 6px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)", fontSize: 11, color: "#64748B" }}>
-                            <span style={{ fontSize: 9 }}>N/A</span>
-                          </td>
-                        );
-                      }
-                      if (t.credits === 0) {
+                      if (t.credits === 0 || t.price === 0) {
+                        // Group pools: show cost per pool instead of $/credit margin
+                        if (t.type === 'group') {
+                          const poolCredits = t.credits;
+                          const poolCost = t.estimatedCostToUs;
+                          const creditValue = poolCredits * 0.09; // at Flex 100 rate
+                          const margin = creditValue > 0 ? ((creditValue - poolCost) / creditValue) * 100 : 0;
+                          return (
+                            <td key={t.key} style={{ padding: "8px 6px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)", fontSize: 11,
+                              color: margin > 90 ? "#34D399" : margin > 70 ? "#FBBF24" : "#F87171",
+                            }}>
+                              <span style={{ color: "#94A3B8", fontWeight: 400, fontSize: 10 }}>{t.credits}cr</span>
+                            </td>
+                          );
+                        }
                         return (
                           <td key={t.key} style={{ padding: "8px 6px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500, borderBottom: "1px solid rgba(30, 41, 59, 0.5)", fontSize: 11, color: "#64748B" }}>
                             <span style={{ fontSize: 9 }}>N/A</span>
@@ -2038,10 +2079,9 @@ export default function UnitEconomics() {
               })}
             </tbody>
           </table>
-          <p style={{ fontSize: 10, color: "#64748B", marginBottom: 24 }}>
+           <p style={{ fontSize: 10, color: "#64748B", marginBottom: 24 }}>
             Each cell shows <span style={{ color: "#94A3B8" }}>user pays</span> + <span style={{ color: "#34D399" }}>margin %</span> at that tier's $/credit rate.
-            Group Unlocks are fixed-price products (not credit-based) — shown as N/A in credit columns.
-            Actions with <span style={{ color: "#34D399" }}>free caps</span> don't cost credits until the per-trip cap is exceeded.
+            *Free caps vary by tier: Free/Flex (3/1/5/1 = 10 total), Voyager (6/2/10/2 = 20), Explorer (9/3/15/3 = 30), Adventurer (15/5/25/5 = 50). Free/Flex caps scale with trip length. Group pools share 40 free actions before pool credits are deducted.
           </p>
 
           {/* TIER-BASED COST BREAKDOWN TABLE */}
@@ -2056,8 +2096,8 @@ export default function UnitEconomics() {
                   <th style={{ textAlign: "right", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Price</th>
                   <th style={{ textAlign: "right", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Credits</th>
                   <th style={{ textAlign: "center", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Days</th>
-                  <th style={{ textAlign: "center", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Swaps</th>
-                  <th style={{ textAlign: "center", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Regens</th>
+                  <th style={{ textAlign: "center", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Free Acts</th>
+                  <th style={{ textAlign: "center", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Pool/Extras</th>
                   <th style={{ textAlign: "right", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Our Cost</th>
                   <th style={{ textAlign: "right", padding: "8px 10px", color: "#64748B", fontWeight: 500, borderBottom: "1px solid rgba(100, 116, 139, 0.3)" }}>Margin</th>
                 </tr>
@@ -2066,14 +2106,29 @@ export default function UnitEconomics() {
                 {CREDIT_TIERS.map((tier, i, arr) => {
                   const prevType = i > 0 ? arr[i - 1].type : null;
                   const showGroupHeader = tier.type !== prevType;
-                  const margin = ((tier.price - tier.estimatedCostToUs) / tier.price) * 100;
+                  const isGroup = tier.type === 'group';
+                  // For groups: margin based on credit value at $0.09/cr
+                  const effectivePrice = isGroup ? tier.credits * 0.09 : tier.price;
+                  const margin = effectivePrice > 0 ? ((effectivePrice - tier.estimatedCostToUs) / effectivePrice) * 100 : -100;
                   const marginColor = margin > 97 ? "#34D399" : margin > 95 ? "#FBBF24" : "#F87171";
+                  
+                  // Free acts by tier
+                  const freeActsMap: Record<string, string> = {
+                    flex_100: '10/trip', flex_300: '10-19/trip', flex_500: '10-28/trip',
+                    voyager: '20/trip', explorer: '30/trip', adventurer: '50/trip',
+                    group_small: '40 shared', group_medium: '40 shared', group_large: '40 shared',
+                  };
+                  const freeActs = freeActsMap[tier.key] || '—';
+                  
+                  // Pool/extras column
+                  const poolExtras = isGroup ? `~${(tier as any).typicalPaidActions || 0} paid` : 
+                    tier.typicalUsage.swaps > 0 ? `${tier.typicalUsage.swaps} swaps` : '—';
                   
                   return (<>
                     {showGroupHeader && (
                       <tr key={`group-${tier.type}`}>
-                        <td colSpan={8} style={{ padding: "10px 10px 4px", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: tier.type === 'club' ? "#A78BFA" : tier.type === 'addon' ? "#EC4899" : "#64748B", borderBottom: "1px solid rgba(100, 116, 139, 0.2)" }}>
-                          {tier.type === 'flexible' ? '📦 Flexible Credits' : tier.type === 'club' ? '✨ Voyance Club' : '🔧 Add-on Products'}
+                        <td colSpan={8} style={{ padding: "10px 10px 4px", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: tier.type === 'club' ? "#A78BFA" : tier.type === 'group' ? "#14B8A6" : "#64748B", borderBottom: "1px solid rgba(100, 116, 139, 0.2)" }}>
+                          {tier.type === 'flexible' ? '📦 Flexible Credits' : tier.type === 'club' ? '✨ Voyance Club' : '👥 Group Unlock (Credit Pool)'}
                         </td>
                       </tr>
                     )}
@@ -2085,19 +2140,19 @@ export default function UnitEconomics() {
                         </div>
                       </td>
                       <td style={{ padding: "8px 10px", color: tier.color, textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                        ${tier.price}
+                        {isGroup ? `${tier.credits} cr` : `$${tier.price}`}
                       </td>
                       <td style={{ padding: "8px 10px", color: "#A78BFA", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                         {tier.credits}
                       </td>
-                      <td style={{ padding: "8px 10px", color: tier.typicalUsage.daysUnlocked === 0 ? "#F87171" : "#34D399", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                        {tier.typicalUsage.daysUnlocked === 0 ? "-" : tier.typicalUsage.daysUnlocked}
+                      <td style={{ padding: "8px 10px", color: isGroup ? "#64748B" : tier.typicalUsage.daysUnlocked === 0 ? "#F87171" : "#34D399", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                        {isGroup ? "—" : tier.typicalUsage.daysUnlocked === 0 ? "-" : tier.typicalUsage.daysUnlocked}
                       </td>
-                      <td style={{ padding: "8px 10px", color: "#94A3B8", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                        {tier.typicalUsage.swaps}
+                      <td style={{ padding: "8px 10px", color: "#34D399", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", fontSize: 10, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                        {freeActs}
                       </td>
-                      <td style={{ padding: "8px 10px", color: "#94A3B8", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                        {tier.typicalUsage.regenerates}
+                      <td style={{ padding: "8px 10px", color: "#94A3B8", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", fontSize: 10, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                        {poolExtras}
                       </td>
                       <td style={{ padding: "8px 10px", color: "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                         ${tier.estimatedCostToUs.toFixed(2)}
@@ -2123,16 +2178,16 @@ export default function UnitEconomics() {
                     $0
                   </td>
                   <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    {FREE_USER_ECONOMICS.freeTripDays} days
+                    150/mo
                   </td>
                   <td style={{ padding: "8px 10px", color: "#F87171", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    1
+                    {FREE_USER_ECONOMICS.freeTripDays}
                   </td>
-                  <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    {FREE_USER_ECONOMICS.freeEditsLimit}
+                  <td style={{ padding: "8px 10px", color: "#34D399", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", fontSize: 10, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    10/trip
                   </td>
-                  <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    0
+                  <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", fontSize: 10, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
+                    —
                   </td>
                   <td style={{ padding: "8px 10px", color: "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                     ${FREE_USER_ECONOMICS.acquisitionCostBlended.toFixed(2)}
@@ -2147,32 +2202,15 @@ export default function UnitEconomics() {
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <div style={{ width: 8, height: 8, borderRadius: 2, background: "#FB923C" }} />
                       <span style={{ color: "#FB923C", fontWeight: 500 }}>Free (worst case)</span>
-                      <span style={{ fontSize: 9, color: "#64748B", background: "rgba(15, 23, 42, 0.5)", padding: "2px 6px", borderRadius: 4 }}>
-                        all 5 edits used
-                      </span>
                     </div>
                   </td>
-                  <td style={{ padding: "8px 10px", color: "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    $0
-                  </td>
-                  <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    {FREE_USER_ECONOMICS.freeTripDays} days
-                  </td>
-                  <td style={{ padding: "8px 10px", color: "#FB923C", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    1
-                  </td>
-                  <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    {FREE_USER_ECONOMICS.freeEditsLimit}
-                  </td>
-                  <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    0
-                  </td>
-                  <td style={{ padding: "8px 10px", color: "#FB923C", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    ${FREE_USER_ECONOMICS.acquisitionCostWorstCase.toFixed(2)}
-                  </td>
-                  <td style={{ padding: "8px 10px", color: "#EF4444", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                    -100%
-                  </td>
+                  <td style={{ padding: "8px 10px", color: "#F87171", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>$0</td>
+                  <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>150/mo</td>
+                  <td style={{ padding: "8px 10px", color: "#FB923C", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>{FREE_USER_ECONOMICS.freeTripDays}</td>
+                  <td style={{ padding: "8px 10px", color: "#34D399", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", fontSize: 10, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>10/trip</td>
+                  <td style={{ padding: "8px 10px", color: "#64748B", textAlign: "center", fontFamily: "'JetBrains Mono', monospace", fontSize: 10, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>—</td>
+                  <td style={{ padding: "8px 10px", color: "#FB923C", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>${FREE_USER_ECONOMICS.acquisitionCostWorstCase.toFixed(2)}</td>
+                  <td style={{ padding: "8px 10px", color: "#EF4444", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>-100%</td>
                 </tr>
               </tbody>
             </table>

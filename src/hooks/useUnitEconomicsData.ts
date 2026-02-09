@@ -134,6 +134,15 @@ export interface UnitEconomicsData {
     costDataDays: number;
     warnings: string[];
   };
+
+  // === TIER DISTRIBUTION ===
+  tierDistribution: Array<{ tier: string; count: number; upgradedThisMonth: number }>;
+
+  // === GROUP BUDGETS ===
+  groupBudgets: {
+    pools: Array<{ tier: string; count: number; allocated: number; remaining: number; depleted: number }>;
+    totalPools: number;
+  };
 }
 
 // ============================================================================
@@ -204,13 +213,15 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
   if (!roles || roles.length === 0) return null;
 
   // Parallel fetch all data sources
-  const [costResult, ledgerResult, balanceResult, tripResult, profileResult, profileNamesResult] = await Promise.all([
+  const [costResult, ledgerResult, balanceResult, tripResult, profileResult, profileNamesResult, tierResult, groupBudgetResult] = await Promise.all([
     supabase.from('trip_cost_tracking').select('*').order('created_at', { ascending: true }),
     supabase.from('credit_ledger').select('user_id, credits_delta, action_type, transaction_type, is_free_credit, amount_cents, created_at, notes'),
     supabase.from('credit_balances').select('user_id, purchased_credits, free_credits'),
     supabase.from('trips').select('id, user_id, created_at', { count: 'exact' }),
     supabase.from('profiles').select('id', { count: 'exact', head: true }),
     supabase.from('profiles').select('id, display_name'),
+    supabase.from('user_tiers').select('tier, updated_at'),
+    supabase.from('group_budgets').select('tier, initial_credits, remaining_credits'),
   ]);
 
   const warnings: string[] = [];
@@ -415,6 +426,40 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
     }
   }
 
+  // ---- TIER DISTRIBUTION ----
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const tierRows = tierResult.data || [];
+  const tierCountMap: Record<string, { count: number; upgradedThisMonth: number }> = {};
+  for (const row of tierRows) {
+    const t = (row as any).tier || 'free';
+    if (!tierCountMap[t]) tierCountMap[t] = { count: 0, upgradedThisMonth: 0 };
+    tierCountMap[t].count++;
+    if ((row as any).updated_at && (row as any).updated_at > thirtyDaysAgo) {
+      tierCountMap[t].upgradedThisMonth++;
+    }
+  }
+  const tierDistribution = Object.entries(tierCountMap).map(([tier, data]) => ({
+    tier,
+    count: data.count,
+    upgradedThisMonth: data.upgradedThisMonth,
+  }));
+
+  // ---- GROUP BUDGETS ----
+  const groupRows = groupBudgetResult.data || [];
+  const groupPoolMap: Record<string, { count: number; allocated: number; remaining: number; depleted: number }> = {};
+  for (const row of groupRows) {
+    const t = (row as any).tier || 'unknown';
+    if (!groupPoolMap[t]) groupPoolMap[t] = { count: 0, allocated: 0, remaining: 0, depleted: 0 };
+    groupPoolMap[t].count++;
+    groupPoolMap[t].allocated += (row as any).initial_credits || 0;
+    groupPoolMap[t].remaining += (row as any).remaining_credits || 0;
+    if (((row as any).remaining_credits || 0) === 0) groupPoolMap[t].depleted++;
+  }
+  const groupBudgets = {
+    pools: Object.entries(groupPoolMap).map(([tier, data]) => ({ tier, ...data })),
+    totalPools: groupRows.length,
+  };
+
   const dailyMetrics = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
 
   // ---- DATA QUALITY ----
@@ -465,6 +510,8 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
       costDataDays,
       warnings,
     },
+    tierDistribution,
+    groupBudgets,
   };
 }
 
