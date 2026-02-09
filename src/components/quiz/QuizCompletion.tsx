@@ -8,6 +8,7 @@ import { ROUTES } from '@/config/routes';
 import { useBonusCredits, BONUS_INFO } from '@/hooks/useBonusCredits';
 import { toast } from 'sonner';
 import { getArchetypeNarrative, getCategoryColors, type ArchetypeNarrative } from '@/data/archetypeNarratives';
+import { getRarityLabel, getRarityDisplay } from '@/config/typeRarity';
 import { cn } from '@/lib/utils';
 
 interface DNAResult {
@@ -80,7 +81,8 @@ function DNARevealCard({ dnaResult }: { dnaResult: DNAResult }) {
     : null;
 
   const confidence = dnaResult.dna_confidence_score || 85;
-  const rarity = dnaResult.dna_rarity || 'Uncommon';
+  const archetypeId = dnaResult.primary_archetype_name || '';
+  const rarity = getRarityLabel(archetypeId) || dnaResult.dna_rarity || 'Uncommon';
 
   return (
     <motion.div
