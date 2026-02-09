@@ -234,7 +234,7 @@ function ItineraryCard({ itinerary }: { itinerary: typeof SAMPLE_ITINERARIES[0] 
 }
 
 export default function ItineraryShowcase() {
-  const [activeDestination, setActiveDestination] = useState('Tokyo');
+  const [activeDestination, setActiveDestination] = useState('Rio de Janeiro');
 
   return (
     <section className="py-24 px-6 bg-muted/30">
