@@ -16,7 +16,7 @@ function BeforeChaos() {
         {/* Browser tabs */}
         <div className="flex-1 flex gap-0.5 overflow-hidden ml-2">
           {[
-            { name: 'Reddit: Best Tokyo...', active: true },
+            { name: 'Reddit: Best Barcelona...', active: true },
             { name: 'TripAdvisor', active: false },
             { name: 'Google Flights', active: false },
             { name: 'Blog: Hidden...', active: false },
@@ -41,7 +41,7 @@ function BeforeChaos() {
         {/* Search bar */}
         <div className="flex items-center gap-2 bg-neutral-800 rounded-lg px-2 py-1.5">
           <Search className="w-3 h-3 text-neutral-500" />
-          <span className="text-[9px] text-neutral-400 truncate">best tokyo restaurants authentic local 2024 reddit not touristy</span>
+          <span className="text-[9px] text-neutral-400 truncate">best barcelona restaurants authentic local 2024 reddit not touristy</span>
         </div>
         
         {/* Messy grid of content */}
@@ -50,7 +50,7 @@ function BeforeChaos() {
           <div className="col-span-3 bg-white rounded-md p-1.5 shadow-sm">
             <div className="flex items-center gap-1 text-green-700 font-medium mb-1 text-[8px]">
               <FileSpreadsheet className="w-2.5 h-2.5" />
-              Tokyo_Trip_v4_FINAL_REAL.xlsx
+              Barcelona_Trip_v4_FINAL_REAL.xlsx
             </div>
             <div className="space-y-px">
               <div className="grid grid-cols-4 gap-px text-[6px]">
@@ -118,7 +118,7 @@ function BeforeChaos() {
           <div className="bg-white rounded-md p-1.5 shadow-sm">
             <div className="flex items-center gap-1 text-blue-600 font-medium text-[8px] mb-0.5">
               <Globe className="w-2.5 h-2.5" />
-              10 MUST-DO Things Tokyo!
+              10 MUST-DO Things Barcelona!
             </div>
             <div className="text-neutral-500 text-[6px] italic">
               "As a travel influencer..."
@@ -135,7 +135,7 @@ function BeforeChaos() {
               Saved (47 links)
             </div>
             <div className="space-y-0.5 text-[5px] text-neutral-500">
-              <div className="truncate">• tokyo-guide.com/best-r...</div>
+              <div className="truncate">• barcelona-guide.com/best-r...</div>
               <div className="truncate">• reddit.com/r/japan/...</div>
               <div className="truncate">• youtube.com/watch?...</div>
               <div className="text-neutral-600">+ 44 more tabs</div>
@@ -168,8 +168,8 @@ function AfterVoyance() {
             <span className="text-primary text-xs font-serif font-bold">V</span>
           </div>
           <div>
-            <span className="text-sm font-medium text-foreground">Tokyo</span>
-            <span className="text-xs text-muted-foreground ml-1.5">7 Days</span>
+             <span className="text-sm font-medium text-foreground">Barcelona</span>
+            <span className="text-xs text-muted-foreground ml-1.5">5 Days</span>
           </div>
         </div>
         <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-primary/10 border border-primary/20">
