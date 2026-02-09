@@ -45,10 +45,24 @@ export interface EntitlementsResponse {
   credit_balance?: number;
   can_build_itinerary?: boolean;
   can_build_day?: boolean;
+  can_swap_activity?: boolean;
+  can_regenerate_day?: boolean;
+  can_unlock_day?: boolean;
+  can_smart_finish?: boolean;
   can_use_flight_hotel_optimization?: boolean;
   can_use_group_budgeting?: boolean;
   can_co_edit?: boolean;
   can_optimize_routes?: boolean;
+  // Server-provided costs — use these instead of hardcoding
+  costs?: {
+    unlock_day: number;
+    smart_finish: number;
+    swap_activity: number;
+    regenerate_day: number;
+    ai_message: number;
+    hotel_search: number;
+    base_rate_per_day: number;
+  };
 }
 
 // Feature flag keys for type safety
