@@ -18,7 +18,7 @@ import {
   ChevronUp, ChevronDown, MapPin, Clock, Star, Save,
   Lock, Unlock, MoveUp, MoveDown, Plus, RefreshCw,
   Plane, Hotel, Utensils, Camera, ShoppingBag, Palmtree, Car, Trash2,
-  Sun, Cloud, CloudRain, CloudSun, Snowflake, Edit3, Sparkles, AlertCircle,
+  Sun, Cloud, CloudRain, CloudSun, Snowflake, Edit3, Sparkles, AlertCircle, AlertTriangle,
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
@@ -5968,6 +5968,14 @@ function ActivityRow({
               return (
                 <>
                   <h4 className="font-serif text-base sm:text-lg font-medium text-foreground leading-snug">{activityTitle}</h4>
+                  {(activity as any).closedRisk && (
+                    <div className="flex items-center gap-1.5 mt-1 px-2 py-1 bg-destructive/10 border border-destructive/20 rounded-md">
+                      <AlertTriangle className="h-3 w-3 text-destructive flex-shrink-0" />
+                      <span className="text-xs text-destructive font-medium">
+                        May be closed — {(activity as any).closedRiskReason || 'Check hours before visiting'}
+                      </span>
+                    </div>
+                  )}
                   {activity.description && (
                     <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 line-clamp-2 leading-relaxed">{activity.description}</p>
                   )}
