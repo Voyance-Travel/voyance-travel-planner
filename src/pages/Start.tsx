@@ -1049,7 +1049,7 @@ function FlightHotelStep({
               )}
             >
               <PenLine className="h-5 w-5 mx-auto mb-2 text-muted-foreground" />
-              <div className="text-sm font-medium text-foreground">I have my own</div>
+              <div className="text-sm font-medium text-foreground">I have my own hotel</div>
               <div className="text-[10px] text-muted-foreground mt-1">Enter details</div>
             </button>
 
