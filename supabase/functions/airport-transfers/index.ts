@@ -78,6 +78,105 @@ const formatCost = (min: number | null, max: number | null, symbol: string, isFi
   return `${symbol}${min}-${max}`;
 };
 
+// Regional transfer cost estimates for cities not in the database
+// Based on typical airport-to-city-center fares by region
+interface RegionalEstimate {
+  taxiMin: number; taxiMax: number;
+  trainCost: number | null;
+  symbol: string;
+  taxiDuration: string;
+  trainDuration: string | null;
+}
+
+const REGIONAL_ESTIMATES: Record<string, RegionalEstimate> = {
+  // Latin America
+  'mexico': { taxiMin: 15, taxiMax: 30, trainCost: 1, symbol: '$', taxiDuration: '30-50 min', trainDuration: '40-60 min' },
+  'colombia': { taxiMin: 10, taxiMax: 25, trainCost: null, symbol: '$', taxiDuration: '40-70 min', trainDuration: null },
+  'brazil': { taxiMin: 20, taxiMax: 40, trainCost: 2, symbol: 'R$', taxiDuration: '30-60 min', trainDuration: '40-60 min' },
+  'argentina': { taxiMin: 15, taxiMax: 30, trainCost: 1, symbol: '$', taxiDuration: '30-50 min', trainDuration: '45 min' },
+  'peru': { taxiMin: 8, taxiMax: 20, trainCost: null, symbol: 'S/', taxiDuration: '30-50 min', trainDuration: null },
+  'chile': { taxiMin: 15, taxiMax: 30, trainCost: 2, symbol: '$', taxiDuration: '25-40 min', trainDuration: '30 min' },
+  'costa rica': { taxiMin: 25, taxiMax: 45, trainCost: null, symbol: '$', taxiDuration: '20-40 min', trainDuration: null },
+  // Europe
+  'europe_default': { taxiMin: 30, taxiMax: 60, trainCost: 10, symbol: '€', taxiDuration: '30-50 min', trainDuration: '30-45 min' },
+  'uk': { taxiMin: 40, taxiMax: 80, trainCost: 15, symbol: '£', taxiDuration: '30-60 min', trainDuration: '30-45 min' },
+  'scandinavia': { taxiMin: 40, taxiMax: 80, trainCost: 12, symbol: '€', taxiDuration: '25-40 min', trainDuration: '20-35 min' },
+  'eastern_europe': { taxiMin: 10, taxiMax: 25, trainCost: 3, symbol: '€', taxiDuration: '25-45 min', trainDuration: '30-45 min' },
+  // Asia
+  'southeast_asia': { taxiMin: 5, taxiMax: 15, trainCost: 2, symbol: '$', taxiDuration: '30-60 min', trainDuration: '30-45 min' },
+  'japan': { taxiMin: 60, taxiMax: 200, trainCost: 30, symbol: '¥', taxiDuration: '45-90 min', trainDuration: '35-60 min' },
+  'india': { taxiMin: 8, taxiMax: 20, trainCost: 1, symbol: '₹', taxiDuration: '30-60 min', trainDuration: '40-60 min' },
+  'china': { taxiMin: 15, taxiMax: 35, trainCost: 5, symbol: '¥', taxiDuration: '30-50 min', trainDuration: '20-40 min' },
+  // Africa
+  'africa': { taxiMin: 10, taxiMax: 30, trainCost: null, symbol: '$', taxiDuration: '25-50 min', trainDuration: null },
+  'south_africa': { taxiMin: 15, taxiMax: 35, trainCost: 5, symbol: 'R', taxiDuration: '25-40 min', trainDuration: '30 min' },
+  'morocco': { taxiMin: 10, taxiMax: 25, trainCost: 3, symbol: 'MAD ', taxiDuration: '20-40 min', trainDuration: '30-45 min' },
+  // Middle East
+  'middle_east': { taxiMin: 15, taxiMax: 40, trainCost: 5, symbol: '$', taxiDuration: '20-40 min', trainDuration: '25-40 min' },
+  // Oceania
+  'australia': { taxiMin: 40, taxiMax: 80, trainCost: 15, symbol: 'A$', taxiDuration: '25-45 min', trainDuration: '30-45 min' },
+  'new_zealand': { taxiMin: 30, taxiMax: 60, trainCost: null, symbol: 'NZ$', taxiDuration: '25-40 min', trainDuration: null },
+  // Default
+  'default': { taxiMin: 20, taxiMax: 50, trainCost: 5, symbol: '$', taxiDuration: '30-50 min', trainDuration: '30-45 min' },
+};
+
+// Map city/country to region for cost estimation
+const CITY_REGION_MAP: Record<string, string> = {
+  // Latin America cities
+  'bogota': 'colombia', 'medellin': 'colombia', 'cartagena': 'colombia',
+  'mexico city': 'mexico', 'cancun': 'mexico', 'cabo san lucas': 'mexico', 'oaxaca': 'mexico', 'playa del carmen': 'mexico', 'tulum': 'mexico',
+  'rio de janeiro': 'brazil', 'sao paulo': 'brazil',
+  'buenos aires': 'argentina',
+  'lima': 'peru', 'cusco': 'peru',
+  'santiago': 'chile',
+  'san jose': 'costa rica',
+  // Europe
+  'edinburgh': 'uk', 'dublin': 'europe_default', 'manchester': 'uk',
+  'stockholm': 'scandinavia', 'copenhagen': 'scandinavia', 'oslo': 'scandinavia', 'helsinki': 'scandinavia',
+  'prague': 'eastern_europe', 'budapest': 'eastern_europe', 'krakow': 'eastern_europe', 'warsaw': 'eastern_europe', 'bucharest': 'eastern_europe',
+  'amsterdam': 'europe_default', 'brussels': 'europe_default', 'vienna': 'europe_default', 'zurich': 'europe_default',
+  'lisbon': 'europe_default', 'porto': 'europe_default',
+  'berlin': 'europe_default', 'munich': 'europe_default',
+  'santorini': 'europe_default', 'mykonos': 'europe_default',
+  // Asia
+  'hanoi': 'southeast_asia', 'ho chi minh': 'southeast_asia', 'saigon': 'southeast_asia',
+  'kuala lumpur': 'southeast_asia', 'phuket': 'southeast_asia', 'chiang mai': 'southeast_asia',
+  'manila': 'southeast_asia', 'jakarta': 'southeast_asia',
+  'kyoto': 'japan', 'osaka': 'japan',
+  'mumbai': 'india', 'delhi': 'india', 'new delhi': 'india', 'jaipur': 'india', 'goa': 'india',
+  'shanghai': 'china', 'beijing': 'china',
+  // Africa
+  'cape town': 'south_africa', 'johannesburg': 'south_africa',
+  'marrakech': 'morocco', 'fez': 'morocco', 'casablanca': 'morocco',
+  'nairobi': 'africa', 'cairo': 'africa', 'accra': 'africa', 'lagos': 'africa',
+  'inhambane': 'africa', 'maputo': 'africa',
+  // Middle East
+  'amman': 'middle_east', 'doha': 'middle_east', 'muscat': 'middle_east', 'tel aviv': 'middle_east', 'istanbul': 'middle_east',
+  // Oceania
+  'sydney': 'australia', 'melbourne': 'australia', 'brisbane': 'australia',
+  'auckland': 'new_zealand', 'queenstown': 'new_zealand',
+  // US cities not in DB
+  'austin': 'default', 'nashville': 'default', 'denver': 'default', 'seattle': 'default',
+  'portland': 'default', 'boston': 'default', 'atlanta': 'default', 'new orleans': 'default',
+  'washington dc': 'default', 'philadelphia': 'default', 'san diego': 'default', 'honolulu': 'default',
+};
+
+function getRegionalEstimate(city: string): RegionalEstimate {
+  const cityLower = city.toLowerCase().trim();
+  const regionKey = CITY_REGION_MAP[cityLower];
+  if (regionKey && REGIONAL_ESTIMATES[regionKey]) {
+    return REGIONAL_ESTIMATES[regionKey];
+  }
+  // Fuzzy match
+  for (const [key, region] of Object.entries(CITY_REGION_MAP)) {
+    if (cityLower.includes(key) || key.includes(cityLower)) {
+      return REGIONAL_ESTIMATES[region] || REGIONAL_ESTIMATES['default'];
+    }
+  }
+  return REGIONAL_ESTIMATES['default'];
+}
+
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -228,21 +327,34 @@ serve(async (req) => {
         });
       }
     } else {
-      // Fallback: Use Google Maps duration with estimated costs
-      options.push({
-        mode: 'Taxi/Rideshare',
-        duration: liveTaxiDuration || '30-50 min',
-        durationMinutes: 40,
-        estimatedCost: 'Varies by city',
-        notes: liveTaxiDuration ? 'Live traffic' : undefined,
-      });
+      // Fallback: Use regional estimates with Google Maps duration if available
+      const regional = getRegionalEstimate(city);
       
       options.push({
-        mode: 'Train/Metro',
-        duration: liveTransitDuration || '30-45 min',
-        durationMinutes: 35,
-        estimatedCost: 'Check locally',
+        mode: 'Taxi/Rideshare',
+        duration: liveTaxiDuration || regional.taxiDuration,
+        durationMinutes: 40,
+        estimatedCost: `${regional.symbol}${regional.taxiMin}-${regional.taxiMax}`,
+        notes: liveTaxiDuration ? 'Live traffic estimate' : 'Regional estimate',
       });
+      
+      if (regional.trainCost !== null && regional.trainDuration) {
+        options.push({
+          mode: 'Train/Metro',
+          duration: liveTransitDuration || regional.trainDuration,
+          durationMinutes: 35,
+          estimatedCost: `${regional.symbol}${regional.trainCost}`,
+          notes: 'Regional estimate',
+        });
+      } else {
+        options.push({
+          mode: 'Train/Metro',
+          duration: 'N/A',
+          durationMinutes: 0,
+          estimatedCost: 'N/A',
+          notes: 'Taxi/rideshare recommended',
+        });
+      }
     }
 
     const result: TransferResponse = {
