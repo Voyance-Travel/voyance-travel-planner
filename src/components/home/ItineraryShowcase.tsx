@@ -125,7 +125,7 @@ function ItineraryCard({ itinerary }: { itinerary: typeof SAMPLE_ITINERARIES[0] 
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
-      className="bg-card border border-border rounded-xl overflow-hidden hover:shadow-xl hover:border-primary/20 transition-all duration-300 group"
+      className="rounded-xl overflow-hidden hover:shadow-xl transition-all duration-300 group"
     >
       {/* Image */}
       <div className="relative aspect-[16/10] overflow-hidden">
@@ -155,7 +155,7 @@ function ItineraryCard({ itinerary }: { itinerary: typeof SAMPLE_ITINERARIES[0] 
       </div>
       
       {/* Content */}
-      <div className="p-5">
+      <div className="p-5 bg-muted/40 backdrop-blur-sm">
         {/* Archetype */}
         <div className="flex items-center gap-2 mb-4">
           <Sparkles className="w-3.5 h-3.5 text-primary" />
@@ -221,7 +221,7 @@ function ItineraryCard({ itinerary }: { itinerary: typeof SAMPLE_ITINERARIES[0] 
       </div>
       
       {/* Sample label - honest framing */}
-      <div className="px-5 py-2.5 bg-muted/30 border-t border-border">
+      <div className="px-5 py-2.5 bg-muted/30">
         <p className="text-xs text-muted-foreground text-center">
           Sample itinerary for the {itinerary.archetype} in {itinerary.destination}
         </p>
