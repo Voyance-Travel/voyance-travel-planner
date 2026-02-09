@@ -6,6 +6,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { useItineraryGeneration, GeneratedDay, TripOverview } from '@/hooks/useItineraryGeneration';
+import { toast } from 'sonner';
 import type { GenerationStep } from '@/hooks/useLovableItinerary';
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { useOutOfCredits } from '@/contexts/OutOfCreditsContext';
@@ -95,6 +96,7 @@ export function ItineraryGenerator({
   const [showGenericWarning, setShowGenericWarning] = useState(false);
   const [prePhase, setPrePhase] = useState<Extract<GenerationStep, 'gathering-dna' | 'personalizing' | 'preparing'> | null>(null);
   const autoStartTriggered = useRef(false);
+  const generationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Generation gate — pre-authorizes credits before generation
   const { authorize } = useGenerationGate();
@@ -103,14 +105,25 @@ export function ItineraryGenerator({
   // so we don't flash back to the generic spinner state.
   useEffect(() => {
     if (!prePhase) return;
-    if (days.length > 0) {
+    // Clear pre-phase when days arrive OR when an error/completion occurs
+    if (days.length > 0 || status === 'error' || status === 'complete') {
       setPrePhase(null);
     }
-  }, [prePhase, days.length]);
+  }, [prePhase, days.length, status]);
 
   const handleGenerate = async () => {
     setHasStarted(true);
     setShowGenericWarning(false);
+
+    // Safety timeout: if generation hasn't completed in 90s, show error
+    if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
+    generationTimeoutRef.current = setTimeout(() => {
+      console.error('[ItineraryGenerator] Generation timed out after 90s');
+      setPrePhase(null);
+      reset();
+      setHasStarted(false);
+      toast.error('Generation timed out. Please try again.');
+    }, 90_000);
 
     // Pre-generation phases (matches the newer streaming UX)
     setPrePhase('gathering-dna');
@@ -180,6 +193,7 @@ export function ItineraryGenerator({
 
         setPrePhase(null);
         await new Promise(resolve => setTimeout(resolve, 900));
+        if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
         onComplete(allDays, overview);
       } else {
         // LOCKED — no credits, no AI, no API calls
@@ -198,10 +212,18 @@ export function ItineraryGenerator({
         });
 
         // Pass locked placeholders to onComplete so the trip structure exists
+        if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
         onComplete(lockedDays);
       }
     } catch (err) {
-      console.error('Generation failed:', err);
+      if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
+      console.error('[ItineraryGenerator] Generation failed:', err);
+      setPrePhase(null);
+      // If useItineraryGeneration didn't already set the error, surface it
+      if (status !== 'error') {
+        toast.error('Generation failed. Please try again.');
+        setHasStarted(false);
+      }
     }
   };
 
