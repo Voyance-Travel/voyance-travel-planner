@@ -35,7 +35,7 @@ const SAMPLE_ITINERARIES = [
     destination: 'Denver',
     country: 'Colorado',
     duration: '3 days',
-    image: 'https://images.unsplash.com/photo-1619856699906-09e1f4ef32c8?w=800',
+    image: 'https://images.unsplash.com/photo-1546156929-a4c0ac411f47?w=800',
     archetype: 'Social Butterfly',
     archetypeCategory: 'CONNECTOR',
     budgetTier: 'Safe',
@@ -118,14 +118,6 @@ const SAMPLE_ITINERARIES = [
 
 const DESTINATIONS = ['Tokyo', 'Denver', 'New Orleans', 'Bali', 'Rome'];
 
-function getBudgetTierColor(tier: string) {
-  switch (tier) {
-    case 'Safe': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
-    case 'Stretch': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
-    case 'Splurge': return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400';
-    default: return 'bg-muted text-muted-foreground';
-  }
-}
 
 function ItineraryCard({ itinerary }: { itinerary: typeof SAMPLE_ITINERARIES[0] }) {
   return (
@@ -164,17 +156,12 @@ function ItineraryCard({ itinerary }: { itinerary: typeof SAMPLE_ITINERARIES[0] 
       
       {/* Content */}
       <div className="p-5">
-        {/* Archetype & Budget */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-primary" />
-            <span className="text-xs text-muted-foreground">
-              Built for: <span className="text-foreground font-medium">{itinerary.archetype}</span>
-            </span>
-          </div>
-          <Badge className={getBudgetTierColor(itinerary.budgetTier)}>
-            {itinerary.budgetTier}
-          </Badge>
+        {/* Archetype */}
+        <div className="flex items-center gap-2 mb-4">
+          <Sparkles className="w-3.5 h-3.5 text-primary" />
+          <span className="text-xs text-muted-foreground">
+            Built for: <span className="text-foreground font-medium">{itinerary.archetype}</span>
+          </span>
         </div>
         
         {/* Total Cost */}
