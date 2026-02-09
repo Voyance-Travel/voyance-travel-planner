@@ -119,7 +119,7 @@ const SAMPLE_ITINERARIES = [
 const DESTINATIONS = ['Rio de Janeiro', 'Denver', 'New Orleans', 'Bali', 'Rome'];
 
 // Destinations with real sample itinerary data
-const HAS_REAL_SAMPLE = new Set(['bali-adventurer']);
+const HAS_REAL_SAMPLE = new Set(['rio-explorer', 'bali-adventurer']);
 function ItineraryCard({ itinerary }: { itinerary: typeof SAMPLE_ITINERARIES[0] }) {
   return (
     <motion.div

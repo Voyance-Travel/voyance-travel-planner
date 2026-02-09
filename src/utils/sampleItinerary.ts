@@ -157,7 +157,7 @@ export function getSampleTrip() {
   const startDate = new Date();
   startDate.setDate(startDate.getDate() + 30); // 30 days from now
   
-  const destination = 'Kyoto, Japan';
+  const destination = 'Rio de Janeiro, Brazil';
   const days = 5;
   
   return {
