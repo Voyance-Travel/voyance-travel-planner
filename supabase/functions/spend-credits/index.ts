@@ -1,6 +1,7 @@
 /**
  * Spend Credits Edge Function
- * Deducts credits for actions with per-trip free cap support.
+ * Deducts credits using FIFO (earliest-expiring first) from credit_purchases table.
+ * Also supports group unlock caps for collaborators.
  */
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
@@ -25,7 +26,7 @@ const FIXED_COSTS: Record<string, number> = {
   transport_mode_change: 5,
 };
 
-// Per-trip free action caps
+// Per-trip free action caps (owner only — collaborators use group caps)
 const FREE_CAPS: Record<string, number> = {
   swap_activity: 10,
   regenerate_day: 5,
@@ -33,12 +34,13 @@ const FREE_CAPS: Record<string, number> = {
   restaurant_rec: 5,
 };
 
-// Variable-cost actions (cost passed from client, validated server-side)
+// Variable-cost actions
 const VARIABLE_COST_ACTIONS = ['trip_generation', 'hotel_search'];
-
-// Hotel search rate
 const HOTEL_SEARCH_PER_CITY = 40;
 const BASE_RATE_PER_DAY = 60;
+
+// Actions eligible for group cap
+const GROUP_CAP_ACTIONS = ['swap_activity', 'regenerate_day', 'ai_message', 'restaurant_rec'];
 
 interface SpendRequest {
   action: string;
@@ -47,6 +49,116 @@ interface SpendRequest {
   dayIndex?: number;
   creditsAmount?: number;
   metadata?: Record<string, unknown>;
+}
+
+/**
+ * Deduct credits FIFO from credit_purchases.
+ * Returns the total deducted or throws on insufficient credits.
+ */
+async function deductFIFO(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  userId: string,
+  cost: number
+): Promise<{ deducted: number; purchases: Array<{ id: string; deducted: number }> }> {
+  // Get all active credit rows, ordered by expiration (earliest first, NULL = never = last)
+  const { data: rows, error } = await supabaseAdmin
+    .from('credit_purchases')
+    .select('id, remaining, expires_at, credit_type')
+    .eq('user_id', userId)
+    .gt('remaining', 0)
+    .order('expires_at', { ascending: true, nullsFirst: false });
+
+  if (error) throw new Error('Failed to fetch credit purchases');
+
+  // Filter out expired rows
+  const now = new Date();
+  const activeRows = (rows || []).filter(r => !r.expires_at || new Date(r.expires_at) > now);
+
+  const totalAvailable = activeRows.reduce((sum, r) => sum + r.remaining, 0);
+
+  // Round-up logic: if user has >= 50% of cost, let them proceed
+  const canCoverHalf = totalAvailable >= cost / 2;
+  if (totalAvailable < cost && !canCoverHalf) {
+    throw Object.assign(new Error('Insufficient credits'), {
+      code: 'INSUFFICIENT_CREDITS',
+      required: cost,
+      available: totalAvailable,
+    });
+  }
+
+  const effectiveCost = Math.min(cost, totalAvailable);
+  let remaining = effectiveCost;
+  const deductions: Array<{ id: string; deducted: number }> = [];
+
+  for (const row of activeRows) {
+    if (remaining <= 0) break;
+    const take = Math.min(row.remaining, remaining);
+    deductions.push({ id: row.id, deducted: take });
+    remaining -= take;
+  }
+
+  // Apply deductions
+  for (const d of deductions) {
+    const { error: updateError } = await supabaseAdmin
+      .from('credit_purchases')
+      .update({
+        remaining: (activeRows.find(r => r.id === d.id)!.remaining) - d.deducted,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', d.id);
+
+    if (updateError) {
+      console.error('[spend-credits] Error updating purchase row:', updateError);
+    }
+  }
+
+  return { deducted: effectiveCost, purchases: deductions };
+}
+
+/**
+ * Sync credit_balances cache from credit_purchases source of truth.
+ */
+async function syncBalanceCache(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  userId: string
+) {
+  const now = new Date();
+  const { data: rows } = await supabaseAdmin
+    .from('credit_purchases')
+    .select('remaining, expires_at, credit_type')
+    .eq('user_id', userId)
+    .gt('remaining', 0);
+
+  let purchased = 0;
+  let free = 0;
+  let freeExpiresAt: string | null = null;
+
+  for (const row of rows || []) {
+    const expired = row.expires_at && new Date(row.expires_at) < now;
+    if (expired) continue;
+
+    if (row.credit_type === 'free_monthly' || row.credit_type === 'signup_bonus' || row.credit_type === 'referral_bonus') {
+      free += row.remaining;
+      // Track the latest expiration for free credits
+      if (row.expires_at && (!freeExpiresAt || new Date(row.expires_at) > new Date(freeExpiresAt))) {
+        freeExpiresAt = row.expires_at;
+      }
+    } else {
+      purchased += row.remaining;
+    }
+  }
+
+  await supabaseAdmin
+    .from('credit_balances')
+    .upsert({
+      user_id: userId,
+      purchased_credits: purchased,
+      free_credits: free,
+      free_credits_expires_at: freeExpiresAt,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' });
+
+  return { purchased, free, total: purchased + free };
 }
 
 serve(async (req) => {
@@ -86,10 +198,85 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // ── Free cap check ──
+    // ── Check if user is a collaborator (not owner) on this trip ──
+    let isCollaborator = false;
+    if (tripId) {
+      const { data: trip } = await supabaseAdmin
+        .from('trips')
+        .select('user_id')
+        .eq('id', tripId)
+        .maybeSingle();
+
+      if (trip && trip.user_id !== user.id) {
+        isCollaborator = true;
+      }
+    }
+
+    // ── Group cap check for collaborators ──
+    if (isCollaborator && tripId && GROUP_CAP_ACTIONS.includes(action)) {
+      const { data: groupUnlock } = await supabaseAdmin
+        .from('group_unlocks')
+        .select('caps, usage')
+        .eq('trip_id', tripId)
+        .maybeSingle();
+
+      if (groupUnlock) {
+        const caps = groupUnlock.caps as Record<string, number>;
+        const usage = groupUnlock.usage as Record<string, number>;
+        const cap = caps[action] || 0;
+        const used = usage[action] || 0;
+
+        if (used < cap) {
+          // Free under group cap — increment usage atomically
+          const newUsage = { ...usage, [action]: used + 1 };
+          await supabaseAdmin
+            .from('group_unlocks')
+            .update({ usage: newUsage })
+            .eq('trip_id', tripId);
+
+          // Log zero-cost entry
+          await supabaseAdmin
+            .from('credit_ledger')
+            .insert({
+              user_id: user.id,
+              transaction_type: 'spend',
+              credits_delta: 0,
+              is_free_credit: true,
+              action_type: action,
+              trip_id: tripId,
+              activity_id: activityId || null,
+              notes: `${action.replace(/_/g, ' ')} - group cap (${used + 1}/${cap})`,
+              metadata: { ...metadata, day_index: dayIndex, group_cap_used: true },
+            });
+
+          const balance = await syncBalanceCache(supabaseAdmin, user.id);
+
+          return new Response(
+            JSON.stringify({
+              success: true,
+              spent: 0,
+              action,
+              groupCapUsed: true,
+              usageCount: used + 1,
+              groupCap: cap,
+              newBalance: { total: balance.total, purchased: balance.purchased, free: balance.free },
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        // Over group cap — fall through to charge credits
+      } else {
+        // No group unlock — collaborators can't perform these actions without one
+        return new Response(
+          JSON.stringify({ error: 'Group unlock required for collaborator actions', action }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    // ── Free cap check (owner only) ──
     const freeCap = FREE_CAPS[action];
-    if (freeCap !== undefined && tripId) {
-      // Check current usage for this action on this trip
+    if (!isCollaborator && freeCap !== undefined && tripId) {
       const { data: usageRow } = await supabaseAdmin
         .from('trip_action_usage')
         .select('usage_count')
@@ -101,7 +288,6 @@ serve(async (req) => {
       const currentUsage = usageRow?.usage_count ?? 0;
 
       if (currentUsage < freeCap) {
-        // Still free — increment usage and return success with 0 cost
         await supabaseAdmin
           .from('trip_action_usage')
           .upsert({
@@ -112,7 +298,6 @@ serve(async (req) => {
             updated_at: new Date().toISOString(),
           }, { onConflict: 'user_id,trip_id,action_type' });
 
-        // Create a zero-cost ledger entry for tracking
         await supabaseAdmin
           .from('credit_ledger')
           .insert({
@@ -127,18 +312,7 @@ serve(async (req) => {
             metadata: { ...metadata, day_index: dayIndex, free_cap_used: true, usage: currentUsage + 1, cap: freeCap },
           });
 
-        // Get current balance to return
-        const { data: balance } = await supabaseAdmin
-          .from('credit_balances')
-          .select('purchased_credits, free_credits, free_credits_expires_at')
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-        const purchasedCredits = balance?.purchased_credits || 0;
-        let freeCredits = balance?.free_credits || 0;
-        if (balance?.free_credits_expires_at && new Date(balance.free_credits_expires_at) < new Date()) {
-          freeCredits = 0;
-        }
+        const balance = await syncBalanceCache(supabaseAdmin, user.id);
 
         return new Response(
           JSON.stringify({
@@ -148,13 +322,13 @@ serve(async (req) => {
             freeCapUsed: true,
             usageCount: currentUsage + 1,
             freeCap,
-            newBalance: { total: purchasedCredits + freeCredits, purchased: purchasedCredits, free: freeCredits },
+            newBalance: { total: balance.total, purchased: balance.purchased, free: balance.free },
           }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      // At/over cap — increment usage count and proceed to charge credits
+      // Over cap — increment and proceed to charge
       await supabaseAdmin
         .from('trip_action_usage')
         .upsert({
@@ -204,116 +378,61 @@ serve(async (req) => {
       );
     }
 
-    // ── Get current balance ──
-    const { data: balance, error: balanceError } = await supabaseAdmin
-      .from('credit_balances')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (balanceError) {
-      console.error('[spend-credits] Error fetching balance:', balanceError);
-      return new Response(
-        JSON.stringify({ error: 'Failed to fetch balance' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // ── FIFO deduction ──
+    let deductResult;
+    try {
+      deductResult = await deductFIFO(supabaseAdmin, user.id, cost);
+    } catch (err: unknown) {
+      const error = err as Error & { code?: string; required?: number; available?: number };
+      if (error.code === 'INSUFFICIENT_CREDITS') {
+        return new Response(
+          JSON.stringify({
+            error: 'Insufficient credits',
+            required: error.required,
+            available: error.available,
+            action,
+          }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      throw err;
     }
 
-    const purchasedCredits = balance?.purchased_credits || 0;
-    let freeCredits = balance?.free_credits || 0;
-    const expiresAt = balance?.free_credits_expires_at;
-    if (expiresAt && new Date(expiresAt) < new Date()) {
-      freeCredits = 0;
-    }
-    const totalCredits = purchasedCredits + freeCredits;
+    const wasRoundedUp = deductResult.deducted < cost;
 
-    // ── Round-up logic ──
-    const canCoverHalf = totalCredits >= cost / 2;
+    // ── Sync balance cache ──
+    const balance = await syncBalanceCache(supabaseAdmin, user.id);
 
-    if (totalCredits < cost && !canCoverHalf) {
-      return new Response(
-        JSON.stringify({ error: 'Insufficient credits', required: cost, available: totalCredits, action }),
-        { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const effectiveCost = totalCredits < cost ? totalCredits : cost;
-
-    // Deduct: free credits first, then purchased
-    let remainingCost = effectiveCost;
-    let newFreeCredits = freeCredits;
-    let newPurchasedCredits = purchasedCredits;
-    let usedFreeCredits = 0;
-    let usedPurchasedCredits = 0;
-
-    if (freeCredits > 0) {
-      const fromFree = Math.min(freeCredits, remainingCost);
-      newFreeCredits = freeCredits - fromFree;
-      remainingCost -= fromFree;
-      usedFreeCredits = fromFree;
-    }
-    if (remainingCost > 0) {
-      newPurchasedCredits = purchasedCredits - remainingCost;
-      usedPurchasedCredits = remainingCost;
-    }
-
-    const { error: updateError } = await supabaseAdmin
-      .from('credit_balances')
-      .upsert({
-        user_id: user.id,
-        purchased_credits: newPurchasedCredits,
-        free_credits: newFreeCredits,
-        free_credits_expires_at: balance?.free_credits_expires_at || null,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id' });
-
-    if (updateError) {
-      console.error('[spend-credits] Error updating balance:', updateError);
-      return new Response(
-        JSON.stringify({ error: 'Failed to update balance' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const wasRoundedUp = effectiveCost < cost;
-
-    // Create ledger entry
-    const { error: ledgerError } = await supabaseAdmin
+    // ── Ledger entry ──
+    await supabaseAdmin
       .from('credit_ledger')
       .insert({
         user_id: user.id,
         transaction_type: 'spend',
-        credits_delta: -effectiveCost,
-        is_free_credit: usedFreeCredits > 0 && usedPurchasedCredits === 0,
+        credits_delta: -deductResult.deducted,
+        is_free_credit: false,
         action_type: action,
         trip_id: tripId || null,
         activity_id: activityId || null,
-        notes: `${action.replace(/_/g, ' ')} - ${effectiveCost} credits${wasRoundedUp ? ` (rounded up from ${totalCredits}/${cost})` : ''}`,
+        notes: `${action.replace(/_/g, ' ')} - ${deductResult.deducted} credits${wasRoundedUp ? ` (rounded up from ${deductResult.deducted}/${cost})` : ''}`,
         metadata: {
           ...metadata,
           day_index: dayIndex,
-          used_free_credits: usedFreeCredits,
-          used_purchased_credits: usedPurchasedCredits,
           is_variable_cost: isVariable,
           original_cost: cost,
           rounded_up: wasRoundedUp,
+          fifo_deductions: deductResult.purchases,
         },
       });
-
-    if (ledgerError) {
-      console.error('[spend-credits] Error creating ledger entry:', ledgerError);
-    }
-
-    const newTotal = newPurchasedCredits + newFreeCredits;
 
     return new Response(
       JSON.stringify({
         success: true,
-        spent: effectiveCost,
+        spent: deductResult.deducted,
         action,
         roundedUp: wasRoundedUp,
         originalCost: wasRoundedUp ? cost : undefined,
-        newBalance: { total: newTotal, purchased: newPurchasedCredits, free: newFreeCredits },
+        newBalance: { total: balance.total, purchased: balance.purchased, free: balance.free },
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

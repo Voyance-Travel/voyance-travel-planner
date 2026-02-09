@@ -1,12 +1,5 @@
 /**
- * Stripe Webhook Handler - Enhanced with Finance Subledger Auto-Posting
- * 
- * Handles Stripe events and auto-posts to the finance ledger:
- * - payment_intent.succeeded → client_payment entry
- * - charge.refunded → client_refund entry
- * - charge.dispute.* → client_credit (dispute adjustment)
- * - transfer.created → agent_payout entry
- * - payout.paid → marks funds settled
+ * Stripe Webhook Handler - Enhanced with FIFO credit purchases + badges + group unlocks
  */
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
@@ -16,6 +9,59 @@ import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 const log = (step: string, details?: unknown) => {
   console.log(`[STRIPE-WEBHOOK] ${step}`, details ? JSON.stringify(details) : '');
 };
+
+// Club pack product IDs → tier mapping
+const CLUB_PRODUCT_MAP: Record<string, { tier: string; baseCredits: number; bonusCredits: number }> = {
+  'prod_TwpdsFwCQpA4ew': { tier: 'voyager', baseCredits: 500, bonusCredits: 100 },
+  'prod_TwpdzBlDJuJfbS': { tier: 'explorer', baseCredits: 1200, bonusCredits: 400 },
+  'prod_TwpdxFwT7d6EIc': { tier: 'adventurer', baseCredits: 2500, bonusCredits: 700 },
+};
+
+// Group unlock product IDs → tier mapping
+const GROUP_PRODUCT_MAP: Record<string, { tier: string; caps: Record<string, number> }> = {
+  'prod_TwpdLWc2OUADWF': { tier: 'small', caps: { swap_activity: 15, regenerate_day: 8, ai_message: 30, restaurant_rec: 10 } },
+  'prod_TwpdnmZV4SWa88': { tier: 'medium', caps: { swap_activity: 25, regenerate_day: 12, ai_message: 50, restaurant_rec: 15 } },
+  'prod_TwpdEoxWuAKPOB': { tier: 'large', caps: { swap_activity: 50, regenerate_day: 20, ai_message: 100, restaurant_rec: 25 } },
+};
+
+/**
+ * Sync credit_balances cache from credit_purchases source of truth.
+ */
+async function syncBalanceCache(supabaseAdmin: ReturnType<typeof createClient>, userId: string) {
+  const now = new Date();
+  const { data: rows } = await supabaseAdmin
+    .from('credit_purchases')
+    .select('remaining, expires_at, credit_type')
+    .eq('user_id', userId)
+    .gt('remaining', 0);
+
+  let purchased = 0;
+  let free = 0;
+  let freeExpiresAt: string | null = null;
+
+  for (const row of rows || []) {
+    const expired = row.expires_at && new Date(row.expires_at) < now;
+    if (expired) continue;
+    if (['free_monthly', 'signup_bonus', 'referral_bonus'].includes(row.credit_type)) {
+      free += row.remaining;
+      if (row.expires_at && (!freeExpiresAt || new Date(row.expires_at) > new Date(freeExpiresAt))) {
+        freeExpiresAt = row.expires_at;
+      }
+    } else {
+      purchased += row.remaining;
+    }
+  }
+
+  await supabaseAdmin
+    .from('credit_balances')
+    .upsert({
+      user_id: userId,
+      purchased_credits: purchased,
+      free_credits: free,
+      free_credits_expires_at: freeExpiresAt,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' });
+}
 
 serve(async (req) => {
   if (req.method !== "POST") {
@@ -50,7 +96,6 @@ serve(async (req) => {
 
     log("Event type", { type: event.type, id: event.id });
 
-    // Create admin Supabase client for database operations
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
@@ -58,26 +103,21 @@ serve(async (req) => {
 
     switch (event.type) {
       // ========================================
-      // Payment Intent Succeeded - Create Payment Entry
+      // Payment Intent Succeeded
       // ========================================
       case "payment_intent.succeeded": {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
-        log("PaymentIntent succeeded", { 
-          id: paymentIntent.id, 
-          amount: paymentIntent.amount,
-          metadata: paymentIntent.metadata 
-        });
+        log("PaymentIntent succeeded", { id: paymentIntent.id, amount: paymentIntent.amount, metadata: paymentIntent.metadata });
 
         const metadata = paymentIntent.metadata || {};
         
-        // Check if this is an agency payment (has trip_id or invoice_id)
+        // Agency payment handling
         if (metadata.trip_id || metadata.invoice_id || metadata.agent_id) {
           const agentId = metadata.agent_id;
           const tripId = metadata.trip_id;
           const invoiceId = metadata.invoice_id;
           
           if (agentId) {
-            // IDEMPOTENCY CHECK: Skip if already processed
             const { data: existingPayment } = await supabaseAdmin
               .from("finance_ledger_entries")
               .select("id")
@@ -90,110 +130,59 @@ serve(async (req) => {
               break;
             }
 
-            // Calculate Stripe fee (approximately 2.9% + $0.30)
             const stripeFee = Math.round(paymentIntent.amount * 0.029 + 30);
 
-            // Create ledger entry for client payment
-            const { error: paymentError } = await supabaseAdmin
-              .from("finance_ledger_entries")
-              .insert({
-                agent_id: agentId,
-                trip_id: tripId || null,
-                invoice_id: invoiceId || null,
-                entry_type: 'client_payment',
-                entry_source: 'stripe_webhook',
-                amount_cents: paymentIntent.amount,
-                currency: paymentIntent.currency.toUpperCase(),
-                description: `Payment received via Stripe`,
-                stripe_payment_intent_id: paymentIntent.id,
-                stripe_charge_id: typeof paymentIntent.latest_charge === 'string' 
-                  ? paymentIntent.latest_charge 
-                  : paymentIntent.latest_charge?.id,
-                effective_date: new Date().toISOString().split('T')[0],
-                metadata: {
-                  customer_email: metadata.customer_email,
-                  payment_method: paymentIntent.payment_method_types?.[0],
-                  stripe_event_id: event.id,
-                  activity_id: metadata.activity_id,
-                },
-              });
+            await supabaseAdmin.from("finance_ledger_entries").insert({
+              agent_id: agentId,
+              trip_id: tripId || null,
+              invoice_id: invoiceId || null,
+              entry_type: 'client_payment',
+              entry_source: 'stripe_webhook',
+              amount_cents: paymentIntent.amount,
+              currency: paymentIntent.currency.toUpperCase(),
+              description: `Payment received via Stripe`,
+              stripe_payment_intent_id: paymentIntent.id,
+              stripe_charge_id: typeof paymentIntent.latest_charge === 'string' ? paymentIntent.latest_charge : paymentIntent.latest_charge?.id,
+              effective_date: new Date().toISOString().split('T')[0],
+              metadata: { customer_email: metadata.customer_email, payment_method: paymentIntent.payment_method_types?.[0], stripe_event_id: event.id, activity_id: metadata.activity_id },
+            });
 
-            if (paymentError) {
-              log("Error creating payment ledger entry", paymentError);
-            } else {
-              log("Payment ledger entry created", { agentId, tripId, amount: paymentIntent.amount });
-            }
+            await supabaseAdmin.from("finance_ledger_entries").insert({
+              agent_id: agentId,
+              trip_id: tripId || null,
+              invoice_id: invoiceId || null,
+              entry_type: 'stripe_fee',
+              entry_source: 'stripe_webhook',
+              amount_cents: -stripeFee,
+              currency: paymentIntent.currency.toUpperCase(),
+              description: `Stripe processing fee`,
+              stripe_payment_intent_id: paymentIntent.id,
+              effective_date: new Date().toISOString().split('T')[0],
+              metadata: { stripe_event_id: event.id },
+            });
 
-            // Create ledger entry for Stripe fee
-            const { error: feeError } = await supabaseAdmin
-              .from("finance_ledger_entries")
-              .insert({
-                agent_id: agentId,
-                trip_id: tripId || null,
-                invoice_id: invoiceId || null,
-                entry_type: 'stripe_fee',
-                entry_source: 'stripe_webhook',
-                amount_cents: -stripeFee, // Negative as it's an expense
-                currency: paymentIntent.currency.toUpperCase(),
-                description: `Stripe processing fee`,
-                stripe_payment_intent_id: paymentIntent.id,
-                effective_date: new Date().toISOString().split('T')[0],
-                metadata: { stripe_event_id: event.id },
-              });
-
-            if (feeError) {
-              log("Error creating fee ledger entry", feeError);
-            }
-
-            // Update invoice if linked
             if (invoiceId) {
-              const { data: invoice } = await supabaseAdmin
-                .from("agency_invoices")
-                .select("amount_paid_cents, total_cents")
-                .eq("id", invoiceId)
-                .single();
-
+              const { data: invoice } = await supabaseAdmin.from("agency_invoices").select("amount_paid_cents, total_cents").eq("id", invoiceId).single();
               if (invoice) {
                 const newPaid = (invoice.amount_paid_cents || 0) + paymentIntent.amount;
                 const newBalance = (invoice.total_cents || 0) - newPaid;
-                const newStatus = newBalance <= 0 ? 'paid' : 'partially_paid';
-
-                await supabaseAdmin
-                  .from("agency_invoices")
-                  .update({
-                    amount_paid_cents: newPaid,
-                    balance_due_cents: Math.max(0, newBalance),
-                    status: newStatus,
-                    paid_date: newStatus === 'paid' ? new Date().toISOString().split('T')[0] : null,
-                  })
-                  .eq("id", invoiceId);
+                await supabaseAdmin.from("agency_invoices").update({
+                  amount_paid_cents: newPaid,
+                  balance_due_cents: Math.max(0, newBalance),
+                  status: newBalance <= 0 ? 'paid' : 'partially_paid',
+                  paid_date: newBalance <= 0 ? new Date().toISOString().split('T')[0] : null,
+                }).eq("id", invoiceId);
               }
             }
 
-            // Update trip totals if linked
             if (tripId) {
-              const { data: trip } = await supabaseAdmin
-                .from("agency_trips")
-                .select("total_paid_cents")
-                .eq("id", tripId)
-                .single();
-
+              const { data: trip } = await supabaseAdmin.from("agency_trips").select("total_paid_cents").eq("id", tripId).single();
               if (trip) {
-                await supabaseAdmin
-                  .from("agency_trips")
-                  .update({
-                    total_paid_cents: (trip.total_paid_cents || 0) + paymentIntent.amount,
-                  })
-                  .eq("id", tripId);
+                await supabaseAdmin.from("agency_trips").update({ total_paid_cents: (trip.total_paid_cents || 0) + paymentIntent.amount }).eq("id", tripId);
               }
             }
           }
         }
-
-        // NOTE: Legacy credit_topup path removed - now handled via credit_purchase in checkout.session.completed
-        // The old cents-based system (user_credits/credit_transactions) is deprecated.
-        // All credit purchases now flow through the credits-based system (credit_balances/credit_ledger).
-
         break;
       }
 
@@ -210,196 +199,72 @@ serve(async (req) => {
         if (metadata.type === "trip_pass") {
           const userId = metadata.user_id;
           const tripId = metadata.trip_id;
-
           if (userId && tripId) {
-            await supabaseAdmin
-              .from("trip_purchases")
-              .upsert({
-                user_id: userId,
-                trip_id: tripId,
-                purchase_type: "trip_pass",
-                features_unlocked: {
-                  unlimited_rebuilds: true,
-                  unlimited_day_builds: true,
-                  route_optimization: true,
-                  weather_tracker: true,
-                  group_budgeting: true,
-                  co_edit: true,
-                },
-                stripe_session_id: session.id,
-                created_at: new Date().toISOString(),
-              }, { onConflict: "user_id,trip_id" });
-
+            await supabaseAdmin.from("trip_purchases").upsert({
+              user_id: userId, trip_id: tripId, purchase_type: "trip_pass",
+              features_unlocked: { unlimited_rebuilds: true, unlimited_day_builds: true, route_optimization: true, weather_tracker: true, group_budgeting: true, co_edit: true },
+              stripe_session_id: session.id, created_at: new Date().toISOString(),
+            }, { onConflict: "user_id,trip_id" });
             log("Trip pass fulfilled", { userId, tripId });
           }
         }
 
         // Activity/Flight/Hotel Payment Fulfillment
         if (metadata.tripId && metadata.itemId && metadata.itemType) {
-          log("Activity payment checkout completed", { 
-            tripId: metadata.tripId, 
-            itemId: metadata.itemId, 
-            itemType: metadata.itemType 
-          });
+          const { data: payment, error: updateError } = await supabaseAdmin.from("trip_payments").update({
+            status: 'paid', paid_at: new Date().toISOString(),
+            stripe_payment_intent_id: typeof session.payment_intent === 'string' ? session.payment_intent : (session.payment_intent as any)?.id,
+            updated_at: new Date().toISOString(),
+          }).eq('stripe_checkout_session_id', session.id).select().single();
 
-          // Update trip_payments to 'paid' status
-          const { data: payment, error: updateError } = await supabaseAdmin
-            .from("trip_payments")
-            .update({
-              status: 'paid',
-              paid_at: new Date().toISOString(),
-              stripe_payment_intent_id: typeof session.payment_intent === 'string' 
-                ? session.payment_intent 
-                : (session.payment_intent as any)?.id,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('stripe_checkout_session_id', session.id)
-            .select()
-            .single();
-
-          if (updateError) {
-            log("Error updating trip_payment to paid", updateError);
-          } else {
-            log("Trip payment marked as paid", { paymentId: payment?.id });
-
-            // If this is a Viator activity, update booking state to awaiting_booking
-            // The actual Viator API call happens when user provides traveler info
-            if (payment?.external_provider === 'viator' && metadata.itemType === 'activity') {
-              log("Viator activity payment confirmed, ready for booking", { 
-                paymentId: payment.id,
-                itemId: metadata.itemId 
-              });
-
-              // Update the trip_activities booking state to indicate payment received
-              const { error: activityError } = await supabaseAdmin.rpc('transition_booking_state', {
-                p_activity_id: metadata.itemId,
-                p_new_state: 'payment_confirmed',
-                p_trigger_source: 'stripe_webhook',
-                p_trigger_reference: session.id,
-                p_metadata: { 
-                  payment_id: payment.id,
-                  stripe_session_id: session.id,
-                },
-              });
-
-              if (activityError) {
-                log("Error transitioning booking state", activityError);
-              } else {
-                log("Booking state transitioned to payment_confirmed");
-              }
-            }
+          if (!updateError && payment?.external_provider === 'viator' && metadata.itemType === 'activity') {
+            await supabaseAdmin.rpc('transition_booking_state', {
+              p_activity_id: metadata.itemId, p_new_state: 'payment_confirmed',
+              p_trigger_source: 'stripe_webhook', p_trigger_reference: session.id,
+              p_metadata: { payment_id: payment.id, stripe_session_id: session.id },
+            });
           }
         }
 
-        // ========================================
-        // Day Purchase Fulfillment
-        // ========================================
+        // Day Purchase Fulfillment (legacy)
         if (metadata.type === "day_purchase") {
           const userId = metadata.user_id;
-          const priceId = metadata.price_id;
-          const productId = metadata.product_id;
           const daysToAdd = parseInt(metadata.days || "0", 10);
           const packageTier = metadata.package_tier as 'essential' | 'complete' | null;
           const amountCents = session.amount_total || 0;
 
           if (userId && daysToAdd > 0) {
-            log("Processing day purchase", { userId, daysToAdd, packageTier, priceId });
+            const { data: existingLedger } = await supabaseAdmin.from("day_ledger").select("id").eq("stripe_session_id", session.id).eq("transaction_type", "purchase").maybeSingle();
+            if (existingLedger) { log("Duplicate day purchase, skipping"); break; }
 
-            // IDEMPOTENCY CHECK: Skip if this session already processed
-            const { data: existingLedger } = await supabaseAdmin
-              .from("day_ledger")
-              .select("id")
-              .eq("stripe_session_id", session.id)
-              .eq("transaction_type", "purchase")
-              .maybeSingle();
-
-            if (existingLedger) {
-              log("Duplicate day purchase event, skipping", { sessionId: session.id });
-              break;
-            }
-
-            // Get or create day balance record
-            const { data: existingBalance } = await supabaseAdmin
-              .from("day_balances")
-              .select("*")
-              .eq("user_id", userId)
-              .maybeSingle();
-
-            // Calculate new values
-            const currentPurchasedDays = existingBalance?.purchased_days || 0;
-            const newPurchasedDays = currentPurchasedDays + daysToAdd;
-
-            // Determine tier and package limits
+            const { data: existingBalance } = await supabaseAdmin.from("day_balances").select("*").eq("user_id", userId).maybeSingle();
+            const newPurchasedDays = (existingBalance?.purchased_days || 0) + daysToAdd;
             let swapsRemaining = existingBalance?.swaps_remaining;
             let regeneratesRemaining = existingBalance?.regenerates_remaining;
             let activeTier = existingBalance?.active_tier;
+            if (packageTier === 'essential') { activeTier = packageTier; swapsRemaining = (swapsRemaining || 0) + 5; regeneratesRemaining = (regeneratesRemaining || 0) + 2; }
+            else if (packageTier === 'complete') { activeTier = packageTier; swapsRemaining = -1; regeneratesRemaining = -1; }
 
-            // If buying a package, set tier and limits
-            if (packageTier) {
-              activeTier = packageTier;
-              if (packageTier === 'essential') {
-                // Essential: 5 swaps, 2 regenerates per package
-                swapsRemaining = (swapsRemaining || 0) + 5;
-                regeneratesRemaining = (regeneratesRemaining || 0) + 2;
-              } else if (packageTier === 'complete') {
-                // Complete: unlimited (-1)
-                swapsRemaining = -1;
-                regeneratesRemaining = -1;
-              }
-            }
+            await supabaseAdmin.from("day_balances").upsert({
+              user_id: userId, purchased_days: newPurchasedDays, free_days: existingBalance?.free_days || 0,
+              free_days_expires_at: existingBalance?.free_days_expires_at || null, active_tier: activeTier,
+              swaps_remaining: swapsRemaining, regenerates_remaining: regeneratesRemaining,
+              monthly_swaps_used: existingBalance?.monthly_swaps_used || 0, monthly_regenerates_used: existingBalance?.monthly_regenerates_used || 0,
+              monthly_reset_at: existingBalance?.monthly_reset_at || new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString(),
+              updated_at: new Date().toISOString(),
+            }, { onConflict: "user_id" });
 
-            // Upsert day balance
-            const { error: balanceError } = await supabaseAdmin
-              .from("day_balances")
-              .upsert({
-                user_id: userId,
-                purchased_days: newPurchasedDays,
-                free_days: existingBalance?.free_days || 0,
-                free_days_expires_at: existingBalance?.free_days_expires_at || null,
-                active_tier: activeTier,
-                swaps_remaining: swapsRemaining,
-                regenerates_remaining: regeneratesRemaining,
-                monthly_swaps_used: existingBalance?.monthly_swaps_used || 0,
-                monthly_regenerates_used: existingBalance?.monthly_regenerates_used || 0,
-                monthly_reset_at: existingBalance?.monthly_reset_at || new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString(),
-                updated_at: new Date().toISOString(),
-              }, { onConflict: "user_id" });
-
-            if (balanceError) {
-              log("Error upserting day balance", balanceError);
-            } else {
-              log("Day balance updated", { userId, newPurchasedDays, activeTier });
-            }
-
-            // Create ledger entry
-            const { error: ledgerError } = await supabaseAdmin
-              .from("day_ledger")
-              .insert({
-                user_id: userId,
-                transaction_type: 'purchase',
-                days_delta: daysToAdd,
-                is_free_day: false,
-                stripe_session_id: session.id,
-                stripe_product_id: productId,
-                price_id: priceId,
-                amount_cents: amountCents,
-                package_tier: packageTier,
-                package_days: daysToAdd,
-                notes: packageTier 
-                  ? `${packageTier.charAt(0).toUpperCase() + packageTier.slice(1)} package - ${daysToAdd} days`
-                  : `${daysToAdd} day${daysToAdd > 1 ? 's' : ''} à la carte`,
-              });
-
-            if (ledgerError) {
-              log("Error creating day ledger entry", ledgerError);
-            } else {
-              log("Day ledger entry created", { userId, daysToAdd, packageTier });
-            }
+            await supabaseAdmin.from("day_ledger").insert({
+              user_id: userId, transaction_type: 'purchase', days_delta: daysToAdd, is_free_day: false,
+              stripe_session_id: session.id, stripe_product_id: metadata.product_id, price_id: metadata.price_id,
+              amount_cents: amountCents, package_tier: packageTier, package_days: daysToAdd,
+              notes: packageTier ? `${packageTier.charAt(0).toUpperCase() + packageTier.slice(1)} package - ${daysToAdd} days` : `${daysToAdd} day${daysToAdd > 1 ? 's' : ''} à la carte`,
+            });
           }
         }
 
         // ========================================
-        // Credit Pack Purchase Fulfillment
+        // Credit Pack Purchase Fulfillment (FIFO)
         // ========================================
         if (metadata.type === "credit_purchase") {
           const userId = metadata.user_id;
@@ -409,9 +274,9 @@ serve(async (req) => {
           const amountCents = session.amount_total || 0;
 
           if (userId && creditsToAdd > 0) {
-            log("Processing credit purchase", { userId, creditsToAdd, priceId });
+            log("Processing credit purchase", { userId, creditsToAdd, priceId, productId });
 
-            // IDEMPOTENCY CHECK: Skip if this session already processed
+            // IDEMPOTENCY CHECK
             const { data: existingLedger } = await supabaseAdmin
               .from("credit_ledger")
               .select("id")
@@ -424,54 +289,138 @@ serve(async (req) => {
               break;
             }
 
-            // Get or create credit balance record
-            const { data: existingBalance } = await supabaseAdmin
-              .from("credit_balances")
-              .select("*")
-              .eq("user_id", userId)
-              .maybeSingle();
+            const clubInfo = productId ? CLUB_PRODUCT_MAP[productId] : null;
 
-            // Calculate new values
-            const currentPurchased = existingBalance?.purchased_credits || 0;
-            const newPurchased = currentPurchased + creditsToAdd;
+            if (clubInfo) {
+              // ── Club pack: 2 credit_purchases rows (base + bonus) ──
+              const now = new Date();
+              const bonusExpires = new Date(now);
+              bonusExpires.setMonth(bonusExpires.getMonth() + 6);
 
-            // Upsert credit balance
-            const { error: balanceError } = await supabaseAdmin
-              .from("credit_balances")
-              .upsert({
+              // Base credits (never expire)
+              await supabaseAdmin.from('credit_purchases').insert({
                 user_id: userId,
-                purchased_credits: newPurchased,
-                free_credits: existingBalance?.free_credits || 0,
-                free_credits_expires_at: existingBalance?.free_credits_expires_at || null,
-                updated_at: new Date().toISOString(),
-              }, { onConflict: "user_id" });
-
-            if (balanceError) {
-              log("Error upserting credit balance", balanceError);
-            } else {
-              log("Credit balance updated", { userId, newPurchased });
-            }
-
-            // Create ledger entry
-            const { error: ledgerError } = await supabaseAdmin
-              .from("credit_ledger")
-              .insert({
-                user_id: userId,
-                transaction_type: 'purchase',
-                credits_delta: creditsToAdd,
-                is_free_credit: false,
+                credit_type: 'club_base',
+                amount: clubInfo.baseCredits,
+                remaining: clubInfo.baseCredits,
+                expires_at: null,
+                source: 'stripe',
                 stripe_session_id: session.id,
-                stripe_product_id: productId,
-                price_id: priceId,
-                amount_cents: amountCents,
-                notes: `Credit pack purchase - ${creditsToAdd} credits`,
+                club_tier: clubInfo.tier,
               });
 
-            if (ledgerError) {
-              log("Error creating credit ledger entry", ledgerError);
+              // Bonus credits (6 month expiry)
+              await supabaseAdmin.from('credit_purchases').insert({
+                user_id: userId,
+                credit_type: 'club_bonus',
+                amount: clubInfo.bonusCredits,
+                remaining: clubInfo.bonusCredits,
+                expires_at: bonusExpires.toISOString(),
+                source: 'stripe',
+                stripe_session_id: session.id,
+                club_tier: clubInfo.tier,
+              });
+
+              // Award club badge
+              await supabaseAdmin.from('user_badges').upsert({
+                user_id: userId,
+                badge_type: `club_${clubInfo.tier}`,
+                source: 'purchase',
+                metadata: { stripe_session_id: session.id, tier: clubInfo.tier },
+              }, { onConflict: 'user_id,badge_type' });
+
+              // Award founding member for adventurer
+              if (clubInfo.tier === 'adventurer') {
+                await supabaseAdmin.rpc('award_founding_member', {
+                  p_user_id: userId,
+                  p_stripe_session_id: session.id,
+                });
+                await supabaseAdmin.from('user_badges').upsert({
+                  user_id: userId,
+                  badge_type: 'founding_member',
+                  source: 'purchase',
+                  metadata: { stripe_session_id: session.id },
+                }, { onConflict: 'user_id,badge_type' });
+              }
+
+              log("Club pack fulfilled", { tier: clubInfo.tier, base: clubInfo.baseCredits, bonus: clubInfo.bonusCredits });
             } else {
-              log("Credit ledger entry created", { userId, creditsToAdd });
+              // ── Flex pack: 1 credit_purchases row (12 month expiry) ──
+              const flexExpires = new Date();
+              flexExpires.setMonth(flexExpires.getMonth() + 12);
+
+              await supabaseAdmin.from('credit_purchases').insert({
+                user_id: userId,
+                credit_type: 'flex',
+                amount: creditsToAdd,
+                remaining: creditsToAdd,
+                expires_at: flexExpires.toISOString(),
+                source: 'stripe',
+                stripe_session_id: session.id,
+              });
+
+              log("Flex pack fulfilled", { credits: creditsToAdd });
             }
+
+            // Sync balance cache
+            await syncBalanceCache(supabaseAdmin, userId);
+
+            // Ledger entry
+            await supabaseAdmin.from("credit_ledger").insert({
+              user_id: userId,
+              transaction_type: 'purchase',
+              credits_delta: creditsToAdd,
+              is_free_credit: false,
+              stripe_session_id: session.id,
+              stripe_product_id: productId,
+              price_id: priceId,
+              amount_cents: amountCents,
+              notes: clubInfo
+                ? `${clubInfo.tier} club pack - ${creditsToAdd} credits (${clubInfo.baseCredits} base + ${clubInfo.bonusCredits} bonus)`
+                : `Flex credit pack - ${creditsToAdd} credits`,
+            });
+          }
+        }
+
+        // ========================================
+        // Group Unlock Purchase Fulfillment
+        // ========================================
+        if (metadata.type === "group_unlock") {
+          const userId = metadata.user_id;
+          const tripId = metadata.trip_id;
+          const productId = metadata.product_id;
+
+          if (userId && tripId && productId) {
+            log("Processing group unlock", { userId, tripId, productId });
+
+            // IDEMPOTENCY
+            const { data: existing } = await supabaseAdmin
+              .from('group_unlocks')
+              .select('id')
+              .eq('trip_id', tripId)
+              .maybeSingle();
+
+            if (existing) {
+              log("Group unlock already exists for trip, skipping", { tripId });
+              break;
+            }
+
+            const groupInfo = GROUP_PRODUCT_MAP[productId];
+            if (!groupInfo) {
+              log("Unknown group unlock product", { productId });
+              break;
+            }
+
+            await supabaseAdmin.from('group_unlocks').insert({
+              trip_id: tripId,
+              purchased_by: userId,
+              tier: groupInfo.tier,
+              stripe_session_id: session.id,
+              caps: groupInfo.caps,
+              usage: { swap_activity: 0, regenerate_day: 0, ai_message: 0, restaurant_rec: 0 },
+            });
+
+            log("Group unlock fulfilled", { tripId, tier: groupInfo.tier });
           }
         }
 
@@ -479,271 +428,125 @@ serve(async (req) => {
       }
 
       // ========================================
-      // Charge Refunded - Create Refund Entry
+      // Charge Refunded
       // ========================================
       case "charge.refunded": {
         const charge = event.data.object as Stripe.Charge;
-        log("Charge refunded", { chargeId: charge.id, amountRefunded: charge.amount_refunded });
-
-        // Get refund details
         const refunds = charge.refunds?.data || [];
         const latestRefund = refunds[0];
 
-        // IDEMPOTENCY CHECK: Skip if this specific refund already processed
         if (latestRefund?.id) {
-          const { data: existingRefund } = await supabaseAdmin
-            .from("finance_ledger_entries")
-            .select("id")
-            .eq("stripe_refund_id", latestRefund.id)
-            .eq("entry_type", "client_refund")
-            .maybeSingle();
-
-          if (existingRefund) {
-            log("Duplicate refund event, skipping", { refundId: latestRefund.id });
-            break;
-          }
+          const { data: existingRefund } = await supabaseAdmin.from("finance_ledger_entries").select("id").eq("stripe_refund_id", latestRefund.id).eq("entry_type", "client_refund").maybeSingle();
+          if (existingRefund) { log("Duplicate refund, skipping"); break; }
         }
 
-        // Find the original payment entry
-        const { data: originalEntry } = await supabaseAdmin
-          .from("finance_ledger_entries")
-          .select("*")
-          .eq("stripe_charge_id", charge.id)
-          .eq("entry_type", "client_payment")
-          .single();
+        const { data: originalEntry } = await supabaseAdmin.from("finance_ledger_entries").select("*").eq("stripe_charge_id", charge.id).eq("entry_type", "client_payment").single();
 
         if (originalEntry) {
-          const { error: refundError } = await supabaseAdmin
-            .from("finance_ledger_entries")
-            .insert({
-              agent_id: originalEntry.agent_id,
-              trip_id: originalEntry.trip_id,
-              invoice_id: originalEntry.invoice_id,
-              entry_type: 'client_refund',
-              entry_source: 'stripe_webhook',
-              amount_cents: -charge.amount_refunded, // Negative as money flows out
-              currency: charge.currency.toUpperCase(),
-              description: `Refund processed`,
-              stripe_charge_id: charge.id,
-              stripe_refund_id: latestRefund?.id,
-              effective_date: new Date().toISOString().split('T')[0],
-              metadata: {
-                refund_reason: latestRefund?.reason,
-                stripe_event_id: event.id,
-                activity_id: originalEntry.metadata?.activity_id,
-              },
+          await supabaseAdmin.from("finance_ledger_entries").insert({
+            agent_id: originalEntry.agent_id, trip_id: originalEntry.trip_id, invoice_id: originalEntry.invoice_id,
+            entry_type: 'client_refund', entry_source: 'stripe_webhook', amount_cents: -charge.amount_refunded,
+            currency: charge.currency.toUpperCase(), description: `Refund processed`,
+            stripe_charge_id: charge.id, stripe_refund_id: latestRefund?.id,
+            effective_date: new Date().toISOString().split('T')[0],
+            metadata: { refund_reason: latestRefund?.reason, stripe_event_id: event.id, activity_id: originalEntry.metadata?.activity_id },
+          });
+
+          const activityId = originalEntry.metadata?.activity_id;
+          if (activityId) {
+            await supabaseAdmin.rpc('transition_booking_state', {
+              p_activity_id: activityId, p_new_state: 'refunded',
+              p_trigger_source: 'stripe_webhook', p_trigger_reference: latestRefund?.id,
+              p_metadata: { refund_amount: charge.amount_refunded },
             });
-
-          if (refundError) {
-            log("Error creating refund ledger entry", refundError);
-          } else {
-            log("Refund ledger entry created", { 
-              agentId: originalEntry.agent_id, 
-              amount: charge.amount_refunded 
-            });
-
-            // P0 FIX: Sync booking state to 'refunded' if activity linked
-            const activityId = originalEntry.metadata?.activity_id;
-            if (activityId) {
-              const { data: stateResult, error: stateError } = await supabaseAdmin
-                .rpc('transition_booking_state', {
-                  p_activity_id: activityId,
-                  p_new_state: 'refunded',
-                  p_trigger_source: 'stripe_webhook',
-                  p_trigger_reference: latestRefund?.id,
-                  p_metadata: { refund_amount: charge.amount_refunded },
-                });
-
-              if (stateError) {
-                log("Error transitioning booking state to refunded", stateError);
-              } else {
-                log("Booking state transitioned to refunded", { activityId, result: stateResult });
-              }
-            }
           }
         }
-
         break;
       }
 
       // ========================================
-      // Dispute Created/Updated - Create Credit Entry
+      // Dispute Events
       // ========================================
       case "charge.dispute.created":
       case "charge.dispute.updated": {
         const dispute = event.data.object as Stripe.Dispute;
-        log("Dispute event", { disputeId: dispute.id, status: dispute.status, amount: dispute.amount });
-
-        // Find the original payment
         const chargeId = typeof dispute.charge === 'string' ? dispute.charge : dispute.charge?.id;
         
-        const { data: originalEntry } = await supabaseAdmin
-          .from("finance_ledger_entries")
-          .select("*")
-          .eq("stripe_charge_id", chargeId)
-          .eq("entry_type", "client_payment")
-          .single();
+        const { data: originalEntry } = await supabaseAdmin.from("finance_ledger_entries").select("*").eq("stripe_charge_id", chargeId).eq("entry_type", "client_payment").single();
 
         if (originalEntry) {
-          // Check if we already have a dispute entry
-          const { data: existingDispute } = await supabaseAdmin
-            .from("finance_ledger_entries")
-            .select("id")
-            .eq("stripe_dispute_id", dispute.id)
-            .single();
-
-          if (!existingDispute) {
-            // Only create new entry if dispute is lost (funds withdrawn)
-            if (dispute.status === 'lost' || dispute.status === 'warning_needs_response') {
-              const { error: disputeError } = await supabaseAdmin
-                .from("finance_ledger_entries")
-                .insert({
-                  agent_id: originalEntry.agent_id,
-                  trip_id: originalEntry.trip_id,
-                  invoice_id: originalEntry.invoice_id,
-                  entry_type: 'client_credit',
-                  entry_source: 'stripe_webhook',
-                  amount_cents: -dispute.amount, // Negative as money flows out
-                  currency: dispute.currency.toUpperCase(),
-                  description: `Dispute ${dispute.status === 'lost' ? 'lost' : 'pending'}: ${dispute.reason}`,
-                  stripe_charge_id: chargeId,
-                  stripe_dispute_id: dispute.id,
-                  effective_date: new Date().toISOString().split('T')[0],
-                  metadata: {
-                    dispute_reason: dispute.reason,
-                    dispute_status: dispute.status,
-                    stripe_event_id: event.id,
-                  },
-                });
-
-              if (disputeError) {
-                log("Error creating dispute ledger entry", disputeError);
-              } else {
-                log("Dispute ledger entry created", { disputeId: dispute.id });
-              }
-            }
+          const { data: existingDispute } = await supabaseAdmin.from("finance_ledger_entries").select("id").eq("stripe_dispute_id", dispute.id).single();
+          if (!existingDispute && (dispute.status === 'lost' || dispute.status === 'warning_needs_response')) {
+            await supabaseAdmin.from("finance_ledger_entries").insert({
+              agent_id: originalEntry.agent_id, trip_id: originalEntry.trip_id, invoice_id: originalEntry.invoice_id,
+              entry_type: 'client_credit', entry_source: 'stripe_webhook', amount_cents: -dispute.amount,
+              currency: dispute.currency.toUpperCase(), description: `Dispute ${dispute.status === 'lost' ? 'lost' : 'pending'}: ${dispute.reason}`,
+              stripe_charge_id: chargeId, stripe_dispute_id: dispute.id,
+              effective_date: new Date().toISOString().split('T')[0],
+              metadata: { dispute_reason: dispute.reason, dispute_status: dispute.status, stripe_event_id: event.id },
+            });
           }
         }
-
         break;
       }
 
       // ========================================
-      // Transfer Created - Agent Payout Entry
+      // Transfer Created
       // ========================================
       case "transfer.created": {
         const transfer = event.data.object as Stripe.Transfer;
-        log("Transfer created", { transferId: transfer.id, amount: transfer.amount });
-
         const metadata = transfer.metadata || {};
         const agentId = metadata.agent_id;
-        const tripId = metadata.trip_id;
 
         if (agentId) {
-          // Record the transfer as an agent payout
-          const { error: transferError } = await supabaseAdmin
-            .from("finance_ledger_entries")
-            .insert({
-              agent_id: agentId,
-              trip_id: tripId || null,
-              entry_type: 'agent_payout',
-              entry_source: 'stripe_webhook',
-              amount_cents: -transfer.amount, // Negative as money flows out of platform
-              currency: transfer.currency.toUpperCase(),
-              description: `Payout to agent (Stripe Connect)`,
-              stripe_transfer_id: transfer.id,
-              effective_date: new Date().toISOString().split('T')[0],
-              metadata: {
-                destination_account: transfer.destination,
-                stripe_event_id: event.id,
-              },
-            });
+          await supabaseAdmin.from("finance_ledger_entries").insert({
+            agent_id: agentId, trip_id: metadata.trip_id || null,
+            entry_type: 'agent_payout', entry_source: 'stripe_webhook',
+            amount_cents: -transfer.amount, currency: transfer.currency.toUpperCase(),
+            description: `Payout to agent (Stripe Connect)`, stripe_transfer_id: transfer.id,
+            effective_date: new Date().toISOString().split('T')[0],
+            metadata: { destination_account: transfer.destination, stripe_event_id: event.id },
+          });
 
-          if (transferError) {
-            log("Error creating transfer ledger entry", transferError);
-          } else {
-            log("Transfer ledger entry created", { agentId, amount: transfer.amount });
-          }
-
-          // Update payout run if linked
           if (metadata.payout_run_id) {
-            await supabaseAdmin
-              .from("finance_payout_runs")
-              .update({
-                stripe_transfer_id: transfer.id,
-                status: 'processing',
-                initiated_at: new Date().toISOString(),
-              })
-              .eq("id", metadata.payout_run_id);
+            await supabaseAdmin.from("finance_payout_runs").update({
+              stripe_transfer_id: transfer.id, status: 'processing', initiated_at: new Date().toISOString(),
+            }).eq("id", metadata.payout_run_id);
           }
         }
-
         break;
       }
 
       // ========================================
-      // Payout Paid - Mark Funds Settled
+      // Payout Paid
       // ========================================
       case "payout.paid": {
         const payout = event.data.object as Stripe.Payout;
-        log("Payout paid", { payoutId: payout.id, amount: payout.amount });
-
-        // Find related payout runs by looking at transfers
-        const { data: relatedEntries } = await supabaseAdmin
-          .from("finance_ledger_entries")
-          .select("id, metadata")
-          .eq("entry_type", "agent_payout")
-          .not("stripe_transfer_id", "is", null);
-
-        // Update payout runs status to completed
-        await supabaseAdmin
-          .from("finance_payout_runs")
-          .update({
-            stripe_payout_id: payout.id,
-            status: 'completed',
-            completed_at: new Date().toISOString(),
-          })
-          .eq("status", "processing");
-
-        log("Payout marked as complete", { payoutId: payout.id });
-
+        await supabaseAdmin.from("finance_payout_runs").update({
+          stripe_payout_id: payout.id, status: 'completed', completed_at: new Date().toISOString(),
+        }).eq("status", "processing");
         break;
       }
 
-      // ========================================
-      // Subscription Events (existing)
-      // ========================================
+      // Subscription events (existing)
       case "customer.subscription.created":
-      case "customer.subscription.updated": {
-        const subscription = event.data.object as Stripe.Subscription;
-        log("Subscription event", { 
-          subscriptionId: subscription.id, 
-          status: subscription.status,
-          customerId: subscription.customer 
-        });
+      case "customer.subscription.updated":
+      case "customer.subscription.deleted":
+        log("Subscription event", { type: event.type });
         break;
-      }
-
-      case "customer.subscription.deleted": {
-        const subscription = event.data.object as Stripe.Subscription;
-        log("Subscription canceled", { subscriptionId: subscription.id });
-        break;
-      }
 
       default:
         log("Unhandled event type", { type: event.type });
     }
 
     return new Response(JSON.stringify({ received: true }), {
-      headers: { "Content-Type": "application/json" },
-      status: 200,
+      headers: { "Content-Type": "application/json" }, status: 200,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     log("ERROR", { message });
     return new Response(JSON.stringify({ error: message }), {
-      headers: { "Content-Type": "application/json" },
-      status: 500,
+      headers: { "Content-Type": "application/json" }, status: 500,
     });
   }
 });
