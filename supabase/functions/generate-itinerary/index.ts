@@ -249,6 +249,10 @@ interface GenerationContext {
   pace?: string;
   interests?: string[];
   dailyBudget?: number;
+  /** Actual user-set total budget in cents (from trip settings), null if not set */
+  budgetTotalCents?: number | null;
+  /** Computed actual daily budget per person from user-set budget */
+  actualDailyBudgetPerPerson?: number | null;
   currency?: string;
   // Phase 9: Full DNA injection for prompt library
   travelerDNA?: TravelerDNA;
@@ -3820,7 +3824,7 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     celebrationDay: trip.metadata?.celebrationDay,
   };
 
-  // Set daily budget based on tier
+  // Set daily budget based on tier (fallback)
   const budgetMap: Record<string, number> = {
     budget: 75,
     economy: 100,
@@ -3830,6 +3834,22 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     luxury: 500
   };
   context.dailyBudget = budgetMap[context.budgetTier || 'standard'] || 150;
+
+  // Override with ACTUAL user-set budget if available
+  const budgetTotalCents = trip.budget_total_cents;
+  if (budgetTotalCents && budgetTotalCents > 0) {
+    context.budgetTotalCents = budgetTotalCents;
+    const travelers = context.travelers || 1;
+    const days = context.totalDays || 1;
+    // Subtract committed costs (flight + hotel) to get activity-only budget
+    const flightCents = trip.flight_selection?.outbound?.price ? Math.round((trip.flight_selection.outbound.price + (trip.flight_selection.return?.price || 0)) * 100) : 0;
+    const hotelCents = trip.hotel_selection?.pricePerNight ? Math.round(trip.hotel_selection.pricePerNight * days * 100) : 0;
+    const activityBudgetCents = Math.max(0, budgetTotalCents - flightCents - hotelCents);
+    const actualDailyPerPerson = Math.round(activityBudgetCents / days / travelers) / 100; // convert to dollars
+    context.actualDailyBudgetPerPerson = actualDailyPerPerson;
+    context.dailyBudget = actualDailyPerPerson; // Override tier-based estimate
+    console.log(`[Stage 1] User budget: $${budgetTotalCents / 100} total, $${actualDailyPerPerson}/day/person for activities (after flight=$${flightCents / 100}, hotel=$${hotelCents / 100})`);
+  }
 
   // =========================================================================
   // MULTI-CITY SUPPORT: Build day→city mapping from destinations or trip_cities
@@ -4570,7 +4590,8 @@ DO NOT leave these fields empty or omit them. They are the core intelligence lay
 
 DATE: ${date}
 TRAVELERS: ${context.travelers}
-BUDGET: ${context.budgetTier || 'standard'} (~$${context.dailyBudget}/day per person)
+BUDGET: ${context.budgetTier || 'standard'} (~$${context.dailyBudget}/day per person)${context.actualDailyBudgetPerPerson ? `
+⚠️ HARD BUDGET CAP: The user has set a real budget. Total activity spending for this day MUST NOT exceed ~$${Math.round(context.actualDailyBudgetPerPerson * context.travelers)}/day ($${context.actualDailyBudgetPerPerson}/person). Choose activities and dining that fit within this cap. If an activity is expensive, balance with free/cheap alternatives elsewhere in the day.` : ''}
 ARCHETYPE: ${context.travelerDNA?.primaryArchetype || 'balanced'}
 MAX ACTIVITIES: ${maxActivitiesFromArchetype} (from archetype day structure - this is a HARD LIMIT)
 ${multiCityPrompt}
@@ -8437,6 +8458,29 @@ FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
       // Use profile's budget tier if available, fallback to params
       const effectiveBudgetTier = profile.budgetTier || budgetTier || 'moderate';
       console.log(`[generate-day] Budget tier: ${effectiveBudgetTier}`);
+
+      // Fetch actual user-set budget for hard cap enforcement
+      let actualDailyBudgetPerPerson: number | null = null;
+      if (tripId) {
+        try {
+          const { data: tripBudgetData } = await supabase
+            .from('trips')
+            .select('budget_total_cents, flight_selection, hotel_selection')
+            .eq('id', tripId)
+            .single();
+          if (tripBudgetData?.budget_total_cents && tripBudgetData.budget_total_cents > 0) {
+            const trav = travelers || 1;
+            const days = totalDays || 1;
+            const flightCents = tripBudgetData.flight_selection?.outbound?.price ? Math.round((tripBudgetData.flight_selection.outbound.price + (tripBudgetData.flight_selection.return?.price || 0)) * 100) : 0;
+            const hotelCents = tripBudgetData.hotel_selection?.pricePerNight ? Math.round(tripBudgetData.hotel_selection.pricePerNight * days * 100) : 0;
+            const activityBudgetCents = Math.max(0, tripBudgetData.budget_total_cents - flightCents - hotelCents);
+            actualDailyBudgetPerPerson = Math.round(activityBudgetCents / days / trav) / 100;
+            console.log(`[generate-day] Real budget: $${tripBudgetData.budget_total_cents / 100} total → $${actualDailyBudgetPerPerson}/day/person for activities`);
+          }
+        } catch (e) {
+          console.warn('[generate-day] Failed to fetch budget:', e);
+        }
+      }
       
       // ==========================================================================
       // PHASE 2 FIX: Use buildFullPromptGuidanceAsync (with dynamic features)
@@ -8578,7 +8622,8 @@ ${voyancePicksPrompt}`;
 
 Date: ${date}
 Travelers: ${travelers}
-Budget: ${budgetTier || 'standard'}
+Budget: ${effectiveBudgetTier}${actualDailyBudgetPerPerson ? ` (~$${actualDailyBudgetPerPerson}/day per person)
+⚠️ HARD BUDGET CAP: The user has set a real budget. Total activity spending for this day MUST NOT exceed ~$${Math.round(actualDailyBudgetPerPerson * (travelers || 1))}/day ($${actualDailyBudgetPerPerson}/person). Choose activities and dining that fit within this cap.` : ''}
 ARCHETYPE: ${primaryArchetype}
 MAX ACTIVITIES: ${maxActivitiesFromArchetype} (from archetype day structure - HARD LIMIT)
 ${preferences?.pace ? `Pace: ${preferences.pace}` : ''}
