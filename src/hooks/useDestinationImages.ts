@@ -230,29 +230,22 @@ export function useDestinationImages(
           return;
         }
 
-        // Fallback to API for non-curated destinations
+        // For non-curated destinations, use a single API image for hero
+        // and a gradient for mid — the API's second image is often random/irrelevant
         const images = await getAPIImages({
           destination: queryDestination,
-          imageType: 'gallery',
-          // Fetch more so we can reliably pick a different mid image
-          limit: 6,
+          imageType: 'hero',
+          limit: 1,
         });
 
         if (cancelled) return;
 
-        const chosen = await pickTwoLoadableDistinct(
-          images.map(i => i.url),
-          cleanDestination,
-          `${seed}|api`
-        );
+        const heroUrl = images[0]?.url && (await isUrlLoadable(images[0].url))
+          ? images[0].url
+          : generateGradientDataUrl(cleanDestination, 0);
 
-        let mid = chosen.mid;
-        if (!mid && chosen.hero) {
-          mid = getMidFallback();
-        }
-
-        setHeroImage(chosen.hero);
-        setMidImage(mid);
+        setHeroImage(heroUrl);
+        setMidImage(generateGradientDataUrl(cleanDestination, 1));
       } catch (err) {
         console.error('[useDestinationImages] Failed to fetch images:', err);
         if (!cancelled) {
