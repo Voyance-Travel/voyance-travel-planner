@@ -23,13 +23,14 @@ export function WelcomeBonusManager() {
   // Helper to check if welcome modal should be allowed
   const shouldShowWelcome = () => {
     if (!user) return false;
+    // Per-user persistent check — already claimed in DB
+    if (hasClaimedBonus('welcome')) return false;
     // Per-user session check: prevents re-showing within the same tab session
     const shownForUser = sessionStorage.getItem(POPUP_STORAGE.WELCOME_SHOWN);
     if (shownForUser === user.id) return false;
-    // Per-user persistent check
+    // Per-user persistent check — already claimed in this browser
     const claimedBy = localStorage.getItem('voyance_welcome_bonus_claimed');
     if (claimedBy === user.id) return false;
-    if (hasClaimedBonus('welcome')) return false;
     return true;
   };
 
@@ -43,8 +44,11 @@ export function WelcomeBonusManager() {
     const timer = setTimeout(() => {
       const allowed = requestPopup('welcome_credits');
       if (allowed) {
+        console.log('[WelcomeBonusManager] Welcome credits modal activated for user:', user.id);
         setShowWelcomeModal(true);
         sessionStorage.setItem(POPUP_STORAGE.WELCOME_SHOWN, user.id);
+      } else {
+        console.log('[WelcomeBonusManager] Popup slot denied, queuing...');
       }
     }, 500); // Fire quickly - welcome has highest priority
     return () => clearTimeout(timer);
