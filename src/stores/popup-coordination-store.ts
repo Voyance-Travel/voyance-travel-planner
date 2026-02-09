@@ -23,8 +23,8 @@ interface PopupPriority {
 // Priority order - only one modal at a time
 // Progress bar is always-visible but hides when modals are active
 const POPUP_PRIORITIES: PopupPriority[] = [
-  { type: 'welcome_credits', priority: 1, minDelaySinceLastPopup: 0 },
-  { type: 'site_tour', priority: 2, minDelaySinceLastPopup: 1000 },
+  { type: 'site_tour', priority: 1, minDelaySinceLastPopup: 0 },
+  { type: 'welcome_credits', priority: 2, minDelaySinceLastPopup: 500 },
   { type: 'itinerary_tour', priority: 3, minDelaySinceLastPopup: 500 },
   { type: 'onboarding_preferences', priority: 4, minDelaySinceLastPopup: 1000 },
   { type: 'review_capture', priority: 5, minDelaySinceLastPopup: 2000 },
