@@ -207,13 +207,15 @@ export default function Archetypes() {
   const [canScrollPrev, setCanScrollPrev] = useState(false);
   const [canScrollNext, setCanScrollNext] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [detailArchetype, setDetailArchetype] = useState<ArchetypeDetail | null>(null);
+  const [detailArchetype, setDetailArchetype] = useState<(ArchetypeDetail & { displayName?: string }) | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
   const handleSelectArchetype = useCallback((narrativeId: string) => {
     const detailId = NARRATIVE_TO_DETAIL[narrativeId];
+    const narrative = ARCHETYPE_NARRATIVES[narrativeId];
     if (detailId && ARCHETYPE_DETAILS[detailId]) {
-      setDetailArchetype(ARCHETYPE_DETAILS[detailId]);
+      // Override the detail name with the narrative name so users see consistent naming
+      setDetailArchetype({ ...ARCHETYPE_DETAILS[detailId], name: narrative?.name || ARCHETYPE_DETAILS[detailId].name });
       setDetailOpen(true);
     }
   }, []);
