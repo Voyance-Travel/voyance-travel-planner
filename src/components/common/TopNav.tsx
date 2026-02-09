@@ -31,6 +31,7 @@ const exploreItems = [
 const navLinks = [
   { href: ROUTES.HOW_IT_WORKS, label: 'How It Works' },
   { href: ROUTES.PRICING, label: 'Pricing' },
+  { href: ROUTES.ABOUT, label: 'About' },
 ];
 
 const userMenuItems = [
