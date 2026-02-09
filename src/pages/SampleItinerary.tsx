@@ -85,8 +85,8 @@ export default function SampleItinerary() {
   }, []);
 
   useEffect(() => {
-    const destinationParam = searchParams.get('destination') || 'bali-wellness';
-    const data = getItineraryBySlug(destinationParam);
+    const slug = searchParams.get('id') || searchParams.get('destination') || 'bali-wellness';
+    const data = getItineraryBySlug(slug);
     setItineraryData(data);
     setIsLoading(false);
   }, [searchParams]);
