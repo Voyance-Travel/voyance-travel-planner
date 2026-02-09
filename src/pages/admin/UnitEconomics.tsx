@@ -61,7 +61,7 @@ const FALLBACK_DATA = {
     // Hidden fixed: your own testing, API testing, dev overhead
     devOps: 20.00, // Rough estimate for internal usage/testing that doesn't generate revenue
   },
-  revenue: { flex_100: 9, flex_300: 25, flex_500: 39, voyager: 49.99, explorer: 89.99, adventurer: 149.99 } as Record<string, number>,
+  revenue: { flex_100: 9, flex_300: 25, flex_500: 39, voyager: 49.99, explorer: 89.99, adventurer: 149.99, smart_finish: 6.99, group_small: 19.99, group_medium: 34.99, group_large: 79.99 } as Record<string, number>,
 };
 
 // Revenue mix presets - what % of paying users buy each tier
