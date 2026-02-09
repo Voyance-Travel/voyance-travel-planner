@@ -9,7 +9,7 @@ const STEPS = [
     number: '1',
     icon: Dna,
     title: 'Discover your Travel DNA',
-    description: 'Take our 5-minute quiz. We analyze your preferences across 10 traits to identify your unique travel type from 27 types.',
+    description: 'Take our 5-minute quiz. We analyze your preferences across 10 traits to identify your unique travel type from 29 types.',
     highlight: '5-min quiz',
   },
   {

@@ -50,10 +50,10 @@ const promises = [
 
 const ALL_ARCHETYPE_IDS = [
   'cultural_anthropologist', 'urban_nomad', 'wilderness_pioneer', 'digital_explorer',
-  'social_butterfly', 'family_architect', 'romantic_curator', 'story_seeker',
+  'social_butterfly', 'family_architect', 'romantic_curator', 'story_seeker', 'community_builder',
   'bucket_list_conqueror', 'adrenaline_architect', 'collection_curator', 'status_seeker',
   'zen_seeker', 'slow_traveler', 'beach_therapist', 'sanctuary_seeker', 'escape_artist', 'retreat_regular',
-  'culinary_cartographer', 'luxury_luminary', 'art_aficionado', 'eco_ethicist',
+  'culinary_cartographer', 'luxury_luminary', 'art_aficionado', 'eco_ethicist', 'curated_luxe',
   'gap_year_graduate', 'midlife_explorer', 'healing_journeyer', 'sabbatical_scholar', 'retirement_ranger',
 ];
 
@@ -240,13 +240,13 @@ export default function HowItWorks() {
                 how you plan, how you recharge, what thrills you, what bores you.
               </p>
               <p className="text-lg text-muted-foreground leading-relaxed">
-                In 5 minutes, we identify your type from 27 distinct traveler types. 
+                In 5 minutes, we identify your type from 29 distinct traveler types. 
                 Not a horoscope. A blueprint.
               </p>
               <div className="mt-8 flex items-center gap-4 text-sm text-muted-foreground">
                 <span className="px-3 py-1 bg-muted rounded-full">Your profile stays with you</span>
                 <span className="px-3 py-1 bg-muted rounded-full">5 minutes</span>
-                <span className="px-3 py-1 bg-muted rounded-full">27 types</span>
+                <span className="px-3 py-1 bg-muted rounded-full">29 types</span>
               </div>
             </div>
             <div className="relative">

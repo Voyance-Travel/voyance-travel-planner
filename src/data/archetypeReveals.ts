@@ -1,5 +1,5 @@
 /**
- * Complete 27 Archetype Reveals - The "Screenshot Moments"
+ * Complete 29 Archetype Reveals - The "Screenshot Moments"
  * 
  * Each reveal is crafted to make users feel genuinely understood.
  * They should want to screenshot and share with friends.

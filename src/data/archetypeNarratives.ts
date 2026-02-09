@@ -438,6 +438,31 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     perfectTripPreview: "You seek excellence in every detail.",
     emoji: "💎"
   },
+  community_builder: {
+    id: 'community_builder',
+    name: 'The Community Builder',
+    category: 'CONNECTOR',
+    hookLine: "Travel should enrich the places you visit, not just your photo album.",
+    coreDescription: "You travel with a conscience. You seek out local businesses, guides from the community, and experiences that create connection rather than consumption. Your presence should matter in a good way.",
+    whatThisMeans: [
+      "You research how to support local communities before visiting",
+      "You avoid chain restaurants and hotels when possible",
+      "You learn basic phrases to connect more genuinely",
+      "You feel uncomfortable with overtourism"
+    ],
+    superpowers: [
+      "Finding community-positive experiences",
+      "Building meaningful local connections",
+      "Traveling in a way that gives back"
+    ],
+    growthEdges: [
+      "Sometimes convenience is okay",
+      "Not every choice needs to be ethical perfection",
+      "Enjoying yourself isn't selfish"
+    ],
+    perfectTripPreview: "You leave places better than you found them.",
+    emoji: "🤝"
+  },
   story_seeker: {
     id: 'story_seeker',
     name: 'The Story Seeker',
