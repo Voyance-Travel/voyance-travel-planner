@@ -80,13 +80,13 @@ export const AI_COSTS = {
     travel_dna: { min: 0.01, max: 0.03, model: 'gpt-5-mini', desc: 'Calculate DNA from 21-question quiz' },
     
     // Credit-based (paid features)
-    full_itinerary: { min: 0.15, max: 0.60, model: 'gpt-5', desc: 'Full trip generation (5 days)' },
+    full_itinerary: { min: 0.15, max: 0.60, model: 'gpt-5', desc: 'Full trip generation (60cr/day)' },
     day1_only: { min: 0.03, max: 0.08, model: 'gpt-5', desc: 'Day 1 only for free users' },
-    day_regeneration: { min: 0.02, max: 0.08, model: 'gpt-5-mini', desc: 'Regenerate single day (15 credits)' },
+    day_regeneration: { min: 0.02, max: 0.08, model: 'gpt-5-mini', desc: 'Regenerate single day (10 credits)' },
     activity_swap: { min: 0.005, max: 0.02, model: 'gpt-5-mini', desc: 'Swap one activity (5 credits)' },
-    restaurant_rec: { min: 0.01, max: 0.04, model: 'gpt-5-mini', desc: 'Restaurant recommendation (10 credits)' },
-    itinerary_chat: { min: 0.005, max: 0.02, model: 'gpt-5-mini', desc: 'AI chat message (2 credits)' },
-    mystery_trip: { min: 0.01, max: 0.04, model: 'gpt-5-mini', desc: 'Mystery destination suggestion' },
+    restaurant_rec: { min: 0.01, max: 0.04, model: 'gpt-5-mini', desc: 'Restaurant recommendation (5 credits)' },
+    itinerary_chat: { min: 0.005, max: 0.02, model: 'gpt-5-mini', desc: 'AI chat message (5 credits)' },
+    mystery_trip: { min: 0.01, max: 0.04, model: 'gpt-5-mini', desc: 'Mystery destination suggestion (15 credits)' },
     parse_story: { min: 0.005, max: 0.02, model: 'gpt-5-mini', desc: 'Parse travel story text' },
     explain_recommendation: { min: 0.002, max: 0.008, model: 'gpt-5-mini', desc: 'Why this activity?' },
   },
@@ -159,13 +159,16 @@ export const BLENDED_COST_PER_VISITOR =
 // ============================================================================
 
 export const CREDIT_ACTION_MAPPING = {
-  trip_generation: { credits: 0, costMin: 0.15, costMax: 0.60, desc: 'Full trip generation (variable)' },
-  unlock_day: { credits: 150, costMin: 0.06, costMax: 0.15, desc: 'Unlock full day details' },
-  swap_activity: { credits: 10, costMin: 0.005, costMax: 0.02, desc: 'Swap an activity' },
-  regenerate_day: { credits: 20, costMin: 0.02, costMax: 0.08, desc: 'Regenerate a day' },
-  restaurant_rec: { credits: 15, costMin: 0.01, costMax: 0.04, desc: 'Restaurant recommendation' },
-  ai_message: { credits: 10, costMin: 0.005, costMax: 0.02, desc: 'AI companion message' },
+  trip_generation: { credits: 0, costMin: 0.15, costMax: 0.60, desc: 'Full trip generation (variable, 60cr/day)' },
+  unlock_day: { credits: 60, costMin: 0.06, costMax: 0.15, desc: 'Unlock full day details' },
+  smart_finish: { credits: 50, costMin: 0.03, costMax: 0.06, desc: 'Smart Finish enrichment' },
+  swap_activity: { credits: 5, costMin: 0.005, costMax: 0.02, desc: 'Swap an activity' },
+  regenerate_day: { credits: 10, costMin: 0.02, costMax: 0.08, desc: 'Regenerate a day' },
+  restaurant_rec: { credits: 5, costMin: 0.01, costMax: 0.04, desc: 'Restaurant recommendation' },
+  ai_message: { credits: 5, costMin: 0.005, costMax: 0.02, desc: 'AI companion message' },
   hotel_search: { credits: 40, costMin: 0.01, costMax: 0.05, desc: 'Hotel search per city' },
+  mystery_getaway: { credits: 15, costMin: 0.01, costMax: 0.04, desc: 'Mystery Getaway suggestions' },
+  transport_mode_change: { credits: 5, costMin: 0.003, costMax: 0.01, desc: 'Change transport mode' },
 } as const;
 
 // ============================================================================
@@ -174,13 +177,21 @@ export const CREDIT_ACTION_MAPPING = {
 // ============================================================================
 
 export const REVENUE_CONFIG = {
-  // Current products (active in Stripe)
-  creditPacks: {
-    boost: { credits: 100, price: 8.99, stripeProductId: 'prod_TvoDemv6UvLUc4' },
-    single: { credits: 200, price: 15.99, stripeProductId: 'prod_TuvcrwliHJ0mph' },
-    weekend: { credits: 500, price: 29.99, stripeProductId: 'prod_Tuvc6zstLq6b4V' },
-    explorer: { credits: 1200, price: 65.99, stripeProductId: 'prod_TvoD2IYQGay8FB' },
-    adventurer: { credits: 2500, price: 99.99, stripeProductId: 'prod_TuvcYuWNk7Tayn' },
+  // Current products (active in Stripe) — Flexible + Voyance Club
+  flexiblePacks: {
+    flex_100: { credits: 100, price: 9.00, stripeProductId: 'prod_TwV6DLU2wY20SS', expirationMonths: 12 },
+    flex_300: { credits: 300, price: 25.00, stripeProductId: 'prod_TwV6R1eib5j9Wq', expirationMonths: 12 },
+    flex_500: { credits: 500, price: 39.00, stripeProductId: 'prod_TwV6Z5Bmoox7SK', expirationMonths: 12 },
+  },
+  clubPacks: {
+    voyager: { baseCredits: 500, bonusCredits: 100, totalCredits: 600, price: 49.99, stripeProductId: 'prod_TwpdsFwCQpA4ew', bonusExpirationMonths: 6, baseExpiresNever: true },
+    explorer: { baseCredits: 1200, bonusCredits: 400, totalCredits: 1600, price: 89.99, stripeProductId: 'prod_TwpdzBlDJuJfbS', bonusExpirationMonths: 6, baseExpiresNever: true },
+    adventurer: { baseCredits: 2500, bonusCredits: 700, totalCredits: 3200, price: 149.99, stripeProductId: 'prod_TwpdxFwT7d6EIc', bonusExpirationMonths: 6, baseExpiresNever: true },
+  },
+  groupUnlocks: {
+    small: { maxTravelers: 3, price: 19.99, stripeProductId: 'prod_TwpdLWc2OUADWF' },
+    medium: { maxTravelers: 6, price: 34.99, stripeProductId: 'prod_TwpdnmZV4SWa88' },
+    large: { maxTravelers: 99, price: 79.99, stripeProductId: 'prod_TwpdEoxWuAKPOB' },
   },
   
   // Legacy (deprecated but still in DB)
@@ -196,25 +207,19 @@ export const REVENUE_CONFIG = {
     fixed: 0.30, // $0.30 per transaction
   },
   
-  // Conversion funnel:
-  // 1. First trip: bypasses credits (full 2-day enriched, one-time)
-  // 2. Subsequent trips: Day 1 preview always free (AI-only, no enrichment)
-  // 3. Monthly grant: 150cr/mo for ALL users (free + paid), 2-month expiry
-  // 4. Purchased credits never expire
-  // 5. User runs out of free credits → buys pack (conversion)
   freeTier: {
     freeTripDays: 2,
     freeEditsLimit: 5,
     oneFreeTripPerAccount: true,
-    acquisitionCostBlended: 0.278,     // One-time per new user
-    acquisitionCostWorstCase: 0.313,   // All 5 edits used
-    day1PreviewCost: 0.010,            // AI-only lightweight preview (always free)
-    monthlyGrantCredits: 150,          // Credits per month (ALL users)
-    monthlyGrantExpiry: 2,             // Months until free credits expire
-    purchasedNeverExpire: true,        // Purchased credits never expire
-    recurringCostIfUsed: 0.040,        // Cost if user spends all 150cr
-    usageRate: 0.60,                   // ~60% of users use their free credits
-    recurringCostPerMonth: 0.024,      // Blended: $0.04 × 60%
+    acquisitionCostBlended: 0.278,
+    acquisitionCostWorstCase: 0.313,
+    day1PreviewCost: 0.010,
+    monthlyGrantCredits: 150,
+    monthlyGrantExpiry: 2,
+    purchasedNeverExpire: true,
+    recurringCostIfUsed: 0.040,
+    usageRate: 0.60,
+    recurringCostPerMonth: 0.024,
   },
 } as const;
 
