@@ -65,7 +65,9 @@ import { BudgetTab } from '@/components/planner/budget/BudgetTab';
 import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useTripBudget } from '@/hooks/useTripBudget';
 import { syncItineraryToBudget } from '@/services/tripBudgetService';
-import { useEntitlements } from '@/hooks/useEntitlements';
+import { useEntitlements, canViewPremiumContentForDay } from '@/hooks/useEntitlements';
+import { LockedPhotoPlaceholder } from './LockedPhotoPlaceholder';
+import { LockedField } from './LockedField';
 import { useAuth } from '@/contexts/AuthContext';
 import { UpgradePrompt } from '@/components/checkout/UpgradePrompt';
 import { AddFlightInline, AddHotelInline } from './AddBookingInline';
@@ -2666,9 +2668,8 @@ export function EditorialItinerary({
               onSave={effectiveIsEditable ? handleSave : undefined}
               isSaving={isSaving}
               onExportPDF={(() => {
-                // PDF export is gated: requires Smart Finish, paid/unlocked trip, or fully generated (non-preview)
-                const tripIsFullyUnlocked = !isPreview && !isManualMode;
-                const canExport = smartFinishPurchased || isPaid || tripIsFullyUnlocked;
+                // PDF export gated by entitlements (requires purchase or Smart Finish, never free on first trip)
+                const canExport = entitlements?.can_export_pdf || smartFinishPurchased || isPaid || (!isPreview && !isManualMode);
                 if (!canExport) return undefined;
                 return async () => {
                 const { generateConsumerTripPdf } = await import('@/utils/consumerPdfGenerator');
@@ -2869,6 +2870,7 @@ export function EditorialItinerary({
                     isRegenerating={regeneratingDay === days[selectedDayIndex].dayNumber}
                     isEditable={effectiveIsEditable}
                     isPreview={effectiveIsPreview}
+                    canViewPremium={canViewPremiumContentForDay(entitlements, days[selectedDayIndex].dayNumber)}
                     tripId={tripId}
                      onUnlockTrip={() => setCreditNudge({ action: 'UNLOCK_DAY' })}
                      onUnlockDay={handleUnlockDay}
@@ -5178,6 +5180,7 @@ interface DayCardProps {
   isRegenerating: boolean;
   isEditable: boolean;
   isPreview?: boolean; // Preview mode - gates details
+  canViewPremium?: boolean; // Entitlement-based premium content gate
   tripId: string;
   highlightedActivityIds?: string[]; // Activities to highlight (from chatbot)
   getPaymentForItem: (itemType: 'flight' | 'hotel' | 'activity', itemId: string) => TripPayment | undefined;
@@ -5221,6 +5224,7 @@ function DayCard({
   isRegenerating,
   isEditable,
   isPreview = false,
+  canViewPremium: canViewPremiumProp,
   tripId,
   highlightedActivityIds = [],
   getPaymentForItem,
@@ -5252,6 +5256,8 @@ function DayCard({
   // Per-day preview: a day is preview only if the global flag is set AND the day itself is a preview
   // Fully generated days (e.g., first 2 free days) should NOT be gated even if other days are locked
   const dayIsPreview = isPreview && !!(day.metadata?.isPreview);
+  // Premium content visibility: use entitlement prop, fallback to !dayIsPreview for backward compat
+  const canViewPremium = canViewPremiumProp !== undefined ? canViewPremiumProp : !dayIsPreview;
   const allLocked = day.activities.every(a => a.isLocked);
   const totalCost = dayIsPreview ? 0 : getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry);
   
@@ -5447,6 +5453,7 @@ function DayCard({
                       isLast={activityIndex === day.activities.length - 1}
                       isEditable={isEditable}
                       isPreview={dayIsPreview}
+                      canViewPremium={canViewPremium}
                       travelers={travelers}
                       budgetTier={budgetTier}
                       tripCurrency={tripCurrency}
@@ -5567,6 +5574,7 @@ interface ActivityRowProps {
   isLast: boolean;
   isEditable: boolean;
   isPreview?: boolean;
+  canViewPremium?: boolean;
   travelers: number;
   budgetTier?: string;
   tripCurrency: string;
@@ -5604,6 +5612,7 @@ function ActivityRow({
   isLast,
   isEditable,
   isPreview = false,
+  canViewPremium = true,
   travelers,
   budgetTier,
   tripCurrency,
@@ -5752,7 +5761,7 @@ function ActivityRow({
   
   // Fetch real photos for most activities, including hotels (but not generic check-ins without hotel name)
   const hasHotelName = hotelName && hotelName.length > 3 && !hotelName.toLowerCase().includes('hotel check');
-  const shouldFetchRealPhoto = !isPreview && showThumbnail && !isAirport && (hasHotelName || (!isCheckIn && !isAccommodation));
+  const shouldFetchRealPhoto = canViewPremium && showThumbnail && !isAirport && (hasHotelName || (!isCheckIn && !isAccommodation));
   
   const { imageUrl: fetchedImageUrl, loading: imageLoading } = useActivityImage(
     isHotelActivity && hasHotelName ? `${hotelName} hotel` : effectiveSearchTerm,
@@ -5842,7 +5851,9 @@ function ActivityRow({
 
       {/* Thumbnail Column - Hidden on mobile, consistent width on desktop */}
       <div className="hidden sm:block w-24 h-24 shrink-0 border-r border-border bg-muted/30 overflow-hidden relative">
-        {showThumbnail && thumbnailUrl && !thumbnailError ? (
+        {!canViewPremium && showThumbnail ? (
+          <LockedPhotoPlaceholder />
+        ) : showThumbnail && thumbnailUrl && !thumbnailError ? (
           <>
             <img
               src={thumbnailUrl}
@@ -5927,7 +5938,7 @@ function ActivityRow({
                   activityTypeLower.includes(t) || titleLower.includes(t)
                 ) || titleLower.includes('check in') || titleLower.includes('check out');
                 
-                if (isNonReviewable || aiLocked) return null;
+                if (isNonReviewable || aiLocked || !canViewPremium) return null;
                 
                 // Show rating badge if we have a rating, otherwise show "See Reviews" button
                 // Always allow viewing reviews for reviewable activities - the edge function fetches them on-demand
@@ -5983,18 +5994,15 @@ function ActivityRow({
                   <>
                     <h4 className="font-serif text-base sm:text-lg font-medium text-foreground leading-snug">{venue}</h4>
                     <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 italic line-clamp-1">{activityTitle}</p>
-                    {/* Address gated in preview */}
-                    {!isPreview && hasAddress && address !== venue && (
+                    {/* Address gated by premium access */}
+                    {canViewPremium && hasAddress && address !== venue && (
                       <div className="flex items-start gap-1.5 mt-1.5 text-xs text-muted-foreground">
                         <MapPin className="h-3 w-3 text-primary/60 mt-0.5 shrink-0" />
                         <span className="leading-snug line-clamp-2 sm:line-clamp-none">{address}</span>
                       </div>
                     )}
-                    {isPreview && (
-                      <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground/60 italic">
-                        <Lock className="h-3 w-3" />
-                        <span>Address available after unlock</span>
-                      </div>
+                    {!canViewPremium && (
+                      <LockedField icon={MapPin} label="Address available after unlock" className="mt-2" />
                     )}
                   </>
                 );
@@ -6015,8 +6023,8 @@ function ActivityRow({
                     <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 line-clamp-2 leading-relaxed">{activity.description}</p>
                   )}
 
-                  {/* Location gated in preview */}
-                  {!isPreview && (activity.location?.name || hasAddress) && (
+                  {/* Location gated by premium access */}
+                  {canViewPremium && (activity.location?.name || hasAddress) && (
                     <div className="mt-1.5">
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <MapPin className="h-3 w-3 text-primary/60 shrink-0" />
@@ -6029,25 +6037,22 @@ function ActivityRow({
                       )}
                     </div>
                   )}
-                  {isPreview && (
-                    <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground/60 italic">
-                      <Lock className="h-3 w-3" />
-                      <span>Details available after unlock</span>
-                    </div>
+                  {!canViewPremium && (
+                    <LockedField icon={MapPin} label="Details available after unlock" className="mt-2" />
                   )}
                 </>
               );
             })()}
             {/* Voyance Pick — founder-curated endorsement */}
-            {!isPreview && activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
+            {canViewPremium && activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
               <VoyancePickCallout tip={activity.tips} />
             )}
-            {/* Voyance Insight - Local knowledge (gated in preview) — skip if already showing Pick callout */}
-            {!isPreview && activity.tips && !activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
+            {/* Voyance Insight - Local knowledge (gated by premium) — skip if already showing Pick callout */}
+            {canViewPremium && activity.tips && !activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
               <VoyanceInsight tip={activity.tips} />
             )}
-            {/* Transportation to next (gated in preview) */}
-            {!isPreview && activity.timeBlockType !== 'downtime' && activity.transportation && !isLast && (
+            {/* Transportation to next (gated by premium) */}
+            {canViewPremium && activity.timeBlockType !== 'downtime' && activity.transportation && !isLast && (
               <div data-tour="transit-badge">
                 <TransitBadge 
                   transportation={activity.transportation}
@@ -6067,7 +6072,7 @@ function ActivityRow({
 
           {/* Actions & Cost */}
           <div className="flex flex-col items-end gap-1.5 sm:gap-2 ml-2 sm:ml-4 shrink-0">
-            {isPreview ? (
+            {!canViewPremium ? (
               /* Preview: show locked cost placeholder */
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60">
                 <Lock className="h-3 w-3" />
