@@ -2048,8 +2048,11 @@ export function getItineraryBySlug(slug: string): SampleItineraryData {
     if (slug.includes('kyoto') || slug.includes('japan')) destination = 'kyoto-cultural';
     else if (slug.includes('santorini') || slug.includes('greece')) destination = 'santorini-romance';
     else if (slug.includes('iceland') || slug.includes('reykjavik')) destination = 'iceland-adventure';
-    else if (slug.includes('bali')) destination = 'bali-wellness';
     else if (slug.includes('tokyo')) destination = 'tokyo-modern';
+    else if (slug.includes('bali')) destination = 'bali-wellness';
+    else if (slug.includes('denver')) destination = 'tokyo-modern'; // TODO: create Denver sample
+    else if (slug.includes('new-orleans') || slug.includes('nola')) destination = 'santorini-romance'; // TODO: create NOLA sample
+    else if (slug.includes('rome')) destination = 'kyoto-cultural'; // TODO: create Rome sample
   }
   
   return SAMPLE_ITINERARIES[destination] || SAMPLE_ITINERARIES['bali-wellness'];
