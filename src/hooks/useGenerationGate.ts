@@ -113,7 +113,7 @@ export function useGenerationGate() {
     if (user?.id) {
       const isFirstTrip = await checkIsFirstTrip(user.id, params.tripId);
       if (isFirstTrip) {
-        console.log('[GenerationGate] First trip detected — granting free 2-day generation');
+        console.log('[GenerationGate] First trip detected — generating ALL days, content gated on 3+');
         return {
           mode: 'full',
           tripCost: 0,
@@ -123,7 +123,7 @@ export function useGenerationGate() {
           recommendedPack: null,
           isFirstTrip: true,
           requestedDays: params.days,
-          generateDays: Math.min(params.days, 2), // First trip: only 2 days free
+          generateDays: params.days, // Generate ALL days; premium content gated via entitlements
         };
       }
     }
