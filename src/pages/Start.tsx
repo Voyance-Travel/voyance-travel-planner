@@ -1442,6 +1442,20 @@ export default function Start() {
     }
   }, [searchParams, user]);
 
+  // Handle return from auth — restore all fields from draft
+  useEffect(() => {
+    if (user && savedDraft && !searchParams.get('fromQuiz')) {
+      if (savedDraft.outboundFlight) setOutboundFlight(savedDraft.outboundFlight);
+      if (savedDraft.returnFlight) setReturnFlight(savedDraft.returnFlight);
+      if (savedDraft.showReturnFlight) setShowReturnFlight(savedDraft.showReturnFlight);
+      if (savedDraft.hotelChoice) setHotelChoice(savedDraft.hotelChoice);
+      if (savedDraft.manualHotel) setManualHotel(savedDraft.manualHotel);
+      if (savedDraft.isFirstTimeVisitor !== undefined) setIsFirstTimeVisitor(savedDraft.isFirstTimeVisitor);
+      if (savedDraft.mustDoActivities) setMustDoActivities(savedDraft.mustDoActivities);
+      if (savedDraft.currentStep) setCurrentStep(savedDraft.currentStep);
+    }
+  }, [user]);
+
   // Check draft limit
   useEffect(() => {
     if (!canCreateDraft && user) {
@@ -1465,14 +1479,44 @@ export default function Start() {
     try {
       // Check if user needs to authenticate
       if (!user) {
-        setBasics({
-          destination: destinationSelection.cityName,
+        // Save all current input to sessionStorage so it survives the auth redirect
+        const dest = isMultiCity
+          ? (multiCityDestinations[0]?.city || destinationSelection.cityName)
+          : destinationSelection.cityName;
+        const draft = {
+          destination: dest,
           startDate: format(startDate, 'yyyy-MM-dd'),
           endDate: format(endDate, 'yyyy-MM-dd'),
           travelers,
           budgetAmount,
+          tripType,
+          celebrationDay,
+          isMultiCity,
+          multiCityDestinations,
+          multiCityTransports,
+          outboundFlight: outboundFlight.arrivalTime ? outboundFlight : undefined,
+          returnFlight: showReturnFlight && returnFlight.departureTime ? returnFlight : undefined,
+          showReturnFlight,
+          hotelChoice,
+          manualHotel: hotelChoice === 'own' ? manualHotel : undefined,
+          isFirstTimeVisitor,
+          mustDoActivities,
+          currentStep,
+        };
+        sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+        setBasics({
+          destination: dest,
+          startDate: draft.startDate,
+          endDate: draft.endDate,
+          travelers,
+          budgetAmount,
+          isMultiCity,
+          destinations: multiCityDestinations,
+          interCityTransports: multiCityTransports,
         });
-        navigate(ROUTES.SIGNUP + '?redirect=' + ROUTES.PLANNER.ITINERARY);
+        saveReturnPath('/start');
+        setIsSubmitting(false);
+        setShowAuthGate(true);
         return;
       }
 
