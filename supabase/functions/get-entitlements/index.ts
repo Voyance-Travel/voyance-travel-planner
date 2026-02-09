@@ -38,7 +38,7 @@ const PLAN_LIMITS = {
     flightHotelOptimization: false,
     groupBudgeting: false,
     coEditCollaboration: false,
-    routeOptimization: false,
+    routeOptimization: true,
     weatherTracker: true,
   },
   monthly: {
