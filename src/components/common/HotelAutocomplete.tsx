@@ -65,6 +65,9 @@ export function HotelAutocomplete({
     const newValue = e.target.value;
     setInputValue(newValue);
 
+    // Always sync manual typing to parent so Save button works
+    onChange({ name: newValue, address: '' });
+
     // Clear previous debounce
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
