@@ -426,6 +426,8 @@ serve(async (req) => {
     } catch (err: unknown) {
       const error = err as Error & { code?: string; required?: number; available?: number };
       if (error.code === 'INSUFFICIENT_CREDITS') {
+        // Return 200 so supabase.functions.invoke puts response in `data` (not `error`)
+        // Frontend checks data.error === 'Insufficient credits' to trigger the modal
         return new Response(
           JSON.stringify({
             error: 'Insufficient credits',
@@ -433,7 +435,7 @@ serve(async (req) => {
             available: error.available,
             action,
           }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       throw err;

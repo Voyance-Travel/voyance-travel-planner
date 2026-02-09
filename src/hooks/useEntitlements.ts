@@ -198,28 +198,35 @@ export function useEntitlements(tripId?: string) {
   const query = useQuery({
     queryKey: ['entitlements', user?.id, tripId],
     queryFn: async (): Promise<EntitlementsResponse> => {
+      console.log('[Entitlements] Fetching entitlements', { userId: user?.id, tripId });
       const { data, error } = await supabase.functions.invoke('get-entitlements', {
         body: tripId ? { tripId } : undefined,
       });
       
       if (error) {
         const errorBody = error.message || '';
+        console.error('[Entitlements] Error fetching:', errorBody);
         if (errorBody.includes('401') || errorBody.includes('Session expired') || errorBody.includes('invalid')) {
-          console.warn('[Entitlements] Session expired, user may need to re-authenticate');
+          console.warn('[Entitlements] Session expired, returning defaults');
           return getDefaultEntitlements(user?.id || '');
         }
-        throw error;
+        // For ANY error, return defaults rather than throwing
+        // This prevents all days from locking when the function is temporarily unavailable
+        console.warn('[Entitlements] Returning defaults due to error');
+        return getDefaultEntitlements(user?.id || '');
       }
+      console.log('[Entitlements] Received:', { 
+        is_first_trip: data?.is_first_trip, 
+        has_completed_purchase: data?.has_completed_purchase,
+        credits_balance: data?.credits_balance,
+        can_view_photos: data?.can_view_photos,
+      });
       return data;
     },
     enabled: isAuthenticated && !!user?.id,
     staleTime: 60000,
     refetchOnWindowFocus: true,
-    retry: (failureCount, error) => {
-      const errorMsg = error?.message || '';
-      if (errorMsg.includes('401') || errorMsg.includes('Session expired')) return false;
-      return failureCount < 2;
-    },
+    retry: 2,
   });
 
   return {
@@ -245,7 +252,12 @@ export function canViewPremiumContentForDay(
   entitlements: EntitlementsResponse | undefined,
   dayNumber: number
 ): boolean {
-  if (!entitlements) return false;
+  // If entitlements haven't loaded yet, assume first-trip for days 1-2
+  // This prevents flash-of-locked-content during loading
+  if (!entitlements) {
+    console.warn('[canViewPremium] Entitlements not loaded, defaulting days 1-2 as viewable');
+    return dayNumber <= 2;
+  }
   if (entitlements.has_completed_purchase) return true;
   if (entitlements.trip_has_smart_finish) return true;
   if (entitlements.is_first_trip && dayNumber <= 2) return true;
