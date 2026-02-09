@@ -4590,8 +4590,14 @@ DO NOT leave these fields empty or omit them. They are the core intelligence lay
 
 DATE: ${date}
 TRAVELERS: ${context.travelers}
-BUDGET: ${context.budgetTier || 'standard'} (~$${context.dailyBudget}/day per person)${context.actualDailyBudgetPerPerson ? `
-⚠️ HARD BUDGET CAP: The user has set a real budget. Total activity spending for this day MUST NOT exceed ~$${Math.round(context.actualDailyBudgetPerPerson * context.travelers)}/day ($${context.actualDailyBudgetPerPerson}/person). Choose activities and dining that fit within this cap. If an activity is expensive, balance with free/cheap alternatives elsewhere in the day.` : ''}
+BUDGET: ${context.budgetTier || 'standard'} (~$${context.dailyBudget}/day per person)${context.actualDailyBudgetPerPerson != null ? `
+⚠️ HARD BUDGET CAP: The user has set a real budget of ~$${Math.round(context.actualDailyBudgetPerPerson * context.travelers)}/day total ($${context.actualDailyBudgetPerPerson}/person) for activities.
+${context.actualDailyBudgetPerPerson < 10 ? `🚨 EXTREMELY TIGHT BUDGET: This budget is unrealistically low for ${context.destination || 'this destination'}. Do your best:
+- Prioritize FREE activities: parks, temples, markets, viewpoints, walking tours, beaches, street art, public plazas.
+- For meals, suggest the cheapest realistic options: street food stalls, convenience stores, budget eateries. Use real local prices.
+- Do NOT invent fake low prices. If a typical meal costs $8-12 in this city, say so — do not claim $2.
+- Include a "budget_note" field in your response: a 1-sentence honest note like "This budget is very tight for Tokyo — we've maximized free activities but meals will be the main expense."
+- Still aim to fill the day with great experiences — many of the best travel moments are free.` : context.actualDailyBudgetPerPerson < 30 ? `⚡ TIGHT BUDGET: This is a lean budget. Lean heavily on free attractions, street food, and self-guided exploration. Limit paid activities to 1-2 per day max. Use realistic local prices — do not underestimate costs to fit the budget.` : `Stay within this cap. If an activity is expensive, balance with free/cheap alternatives elsewhere in the day.`}` : ''}
 ARCHETYPE: ${context.travelerDNA?.primaryArchetype || 'balanced'}
 MAX ACTIVITIES: ${maxActivitiesFromArchetype} (from archetype day structure - this is a HARD LIMIT)
 ${multiCityPrompt}
@@ -8622,8 +8628,9 @@ ${voyancePicksPrompt}`;
 
 Date: ${date}
 Travelers: ${travelers}
-Budget: ${effectiveBudgetTier}${actualDailyBudgetPerPerson ? ` (~$${actualDailyBudgetPerPerson}/day per person)
-⚠️ HARD BUDGET CAP: The user has set a real budget. Total activity spending for this day MUST NOT exceed ~$${Math.round(actualDailyBudgetPerPerson * (travelers || 1))}/day ($${actualDailyBudgetPerPerson}/person). Choose activities and dining that fit within this cap.` : ''}
+Budget: ${effectiveBudgetTier}${actualDailyBudgetPerPerson != null ? ` (~$${actualDailyBudgetPerPerson}/day per person)
+⚠️ HARD BUDGET CAP: The user has set a real budget of ~$${Math.round(actualDailyBudgetPerPerson * (travelers || 1))}/day total ($${actualDailyBudgetPerPerson}/person) for activities.
+${actualDailyBudgetPerPerson < 10 ? `🚨 EXTREMELY TIGHT BUDGET: Do your best — prioritize FREE activities (parks, temples, markets, viewpoints, walking tours). For meals, suggest cheapest realistic options (street food, convenience stores). Do NOT invent fake low prices — use real local costs. Include a "budget_note" field with an honest 1-sentence note about budget feasibility.` : actualDailyBudgetPerPerson < 30 ? `⚡ TIGHT BUDGET: Lean heavily on free attractions, street food, self-guided exploration. Limit paid activities to 1-2/day. Use realistic local prices.` : `Stay within this cap. Balance expensive activities with free alternatives.`}` : ''}
 ARCHETYPE: ${primaryArchetype}
 MAX ACTIVITIES: ${maxActivitiesFromArchetype} (from archetype day structure - HARD LIMIT)
 ${preferences?.pace ? `Pace: ${preferences.pace}` : ''}
