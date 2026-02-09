@@ -1459,7 +1459,7 @@ export default function Start() {
   }, [canCreateDraft, user]);
 
   // Handle final submission
-  const handleSubmit = async (skipDNACheck = false) => {
+  const handleSubmit = async () => {
     const primaryDestination = isMultiCity
       ? (multiCityDestinations[0]?.city || '')
       : destinationSelection.cityName;
@@ -1472,12 +1472,7 @@ export default function Start() {
     setIsSubmitting(true);
 
     try {
-      // Check if user has Travel DNA — prompt if not
-      if (!skipDNACheck && !user.quizCompleted) {
-        setIsSubmitting(false);
-        setShowDNAPrompt(true);
-        return;
-      }
+      // DNA check now happens at Step 1→2 transition, not here
 
       // Build flight selection data
       const flightSelection = outboundFlight.arrivalTime ? {
@@ -1734,8 +1729,13 @@ export default function Start() {
                       }
                     }}
                     onContinue={() => {
-                      setCurrentStep(2);
-                      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+                      // Show DNA prompt between Step 1 and Step 2 if user hasn't taken quiz
+                      if (!user.quizCompleted) {
+                        setShowDNAPrompt(true);
+                      } else {
+                        setCurrentStep(2);
+                        window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+                      }
                     }}
                     onManualAuthRequired={() => {
                       // User is already authenticated via ProtectedRoute, no-op
@@ -1785,16 +1785,16 @@ export default function Start() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
-              One last thing before we generate this
+              Want a personalized trip?
             </DialogTitle>
             <DialogDescription className="text-sm leading-relaxed pt-2">
-              We don't have your Travel DNA yet - we don't know what makes you, <em>you</em>. 
-              This trip probably won't be as customized without it.
+              We don't have your Travel DNA yet — a quick 5-minute quiz lets us tailor 
+              every recommendation to your pace, style, and interests.
             </DialogDescription>
           </DialogHeader>
           <div className="py-2 text-sm text-muted-foreground">
-            Take a quick 5-minute quiz so we can make this trip truly yours, personalized to your pace, 
-            style, and the things you actually care about.
+            You can skip this and still build a great trip, but personalized itineraries 
+            are significantly more accurate.
           </div>
           <DialogFooter className="flex-col gap-2 sm:flex-col">
             <Button
@@ -1821,7 +1821,7 @@ export default function Start() {
                   manualHotel,
                   isFirstTimeVisitor,
                   mustDoActivities,
-                  currentStep: 2,
+                  currentStep: 1,
                 };
                 sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
                 sessionStorage.setItem('postQuizRedirect', '/start?fromQuiz=true');
@@ -1838,10 +1838,11 @@ export default function Start() {
               className="w-full text-muted-foreground"
               onClick={() => {
                 setShowDNAPrompt(false);
-                handleSubmit(true);
+                setCurrentStep(2);
+                window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
               }}
             >
-              Continue without personalizing
+              Skip for now
             </Button>
           </DialogFooter>
         </DialogContent>
