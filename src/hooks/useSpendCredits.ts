@@ -47,6 +47,13 @@ interface SpendCreditsResponse {
     purchased: number;
     free: number;
   };
+  // Free cap info (from tier-aware spend-credits)
+  freeCapUsed?: boolean;
+  usageCount?: number;
+  freeCap?: number;
+  // Group cap info
+  groupCapUsed?: boolean;
+  groupCap?: number;
 }
 
 export function useSpendCredits() {
@@ -94,9 +101,13 @@ export function useSpendCredits() {
 
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       if (user?.id) {
         queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
+        queryClient.invalidateQueries({ queryKey: ['entitlements', user.id] });
+        if (variables.tripId) {
+          queryClient.invalidateQueries({ queryKey: ['action-cap', user.id, variables.tripId] });
+        }
       }
     },
     onError: (error: Error) => {
