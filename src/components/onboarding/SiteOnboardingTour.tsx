@@ -121,33 +121,43 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
     },
   ];
 
-  // Request slot from popup coordination on first visit only
-  // Re-check on route changes so the tour can show after quiz completion
+  // Robust polling: keep trying to acquire the popup slot every 2s
+  // This avoids fragile dependency on the queue's setTimeout chain
   useEffect(() => {
     if (!user) return;
-    if (isVisible) return; // Already showing
-    const alreadyCompleted = localStorage.getItem(STORAGE_KEY) === 'true';
-    if (alreadyCompleted) return;
+    if (isVisible) return;
+    if (localStorage.getItem(STORAGE_KEY) === 'true') return;
 
-    const timer = setTimeout(() => {
+    // Initial attempt after a short delay
+    const initialTimer = setTimeout(() => {
       const allowed = requestPopup('site_tour');
       if (allowed) {
         setIsVisible(true);
       }
     }, 1500);
-    return () => clearTimeout(timer);
-  }, [user, requestPopup, location.pathname]);
 
-  // React to being granted from the popup queue (e.g. after welcome modal closes)
-  const activePopup = usePopupCoordination((s) => s.activePopup);
-  useEffect(() => {
-    if (activePopup === 'site_tour' && !isVisible) {
-      const alreadyCompleted = localStorage.getItem(STORAGE_KEY) === 'true';
-      if (!alreadyCompleted && user) {
-        setIsVisible(true);
+    // Fallback: poll every 2s in case the initial attempt was blocked by welcome modal
+    const interval = setInterval(() => {
+      if (localStorage.getItem(STORAGE_KEY) === 'true') {
+        clearInterval(interval);
+        return;
       }
-    }
-  }, [activePopup, isVisible, user]);
+      const state = usePopupCoordination.getState();
+      // Only try when no other popup is active
+      if (!state.activePopup) {
+        const allowed = state.requestPopup('site_tour');
+        if (allowed) {
+          setIsVisible(true);
+          clearInterval(interval);
+        }
+      }
+    }, 2000);
+
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+    };
+  }, [user, isVisible, requestPopup]);
 
   // Navigate to route when step changes
   useEffect(() => {
