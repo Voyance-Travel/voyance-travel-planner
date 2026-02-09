@@ -98,7 +98,7 @@ import { TransitBadge } from './TransitBadge';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { useActionCap } from '@/hooks/useActionCap';
 import { AddActivityModal } from './AddActivityModal';
-import { ImportActivitiesModal } from './ImportActivitiesModal';
+import { ImportActivitiesModal, type ImportMode } from './ImportActivitiesModal';
 import { SmartFinishBanner } from './SmartFinishBanner';
 import { OptionGroupBlock } from './OptionGroupBlock';
 import { ParsedTripNotesSection } from './ParsedTripNotesSection';
@@ -2264,7 +2264,7 @@ export function EditorialItinerary({
     toast.success('Activity added!');
   }, [tripCurrency]);
 
-  const handleImportActivities = useCallback((dayIndex: number, activities: Array<Partial<EditorialActivity>>) => {
+  const handleImportActivities = useCallback((dayIndex: number, activities: Array<Partial<EditorialActivity>>, mode: ImportMode = 'merge') => {
     const newActivities = activities.map((activity, i) => ({
       id: `import-${Date.now()}-${i}`,
       title: activity.title || 'Imported Activity',
@@ -2281,11 +2281,26 @@ export function EditorialItinerary({
 
     setDays(prev => prev.map((day, idx) => {
       if (idx !== dayIndex) return day;
-      return { ...day, activities: [...day.activities, ...newActivities] };
+      if (mode === 'replace') {
+        // Start Over: replace all activities with imported ones
+        return { ...day, activities: newActivities };
+      }
+      // Merge: combine existing + imported, sort by startTime
+      const combined = [...day.activities, ...newActivities];
+      combined.sort((a, b) => {
+        const timeA = a.startTime || '';
+        const timeB = b.startTime || '';
+        if (!timeA && !timeB) return 0;
+        if (!timeA) return 1;
+        if (!timeB) return -1;
+        return timeA.localeCompare(timeB);
+      });
+      return { ...day, activities: combined };
     }));
     setHasChanges(true);
     setImportModal(null);
-    toast.success(`${newActivities.length} activities imported!`);
+    const verb = mode === 'replace' ? 'replaced with' : 'merged';
+    toast.success(`${newActivities.length} activities ${verb}!`);
   }, [tripCurrency]);
 
   // Update activity time
@@ -3465,8 +3480,9 @@ export function EditorialItinerary({
       <ImportActivitiesModal
         isOpen={!!importModal}
         onClose={() => setImportModal(null)}
-        onImport={(activities) => importModal && handleImportActivities(importModal.dayIndex, activities)}
+        onImport={(activities, mode) => importModal && handleImportActivities(importModal.dayIndex, activities, mode)}
         currency={tripCurrency}
+        existingActivityCount={importModal ? (days[importModal.dayIndex]?.activities?.length ?? 0) : 0}
       />
 
       {/* Time Edit Modal */}
