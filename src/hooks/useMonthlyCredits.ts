@@ -8,6 +8,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 
+// Session-level dedup key to prevent double-fire in StrictMode
+const MONTHLY_CREDITS_SESSION_KEY = 'voyance_monthly_credits_checked';
+
 export function useMonthlyCredits() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -17,7 +20,12 @@ export function useMonthlyCredits() {
     // Only check once per session and only if user is logged in
     if (!user || hasChecked.current) return;
     
+    // Session-level dedup (survives StrictMode double-mount)
+    const sessionKey = `${MONTHLY_CREDITS_SESSION_KEY}_${user.id}`;
+    if (sessionStorage.getItem(sessionKey)) return;
+    
     hasChecked.current = true;
+    sessionStorage.setItem(sessionKey, Date.now().toString());
 
     const checkMonthlyCredits = async () => {
       try {
