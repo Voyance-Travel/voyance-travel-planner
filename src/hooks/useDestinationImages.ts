@@ -6,7 +6,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { getDestinationImages as getCuratedImages, hasCuratedImages } from '@/utils/destinationImages';
 import { getDestinationImages as getAPIImages } from '@/services/destinationImagesAPI';
-import { supabase } from '@/integrations/supabase/client';
 
 interface DestinationImagesResult {
   heroImage: string | null;
@@ -196,42 +195,10 @@ export function useDestinationImages(
 
     let cancelled = false;
 
-    // Helper: fetch one landmark image via backend using points_of_interest
-    async function fetchLandmarkFallback(heroUrl: string): Promise<string> {
-      try {
-        // Query destinations table for POIs
-        const { data: dest } = await supabase
-          .from('destinations')
-          .select('points_of_interest')
-          .ilike('city', cleanDestination)
-          .maybeSingle();
-
-        const pois = dest?.points_of_interest;
-        if (Array.isArray(pois) && pois.length > 0) {
-          // Pick a POI deterministically using the seed
-          const idx = hashString(seedKey || cleanDestination) % pois.length;
-          const poiName = pois[idx];
-
-          // Call backend to fetch an image for that POI
-          const imgs = await getAPIImages({
-            destination: `${poiName}, ${cleanDestination}`,
-            imageType: 'hero',
-            limit: 2,
-          });
-
-          // Find first loadable that isn't the hero
-          for (const i of imgs) {
-            if (i.url === heroUrl) continue;
-            // eslint-disable-next-line no-await-in-loop
-            if (await isUrlLoadable(i.url)) {
-              return i.url;
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('[useDestinationImages] Landmark fallback failed', e);
-      }
-      // Ultimate fallback: gradient
+    // Helper: get a second distinct image, preferring curated over unreliable API
+    // The API landmark fallback was returning random/irrelevant images, so we now
+    // skip it entirely and use a styled gradient as the mid-page accent instead.
+    function getMidFallback(): string {
       return generateGradientDataUrl(cleanDestination, 1);
     }
 
@@ -250,10 +217,9 @@ export function useDestinationImages(
             `${seed}|curated`
           );
 
-          // If mid is null (no distinct second image), fetch a landmark photo
           let mid = chosen.mid;
           if (!mid && chosen.hero) {
-            mid = await fetchLandmarkFallback(chosen.hero);
+            mid = getMidFallback();
           }
 
           if (!cancelled) {
@@ -282,7 +248,7 @@ export function useDestinationImages(
 
         let mid = chosen.mid;
         if (!mid && chosen.hero) {
-          mid = await fetchLandmarkFallback(chosen.hero);
+          mid = getMidFallback();
         }
 
         setHeroImage(chosen.hero);
