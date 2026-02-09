@@ -20,31 +20,40 @@ export function WelcomeBonusManager() {
   
   const { requestPopup, closePopup, hasActiveModal } = usePopupCoordination();
 
+  // Helper to check if welcome modal should be allowed
+  const shouldShowWelcome = () => {
+    if (!user) return false;
+    if (sessionStorage.getItem(POPUP_STORAGE.WELCOME_SHOWN)) return false;
+    if (localStorage.getItem('voyance_welcome_bonus_claimed')) return false;
+    if (hasClaimedBonus('welcome')) return false;
+    return true;
+  };
+
   useEffect(() => {
     // Wait for auth and bonus data to fully load
     if (authLoading || bonusLoading || !user) return;
+    if (!shouldShowWelcome()) return;
 
-    // Check if we've already shown the welcome modal this session
-    const welcomeShown = sessionStorage.getItem(POPUP_STORAGE.WELCOME_SHOWN);
-    if (welcomeShown) return;
-
-    // Also check localStorage to prevent re-showing across sessions after claim
-    const welcomeClaimed = localStorage.getItem('voyance_welcome_bonus_claimed');
-    if (welcomeClaimed) return;
-
-    // Check if user hasn't claimed welcome bonus yet (new user)
-    if (!hasClaimedBonus('welcome')) {
-      // Request permission from coordination system
-      const timer = setTimeout(() => {
-        const allowed = requestPopup('welcome_credits');
-        if (allowed) {
-          setShowWelcomeModal(true);
-          sessionStorage.setItem(POPUP_STORAGE.WELCOME_SHOWN, 'true');
-        }
-      }, 1200); // Allow extra time for bonus query to settle
-      return () => clearTimeout(timer);
-    }
+    // Request permission from coordination system immediately
+    // Welcome has highest priority (1) so it should win any race
+    const timer = setTimeout(() => {
+      const allowed = requestPopup('welcome_credits');
+      if (allowed) {
+        setShowWelcomeModal(true);
+        sessionStorage.setItem(POPUP_STORAGE.WELCOME_SHOWN, 'true');
+      }
+    }, 500); // Fire quickly - welcome has highest priority
+    return () => clearTimeout(timer);
   }, [user, authLoading, bonusLoading, hasClaimedBonus, requestPopup]);
+
+  // React to being granted from the popup queue (e.g. if another popup grabbed the slot first)
+  const activePopup = usePopupCoordination((s) => s.activePopup);
+  useEffect(() => {
+    if (activePopup === 'welcome_credits' && !showWelcomeModal && shouldShowWelcome()) {
+      setShowWelcomeModal(true);
+      sessionStorage.setItem(POPUP_STORAGE.WELCOME_SHOWN, 'true');
+    }
+  }, [activePopup, showWelcomeModal, user, hasClaimedBonus]);
 
   const handleCloseWelcome = () => {
     setShowWelcomeModal(false);
