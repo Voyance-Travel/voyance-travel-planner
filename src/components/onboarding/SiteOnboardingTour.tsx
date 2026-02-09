@@ -121,12 +121,25 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
     },
   ];
 
-  // Robust polling: keep trying to acquire the popup slot every 2s
-  // This avoids fragile dependency on the queue's setTimeout chain
+  // Clear stale tour flags when a NEW user signs in
+  // This handles the case where a previous account on the same browser
+  // already completed the tour — the new user should see it fresh
+  useEffect(() => {
+    if (!user) return;
+    const completedForUserId = localStorage.getItem(STORAGE_KEY);
+    // Store which user ID completed the tour, not just "true"
+    // If stored value is "true" (legacy) or a different user ID, clear it
+    if (completedForUserId && completedForUserId !== user.id) {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }, [user]);
+
+  // Robust polling: keep trying to acquire the popup slot
   useEffect(() => {
     if (!user) return;
     if (isVisible) return;
-    if (localStorage.getItem(STORAGE_KEY) === 'true') return;
+    const completedVal = localStorage.getItem(STORAGE_KEY);
+    if (completedVal === user.id) return; // This user already completed tour
 
     // Initial attempt after a short delay
     const initialTimer = setTimeout(() => {
@@ -134,16 +147,16 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
       if (allowed) {
         setIsVisible(true);
       }
-    }, 1500);
+    }, 2000);
 
-    // Fallback: poll every 2s in case the initial attempt was blocked by welcome modal
+    // Fallback: poll every 2s in case the initial attempt was blocked
     const interval = setInterval(() => {
-      if (localStorage.getItem(STORAGE_KEY) === 'true') {
+      const val = localStorage.getItem(STORAGE_KEY);
+      if (val === user?.id) {
         clearInterval(interval);
         return;
       }
       const state = usePopupCoordination.getState();
-      // Only try when no other popup is active
       if (!state.activePopup) {
         const allowed = state.requestPopup('site_tour');
         if (allowed) {
@@ -151,7 +164,7 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
           clearInterval(interval);
         }
       }
-    }, 2000);
+    }, 2500);
 
     return () => {
       clearTimeout(initialTimer);
@@ -254,19 +267,19 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
   }, [currentStep]);
 
   const handleComplete = useCallback((destination: 'quiz' | 'start' = 'start') => {
-    localStorage.setItem(STORAGE_KEY, 'true');
+    if (user?.id) localStorage.setItem(STORAGE_KEY, user.id);
     setIsVisible(false);
     closePopup('site_tour');
     onComplete?.();
     navigate(destination === 'quiz' ? ROUTES.QUIZ : ROUTES.START);
-  }, [onComplete, navigate, closePopup]);
+  }, [onComplete, navigate, closePopup, user]);
 
   const handleSkip = useCallback(() => {
-    localStorage.setItem(STORAGE_KEY, 'true');
+    if (user?.id) localStorage.setItem(STORAGE_KEY, user.id);
     setIsVisible(false);
     closePopup('site_tour');
     onComplete?.();
-  }, [onComplete, closePopup]);
+  }, [onComplete, closePopup, user]);
 
   if (!isVisible) return null;
 
@@ -451,7 +464,8 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
  * Hook to check if site tour has been completed
  */
 export function useSiteTourCompleted(): boolean {
-  return localStorage.getItem(STORAGE_KEY) === 'true';
+  // Returns true if the storage key has any value (legacy 'true' or user ID)
+  return localStorage.getItem(STORAGE_KEY) !== null;
 }
 
 /**
