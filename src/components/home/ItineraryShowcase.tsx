@@ -118,7 +118,8 @@ const SAMPLE_ITINERARIES = [
 
 const DESTINATIONS = ['Tokyo', 'Denver', 'New Orleans', 'Bali', 'Rome'];
 
-
+// Destinations with real sample itinerary data
+const HAS_REAL_SAMPLE = new Set(['tokyo-slow', 'bali-adventurer']);
 function ItineraryCard({ itinerary }: { itinerary: typeof SAMPLE_ITINERARIES[0] }) {
   return (
     <motion.div
@@ -205,12 +206,14 @@ function ItineraryCard({ itinerary }: { itinerary: typeof SAMPLE_ITINERARIES[0] 
         
         {/* CTAs */}
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="flex-1" asChild>
-            <Link to={`${ROUTES.ITINERARY.SAMPLE}?id=${itinerary.id}`}>
-              <Eye className="w-3.5 h-3.5 mr-1.5" />
-              Preview This Trip
-            </Link>
-          </Button>
+          {HAS_REAL_SAMPLE.has(itinerary.id) && (
+            <Button variant="outline" size="sm" className="flex-1" asChild>
+              <Link to={`${ROUTES.ITINERARY.SAMPLE}?id=${itinerary.id}`}>
+                <Eye className="w-3.5 h-3.5 mr-1.5" />
+                Preview This Trip
+              </Link>
+            </Button>
+          )}
           <Button size="sm" className="flex-1" asChild>
             <Link to={`${ROUTES.START}?destination=${itinerary.destination}`}>
               Build Like This
