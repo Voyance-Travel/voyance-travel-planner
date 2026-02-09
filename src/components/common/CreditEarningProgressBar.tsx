@@ -44,7 +44,8 @@ const BONUS_CONDITIONS: Record<BonusType, {
 
 // How long before we remind users about unclaimed credits
 const COLLAPSE_REMINDER_KEY = 'voyance_progress_bar_last_collapsed';
-const REMINDER_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
+const DISMISS_SESSION_KEY = 'voyance_progress_bar_dismissed';
+const REMINDER_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 interface CreditEarningProgressBarProps {
   className?: string;
@@ -56,7 +57,7 @@ export function CreditEarningProgressBar({ className }: CreditEarningProgressBar
   const location = useLocation();
   const { hasClaimedBonus, isLoading } = useBonusCredits();
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isDismissed, setIsDismissed] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(() => !!sessionStorage.getItem(DISMISS_SESSION_KEY));
 
   // Auto-expand after delay on first visit (or after reminder interval)
   useEffect(() => {
@@ -81,6 +82,7 @@ export function CreditEarningProgressBar({ className }: CreditEarningProgressBar
 
   const handleDismiss = () => {
     setIsDismissed(true);
+    sessionStorage.setItem(DISMISS_SESSION_KEY, 'true');
     localStorage.setItem(COLLAPSE_REMINDER_KEY, Date.now().toString());
   };
 
@@ -111,9 +113,9 @@ export function CreditEarningProgressBar({ className }: CreditEarningProgressBar
   // Don't show if all bonuses claimed
   if (unclaimedActionable.length === 0) return null;
 
-  // Don't show on certain pages to avoid clutter
-  const hiddenPaths = ['/quiz', '/profile'];
-  if (hiddenPaths.some(path => location.pathname.startsWith(path))) return null;
+  // Don't show on pages where it's distracting
+  const hiddenPaths = ['/quiz', '/profile', '/', '/demo', '/pricing', '/itinerary', '/signin', '/signup', '/start'];
+  if (hiddenPaths.some(path => path === '/' ? location.pathname === '/' : location.pathname.startsWith(path))) return null;
 
   return (
     <motion.div
