@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { consumeReturnPath, saveReturnPath } from '@/utils/authReturnPath';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -446,6 +446,8 @@ export default function Quiz() {
   const { user, setPreferences } = useAuth();
   const navigate = useNavigate();
 
+  const questionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
   const stepQuestions = getQuestionsForStep(currentStep);
 
   // Initialize quiz session when user is authenticated and quiz starts
@@ -483,6 +485,20 @@ export default function Quiz() {
     }
     
     setAnswers(newAnswers);
+
+    // Auto-scroll to next question after single-select answer
+    if (!isMultiSelect) {
+      const currentIndex = stepQuestions.findIndex(q => q.id === questionId);
+      if (currentIndex >= 0 && currentIndex < stepQuestions.length - 1) {
+        const nextQuestion = stepQuestions[currentIndex + 1];
+        setTimeout(() => {
+          questionRefs.current[nextQuestion.id]?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+          });
+        }, 350); // Wait for feedback animation
+      }
+    }
 
     // Save response to database - properly await and handle errors
     if (user) {
@@ -676,7 +692,11 @@ export default function Quiz() {
                     className="max-w-xl mx-auto space-y-6"
                   >
                     {stepQuestions.map((question, qIdx) => (
-                      <div key={question.id} className={qIdx > 0 ? 'pt-4 border-t border-border/50' : ''}>
+                      <div
+                        key={question.id}
+                        ref={(el) => { questionRefs.current[question.id] = el; }}
+                        className={cn('scroll-mt-28', qIdx > 0 ? 'pt-4 border-t border-border/50' : '')}
+                      >
                         {/* Compact question header */}
                         <div className="mb-4">
                           <div className="flex items-center gap-2 text-xs text-primary font-medium uppercase tracking-wide mb-2">
