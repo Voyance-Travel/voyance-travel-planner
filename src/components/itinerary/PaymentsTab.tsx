@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { estimateCostSync } from '@/lib/cost-estimation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plane, Hotel, Camera, Check, CreditCard, ExternalLink, 
@@ -52,6 +53,10 @@ interface PaymentsTabProps {
   /** Trip owner info for Split Bill */
   ownerId?: string;
   ownerName?: string;
+  /** For consistent cost estimation matching itinerary header */
+  budgetTier?: string;
+  destination?: string;
+  destinationCountry?: string;
 }
 
 interface PayableItem {
@@ -77,6 +82,9 @@ export function PaymentsTab({
   budgetLimitCents,
   ownerId,
   ownerName,
+  budgetTier = 'moderate',
+  destination,
+  destinationCountry,
 }: PaymentsTabProps) {
   const [payments, setPayments] = useState<TripPayment[]>([]);
   const [totals, setTotals] = useState<PaymentTotals>({ paid: 0, pending: 0, total: 0 });
@@ -285,17 +293,54 @@ export function PaymentsTab({
     ];
     const NON_PAYABLE_CATEGORIES = ['downtime', 'free_time'];
 
+    // Categories that should never be free - mirrors EditorialItinerary logic
+    const NEVER_FREE_CATEGORIES = [
+      'dining', 'restaurant', 'breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'coffee',
+      'cruise', 'boat', 'tour', 'activity', 'experience', 'spa', 'massage', 'show',
+      'performance', 'concert', 'theater', 'theatre', 'nightlife', 'bar', 'club',
+      'transfer', 'transport', 'transportation', 'airport', 'taxi', 'uber', 'rideshare'
+    ];
+    const NEVER_FREE_KEYWORDS = [
+      'breakfast', 'brunch', 'lunch', 'dinner', 'cruise', 'tour',
+      'restaurant', 'café', 'cafe', 'transfer', 'airport', 'taxi',
+      'uber', 'private car', 'shuttle', 'train to', 'bus to'
+    ];
+
     days.forEach(day => {
       day.activities.forEach(activity => {
-        const cost = activity.cost?.amount || activity.estimatedCost?.amount || 0;
-        if (cost > 0) {
-          const titleLower = (activity.title || '').toLowerCase();
-          const catLower = (activity.type || activity.category || '').toLowerCase();
-          const isNonPayable = NON_PAYABLE_KEYWORDS.some(kw => titleLower.includes(kw)) ||
-            NON_PAYABLE_CATEGORIES.includes(catLower) ||
-            activity.timeBlockType === 'downtime';
-          if (isNonPayable) return;
+        let cost = activity.cost?.amount || activity.estimatedCost?.amount || 0;
+        
+        const titleLower = (activity.title || '').toLowerCase();
+        const catLower = (activity.type || activity.category || '').toLowerCase();
+        
+        // Non-payable filter
+        const isNonPayable = NON_PAYABLE_KEYWORDS.some(kw => titleLower.includes(kw)) ||
+          NON_PAYABLE_CATEGORIES.includes(catLower) ||
+          activity.timeBlockType === 'downtime';
+        if (isNonPayable) return;
 
+        // If cost is 0 but the category should never be free, estimate it
+        // This mirrors the header's smart estimation for consistent totals
+        if (cost <= 0) {
+          const shouldNeverBeFree = NEVER_FREE_CATEGORIES.some(nfc => catLower.includes(nfc)) ||
+            NEVER_FREE_KEYWORDS.some(kw => titleLower.includes(kw));
+          
+          if (shouldNeverBeFree) {
+            const priceLevel = (activity as any).priceLevel || (activity as any).price_level;
+            const result = estimateCostSync({
+              category: catLower,
+              title: activity.title,
+              city: destination,
+              country: destinationCountry,
+              travelers,
+              budgetTier: budgetTier as 'budget' | 'moderate' | 'luxury',
+              priceLevel: priceLevel ? Number(priceLevel) : undefined,
+            });
+            cost = result.amount;
+          }
+        }
+
+        if (cost > 0) {
           const activityPayments = payments.filter(p => p.item_type === 'activity' && p.item_id === activity.id);
           const activityPayment = activityPayments[0];
           const assignedIds = activityPayments

@@ -2954,6 +2954,9 @@ export function EditorialItinerary({
             budgetLimitCents={budgetSettings?.budget_total_cents || undefined}
             ownerId={user?.id}
             ownerName={user?.name || user?.email?.split('@')[0]}
+            budgetTier={budgetTier}
+            destination={destination}
+            destinationCountry={destinationCountry}
           />
         )}
 
