@@ -59,13 +59,14 @@ export interface GenerationGateParams {
  * Check if the user has any previously generated itineraries.
  * Returns true if they have zero completed generations (first trip).
  */
-async function checkIsFirstTrip(userId: string): Promise<boolean> {
+async function checkIsFirstTrip(userId: string, currentTripId: string): Promise<boolean> {
   try {
     const { count, error } = await supabase
       .from('trips')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
-      .not('itinerary_status', 'is', null);
+      .not('itinerary_status', 'is', null)
+      .neq('id', currentTripId); // Exclude the trip being generated right now
 
     if (error) {
       console.error('[GenerationGate] First-trip check error:', error);
@@ -110,7 +111,7 @@ export function useGenerationGate() {
     // FIRST TRIP: Free full generation, no credits charged
     // ────────────────────────────────────────────────────
     if (user?.id) {
-      const isFirstTrip = await checkIsFirstTrip(user.id);
+      const isFirstTrip = await checkIsFirstTrip(user.id, params.tripId);
       if (isFirstTrip) {
         console.log('[GenerationGate] First trip detected — granting free 2-day generation');
         return {
@@ -163,18 +164,10 @@ export function useGenerationGate() {
       });
 
       if (error) {
-        // Network error — fall back to preview to avoid charging without generation
+        // Network error — if user can afford it, this is a transient failure, not "insufficient"
         console.error('[GenerationGate] Spend error:', error);
-        return {
-          mode: 'locked',
-          tripCost,
-          creditsCharged: 0,
-          currentBalance,
-          shortfall: 0,
-          recommendedPack: null,
-          requestedDays: params.days,
-          generateDays: 0,
-        };
+        // Throw so ItineraryGenerator shows a generic error, NOT the "out of credits" modal
+        throw new Error(`Credit spend failed: ${error.message || 'network error'}`);
       }
 
       // Handle insufficient credits (402 from edge function)
@@ -195,16 +188,8 @@ export function useGenerationGate() {
 
       if (data?.error) {
         console.error('[GenerationGate] Spend error:', data.error);
-        return {
-          mode: 'locked',
-          tripCost,
-          creditsCharged: 0,
-          currentBalance,
-          shortfall: 0,
-          recommendedPack: null,
-          requestedDays: params.days,
-          generateDays: 0,
-        };
+        // Throw so the UI shows a generic retry error, not "out of credits"
+        throw new Error(`Credit spend failed: ${data.error}`);
       }
 
       // Credits deducted successfully — proceed with full generation
