@@ -284,10 +284,61 @@ const CREDIT_TIERS = [
     estimatedCostToUs: 0.990,
     notes: "53 days + 4 swaps (2,500 base + 700 bonus)",
   },
+  // ── Add-on Products ──
+  { 
+    key: "smart_finish", 
+    label: "Smart Finish", 
+    price: 6.99, 
+    credits: 50, // Fixed 50cr cost
+    color: "#EC4899", 
+    type: "addon" as const,
+    description: "Enrich manual/imported itinerary",
+    typicalUsage: { daysUnlocked: 0, swaps: 0, regenerates: 0, restaurants: 0, aiMessages: 0 },
+    // Route opt + reviews + tips + events + DNA gap fixes
+    estimatedCostToUs: 0.040,
+    notes: "One-shot enrichment: route optimization, reviews, tips, events",
+  },
+  { 
+    key: "group_small", 
+    label: "Group Small", 
+    price: 19.99, 
+    credits: 0, // Not credit-based, flat product
+    color: "#14B8A6", 
+    type: "addon" as const,
+    description: "Group unlock - small (2-3 travelers)",
+    typicalUsage: { daysUnlocked: 0, swaps: 0, regenerates: 0, restaurants: 0, aiMessages: 0 },
+    estimatedCostToUs: 0.015,
+    notes: "Shared editing + increased action caps for 2-3 collaborators",
+  },
+  { 
+    key: "group_medium", 
+    label: "Group Medium", 
+    price: 34.99, 
+    credits: 0,
+    color: "#0EA5E9", 
+    type: "addon" as const,
+    description: "Group unlock - medium (4-6 travelers)",
+    typicalUsage: { daysUnlocked: 0, swaps: 0, regenerates: 0, restaurants: 0, aiMessages: 0 },
+    estimatedCostToUs: 0.015,
+    notes: "Shared editing + increased action caps for 4-6 collaborators",
+  },
+  { 
+    key: "group_large", 
+    label: "Group Large", 
+    price: 79.99, 
+    credits: 0,
+    color: "#6366F1", 
+    type: "addon" as const,
+    description: "Group unlock - large (7+ travelers)",
+    typicalUsage: { daysUnlocked: 0, swaps: 0, regenerates: 0, restaurants: 0, aiMessages: 0 },
+    estimatedCostToUs: 0.015,
+    notes: "Shared editing + increased action caps for 7+ collaborators",
+  },
 ];
 
 // Cost per action (verified from production data, $0.091 avg/trip)
 // Credit costs: Unlock=60, Regen=10, Swap=5, Restaurant=5, AI=5, Hotel=40, SmartFinish=50, MysteryGetaway=15, MysteryLogistics=5, Transport=5
+// Free caps per trip: swap 10, regen 5, ai_message 20, restaurant 5, transport_mode_change 5
 const ACTION_COSTS: Record<string, number> = {
   unlock_day: 0.018,      // $0.091 ÷ 5 days avg
   day_unlock: 0.018,      // alias
@@ -296,7 +347,12 @@ const ACTION_COSTS: Record<string, number> = {
   restaurant_rec: 0.015,  // 1 Perplexity call
   ai_message: 0.005,      // 1 Gemini call
   hotel_search: 0.020,    // ~2-3 Places calls per city
-  smart_finish: 0.040,    // Smart Finish enrichment
+  smart_finish: 0.040,    // Smart Finish enrichment (route opt + reviews + tips)
+  purchase_smart_finish: 0.040, // alias for ledger tracking
+  group_unlock: 0.015,    // Group unlock setup (minimal API cost)
+  purchase_group_small: 0.015,
+  purchase_group_medium: 0.015,
+  purchase_group_large: 0.015,
   mystery_getaway: 0.025, // AI destination suggestions
   mystery_logistics: 0.015, // Flight + hotel estimates
   transport_mode_change: 0.005, // Route recalculation
@@ -1054,7 +1110,7 @@ export default function UnitEconomics() {
                       );
                     })}
                   {/* Show expected actions that are MISSING from spend tracking */}
-                  {['regenerate_day', 'swap_activity', 'transport_mode_change'].filter(
+                  {['regenerate_day', 'swap_activity', 'transport_mode_change', 'smart_finish', 'purchase_smart_finish', 'group_unlock', 'purchase_group_small', 'purchase_group_medium', 'purchase_group_large'].filter(
                     a => !(econData.revenue.spendByAction || {})[a]
                   ).map(action => (
                     <tr key={action} style={{ borderBottom: "1px solid rgba(100, 116, 139, 0.1)", opacity: 0.6 }}>
@@ -1927,6 +1983,10 @@ export default function UnitEconomics() {
                 { action: "Restaurant Rec", credits: 15, cost: 0.015 },
                 { action: "AI Message", credits: 10, cost: 0.005 },
                 { action: "Hotel Search", credits: 40, cost: 0.020 },
+                { action: "Smart Finish", credits: 50, cost: 0.040 },
+                { action: "Group Unlock (Small)", credits: 0, cost: 0.015 },
+                { action: "Group Unlock (Medium)", credits: 0, cost: 0.015 },
+                { action: "Group Unlock (Large)", credits: 0, cost: 0.015 },
               ].map((row, i) => {
                 const avgCost = row.cost;
                 return (
@@ -1996,8 +2056,8 @@ export default function UnitEconomics() {
                   return (<>
                     {showGroupHeader && (
                       <tr key={`group-${tier.type}`}>
-                        <td colSpan={8} style={{ padding: "10px 10px 4px", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: tier.type === 'club' ? "#A78BFA" : "#64748B", borderBottom: "1px solid rgba(100, 116, 139, 0.2)" }}>
-                          {tier.type === 'flexible' ? '📦 Flexible Credits' : '✨ Voyance Club'}
+                        <td colSpan={8} style={{ padding: "10px 10px 4px", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: tier.type === 'club' ? "#A78BFA" : tier.type === 'addon' ? "#EC4899" : "#64748B", borderBottom: "1px solid rgba(100, 116, 139, 0.2)" }}>
+                          {tier.type === 'flexible' ? '📦 Flexible Credits' : tier.type === 'club' ? '✨ Voyance Club' : '🔧 Add-on Products'}
                         </td>
                       </tr>
                     )}
