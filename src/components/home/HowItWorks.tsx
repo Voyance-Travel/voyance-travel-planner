@@ -8,13 +8,13 @@ const STEPS = [
     image: "/images/howitworks-step-1.jpg"
   },
   {
-    title: "You set the destination.",
-    description: "We help you plan the trip you actually want, on your terms.",
+    title: "You start your way.",
+    description: "Pick a city, plan multi-city, chat your dream trip, or paste an existing itinerary — four ways to begin.",
     image: "/images/howitworks-step-2.jpg"
   },
   {
     title: "We build the ideal trip.",
-    description: "Flights, stays, and activities pre-selected to match your vibe.",
+    description: "Flights, stays, and activities pre-selected to match your vibe and budget.",
     image: "/images/howitworks-step-3.jpg"
   },
   {
