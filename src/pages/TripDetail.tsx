@@ -11,6 +11,7 @@ import { ItineraryGenerator } from '@/components/itinerary/ItineraryGenerator';
 import { EditorialItinerary } from '@/components/itinerary/EditorialItinerary';
 import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
 import { ItineraryAssistant } from '@/components/itinerary/ItineraryAssistant';
+import { useEntitlements, canViewPremiumContentForDay } from '@/hooks/useEntitlements';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { TripDebriefModal } from '@/components/trip/TripDebriefModal';
 import { TripConfirmationBanner } from '@/components/trip/TripConfirmationBanner';
@@ -86,6 +87,10 @@ export default function TripDetail() {
   const hotelEnrichmentAttempted = useRef(false);
   const debriefPromptAttempted = useRef(false);
   const autoGenerateTriggered = useRef(false);
+
+  // Entitlements — gate premium features like chat assistant
+  const { data: entitlements } = useEntitlements(tripId);
+  const hasPremiumAccess = entitlements?.has_completed_purchase || entitlements?.trip_has_smart_finish || false;
 
   // Check if trip already has a learning submitted
   const { data: existingLearning } = useTripLearning(tripId || '');
@@ -1118,7 +1123,7 @@ export default function TripDetail() {
       </section>
 
       {/* Itinerary Assistant - Floating Chatbot */}
-      {hasItinerary && !(isManualMode && !trip.smart_finish_purchased) && (
+      {hasItinerary && !(isManualMode && !trip.smart_finish_purchased) && hasPremiumAccess && (
         <ItineraryAssistant
           tripId={trip.id}
           destination={trip.destination}

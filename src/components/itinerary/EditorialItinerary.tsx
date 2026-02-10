@@ -2895,7 +2895,7 @@ export function EditorialItinerary({
                     getPaymentForItem={getPaymentForItem}
                     refreshPayments={refreshPayments}
                     onToggle={() => toggleDay(days[selectedDayIndex].dayNumber)}
-                    onActivitySwap={aiLocked ? undefined : openSwapDrawer}
+                    onActivitySwap={aiLocked || !canViewPremiumContentForDay(entitlements, days[selectedDayIndex].dayNumber) ? undefined : openSwapDrawer}
                     onActivityLock={handleActivityLock}
                     onActivityMove={handleActivityMove}
                     onActivityReorder={(reordered) => handleActivityReorder(selectedDayIndex, reordered)}
@@ -6179,15 +6179,19 @@ function ActivityRow({
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="bg-background border shadow-lg z-50 min-w-[160px]">
-                      <DropdownMenuItem
-                        onClick={() => onSwap?.(dayIndex, activity)}
-                        className="cursor-pointer gap-2"
-                        data-tour="find-alternative"
-                      >
-                        <ArrowRightLeft className="h-4 w-4" />
-                        Find Alternative
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
+                      {onSwap && (
+                        <>
+                          <DropdownMenuItem
+                            onClick={() => onSwap(dayIndex, activity)}
+                            className="cursor-pointer gap-2"
+                            data-tour="find-alternative"
+                          >
+                            <ArrowRightLeft className="h-4 w-4" />
+                            Find Alternative
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                        </>
+                      )}
                       <DropdownMenuItem
                         onClick={() => onMove(dayIndex, activity.id, 'up')}
                         disabled={activityIndex === 0}
