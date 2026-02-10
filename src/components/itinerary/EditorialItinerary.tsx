@@ -2882,6 +2882,7 @@ export function EditorialItinerary({
                           <UnlockBanner
                             tripId={tripId}
                             totalDays={days.length}
+                            freeDays={entitlements?.is_first_trip ? 2 : 0}
                             destination={destination}
                             destinationCountry={destinationCountry}
                             travelers={travelers}
@@ -2969,6 +2970,7 @@ export function EditorialItinerary({
                 <UnlockBanner
                   tripId={tripId}
                   totalDays={days.length}
+                  freeDays={entitlements?.is_first_trip ? 2 : 0}
                   destination={destination}
                   destinationCountry={destinationCountry}
                   travelers={travelers}
