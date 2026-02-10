@@ -2855,9 +2855,26 @@ export function EditorialItinerary({
                     currentBalance={totalCredits}
                   />
                 ) : (
-                  <DayCard
-                    key={days[selectedDayIndex].dayNumber}
-                    day={days[selectedDayIndex]}
+                  <>
+                    {/* Show unlock CTA when viewing a gated day */}
+                    {!canViewPremiumContentForDay(entitlements, days[selectedDayIndex].dayNumber) && !isManualMode && (
+                      <div className="mb-4">
+                        <UnlockBanner
+                          tripId={tripId}
+                          totalDays={days.length}
+                          destination={destination}
+                          destinationCountry={destinationCountry}
+                          travelers={travelers}
+                          startDate={startDate}
+                          budgetTier={budgetTier}
+                          tripType={tripType}
+                          onUnlockComplete={onUnlockComplete}
+                        />
+                      </div>
+                    )}
+                    <DayCard
+                      key={days[selectedDayIndex].dayNumber}
+                      day={days[selectedDayIndex]}
                     dayIndex={selectedDayIndex}
                     totalDays={days.length}
                     travelers={travelers}
@@ -2897,6 +2914,7 @@ export function EditorialItinerary({
                      collaboratorColorMap={collaboratorColorMap}
                      aiLocked={aiLocked}
                    />
+                  </>
                 )}
               </div>
             )}
