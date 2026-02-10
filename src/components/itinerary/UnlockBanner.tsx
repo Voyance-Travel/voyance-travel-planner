@@ -21,6 +21,8 @@ import { CREDIT_COSTS } from '@/config/pricing';
 interface UnlockBannerProps {
   tripId: string;
   totalDays: number;
+  /** Number of days that are already unlocked/free (e.g., 2 for first-trip gift) */
+  freeDays?: number;
   destination: string;
   destinationCountry?: string;
   travelers: number;
@@ -33,6 +35,7 @@ interface UnlockBannerProps {
 export function UnlockBanner({
   tripId,
   totalDays,
+  freeDays = 0,
   destination,
   destinationCountry,
   travelers,
@@ -45,8 +48,10 @@ export function UnlockBanner({
   const { enableManualBuilder } = useManualBuilderStore();
   const { showOutOfCredits } = useOutOfCredits();
 
-  const unlockCost = getUnlockCost(totalDays);
-  const affordable = canAfford(totalDays);
+  // Only charge for days that aren't already free
+  const daysToUnlock = Math.max(0, totalDays - freeDays);
+  const unlockCost = getUnlockCost(daysToUnlock);
+  const affordable = totalCredits >= unlockCost;
 
   const handleManualBuild = () => {
     enableManualBuilder(tripId);
@@ -66,7 +71,7 @@ export function UnlockBanner({
 
     const params: UnlockTripParams = {
       tripId,
-      totalDays,
+      totalDays: daysToUnlock, // Only unlock the remaining locked days
       destination,
       destinationCountry,
       travelers,
@@ -144,7 +149,9 @@ export function UnlockBanner({
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <Button onClick={handleUnlockAll} className="gap-2 flex-1">
               <Sparkles className="h-4 w-4" />
-              Unlock All {totalDays} Days
+              {daysToUnlock < totalDays 
+                ? `Unlock Remaining ${daysToUnlock} Days` 
+                : `Unlock All ${totalDays} Days`}
             </Button>
             <Button variant="outline" onClick={handleManualBuild} className="gap-2 flex-1">
               <Pencil className="h-4 w-4" />
