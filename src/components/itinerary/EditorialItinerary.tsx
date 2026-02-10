@@ -6212,7 +6212,7 @@ function ActivityRow({
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="bg-background border shadow-lg z-50 min-w-[160px]">
-                      {onSwap && (
+                      {onSwap && canViewPremium && (
                         <>
                           <DropdownMenuItem
                             onClick={() => onSwap(dayIndex, activity)}

@@ -92,6 +92,14 @@ export default function TripDetail() {
   const { data: entitlements } = useEntitlements(tripId);
   // Premium access = paid purchase OR smart finish. First-trip free days don't grant chat access.
   const hasPremiumAccess = entitlements?.has_completed_purchase || entitlements?.trip_has_smart_finish || false;
+  
+  // Debug: log premium access state so we can verify gating
+  console.log('[TripDetail] Premium access check:', { 
+    hasPremiumAccess, 
+    has_completed_purchase: entitlements?.has_completed_purchase,
+    trip_has_smart_finish: entitlements?.trip_has_smart_finish,
+    is_first_trip: entitlements?.is_first_trip,
+  });
 
   // Check if trip already has a learning submitted
   const { data: existingLearning } = useTripLearning(tripId || '');
