@@ -237,7 +237,7 @@ serve(async (req) => {
     };
 
     // ── Feature flags ──
-    const hasPaidAccess = hasCompletedPurchase || tripHasSmartFinish;
+    const hasPaidAccess = hasCompletedPurchase || tripHasSmartFinish || unlockedDays > 0;
 
     // ── Legacy usage/limits ──
     const { data: usage } = await supabaseAdmin

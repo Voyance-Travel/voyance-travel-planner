@@ -9398,13 +9398,21 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         );
       }
 
+      // If itinerary is no longer a preview, update unlocked_day_count
+      const updatePayload: Record<string, any> = {
+        itinerary_data: itinerary,
+        itinerary_status: 'ready',
+        updated_at: new Date().toISOString(),
+      };
+      
+      if (itinerary?.isPreview === false) {
+        const dayCount = Array.isArray(itinerary?.days) ? itinerary.days.length : 0;
+        updatePayload.unlocked_day_count = dayCount;
+      }
+
       const { error } = await supabase
         .from('trips')
-        .update({
-          itinerary_data: itinerary,
-          itinerary_status: 'ready',
-          updated_at: new Date().toISOString()
-        })
+        .update(updatePayload)
         .eq('id', tripId);
 
       if (error) {

@@ -71,7 +71,8 @@ export function UnlockBanner({
 
     const params: UnlockTripParams = {
       tripId,
-      totalDays: daysToUnlock, // Only unlock the remaining locked days
+      totalDays, // Total trip length (for itinerary structure)
+      startDay: freeDays + 1, // Skip already-free days (e.g., start at day 3)
       destination,
       destinationCountry,
       travelers,

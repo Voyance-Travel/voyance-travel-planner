@@ -30,6 +30,8 @@ export interface UnlockState {
 export interface UnlockTripParams {
   tripId: string;
   totalDays: number;
+  /** First day number to enrich (skip already-free days). Defaults to 1. */
+  startDay?: number;
   destination: string;
   destinationCountry?: string;
   travelers: number;
@@ -127,19 +129,51 @@ export function useUnlockTrip() {
       return false;
     }
 
-    // Step 2: Re-generate each day with full enrichment
+    // Step 2: Re-generate only the LOCKED days with full enrichment
+    const startDay = params.startDay || 1;
+    const daysToEnrich = params.totalDays - startDay + 1;
+    
     setState(prev => ({
       ...prev,
       step: 'enriching',
       progress: 10,
-      message: `Enriching Day 1 of ${params.totalDays}...`,
+      message: `Enriching Day ${startDay} of ${params.totalDays}...`,
     }));
 
     const enrichedDays: any[] = [];
     const previousActivities: string[] = [];
 
-    for (let dayNum = 1; dayNum <= params.totalDays; dayNum++) {
-      const dayProgress = 10 + ((dayNum - 1) / params.totalDays) * 80;
+    // First, fetch existing itinerary to preserve already-free days
+    let existingDays: any[] = [];
+    try {
+      const { data: tripData } = await supabase
+        .from('trips')
+        .select('itinerary_data')
+        .eq('id', params.tripId)
+        .maybeSingle();
+      
+      const itinData = tripData?.itinerary_data as any;
+      existingDays = itinData?.days || [];
+    } catch (err) {
+      console.warn('[UnlockTrip] Could not fetch existing days:', err);
+    }
+
+    // Keep existing free days as-is
+    for (let dayNum = 1; dayNum < startDay; dayNum++) {
+      const existing = existingDays.find((d: any) => d.dayNumber === dayNum);
+      if (existing) {
+        enrichedDays.push(existing);
+        const activities = existing.activities || existing.timeBlocks || [];
+        activities.forEach((a: any) => {
+          if (a.title || a.name) previousActivities.push(a.title || a.name);
+        });
+      }
+    }
+
+    // Enrich only the locked days
+    for (let dayNum = startDay; dayNum <= params.totalDays; dayNum++) {
+      const enrichIdx = dayNum - startDay;
+      const dayProgress = 10 + (enrichIdx / daysToEnrich) * 80;
       setState(prev => ({
         ...prev,
         currentDay: dayNum,
