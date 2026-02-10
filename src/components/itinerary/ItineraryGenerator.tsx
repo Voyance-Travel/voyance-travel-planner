@@ -115,15 +115,16 @@ export function ItineraryGenerator({
     setHasStarted(true);
     setShowGenericWarning(false);
 
-    // Safety timeout: if generation hasn't completed in 90s, show error
+    // Safety timeout: if generation hasn't completed in 180s, show error
+    // First-time 5-day trips with full Places enrichment can take 120s+
     if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
     generationTimeoutRef.current = setTimeout(() => {
-      console.error('[ItineraryGenerator] Generation timed out after 90s');
+      console.error('[ItineraryGenerator] Generation timed out after 180s');
       setPrePhase(null);
       reset();
       setHasStarted(false);
       toast.error('Generation timed out. Please try again.');
-    }, 90_000);
+    }, 180_000);
 
     // Pre-generation phases (matches the newer streaming UX)
     setPrePhase('gathering-dna');
