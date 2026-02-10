@@ -2859,24 +2859,9 @@ export function EditorialItinerary({
                     {/* Show unlock CTA when viewing a gated day */}
                     {(() => {
                       const currentDayNum = days[selectedDayIndex].dayNumber;
-                      const canView = canViewPremiumContentForDay(entitlements, currentDayNum);
-                      const hasPurchased = entitlements?.has_completed_purchase || entitlements?.trip_has_smart_finish || false;
-                      // Force-show banner for days 3+ when user hasn't paid, regardless of entitlements state
-                      const forceShowBanner = !hasPurchased && currentDayNum > 2 && !isManualMode;
-                      const shouldShow = (!canView && !isManualMode) || forceShowBanner;
-                      console.log('[UnlockBanner Debug]', {
-                        dayNumber: currentDayNum,
-                        canViewPremium: canView,
-                        isManualMode,
-                        hasPurchased,
-                        forceShowBanner,
-                        shouldShow,
-                        entitlements_loaded: !!entitlements,
-                        has_completed_purchase: entitlements?.has_completed_purchase,
-                        is_first_trip: entitlements?.is_first_trip,
-                        trip_has_smart_finish: entitlements?.trip_has_smart_finish,
-                      });
-                      if (!shouldShow) return null;
+                      const canViewThisDay = canViewPremiumContentForDay(entitlements, currentDayNum);
+                      const forceShowBanner = !canViewThisDay && !isManualMode;
+                      if (!forceShowBanner) return null;
                       return (
                         <div className="mb-4">
                           <UnlockBanner
@@ -2909,13 +2894,7 @@ export function EditorialItinerary({
                     isRegenerating={regeneratingDay === days[selectedDayIndex].dayNumber}
                     isEditable={effectiveIsEditable}
                     isPreview={effectiveIsPreview}
-                    canViewPremium={(() => {
-                      const hasPurchased = entitlements?.has_completed_purchase || entitlements?.trip_has_smart_finish || false;
-                      if (hasPurchased) return true;
-                      // Force-gate days 3+ for users without purchases
-                      if (days[selectedDayIndex].dayNumber > 2) return false;
-                      return canViewPremiumContentForDay(entitlements, days[selectedDayIndex].dayNumber);
-                    })()}
+                    canViewPremium={canViewPremiumContentForDay(entitlements, days[selectedDayIndex].dayNumber)}
                     tripId={tripId}
                      onUnlockTrip={() => setCreditNudge({ action: 'UNLOCK_DAY' })}
                      onUnlockDay={handleUnlockDay}
@@ -2924,9 +2903,7 @@ export function EditorialItinerary({
                     refreshPayments={refreshPayments}
                     onToggle={() => toggleDay(days[selectedDayIndex].dayNumber)}
                     onActivitySwap={(() => {
-                      const hasPurchased = entitlements?.has_completed_purchase || entitlements?.trip_has_smart_finish || false;
                       if (aiLocked) return undefined;
-                      if (!hasPurchased && days[selectedDayIndex].dayNumber > 2) return undefined;
                       if (!canViewPremiumContentForDay(entitlements, days[selectedDayIndex].dayNumber)) return undefined;
                       return openSwapDrawer;
                     })()}

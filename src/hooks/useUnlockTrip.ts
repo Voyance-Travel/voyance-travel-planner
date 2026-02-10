@@ -82,7 +82,8 @@ export function useUnlockTrip() {
       return false;
     }
 
-    const unlockCost = getUnlockCost(params.totalDays);
+    const daysToUnlock = params.totalDays - (params.startDay || 1) + 1;
+    const unlockCost = getUnlockCost(daysToUnlock);
 
     // Step 1: Spend credits
     setState({

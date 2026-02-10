@@ -288,6 +288,7 @@ serve(async (req) => {
       trip_has_smart_finish: tripHasSmartFinish,
 
       // Feature flags (computed from gates)
+      unlocked_day_count: unlockedDays,
       can_view_photos: hasPaidAccess || isFirstTrip,
       can_view_addresses: hasPaidAccess || isFirstTrip,
       can_view_booking_links: hasPaidAccess || isFirstTrip,
