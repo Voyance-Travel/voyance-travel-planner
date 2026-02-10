@@ -1,113 +1,174 @@
 
-# Dashboard Update: Align Unit Economics with New Pricing Model
 
-## Summary
+# Fix: Unlock Flow — 3 Surgical Changes + 1 Logic Fix
 
-Update `UnitEconomics.tsx` and `useUnitEconomicsData.ts` to reflect the tier-based free caps, credit-pool group unlocks, and add new analytics sections for tier distribution and group budget health.
+## What's Broken (confirmed by code inspection)
 
----
+### Bug 1: Overcharging Credits
+**File**: `useUnlockTrip.ts`, line 85
+Uses `params.totalDays` (5) to calculate cost instead of only the locked days (3). User gets charged 300 credits instead of 180.
 
-## Changes by File
+### Bug 2: Force-Gate Checks Wrong Field
+**File**: `EditorialItinerary.tsx`, lines 2863-2866
+Checks `has_completed_purchase` (Stripe purchases only). Credit-based unlocks set `unlocked_day_count` instead, so the gate never opens.
 
-### 1. `src/hooks/useUnitEconomicsData.ts`
+### Bug 2b: `canViewPremiumContentForDay` Has a Logic Hole
+**File**: `useEntitlements.ts`, line 263
+After unlock, the server correctly returns `can_view_photos: true`. But the client-side function checks `can_view_photos && !is_first_trip`. For first-trip users (who are the primary unlock audience), `is_first_trip` is still `true`, so this check fails. It falls through to line 264 which only allows days 1-2.
 
-**Add to types (after line 136):**
-- `tierDistribution`: array of `{ tier, count, upgradedThisMonth }` from `user_tiers`
-- `groupBudgets`: `{ pools: [{ tier, count, allocated, remaining, depleted }], totalPools }` from `group_budgets`
+### Bug 3: Reload Races Entitlements Refresh
+**File**: `TripDetail.tsx`, line 1080
+`window.location.reload()` fires before `refreshEntitlements()` completes, loading stale cached data.
 
-**Add two parallel queries (line 207, extend the `Promise.all`):**
-- `supabase.from('user_tiers').select('tier, updated_at')` -- process client-side to count by tier and recent upgrades
-- `supabase.from('group_budgets').select('tier, initial_credits, remaining_credits')` -- aggregate by tier
+## Implementation Plan
 
-**Process results:** Group the raw rows into the typed aggregates. Add to the returned object alongside existing fields.
+### Change 1: Fix credit calculation (`useUnlockTrip.ts`)
 
----
+Line 85 — derive cost from locked days only:
 
-### 2. `src/pages/admin/UnitEconomics.tsx`
+```
+// Before:
+const unlockCost = getUnlockCost(params.totalDays);
 
-#### A. Fix comment (line 198)
-Change `Free caps per trip: swap 10, regen 5, ai_message 20, restaurant 5` to `Free caps per trip (tier-based): swap 3-15, regen 1-5, ai_message 5-25, restaurant 1-5`
+// After:
+const startDay = params.startDay || 1;
+const daysToUnlock = params.totalDays - startDay + 1;
+const unlockCost = getUnlockCost(daysToUnlock);
+```
 
-#### B. Fix CREDIT_TIERS group entries (lines 287-323)
-Replace the three group entries with credit-pool model:
+### Change 2: Fix `canViewPremiumContentForDay` (`useEntitlements.ts`)
 
-| Field | Old | New |
-|-------|-----|-----|
-| `price` | 19.99 / 34.99 / 79.99 | 0 (no Stripe price) |
-| `credits` | 0 | 150 / 300 / 500 |
-| `type` | `"addon"` | `"group"` |
-| `estimatedCostToUs` | 0.015 | 0.50 / 1.00 / 1.50 |
-| `description` | "Group unlock - small..." | "Credit pool (2-3 travelers)" |
-| `notes` | "Fixed price product..." | "150 credit pool. 40 shared free actions..." |
+Lines 259-265 — when `can_view_photos` is true (server says user has paid access), return true regardless of `is_first_trip`:
 
-Add new fields: `sharedFreeCaps: 40`, `typicalPaidActions: 20 / 50 / 90`.
+```
+// Before:
+if (entitlements.can_view_photos && !entitlements.is_first_trip) return true;
+if (entitlements.is_first_trip && dayNumber <= 2) return true;
 
-#### C. Fix ACTION_COSTS group entries (lines 339-342)
-Update `purchase_group_small` to 0.50, `purchase_group_medium` to 1.00, `purchase_group_large` to 1.50 (reflecting pool utilization cost, not just setup).
+// After:
+if (entitlements.can_view_photos && entitlements.has_completed_purchase) return true;
+if (entitlements.can_view_photos && entitlements.trip_has_smart_finish) return true;
+// For first-trip users: check if they've unlocked days (server sets can_view_photos when unlockedDays > 0)
+// If can_view_photos is true AND is_first_trip, they must have unlocked — grant full access
+if (entitlements.can_view_photos) return true;
+if (entitlements.is_first_trip && dayNumber <= 2) return true;
+```
 
-#### D. Fix FALLBACK_DATA.revenue (line 64)
-Remove `group_small`, `group_medium`, `group_large` from revenue object (groups no longer generate direct Stripe revenue).
+Wait — that simplifies to just: if `can_view_photos` is true, return true for all days. The server already computes this correctly (`hasPaidAccess || isFirstTrip`). The day-level restriction for first-trip users should only apply when `can_view_photos` is true solely because of `isFirstTrip` (not because of `hasPaidAccess`).
 
-#### E. Fix REVENUE_MIX_PRESETS (lines 70-75)
-Remove group tiers from all presets. Percentages only cover flex + club tiers. Renormalize so existing tiers sum to 100%.
+Correct fix:
 
-#### F. Fix blendedAOV calculation (lines 399-410)
-Remove group references from the AOV calculation (they no longer contribute to Stripe revenue).
+```
+// After:
+if (entitlements.has_completed_purchase) return true;
+if (entitlements.trip_has_smart_finish) return true;
+// can_view_photos includes unlockedDays > 0 from server
+// For first-trip users who haven't unlocked, can_view_photos is true (from isFirstTrip),
+// but we still restrict to days 1-2. If they HAVE unlocked, can_view_photos is true
+// from hasPaidAccess, not just isFirstTrip.
+if (entitlements.is_first_trip) {
+  // Check if access comes from hasPaidAccess (not just isFirstTrip)
+  // Server sets can_view_photos = hasPaidAccess || isFirstTrip
+  // If has_completed_purchase and trip_has_smart_finish are both false,
+  // hasPaidAccess = unlockedDays > 0
+  const hasUnlockedDays = entitlements.can_view_photos && 
+    !entitlements.has_completed_purchase && 
+    !entitlements.trip_has_smart_finish;
+  // If they have unlocked days, grant full access; otherwise only days 1-2
+  if (hasUnlockedDays && !entitlements.is_first_trip) return true;
+  // ... this is circular
+}
+```
 
-#### G. Fix Action Cost Table rows (lines 1966-1976)
-- Change free cap values: `"10/trip"` to `"3-15/trip*"`, `"5/trip"` to `"1-5/trip*"`, `"20/trip"` to `"5-25/trip*"`
-- Replace group rows from fixed-price model to credit-based:
-  - `credits: 150 / 300 / 500` (not null)
-  - `cost: 0.50 / 1.00 / 1.50`
-  - Remove `fixedPrice` field
+The real issue is the client can't distinguish WHY `can_view_photos` is true. The cleanest fix: **add `unlocked_day_count` to the entitlements response** so the client can check it directly. But that requires an edge function change. Simpler alternative: since `can_view_photos` is `hasPaidAccess || isFirstTrip`, and `hasPaidAccess = hasCompletedPurchase || tripHasSmartFinish || unlockedDays > 0`, we can check:
 
-#### H. Fix Action Cost Table group column rendering (lines 2006-2021)
-Remove the `isFixedPrice` branch (no longer needed since groups have credits). Remove the `t.credits === 0` "N/A" branch (groups now have credits > 0).
+```
+const hasPaidAccess = entitlements.has_completed_purchase || 
+                      entitlements.trip_has_smart_finish || 
+                      (entitlements.can_view_photos && !entitlements.is_first_trip);
+```
 
-#### I. Fix footer note (lines 2041-2044)
-Replace text with: "Each cell shows user pays + margin % at that tier's $/credit rate. *Free caps vary by tier: Free/Flex (3/1/5/1 = 10 total), Voyager (6/2/10/2 = 20), Explorer (9/3/15/3 = 30), Adventurer (15/5/25/5 = 50). Free/Flex caps scale with trip length. Group pools share 40 free actions before pool credits are deducted."
+No — for first-trip users who unlock, `is_first_trip` is still true, so the third clause fails. We need the server to send `unlocked_day_count` directly.
 
-#### J. Fix Tier -> Usage Pattern table (lines 2066-2178)
-- Change group header from `'Add-on Products'` to `'Group Unlock (Credit Pool)'`
-- For group rows: show "150 cr" / "300 cr" / "500 cr" in Price column instead of "$19.99"
-- Replace "Swaps" / "Regens" columns with "Free Acts" / "Pool Usage" for group rows
-- Add "Free Acts" column showing tier-based totals for flex/club rows (10, 10, 20, 30, 50)
-- Free user rows: add "10/trip" in Free Acts column
+**Revised approach**: Add `unlocked_day_count` to the entitlements response (it's already computed server-side on line 207), then use it client-side.
 
-#### K. Add Tier Distribution section (after line 2217, before Monthly Expense Projections)
-New collapsible section using `econData.tierDistribution`:
-- Table: Tier | Users | % | Upgraded This Month
-- Group credit value insight: `groupCreditsAllocated * $0.09`
-- Uses same dark panel style as existing sections
+### Change 2 (revised): Two-part fix
 
-#### L. Add Group Budget Analytics section (after Tier Distribution)
-New collapsible section using `econData.groupBudgets`:
-- Table: Tier | Pools | Allocated | Remaining | Utilization % | Depleted
-- Pool health indicators (healthy/low/depleted counts)
-- Total summary row
+**Part A**: Edge function `get-entitlements/index.ts` — add `unlocked_day_count` to response (it's already computed as `unlockedDays` on line 207, just not included in the response object).
 
-#### M. Update insights engine (lines 646-793)
-Add three new insights:
-1. **Group pool depletion warning**: If any `groupBudgets.pools` have `depleted > 0`, emit warning with count
-2. **Group credit absorption**: Show total credits allocated to pools as dollar equivalent (`allocated * $0.09`)
-3. **Tier margin check**: Confirm all tiers maintain >90% margin (success insight)
+**Part B**: Client `useEntitlements.ts` — add `unlocked_day_count` to the `EntitlementsResponse` type and update `canViewPremiumContentForDay`:
 
----
+```
+// After:
+if (entitlements.has_completed_purchase) return true;
+if (entitlements.trip_has_smart_finish) return true;
+if ((entitlements.unlocked_day_count ?? 0) > 0) return true;
+if (entitlements.is_first_trip && dayNumber <= 2) return true;
+return false;
+```
 
-## Implementation Order
+This is definitive — no ambiguity about why `can_view_photos` is true.
 
-1. `useUnitEconomicsData.ts` -- add queries + types (~60 lines)
-2. `UnitEconomics.tsx` constants -- fix CREDIT_TIERS, ACTION_COSTS, REVENUE_MIX, comment (items A-F)
-3. `UnitEconomics.tsx` Action Cost Table -- fix rows, rendering, footer (items G-I)
-4. `UnitEconomics.tsx` Tier Usage Table -- fix group rows, add columns (item J)
-5. `UnitEconomics.tsx` new sections -- Tier Distribution, Group Budgets (items K-L)
-6. `UnitEconomics.tsx` insights -- add new entries (item M)
+### Change 3: Replace force-gate with canonical check (`EditorialItinerary.tsx`)
 
-## What Does NOT Change
+Lines 2861-2866 — replace the `hasPurchased` check with the now-fixed `canViewPremiumContentForDay`:
 
-- Cost Model constants (lines 30-46) -- still accurate
-- FREE_USER_ECONOMICS (lines 121-161) -- still accurate
-- Monthly Expense Projections table -- still accurate
-- Revenue Drilldown section -- still shows actual Stripe data correctly
-- Daily metrics time series -- still accurate
-- Scenario toggle logic -- still valid
+```
+// Before:
+const hasPurchased = entitlements?.has_completed_purchase || entitlements?.trip_has_smart_finish || false;
+const forceShowBanner = !hasPurchased && currentDayNum > 2 && !isManualMode;
+
+// After:
+const canViewThisDay = canViewPremiumContentForDay(entitlements, currentDayNum);
+const forceShowBanner = !canViewThisDay && !isManualMode;
+```
+
+Apply the same pattern to `canViewPremium` prop (line 2912-2919) and `onActivitySwap` (line 2926-2929).
+
+### Change 4: Remove reload race (`TripDetail.tsx`)
+
+Line 1080 — remove `window.location.reload()`:
+
+```
+onUnlockComplete={(enrichedItinerary) => {
+  refreshEntitlements();
+  setTrip(prev => prev ? {
+    ...prev,
+    itinerary_data: enrichedItinerary,
+  } : prev);
+  // No reload — React re-renders with updated state + fresh entitlements
+}}
+```
+
+### Change 5: Clean up debug logs
+
+Remove `[UnlockBanner Debug]` console.logs from `EditorialItinerary.tsx` (lines 2867-2874).
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `src/hooks/useUnlockTrip.ts` | Fix credit calc: `daysToUnlock` not `totalDays` |
+| `supabase/functions/get-entitlements/index.ts` | Add `unlocked_day_count` to response payload |
+| `src/hooks/useEntitlements.ts` | Add `unlocked_day_count` to type; fix `canViewPremiumContentForDay` |
+| `src/components/itinerary/EditorialItinerary.tsx` | Replace `hasPurchased` force-gate with `canViewPremiumContentForDay`; remove debug logs |
+| `src/pages/TripDetail.tsx` | Remove `window.location.reload()` from unlock callback |
+
+## Expected Result After Fix
+
+```text
+User creates 5-day first trip
+  |
+Days 1-2: Full access (first trip free)
+Days 3-5: Locked with "Unlock Remaining 3 Days" CTA
+  |
+User clicks unlock (180 credits, not 300)
+  |
+Credits spent --> Days 3-5 enriched --> unlocked_day_count set in DB
+  |
+refreshEntitlements() --> unlocked_day_count > 0 --> canViewPremiumContentForDay returns true
+  |
+React re-renders (no reload) --> All 5 days fully accessible
+  |
+Chat FAB + Find Alternative available on all days
+```
