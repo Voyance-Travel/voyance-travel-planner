@@ -90,6 +90,7 @@ export default function TripDetail() {
 
   // Entitlements — gate premium features like chat assistant
   const { data: entitlements } = useEntitlements(tripId);
+  // Premium access = paid purchase OR smart finish. First-trip free days don't grant chat access.
   const hasPremiumAccess = entitlements?.has_completed_purchase || entitlements?.trip_has_smart_finish || false;
 
   // Check if trip already has a learning submitted
