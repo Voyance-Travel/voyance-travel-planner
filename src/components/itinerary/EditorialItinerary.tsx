@@ -2857,21 +2857,42 @@ export function EditorialItinerary({
                 ) : (
                   <>
                     {/* Show unlock CTA when viewing a gated day */}
-                    {!canViewPremiumContentForDay(entitlements, days[selectedDayIndex].dayNumber) && !isManualMode && (
-                      <div className="mb-4">
-                        <UnlockBanner
-                          tripId={tripId}
-                          totalDays={days.length}
-                          destination={destination}
-                          destinationCountry={destinationCountry}
-                          travelers={travelers}
-                          startDate={startDate}
-                          budgetTier={budgetTier}
-                          tripType={tripType}
-                          onUnlockComplete={onUnlockComplete}
-                        />
-                      </div>
-                    )}
+                    {(() => {
+                      const currentDayNum = days[selectedDayIndex].dayNumber;
+                      const canView = canViewPremiumContentForDay(entitlements, currentDayNum);
+                      const hasPurchased = entitlements?.has_completed_purchase || entitlements?.trip_has_smart_finish || false;
+                      // Force-show banner for days 3+ when user hasn't paid, regardless of entitlements state
+                      const forceShowBanner = !hasPurchased && currentDayNum > 2 && !isManualMode;
+                      const shouldShow = (!canView && !isManualMode) || forceShowBanner;
+                      console.log('[UnlockBanner Debug]', {
+                        dayNumber: currentDayNum,
+                        canViewPremium: canView,
+                        isManualMode,
+                        hasPurchased,
+                        forceShowBanner,
+                        shouldShow,
+                        entitlements_loaded: !!entitlements,
+                        has_completed_purchase: entitlements?.has_completed_purchase,
+                        is_first_trip: entitlements?.is_first_trip,
+                        trip_has_smart_finish: entitlements?.trip_has_smart_finish,
+                      });
+                      if (!shouldShow) return null;
+                      return (
+                        <div className="mb-4">
+                          <UnlockBanner
+                            tripId={tripId}
+                            totalDays={days.length}
+                            destination={destination}
+                            destinationCountry={destinationCountry}
+                            travelers={travelers}
+                            startDate={startDate}
+                            budgetTier={budgetTier}
+                            tripType={tripType}
+                            onUnlockComplete={onUnlockComplete}
+                          />
+                        </div>
+                      );
+                    })()}
                     <DayCard
                       key={days[selectedDayIndex].dayNumber}
                       day={days[selectedDayIndex]}
@@ -2887,7 +2908,13 @@ export function EditorialItinerary({
                     isRegenerating={regeneratingDay === days[selectedDayIndex].dayNumber}
                     isEditable={effectiveIsEditable}
                     isPreview={effectiveIsPreview}
-                    canViewPremium={canViewPremiumContentForDay(entitlements, days[selectedDayIndex].dayNumber)}
+                    canViewPremium={(() => {
+                      const hasPurchased = entitlements?.has_completed_purchase || entitlements?.trip_has_smart_finish || false;
+                      if (hasPurchased) return true;
+                      // Force-gate days 3+ for users without purchases
+                      if (days[selectedDayIndex].dayNumber > 2) return false;
+                      return canViewPremiumContentForDay(entitlements, days[selectedDayIndex].dayNumber);
+                    })()}
                     tripId={tripId}
                      onUnlockTrip={() => setCreditNudge({ action: 'UNLOCK_DAY' })}
                      onUnlockDay={handleUnlockDay}
@@ -2895,7 +2922,13 @@ export function EditorialItinerary({
                     getPaymentForItem={getPaymentForItem}
                     refreshPayments={refreshPayments}
                     onToggle={() => toggleDay(days[selectedDayIndex].dayNumber)}
-                    onActivitySwap={aiLocked || !canViewPremiumContentForDay(entitlements, days[selectedDayIndex].dayNumber) ? undefined : openSwapDrawer}
+                    onActivitySwap={(() => {
+                      const hasPurchased = entitlements?.has_completed_purchase || entitlements?.trip_has_smart_finish || false;
+                      if (aiLocked) return undefined;
+                      if (!hasPurchased && days[selectedDayIndex].dayNumber > 2) return undefined;
+                      if (!canViewPremiumContentForDay(entitlements, days[selectedDayIndex].dayNumber)) return undefined;
+                      return openSwapDrawer;
+                    })()}
                     onActivityLock={handleActivityLock}
                     onActivityMove={handleActivityMove}
                     onActivityReorder={(reordered) => handleActivityReorder(selectedDayIndex, reordered)}
