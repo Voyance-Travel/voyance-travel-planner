@@ -1069,15 +1069,11 @@ export default function TripDetail() {
                   creationSource={trip.creation_source}
                   onBookingAdded={() => window.location.reload()}
                   onUnlockComplete={(enrichedItinerary) => {
-                    // Invalidate entitlements cache so fresh fetch sees unlocked_day_count
                     refreshEntitlements();
-                    // Refresh trip with enriched data — reload to re-parse
                     setTrip(prev => prev ? {
                       ...prev,
                       itinerary_data: enrichedItinerary as any,
                     } : prev);
-                    // Force full reload to re-parse editorial days
-                    window.location.reload();
                   }}
                   onPaymentRequest={async (activityId) => {
                     // Find the activity across all days

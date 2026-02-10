@@ -39,6 +39,7 @@ export interface EntitlementsResponse {
   has_completed_purchase: boolean;
   is_first_trip: boolean;
   trip_has_smart_finish: boolean;
+  unlocked_day_count: number;
 
   // Feature flags (computed from gates)
   can_view_photos: boolean;
@@ -258,9 +259,7 @@ export function canViewPremiumContentForDay(
   }
   if (entitlements.has_completed_purchase) return true;
   if (entitlements.trip_has_smart_finish) return true;
-  // can_view_photos is the server-computed flag that includes unlocked_day_count > 0
-  // For first-trip users who haven't unlocked, only days 1-2 are free
-  if (entitlements.can_view_photos && !entitlements.is_first_trip) return true;
+  if ((entitlements.unlocked_day_count ?? 0) > 0) return true;
   if (entitlements.is_first_trip && dayNumber <= 2) return true;
   return false;
 }
@@ -283,6 +282,7 @@ function getDefaultEntitlements(userId: string): EntitlementsResponse {
     has_completed_purchase: false,
     is_first_trip: true,
     trip_has_smart_finish: false,
+    unlocked_day_count: 0,
     can_view_photos: true, // First trip = true
     can_view_addresses: true,
     can_view_booking_links: true,
