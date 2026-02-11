@@ -1,174 +1,119 @@
 
 
-# Fix: Unlock Flow — 3 Surgical Changes + 1 Logic Fix
+# Fix: 4 QA Bugs — unlocked_day_count + Toast + Manual Mode
 
-## What's Broken (confirmed by code inspection)
+## Problem Summary
 
-### Bug 1: Overcharging Credits
-**File**: `useUnlockTrip.ts`, line 85
-Uses `params.totalDays` (5) to calculate cost instead of only the locked days (3). User gets charged 300 credits instead of 180.
+All 4 bugs trace back to a single root cause family: the system charges credits but never records that days are unlocked, and the UI shows inaccurate feedback.
 
-### Bug 2: Force-Gate Checks Wrong Field
-**File**: `EditorialItinerary.tsx`, lines 2863-2866
-Checks `has_completed_purchase` (Stripe purchases only). Credit-based unlocks set `unlocked_day_count` instead, so the gate never opens.
+| Bug | Root Cause |
+|-----|-----------|
+| QA-019: Paid trip stays gated | `TripDetail.tsx` save omits `unlocked_day_count` |
+| QA-020: Single-day unlock fails | `useUnlockDay.ts` never increments `unlocked_day_count` |
+| QA-015: Swap toast lies | Toast hardcoded to "5 credits used" even when free |
+| QA-021: Smart Finish missing | Manual mode only checks localStorage, not DB `creation_source` |
 
-### Bug 2b: `canViewPremiumContentForDay` Has a Logic Hole
-**File**: `useEntitlements.ts`, line 263
-After unlock, the server correctly returns `can_view_photos: true`. But the client-side function checks `can_view_photos && !is_first_trip`. For first-trip users (who are the primary unlock audience), `is_first_trip` is still `true`, so this check fails. It falls through to line 264 which only allows days 1-2.
+---
 
-### Bug 3: Reload Races Entitlements Refresh
-**File**: `TripDetail.tsx`, line 1080
-`window.location.reload()` fires before `refreshEntitlements()` completes, loading stale cached data.
+## Changes
 
-## Implementation Plan
+### 1. TripDetail.tsx — Set `unlocked_day_count` on Paid Generation (QA-019)
 
-### Change 1: Fix credit calculation (`useUnlockTrip.ts`)
+In `handleGenerationComplete` (line 651-658), when `isPreview` is false (meaning credits were charged), include `unlocked_day_count` in the database update:
 
-Line 85 — derive cost from locked days only:
-
-```
-// Before:
-const unlockCost = getUnlockCost(params.totalDays);
-
-// After:
-const startDay = params.startDay || 1;
-const daysToUnlock = params.totalDays - startDay + 1;
-const unlockCost = getUnlockCost(daysToUnlock);
+```typescript
+.update({
+  itinerary_data: ...,
+  itinerary_status: 'ready',
+  updated_at: ...,
+  // Set unlocked_day_count for paid generations
+  ...(isPreview === false ? { unlocked_day_count: nonLockedDays.length } : {}),
+})
 ```
 
-### Change 2: Fix `canViewPremiumContentForDay` (`useEntitlements.ts`)
+`nonLockedDays` is already computed on line 623 — it's the generated days minus locked placeholders. This is the exact count of days the user paid for.
 
-Lines 259-265 — when `can_view_photos` is true (server says user has paid access), return true regardless of `is_first_trip`:
+---
 
+### 2. useUnlockDay.ts — Increment `unlocked_day_count` After Single-Day Unlock (QA-020)
+
+After successful enrichment (between line 155 and the toast on line 158), fetch the current count and increment it:
+
+```typescript
+// Increment unlocked_day_count in DB
+const { data: tripRow } = await supabase
+  .from('trips')
+  .select('unlocked_day_count')
+  .eq('id', params.tripId)
+  .single();
+const currentCount = tripRow?.unlocked_day_count ?? 0;
+await supabase
+  .from('trips')
+  .update({ unlocked_day_count: currentCount + 1 })
+  .eq('id', params.tripId);
 ```
-// Before:
-if (entitlements.can_view_photos && !entitlements.is_first_trip) return true;
-if (entitlements.is_first_trip && dayNumber <= 2) return true;
 
-// After:
-if (entitlements.can_view_photos && entitlements.has_completed_purchase) return true;
-if (entitlements.can_view_photos && entitlements.trip_has_smart_finish) return true;
-// For first-trip users: check if they've unlocked days (server sets can_view_photos when unlockedDays > 0)
-// If can_view_photos is true AND is_first_trip, they must have unlocked — grant full access
-if (entitlements.can_view_photos) return true;
-if (entitlements.is_first_trip && dayNumber <= 2) return true;
-```
+Also invalidate the trip query so the UI picks up the new count.
 
-Wait — that simplifies to just: if `can_view_photos` is true, return true for all days. The server already computes this correctly (`hasPaidAccess || isFirstTrip`). The day-level restriction for first-trip users should only apply when `can_view_photos` is true solely because of `isFirstTrip` (not because of `hasPaidAccess`).
+---
 
-Correct fix:
+### 3. EditorialItinerary.tsx — Accurate Swap Toast (QA-015)
 
-```
-// After:
-if (entitlements.has_completed_purchase) return true;
-if (entitlements.trip_has_smart_finish) return true;
-// can_view_photos includes unlockedDays > 0 from server
-// For first-trip users who haven't unlocked, can_view_photos is true (from isFirstTrip),
-// but we still restrict to days 1-2. If they HAVE unlocked, can_view_photos is true
-// from hasPaidAccess, not just isFirstTrip.
-if (entitlements.is_first_trip) {
-  // Check if access comes from hasPaidAccess (not just isFirstTrip)
-  // Server sets can_view_photos = hasPaidAccess || isFirstTrip
-  // If has_completed_purchase and trip_has_smart_finish are both false,
-  // hasPaidAccess = unlockedDays > 0
-  const hasUnlockedDays = entitlements.can_view_photos && 
-    !entitlements.has_completed_purchase && 
-    !entitlements.trip_has_smart_finish;
-  // If they have unlocked days, grant full access; otherwise only days 1-2
-  if (hasUnlockedDays && !entitlements.is_first_trip) return true;
-  // ... this is circular
+Line 1546: Capture the return value from `spendCredits.mutateAsync()`.
+Line 1610: Replace hardcoded toast with dynamic one based on actual server response.
+
+```typescript
+const result = await spendCredits.mutateAsync({
+  action: 'SWAP_ACTIVITY', tripId, ...
+});
+// ... (existing swap logic unchanged) ...
+
+// Replace line 1610:
+if (result?.freeCapUsed) {
+  toast.success(`Swapped activity (free - ${result.usageCount}/${result.freeCap} used)`);
+} else {
+  toast.success(`Swapped activity (${result?.spent ?? CREDIT_COSTS.SWAP_ACTIVITY} credits used)`);
 }
 ```
 
-The real issue is the client can't distinguish WHY `can_view_photos` is true. The cleanest fix: **add `unlocked_day_count` to the entitlements response** so the client can check it directly. But that requires an edge function change. Simpler alternative: since `can_view_photos` is `hasPaidAccess || isFirstTrip`, and `hasPaidAccess = hasCompletedPurchase || tripHasSmartFinish || unlockedDays > 0`, we can check:
+---
 
-```
-const hasPaidAccess = entitlements.has_completed_purchase || 
-                      entitlements.trip_has_smart_finish || 
-                      (entitlements.can_view_photos && !entitlements.is_first_trip);
-```
+### 4. EditorialItinerary.tsx — Manual Mode Detection from DB (QA-021)
 
-No — for first-trip users who unlock, `is_first_trip` is still true, so the third clause fails. We need the server to send `unlocked_day_count` directly.
+Line 1052: Expand the check to include the `creationSource` prop (already passed from TripDetail):
 
-**Revised approach**: Add `unlocked_day_count` to the entitlements response (it's already computed server-side on line 207), then use it client-side.
-
-### Change 2 (revised): Two-part fix
-
-**Part A**: Edge function `get-entitlements/index.ts` — add `unlocked_day_count` to response (it's already computed as `unlockedDays` on line 207, just not included in the response object).
-
-**Part B**: Client `useEntitlements.ts` — add `unlocked_day_count` to the `EntitlementsResponse` type and update `canViewPremiumContentForDay`:
-
-```
-// After:
-if (entitlements.has_completed_purchase) return true;
-if (entitlements.trip_has_smart_finish) return true;
-if ((entitlements.unlocked_day_count ?? 0) > 0) return true;
-if (entitlements.is_first_trip && dayNumber <= 2) return true;
-return false;
+```typescript
+const isManualMode = (tripId ? isManualBuilder(tripId) : false) 
+  || creationSource === 'manual_paste' 
+  || creationSource === 'manual';
 ```
 
-This is definitive — no ambiguity about why `can_view_photos` is true.
+This ensures the Smart Finish banner appears even if localStorage was cleared.
 
-### Change 3: Replace force-gate with canonical check (`EditorialItinerary.tsx`)
-
-Lines 2861-2866 — replace the `hasPurchased` check with the now-fixed `canViewPremiumContentForDay`:
-
-```
-// Before:
-const hasPurchased = entitlements?.has_completed_purchase || entitlements?.trip_has_smart_finish || false;
-const forceShowBanner = !hasPurchased && currentDayNum > 2 && !isManualMode;
-
-// After:
-const canViewThisDay = canViewPremiumContentForDay(entitlements, currentDayNum);
-const forceShowBanner = !canViewThisDay && !isManualMode;
-```
-
-Apply the same pattern to `canViewPremium` prop (line 2912-2919) and `onActivitySwap` (line 2926-2929).
-
-### Change 4: Remove reload race (`TripDetail.tsx`)
-
-Line 1080 — remove `window.location.reload()`:
-
-```
-onUnlockComplete={(enrichedItinerary) => {
-  refreshEntitlements();
-  setTrip(prev => prev ? {
-    ...prev,
-    itinerary_data: enrichedItinerary,
-  } : prev);
-  // No reload — React re-renders with updated state + fresh entitlements
-}}
-```
-
-### Change 5: Clean up debug logs
-
-Remove `[UnlockBanner Debug]` console.logs from `EditorialItinerary.tsx` (lines 2867-2874).
+---
 
 ## Files Changed
 
-| File | Change |
-|------|--------|
-| `src/hooks/useUnlockTrip.ts` | Fix credit calc: `daysToUnlock` not `totalDays` |
-| `supabase/functions/get-entitlements/index.ts` | Add `unlocked_day_count` to response payload |
-| `src/hooks/useEntitlements.ts` | Add `unlocked_day_count` to type; fix `canViewPremiumContentForDay` |
-| `src/components/itinerary/EditorialItinerary.tsx` | Replace `hasPurchased` force-gate with `canViewPremiumContentForDay`; remove debug logs |
-| `src/pages/TripDetail.tsx` | Remove `window.location.reload()` from unlock callback |
+| File | Lines | Change |
+|------|-------|--------|
+| `src/pages/TripDetail.tsx` | ~654 | Add `unlocked_day_count` to paid generation save |
+| `src/hooks/useUnlockDay.ts` | ~155 | Increment `unlocked_day_count` after single-day unlock |
+| `src/components/itinerary/EditorialItinerary.tsx` | ~1546, 1610 | Capture spend result, show accurate toast |
+| `src/components/itinerary/EditorialItinerary.tsx` | ~1052 | Check `creationSource` for manual mode |
 
 ## Expected Result After Fix
 
 ```text
-User creates 5-day first trip
-  |
-Days 1-2: Full access (first trip free)
-Days 3-5: Locked with "Unlock Remaining 3 Days" CTA
-  |
-User clicks unlock (180 credits, not 300)
-  |
-Credits spent --> Days 3-5 enriched --> unlocked_day_count set in DB
-  |
-refreshEntitlements() --> unlocked_day_count > 0 --> canViewPremiumContentForDay returns true
-  |
-React re-renders (no reload) --> All 5 days fully accessible
-  |
-Chat FAB + Find Alternative available on all days
+Paid trip (290 credits, 3-day Paris):
+  Credits charged: 180 --> unlocked_day_count: 3 --> all days fully accessible
+
+Single-day unlock (60 credits):
+  Credits charged: 60 --> unlocked_day_count: 1 --> 2 --> 3 (increments)
+
+Swap activity:
+  Free swap: "Swapped activity (free - 2/3 used)"
+  Paid swap: "Swapped activity (5 credits used)"
+
+Manual trip:
+  creation_source = 'manual' --> Smart Finish CTA visible
 ```
