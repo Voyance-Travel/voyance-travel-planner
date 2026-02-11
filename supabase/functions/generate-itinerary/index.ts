@@ -6279,133 +6279,12 @@ serve(async (req) => {
       console.log(`[generate-full] ✓ Using authenticated userId: ${userId} (trip owner: ${tripAccessResult.isOwner})`);
 
       // =========================================================================
-      // FREE TIER CHECK: Only generate Day 1 for free users (cost optimization)
-      // Full itinerary is generated only after Trip Pass purchase or if paid user
+      // Credit authorization is handled by the client-side generation gate
+      // (useGenerationGate.ts) BEFORE this function is called.
+      // The gate charges credits at 60/day and only invokes this function
+      // when authorized. No duplicate check needed here.
       // =========================================================================
-      let isFreeUser = true; // Default to free
-      let hasTripPass = false;
-      let originalTotalDays = 0; // Track requested days for metadata
-      
-      try {
-        // Check if user has an active subscription
-        const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-        if (stripeKey && userId) {
-          // Get user email from auth
-          const { data: userData } = await supabase.auth.admin.getUserById(userId);
-          const userEmail = userData?.user?.email;
-          
-          if (userEmail) {
-            const Stripe = (await import("npm:stripe@18.5.0")).default;
-            const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-            const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
-            
-            if (customers.data.length > 0) {
-              const customerId = customers.data[0].id;
-              const subscriptions = await stripe.subscriptions.list({
-                customer: customerId,
-                status: "active",
-                limit: 1,
-              });
-              
-              if (subscriptions.data.length > 0) {
-                isFreeUser = false;
-                console.log(`[generate-full] ✓ User has active subscription - generating full itinerary`);
-              }
-            }
-          }
-        }
-        
-        // Check for Trip Pass on this specific trip
-        if (isFreeUser && tripId) {
-          const { data: tripPurchase } = await supabase
-            .from('trip_purchases')
-            .select('id')
-            .eq('user_id', userId)
-            .eq('trip_id', tripId)
-            .eq('purchase_type', 'trip_pass')
-            .maybeSingle();
-          
-          if (tripPurchase) {
-            hasTripPass = true;
-            isFreeUser = false;
-            console.log(`[generate-full] ✓ Trip has Trip Pass - generating full itinerary`);
-          }
-        }
-        
-        // NOTE: Credit balance check moved to after context preparation (needs totalDays)
-      } catch (entitlementErr) {
-        console.warn(`[generate-full] Entitlement check failed, defaulting to free tier:`, entitlementErr);
-        // Continue with free tier generation
-      }
-
-      // STAGE 1: Context Preparation (supports direct trip data for localStorage/demo mode)
-      const directTripData = tripData ? {
-        tripId,
-        destination: tripData.destination,
-        destinationCountry: tripData.destinationCountry,
-        startDate: tripData.startDate,
-        endDate: tripData.endDate,
-        travelers: tripData.travelers,
-        tripType: tripData.tripType,
-        budgetTier: tripData.budgetTier,
-        userId: userId, // Always use authenticated userId
-      } : undefined;
-
-      const context = await prepareContext(supabase, tripId, userId, directTripData);
-      if (!context) {
-        return new Response(
-          JSON.stringify({ error: "Trip not found" }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
-      // Store original total days
-      originalTotalDays = context.totalDays;
-      
-      // =========================================================================
-      // CREDIT CHECK (after context prep - needs totalDays)
-      // Uses NEW credit_balances table (not deprecated user_credits)
-      // 150 credits = 1 day unlock. To generate N days, user needs N * 150 credits
-      // =========================================================================
-      if (isFreeUser && userId) {
-        try {
-          const { data: creditBalance } = await supabase
-            .from('credit_balances')
-            .select('purchased_credits, free_credits, free_credits_expires_at')
-            .eq('user_id', userId)
-            .maybeSingle();
-          
-          if (creditBalance) {
-            // Calculate effective credits (purchased + non-expired free)
-            let effectiveFreeCredits = creditBalance.free_credits || 0;
-            if (creditBalance.free_credits_expires_at) {
-              const expiresAt = new Date(creditBalance.free_credits_expires_at);
-              if (expiresAt < new Date()) {
-                effectiveFreeCredits = 0; // Free credits expired
-              }
-            }
-            const totalCredits = (creditBalance.purchased_credits || 0) + effectiveFreeCredits;
-            
-            // User can generate full trip if they have enough credits for all days
-            // Cost: 150 credits per day × totalDays
-            const requiredCredits = context.totalDays * 150;
-            if (totalCredits >= requiredCredits) {
-              isFreeUser = false;
-              console.log(`[generate-full] ✓ User has sufficient credits (${totalCredits} >= ${requiredCredits}) - generating full ${context.totalDays}-day itinerary`);
-            } else {
-              console.log(`[generate-full] ℹ️ User has ${totalCredits} credits, needs ${requiredCredits} for ${context.totalDays} days - limiting to Day 1`);
-            }
-          }
-        } catch (creditErr) {
-          console.warn(`[generate-full] Credit check failed:`, creditErr);
-        }
-      }
-      
-      // Limit free users to 2 days only — additional days require credits
-      if (isFreeUser) {
-        context.totalDays = Math.min(originalTotalDays, 2);
-        console.log(`[generate-full] 🔒 FREE USER: Limiting generation to ${context.totalDays} days (original: ${originalTotalDays} days)`);
-      }
+      let originalTotalDays = 0; // Set after context prep
 
       // Get user preferences for personalization
       const insights = userId ? await getLearnedPreferences(supabase, userId) : null;
@@ -7649,14 +7528,7 @@ RULES FOR VOYANCE PICKS:
           enrichmentMetadata: enrichedItinerary.enrichmentMetadata,
           // Hidden gems discovered but not auto-included (for browsable section)
           hiddenGems: discoveredGems.length > 0 ? discoveredGems : undefined,
-          // Free tier metadata for frontend upgrade prompts
-          freeTierInfo: isFreeUser ? {
-            isFreeTier: true,
-            daysGenerated: context.totalDays,
-            totalDaysRequested: originalTotalDays,
-            remainingDaysLocked: originalTotalDays - context.totalDays,
-            upgradeMessage: `Unlock ${originalTotalDays - 1} more days with a Trip Pass`
-          } : undefined
+          // freeTierInfo removed — credit gating handled by client-side generation gate
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
