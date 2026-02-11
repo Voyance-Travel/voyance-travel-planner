@@ -1,119 +1,61 @@
 
 
-# Fix: 4 QA Bugs — unlocked_day_count + Toast + Manual Mode
+# Fix: Remove Legacy Credit Check from generate-itinerary Edge Function
 
-## Problem Summary
+## Problem
 
-All 4 bugs trace back to a single root cause family: the system charges credits but never records that days are unlocked, and the UI shows inaccurate feedback.
-
-| Bug | Root Cause |
-|-----|-----------|
-| QA-019: Paid trip stays gated | `TripDetail.tsx` save omits `unlocked_day_count` |
-| QA-020: Single-day unlock fails | `useUnlockDay.ts` never increments `unlocked_day_count` |
-| QA-015: Swap toast lies | Toast hardcoded to "5 credits used" even when free |
-| QA-021: Smart Finish missing | Manual mode only checks localStorage, not DB `creation_source` |
-
----
-
-## Changes
-
-### 1. TripDetail.tsx — Set `unlocked_day_count` on Paid Generation (QA-019)
-
-In `handleGenerationComplete` (line 651-658), when `isPreview` is false (meaning credits were charged), include `unlocked_day_count` in the database update:
-
-```typescript
-.update({
-  itinerary_data: ...,
-  itinerary_status: 'ready',
-  updated_at: ...,
-  // Set unlocked_day_count for paid generations
-  ...(isPreview === false ? { unlocked_day_count: nonLockedDays.length } : {}),
-})
-```
-
-`nonLockedDays` is already computed on line 623 — it's the generated days minus locked placeholders. This is the exact count of days the user paid for.
-
----
-
-### 2. useUnlockDay.ts — Increment `unlocked_day_count` After Single-Day Unlock (QA-020)
-
-After successful enrichment (between line 155 and the toast on line 158), fetch the current count and increment it:
-
-```typescript
-// Increment unlocked_day_count in DB
-const { data: tripRow } = await supabase
-  .from('trips')
-  .select('unlocked_day_count')
-  .eq('id', params.tripId)
-  .single();
-const currentCount = tripRow?.unlocked_day_count ?? 0;
-await supabase
-  .from('trips')
-  .update({ unlocked_day_count: currentCount + 1 })
-  .eq('id', params.tripId);
-```
-
-Also invalidate the trip query so the UI picks up the new count.
-
----
-
-### 3. EditorialItinerary.tsx — Accurate Swap Toast (QA-015)
-
-Line 1546: Capture the return value from `spendCredits.mutateAsync()`.
-Line 1610: Replace hardcoded toast with dynamic one based on actual server response.
-
-```typescript
-const result = await spendCredits.mutateAsync({
-  action: 'SWAP_ACTIVITY', tripId, ...
-});
-// ... (existing swap logic unchanged) ...
-
-// Replace line 1610:
-if (result?.freeCapUsed) {
-  toast.success(`Swapped activity (free - ${result.usageCount}/${result.freeCap} used)`);
-} else {
-  toast.success(`Swapped activity (${result?.spent ?? CREDIT_COSTS.SWAP_ACTIVITY} credits used)`);
-}
-```
-
----
-
-### 4. EditorialItinerary.tsx — Manual Mode Detection from DB (QA-021)
-
-Line 1052: Expand the check to include the `creationSource` prop (already passed from TripDetail):
-
-```typescript
-const isManualMode = (tripId ? isManualBuilder(tripId) : false) 
-  || creationSource === 'manual_paste' 
-  || creationSource === 'manual';
-```
-
-This ensures the Smart Finish banner appears even if localStorage was cleared.
-
----
-
-## Files Changed
-
-| File | Lines | Change |
-|------|-------|--------|
-| `src/pages/TripDetail.tsx` | ~654 | Add `unlocked_day_count` to paid generation save |
-| `src/hooks/useUnlockDay.ts` | ~155 | Increment `unlocked_day_count` after single-day unlock |
-| `src/components/itinerary/EditorialItinerary.tsx` | ~1546, 1610 | Capture spend result, show accurate toast |
-| `src/components/itinerary/EditorialItinerary.tsx` | ~1052 | Check `creationSource` for manual mode |
-
-## Expected Result After Fix
+The `generate-itinerary` edge function contains a redundant credit check that uses a **stale rate of 150 credits/day** instead of the correct 60 credits/day. This overrides the client-side generation gate's correct authorization, causing paid trips to only generate 2 days instead of all days.
 
 ```text
-Paid trip (290 credits, 3-day Paris):
-  Credits charged: 180 --> unlocked_day_count: 3 --> all days fully accessible
+CLIENT (correct):     4 days x 60  = 240 credits needed. User has 290. APPROVED.
+EDGE FUNCTION (wrong): 4 days x 150 = 600 credits needed. User has 50*. DENIED. Cap to 2 days.
 
-Single-day unlock (60 credits):
-  Credits charged: 60 --> unlocked_day_count: 1 --> 2 --> 3 (increments)
-
-Swap activity:
-  Free swap: "Swapped activity (free - 2/3 used)"
-  Paid swap: "Swapped activity (5 credits used)"
-
-Manual trip:
-  creation_source = 'manual' --> Smart Finish CTA visible
+* Balance is 50 because the client already charged 240
 ```
+
+## What Will Change
+
+**File:** `supabase/functions/generate-itinerary/index.ts`
+
+### Change 1: Remove legacy free-tier check block (lines 6281-6408)
+
+Remove ~128 lines containing:
+- Stripe subscription lookup (lines 6291-6316) -- redundant, client gate handles this
+- `trip_purchases` "Trip Pass" check (lines 6318-6333) -- obsolete concept
+- Credit recalculation at 150/day (lines 6370-6402) -- wrong rate
+- `if (isFreeUser) { context.totalDays = Math.min(originalTotalDays, 2); }` (lines 6404-6408) -- **the bug**
+
+Replace with:
+
+```typescript
+// Credit authorization is handled by the client-side generation gate
+// (useGenerationGate.ts) BEFORE this function is called.
+// The gate charges credits at 60/day and only invokes this function
+// when authorized. No duplicate check needed here.
+const originalTotalDays = 0; // Set after context prep
+```
+
+### Change 2: Remove `freeTierInfo` from response (lines 7652-7659)
+
+The `isFreeUser` variable no longer exists, so remove the metadata block that references it.
+
+## Why This Is Safe
+
+| Concern | Answer |
+|---------|--------|
+| Could users bypass payment? | No -- the client gate charges credits BEFORE calling the edge function |
+| What about locked mode? | The edge function is never called in locked mode -- client creates local placeholders |
+| What about first trips? | Client gate handles it -- generates all days, frontend caps unlock to 2 |
+
+## Expected Result
+
+| Scenario | Before Fix | After Fix |
+|----------|-----------|-----------|
+| Paid 4-day trip (240 credits) | Generates 2 days, locks rest | Generates 4 days, all unlocked |
+| First trip (5 days, free) | Generates 2 days | Generates 5 days, frontend unlocks 2 |
+| Preview mode (no credits) | Edge function never called | No change |
+
+## Fix Number
+
+This is **Fix 9 of 9** -- the final piece. All 8 client-side fixes are verified and correct. They just need the edge function to stop overriding them.
+
