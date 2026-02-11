@@ -654,6 +654,8 @@ export default function TripDetail() {
             itinerary_data: JSON.parse(JSON.stringify(itineraryPayload)) as any,
             itinerary_status: 'ready',
             updated_at: new Date().toISOString(),
+            // QA-019: Set unlocked_day_count for paid generations so gating works
+            ...(isPreview === false ? { unlocked_day_count: nonLockedDays.length } : {}),
           })
           .eq('id', tripId);
         

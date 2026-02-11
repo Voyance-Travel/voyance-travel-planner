@@ -1049,7 +1049,10 @@ export function EditorialItinerary({
   const transportCap = useActionCap(tripId, 'transport_mode_change');
   
   const { isManualBuilder, enableManualBuilder } = useManualBuilderStore();
-  const isManualMode = tripId ? isManualBuilder(tripId) : false;
+  // QA-021: Check DB creation_source in addition to localStorage
+  const isManualMode = (tripId ? isManualBuilder(tripId) : false)
+    || creationSource === 'manual_paste'
+    || creationSource === 'manual';
   
   // Smart Finish state — check URL params for post-purchase return
   const [smartFinishPurchased, setSmartFinishPurchased] = useState(false);
@@ -1543,7 +1546,7 @@ export function EditorialItinerary({
     // Spend credits for the swap (server handles free caps)
     {
       try {
-        await spendCredits.mutateAsync({
+        var swapCreditResult = await spendCredits.mutateAsync({
           action: 'SWAP_ACTIVITY',
           tripId,
           activityId: target.activityId,
@@ -1607,7 +1610,12 @@ export function EditorialItinerary({
     setSwapDrawerOpen(false);
     setSwapTarget(null);
     setSwapDrawerActivity(null);
-    toast.success(`Swapped activity (${CREDIT_COSTS.SWAP_ACTIVITY} credits used)`);
+    // QA-015: Show accurate free/paid toast based on server response
+    if (swapCreditResult?.freeCapUsed) {
+      toast.success(`Swapped activity (free — ${swapCreditResult.usageCount}/${swapCreditResult.freeCap} used)`);
+    } else {
+      toast.success(`Swapped activity (${swapCreditResult?.spent ?? CREDIT_COSTS.SWAP_ACTIVITY} credits used)`);
+    }
   }, [swapTarget, tripCurrency, isPaid, spendCredits, tripId]);
 
   // Supports both database trips and localStorage demo trips
