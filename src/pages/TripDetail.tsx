@@ -616,7 +616,7 @@ export default function TripDetail() {
   })();
 
   // Handle itinerary generation complete - also force-save to backend
-  const handleGenerationComplete = useCallback(async (generatedDays: GeneratedDay[], generatedOverview?: TripOverview) => {
+  const handleGenerationComplete = useCallback(async (generatedDays: GeneratedDay[], generatedOverview?: TripOverview, isFirstTrip?: boolean) => {
     // Detect if this is a preview itinerary — only check non-locked days.
     // Locked placeholder days always have isPreview:true but that doesn't mean
     // the actual generated days are previews (e.g., first-trip free 2-day generation).
@@ -654,8 +654,8 @@ export default function TripDetail() {
             itinerary_data: JSON.parse(JSON.stringify(itineraryPayload)) as any,
             itinerary_status: 'ready',
             updated_at: new Date().toISOString(),
-            // QA-019: Set unlocked_day_count for paid generations so gating works
-            ...(isPreview === false ? { unlocked_day_count: nonLockedDays.length } : {}),
+            // QA-019 + Bug B: Set unlocked_day_count — first trip caps at 2, paid gets all
+            ...(isPreview === false ? { unlocked_day_count: isFirstTrip ? Math.min(2, nonLockedDays.length) : nonLockedDays.length } : {}),
           })
           .eq('id', tripId);
         

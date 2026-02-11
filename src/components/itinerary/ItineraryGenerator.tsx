@@ -34,7 +34,7 @@ interface ItineraryGeneratorProps {
   isMultiCity?: boolean;
   /** Auto-start generation immediately without showing confirmation */
   autoStart?: boolean;
-  onComplete: (days: GeneratedDay[], overview?: TripOverview) => void;
+  onComplete: (days: GeneratedDay[], overview?: TripOverview, isFirstTrip?: boolean) => void;
   onCancel?: () => void;
 }
 
@@ -195,7 +195,7 @@ export function ItineraryGenerator({
         setPrePhase(null);
         await new Promise(resolve => setTimeout(resolve, 900));
         if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
-        onComplete(allDays, overview);
+        onComplete(allDays, overview, gateResult.isFirstTrip);
       } else {
         // LOCKED — no credits, no AI, no API calls
         console.log(`[ItineraryGenerator] LOCKED: user has ${gateResult.currentBalance} credits, needs ${gateResult.tripCost}. No AI generation.`);
@@ -214,7 +214,7 @@ export function ItineraryGenerator({
 
         // Pass locked placeholders to onComplete so the trip structure exists
         if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
-        onComplete(lockedDays);
+        onComplete(lockedDays, undefined, false);
       }
     } catch (err) {
       if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
