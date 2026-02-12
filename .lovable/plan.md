@@ -1,61 +1,124 @@
 
 
-# Fix: Remove Legacy Credit Check from generate-itinerary Edge Function
+# Create voyanceFlowController.ts + Fix Bugs 11 & 12
 
-## Problem
+## What This Does
 
-The `generate-itinerary` edge function contains a redundant credit check that uses a **stale rate of 150 credits/day** instead of the correct 60 credits/day. This overrides the client-side generation gate's correct authorization, causing paid trips to only generate 2 days instead of all days.
+Creates a single source of truth library for all business logic decisions, then refactors 8+ files to import from it instead of having their own copies. Also fixes the two remaining server-side bugs.
 
-```text
-CLIENT (correct):     4 days x 60  = 240 credits needed. User has 290. APPROVED.
-EDGE FUNCTION (wrong): 4 days x 150 = 600 credits needed. User has 50*. DENIED. Cap to 2 days.
+## Important Discrepancies Found in Your Draft
 
-* Balance is 50 because the client already charged 240
-```
+Before implementing, I found several places where your proposed library doesn't match the actual codebase. These need to be reconciled:
 
-## What Will Change
+| Your Draft | Actual Code | Resolution |
+|------------|-------------|------------|
+| `COSTS.RESTAURANT_REC = 15` | `CREDIT_COSTS.RESTAURANT_REC = 5` (pricing.ts line 17) | Use **5** (matches pricing.ts) |
+| `calculateTripCost = days x 60 + multi-city 60` | `tripCostCalculator.ts` uses **complexity multipliers** (1.0x-1.3x), **tiered multi-city fees** (0/60/120/180), and **roundUpTo10** | Keep `tripCostCalculator.ts` as-is -- it's already correct and more sophisticated |
+| `FREE_LIMITS` has `flex` tier | Actual code has `free` and `flex` as separate tiers in `TIER_FREE_CAPS` with identical values, plus trip-length scaling for Free/Flex | Keep `TIER_FREE_CAPS` and `FLEX_CAPS_BY_DAYS` from pricing.ts |
+| `CREDIT_GRANTS.QUIZ_COMPLETION = 100` | Not found in pricing.ts -- may be handled elsewhere | Omit unless confirmed |
+| Missing: `TRANSPORT_MODE_CHANGE`, `HOTEL_SEARCH`, `HOTEL_OPTIMIZATION`, `MYSTERY_GETAWAY`, `MYSTERY_LOGISTICS` | All exist in `CREDIT_COSTS` (pricing.ts) | Include all costs |
 
-**File:** `supabase/functions/generate-itinerary/index.ts`
+## Implementation Plan
 
-### Change 1: Remove legacy free-tier check block (lines 6281-6408)
+### Phase 1: Create the Library
 
-Remove ~128 lines containing:
-- Stripe subscription lookup (lines 6291-6316) -- redundant, client gate handles this
-- `trip_purchases` "Trip Pass" check (lines 6318-6333) -- obsolete concept
-- Credit recalculation at 150/day (lines 6370-6402) -- wrong rate
-- `if (isFreeUser) { context.totalDays = Math.min(originalTotalDays, 2); }` (lines 6404-6408) -- **the bug**
+**New file: `src/lib/voyanceFlowController.ts`**
 
-Replace with:
+This will be a **thin decision layer** that imports constants from `config/pricing.ts` and `tripCostCalculator.ts` rather than duplicating them:
 
 ```typescript
-// Credit authorization is handled by the client-side generation gate
-// (useGenerationGate.ts) BEFORE this function is called.
-// The gate charges credits at 60/day and only invokes this function
-// when authorized. No duplicate check needed here.
-const originalTotalDays = 0; // Set after context prep
+// Re-export constants from their canonical sources
+export { CREDIT_COSTS, TIER_FREE_CAPS, FREE_ACTION_CAPS } from '@/config/pricing';
+export { BASE_RATE_PER_DAY, calculateTripCredits } from '@/lib/tripCostCalculator';
+
+// NEW: Decision functions only
+export const FIRST_TRIP_FREE_DAYS = 2;
+
+export function computeUnlockedDayCount(...)
+export function canAccessDay(...)
+export function getActionCost(...)
+export function hasPaidAccessForTrip(...)
+export function formatActionToast(...)
 ```
 
-### Change 2: Remove `freeTierInfo` from response (lines 7652-7659)
+Key design decision: **Don't duplicate constants**. The library re-exports from `config/pricing.ts` (which has all the Stripe product IDs, pack details, etc.) and adds only the decision functions that were previously scattered.
 
-The `isFreeUser` variable no longer exists, so remove the metadata block that references it.
+### Phase 2: Fix Bug 11 -- save-itinerary Override
 
-## Why This Is Safe
+**File: `supabase/functions/generate-itinerary/index.ts`**
 
-| Concern | Answer |
-|---------|--------|
-| Could users bypass payment? | No -- the client gate charges credits BEFORE calling the edge function |
-| What about locked mode? | The edge function is never called in locked mode -- client creates local placeholders |
-| What about first trips? | Client gate handles it -- generates all days, frontend caps unlock to 2 |
+Remove lines 9273 and 9280-9283:
+```typescript
+// DELETE:
+if (itinerary?.isPreview === false) {
+  const dayCount = Array.isArray(itinerary?.days) ? itinerary.days.length : 0;
+  updatePayload.unlocked_day_count = dayCount;
+}
+```
 
-## Expected Result
+Replace the comment on line 9273 with:
+```typescript
+// unlocked_day_count is managed by the client (TripDetail.tsx + useUnlockDay.ts).
+// Do NOT set it here -- doing so creates a race condition with the client's write.
+```
 
-| Scenario | Before Fix | After Fix |
-|----------|-----------|-----------|
-| Paid 4-day trip (240 credits) | Generates 2 days, locks rest | Generates 4 days, all unlocked |
-| First trip (5 days, free) | Generates 2 days | Generates 5 days, frontend unlocks 2 |
-| Preview mode (no credits) | Edge function never called | No change |
+### Phase 3: Fix Bug 12 -- hasPaidAccess Leak
 
-## Fix Number
+**File: `supabase/functions/get-entitlements/index.ts`**
 
-This is **Fix 9 of 9** -- the final piece. All 8 client-side fixes are verified and correct. They just need the edge function to stop overriding them.
+Change line 240:
+```typescript
+// FROM:
+const hasPaidAccess = hasCompletedPurchase || tripHasSmartFinish || unlockedDays > 0;
+
+// TO:
+const hasPaidAccess = tripHasSmartFinish || unlockedDays > 0;
+```
+
+### Phase 4: Refactor Consumers
+
+**4a. `src/hooks/useEntitlements.ts` (canViewPremiumContentForDay)**
+- Import `canAccessDay` from `voyanceFlowController`
+- Replace the inline logic (lines 252-264) with a call to `canAccessDay()`
+- Keeps the same function signature for backward compatibility
+
+**4b. `src/pages/TripDetail.tsx` (handleGenerationComplete)**
+- Import `computeUnlockedDayCount` from `voyanceFlowController`
+- Replace inline `isFirstTrip ? Math.min(2, nonLockedDays.length) : nonLockedDays.length` (line 658) with `computeUnlockedDayCount()`
+
+**4c. `src/hooks/useActionCap.ts`**
+- Import `getActionCost` from `voyanceFlowController`
+- Replace inline cap lookup with the library function
+
+**4d. `src/hooks/useUnlockDay.ts`**
+- Import `CREDIT_COSTS` via `voyanceFlowController` (or keep direct import from pricing.ts -- both work since the library re-exports)
+
+**4e. `src/hooks/useGenerationGate.ts`**
+- No logic change needed (already uses `tripCostCalculator` correctly)
+- Optionally import `FIRST_TRIP_FREE_DAYS` from the library for the comment clarity
+
+### Phase 5: Deploy Edge Functions
+
+Both modified edge functions will be redeployed:
+- `generate-itinerary` (Bug 11 fix)
+- `get-entitlements` (Bug 12 fix)
+
+## Files Changed Summary
+
+| File | Change Type | Priority |
+|------|-------------|----------|
+| `src/lib/voyanceFlowController.ts` | NEW -- central decision library | CRITICAL |
+| `supabase/functions/generate-itinerary/index.ts` | Remove `unlocked_day_count` from save-itinerary | CRITICAL |
+| `supabase/functions/get-entitlements/index.ts` | Remove `hasCompletedPurchase` from `hasPaidAccess` | HIGH |
+| `src/hooks/useEntitlements.ts` | Use `canAccessDay` from library | MEDIUM |
+| `src/pages/TripDetail.tsx` | Use `computeUnlockedDayCount` from library | MEDIUM |
+| `src/hooks/useActionCap.ts` | Use `getActionCost` from library | MEDIUM |
+
+## What This Fixes
+
+| Scenario | Before | After |
+|----------|--------|-------|
+| First trip (5 days) | Race condition: client sets 2, server overwrites to 5 | Client sets 2, server doesn't touch it |
+| Past purchaser, new trip | `hasCompletedPurchase` grants access to all trips | Per-trip gating: only unlocked trips show content |
+| Future bugs | Logic in 8 files, each can diverge | One library, all consumers import |
 
