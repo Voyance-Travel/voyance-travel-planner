@@ -8,6 +8,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { canAccessDaySimple } from '@/lib/voyanceFlowController';
 
 // ============================================================================
 // Types
@@ -255,13 +256,12 @@ export function canViewPremiumContentForDay(
 ): boolean {
   // No entitlements loaded = assume first trip, days 1-2 free
   if (!entitlements) return dayNumber <= 2;
-  // Smart Finish unlocks all days
-  if (entitlements.trip_has_smart_finish) return true;
-  // Per-day check: only days within the unlock count are accessible
-  if (dayNumber <= (entitlements.unlocked_day_count ?? 0)) return true;
-  // First trip gets days 1-2 free
-  if (entitlements.is_first_trip && dayNumber <= 2) return true;
-  return false;
+  return canAccessDaySimple(
+    dayNumber,
+    entitlements.unlocked_day_count ?? 0,
+    entitlements.is_first_trip,
+    entitlements.trip_has_smart_finish,
+  );
 }
 
 // ============================================================================

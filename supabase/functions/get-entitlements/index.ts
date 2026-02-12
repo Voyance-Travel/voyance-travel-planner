@@ -237,7 +237,9 @@ serve(async (req) => {
     };
 
     // ── Feature flags ──
-    const hasPaidAccess = hasCompletedPurchase || tripHasSmartFinish || unlockedDays > 0;
+    // Bug 12 fix: per-trip only. hasCompletedPurchase is a global flag and must NOT grant per-trip access.
+    // See src/lib/voyanceFlowController.ts hasPaidAccessForTrip() for the canonical logic.
+    const hasPaidAccess = tripHasSmartFinish || unlockedDays > 0;
 
     // ── Legacy usage/limits ──
     const { data: usage } = await supabaseAdmin

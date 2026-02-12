@@ -12,6 +12,7 @@ import { EditorialItinerary } from '@/components/itinerary/EditorialItinerary';
 import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
 import { ItineraryAssistant } from '@/components/itinerary/ItineraryAssistant';
 import { useEntitlements, canViewPremiumContentForDay } from '@/hooks/useEntitlements';
+import { computeUnlockedDayCount } from '@/lib/voyanceFlowController';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { TripDebriefModal } from '@/components/trip/TripDebriefModal';
 import { TripConfirmationBanner } from '@/components/trip/TripConfirmationBanner';
@@ -654,8 +655,8 @@ export default function TripDetail() {
             itinerary_data: JSON.parse(JSON.stringify(itineraryPayload)) as any,
             itinerary_status: 'ready',
             updated_at: new Date().toISOString(),
-            // QA-019 + Bug B: Set unlocked_day_count — first trip caps at 2, paid gets all
-            ...(isPreview === false ? { unlocked_day_count: isFirstTrip ? Math.min(2, nonLockedDays.length) : nonLockedDays.length } : {}),
+            // Set unlocked_day_count via voyanceFlowController (single source of truth)
+            ...(isPreview === false ? { unlocked_day_count: computeUnlockedDayCount({ isFirstTrip, isPreview: false, generatedDayCount: nonLockedDays.length }) } : {}),
           })
           .eq('id', tripId);
         
