@@ -2455,6 +2455,29 @@ export function EditorialItinerary({
                 </div>
               );
             })()}
+            {/* Unlock Status Pill */}
+            {(() => {
+              const lockedDayCount = days.filter(d => !canViewPremiumContentForDay(entitlements, d.dayNumber)).length;
+              const unlockedCount = days.length - lockedDayCount;
+              if (lockedDayCount === 0) return null;
+              return (
+                <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md bg-background border border-border text-xs sm:text-sm shrink-0">
+                  <Unlock className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-primary" />
+                  <span className="font-medium text-foreground">{unlockedCount} Unlocked</span>
+                  <span className="text-muted-foreground">·</span>
+                  <Lock className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-muted-foreground" />
+                  <span className="text-muted-foreground">{lockedDayCount} Locked</span>
+                </div>
+              );
+            })()}
+            {/* Credit Balance Pill */}
+            {creditData && (
+              <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md bg-primary/5 border border-primary/20 text-xs sm:text-sm shrink-0">
+                <Coins className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-primary" />
+                <span className="font-medium text-primary">{totalCredits}</span>
+                <span className="text-muted-foreground hidden sm:inline">credits</span>
+              </div>
+            )}
           </div>
           
           {/* Right: Cost + Actions */}
