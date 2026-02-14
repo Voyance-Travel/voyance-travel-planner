@@ -8,16 +8,14 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Coins, Zap, Sparkles, ArrowRight, Loader2, Pencil } from 'lucide-react';
+import { Coins, Zap, Sparkles, ArrowRight, Loader2, Eye } from 'lucide-react';
 import { CREDIT_PACKS, BOOST_PACK, CREDIT_COSTS, formatCredits, getRecommendedPack, CREDIT_EXPIRATION_COPY } from '@/config/pricing';
 import { EmbeddedCheckoutModal } from './EmbeddedCheckoutModal';
 import { useOutOfCredits } from '@/contexts/OutOfCreditsContext';
 import { useNavigate } from 'react-router-dom';
-import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { ROUTES } from '@/config/routes';
-import { toast as sonnerToast } from 'sonner';
 
 const ACTION_LABELS: Partial<Record<keyof typeof CREDIT_COSTS, string>> = {
   SWAP_ACTIVITY: 'Swap Activity',
@@ -34,7 +32,6 @@ export function OutOfCreditsModal() {
   const { state, dismiss } = useOutOfCredits();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { enableManualBuilder } = useManualBuilderStore();
   const [loadingPack, setLoadingPack] = useState<string | null>(null);
   const [checkoutConfig, setCheckoutConfig] = useState<{
     priceId: string;
@@ -77,10 +74,8 @@ export function OutOfCreditsModal() {
     }
   };
 
-  const handleManualBuild = () => {
+  const handleExploreFree = () => {
     if (tripId) {
-      enableManualBuilder(tripId);
-      sonnerToast.success('Manual builder mode enabled!');
       navigate(`/trip/${tripId}`, { replace: true });
     }
     dismiss();
@@ -217,11 +212,11 @@ export function OutOfCreditsModal() {
             {tripId && (
               <div className="pt-2 mt-1 border-t border-border">
                 <button
-                  onClick={handleManualBuild}
+                  onClick={handleExploreFree}
                   className="flex items-center justify-center gap-2 w-full text-xs text-muted-foreground hover:text-foreground py-2 transition-colors"
                 >
-                  <Pencil className="h-3 w-3" />
-                  I'll build it myself instead
+                  <Eye className="h-3 w-3" />
+                  I'll explore the free days for now
                 </button>
               </div>
             )}
