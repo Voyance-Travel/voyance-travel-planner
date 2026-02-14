@@ -66,7 +66,7 @@ interface DayLockOverlayProps {
             </h3>
             
             <p className="text-sm text-muted-foreground mb-4">
-              Unlock to see all activities, swap options, and route optimization for this day.
+              Unlock this day to explore activities, swap options, and optimized routes.
             </p>
 
             <Button onClick={handleUnlock} className="gap-2">

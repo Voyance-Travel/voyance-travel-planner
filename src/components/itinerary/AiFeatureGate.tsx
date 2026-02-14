@@ -20,7 +20,7 @@ export function AiFeatureGate({ feature, className }: AiFeatureGateProps) {
     )}>
       <Lock className="h-3.5 w-3.5 shrink-0" />
       <span>
-        <span className="font-medium">{feature}</span> requires credits
+        Unlock <span className="font-medium">{feature}</span> with credits
       </span>
       <Sparkles className="h-3 w-3 text-amber-500 shrink-0" />
     </div>
