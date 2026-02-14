@@ -270,7 +270,7 @@ export default function TripDetail() {
       trip && 
       !loading && 
       !autoGenerateTriggered.current &&
-      !hasItineraryData(trip)
+      (!hasItineraryData(trip) || trip.itinerary_status === 'failed')
     ) {
       autoGenerateTriggered.current = true;
       handleShowGenerator(true);
