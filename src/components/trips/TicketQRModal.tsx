@@ -9,7 +9,8 @@ import {
   X, QrCode, Copy, Check, Download, ExternalLink,
   Ticket, Calendar, Clock, MapPin, User
 } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -136,7 +137,7 @@ export function TicketQRModal({
               <div className="flex items-center gap-3">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 <span>
-                  {format(parseISO(ticket.date), 'EEEE, MMMM d, yyyy')}
+                  {format(parseLocalDate(ticket.date), 'EEEE, MMMM d, yyyy')}
                   {ticket.time && ` at ${ticket.time}`}
                 </span>
               </div>
@@ -160,9 +161,9 @@ export function TicketQRModal({
               <div className="flex items-center gap-3">
                 <Clock className="h-4 w-4 text-muted-foreground" />
                 <span>
-                  {ticket.validFrom && `From ${format(parseISO(ticket.validFrom), 'MMM d')}`}
+                  {ticket.validFrom && `From ${format(parseLocalDate(ticket.validFrom), 'MMM d')}`}
                   {ticket.validFrom && ticket.validUntil && ' - '}
-                  {ticket.validUntil && `Until ${format(parseISO(ticket.validUntil), 'MMM d')}`}
+                  {ticket.validUntil && `Until ${format(parseLocalDate(ticket.validUntil), 'MMM d')}`}
                 </span>
               </div>
             )}

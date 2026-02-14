@@ -7,7 +7,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { format, addDays, isBefore, startOfToday, parseISO } from 'date-fns';
+import { format, addDays, isBefore, startOfToday } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { MapPin, Calendar as CalendarIcon, Users, Plane, ArrowRight, Sparkles, ArrowLeft } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -100,7 +101,7 @@ export default function MultiCityPlanner() {
   const [originCity, setOriginCity] = useState(plannerState.basics.originCity || '');
   const [originCodes, setOriginCodes] = useState<string[]>([]);
   const [startDate, setStartDate] = useState<Date | undefined>(
-    plannerState.basics.startDate ? parseISO(plannerState.basics.startDate) : undefined
+    plannerState.basics.startDate ? parseLocalDate(plannerState.basics.startDate) : undefined
   );
   const [travelers, setTravelers] = useState(plannerState.basics.travelers || 2);
   const [destinations, setDestinations] = useState<TripDestination[]>(

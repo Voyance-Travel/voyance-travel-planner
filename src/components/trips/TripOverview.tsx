@@ -12,7 +12,8 @@ import {
   Download, ExternalLink, Copy, CalendarDays,
   Bookmark, Star, AlertCircle, Sparkles
 } from 'lucide-react';
-import { format, parseISO, differenceInDays, isToday, isBefore, isAfter } from 'date-fns';
+import { format, differenceInDays, isToday, isBefore, isAfter } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -114,8 +115,8 @@ export function TripOverview({
   // Calculate trip progress
   const tripProgress = useMemo(() => {
     const now = new Date();
-    const start = parseISO(startDate);
-    const end = parseISO(endDate);
+    const start = parseLocalDate(startDate);
+    const end = parseLocalDate(endDate);
     
     const totalDays = differenceInDays(end, start) + 1;
     const currentDayNumber = Math.max(1, Math.min(
@@ -133,7 +134,7 @@ export function TripOverview({
     const now = new Date();
     
     return days.map(day => {
-      const dayDate = parseISO(day.date);
+      const dayDate = parseLocalDate(day.date);
       const completed = day.activities.filter(a => completedActivities.has(a.id)).length;
       
       return {
@@ -156,7 +157,7 @@ export function TripOverview({
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .map(r => ({
         ...r,
-        isUpcoming: isAfter(parseISO(r.date), now) || isToday(parseISO(r.date)),
+        isUpcoming: isAfter(parseLocalDate(r.date), now) || isToday(parseLocalDate(r.date)),
       }));
   }, [reservations]);
 
@@ -174,7 +175,7 @@ export function TripOverview({
         <div>
           <h2 className="text-2xl font-serif font-bold">{destination}</h2>
           <p className="text-muted-foreground">
-            {format(parseISO(startDate), 'MMM d')} - {format(parseISO(endDate), 'MMM d, yyyy')}
+            {format(parseLocalDate(startDate), 'MMM d')} - {format(parseLocalDate(endDate), 'MMM d, yyyy')}
           </p>
         </div>
 
@@ -232,7 +233,7 @@ export function TripOverview({
                   </Badge>
                 ) : (
                   <span className="text-[10px] text-muted-foreground">
-                    {format(parseISO(day.date), 'MMM d')}
+                    {format(parseLocalDate(day.date), 'MMM d')}
                   </span>
                 )}
               </button>
@@ -304,7 +305,7 @@ export function TripOverview({
                           )}
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          {day.theme || format(parseISO(day.date), 'EEEE, MMM d')}
+                          {day.theme || format(parseLocalDate(day.date), 'EEEE, MMM d')}
                         </p>
                       </div>
                     </div>
@@ -365,7 +366,7 @@ export function TripOverview({
                             <div>
                               <h4 className="font-medium truncate">{reservation.title}</h4>
                               <p className="text-sm text-muted-foreground">
-                                {format(parseISO(reservation.date), 'EEE, MMM d')}
+                                {format(parseLocalDate(reservation.date), 'EEE, MMM d')}
                                 {reservation.time && ` · ${reservation.time}`}
                               </p>
                             </div>

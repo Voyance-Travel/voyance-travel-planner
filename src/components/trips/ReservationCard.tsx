@@ -10,7 +10,8 @@ import {
   QrCode, Download, Copy, Check, Clock, 
   ExternalLink, AlertCircle, ChevronDown, ChevronUp
 } from 'lucide-react';
-import { format, parseISO, isAfter, isToday } from 'date-fns';
+import { format, isAfter, isToday } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -98,7 +99,7 @@ export function ReservationCard({
 
   const Icon = typeIcons[reservation.type];
   const status = statusConfig[reservation.status];
-  const isUpcoming = isAfter(parseISO(reservation.date), new Date()) || isToday(parseISO(reservation.date));
+  const isUpcoming = isAfter(parseLocalDate(reservation.date), new Date()) || isToday(parseLocalDate(reservation.date));
 
   const handleCopy = () => {
     if (reservation.confirmationNumber) {
@@ -177,7 +178,7 @@ export function ReservationCard({
         <div className="flex-1 min-w-0">
           <p className="font-medium text-sm truncate">{reservation.title}</p>
           <p className="text-xs text-muted-foreground">
-            {format(parseISO(reservation.date), 'EEE, MMM d')}
+            {format(parseLocalDate(reservation.date), 'EEE, MMM d')}
             {reservation.time && ` · ${reservation.time}`}
           </p>
         </div>
@@ -218,10 +219,10 @@ export function ReservationCard({
                     </Badge>
                   </div>
                   <p className="text-sm text-muted-foreground mt-0.5">
-                    {format(parseISO(reservation.date), 'EEEE, MMM d')}
+                    {format(parseLocalDate(reservation.date), 'EEEE, MMM d')}
                     {reservation.time && ` at ${reservation.time}`}
                     {reservation.endDate && reservation.endDate !== reservation.date && (
-                      <> - {format(parseISO(reservation.endDate), 'MMM d')}</>
+                      <> - {format(parseLocalDate(reservation.endDate), 'MMM d')}</>
                     )}
                   </p>
                 </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { 
   MapPin, 
   Calendar, 
@@ -180,7 +181,7 @@ export default function TripShare() {
             {trip.start_date && trip.end_date && (
               <span className="flex items-center gap-1">
                 <Calendar className="h-4 w-4" />
-                {format(parseISO(trip.start_date), 'MMM d')} – {format(parseISO(trip.end_date), 'MMM d, yyyy')}
+                {format(parseLocalDate(trip.start_date), 'MMM d')} – {format(parseLocalDate(trip.end_date), 'MMM d, yyyy')}
               </span>
             )}
             {trip.traveler_count && (
@@ -229,7 +230,7 @@ export default function TripShare() {
                           {segment.start_date && (
                             <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                               <Clock className="h-3 w-3" />
-                              {format(parseISO(segment.start_date), 'EEE, MMM d')}
+                              {format(parseLocalDate(segment.start_date), 'EEE, MMM d')}
                               {segment.start_time && ` at ${segment.start_time}`}
                             </p>
                           )}

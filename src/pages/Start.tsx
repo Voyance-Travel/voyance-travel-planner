@@ -10,7 +10,8 @@ import {
 import { addDays as addDaysUtil } from 'date-fns';
 import MultiCitySelector from '@/components/planner/MultiCitySelector';
 import { TripDestination, InterCityTransport, calculateTotalNights, generateDestinationDates } from '@/types/multiCity';
-import { format, addDays, isBefore, startOfToday, parseISO, startOfMonth, differenceInDays } from 'date-fns';
+import { format, addDays, isBefore, startOfToday, startOfMonth, differenceInDays } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { DraftLimitBanner, DraftLimitBlocker } from '@/components/common/DraftLimitBanner';
@@ -1360,10 +1361,10 @@ export default function Start() {
     airportCodes: undefined,
   }));
   const [startDate, setStartDate] = useState<Date | undefined>(
-    plannerState.basics.startDate ? parseISO(plannerState.basics.startDate) : undefined
+    plannerState.basics.startDate ? parseLocalDate(plannerState.basics.startDate) : undefined
   );
   const [endDate, setEndDate] = useState<Date | undefined>(
-    plannerState.basics.endDate ? parseISO(plannerState.basics.endDate) : undefined
+    plannerState.basics.endDate ? parseLocalDate(plannerState.basics.endDate) : undefined
   );
   const [travelers, setTravelers] = useState(plannerState.basics.travelers || 2);
   const [tripType, setTripType] = useState<string>('leisure');
@@ -1441,8 +1442,8 @@ export default function Start() {
           if (savedDraft.isFirstTimeVisitor !== undefined) setIsFirstTimeVisitor(savedDraft.isFirstTimeVisitor);
           if (savedDraft.mustDoActivities) setMustDoActivities(savedDraft.mustDoActivities);
           if (savedDraft.destination) setDestinationSelection({ display: savedDraft.destination, cityName: savedDraft.destination });
-          if (savedDraft.startDate) setStartDate(parseISO(savedDraft.startDate));
-          if (savedDraft.endDate) setEndDate(parseISO(savedDraft.endDate));
+          if (savedDraft.startDate) setStartDate(parseLocalDate(savedDraft.startDate));
+          if (savedDraft.endDate) setEndDate(parseLocalDate(savedDraft.endDate));
           if (savedDraft.travelers) setTravelers(savedDraft.travelers);
           if (savedDraft.tripType) setTripType(savedDraft.tripType);
           if (savedDraft.budgetAmount) setBudgetAmount(savedDraft.budgetAmount);
@@ -1680,8 +1681,8 @@ export default function Start() {
                     onChatDetailsExtracted={async (details) => {
                       // Create trip directly from extracted details — don't rely on async state updates
                       const dest = details.destination || '';
-                      const chatStartDate = details.startDate ? parseISO(details.startDate) : null;
-                      const chatEndDate = details.endDate ? parseISO(details.endDate) : null;
+                      const chatStartDate = details.startDate ? parseLocalDate(details.startDate) : null;
+                      const chatEndDate = details.endDate ? parseLocalDate(details.endDate) : null;
 
                       if (!dest || !chatStartDate || !chatEndDate) {
                         toast.error('Missing trip details - please provide destination and dates');

@@ -14,7 +14,8 @@ import { PreferenceNudge, usePreferenceCompletion } from '@/components/common/Pr
 import { GenerationPhases } from '@/components/planner/shared/GenerationPhases';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { format, parseISO, differenceInCalendarDays } from 'date-fns';
+import { format, differenceInCalendarDays } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { ROUTES } from '@/config/routes';
 import { useGenerationGate, type GateResult } from '@/hooks/useGenerationGate';
@@ -133,7 +134,7 @@ export function ItineraryGenerator({
     await new Promise(resolve => setTimeout(resolve, 800));
 
     // Calculate trip days for the gate
-    const totalDays = differenceInCalendarDays(parseISO(endDate), parseISO(startDate)) + 1;
+    const totalDays = differenceInCalendarDays(parseLocalDate(endDate), parseLocalDate(startDate)) + 1;
     const cities = isMultiCity ? [] : [destination]; // Multi-city cities resolved inside gate if needed
 
     // PRE-AUTHORIZE: Check credits and deduct if affordable
@@ -721,7 +722,7 @@ export function ItineraryGenerator({
                       Day {day.dayNumber}
                     </Badge>
                     <span className="text-sm text-muted-foreground">
-                      {format(parseISO(day.date), 'EEEE, MMM d')}
+                      {format(parseLocalDate(day.date), 'EEEE, MMM d')}
                     </span>
                     {day.metadata?.pacingLevel && (
                       <Badge variant="outline" className="text-xs capitalize">

@@ -1,6 +1,16 @@
 import { format as dateFnsFormat, parseISO } from 'date-fns';
 
 /**
+ * Parse a YYYY-MM-DD date string as local midnight instead of UTC midnight.
+ * This prevents the off-by-one-day bug for users in timezones west of UTC.
+ * Use this instead of parseISO() when displaying date-only strings from the database.
+ */
+export const parseLocalDate = (dateStr: string): Date => {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+/**
  * Format a date for display
  */
 export const formatDate = (date: string | Date): string => {
@@ -142,7 +152,7 @@ export const safeFormatDate = (
   }
   
   try {
-    const date = parseISO(dateString);
+    const date = parseLocalDate(dateString);
     if (isNaN(date.getTime())) return fallback;
     return dateFnsFormat(date, formatStr);
   } catch {

@@ -40,7 +40,8 @@ import {
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { createPaymentSchedule, type PaymentSchedule, type AgencyTrip } from '@/services/agencyCRM';
-import { format, addDays, subDays, parseISO } from 'date-fns';
+import { format, addDays, subDays } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 
 interface ScheduleItem {
   id: string;
@@ -96,7 +97,7 @@ export default function PaymentScheduleModal({
     const preset = PRESETS.find(p => p.id === selectedPreset);
     if (!preset || preset.id === 'custom') return;
 
-    const tripStartDate = trip.start_date ? parseISO(trip.start_date) : addDays(new Date(), 60);
+    const tripStartDate = trip.start_date ? parseLocalDate(trip.start_date) : addDays(new Date(), 60);
     const today = new Date();
     
     const items: ScheduleItem[] = preset.splits.map((percent, index) => {

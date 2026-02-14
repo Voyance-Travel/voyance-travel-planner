@@ -1,5 +1,6 @@
 import { MapPin, Calendar, Users, Share2, Route, RefreshCw, Lock } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
+import { parseLocalDate } from '@/utils/dateUtils';
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -38,8 +39,8 @@ export const TripHeader: React.FC<TripHeaderProps> = ({
   showOptimizeLock = false,
 }) => {
   const formatDateRange = (start: string, end: string) => {
-    const startD = parseISO(start);
-    const endD = parseISO(end);
+    const startD = parseLocalDate(start);
+    const endD = parseLocalDate(end);
 
     if (startD.getFullYear() === endD.getFullYear()) {
       return `${format(startD, "MMM d")} – ${format(endD, "MMM d, yyyy")}`;

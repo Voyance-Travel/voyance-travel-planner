@@ -6,7 +6,8 @@
 import { useMemo, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Camera, Trash2, X, MapPin, Calendar, ImageOff } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -40,7 +41,7 @@ export function MemoriesTimeline({ tripId, tripName, className }: MemoriesTimeli
     const groups = new Map<number | string, TripMemory[]>();
     
     memories.forEach(memory => {
-      const key = memory.day_number || format(parseISO(memory.taken_at), 'yyyy-MM-dd');
+      const key = memory.day_number || format(parseLocalDate(memory.taken_at), 'yyyy-MM-dd');
       const existing = groups.get(key) || [];
       existing.push(memory);
       groups.set(key, existing);
@@ -105,7 +106,7 @@ export function MemoriesTimeline({ tripId, tripName, className }: MemoriesTimeli
           <div className="flex items-center gap-2 mb-3">
             <Calendar className="w-4 h-4 text-muted-foreground" />
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              {typeof dayKey === 'number' ? `Day ${dayKey}` : format(parseISO(dayKey), 'EEEE, MMM d')}
+              {typeof dayKey === 'number' ? `Day ${dayKey}` : format(parseLocalDate(dayKey), 'EEEE, MMM d')}
             </h3>
             <span className="text-xs text-muted-foreground">
               · {dayMemories.length} {dayMemories.length === 1 ? 'photo' : 'photos'}
@@ -204,7 +205,7 @@ export function MemoriesTimeline({ tripId, tripName, className }: MemoriesTimeli
                       {lightboxImage.activity_name}
                     </span>
                   )}
-                  <span>{format(parseISO(lightboxImage.taken_at), 'MMM d, h:mm a')}</span>
+                  <span>{format(parseLocalDate(lightboxImage.taken_at), 'MMM d, h:mm a')}</span>
                 </div>
               </div>
             </motion.div>

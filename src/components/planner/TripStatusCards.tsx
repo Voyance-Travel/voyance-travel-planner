@@ -1,5 +1,6 @@
 import { Calendar, MapPin, Users, Plane, DollarSign, Clock } from 'lucide-react';
-import { format, parseISO, differenceInDays } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 
 interface TripStatusCardsProps {
   destination?: string;
@@ -23,7 +24,7 @@ export default function TripStatusCards({
   className = ''
 }: TripStatusCardsProps) {
   const tripDays = startDate && endDate 
-    ? differenceInDays(parseISO(endDate), parseISO(startDate)) + 1
+    ? differenceInDays(parseLocalDate(endDate), parseLocalDate(startDate)) + 1
     : null;
 
   const cards = [
@@ -37,7 +38,7 @@ export default function TripStatusCards({
       icon: Calendar,
       label: 'Dates',
       value: startDate && endDate 
-        ? `${format(parseISO(startDate), 'MMM d')} – ${format(parseISO(endDate), 'MMM d')}`
+        ? `${format(parseLocalDate(startDate), 'MMM d')} – ${format(parseLocalDate(endDate), 'MMM d')}`
         : 'Not set',
       subValue: tripDays ? `${tripDays} days` : undefined,
       color: 'text-blue-500',

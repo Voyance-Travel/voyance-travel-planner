@@ -16,7 +16,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 
 interface WeatherDay {
   date: string;
@@ -214,7 +215,7 @@ export function WeatherForecast({ destination, startDate, endDate, tripDays }: W
               tripDays <= 4 ? "grid-cols-4" : tripDays <= 5 ? "grid-cols-5" : tripDays <= 7 ? "grid-cols-7" : "grid-cols-8"
             )}>
               {weather.forecast.slice(0, Math.min(tripDays, 8)).map((day, idx) => {
-                const dayDate = parseISO(day.date);
+                const dayDate = parseLocalDate(day.date);
                 const todayDate = new Date();
                 const isTodayActual = format(dayDate, 'yyyy-MM-dd') === format(todayDate, 'yyyy-MM-dd');
                 const dayNumber = idx + 1;
