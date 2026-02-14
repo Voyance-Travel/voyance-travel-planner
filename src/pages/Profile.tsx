@@ -66,6 +66,8 @@ interface DisplayTrip {
   status: 'upcoming' | 'completed' | 'draft';
   image: string;
   progress?: number;
+  progressLabel?: string;
+  progressColor?: string;
   rating?: number;
 }
 
@@ -74,6 +76,57 @@ import { getDestinationImage as getCuratedDestinationImage } from '@/utils/desti
 
 function getDestinationImage(destination: string): string {
   return getCuratedDestinationImage(destination);
+}
+
+// Compute real trip progress from itinerary state
+function computeTripProgress(trip: any): { progress?: number; label?: string; color?: string } {
+  const itineraryStatus = trip.itinerary_status as string | null;
+  const itineraryData = trip.itinerary_data as any;
+  const startDate = trip.start_date ? new Date(trip.start_date) : null;
+  const now = new Date();
+
+  // Failed generation
+  if (itineraryStatus === 'failed') {
+    return { progress: 0, label: 'Generation failed — try again', color: 'bg-destructive' };
+  }
+
+  // Currently generating
+  if (itineraryStatus === 'generating' || itineraryStatus === 'queued') {
+    return { progress: 15, label: 'Generating…', color: 'bg-primary' };
+  }
+
+  // No itinerary data at all
+  const days = itineraryData?.days as any[] | undefined;
+  if (!days || days.length === 0) {
+    return { progress: 0, label: 'Not started', color: 'bg-muted-foreground' };
+  }
+
+  // Has itinerary — compute based on days with activities
+  const totalDays = days.length;
+  const daysWithActivities = days.filter(
+    (d: any) => d.activities && d.activities.length > 0
+  ).length;
+
+  if (daysWithActivities === 0) {
+    return { progress: 0, label: 'Empty itinerary', color: 'bg-muted-foreground' };
+  }
+
+  // Days until departure
+  if (startDate && startDate > now) {
+    const daysUntil = Math.ceil((startDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    const pct = Math.round((daysWithActivities / totalDays) * 100);
+    if (pct >= 100) {
+      return { progress: 100, label: `Ready! ${daysUntil}d until departure`, color: 'bg-primary' };
+    }
+    return { progress: pct, label: `${daysWithActivities}/${totalDays} days planned`, color: 'bg-primary' };
+  }
+
+  // Completed or past trips
+  const pct = Math.round((daysWithActivities / totalDays) * 100);
+  if (pct >= 100) {
+    return { progress: 100, label: 'Fully planned', color: 'bg-primary' };
+  }
+  return { progress: pct, label: `${daysWithActivities}/${totalDays} days planned`, color: 'bg-primary' };
 }
 
 // Transform API trip to display format
@@ -92,13 +145,13 @@ function transformTrip(trip: any): DisplayTrip {
   if (trip.status === 'completed') {
     status = 'completed';
   } else if (endDate && endDate < now) {
-    // Trip has ended - mark as completed regardless of DB status
     status = 'completed';
   } else if (trip.status === 'booked' || (endDate && endDate >= now)) {
-    // Trip hasn't ended yet
     status = 'upcoming';
   }
   
+  const { progress, label: progressLabel, color: progressColor } = computeTripProgress(trip);
+
   return {
     id: trip.id,
     destination: trip.destination || 'Unknown Destination',
@@ -110,7 +163,9 @@ function transformTrip(trip: any): DisplayTrip {
         : (typeof trip?.metadata?.imageUrl === 'string' && trip.metadata.imageUrl.length > 0)
           ? trip.metadata.imageUrl
           : getDestinationImage(trip.destination || ''),
-    progress: status === 'upcoming' ? 75 : undefined,
+    progress,
+    progressLabel,
+    progressColor,
     rating: status === 'completed' ? 4 : undefined,
   };
 }
@@ -608,15 +663,15 @@ export default function Profile() {
                                 {trip.dates}
                               </p>
                             </div>
-                            {trip.progress && (
+                            {trip.progress !== undefined && (
                               <div className="hidden sm:flex items-center gap-2">
                                 <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
                                   <div 
-                                    className="h-full bg-primary rounded-full"
-                                    style={{ width: `${trip.progress}%` }}
+                                    className={`h-full rounded-full ${trip.progressColor || 'bg-primary'}`}
+                                    style={{ width: `${Math.max(trip.progress, 5)}%` }}
                                   />
                                 </div>
-                                <span className="text-xs text-muted-foreground">{trip.progress}%</span>
+                                <span className="text-xs text-muted-foreground truncate max-w-[120px]">{trip.progressLabel}</span>
                               </div>
                             )}
                             <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
@@ -754,15 +809,15 @@ export default function Profile() {
                               <Calendar className="h-3.5 w-3.5" />
                               {trip.dates}
                             </p>
-                            {trip.progress && (
+                            {trip.progress !== undefined && (
                               <div className="flex items-center gap-2 mt-2">
                                 <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
                                   <div 
-                                    className="h-full bg-primary rounded-full transition-all"
-                                    style={{ width: `${trip.progress}%` }}
+                                    className={`h-full rounded-full transition-all ${trip.progressColor || 'bg-primary'}`}
+                                    style={{ width: `${Math.max(trip.progress, 5)}%` }}
                                   />
                                 </div>
-                                <span className="text-xs text-muted-foreground">{trip.progress}% planned</span>
+                                <span className="text-xs text-muted-foreground">{trip.progressLabel}</span>
                               </div>
                             )}
                           </div>
@@ -942,7 +997,7 @@ export default function Profile() {
 }
 
 // Helper Components
-function TripCard({ trip }: { trip: { id: string; destination: string; dates: string; image: string; status: string; progress?: number; rating?: number } }) {
+function TripCard({ trip }: { trip: { id: string; destination: string; dates: string; image: string; status: string; progress?: number; progressLabel?: string; progressColor?: string; rating?: number } }) {
   return (
     <Link
       to={`/trip/${trip.id}`}
@@ -956,11 +1011,12 @@ function TripCard({ trip }: { trip: { id: string; destination: string; dates: st
           {trip.destination}
         </h3>
         <p className="text-sm text-muted-foreground mt-1">{trip.dates}</p>
-        {trip.status === 'upcoming' && trip.progress !== undefined && (
-          <div className="mt-2">
-            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full" style={{ width: `${trip.progress}%` }} />
+        {trip.progress !== undefined && (
+          <div className="mt-2 flex items-center gap-2">
+            <div className="h-1.5 bg-muted rounded-full overflow-hidden flex-1">
+              <div className={`h-full rounded-full ${trip.progressColor || 'bg-primary'}`} style={{ width: `${Math.max(trip.progress, 5)}%` }} />
             </div>
+            {trip.progressLabel && <span className="text-xs text-muted-foreground whitespace-nowrap">{trip.progressLabel}</span>}
           </div>
         )}
         {trip.status === 'completed' && trip.rating && (
