@@ -91,7 +91,7 @@ export function OutOfCreditsModal() {
 
   return (
     <>
-      <Dialog open={state.isOpen && !checkoutConfig} onOpenChange={(open) => !open && handleDismiss()}>
+      <Dialog open={state.isOpen && !checkoutConfig} onOpenChange={(open) => { if (!open) handleDismiss(); }}>
         <DialogContent className="max-w-sm p-0 gap-0 overflow-hidden">
           {/* Header */}
           <div className="bg-destructive/10 px-6 pt-6 pb-4 text-center">
