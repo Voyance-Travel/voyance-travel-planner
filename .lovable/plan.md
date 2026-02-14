@@ -1,61 +1,55 @@
 
 
-# Fix #6: Add Smart Finish Comparison Helper
+# Fix #7: Replace Punitive Locked-State Language
 
 ## Summary
 
-Add a new exported utility function `getSmartFinishComparison` to the end of `src/lib/voyanceFlowController.ts`. This is purely additive -- no existing code changes.
+Update user-facing copy in 6 files to shift tone from "you can't have this" to "here's what you'll get." All changes are string-only, no logic modifications.
 
-## Change
+## Changes
 
-**File:** `src/lib/voyanceFlowController.ts`
+### 1. `src/components/ItineraryView.tsx` (line 152)
 
-Append the following function after the existing `formatActionToast` function (after line ~175):
+**Before:** `"Book to unlock full itinerary"`
+**After:** `"Unlock to explore your full itinerary"`
 
-```typescript
-/**
- * Compare the cost of unlocking remaining gated days individually vs Smart Finish.
- * Returns the comparison so the UI can nudge users toward the better deal.
- */
-export function getSmartFinishComparison(params: {
-  totalDays: number;
-  unlockedDayCount: number;
-  hasSmartFinish: boolean;
-}): {
-  remainingDays: number;
-  individualCost: number;
-  smartFinishCost: number;
-  savings: number;
-  smartFinishIsCheaper: boolean;
-} {
-  if (params.hasSmartFinish) {
-    return {
-      remainingDays: 0,
-      individualCost: 0,
-      smartFinishCost: 0,
-      savings: 0,
-      smartFinishIsCheaper: false,
-    };
-  }
+### 2. `src/components/itinerary/UnlockBanner.tsx` (lines 142-145)
 
-  const remainingDays = Math.max(0, params.totalDays - params.unlockedDayCount);
-  const individualCost = remainingDays * CREDIT_COSTS.UNLOCK_DAY;
-  const smartFinishCost = CREDIT_COSTS.SMART_FINISH;
-  const savings = individualCost - smartFinishCost;
-
-  return {
-    remainingDays,
-    individualCost,
-    smartFinishCost,
-    savings,
-    smartFinishIsCheaper: savings > 0,
-  };
-}
+**Before:**
+```
+Preview Mode: Details Locked
+Unlock days to see addresses, photos, tips & booking links
+```
+**After:**
+```
+Your trip is ready to explore
+Unlock days for addresses, photos, insider tips and booking links
 ```
 
+### 3. `src/components/itinerary/DayLockOverlay.tsx` (line 69)
+
+**Before:** `"Unlock to see all activities, swap options, and route optimization for this day."`
+**After:** `"Unlock this day to explore activities, swap options, and optimized routes."`
+
+### 4. `src/components/itinerary/LockedPhotoPlaceholder.tsx` (line 23)
+
+**Before:** `"Premium"`
+**After:** `"Unlock to view"`
+
+### 5. `src/components/itinerary/AiFeatureGate.tsx` (line 23)
+
+**Before:** `"{feature} requires credits"`
+**After:** `"Unlock {feature} with credits"`
+
+### 6. `src/components/itinerary/LockedDayCard.tsx` (line 98)
+
+**Before:** `"This day hasn't been planned yet."`
+**After:** `"Want us to plan this day for you?"`
+
 ## What does NOT change
-- All existing functions untouched
-- No new imports needed (CREDIT_COSTS already in scope)
-- No other files touched
-- Nothing calls this yet -- a future UI prompt will wire it up
+- No logic changes in any file
+- No changes to voyanceFlowController.ts
+- No changes to credit deduction, entitlements, or edge functions
+- No changes to component structure or layout
+- UpgradePrompt.tsx left as-is (it handles subscription upsells, not day-unlock gating)
 
