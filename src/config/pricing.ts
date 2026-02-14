@@ -338,6 +338,10 @@ export const TOPUP_PACK = FLEXIBLE_CREDITS[0];
 // MONTHLY CREDIT GRANT
 // ============================================================
 
+// GUARD: Free credit expiration policy.
+// Free credits (signup bonus + monthly grants) expire after freeExpirationMonths months.
+// Purchased credits NEVER expire.
+// The UI should surface this distinction wherever credit balances are shown.
 export const MONTHLY_CREDIT_GRANT = {
   monthlyCredits: 150,
   maxBankedFree: 300,
@@ -345,6 +349,16 @@ export const MONTHLY_CREDIT_GRANT = {
   purchasedNeverExpire: true,
   appliesToAllUsers: true,
   referralBonus: 200,
+} as const;
+
+/**
+ * Human-readable credit expiration messages for UI display.
+ * Use these in balance displays, tooltips, and purchase confirmations.
+ */
+export const CREDIT_EXPIRATION_COPY = {
+  freeCreditsNotice: 'Free credits expire after 2 months if unused.',
+  purchasedCreditsNotice: 'Purchased credits never expire.',
+  balanceTooltip: 'Your balance includes both free and purchased credits. Free credits are used first and expire after 2 months.',
 } as const;
 
 // Free Tier
