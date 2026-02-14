@@ -1051,6 +1051,8 @@ export function EditorialItinerary({
   
   // Transport mode change free cap
   const transportCap = useActionCap(tripId, 'transport_mode_change');
+  // Swap activity free cap
+  const swapCap = useActionCap(tripId, 'swap_activity');
   
   const { isManualBuilder, enableManualBuilder } = useManualBuilderStore();
   // QA-021: Check DB creation_source in addition to localStorage
@@ -2986,6 +2988,7 @@ export function EditorialItinerary({
                             if (!canViewPremiumContentForDay(entitlements, selectedDay.dayNumber)) return undefined;
                             return openSwapDrawer;
                           })()}
+                          swapCapInfo={swapCap}
                           onActivityLock={handleActivityLock}
                           onActivityMove={handleActivityMove}
                           onActivityReorder={(reordered) => handleActivityReorder(selectedDayIndex, reordered)}
@@ -5298,6 +5301,7 @@ interface DayCardProps {
   refreshPayments: () => void;
   onToggle: () => void;
   onActivitySwap?: (dayIndex: number, activity: EditorialActivity) => void;
+  swapCapInfo?: { isFree: boolean; usedCount: number; freeRemaining: number; cap: number; creditCost: number; isLoading: boolean };
   onActivityLock: (dayIndex: number, activityId: string) => void;
   onActivityMove: (dayIndex: number, activityId: string, direction: 'up' | 'down') => void;
   onMoveToDay?: (fromDayIndex: number, activityId: string, toDayIndex: number) => void;
@@ -5342,6 +5346,7 @@ function DayCard({
   refreshPayments,
   onToggle,
   onActivitySwap,
+  swapCapInfo,
   onActivityLock,
   onActivityMove,
   onMoveToDay,
@@ -5574,8 +5579,9 @@ function DayCard({
                       existingPayment={getPaymentForItem('activity', activity.id)}
                       onPaymentSuccess={refreshPayments}
                       onLock={onActivityLock}
-                      onSwap={onActivitySwap}
-                      onMove={onActivityMove}
+                       onSwap={onActivitySwap}
+                        swapCapInfo={swapCapInfo}
+                        onMove={onActivityMove}
                       onMoveToDay={onMoveToDay}
                       onRemove={onActivityRemove}
                       onTimeEdit={onTimeEdit}
@@ -5696,6 +5702,7 @@ interface ActivityRowProps {
   onPaymentSuccess: () => void;
   onLock: (dayIndex: number, activityId: string) => void;
   onSwap?: (dayIndex: number, activity: EditorialActivity) => void;
+  swapCapInfo?: { isFree: boolean; usedCount: number; freeRemaining: number; cap: number; creditCost: number; isLoading: boolean };
   onMove: (dayIndex: number, activityId: string, direction: 'up' | 'down') => void;
   onMoveToDay?: (fromDayIndex: number, activityId: string, toDayIndex: number) => void;
   onRemove: (dayIndex: number, activityId: string) => void;
@@ -5734,6 +5741,7 @@ function ActivityRow({
   onPaymentSuccess,
   onLock,
   onSwap,
+  swapCapInfo,
   onMove,
   onMoveToDay,
   onRemove,
@@ -6287,11 +6295,20 @@ function ActivityRow({
                         <>
                           <DropdownMenuItem
                             onClick={() => onSwap(dayIndex, activity)}
-                            className="cursor-pointer gap-2"
+                            className="cursor-pointer gap-2 flex-col items-start"
                             data-tour="find-alternative"
                           >
-                            <ArrowRightLeft className="h-4 w-4" />
-                            Find Alternative
+                            <span className="flex items-center gap-2">
+                              <ArrowRightLeft className="h-4 w-4" />
+                              Find Alternative
+                            </span>
+                            {swapCapInfo && !swapCapInfo.isLoading && (
+                              <span className="text-[10px] text-muted-foreground ml-6">
+                                {swapCapInfo.isFree
+                                  ? `${swapCapInfo.freeRemaining} of ${swapCapInfo.cap} free swaps left`
+                                  : `${swapCapInfo.creditCost} credits per swap`}
+                              </span>
+                            )}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                         </>
