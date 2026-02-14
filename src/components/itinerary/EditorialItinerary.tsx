@@ -1549,23 +1549,29 @@ export function EditorialItinerary({
       return;
     }
 
+    console.log('[Swap] Spending credits for swap_activity', { tripId, activityId: target.activityId, dayIndex: target.dayIndex });
+
     // Spend credits for the swap (server handles free caps)
-    {
-      try {
-        var swapCreditResult = await spendCredits.mutateAsync({
-          action: 'SWAP_ACTIVITY',
-          tripId,
-          activityId: target.activityId,
-          dayIndex: target.dayIndex,
-        });
-      } catch (err) {
-        console.error('[Swap] Credit spend failed:', err);
-        setCreditNudge({ action: 'SWAP_ACTIVITY' });
-        setSwapDrawerOpen(false);
-        setSwapTarget(null);
-        setSwapDrawerActivity(null);
-        return;
-      }
+    let swapCreditResult: Awaited<ReturnType<typeof spendCredits.mutateAsync>> | undefined;
+    try {
+      swapCreditResult = await spendCredits.mutateAsync({
+        action: 'SWAP_ACTIVITY',
+        tripId,
+        activityId: target.activityId,
+        dayIndex: target.dayIndex,
+        metadata: {
+          old_activity: days[target.dayIndex]?.activities?.find(a => a.id === target.activityId)?.title || 'unknown',
+          new_activity: newActivity.title || 'unknown',
+        },
+      });
+      console.log('[Swap] Credit spend result:', swapCreditResult);
+    } catch (err) {
+      console.error('[Swap] Credit spend failed:', err);
+      setCreditNudge({ action: 'SWAP_ACTIVITY' });
+      setSwapDrawerOpen(false);
+      setSwapTarget(null);
+      setSwapDrawerActivity(null);
+      return;
     }
 
     // Replacing activity with new selection
@@ -1622,7 +1628,7 @@ export function EditorialItinerary({
     } else {
       toast.success(`Swapped activity (${swapCreditResult?.spent ?? CREDIT_COSTS.SWAP_ACTIVITY} credits used)`);
     }
-  }, [swapTarget, tripCurrency, isPaid, spendCredits, tripId]);
+  }, [swapTarget, tripCurrency, isPaid, spendCredits, tripId, days]);
 
   // Supports both database trips and localStorage demo trips
   useEffect(() => {
