@@ -1,30 +1,35 @@
 
+# Fix #5: First-Trip Gating Guard Comments
 
-# Fix #4: Preview Mode Returns 1 Unlocked Day Instead of 0
+## Changes
 
-## Change
+**File:** `src/lib/voyanceFlowController.ts`
 
-**File:** `src/lib/voyanceFlowController.ts`, line 96
+### Change 1: Guard comment above FIRST_TRIP_FREE_DAYS (lines 36-37)
 
 Replace:
 ```typescript
-if (params.isPreview) return 0;
+/** Days unlocked free on a user's very first trip */
+export const FIRST_TRIP_FREE_DAYS = 2;
 ```
 
 With:
 ```typescript
-// Preview users get Day 1 free so they can evaluate the trip before committing credits.
-if (params.isPreview) return 1;
+// GUARD: First-trip users get exactly 2 days free. Day 3+ is gated.
+// This value is used by canAccessDay() and computeUnlockedDayCount().
+// Changing this number affects all first-trip users — coordinate with pricing.ts if adjusted.
+export const FIRST_TRIP_FREE_DAYS = 2;
+```
+
+### Change 2: Inline comment above first-trip check in canAccessDay (line 78)
+
+Add a comment directly above the existing line 78:
+```typescript
+  // First-trip-free: users get Days 1-2 at no cost. Day 3+ requires unlock or Smart Finish.
+  if (isFirstTrip && dayNumber <= FIRST_TRIP_FREE_DAYS) {
 ```
 
 ## What does NOT change
-- `canAccessDay`, `hasPaidAccessForTrip`, `getActionCost` — untouched
-- First-trip logic (`if (params.isFirstTrip)`) — untouched
-- Paid-trip fallback (`return params.generatedDayCount`) — untouched
-- No new imports, no new parameters, no other files
-
-## Expected behavior after change
-- Preview trips: Day 1 fully visible, Day 2+ gated
-- First-trip-free: Days 1-2 visible, Day 3+ gated (unchanged)
-- Paid trips: All days visible (unchanged)
-
+- Value of FIRST_TRIP_FREE_DAYS stays at 2
+- No logic changes anywhere
+- No other functions or files touched
