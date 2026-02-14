@@ -245,8 +245,11 @@ serve(async (req) => {
     };
 
     // ── Feature flags ──
-    // Bug 12 fix: per-trip only. hasCompletedPurchase is a global flag and must NOT grant per-trip access.
-    // See src/lib/voyanceFlowController.ts hasPaidAccessForTrip() for the canonical logic.
+    // GUARD: hasPaidAccess is PER-TRIP only.
+    // tripHasSmartFinish = user bought Smart Finish for THIS trip.
+    // unlockedDays > 0 = user unlocked days on THIS trip.
+    // NEVER include hasCompletedPurchase here — that is account-wide, not trip-scoped.
+    // See: src/lib/voyanceFlowController.ts → hasPaidAccessForTrip()
     const hasPaidAccess = tripHasSmartFinish || unlockedDays > 0;
 
     // ── Legacy usage/limits ──
