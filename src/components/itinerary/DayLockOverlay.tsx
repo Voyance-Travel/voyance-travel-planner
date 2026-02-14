@@ -1,4 +1,4 @@
- import { Lock, Sparkles, Pencil } from 'lucide-react';
+ import { Lock, Sparkles, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
  import { useManualBuilderStore } from '@/stores/manual-builder-store';
  import { useOutOfCredits } from '@/contexts/OutOfCreditsContext';
@@ -79,8 +79,8 @@ interface DayLockOverlayProps {
                  onClick={handleManualBuild}
                  className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mt-4 transition-colors mx-auto"
                >
-                 <Pencil className="h-3 w-3" />
-                 I'll build it myself
+                 <Eye className="h-3 w-3" />
+                 I'll explore the free days for now
                </button>
              )}
           </div>
