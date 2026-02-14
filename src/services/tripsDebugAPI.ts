@@ -5,6 +5,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { useQuery } from '@tanstack/react-query';
 
 // ============================================================================
@@ -156,7 +157,7 @@ export async function getTripStatusAnalysis(): Promise<TripStatusAnalysisRespons
       categorization.draft.push(trip.id);
     } else if (status === 'completed') {
       categorization.completed.push(trip.id);
-    } else if (trip.start_date && new Date(trip.start_date) > now) {
+    } else if (trip.start_date && parseLocalDate(trip.start_date) > now) {
       categorization.upcoming.push(trip.id);
     } else {
       categorization.other.push(trip.id);

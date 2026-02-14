@@ -7,6 +7,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getTripCities } from '@/services/tripCitiesService';
 import type { TripCity } from '@/types/tripCity';
@@ -290,7 +291,7 @@ export async function generateItinerary(
   
   // Generate each day progressively
   for (let dayNumber = 1; dayNumber <= totalDays; dayNumber++) {
-    const dayDate = new Date(trip.start_date);
+    const dayDate = parseLocalDate(trip.start_date);
     dayDate.setDate(dayDate.getDate() + dayNumber - 1);
     
     // Resolve destination for this day
@@ -455,7 +456,7 @@ export async function regenerateDay(
   const trip = await getTripDetails(tripId);
   const totalDays = calculateDays(trip.start_date, trip.end_date);
   
-  const dayDate = new Date(trip.start_date);
+  const dayDate = parseLocalDate(trip.start_date);
   dayDate.setDate(dayDate.getDate() + dayNumber - 1);
   
   // Get existing itinerary for context

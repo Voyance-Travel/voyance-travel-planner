@@ -21,6 +21,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 
 interface TripMemory {
   id: string;
@@ -88,8 +89,8 @@ const MemoryCard = ({ memory, onUpdate }: { memory: TripMemory; onUpdate: () => 
   const [saving, setSaving] = useState(false);
 
   const tripDuration = () => {
-    const start = new Date(memory.start_date);
-    const end = new Date(memory.end_date);
+    const start = parseLocalDate(memory.start_date);
+    const end = parseLocalDate(memory.end_date);
     const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
     return `${days} days`;
   };
@@ -167,7 +168,7 @@ const MemoryCard = ({ memory, onUpdate }: { memory: TripMemory; onUpdate: () => 
         <div className="mb-6 space-y-2">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Calendar className="w-4 h-4" />
-            <span>{format(new Date(memory.start_date), 'MMM yyyy')} • {tripDuration()}</span>
+            <span>{format(parseLocalDate(memory.start_date), 'MMM yyyy')} • {tripDuration()}</span>
           </div>
         </div>
 

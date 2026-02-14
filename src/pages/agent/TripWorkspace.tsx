@@ -72,6 +72,7 @@ import {
   PIPELINE_STAGES
 } from '@/services/agencyCRM';
 import { format, differenceInDays, isPast } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { toast } from '@/hooks/use-toast';
 import ShareTripModal from '@/components/agent/ShareTripModal';
 // CloneTripModal removed - agent features disabled
@@ -231,7 +232,7 @@ export default function TripWorkspace() {
         details: seg.origin && seg.destination 
           ? `${seg.origin} → ${seg.destination}` 
           : seg.start_date 
-            ? format(new Date(seg.start_date), 'MMM d, yyyy')
+            ? format(parseLocalDate(seg.start_date), 'MMM d, yyyy')
             : undefined,
         startDate: seg.start_date || undefined,
         endDate: seg.end_date || undefined,
@@ -344,7 +345,7 @@ export default function TripWorkspace() {
   }
 
   const daysUntilTrip = trip.start_date 
-    ? differenceInDays(new Date(trip.start_date), new Date())
+    ? differenceInDays(parseLocalDate(trip.start_date), new Date())
     : null;
 
   return (
@@ -383,7 +384,7 @@ export default function TripWorkspace() {
               {trip.start_date && trip.end_date && (
                 <span className="flex items-center gap-1">
                   <Calendar className="h-4 w-4" />
-                  {format(new Date(trip.start_date), 'MMM d')} – {format(new Date(trip.end_date), 'MMM d, yyyy')}
+                  {format(parseLocalDate(trip.start_date), 'MMM d')} – {format(parseLocalDate(trip.end_date), 'MMM d, yyyy')}
                 </span>
               )}
               {trip.traveler_count && (
@@ -672,7 +673,7 @@ export default function TripWorkspace() {
                                 <div>
                                   <p className="text-muted-foreground">Dates</p>
                                   <p className="font-medium">
-                                    {format(new Date(segment.start_date), 'MMM d')} – {format(new Date(segment.end_date), 'MMM d')}
+                                    {format(parseLocalDate(segment.start_date), 'MMM d')} – {format(parseLocalDate(segment.end_date), 'MMM d')}
                                   </p>
                                 </div>
                               )}

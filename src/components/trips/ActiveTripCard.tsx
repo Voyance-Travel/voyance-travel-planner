@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { useTripHeroImage } from '@/hooks/useTripHeroImage';
  import { openMapLocation, isIOS } from '@/utils/mapNavigation';
 
@@ -76,8 +77,8 @@ export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
 
   // Calculate trip progress
   const now = new Date();
-  const startDate = trip.startDate ? new Date(trip.startDate) : null;
-  const endDate = trip.endDate ? new Date(trip.endDate) : null;
+  const startDate = trip.startDate ? parseLocalDate(trip.startDate) : null;
+  const endDate = trip.endDate ? parseLocalDate(trip.endDate) : null;
   
   let currentDay = 1;
   let totalDays = 1;
@@ -171,8 +172,8 @@ export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
           </div>
           <Progress value={progressPercent} className="h-2 bg-muted" />
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>{trip.startDate ? new Date(trip.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Start'}</span>
-            <span>{trip.endDate ? new Date(trip.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'End'}</span>
+            <span>{trip.startDate ? parseLocalDate(trip.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Start'}</span>
+            <span>{trip.endDate ? parseLocalDate(trip.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'End'}</span>
           </div>
         </div>
 

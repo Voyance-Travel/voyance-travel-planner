@@ -73,6 +73,7 @@ interface DisplayTrip {
 
 // Use centralized curated image utility
 import { getDestinationImage as getCuratedDestinationImage } from '@/utils/destinationImages';
+import { parseLocalDate } from '@/utils/dateUtils';
 
 function getDestinationImage(destination: string): string {
   return getCuratedDestinationImage(destination);
@@ -82,7 +83,7 @@ function getDestinationImage(destination: string): string {
 function computeTripProgress(trip: any): { progress?: number; label?: string; color?: string } {
   const itineraryStatus = trip.itinerary_status as string | null;
   const itineraryData = trip.itinerary_data as any;
-  const startDate = trip.start_date ? new Date(trip.start_date) : null;
+  const startDate = trip.start_date ? parseLocalDate(trip.start_date) : null;
   const now = new Date();
 
   // Failed generation
@@ -131,8 +132,8 @@ function computeTripProgress(trip: any): { progress?: number; label?: string; co
 
 // Transform API trip to display format
 function transformTrip(trip: any): DisplayTrip {
-  const startDate = trip.start_date ? new Date(trip.start_date) : null;
-  const endDate = trip.end_date ? new Date(trip.end_date) : null;
+  const startDate = trip.start_date ? parseLocalDate(trip.start_date) : null;
+  const endDate = trip.end_date ? parseLocalDate(trip.end_date) : null;
   const now = new Date();
   
   let dates = 'Planning...';

@@ -9,6 +9,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { getDestinationTemplate, hasStaticTemplate, type DestinationTemplate } from '@/data/destinationTemplates';
 
 // =============================================================================
@@ -107,8 +108,8 @@ export async function generateTripPreview(
 ): Promise<PreviewResponse> {
   try {
     // Calculate trip duration
-    const start = new Date(params.startDate);
-    const end = new Date(params.endDate);
+    const start = parseLocalDate(params.startDate);
+    const end = parseLocalDate(params.endDate);
     const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     const cappedDays = Math.min(totalDays, 2); // Free preview limited to 2 days
 

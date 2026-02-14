@@ -29,6 +29,7 @@ import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { format, differenceInDays } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { toast } from 'sonner';
 import { Link, useNavigate } from 'react-router-dom';
 import ClientIntakeSection from './ClientIntakeSection';
@@ -396,7 +397,7 @@ export default function ClientAgentPortal() {
             <div className="space-y-4">
               {trips.map(trip => {
                 const daysUntil = trip.startDate 
-                  ? differenceInDays(new Date(trip.startDate), new Date())
+                  ? differenceInDays(parseLocalDate(trip.startDate), new Date())
                   : null;
                 const paymentProgress = trip.totalCost > 0 
                   ? Math.round((trip.totalPaid / trip.totalCost) * 100)
@@ -433,8 +434,8 @@ export default function ClientAgentPortal() {
                               <div className="flex items-center gap-2 text-sm">
                                 <Calendar className="h-4 w-4 text-muted-foreground" />
                                 <span>
-                                  {format(new Date(trip.startDate), 'MMM d')}
-                                  {trip.endDate && ` – ${format(new Date(trip.endDate), 'MMM d, yyyy')}`}
+                                  {format(parseLocalDate(trip.startDate), 'MMM d')}
+                                  {trip.endDate && ` – ${format(parseLocalDate(trip.endDate), 'MMM d, yyyy')}`}
                                 </span>
                                 {daysUntil !== null && daysUntil > 0 && daysUntil <= 30 && (
                                   <Badge variant="outline" className="ml-2">

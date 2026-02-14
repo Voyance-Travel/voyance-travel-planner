@@ -5,6 +5,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
@@ -113,9 +114,9 @@ export async function getTripStats(): Promise<TripStats> {
       drafts.push(summary);
     } else if (trip.status === 'completed') {
       completed.push(summary);
-    } else if (trip.start_date && new Date(trip.start_date) > now) {
+    } else if (trip.start_date && parseLocalDate(trip.start_date) > now) {
       planned.push(summary);
-    } else if (trip.end_date && new Date(trip.end_date) < now) {
+    } else if (trip.end_date && parseLocalDate(trip.end_date) < now) {
       completed.push(summary);
     } else {
       planned.push(summary);
@@ -148,7 +149,7 @@ export async function getCountriesVisited(): Promise<CountriesResponse> {
   
   // Only count trips that have ENDED (completed/past trips)
   (trips || []).forEach(trip => {
-    const endDate = trip.end_date ? new Date(trip.end_date) : null;
+    const endDate = trip.end_date ? parseLocalDate(trip.end_date) : null;
     
     // Skip if trip hasn't ended yet (upcoming trip)
     if (!endDate || endDate > now) {
@@ -164,7 +165,7 @@ export async function getCountriesVisited(): Promise<CountriesResponse> {
       cities: [],
     };
     
-    const startDate = trip.start_date ? new Date(trip.start_date) : null;
+    const startDate = trip.start_date ? parseLocalDate(trip.start_date) : null;
     const days = startDate && endDate 
       ? Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
       : 0;
@@ -214,7 +215,7 @@ export async function getNextTrip(): Promise<NextTripResponse> {
   }
   
   const trip = trips[0];
-  const startDate = new Date(trip.start_date);
+  const startDate = parseLocalDate(trip.start_date);
   const daysUntil = Math.ceil((startDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   
   return {
@@ -250,7 +251,7 @@ export async function getUserProfile(): Promise<UserProfileResponse> {
   trips.forEach(trip => {
     if (trip.status === 'draft') draft++;
     else if (trip.status === 'completed') completed++;
-    else if (trip.start_date && new Date(trip.start_date) > now) upcoming++;
+    else if (trip.start_date && parseLocalDate(trip.start_date) > now) upcoming++;
     else completed++;
   });
   

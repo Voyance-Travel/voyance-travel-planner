@@ -29,6 +29,7 @@ import {
   Dna
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAddTripCollaborator, useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import { cn } from '@/lib/utils';
@@ -232,7 +233,7 @@ export default function LinkToTripModal({ open, onOpenChange, friend }: LinkToTr
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           <Calendar className="h-3 w-3" />
                           <span>
-                            {format(new Date(trip.start_date), 'MMM d')} – {format(new Date(trip.end_date), 'MMM d, yyyy')}
+                            {format(parseLocalDate(trip.start_date), 'MMM d')} – {format(parseLocalDate(trip.end_date), 'MMM d, yyyy')}
                           </span>
                         </div>
                       </div>

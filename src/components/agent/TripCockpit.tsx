@@ -36,6 +36,7 @@ import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { toast } from '@/hooks/use-toast';
 import { format, differenceInDays, isPast, isFuture } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import type { 
   AgencyTrip, 
   BookingSegment, 
@@ -99,7 +100,7 @@ export default function TripCockpit({
     .slice(0, 3);
 
   const daysUntilTrip = trip.start_date 
-    ? differenceInDays(new Date(trip.start_date), new Date())
+    ? differenceInDays(parseLocalDate(trip.start_date), new Date())
     : null;
 
   const itineraryDaysCount = trip.itinerary_data?.days?.length || 0;

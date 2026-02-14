@@ -18,6 +18,7 @@ import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { format, isPast, differenceInDays } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { toast } from 'sonner';
 
 interface ClientTrip {
@@ -234,7 +235,7 @@ export default function ClientPaymentSection({ trips, onPaymentComplete }: Clien
                   <CardTitle className="text-lg">{trip.name}</CardTitle>
                   <CardDescription>
                     {trip.destination}
-                    {trip.startDate && ` • ${format(new Date(trip.startDate), 'MMM d, yyyy')}`}
+                    {trip.startDate && ` • ${format(parseLocalDate(trip.startDate), 'MMM d, yyyy')}`}
                   </CardDescription>
                 </div>
                 <Badge variant={trip.totalPaid >= trip.totalCost ? 'default' : 'outline'}>
