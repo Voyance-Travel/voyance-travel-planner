@@ -1,6 +1,7 @@
 // ============================================================
 // Trip Cost Calculator - Dynamic Pricing Engine
-// Formula: roundUpTo10((Days × 90 + MultiCityFee) × TierMultiplier) + AddOns
+// Formula: roundUpTo10((Days × BASE_RATE_PER_DAY + MultiCityFee) × TierMultiplier) + AddOns
+// Current BASE_RATE_PER_DAY = 60 (see CONSTANTS section below)
 // ============================================================
 
 // ============================================================================

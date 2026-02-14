@@ -5,8 +5,10 @@
 
 // Credit Costs for Actions
 export const CREDIT_COSTS = {
-  // Dynamic (variable cost, calculated at generation time)
-  TRIP_GENERATION: 0,         // Placeholder: use tripCostCalculator for actual cost
+  // GUARD: TRIP_GENERATION is a PLACEHOLDER. Actual cost is calculated dynamically
+  // by tripCostCalculator.calculateTripCredits(). Do NOT read this value for display.
+  // Use voyanceFlowController re-export of calculateTripCredits() instead.
+  TRIP_GENERATION: 0,  // Placeholder only - see guard comment above
   HOTEL_SEARCH: 40,           // Per city
 
   // Fixed per-action costs
