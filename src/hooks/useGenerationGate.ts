@@ -56,24 +56,25 @@ export interface GenerationGateParams {
 // ============================================================================
 
 /**
- * Check if the user has any previously generated itineraries.
- * Returns true if they have zero completed generations (first trip).
+ * Check if the user has used their first-trip free benefit.
+ * Uses the `first_trip_used` flag on profiles — only set to true
+ * after a generation completes successfully, so crashed trips don't
+ * consume the benefit.
  */
-async function checkIsFirstTrip(userId: string, currentTripId: string): Promise<boolean> {
+async function checkIsFirstTrip(userId: string): Promise<boolean> {
   try {
-    const { count, error } = await supabase
-      .from('trips')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .not('itinerary_status', 'is', null)
-      .neq('id', currentTripId); // Exclude the trip being generated right now
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('first_trip_used')
+      .eq('id', userId)
+      .maybeSingle();
 
     if (error) {
       console.error('[GenerationGate] First-trip check error:', error);
       return false; // Default to not-first on error (safe fallback)
     }
 
-    return (count ?? 0) === 0;
+    return data?.first_trip_used === false;
   } catch {
     return false;
   }
@@ -111,7 +112,7 @@ export function useGenerationGate() {
     // FIRST TRIP: Free full generation, no credits charged
     // ────────────────────────────────────────────────────
     if (user?.id) {
-      const isFirstTrip = await checkIsFirstTrip(user.id, params.tripId);
+      const isFirstTrip = await checkIsFirstTrip(user.id);
       if (isFirstTrip) {
         console.log('[GenerationGate] First trip detected — generating ALL days, content gated on 3+');
         return {

@@ -187,19 +187,15 @@ serve(async (req) => {
       .limit(1);
     const hasCompletedPurchase = (purchaseCheck?.length || 0) > 0;
 
-    // 2. Is first trip (no OTHER trips with non-null itinerary_status)
-    // Exclude the current tripId so viewing the generated trip doesn't invalidate first-trip status
-    let firstTripQuery = supabaseAdmin
-      .from('trips')
-      .select('id')
-      .eq('user_id', user.id)
-      .not('itinerary_status', 'is', null)
-      .limit(1);
-    if (tripId) {
-      firstTripQuery = firstTripQuery.neq('id', tripId);
-    }
-    const { data: existingTrips } = await firstTripQuery;
-    const isFirstTrip = (existingTrips?.length || 0) === 0;
+    // 2. Is first trip — use the `first_trip_used` flag on profiles.
+    // This flag is only set to true after a generation completes successfully,
+    // so crashed trips don't consume the first-trip benefit.
+    const { data: profileData } = await supabaseAdmin
+      .from('profiles')
+      .select('first_trip_used')
+      .eq('id', user.id)
+      .maybeSingle();
+    const isFirstTrip = profileData?.first_trip_used === false;
 
     // 3. Smart Finish + trip usage (if tripId provided)
     let tripHasSmartFinish = false;
