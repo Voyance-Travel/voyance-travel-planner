@@ -20,6 +20,7 @@ export {
   TIER_FREE_CAPS,
   FREE_ACTION_CAPS,
   FLEX_CAPS_BY_DAYS,
+  SIGNUP_CREDITS,
   type UserTier,
   type TierCaps,
 } from '@/config/pricing';

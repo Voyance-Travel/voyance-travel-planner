@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useBonusCredits, BONUS_INFO } from '@/hooks/useBonusCredits';
 import { useAuth } from '@/contexts/AuthContext';
+import { CREDIT_EXPIRATION_COPY } from '@/config/pricing';
 import confetti from 'canvas-confetti';
 
 interface WelcomeCreditsModalProps {
@@ -215,7 +216,7 @@ export function WelcomeCreditsModal({ open, onClose }: WelcomeCreditsModalProps)
                 transition={{ delay: 0.7 }}
                 className="text-xs text-muted-foreground mb-6"
               >
-                Welcome credits expire in 2 months • Launch bonus expires in 6 months
+                {CREDIT_EXPIRATION_COPY.freeCreditsNotice} Launch bonus expires in 6 months.
               </motion.p>
 
               {/* CTA */}

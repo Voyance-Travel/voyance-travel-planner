@@ -1,3 +1,5 @@
+// SYNC CHECK: Run 'npx ts-node scripts/check-edge-constants.ts' after any
+// pricing or cost constant change. See src/config/pricing.ts for source of truth.
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "npm:stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";

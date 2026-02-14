@@ -15,7 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ROUTES } from '@/config/routes';
-import { FLEXIBLE_CREDITS, VOYANCE_CLUB_PACKS, formatCredits } from '@/config/pricing';
+import { FLEXIBLE_CREDITS, VOYANCE_CLUB_PACKS, formatCredits, CREDIT_EXPIRATION_COPY } from '@/config/pricing';
 import { useFoundingMemberCount } from '@/hooks/useFoundingMemberCount';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -113,7 +113,7 @@ const sampleDay = [
 const faqs = [
   { q: 'How do credits work?', a: 'Credits unlock your full itinerary - all days plus actionable details like addresses, costs, and booking links. Your first trip is free with everything included.' },
   { q: "What's the difference between Quick Top-Up and Voyance Club?", a: "Quick Top-Up credits are simple and transactional - buy what you need, they expire in 12 months. Voyance Club packs give you bonus credits, a Club badge, credits that never expire (as long as your account is active), and exclusive perks like priority support and early feature access." },
-  { q: 'Do I get free credits?', a: 'Yes! Every user gets 150 free credits every month. Free credits expire after 2 months if unused, so use them or bank up to 300.' },
+  { q: 'Do I get free credits?', a: `Yes! Every user gets 150 free credits every month. ${CREDIT_EXPIRATION_COPY.freeCreditsNotice} Use them or bank up to 300.` },
   { q: 'Do purchased credits expire?', a: "Quick Top-Up credits expire after 12 months. Voyance Club base credits never expire as long as your account is active (login once per year). Bonus credits from Club packs expire after 6 months." },
   { q: 'What is the Founding Member badge?', a: "The first 1,000 Adventurer pack buyers receive an exclusive Founding Member badge. Once all 1,000 are claimed, the badge is retired forever." },
   { q: 'Can I unlock individual days?', a: "Yes! You can unlock days one at a time or all at once. Mix unlocked days with manual planning however you like." },
@@ -380,7 +380,7 @@ export default function Pricing() {
           {/* Monthly free credits callout */}
           <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} className="text-center mt-10 bg-card border border-border rounded-xl p-4 max-w-lg mx-auto">
             <p className="text-sm font-medium text-foreground mb-1">🎁 150 free credits every month</p>
-            <p className="text-xs text-muted-foreground">Every user gets 150 credits monthly (expire in 2 months). Quick Top-Up credits expire in 12 months. Club credits never expire.</p>
+            <p className="text-xs text-muted-foreground">Every user gets 150 credits monthly. {CREDIT_EXPIRATION_COPY.freeCreditsNotice} Quick Top-Up credits expire in 12 months. Club credits never expire.</p>
           </motion.div>
           <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} className="text-center text-xs text-muted-foreground mt-3">You'll see the exact credit cost for your trip before you unlock.</motion.p>
         </div>

@@ -1,3 +1,5 @@
+// SYNC CHECK: Run 'npx ts-node scripts/check-edge-constants.ts' after any
+// pricing or cost constant change. See src/config/pricing.ts for source of truth.
 /**
  * Spend Credits Edge Function
  * Deducts credits using FIFO (earliest-expiring first) from credit_purchases table.

@@ -353,6 +353,17 @@ export const MONTHLY_CREDIT_GRANT = {
   referralBonus: 200,
 } as const;
 
+// GUARD: Signup bonus amounts. Edge functions (grant-bonus-credits) must match these values.
+// If you change these, update the edge function AND run scripts/check-edge-constants.ts.
+export const SIGNUP_CREDITS = {
+  welcomeBonus: 150,
+  earlyAdopterBonus: 500,
+  earlyAdopterEnabled: true,
+  get totalSignupCredits() {
+    return this.welcomeBonus + (this.earlyAdopterEnabled ? this.earlyAdopterBonus : 0);
+  },
+} as const;
+
 /**
  * Human-readable credit expiration messages for UI display.
  * Use these in balance displays, tooltips, and purchase confirmations.
