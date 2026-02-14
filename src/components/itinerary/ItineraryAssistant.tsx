@@ -36,6 +36,7 @@ import {
 import { useSpendCredits } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
 import { useEntitlements } from '@/hooks/useEntitlements';
+import { useActionCap } from '@/hooks/useActionCap';
 import { CREDIT_COSTS } from '@/config/pricing';
 
 interface ItineraryAssistantProps {
@@ -74,6 +75,7 @@ export function ItineraryAssistant({
   const { isPaid } = useEntitlements();
   const spendCredits = useSpendCredits();
   const totalCredits = creditData?.totalCredits ?? 0;
+  const aiMessageCap = useActionCap(tripId, 'ai_message');
 
   // Keep local days in sync with props
   useEffect(() => {
@@ -141,22 +143,17 @@ export function ItineraryAssistant({
       return;
     }
 
-    // Charge credits for AI messages (skip for paid users)
-    if (!isPaid) {
-      if (totalCredits < CREDIT_COSTS.AI_MESSAGE) {
-        toast.error(`Need ${CREDIT_COSTS.AI_MESSAGE} credits to send a message`);
-        return;
-      }
-      try {
-        await spendCredits.mutateAsync({
-          action: 'AI_MESSAGE',
-          tripId,
-          metadata: { source: 'itinerary_assistant' },
-        });
-      } catch {
-        // Credit deduction failed — useSpendCredits shows error toast
-        return;
-      }
+    // Charge credits for AI messages (server handles free cap logic)
+    let messageSpendResult: any = null;
+    try {
+      messageSpendResult = await spendCredits.mutateAsync({
+        action: 'AI_MESSAGE',
+        tripId,
+        metadata: { source: 'itinerary_assistant' },
+      });
+    } catch {
+      // Credit deduction failed — useSpendCredits shows error toast / OutOfCreditsModal
+      return;
     }
 
     // Client-side safety: basic input sanitization
@@ -238,7 +235,7 @@ export function ItineraryAssistant({
     } finally {
       setIsLoading(false);
     }
-  }, [inputValue, isLoading, messages, itineraryContext, conversationId, approvalMode, isPaid, totalCredits, spendCredits, tripId]);
+  }, [inputValue, isLoading, messages, itineraryContext, conversationId, approvalMode, spendCredits, tripId]);
 
   const handleActionApply = async (messageId: string, actionIndex: number, action: ItineraryAction) => {
     const actionId = `${messageId}-${actionIndex}`;
@@ -359,6 +356,13 @@ export function ItineraryAssistant({
                 <SheetDescription className="text-xs">
                   Customize your {destination} itinerary
                 </SheetDescription>
+                {!aiMessageCap.isLoading && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {aiMessageCap.isFree
+                      ? `💬 ${aiMessageCap.freeRemaining} of ${aiMessageCap.cap} free messages remaining`
+                      : `💬 Continue chatting: ${aiMessageCap.creditCost} credits/message`}
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-2 text-xs">
