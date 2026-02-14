@@ -1,39 +1,30 @@
 
 
-# Fix #3: Add Guard Comment to hasPaidAccess
-
-## Current State
-
-The logic is already correct at line 250:
-```typescript
-const hasPaidAccess = tripHasSmartFinish || unlockedDays > 0;
-```
-
-The existing comment (lines 248-249) is a shorter version. This plan replaces it with the full guard comment.
+# Fix #4: Preview Mode Returns 1 Unlocked Day Instead of 0
 
 ## Change
 
-**File:** `supabase/functions/get-entitlements/index.ts` (lines 248-250)
+**File:** `src/lib/voyanceFlowController.ts`, line 96
 
 Replace:
 ```typescript
-    // Bug 12 fix: per-trip only. hasCompletedPurchase is a global flag and must NOT grant per-trip access.
-    // See src/lib/voyanceFlowController.ts hasPaidAccessForTrip() for the canonical logic.
-    const hasPaidAccess = tripHasSmartFinish || unlockedDays > 0;
+if (params.isPreview) return 0;
 ```
 
 With:
 ```typescript
-    // GUARD: hasPaidAccess is PER-TRIP only.
-    // tripHasSmartFinish = user bought Smart Finish for THIS trip.
-    // unlockedDays > 0 = user unlocked days on THIS trip.
-    // NEVER include hasCompletedPurchase here — that is account-wide, not trip-scoped.
-    // See: src/lib/voyanceFlowController.ts → hasPaidAccessForTrip()
-    const hasPaidAccess = tripHasSmartFinish || unlockedDays > 0;
+// Preview users get Day 1 free so they can evaluate the trip before committing credits.
+if (params.isPreview) return 1;
 ```
 
 ## What does NOT change
-- The value/logic of `hasPaidAccess` (already correct)
-- No other variables, functions, or response fields
-- No other files
+- `canAccessDay`, `hasPaidAccessForTrip`, `getActionCost` — untouched
+- First-trip logic (`if (params.isFirstTrip)`) — untouched
+- Paid-trip fallback (`return params.generatedDayCount`) — untouched
+- No new imports, no new parameters, no other files
+
+## Expected behavior after change
+- Preview trips: Day 1 fully visible, Day 2+ gated
+- First-trip-free: Days 1-2 visible, Day 3+ gated (unchanged)
+- Paid trips: All days visible (unchanged)
 
