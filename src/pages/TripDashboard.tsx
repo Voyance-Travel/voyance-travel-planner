@@ -22,7 +22,9 @@ import {
   FolderOpen,
    Zap,
    Trash2,
-   UserPlus
+   UserPlus,
+   AlertTriangle,
+   RotateCcw
 } from 'lucide-react';
 import ActiveTripCard from '@/components/trips/ActiveTripCard';
 import { PastTripCard } from '@/components/trips/PastTripCard';
@@ -166,8 +168,9 @@ interface Trip {
   hotelSelection: any;
   metadata: Record<string, any> | null;
   hasItineraryData: boolean;
+  itineraryStatus: string | null;
    isPaid?: boolean;
-  isCollaborator?: boolean; // true if user is a collaborator (not owner)
+  isCollaborator?: boolean;
   ownerName?: string | null;
   collaborators?: TripCollaboratorInfo[];
 }
@@ -394,10 +397,17 @@ function TripCard({ trip, index = 0, onDelete }: { trip: Trip; index?: number; o
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
         
         {/* Status Badge */}
-        <Badge className={`absolute top-3 right-3 sm:top-4 sm:right-4 ${status.color} gap-1 sm:gap-1.5 backdrop-blur-sm text-[10px] sm:text-xs`}>
-          <StatusIcon className="h-3 w-3" />
-          <span className="hidden sm:inline">{status.label}</span>
-        </Badge>
+        {trip.itineraryStatus === 'failed' ? (
+          <Badge className="absolute top-3 right-3 sm:top-4 sm:right-4 bg-destructive/20 text-destructive border border-destructive/30 gap-1 sm:gap-1.5 backdrop-blur-sm text-[10px] sm:text-xs">
+            <AlertTriangle className="h-3 w-3" />
+            <span className="hidden sm:inline">Failed</span>
+          </Badge>
+        ) : (
+          <Badge className={`absolute top-3 right-3 sm:top-4 sm:right-4 ${status.color} gap-1 sm:gap-1.5 backdrop-blur-sm text-[10px] sm:text-xs`}>
+            <StatusIcon className="h-3 w-3" />
+            <span className="hidden sm:inline">{status.label}</span>
+          </Badge>
+        )}
         
         {/* Destination Name */}
         <div className="absolute bottom-3 left-3 right-3 sm:bottom-4 sm:left-4 sm:right-4">
@@ -432,24 +442,42 @@ function TripCard({ trip, index = 0, onDelete }: { trip: Trip; index?: number; o
           )}
         </div>
 
-        {/* Booking Status - horizontal scroll on mobile */}
-        <div className="flex gap-1.5 sm:gap-2 flex-nowrap overflow-x-auto pb-1 scrollbar-hide">
-          {hasFlight && (
-            <Badge variant="secondary" className="gap-1 text-[10px] sm:text-xs shrink-0">
-              <Plane className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> <span className="hidden sm:inline">Flight</span>
-            </Badge>
-          )}
-          {hasHotel && (
-            <Badge variant="secondary" className="gap-1 text-[10px] sm:text-xs shrink-0">
-              <Hotel className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> <span className="hidden sm:inline">Hotel</span>
-            </Badge>
-          )}
-          {hasItinerary && (
-            <Badge variant="secondary" className="gap-1 text-[10px] sm:text-xs bg-primary/10 text-primary border-primary/20 shrink-0">
-              <Sparkles className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> Ready
-            </Badge>
-          )}
-        </div>
+        {/* Failed generation banner */}
+        {trip.itineraryStatus === 'failed' && (
+          <div className="flex items-center gap-2 p-2.5 rounded-lg bg-destructive/10 border border-destructive/20">
+            <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+            <span className="text-xs sm:text-sm font-medium text-destructive">Generation failed</span>
+          </div>
+        )}
+
+        {/* Generating indicator */}
+        {(trip.itineraryStatus === 'generating' || trip.itineraryStatus === 'queued') && (
+          <div className="flex items-center gap-2 p-2.5 rounded-lg bg-primary/10 border border-primary/20">
+            <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" />
+            <span className="text-xs sm:text-sm font-medium text-primary">Generating itinerary…</span>
+          </div>
+        )}
+
+        {/* Booking Status - horizontal scroll on mobile (hide for failed) */}
+        {trip.itineraryStatus !== 'failed' && (
+          <div className="flex gap-1.5 sm:gap-2 flex-nowrap overflow-x-auto pb-1 scrollbar-hide">
+            {hasFlight && (
+              <Badge variant="secondary" className="gap-1 text-[10px] sm:text-xs shrink-0">
+                <Plane className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> <span className="hidden sm:inline">Flight</span>
+              </Badge>
+            )}
+            {hasHotel && (
+              <Badge variant="secondary" className="gap-1 text-[10px] sm:text-xs shrink-0">
+                <Hotel className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> <span className="hidden sm:inline">Hotel</span>
+              </Badge>
+            )}
+            {hasItinerary && (
+              <Badge variant="secondary" className="gap-1 text-[10px] sm:text-xs bg-primary/10 text-primary border-primary/20 shrink-0">
+                <Sparkles className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> Ready
+              </Badge>
+            )}
+          </div>
+        )}
 
         {/* Collaborator indicator badge for linked trips */}
         {trip.isCollaborator && trip.ownerName && (
@@ -494,7 +522,48 @@ function TripCard({ trip, index = 0, onDelete }: { trip: Trip; index?: number; o
 
         {/* Actions - mobile optimized touch targets */}
         <div className="flex gap-2 pt-1 sm:pt-2">
-          {hasItinerary ? (
+          {trip.itineraryStatus === 'failed' ? (
+            <>
+              <Button 
+                onClick={() => navigate(`/trip/${trip.id}?generate=true`)} 
+                variant="default" 
+                className="flex-1 gap-1.5 sm:gap-2 h-10 sm:h-11 text-xs sm:text-sm"
+              >
+                <RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                Retry
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    className="gap-1.5 h-10 sm:h-11 text-xs sm:text-sm text-destructive border-destructive/30 hover:bg-destructive/10"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    Delete
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete this trip?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently delete your failed trip to {trip.destination}. This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDelete}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      disabled={isDeleting}
+                    >
+                      {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
+          ) : hasItinerary ? (
             <Button 
               onClick={handleCardClick} 
               variant="default" 
@@ -750,6 +819,7 @@ export default function TripDashboard() {
           hotelSelection: row.hotel_selection,
           metadata: row.metadata as Record<string, any> | null,
           hasItineraryData: !!row.itinerary_data,
+          itineraryStatus: row.itinerary_status as string | null,
           isPaid: (row.metadata as Record<string, any>)?.is_paid || row.status === 'booked' || false,
           isCollaborator: false,
           collaborators: collabMap.get(row.id) || [],
@@ -774,6 +844,7 @@ export default function TripDashboard() {
               hotelSelection: row.hotel_selection,
               metadata: row.metadata as Record<string, any> | null,
               hasItineraryData: !!row.itinerary_data,
+              itineraryStatus: row.itinerary_status as string | null,
               isPaid: false,
               isCollaborator: true,
               ownerName: ownerMap.get(row.user_id) || null,
