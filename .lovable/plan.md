@@ -1,58 +1,39 @@
 
 
-# Add Sync Comments to get-entitlements Edge Function
+# Fix #3: Add Guard Comment to hasPaidAccess
 
-## Scope
-Comments only. No values changed. No logic changed. No other files touched.
+## Current State
 
-## Change 1: CREDIT_COSTS header + inline comments (lines 15-34)
-
-Replace lines 15-34 with:
-
+The logic is already correct at line 250:
 ```typescript
-// ============================================================
-// CREDIT_COSTS — Mirror of src/config/pricing.ts CREDIT_COSTS
-// ============================================================
-// WARNING: These values MUST match src/config/pricing.ts exactly.
-// When updating pricing.ts, update this block AND the
-// TIER_CAPS block below at the same time.
-// Last synced: 2026-02-14
-// ============================================================
-const CREDIT_COSTS = {
-  unlock_day: 60,            // src/config/pricing.ts:13
-  smart_finish: 50,          // src/config/pricing.ts:14
-  swap_activity: 5,          // src/config/pricing.ts:16
-  regenerate_day: 10,        // src/config/pricing.ts:15
-  ai_message: 5,             // src/config/pricing.ts:18
-  restaurant_rec: 5,         // src/config/pricing.ts:17
-  hotel_search: 40,          // src/config/pricing.ts:10
-  hotel_optimization: 100,   // src/config/pricing.ts:19
-  transport_mode_change: 5,  // src/config/pricing.ts:22
-  mystery_getaway: 15,       // src/config/pricing.ts:20
-  mystery_logistics: 5,      // src/config/pricing.ts:21
-  base_rate_per_day: 60,     // src/lib/tripCostCalculator.ts:BASE_RATE_PER_DAY
-  group_small: 150,          // src/config/pricing.ts:GROUP_UNLOCK_CREDITS.small
-  group_medium: 300,         // src/config/pricing.ts:GROUP_UNLOCK_CREDITS.medium
-  group_large: 500,          // src/config/pricing.ts:GROUP_UNLOCK_CREDITS.large
-};
+const hasPaidAccess = tripHasSmartFinish || unlockedDays > 0;
 ```
 
-## Change 2: TIER_CAPS header comment (lines 36-38)
+The existing comment (lines 248-249) is a shorter version. This plan replaces it with the full guard comment.
 
-Replace lines 36-38 with:
+## Change
 
+**File:** `supabase/functions/get-entitlements/index.ts` (lines 248-250)
+
+Replace:
 ```typescript
-// ============================================================
-// TIER_CAPS — Mirror of src/config/pricing.ts TIER_FREE_CAPS
-// ============================================================
-// Must match src/config/pricing.ts TIER_FREE_CAPS exactly.
-// Last synced: 2026-02-14
-// ============================================================
+    // Bug 12 fix: per-trip only. hasCompletedPurchase is a global flag and must NOT grant per-trip access.
+    // See src/lib/voyanceFlowController.ts hasPaidAccessForTrip() for the canonical logic.
+    const hasPaidAccess = tripHasSmartFinish || unlockedDays > 0;
+```
+
+With:
+```typescript
+    // GUARD: hasPaidAccess is PER-TRIP only.
+    // tripHasSmartFinish = user bought Smart Finish for THIS trip.
+    // unlockedDays > 0 = user unlocked days on THIS trip.
+    // NEVER include hasCompletedPurchase here — that is account-wide, not trip-scoped.
+    // See: src/lib/voyanceFlowController.ts → hasPaidAccessForTrip()
+    const hasPaidAccess = tripHasSmartFinish || unlockedDays > 0;
 ```
 
 ## What does NOT change
-- All values remain identical
-- All logic remains identical
-- No other files are modified
-- The TIER_CAPS object itself, FLEX_CAPS_BY_DAYS, and all functions are untouched
+- The value/logic of `hasPaidAccess` (already correct)
+- No other variables, functions, or response fields
+- No other files
 
