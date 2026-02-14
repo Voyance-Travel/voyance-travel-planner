@@ -6,6 +6,7 @@
  */
 
 import { useState, useMemo } from "react";
+import { RefreshCw } from "lucide-react";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Link } from "react-router-dom";
 import { useRealCostMetrics } from "@/hooks/useRealCostMetrics";
@@ -392,7 +393,7 @@ export default function UnitEconomics() {
   const { data: realMetrics, isLoading: metricsLoading, isError: metricsError } = useRealCostMetrics();
   
   // Fetch comprehensive unit economics data (costs + revenue + users + trips)
-  const { data: econData, isLoading: econLoading } = useUnitEconomicsData();
+  const { data: econData, isLoading: econLoading, refetch: refetchEcon } = useUnitEconomicsData();
   
   // Use real data when available, otherwise fallback
   const hasRealData = !!realMetrics && realMetrics.totalTrips > 0;
@@ -884,9 +885,24 @@ export default function UnitEconomics() {
           >
             ← Back to Profile
           </Link>
-          <span style={{ fontSize: 10, color: "#475569" }}>
-            {VERIFIED_DATA.period}
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 10, color: "#475569" }}>
+              {VERIFIED_DATA.period}
+            </span>
+            <button
+              onClick={() => { refetchEcon(); }}
+              disabled={econLoading}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 4,
+                padding: "3px 8px", borderRadius: 6, fontSize: 11,
+                background: "rgba(100, 116, 139, 0.15)", border: "1px solid rgba(100, 116, 139, 0.25)",
+                color: "#94A3B8", cursor: econLoading ? "wait" : "pointer",
+              }}
+            >
+              <RefreshCw style={{ width: 12, height: 12, ...(econLoading ? { animation: "spin 1s linear infinite" } : {}) }} />
+              Refresh
+            </button>
+          </div>
         </div>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: "#F1F5F9", margin: "0 0 16px" }}>
           Unit Economics
