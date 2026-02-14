@@ -1,124 +1,58 @@
 
 
-# Create voyanceFlowController.ts + Fix Bugs 11 & 12
+# Add Sync Comments to get-entitlements Edge Function
 
-## What This Does
+## Scope
+Comments only. No values changed. No logic changed. No other files touched.
 
-Creates a single source of truth library for all business logic decisions, then refactors 8+ files to import from it instead of having their own copies. Also fixes the two remaining server-side bugs.
+## Change 1: CREDIT_COSTS header + inline comments (lines 15-34)
 
-## Important Discrepancies Found in Your Draft
-
-Before implementing, I found several places where your proposed library doesn't match the actual codebase. These need to be reconciled:
-
-| Your Draft | Actual Code | Resolution |
-|------------|-------------|------------|
-| `COSTS.RESTAURANT_REC = 15` | `CREDIT_COSTS.RESTAURANT_REC = 5` (pricing.ts line 17) | Use **5** (matches pricing.ts) |
-| `calculateTripCost = days x 60 + multi-city 60` | `tripCostCalculator.ts` uses **complexity multipliers** (1.0x-1.3x), **tiered multi-city fees** (0/60/120/180), and **roundUpTo10** | Keep `tripCostCalculator.ts` as-is -- it's already correct and more sophisticated |
-| `FREE_LIMITS` has `flex` tier | Actual code has `free` and `flex` as separate tiers in `TIER_FREE_CAPS` with identical values, plus trip-length scaling for Free/Flex | Keep `TIER_FREE_CAPS` and `FLEX_CAPS_BY_DAYS` from pricing.ts |
-| `CREDIT_GRANTS.QUIZ_COMPLETION = 100` | Not found in pricing.ts -- may be handled elsewhere | Omit unless confirmed |
-| Missing: `TRANSPORT_MODE_CHANGE`, `HOTEL_SEARCH`, `HOTEL_OPTIMIZATION`, `MYSTERY_GETAWAY`, `MYSTERY_LOGISTICS` | All exist in `CREDIT_COSTS` (pricing.ts) | Include all costs |
-
-## Implementation Plan
-
-### Phase 1: Create the Library
-
-**New file: `src/lib/voyanceFlowController.ts`**
-
-This will be a **thin decision layer** that imports constants from `config/pricing.ts` and `tripCostCalculator.ts` rather than duplicating them:
+Replace lines 15-34 with:
 
 ```typescript
-// Re-export constants from their canonical sources
-export { CREDIT_COSTS, TIER_FREE_CAPS, FREE_ACTION_CAPS } from '@/config/pricing';
-export { BASE_RATE_PER_DAY, calculateTripCredits } from '@/lib/tripCostCalculator';
-
-// NEW: Decision functions only
-export const FIRST_TRIP_FREE_DAYS = 2;
-
-export function computeUnlockedDayCount(...)
-export function canAccessDay(...)
-export function getActionCost(...)
-export function hasPaidAccessForTrip(...)
-export function formatActionToast(...)
+// ============================================================
+// CREDIT_COSTS — Mirror of src/config/pricing.ts CREDIT_COSTS
+// ============================================================
+// WARNING: These values MUST match src/config/pricing.ts exactly.
+// When updating pricing.ts, update this block AND the
+// TIER_CAPS block below at the same time.
+// Last synced: 2026-02-14
+// ============================================================
+const CREDIT_COSTS = {
+  unlock_day: 60,            // src/config/pricing.ts:13
+  smart_finish: 50,          // src/config/pricing.ts:14
+  swap_activity: 5,          // src/config/pricing.ts:16
+  regenerate_day: 10,        // src/config/pricing.ts:15
+  ai_message: 5,             // src/config/pricing.ts:18
+  restaurant_rec: 5,         // src/config/pricing.ts:17
+  hotel_search: 40,          // src/config/pricing.ts:10
+  hotel_optimization: 100,   // src/config/pricing.ts:19
+  transport_mode_change: 5,  // src/config/pricing.ts:22
+  mystery_getaway: 15,       // src/config/pricing.ts:20
+  mystery_logistics: 5,      // src/config/pricing.ts:21
+  base_rate_per_day: 60,     // src/lib/tripCostCalculator.ts:BASE_RATE_PER_DAY
+  group_small: 150,          // src/config/pricing.ts:GROUP_UNLOCK_CREDITS.small
+  group_medium: 300,         // src/config/pricing.ts:GROUP_UNLOCK_CREDITS.medium
+  group_large: 500,          // src/config/pricing.ts:GROUP_UNLOCK_CREDITS.large
+};
 ```
 
-Key design decision: **Don't duplicate constants**. The library re-exports from `config/pricing.ts` (which has all the Stripe product IDs, pack details, etc.) and adds only the decision functions that were previously scattered.
+## Change 2: TIER_CAPS header comment (lines 36-38)
 
-### Phase 2: Fix Bug 11 -- save-itinerary Override
+Replace lines 36-38 with:
 
-**File: `supabase/functions/generate-itinerary/index.ts`**
-
-Remove lines 9273 and 9280-9283:
 ```typescript
-// DELETE:
-if (itinerary?.isPreview === false) {
-  const dayCount = Array.isArray(itinerary?.days) ? itinerary.days.length : 0;
-  updatePayload.unlocked_day_count = dayCount;
-}
+// ============================================================
+// TIER_CAPS — Mirror of src/config/pricing.ts TIER_FREE_CAPS
+// ============================================================
+// Must match src/config/pricing.ts TIER_FREE_CAPS exactly.
+// Last synced: 2026-02-14
+// ============================================================
 ```
 
-Replace the comment on line 9273 with:
-```typescript
-// unlocked_day_count is managed by the client (TripDetail.tsx + useUnlockDay.ts).
-// Do NOT set it here -- doing so creates a race condition with the client's write.
-```
-
-### Phase 3: Fix Bug 12 -- hasPaidAccess Leak
-
-**File: `supabase/functions/get-entitlements/index.ts`**
-
-Change line 240:
-```typescript
-// FROM:
-const hasPaidAccess = hasCompletedPurchase || tripHasSmartFinish || unlockedDays > 0;
-
-// TO:
-const hasPaidAccess = tripHasSmartFinish || unlockedDays > 0;
-```
-
-### Phase 4: Refactor Consumers
-
-**4a. `src/hooks/useEntitlements.ts` (canViewPremiumContentForDay)**
-- Import `canAccessDay` from `voyanceFlowController`
-- Replace the inline logic (lines 252-264) with a call to `canAccessDay()`
-- Keeps the same function signature for backward compatibility
-
-**4b. `src/pages/TripDetail.tsx` (handleGenerationComplete)**
-- Import `computeUnlockedDayCount` from `voyanceFlowController`
-- Replace inline `isFirstTrip ? Math.min(2, nonLockedDays.length) : nonLockedDays.length` (line 658) with `computeUnlockedDayCount()`
-
-**4c. `src/hooks/useActionCap.ts`**
-- Import `getActionCost` from `voyanceFlowController`
-- Replace inline cap lookup with the library function
-
-**4d. `src/hooks/useUnlockDay.ts`**
-- Import `CREDIT_COSTS` via `voyanceFlowController` (or keep direct import from pricing.ts -- both work since the library re-exports)
-
-**4e. `src/hooks/useGenerationGate.ts`**
-- No logic change needed (already uses `tripCostCalculator` correctly)
-- Optionally import `FIRST_TRIP_FREE_DAYS` from the library for the comment clarity
-
-### Phase 5: Deploy Edge Functions
-
-Both modified edge functions will be redeployed:
-- `generate-itinerary` (Bug 11 fix)
-- `get-entitlements` (Bug 12 fix)
-
-## Files Changed Summary
-
-| File | Change Type | Priority |
-|------|-------------|----------|
-| `src/lib/voyanceFlowController.ts` | NEW -- central decision library | CRITICAL |
-| `supabase/functions/generate-itinerary/index.ts` | Remove `unlocked_day_count` from save-itinerary | CRITICAL |
-| `supabase/functions/get-entitlements/index.ts` | Remove `hasCompletedPurchase` from `hasPaidAccess` | HIGH |
-| `src/hooks/useEntitlements.ts` | Use `canAccessDay` from library | MEDIUM |
-| `src/pages/TripDetail.tsx` | Use `computeUnlockedDayCount` from library | MEDIUM |
-| `src/hooks/useActionCap.ts` | Use `getActionCost` from library | MEDIUM |
-
-## What This Fixes
-
-| Scenario | Before | After |
-|----------|--------|-------|
-| First trip (5 days) | Race condition: client sets 2, server overwrites to 5 | Client sets 2, server doesn't touch it |
-| Past purchaser, new trip | `hasCompletedPurchase` grants access to all trips | Per-trip gating: only unlocked trips show content |
-| Future bugs | Logic in 8 files, each can diverge | One library, all consumers import |
+## What does NOT change
+- All values remain identical
+- All logic remains identical
+- No other files are modified
+- The TIER_CAPS object itself, FLEX_CAPS_BY_DAYS, and all functions are untouched
 
