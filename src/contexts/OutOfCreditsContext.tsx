@@ -54,7 +54,13 @@ export function OutOfCreditsProvider({ children }: { children: ReactNode }) {
   }, [credits.data?.isNewUserLoading]);
 
   const dismiss = useCallback(() => {
-    setState({ isOpen: false });
+    setState({
+      isOpen: false,
+      action: undefined,
+      creditsNeeded: undefined,
+      creditsAvailable: undefined,
+      tripId: undefined,
+    });
   }, []);
 
   return (
