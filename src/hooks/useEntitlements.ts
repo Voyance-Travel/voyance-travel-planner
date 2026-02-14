@@ -92,6 +92,8 @@ export interface EntitlementsResponse {
     freeBuildsRemaining?: number;
   };
   credit_balance?: number;
+  // Error state flag
+  entitlements_error?: boolean;
   can_build_day?: boolean;
   can_use_flight_hotel_optimization?: boolean;
   can_use_group_budgeting?: boolean;
@@ -182,6 +184,7 @@ export function useEntitlements(tripId?: string) {
         is_paid: true,
         has_addon: true,
         entitlements: {},
+        entitlements_error: false,
         limits: { freeBuildsRemaining: 999, draftTripsRemaining: 999 },
       } as EntitlementsResponse,
       isLoading: false,
@@ -268,6 +271,11 @@ export function canViewPremiumContentForDay(
 // Default Entitlements (for unauthenticated/error state)
 // ============================================================================
 
+// GUARD: Error fallback must be RESTRICTIVE.
+// If get-entitlements fails, lock all premium content to prevent unpaid access.
+// Do NOT default premium flags to true here -- that creates a free-access loophole on errors.
+// The UI should detect the error state and offer a retry.
+// See: src/lib/voyanceFlowController.ts -- single source of truth for gating logic.
 function getDefaultEntitlements(userId: string): EntitlementsResponse {
   return {
     user_id: userId,
@@ -283,11 +291,11 @@ function getDefaultEntitlements(userId: string): EntitlementsResponse {
     is_first_trip: true,
     trip_has_smart_finish: false,
     unlocked_day_count: 0,
-    can_view_photos: true, // First trip = true
-    can_view_addresses: true,
-    can_view_booking_links: true,
-    can_view_tips: true,
-    can_view_reviews: true,
+    can_view_photos: false,
+    can_view_addresses: false,
+    can_view_booking_links: false,
+    can_view_tips: false,
+    can_view_reviews: false,
     can_export_pdf: false,
     can_build_itinerary: false,
     can_unlock_day: false,
@@ -308,6 +316,7 @@ function getDefaultEntitlements(userId: string): EntitlementsResponse {
     is_paid: false,
     has_addon: false,
     entitlements: {},
+    entitlements_error: true,
   };
 }
 
