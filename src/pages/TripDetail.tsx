@@ -68,7 +68,7 @@ interface ItineraryDay {
 export default function TripDetail() {
   const { tripId } = useParams();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const shouldAutoGenerate = searchParams.get('generate') === 'true';
   const [trip, setTrip] = useState<Trip | null>(null);
   const [activities, setActivities] = useState<TripActivity[]>([]);
@@ -644,6 +644,13 @@ export default function TripDetail() {
       };
     });
     setShowGenerator(false);
+    
+    // Clean up ?generate=true from URL to prevent re-trigger / infinite spinner
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('generate');
+      return next;
+    }, { replace: true });
     
     // Force-save to backend so we never regenerate on refresh
     if (tripId) {
