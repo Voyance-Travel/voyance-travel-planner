@@ -1,35 +1,61 @@
 
-# Fix #5: First-Trip Gating Guard Comments
 
-## Changes
+# Fix #6: Add Smart Finish Comparison Helper
+
+## Summary
+
+Add a new exported utility function `getSmartFinishComparison` to the end of `src/lib/voyanceFlowController.ts`. This is purely additive -- no existing code changes.
+
+## Change
 
 **File:** `src/lib/voyanceFlowController.ts`
 
-### Change 1: Guard comment above FIRST_TRIP_FREE_DAYS (lines 36-37)
+Append the following function after the existing `formatActionToast` function (after line ~175):
 
-Replace:
 ```typescript
-/** Days unlocked free on a user's very first trip */
-export const FIRST_TRIP_FREE_DAYS = 2;
-```
+/**
+ * Compare the cost of unlocking remaining gated days individually vs Smart Finish.
+ * Returns the comparison so the UI can nudge users toward the better deal.
+ */
+export function getSmartFinishComparison(params: {
+  totalDays: number;
+  unlockedDayCount: number;
+  hasSmartFinish: boolean;
+}): {
+  remainingDays: number;
+  individualCost: number;
+  smartFinishCost: number;
+  savings: number;
+  smartFinishIsCheaper: boolean;
+} {
+  if (params.hasSmartFinish) {
+    return {
+      remainingDays: 0,
+      individualCost: 0,
+      smartFinishCost: 0,
+      savings: 0,
+      smartFinishIsCheaper: false,
+    };
+  }
 
-With:
-```typescript
-// GUARD: First-trip users get exactly 2 days free. Day 3+ is gated.
-// This value is used by canAccessDay() and computeUnlockedDayCount().
-// Changing this number affects all first-trip users — coordinate with pricing.ts if adjusted.
-export const FIRST_TRIP_FREE_DAYS = 2;
-```
+  const remainingDays = Math.max(0, params.totalDays - params.unlockedDayCount);
+  const individualCost = remainingDays * CREDIT_COSTS.UNLOCK_DAY;
+  const smartFinishCost = CREDIT_COSTS.SMART_FINISH;
+  const savings = individualCost - smartFinishCost;
 
-### Change 2: Inline comment above first-trip check in canAccessDay (line 78)
-
-Add a comment directly above the existing line 78:
-```typescript
-  // First-trip-free: users get Days 1-2 at no cost. Day 3+ requires unlock or Smart Finish.
-  if (isFirstTrip && dayNumber <= FIRST_TRIP_FREE_DAYS) {
+  return {
+    remainingDays,
+    individualCost,
+    smartFinishCost,
+    savings,
+    smartFinishIsCheaper: savings > 0,
+  };
+}
 ```
 
 ## What does NOT change
-- Value of FIRST_TRIP_FREE_DAYS stays at 2
-- No logic changes anywhere
-- No other functions or files touched
+- All existing functions untouched
+- No new imports needed (CREDIT_COSTS already in scope)
+- No other files touched
+- Nothing calls this yet -- a future UI prompt will wire it up
+
