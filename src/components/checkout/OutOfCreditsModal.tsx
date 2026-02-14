@@ -81,13 +81,22 @@ export function OutOfCreditsModal() {
     if (tripId) {
       enableManualBuilder(tripId);
       sonnerToast.success('Manual builder mode enabled!');
+      navigate(`/trip/${tripId}`, { replace: true });
     }
     dismiss();
   };
 
+  const handleDismiss = () => {
+    dismiss();
+    // Clean up ?generate=true from URL to stop the infinite spinner
+    if (tripId) {
+      navigate(`/trip/${tripId}`, { replace: true });
+    }
+  };
+
   return (
     <>
-      <Dialog open={state.isOpen && !checkoutConfig} onOpenChange={(open) => !open && dismiss()}>
+      <Dialog open={state.isOpen && !checkoutConfig} onOpenChange={(open) => !open && handleDismiss()}>
         <DialogContent className="max-w-sm p-0 gap-0 overflow-hidden">
           {/* Header */}
           <div className="bg-destructive/10 px-6 pt-6 pb-4 text-center">
