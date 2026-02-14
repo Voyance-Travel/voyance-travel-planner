@@ -30,7 +30,10 @@ import { CREDIT_COSTS } from '@/config/pricing';
 import { CreditNudge } from './CreditNudge';
 import { UnlockBanner } from './UnlockBanner';
 import { LockedDayCard } from './LockedDayCard';
+import { FrostedGateOverlay } from './FrostedGateOverlay';
+import { BulkUnlockBanner, getBulkUnlockCost } from './BulkUnlockBanner';
 import { useUnlockDay } from '@/hooks/useUnlockDay';
+import { useBulkUnlock } from '@/hooks/useBulkUnlock';
 import { HotelGalleryModal } from './HotelGalleryModal';
 import { DraggableActivityList } from './DraggableActivityList';
 import { Badge } from '@/components/ui/badge';
@@ -1044,6 +1047,7 @@ export function EditorialItinerary({
   
   // Per-day unlock for preview itineraries
   const { unlockDay, isUnlocking: isUnlockingDay, unlockingDayNumber } = useUnlockDay();
+  const { bulkUnlock, isUnlocking: isBulkUnlocking } = useBulkUnlock();
   
   // Transport mode change free cap
   const transportCap = useActionCap(tripId, 'transport_mode_change');
@@ -2828,6 +2832,41 @@ export function EditorialItinerary({
               </Button>
             </div>
             
+            {/* Bulk Unlock Banner - show when 2+ days are locked */}
+            {(() => {
+              const lockedDayCount = days.filter(d => !canViewPremiumContentForDay(entitlements, d.dayNumber)).length;
+              const unlockedCount = days.length - lockedDayCount;
+              if (lockedDayCount < 2) return null;
+              return (
+                <BulkUnlockBanner
+                  lockedDayCount={lockedDayCount}
+                  totalDays={days.length}
+                  destination={destination}
+                  unlockedCount={unlockedCount}
+                  onBulkUnlock={() => {
+                    const lockedDayNumbers = days
+                      .filter(d => !canViewPremiumContentForDay(entitlements, d.dayNumber))
+                      .map(d => d.dayNumber);
+                    bulkUnlock({
+                      tripId,
+                      lockedDayCount,
+                      totalDays: days.length,
+                      destination,
+                      destinationCountry,
+                      travelers,
+                      startDate,
+                      budgetTier,
+                      tripType,
+                      lockedDayNumbers,
+                    }, () => {
+                      onUnlockComplete?.(null);
+                    });
+                  }}
+                  isUnlocking={isBulkUnlocking}
+                />
+              );
+            })()}
+
             {/* Show only selected day */}
             {days[selectedDayIndex] && (
               <div className="space-y-6">
@@ -2842,99 +2881,133 @@ export function EditorialItinerary({
                 )}
                 
                 {/* Check if this day is locked (placeholder with no content) */}
-                {days[selectedDayIndex].metadata?.isLocked && !isManualMode ? (
-                  <LockedDayCard
-                    dayNumber={days[selectedDayIndex].dayNumber}
-                    title={days[selectedDayIndex].title || `Day ${days[selectedDayIndex].dayNumber}`}
-                    activityCount={6}
-                    teaserLine={`Unlock Day ${days[selectedDayIndex].dayNumber} to discover curated activities, real venues, and personalized recommendations.`}
-                    intelligenceBadges={{ finds: 3, timingHacks: 2, trapsAvoided: 1, tips: 2 }}
-                    onUnlock={() => handleUnlockDay(days[selectedDayIndex].dayNumber)}
-                    creditsNeeded={CREDIT_COSTS.UNLOCK_DAY}
-                    tripId={tripId}
-                    onManualBuild={() => {
-                      if (tripId) {
-                        enableManualBuilder(tripId);
-                        toast.success('Manual builder mode enabled! Edit freely.');
-                      }
-                    }}
-                    isFirstTrip={!!days[selectedDayIndex].metadata?.isFirstTrip}
-                    canAfford={totalCredits >= CREDIT_COSTS.UNLOCK_DAY}
-                    currentBalance={totalCredits}
-                  />
-                ) : (
-                  <>
-                    {/* Show unlock CTA when viewing a gated day */}
-                    {(() => {
-                      const currentDayNum = days[selectedDayIndex].dayNumber;
-                      const canViewThisDay = canViewPremiumContentForDay(entitlements, currentDayNum);
-                      const forceShowBanner = !canViewThisDay && !isManualMode;
-                      if (!forceShowBanner) return null;
-                      return (
-                        <div className="mb-4">
-                          <UnlockBanner
-                            tripId={tripId}
+                {(() => {
+                  const selectedDay = days[selectedDayIndex];
+                  const isLockedDay = selectedDay.metadata?.isLocked && !isManualMode;
+                  const hasActivities = selectedDay.activities && selectedDay.activities.length > 0;
+                  const canViewThisDay = canViewPremiumContentForDay(entitlements, selectedDay.dayNumber);
+
+                  // Days with no activities at all: show LockedDayCard fallback
+                  if (isLockedDay && !hasActivities) {
+                    return (
+                      <LockedDayCard
+                        dayNumber={selectedDay.dayNumber}
+                        title={selectedDay.title || `Day ${selectedDay.dayNumber}`}
+                        activityCount={6}
+                        teaserLine={`Unlock Day ${selectedDay.dayNumber} to discover curated activities, real venues, and personalized recommendations.`}
+                        intelligenceBadges={{ finds: 3, timingHacks: 2, trapsAvoided: 1, tips: 2 }}
+                        onUnlock={() => handleUnlockDay(selectedDay.dayNumber)}
+                        creditsNeeded={CREDIT_COSTS.UNLOCK_DAY}
+                        tripId={tripId}
+                        onManualBuild={() => {
+                          if (tripId) {
+                            enableManualBuilder(tripId);
+                            toast.success('Manual builder mode enabled! Edit freely.');
+                          }
+                        }}
+                        isFirstTrip={!!selectedDay.metadata?.isFirstTrip}
+                        canAfford={totalCredits >= CREDIT_COSTS.UNLOCK_DAY}
+                        currentBalance={totalCredits}
+                      />
+                    );
+                  }
+
+                  // Days with activities but locked: show DayCard wrapped in FrostedGateOverlay
+                  return (
+                    <>
+                      {!canViewThisDay && !isManualMode && hasActivities ? (
+                        <FrostedGateOverlay
+                          dayNumber={selectedDay.dayNumber}
+                          activityCount={selectedDay.activities.length}
+                          creditCost={CREDIT_COSTS.UNLOCK_DAY}
+                          onUnlock={() => handleUnlockDay(selectedDay.dayNumber)}
+                          isUnlocking={unlockingDayNumber === selectedDay.dayNumber}
+                        >
+                          <DayCard
+                            key={selectedDay.dayNumber}
+                            day={selectedDay}
+                            dayIndex={selectedDayIndex}
                             totalDays={days.length}
-                            freeDays={entitlements?.is_first_trip ? 2 : 0}
+                            travelers={travelers}
+                            budgetTier={budgetTier}
+                            tripCurrency={tripCurrency}
+                            displayCost={displayCost}
                             destination={destination}
                             destinationCountry={destinationCountry}
-                            travelers={travelers}
-                            startDate={startDate}
-                            budgetTier={budgetTier}
-                            tripType={tripType}
-                            onUnlockComplete={onUnlockComplete}
+                            isExpanded={true}
+                            isRegenerating={false}
+                            isEditable={false}
+                            isPreview={effectiveIsPreview}
+                            canViewPremium={false}
+                            tripId={tripId}
+                            onUnlockTrip={() => setCreditNudge({ action: 'UNLOCK_DAY' })}
+                            onUnlockDay={handleUnlockDay}
+                            unlockingDayNumber={unlockingDayNumber}
+                            getPaymentForItem={getPaymentForItem}
+                            refreshPayments={refreshPayments}
+                            onToggle={() => {}}
+                            onActivityLock={handleActivityLock}
+                            onActivityMove={handleActivityMove}
+                            onActivityRemove={handleActivityRemove}
+                            onDayLock={handleDayLock}
+                            onDayRegenerate={() => {}}
+                            onAddActivity={() => {}}
+                            onTimeEdit={() => {}}
+                            onActivityEdit={() => {}}
+                            aiLocked={aiLocked}
                           />
-                        </div>
-                      );
-                    })()}
-                    <DayCard
-                      key={days[selectedDayIndex].dayNumber}
-                      day={days[selectedDayIndex]}
-                    dayIndex={selectedDayIndex}
-                    totalDays={days.length}
-                    travelers={travelers}
-                    budgetTier={budgetTier}
-                    tripCurrency={tripCurrency}
-                    displayCost={displayCost}
-                    destination={destination}
-                    destinationCountry={destinationCountry}
-                    isExpanded={expandedDays.includes(days[selectedDayIndex].dayNumber)}
-                    isRegenerating={regeneratingDay === days[selectedDayIndex].dayNumber}
-                    isEditable={effectiveIsEditable}
-                    isPreview={effectiveIsPreview}
-                    canViewPremium={canViewPremiumContentForDay(entitlements, days[selectedDayIndex].dayNumber)}
-                    tripId={tripId}
-                     onUnlockTrip={() => setCreditNudge({ action: 'UNLOCK_DAY' })}
-                     onUnlockDay={handleUnlockDay}
-                     unlockingDayNumber={unlockingDayNumber}
-                    getPaymentForItem={getPaymentForItem}
-                    refreshPayments={refreshPayments}
-                    onToggle={() => toggleDay(days[selectedDayIndex].dayNumber)}
-                    onActivitySwap={(() => {
-                      if (aiLocked) return undefined;
-                      if (!canViewPremiumContentForDay(entitlements, days[selectedDayIndex].dayNumber)) return undefined;
-                      return openSwapDrawer;
-                    })()}
-                    onActivityLock={handleActivityLock}
-                    onActivityMove={handleActivityMove}
-                    onActivityReorder={(reordered) => handleActivityReorder(selectedDayIndex, reordered)}
-                    onMoveToDay={handleMoveToDay}
-                    onActivityRemove={handleActivityRemove}
-                    onDayLock={handleDayLock}
-                    onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
-                    onAddActivity={() => setAddActivityModal({ dayIndex: selectedDayIndex })}
-                    onImportActivities={creationSource === 'manual_paste' ? () => setImportModal({ dayIndex: selectedDayIndex }) : undefined}
-                    onTimeEdit={(dIdx, aIdx, activity) => setTimeEditModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
-                    onActivityEdit={(dIdx, aIdx, activity) => setEditActivityModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
-                    onPaymentRequest={onPaymentRequest}
-                     onViewReviews={aiLocked ? undefined : openReviewsDrawer}
-                     onTransportModeChange={handleTransportModeChange}
-                     changingTransportActivityId={changingTransportActivityId}
-                     collaboratorColorMap={collaboratorColorMap}
-                     aiLocked={aiLocked}
-                   />
-                  </>
-                )}
+                        </FrostedGateOverlay>
+                      ) : (
+                        <DayCard
+                          key={selectedDay.dayNumber}
+                          day={selectedDay}
+                          dayIndex={selectedDayIndex}
+                          totalDays={days.length}
+                          travelers={travelers}
+                          budgetTier={budgetTier}
+                          tripCurrency={tripCurrency}
+                          displayCost={displayCost}
+                          destination={destination}
+                          destinationCountry={destinationCountry}
+                          isExpanded={expandedDays.includes(selectedDay.dayNumber)}
+                          isRegenerating={regeneratingDay === selectedDay.dayNumber}
+                          isEditable={effectiveIsEditable}
+                          isPreview={effectiveIsPreview}
+                          canViewPremium={canViewPremiumContentForDay(entitlements, selectedDay.dayNumber)}
+                          tripId={tripId}
+                          onUnlockTrip={() => setCreditNudge({ action: 'UNLOCK_DAY' })}
+                          onUnlockDay={handleUnlockDay}
+                          unlockingDayNumber={unlockingDayNumber}
+                          getPaymentForItem={getPaymentForItem}
+                          refreshPayments={refreshPayments}
+                          onToggle={() => toggleDay(selectedDay.dayNumber)}
+                          onActivitySwap={(() => {
+                            if (aiLocked) return undefined;
+                            if (!canViewPremiumContentForDay(entitlements, selectedDay.dayNumber)) return undefined;
+                            return openSwapDrawer;
+                          })()}
+                          onActivityLock={handleActivityLock}
+                          onActivityMove={handleActivityMove}
+                          onActivityReorder={(reordered) => handleActivityReorder(selectedDayIndex, reordered)}
+                          onMoveToDay={handleMoveToDay}
+                          onActivityRemove={handleActivityRemove}
+                          onDayLock={handleDayLock}
+                          onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
+                          onAddActivity={() => setAddActivityModal({ dayIndex: selectedDayIndex })}
+                          onImportActivities={creationSource === 'manual_paste' ? () => setImportModal({ dayIndex: selectedDayIndex }) : undefined}
+                          onTimeEdit={(dIdx, aIdx, activity) => setTimeEditModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
+                          onActivityEdit={(dIdx, aIdx, activity) => setEditActivityModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
+                          onPaymentRequest={onPaymentRequest}
+                          onViewReviews={aiLocked ? undefined : openReviewsDrawer}
+                          onTransportModeChange={handleTransportModeChange}
+                          changingTransportActivityId={changingTransportActivityId}
+                          collaboratorColorMap={collaboratorColorMap}
+                          aiLocked={aiLocked}
+                        />
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             )}
             
@@ -5889,14 +5962,15 @@ function ActivityRow({
 
       {/* Thumbnail Column - Hidden on mobile, consistent width on desktop */}
       <div className="hidden sm:block w-24 h-24 shrink-0 border-r border-border bg-muted/30 overflow-hidden relative">
-        {!canViewPremium && showThumbnail ? (
-          <LockedPhotoPlaceholder />
-        ) : showThumbnail && thumbnailUrl && !thumbnailError ? (
+        {showThumbnail && thumbnailUrl && !thumbnailError ? (
           <>
             <img
               src={thumbnailUrl}
               alt={activityTitle}
-              className="w-full h-full object-cover transition-transform group-hover/activity:scale-105"
+              className={cn(
+                "w-full h-full object-cover transition-transform group-hover/activity:scale-105",
+                !canViewPremium && "blur-md pointer-events-none"
+              )}
               loading="lazy"
               onError={() => setThumbnailError(true)}
             />
@@ -6033,14 +6107,14 @@ function ActivityRow({
                     <h4 className="font-serif text-base sm:text-lg font-medium text-foreground leading-snug">{venue}</h4>
                     <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 italic line-clamp-1">{activityTitle}</p>
                     {/* Address gated by premium access */}
-                    {canViewPremium && hasAddress && address !== venue && (
-                      <div className="flex items-start gap-1.5 mt-1.5 text-xs text-muted-foreground">
+                    {hasAddress && address !== venue && (
+                      <div className={cn(
+                        "flex items-start gap-1.5 mt-1.5 text-xs text-muted-foreground",
+                        !canViewPremium && "blur-sm pointer-events-none select-none"
+                      )}>
                         <MapPin className="h-3 w-3 text-primary/60 mt-0.5 shrink-0" />
                         <span className="leading-snug line-clamp-2 sm:line-clamp-none">{address}</span>
                       </div>
-                    )}
-                    {!canViewPremium && (
-                      <LockedField icon={MapPin} label="Address available after unlock" className="mt-2" />
                     )}
                   </>
                 );
@@ -6058,12 +6132,18 @@ function ActivityRow({
                     </div>
                   )}
                   {activity.description && (
-                    <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 line-clamp-2 leading-relaxed">{activity.description}</p>
+                    <p className={cn(
+                      "text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 line-clamp-2 leading-relaxed",
+                      !canViewPremium && "blur-sm pointer-events-none select-none"
+                    )}>{activity.description}</p>
                   )}
 
-                  {/* Location gated by premium access */}
-                  {canViewPremium && (activity.location?.name || hasAddress) && (
-                    <div className="mt-1.5">
+                  {/* Location - blurred when premium is gated */}
+                  {(activity.location?.name || hasAddress) && (
+                    <div className={cn(
+                      "mt-1.5",
+                      !canViewPremium && "blur-sm pointer-events-none select-none"
+                    )}>
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <MapPin className="h-3 w-3 text-primary/60 shrink-0" />
                         <span className="truncate">{activity.location?.name || address}</span>
@@ -6075,22 +6155,23 @@ function ActivityRow({
                       )}
                     </div>
                   )}
-                  {!canViewPremium && (
-                    <LockedField icon={MapPin} label="Details available after unlock" className="mt-2" />
-                  )}
                 </>
               );
             })()}
             {/* Voyance Pick — founder-curated endorsement */}
-            {canViewPremium && activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
-              <VoyancePickCallout tip={activity.tips} />
+            {activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
+              <div className={cn(!canViewPremium && "blur-sm pointer-events-none select-none")}>
+                <VoyancePickCallout tip={activity.tips} />
+              </div>
             )}
-            {/* Voyance Insight - Local knowledge (gated by premium) — skip if already showing Pick callout */}
-            {canViewPremium && activity.tips && !activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
-              <VoyanceInsight tip={activity.tips} />
+            {/* Voyance Insight - Local knowledge — blurred when gated */}
+            {activity.tips && !activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
+              <div className={cn(!canViewPremium && "blur-sm pointer-events-none select-none")}>
+                <VoyanceInsight tip={activity.tips} />
+              </div>
             )}
             {/* Transportation to next (gated by premium) */}
-            {canViewPremium && activity.timeBlockType !== 'downtime' && activity.transportation && !isLast && (
+            {activity.timeBlockType !== 'downtime' && activity.transportation && !isLast && (
               <div data-tour="transit-badge">
                 <TransitBadge 
                   transportation={activity.transportation}
@@ -6111,10 +6192,13 @@ function ActivityRow({
           {/* Actions & Cost */}
           <div className="flex flex-col items-end gap-1.5 sm:gap-2 ml-2 sm:ml-4 shrink-0">
             {!canViewPremium ? (
-              /* Preview: show locked cost placeholder */
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60">
-                <Lock className="h-3 w-3" />
-                <span className="italic">Cost hidden</span>
+              /* Preview: show blurred cost */
+              <div className="blur-sm pointer-events-none select-none">
+                {costInfo.isEstimated ? (
+                  <span className="font-medium">~{formatCurrency(displayCost(cost), tripCurrency)}</span>
+                ) : (
+                  <span className="font-medium">{formatCurrency(displayCost(cost), tripCurrency)}</span>
+                )}
               </div>
             ) : (
               <>
