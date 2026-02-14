@@ -1,115 +1,180 @@
 
-# Fixes #11, #12, #13, #14: Credit UX and Constants
 
-Four changes addressing credit display, copy consistency, signup constants, and edge function sync.
+# Content Gating: Full Preview with Frosted-Glass Blur
 
----
+## Summary
 
-## Fix #13: Wire CREDIT_EXPIRATION_COPY to All UI Surfaces
+Replace the current "hide and show lock icon" gating pattern with a "show everything but blur premium details" pattern. Activities on locked days will show titles, times, and category tags clearly, with descriptions, insights, costs, addresses, photos, and booking links visible but blurred behind a frosted-glass overlay. Each locked day gets an unlock button overlay, and a bulk unlock option appears in the header when 3+ days are locked.
 
-Replace hardcoded expiration strings with the `CREDIT_EXPIRATION_COPY` constant from `src/config/pricing.ts`.
+## Current State
 
-**Files to modify:**
+The existing gating infrastructure is already solid:
+- `canViewPremiumContentForDay()` correctly determines access per day
+- `useEntitlements` provides `is_first_trip`, `unlocked_day_count`, `trip_has_smart_finish`
+- `LockedField` and `LockedPhotoPlaceholder` components hide content entirely
+- `useUnlockDay` hook handles single-day unlock with credit spending
+- `spend-credits` edge function supports `unlock_day` (60 credits) and `group_unlock` actions
+- Days with `metadata.isLocked` show a `LockedDayCard` (blank canvas with CTAs)
 
-1. **`src/components/profile/CreditBalanceCard.tsx`** (2 changes)
-   - Line 156: `"Purchased credits never expire"` → `CREDIT_EXPIRATION_COPY.purchasedCreditsNotice`
-   - Line 134: The free credits expiration line already uses `formatDistanceToNow` (dynamic) so it stays, but add a tooltip or keep as-is since it shows relative time
+What needs to change: instead of hiding content or showing blank cards, show the actual content with a CSS blur overlay.
 
-2. **`src/components/common/WelcomeCreditsModal.tsx`** (1 change)
-   - Line 218: `"Welcome credits expire in 2 months • Launch bonus expires in 6 months"` → Use `CREDIT_EXPIRATION_COPY.freeCreditsNotice` (the "6 months" for launch bonus is a different policy -- we'll keep it inline but source the free part from the constant)
+## Changes
 
-3. **`src/components/checkout/OutOfCreditsModal.tsx`** (1 change)
-   - Line 222: `"You get 150 free credits every month. Purchased credits never expire."` → Use `CREDIT_EXPIRATION_COPY.purchasedCreditsNotice` for the second sentence
+### 1. New Component: `FrostedGateOverlay` (`src/components/itinerary/FrostedGateOverlay.tsx`)
 
-4. **`src/pages/Pricing.tsx`** (3 changes)
-   - Line 116 FAQ: `"Free credits expire after 2 months"` → Use `CREDIT_EXPIRATION_COPY.freeCreditsNotice`
-   - Line 293: `"Credits expire in 12 months"` — This is about Quick Top-Up, not free credits. Leave as-is (different policy).
-   - Line 383: `"expire in 2 months"` → Use constant
+A reusable wrapper that applies `backdrop-filter: blur(8px)` over its children and shows an unlock CTA centered on top.
 
-**NOT changed:** `src/pages/admin/UnitEconomics.tsx` (admin-only internal comments, not user-facing). `EditorialItinerary.tsx` "6 months" reference (visa info, unrelated to credits).
+Props:
+- `dayNumber: number`
+- `activityCount: number`
+- `creditCost: number` (default 60)
+- `onUnlock: () => void`
+- `onClickBlurred?: () => void` (triggers unlock prompt when clicking blurred content)
 
-Each modified file will import `CREDIT_EXPIRATION_COPY` from `@/config/pricing`.
+Renders:
+- Children (the actual activity content) wrapped in a `relative` container
+- An overlay div with `backdrop-filter: blur(8px)` and a semi-transparent background
+- Centered teal "Unlock Day X - 60 credits" button
+- Below button: "{X} activities curated for your DNA profile" text
+- `pointer-events: auto` on the overlay so clicking anywhere triggers unlock
 
----
+### 2. New Component: `BulkUnlockBanner` (`src/components/itinerary/BulkUnlockBanner.tsx`)
 
-## Fix #12: Fix Dashboard 0-Credits Race Condition
+Shows when 3+ days are locked. Displays in the trip header area.
 
-Add new-user detection and polling to prevent showing "0 credits" during onboarding.
+Props:
+- `lockedDayCount: number`
+- `tripId: string`
+- `onUnlockComplete?: () => void`
 
-**Files to modify:**
+Credit tiers (matching group_unlock in spend-credits):
+- 2-3 locked days: 150 credits
+- 4-6 locked days: 300 credits
+- 7+ locked days: 500 credits
 
-1. **`src/hooks/useCredits.ts`**
-   - Add `isNewUserLoading` and `newUserTimedOut` fields to `CreditData`
-   - Import `useAuth` (already imported) to access `user.createdAt`
-   - Use a `useRef` for retry count and a `useEffect` to poll every 2s (max 10 retries)
-   - Detection: `totalCredits === 0 AND purchases.length === 0 AND account age < 60s`
-   - Augment the returned `data` with these two boolean flags
+UI: Compact banner with "Unlock All Remaining - {credits} credits" button. Shows savings vs individual unlock (lockedDays x 60).
 
-2. **`src/components/profile/CreditBalanceCard.tsx`**
-   - After the error check, add a new-user loading state block
-   - Shows `Skeleton` + "Setting up your account..." text
-   - After timeout, shows balance with a note: "Your welcome credits are on the way!"
+### 3. Modify `ActivityRow` in `EditorialItinerary.tsx` (~line 5642)
 
-3. **`src/contexts/OutOfCreditsContext.tsx`**
-   - Import `useCredits` in the provider
-   - In `showOutOfCredits`, check `credits.data?.isNewUserLoading` and silently skip if true
+**Current behavior when `!canViewPremium`:**
+- Description: shown fully (NOT gated -- this is a bug)
+- Photo: `LockedPhotoPlaceholder` (hidden entirely)
+- Address: `LockedField` (lock icon + "Details available after unlock")
+- Cost: Lock icon + "Cost hidden"
+- Voyance Insight: hidden entirely
+- Booking links: hidden entirely
+- Reviews: hidden entirely
 
----
+**New behavior when `!canViewPremium`:**
+- Title: visible (no change)
+- Time/duration: visible (no change)
+- Category tag: visible (no change)
+- Description: wrap in a div with `blur-sm` class
+- Photo: show the actual photo but with `blur-md` CSS class instead of `LockedPhotoPlaceholder`
+- Address: show the actual address text with `blur-sm` instead of `LockedField`
+- Cost: show the actual cost with `blur-sm` instead of lock icon
+- Voyance Insight: render it but wrap in `blur-sm`
+- Booking links: render but wrap in `blur-sm`
+- Reviews badge: hidden (no change -- nothing to blur)
 
-## Fix #11: Centralize Signup Bonus Constants
+Implementation: Instead of conditionally rendering `LockedField`/`LockedPhotoPlaceholder`, always render the real content but conditionally apply a CSS utility class. Add `pointer-events-none` to blurred sections so clicks fall through to the overlay.
 
-**Files to modify:**
+### 4. Modify `DayCard` in `EditorialItinerary.tsx` (~line 5251)
 
-1. **`src/config/pricing.ts`**
-   - Add after `MONTHLY_CREDIT_GRANT`:
-   ```typescript
-   export const SIGNUP_CREDITS = {
-     welcomeBonus: 150,
-     earlyAdopterBonus: 500,
-     earlyAdopterEnabled: true,
-     get totalSignupCredits() {
-       return this.welcomeBonus + (this.earlyAdopterEnabled ? this.earlyAdopterBonus : 0);
-     }
-   } as const;
-   ```
+When `!canViewPremium` for the current day (and not manual mode):
+- Wrap the entire activities list section in `FrostedGateOverlay`
+- Remove the separate `UnlockBanner` that currently shows above locked days
+- Keep the day header (number, date, title, weather) fully visible outside the overlay
 
-2. **`src/lib/voyanceFlowController.ts`**
-   - Add `SIGNUP_CREDITS` to the re-exports from `@/config/pricing`
+### 5. Replace `LockedDayCard` usage (~line 2845)
 
-3. **`src/hooks/useBonusCredits.ts`**
-   - Import `SIGNUP_CREDITS` from `@/config/pricing`
-   - Update `BONUS_INFO.welcome.credits` to use `SIGNUP_CREDITS.welcomeBonus` (150)
-   - Update `BONUS_INFO.launch.credits` to use `SIGNUP_CREDITS.earlyAdopterBonus` (500)
-   - Add guard comment pointing to `pricing.ts`
+Currently, days with `metadata.isLocked` render a blank `LockedDayCard`. Change this:
+- For days that have actual activity data (generated but gated): show `DayCard` wrapped in `FrostedGateOverlay`
+- For days that truly have no content (placeholder stubs): keep `LockedDayCard` as fallback
 
----
+The distinction: check `day.activities.length > 0`. If activities exist, show them blurred. If empty, show the blank card.
 
-## Fix #14: Edge Function Constant Sync Verification
+### 6. Add `BulkUnlockBanner` to the itinerary header area (~line 2740)
 
-**New file + guard comments:**
+After the day selector tabs, before the selected day content:
+- Count locked days: `days.filter(d => !canViewPremiumContentForDay(entitlements, d.dayNumber)).length`
+- If lockedDayCount >= 3, show `BulkUnlockBanner`
 
-1. **Create `scripts/check-edge-constants.ts`**
-   - Reads `src/config/pricing.ts` and `src/lib/tripCostCalculator.ts` using `fs.readFileSync`
-   - Extracts key constants via regex: `BASE_RATE_PER_DAY`, `UNLOCK_DAY`, `SMART_FINISH`, `SWAP_ACTIVITY`, etc.
-   - Reads `supabase/functions/get-entitlements/index.ts` and `supabase/functions/spend-credits/index.ts`
-   - Extracts the same constants from those files
-   - Compares values, reports mismatches
-   - Exits with code 1 if any mismatch found
+### 7. Update trip header info line
 
-2. **`supabase/functions/get-entitlements/index.ts`** — Add guard comment at top:
-   ```
-   // SYNC CHECK: Run 'npx ts-node scripts/check-edge-constants.ts' after any
-   // pricing or cost constant change. See src/config/pricing.ts for source of truth.
-   ```
+In the day selector area or `ItineraryUtilityBar`, add a compact status line:
+- Format: "{destination} - {totalDays} Days - {unlockedCount} Unlocked - {lockedCount} Locked"
+- Only show when there are locked days
 
-3. **`supabase/functions/spend-credits/index.ts`** — Same guard comment at top
+### 8. Bulk unlock handler
 
----
+Create `useBulkUnlock` hook or inline handler that:
+1. Determines credit cost based on locked day count (150/300/500)
+2. Calls `spend-credits` with `action: 'group_unlock'` and appropriate `creditsAmount`
+3. On success, triggers enrichment for all locked days sequentially
+4. Updates `unlocked_day_count` in the trips table
+5. Invalidates entitlements query
 
-## Technical Notes
+## Technical Details
 
-- Fix #12 uses `useAuth().user.createdAt` which is already available as `supabase.auth.users.created_at`
-- Fix #12 polling uses a `useEffect` + `setInterval` pattern with a ref counter, not react-query's `refetchInterval` (to avoid stale closure issues with the retry count)
-- Fix #14 script is a Node.js script (not Deno), intended for CI/local dev use
-- No database migrations needed
-- No edge function logic changes
+**CSS blur classes (Tailwind):**
+```css
+.blur-gate {
+  filter: blur(8px);
+  -webkit-filter: blur(8px);
+  pointer-events: none;
+  user-select: none;
+}
+```
+Or use Tailwind's built-in `blur-sm` (4px) / `blur` (8px) / `blur-md` (12px) utilities.
+
+**FrostedGateOverlay structure:**
+```tsx
+<div className="relative">
+  <div className="blur-[8px] pointer-events-none select-none">
+    {children}
+  </div>
+  <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/20">
+    <Button className="bg-teal-600 hover:bg-teal-700 gap-2">
+      <Sparkles className="h-4 w-4" />
+      Unlock Day {dayNumber} - {creditCost} credits
+    </Button>
+    <p className="text-sm text-muted-foreground mt-2">
+      {activityCount} activities curated for your DNA profile
+    </p>
+  </div>
+</div>
+```
+
+**Bulk unlock credit tiers:**
+```typescript
+function getBulkUnlockCost(lockedDays: number): number {
+  if (lockedDays >= 7) return 500;
+  if (lockedDays >= 4) return 300;
+  return 150; // 2-3 days
+}
+```
+
+**First trip vs subsequent trip logic (already handled):**
+- First trip: `canViewPremiumContentForDay` returns true for days 1-2 (via `FIRST_TRIP_FREE_DAYS = 2`)
+- Subsequent trips: returns true only for day 1 (preview mode, `unlocked_day_count = 1`)
+- This logic is already correct in `voyanceFlowController.ts` -- no changes needed
+
+## Files Modified
+
+| File | Change |
+|------|--------|
+| `src/components/itinerary/FrostedGateOverlay.tsx` | NEW - blur overlay component |
+| `src/components/itinerary/BulkUnlockBanner.tsx` | NEW - bulk unlock CTA |
+| `src/components/itinerary/EditorialItinerary.tsx` | Modify ActivityRow to blur instead of hide; modify DayCard to use FrostedGateOverlay; add BulkUnlockBanner; add trip status line |
+| `src/hooks/useBulkUnlock.ts` | NEW - hook for bulk day unlock via group_unlock action |
+
+## What Does NOT Change
+
+- Backend edge functions (spend-credits already supports unlock_day and group_unlock)
+- Entitlements logic (canViewPremiumContentForDay already works correctly)
+- voyanceFlowController.ts (day access logic unchanged)
+- Database schema (unlocked_day_count field already exists)
+- useUnlockDay hook (single-day unlock unchanged)
+- Credit costs (60 per day, group tiers at 150/300/500)
+
