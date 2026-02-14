@@ -10,7 +10,7 @@ import {
 import { addDays as addDaysUtil } from 'date-fns';
 import MultiCitySelector from '@/components/planner/MultiCitySelector';
 import { TripDestination, InterCityTransport, calculateTotalNights, generateDestinationDates } from '@/types/multiCity';
-import { format, addDays, isBefore, startOfToday, parseISO, startOfMonth } from 'date-fns';
+import { format, addDays, isBefore, startOfToday, parseISO, startOfMonth, differenceInDays } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { DraftLimitBanner, DraftLimitBlocker } from '@/components/common/DraftLimitBanner';
@@ -40,6 +40,7 @@ import type { ManualFlightEntry } from '@/components/itinerary/AddBookingInline'
 import GuestLinkModal, { type LinkedGuest } from '@/components/planner/GuestLinkModal';
 import { TripChatPlanner } from '@/components/planner/TripChatPlanner';
 import { ManualTripPasteEntry } from '@/components/planner/ManualTripPasteEntry';
+import { TripCostEstimate } from '@/components/planner/TripCostEstimate';
 
 // Types
 interface LocationSelection {
@@ -699,6 +700,11 @@ function TripDetailsStep({
             </div>
           </CollapsibleContent>
         </Collapsible>
+        )}
+
+        {/* Credit Cost Estimate */}
+        {planMode !== 'chat' && planMode !== 'manual' && startDate && endDate && (
+          <TripCostEstimate tripDays={differenceInDays(endDate, startDate) + 1} />
         )}
       </div>
 
