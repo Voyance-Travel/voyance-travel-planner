@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { format, parseISO, isAfter, isBefore, differenceInDays } from 'date-fns';
+import { format, isAfter, isBefore, differenceInDays } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { Loader2, Calendar, MapPin, ArrowLeft, Edit, Sparkles } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -448,8 +449,8 @@ export default function TripDetail() {
 
         // Auto-update trip status if needed
         const now = new Date();
-        const startDate = parseISO(tripData.start_date);
-        const endDate = parseISO(tripData.end_date);
+        const startDate = parseLocalDate(tripData.start_date);
+        const endDate = parseLocalDate(tripData.end_date);
 
         if (tripData.status === 'booked' && isAfter(now, startDate) && isBefore(now, endDate)) {
           // Trip should be active - update status and schedule notifications
@@ -587,8 +588,8 @@ export default function TripDetail() {
 
     // If no activities, create empty days based on trip dates
     if (daysArray.length === 0) {
-      const start = parseISO(trip.start_date);
-      const end = parseISO(trip.end_date);
+      const start = parseLocalDate(trip.start_date);
+      const end = parseLocalDate(trip.end_date);
       const dayCount = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
       
       for (let i = 0; i < dayCount; i++) {
@@ -604,10 +605,10 @@ export default function TripDetail() {
   };
 
   const calculateDayDate = (startDate: string, dayOffset: number): string => {
-    const start = parseISO(startDate);
+    const start = parseLocalDate(startDate);
     const date = new Date(start);
     date.setDate(date.getDate() + dayOffset);
-    return date.toISOString();
+    return format(date, 'yyyy-MM-dd');
   };
 
   // Check if itinerary has real content
@@ -863,7 +864,7 @@ export default function TripDetail() {
               
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Calendar className="w-4 h-4" />
-                {format(parseISO(trip.start_date), 'MMM d')} - {format(parseISO(trip.end_date), 'MMM d, yyyy')}
+                {format(parseLocalDate(trip.start_date), 'MMM d')} - {format(parseLocalDate(trip.end_date), 'MMM d, yyyy')}
               </div>
             </div>
           )}
@@ -952,7 +953,7 @@ export default function TripDetail() {
                     </h2>
                     
                     <p className="text-muted-foreground mb-6">
-                      Let our AI create a personalized {differenceInDays(parseISO(trip.end_date), parseISO(trip.start_date)) + 1}-day itinerary 
+                      Let our AI create a personalized {differenceInDays(parseLocalDate(trip.end_date), parseLocalDate(trip.start_date)) + 1}-day itinerary 
                       for {trip.destination} based on your preferences.
                     </p>
                     
@@ -981,7 +982,7 @@ export default function TripDetail() {
                           {day.dayNumber}
                         </div>
                         <div>
-                          <p className="font-medium">{format(parseISO(day.date), 'EEEE, MMM d')}</p>
+                          <p className="font-medium">{format(parseLocalDate(day.date), 'EEEE, MMM d')}</p>
                           <p className="text-sm text-muted-foreground">No activities planned yet</p>
                         </div>
                       </div>

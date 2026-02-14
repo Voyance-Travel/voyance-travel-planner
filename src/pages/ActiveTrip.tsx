@@ -7,7 +7,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, parseISO, isToday, isBefore, isAfter, differenceInMinutes, differenceInDays } from 'date-fns';
+import { format, isToday, isBefore, isAfter, differenceInMinutes, differenceInDays } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import {
   ArrowLeft, Calendar, MapPin, Clock, ChevronRight, Sun, Moon,
   Coffee, Sunrise, Sunset, Navigation, Ticket, Bookmark,
@@ -177,8 +178,8 @@ export default function ActiveTrip() {
     if (!trip) return null;
     
     const now = new Date();
-    const start = parseISO(trip.start_date);
-    const end = parseISO(trip.end_date);
+    const start = parseLocalDate(trip.start_date);
+    const end = parseLocalDate(trip.end_date);
     const totalDays = differenceInDays(end, start) + 1;
     const currentDayNumber = Math.max(1, Math.min(differenceInDays(now, start) + 1, totalDays));
     const daysRemaining = Math.max(0, differenceInDays(end, now));
@@ -200,7 +201,7 @@ export default function ActiveTrip() {
   const todaysItinerary = useMemo(() => {
     if (!tripContext || itinerary.length === 0) return null;
     return itinerary.find(day => {
-      const dayDate = parseISO(day.date);
+      const dayDate = parseLocalDate(day.date);
       return isToday(dayDate);
     }) || itinerary[tripContext.currentDayNumber - 1];
   }, [itinerary, tripContext]);
@@ -222,13 +223,13 @@ export default function ActiveTrip() {
       if (!activity.startTime) continue;
       
       const [hours, minutes] = activity.startTime.split(':').map(Number);
-      const activityStart = new Date(parseISO(todaysItinerary.date));
+      const activityStart = new Date(parseLocalDate(todaysItinerary.date));
       activityStart.setHours(hours, minutes);
       
       let activityEnd = activityStart;
       if (activity.endTime) {
         const [endHours, endMinutes] = activity.endTime.split(':').map(Number);
-        activityEnd = new Date(parseISO(todaysItinerary.date));
+        activityEnd = new Date(parseLocalDate(todaysItinerary.date));
         activityEnd.setHours(endHours, endMinutes);
       } else if (activity.duration) {
         activityEnd = new Date(activityStart.getTime() + activity.duration * 60000);

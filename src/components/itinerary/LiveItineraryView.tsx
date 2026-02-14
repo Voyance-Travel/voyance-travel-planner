@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, isToday, isBefore, isAfter, parseISO, startOfDay } from 'date-fns';
+import { format, isToday, isBefore, isAfter, startOfDay } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { 
   Calendar, Sun, Cloud, Sparkles, TrendingUp, 
   ChevronLeft, ChevronRight, MapPin
@@ -106,7 +107,7 @@ export function LiveItineraryView({
   // Determine the current day based on dates
   useEffect(() => {
     const today = new Date();
-    const tripStart = parseISO(startDate);
+    const tripStart = parseLocalDate(startDate);
     
     if (isBefore(today, tripStart)) {
       setSelectedDayIndex(0);
@@ -114,7 +115,7 @@ export function LiveItineraryView({
     }
 
     const dayIndex = days.findIndex(day => {
-      const dayDate = parseISO(day.date);
+      const dayDate = parseLocalDate(day.date);
       return isToday(dayDate);
     });
     
@@ -131,7 +132,7 @@ export function LiveItineraryView({
     if (skippedActivities.has(activity.id)) return 'skipped';
     
     // Check if this is today's itinerary
-    const dayDate = parseISO(currentDay.date);
+    const dayDate = parseLocalDate(currentDay.date);
     if (!isToday(dayDate)) {
       return isBefore(dayDate, new Date()) ? 'completed' : 'upcoming';
     }
@@ -249,7 +250,7 @@ export function LiveItineraryView({
         <div className="flex-1 overflow-x-auto">
           <div className="flex gap-2 justify-center">
             {days.map((day, index) => {
-              const dayDate = parseISO(day.date);
+              const dayDate = parseLocalDate(day.date);
               const isSelected = index === selectedDayIndex;
               const isTodayDay = isToday(dayDate);
               
@@ -306,7 +307,7 @@ export function LiveItineraryView({
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-lg">
-                    Day {currentDay.dayNumber}: {currentDay.theme || format(parseISO(currentDay.date), 'EEEE')}
+                    Day {currentDay.dayNumber}: {currentDay.theme || format(parseLocalDate(currentDay.date), 'EEEE')}
                   </CardTitle>
                   {currentDay.description && (
                     <p className="text-sm text-muted-foreground mt-1">

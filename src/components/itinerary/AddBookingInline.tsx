@@ -9,7 +9,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plane, Hotel, Plus, ArrowRight, Loader2, CalendarIcon, ChevronDown, ChevronUp, Upload } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -462,8 +463,8 @@ export function AddHotelInline({
   const [isSaving, setIsSaving] = useState(false);
   
   // Parse trip dates for calendar bounds
-  const tripStartDate = parseISO(startDate);
-  const tripEndDate = parseISO(endDate);
+  const tripStartDate = parseLocalDate(startDate);
+  const tripEndDate = parseLocalDate(endDate);
   
   const [hotelData, setHotelData] = useState<ManualHotelEntry>(() => {
     if (existingHotel) return existingHotel;
@@ -484,10 +485,10 @@ export function AddHotelInline({
   
   // Date picker state
   const [checkInDate, setCheckInDate] = useState<Date | undefined>(
-    hotelData.checkInDate ? parseISO(hotelData.checkInDate) : tripStartDate
+    hotelData.checkInDate ? parseLocalDate(hotelData.checkInDate) : tripStartDate
   );
   const [checkOutDate, setCheckOutDate] = useState<Date | undefined>(
-    hotelData.checkOutDate ? parseISO(hotelData.checkOutDate) : tripEndDate
+    hotelData.checkOutDate ? parseLocalDate(hotelData.checkOutDate) : tripEndDate
   );
 
   const handleBrowseHotels = () => {
@@ -530,7 +531,7 @@ export function AddHotelInline({
     );
     
     if (overlapping) {
-      toast.error(`Dates overlap with "${overlapping.name}" (${format(parseISO(overlapping.checkInDate), 'MMM d')} - ${format(parseISO(overlapping.checkOutDate), 'MMM d')})`);
+      toast.error(`Dates overlap with "${overlapping.name}" (${format(parseLocalDate(overlapping.checkInDate), 'MMM d')} - ${format(parseLocalDate(overlapping.checkOutDate), 'MMM d')})`);
       return;
     }
 
@@ -582,7 +583,7 @@ export function AddHotelInline({
       
       // Sort by check-in date
       updatedHotels.sort((a, b) => 
-        parseISO(a.checkInDate).getTime() - parseISO(b.checkInDate).getTime()
+        parseLocalDate(a.checkInDate).getTime() - parseLocalDate(b.checkInDate).getTime()
       );
 
       const { error } = await supabase

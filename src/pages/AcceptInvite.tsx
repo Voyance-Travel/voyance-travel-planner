@@ -13,7 +13,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import MainLayout from '@/components/layout/MainLayout';
 
 interface InviteInfo {
@@ -236,7 +237,7 @@ export default function AcceptInvite() {
                   <div className="flex items-center gap-3 text-sm">
                     <Calendar className="h-4 w-4 text-primary" />
                     <span>
-                      {format(parseISO(inviteInfo.startDate), 'MMM d')} - {format(parseISO(inviteInfo.endDate), 'MMM d, yyyy')}
+                      {format(parseLocalDate(inviteInfo.startDate), 'MMM d')} - {format(parseLocalDate(inviteInfo.endDate), 'MMM d, yyyy')}
                     </span>
                   </div>
                 )}

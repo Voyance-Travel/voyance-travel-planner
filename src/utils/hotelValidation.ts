@@ -4,7 +4,8 @@
  * Handles validation for multi-hotel bookings including date overlap detection.
  */
 
-import { isBefore, isAfter, parseISO, isSameDay } from 'date-fns';
+import { isBefore, isAfter, isSameDay } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 
 export type AccommodationType = 'hotel' | 'airbnb' | 'rental' | 'hostel' | 'other';
 
@@ -39,10 +40,10 @@ export function datesOverlap(
   checkIn2: string,
   checkOut2: string
 ): boolean {
-  const start1 = parseISO(checkIn1);
-  const end1 = parseISO(checkOut1);
-  const start2 = parseISO(checkIn2);
-  const end2 = parseISO(checkOut2);
+  const start1 = parseLocalDate(checkIn1);
+  const end1 = parseLocalDate(checkOut1);
+  const start2 = parseLocalDate(checkIn2);
+  const end2 = parseLocalDate(checkOut2);
 
   // Allow same-day checkout/checkin (end1 === start2 or end2 === start1 is OK)
   // Overlap occurs when: start1 < end2 AND start2 < end1
@@ -80,8 +81,8 @@ export function findOverlappingHotel(
  * Validate that check-out is after check-in
  */
 export function isValidDateRange(checkIn: string, checkOut: string): boolean {
-  const start = parseISO(checkIn);
-  const end = parseISO(checkOut);
+  const start = parseLocalDate(checkIn);
+  const end = parseLocalDate(checkOut);
   return isAfter(end, start);
 }
 
@@ -90,8 +91,8 @@ export function isValidDateRange(checkIn: string, checkOut: string): boolean {
  */
 export function sortHotelsByDate(hotels: HotelBooking[]): HotelBooking[] {
   return [...hotels].sort((a, b) => {
-    const dateA = parseISO(a.checkInDate);
-    const dateB = parseISO(b.checkInDate);
+    const dateA = parseLocalDate(a.checkInDate);
+    const dateB = parseLocalDate(b.checkInDate);
     return dateA.getTime() - dateB.getTime();
   });
 }

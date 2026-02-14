@@ -12,7 +12,8 @@
 import { useMemo, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRightLeft, Clock, MapPin, X, ChevronRight, Sparkles } from 'lucide-react';
-import { differenceInMinutes, parseISO, format } from 'date-fns';
+import { differenceInMinutes, format } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -55,7 +56,7 @@ function detectSwapReason(
 
   const now = new Date();
   const [hours, minutes] = nextActivity.startTime.split(':').map(Number);
-  const activityStart = new Date(parseISO(dayDate));
+  const activityStart = new Date(parseLocalDate(dayDate));
   activityStart.setHours(hours, minutes);
 
   const minsUntilStart = differenceInMinutes(activityStart, now);

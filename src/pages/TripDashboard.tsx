@@ -173,11 +173,17 @@ interface Trip {
 }
 
 // Simplified status mapping - no more "draft" display, all future trips are "upcoming"
+function parseLocalDate(dateStr: string): Date {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
 function mapToDisplayStatus(status: TripStatus, startDate: string | null, endDate: string | null): DisplayStatus {
   const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   
   // Completed or past trips
-  if (status === 'completed' || (endDate && new Date(endDate) < now)) {
+  if (status === 'completed' || (endDate && parseLocalDate(endDate) < today)) {
     return 'completed';
   }
   
@@ -187,7 +193,7 @@ function mapToDisplayStatus(status: TripStatus, startDate: string | null, endDat
   }
   
   // Active trips (currently happening)
-  if (status === 'active' || (startDate && endDate && new Date(startDate) <= now && new Date(endDate) >= now)) {
+  if (status === 'active' || (startDate && endDate && parseLocalDate(startDate) <= today && parseLocalDate(endDate) >= today)) {
     return 'active';
   }
   
@@ -204,7 +210,8 @@ const statusConfig: Record<DisplayStatus, { label: string; color: string; icon: 
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return 'TBD';
-  return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const d = parseLocalDate(dateString);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function formatDateRange(startDate: string | null, endDate: string | null): string {
@@ -212,8 +219,8 @@ function formatDateRange(startDate: string | null, endDate: string | null): stri
   if (!startDate) return `Until ${formatDate(endDate)}`;
   if (!endDate) return `From ${formatDate(startDate)}`;
   
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+  const start = parseLocalDate(startDate);
+  const end = parseLocalDate(endDate);
   const diffTime = Math.abs(end.getTime() - start.getTime());
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   
@@ -225,7 +232,7 @@ function canDeleteTrip(trip: Trip): { canDelete: boolean; reason?: string } {
    const now = new Date();
    
    // Check if trip has already happened
-   if (trip.endDate && new Date(trip.endDate) < now) {
+   if (trip.endDate && parseLocalDate(trip.endDate) < now) {
      return { canDelete: false, reason: 'Past trips cannot be deleted' };
    }
    
@@ -794,15 +801,16 @@ export default function TripDashboard() {
   // Simplified filtering - drafts are now included in "upcoming"
   const filterTrips = (tab: TabValue): Trip[] => {
     const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     switch (tab) {
       case 'active':
         // Currently happening trips
         return trips.filter(t => {
           if (t.status === 'completed' || t.status === 'cancelled') return false;
           if (!t.startDate || !t.endDate) return false;
-          const start = new Date(t.startDate);
-          const end = new Date(t.endDate);
-          return start <= now && end >= now;
+          const start = parseLocalDate(t.startDate);
+          const end = parseLocalDate(t.endDate);
+          return start <= today && end >= today;
         });
       case 'upcoming': 
         // All future trips regardless of status (draft, planning, booked)
@@ -810,19 +818,19 @@ export default function TripDashboard() {
           // Exclude completed/cancelled
           if (t.status === 'completed' || t.status === 'cancelled') return false;
           // Exclude past trips
-          if (t.endDate && new Date(t.endDate) < now) return false;
+          if (t.endDate && parseLocalDate(t.endDate) < today) return false;
           // Exclude currently active trips (they have their own section)
           if (t.startDate && t.endDate) {
-            const start = new Date(t.startDate);
-            const end = new Date(t.endDate);
-            if (start <= now && end >= now) return false;
+            const start = parseLocalDate(t.startDate);
+            const end = parseLocalDate(t.endDate);
+            if (start <= today && end >= today) return false;
           }
           return true;
         });
       case 'completed': 
         return trips.filter(t => 
           t.status === 'completed' || 
-          (t.endDate && new Date(t.endDate) < now)
+          (t.endDate && parseLocalDate(t.endDate) < today)
         );
       default: 
         return trips;
