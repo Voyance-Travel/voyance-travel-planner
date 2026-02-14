@@ -20,7 +20,7 @@ export function LockedPhotoPlaceholder({ className }: LockedPhotoPlaceholderProp
       )}
     >
       <Lock className="h-4 w-4 mb-0.5" />
-      <span className="text-[10px] font-medium leading-tight">Premium</span>
+      <span className="text-[10px] font-medium leading-tight">Unlock to view</span>
     </div>
   );
 }

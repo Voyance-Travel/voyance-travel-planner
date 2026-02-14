@@ -95,7 +95,7 @@ export function LockedDayCard({
       <p className="text-sm text-muted-foreground max-w-sm mb-10">
         {isFirstTrip
           ? "Your first 2 days are free. Want us to plan this day too?"
-          : "This day hasn't been planned yet."}
+          : "Want us to plan this day for you?"}
       </p>
 
       {/* Two clear CTA buttons */}

@@ -139,10 +139,10 @@ export function UnlockBanner({
             </div>
             <div className="flex-1">
               <p className="font-medium text-sm text-foreground">
-                Preview Mode: Details Locked
+                Your trip is ready to explore
               </p>
               <p className="text-xs text-muted-foreground">
-                Unlock days to see addresses, photos, tips & booking links
+                Unlock days for addresses, photos, insider tips and booking links
               </p>
             </div>
           </div>
