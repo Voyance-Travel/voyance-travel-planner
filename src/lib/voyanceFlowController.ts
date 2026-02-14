@@ -106,7 +106,8 @@ export function computeUnlockedDayCount(params: {
   isPreview: boolean;
   generatedDayCount: number;
 }): number {
-  if (params.isPreview) return 0;
+  // Preview users get Day 1 free so they can evaluate the trip before committing credits.
+  if (params.isPreview) return 1;
   if (params.isFirstTrip) return Math.min(FIRST_TRIP_FREE_DAYS, params.generatedDayCount);
   return params.generatedDayCount;
 }
