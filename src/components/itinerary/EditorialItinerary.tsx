@@ -1814,21 +1814,26 @@ export function EditorialItinerary({
         body: {
           tripId,
           destination,
-          days: days.map(d => ({
-            dayNumber: d.dayNumber,
-            date: d.date,
-            activities: d.activities.map(a => ({
-              id: a.id,
-              title: a.title,
-              category: a.category || a.type,
-              startTime: a.startTime,
-              endTime: a.endTime,
-              location: a.location,
-              cost: a.cost,
-              isLocked: a.isLocked,
-              transportation: a.transportation,
+          days: days
+            .filter((_d, idx) => {
+              const dayNumber = idx + 1;
+              return canViewPremiumContentForDay(entitlements, dayNumber);
+            })
+            .map(d => ({
+              dayNumber: d.dayNumber,
+              date: d.date,
+              activities: d.activities.map(a => ({
+                id: a.id,
+                title: a.title,
+                category: a.category || a.type,
+                startTime: a.startTime,
+                endTime: a.endTime,
+                location: a.location,
+                cost: a.cost,
+                isLocked: a.isLocked,
+                transportation: a.transportation,
+              })),
             })),
-          })),
           enableRouteOptimization: true,
           enableRealTransport: true,
           enableCostLookup: true,
@@ -1843,9 +1848,9 @@ export function EditorialItinerary({
       if (error) throw error;
 
       if (data?.days) {
-        // Update days with optimized data
-        setDays(prev => prev.map((day, idx) => {
-          const optimizedDay = data.days[idx];
+        // Update days with optimized data — match by dayNumber since we only sent unlocked days
+        setDays(prev => prev.map((day) => {
+          const optimizedDay = data.days.find((od: any) => od.dayNumber === day.dayNumber);
           if (!optimizedDay) return day;
           return {
             ...day,
