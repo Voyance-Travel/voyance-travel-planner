@@ -15,7 +15,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useCredits, useRefreshCredits } from '@/hooks/useCredits';
-import { formatCredits } from '@/config/pricing';
+import { formatCredits, CREDIT_EXPIRATION_COPY } from '@/config/pricing';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface CreditBalanceCardProps {
   onBuyCredits?: () => void;
@@ -42,6 +43,34 @@ export default function CreditBalanceCard({ onBuyCredits, className }: CreditBal
         <div className="flex items-center gap-3 text-destructive">
           <AlertCircle className="h-5 w-5" />
           <p className="text-sm">Failed to load credit balance</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Fix #12: New-user loading state — show skeleton while welcome credits are being granted
+  if (data?.isNewUserLoading) {
+    return (
+      <div className={cn("bg-card rounded-xl border border-border p-6", className)}>
+        <div className="flex flex-col items-center justify-center py-8 gap-3">
+          <Skeleton className="h-10 w-32" />
+          <p className="text-sm text-muted-foreground">Setting up your account...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Fix #12: Timed-out new user — show balance with a helpful note
+  if (data?.newUserTimedOut) {
+    return (
+      <div className={cn("bg-card rounded-xl border border-border p-6", className)}>
+        <div className="flex flex-col items-center justify-center py-8 gap-3">
+          <span className="text-5xl font-serif font-medium text-foreground tracking-tight">
+            {formatCredits(data.totalCredits)}
+          </span>
+          <p className="text-sm text-muted-foreground text-center">
+            Your welcome credits are on the way! Refresh if they don't appear shortly.
+          </p>
         </div>
       </div>
     );
@@ -153,7 +182,7 @@ export default function CreditBalanceCard({ onBuyCredits, className }: CreditBal
         {/* Purchased credits never expire note */}
         {purchasedCredits > 0 && (
           <p className="text-xs text-muted-foreground mt-4 text-center">
-            Purchased credits never expire
+            {CREDIT_EXPIRATION_COPY.purchasedCreditsNotice}
           </p>
         )}
       </div>

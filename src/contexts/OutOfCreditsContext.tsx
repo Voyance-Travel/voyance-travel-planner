@@ -6,6 +6,7 @@
 
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import { CREDIT_COSTS } from '@/config/pricing';
+import { useCredits } from '@/hooks/useCredits';
 
 type ActionType = keyof typeof CREDIT_COSTS;
 
@@ -32,6 +33,7 @@ const OutOfCreditsContext = createContext<OutOfCreditsContextValue | null>(null)
 
 export function OutOfCreditsProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<OutOfCreditsState>({ isOpen: false });
+  const credits = useCredits();
 
   const showOutOfCredits = useCallback((params: {
     action?: ActionType;
@@ -39,6 +41,9 @@ export function OutOfCreditsProvider({ children }: { children: ReactNode }) {
     creditsAvailable?: number;
     tripId?: string;
   }) => {
+    // Fix #12: Suppress modal during new-user loading state
+    if (credits.data?.isNewUserLoading) return;
+
     setState({
       isOpen: true,
       action: params.action,
@@ -46,7 +51,7 @@ export function OutOfCreditsProvider({ children }: { children: ReactNode }) {
       creditsAvailable: params.creditsAvailable,
       tripId: params.tripId,
     });
-  }, []);
+  }, [credits.data?.isNewUserLoading]);
 
   const dismiss = useCallback(() => {
     setState({ isOpen: false });

@@ -7,6 +7,7 @@ import { useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { SIGNUP_CREDITS } from '@/config/pricing';
 
 export type BonusType = 
   | 'welcome'
@@ -37,7 +38,8 @@ export interface GrantResult {
   };
 }
 
-// Bonus display info for UI
+// GUARD: Credit amounts sourced from SIGNUP_CREDITS in pricing.ts.
+// Do NOT hardcode bonus amounts here — use the constants.
 export const BONUS_INFO: Record<BonusType, {
   title: string;
   description: string;
@@ -46,13 +48,13 @@ export const BONUS_INFO: Record<BonusType, {
 }> = {
   welcome: {
     title: 'Welcome Bonus',
-    credits: 150,
+    credits: SIGNUP_CREDITS.welcomeBonus,
     description: 'Thanks for joining Voyance!',
     icon: '🎉',
   },
   launch: {
     title: 'Early Adopter Bonus',
-    credits: 500,
+    credits: SIGNUP_CREDITS.earlyAdopterBonus,
     description: 'Thank you for being part of our launch!',
     icon: '🚀',
   },

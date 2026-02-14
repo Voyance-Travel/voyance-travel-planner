@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Coins, Zap, Sparkles, ArrowRight, Loader2, Pencil } from 'lucide-react';
-import { CREDIT_PACKS, BOOST_PACK, CREDIT_COSTS, formatCredits, getRecommendedPack } from '@/config/pricing';
+import { CREDIT_PACKS, BOOST_PACK, CREDIT_COSTS, formatCredits, getRecommendedPack, CREDIT_EXPIRATION_COPY } from '@/config/pricing';
 import { EmbeddedCheckoutModal } from './EmbeddedCheckoutModal';
 import { useOutOfCredits } from '@/contexts/OutOfCreditsContext';
 import { useNavigate } from 'react-router-dom';
@@ -219,7 +219,7 @@ export function OutOfCreditsModal() {
 
             {/* Monthly grant reminder */}
             <p className="text-center text-[10px] text-muted-foreground">
-              You get 150 free credits every month. Purchased credits never expire.
+              You get 150 free credits every month. {CREDIT_EXPIRATION_COPY.purchasedCreditsNotice}
             </p>
           </div>
         </DialogContent>

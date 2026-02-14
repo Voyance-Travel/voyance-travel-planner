@@ -1,9 +1,11 @@
 /**
  * Hook for fetching user's credit balance
  * Now includes credit_purchases breakdown for FIFO expiration display
+ * Fix #12: Includes new-user loading state to avoid showing "0 credits" during onboarding
  */
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -36,10 +38,14 @@ export interface CreditData {
   effectiveFreeCredits: number;
   freeCreditsExpired: boolean;
   purchases: CreditPurchase[];
+  /** True while a new user's welcome credits haven't arrived yet */
+  isNewUserLoading: boolean;
+  /** True if polling timed out without credits appearing */
+  newUserTimedOut: boolean;
 }
 
-async function fetchCredits(userId: string | undefined): Promise<CreditData> {
-  const empty: CreditData = {
+async function fetchCredits(userId: string | undefined): Promise<Omit<CreditData, 'isNewUserLoading' | 'newUserTimedOut'>> {
+  const empty = {
     balance: null, totalCredits: 0, purchasedCredits: 0,
     freeCredits: 0, effectiveFreeCredits: 0, freeCreditsExpired: false, purchases: [],
   };
@@ -94,13 +100,55 @@ async function fetchCredits(userId: string | undefined): Promise<CreditData> {
 
 export function useCredits() {
   const { user } = useAuth();
-  return useQuery({
+  const queryClient = useQueryClient();
+  const retryCount = useRef(0);
+  const [newUserTimedOut, setNewUserTimedOut] = useState(false);
+
+  // Detect if user account was created within the last 60 seconds
+  const isNewUser = useMemo(() => {
+    if (!user?.createdAt) return false;
+    const age = Date.now() - new Date(user.createdAt).getTime();
+    return age < 60_000;
+  }, [user?.createdAt]);
+
+  const query = useQuery({
     queryKey: ['credits', user?.id],
     queryFn: () => fetchCredits(user?.id),
     enabled: !!user?.id,
     staleTime: 30 * 1000,
     refetchOnWindowFocus: true,
   });
+
+  // Fix #12: Poll for credits if new user has 0 credits
+  const shouldPoll = isNewUser && query.data?.totalCredits === 0 && query.data?.purchases?.length === 0 && retryCount.current < 10 && !newUserTimedOut;
+
+  useEffect(() => {
+    if (!shouldPoll) return;
+
+    const interval = setInterval(() => {
+      retryCount.current += 1;
+      if (retryCount.current >= 10) {
+        setNewUserTimedOut(true);
+        clearInterval(interval);
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: ['credits', user?.id] });
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [shouldPoll, queryClient, user?.id]);
+
+  // Augment query data with new-user loading flags
+  const augmentedData: CreditData | undefined = query.data ? {
+    ...query.data,
+    isNewUserLoading: shouldPoll,
+    newUserTimedOut: newUserTimedOut && query.data.totalCredits === 0,
+  } : undefined;
+
+  return {
+    ...query,
+    data: augmentedData,
+  };
 }
 
 export function useRefreshCredits() {
