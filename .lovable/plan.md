@@ -1,42 +1,38 @@
 
+# Fix #10 and #15: Update Stale Comments
 
-# Fix #9: Surface Credit Expiration Policy in Config
+Two comment-only changes across two files. Zero logic changes.
 
-## Summary
+## Change 1: `src/lib/tripCostCalculator.ts` (line 3)
 
-Add a guard comment above `MONTHLY_CREDIT_GRANT` and a new `CREDIT_EXPIRATION_COPY` constant after it in `src/config/pricing.ts`. Purely additive -- no existing code changes.
-
-## Changes
-
-**File:** `src/config/pricing.ts`
-
-### Change 1: Add guard comment above `MONTHLY_CREDIT_GRANT` (before line 341)
-
-```typescript
-// GUARD: Free credit expiration policy.
-// Free credits (signup bonus + monthly grants) expire after freeExpirationMonths months.
-// Purchased credits NEVER expire.
-// The UI should surface this distinction wherever credit balances are shown.
+**Before:**
+```
+// Formula: roundUpTo10((Days x 90 + MultiCityFee) x TierMultiplier) + AddOns
 ```
 
-### Change 2: Add `CREDIT_EXPIRATION_COPY` constant after the `MONTHLY_CREDIT_GRANT` block (after line 348)
+**After:**
+```
+// Formula: roundUpTo10((Days x BASE_RATE_PER_DAY + MultiCityFee) x TierMultiplier) + AddOns
+// Current BASE_RATE_PER_DAY = 60 (see CONSTANTS section below)
+```
 
-```typescript
-/**
- * Human-readable credit expiration messages for UI display.
- * Use these in balance displays, tooltips, and purchase confirmations.
- */
-export const CREDIT_EXPIRATION_COPY = {
-  freeCreditsNotice: 'Free credits expire after 2 months if unused.',
-  purchasedCreditsNotice: 'Purchased credits never expire.',
-  balanceTooltip: 'Your balance includes both free and purchased credits. Free credits are used first and expire after 2 months.',
-} as const;
+## Change 2: `src/config/pricing.ts` (lines 8-9)
+
+**Before:**
+```
+  // Dynamic (variable cost, calculated at generation time)
+  TRIP_GENERATION: 0,         // Placeholder: use tripCostCalculator for actual cost
+```
+
+**After:**
+```
+  // GUARD: TRIP_GENERATION is a PLACEHOLDER. Actual cost is calculated dynamically
+  // by tripCostCalculator.calculateTripCredits(). Do NOT read this value for display.
+  // Use voyanceFlowController re-export of calculateTripCredits() instead.
+  TRIP_GENERATION: 0,  // Placeholder only - see guard comment above
 ```
 
 ## What does NOT change
-- `MONTHLY_CREDIT_GRANT` values unchanged
-- `CREDIT_COSTS`, `TIER_FREE_CAPS`, all other constants unchanged
 - No logic changes anywhere
 - No other files touched
-- Nothing references `CREDIT_EXPIRATION_COPY` yet -- future UI work will wire it up
-
+- Purely documentation improvements
