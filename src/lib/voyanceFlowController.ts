@@ -33,7 +33,9 @@ import { CREDIT_COSTS, TIER_FREE_CAPS, FLEX_CAPS_BY_DAYS, type UserTier, type Ti
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-/** Days unlocked free on a user's very first trip */
+// GUARD: First-trip users get exactly 2 days free. Day 3+ is gated.
+// This value is used by canAccessDay() and computeUnlockedDayCount().
+// Changing this number affects all first-trip users — coordinate with pricing.ts if adjusted.
 export const FIRST_TRIP_FREE_DAYS = 2;
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -75,6 +77,7 @@ export function canAccessDay(
   if (dayNumber <= unlockedDayCount) {
     return { canAccess: true, reason: 'unlocked', unlockCost: 0 };
   }
+  // First-trip-free: users get Days 1-2 at no cost. Day 3+ requires unlock or Smart Finish.
   if (isFirstTrip && dayNumber <= FIRST_TRIP_FREE_DAYS) {
     return { canAccess: true, reason: 'first_trip_free', unlockCost: 0 };
   }
