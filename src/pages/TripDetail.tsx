@@ -664,6 +664,22 @@ export default function TripDetail() {
           console.error('[TripDetail] Failed to force-save itinerary:', error);
         } else {
           console.log('[TripDetail] Itinerary force-saved successfully');
+          
+          // Mark first_trip_used = true ONLY after successful save
+          if (isFirstTrip) {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              const { error: flagError } = await supabase
+                .from('profiles')
+                .update({ first_trip_used: true })
+                .eq('id', user.id);
+              if (flagError) {
+                console.error('[TripDetail] Failed to set first_trip_used:', flagError);
+              } else {
+                console.log('[TripDetail] first_trip_used flag set successfully');
+              }
+            }
+          }
         }
       } catch (err) {
         console.error('[TripDetail] Force-save error:', err);

@@ -4196,6 +4196,7 @@ export type Database = {
           created_at: string
           display_name: string | null
           first_name: string | null
+          first_trip_used: boolean
           handle: string | null
           home_airport: string | null
           id: string
@@ -4213,6 +4214,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           first_name?: string | null
+          first_trip_used?: boolean
           handle?: string | null
           home_airport?: string | null
           id: string
@@ -4230,6 +4232,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           first_name?: string | null
+          first_trip_used?: boolean
           handle?: string | null
           home_airport?: string | null
           id?: string

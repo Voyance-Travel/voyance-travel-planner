@@ -39,14 +39,14 @@ export function TripCostEstimate({ tripDays, className }: TripCostEstimateProps)
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary shrink-0" />
           <p className="text-sm font-medium text-foreground">
-            Your first trip!
+            Your first trip is free!
           </p>
         </div>
         <p className="text-xs text-muted-foreground pl-6">
-          Days 1-2 are free.{' '}
+          No credits charged for generation. Days 1–2 are fully unlocked.{' '}
           {tripDays > 2
-            ? `Days 3-${tripDays} can be unlocked with credits (${BASE_RATE_PER_DAY} credits/day).`
-            : 'All days included for free.'}
+            ? `Days 3–${tripDays} can be unlocked later with credits (${BASE_RATE_PER_DAY} credits/day).`
+            : ''}
         </p>
       </div>
     );
