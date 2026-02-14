@@ -17,6 +17,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import FriendProfileCard from './FriendProfileCard';
 
 interface FriendsActivityFeedProps {
@@ -93,7 +94,7 @@ async function fetchFriendsActivity(limit: number): Promise<FriendActivity[]> {
   // Transform to activity format
   const activities: FriendActivity[] = trips.map(trip => {
     let type: FriendActivity['type'] = 'planning';
-    const startDate = new Date(trip.start_date);
+    const startDate = parseLocalDate(trip.start_date);
     const now = new Date();
 
     if (trip.status === 'completed') {
@@ -229,7 +230,7 @@ export default function FriendsActivityFeed({ userId, className, limit = 5 }: Fr
                 {(activity.type === 'upcoming' || activity.type === 'active') && (
                   <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
-                    {format(new Date(activity.trip.start_date), 'MMM d')} – {format(new Date(activity.trip.end_date), 'MMM d, yyyy')}
+                    {format(parseLocalDate(activity.trip.start_date), 'MMM d')} – {format(parseLocalDate(activity.trip.end_date), 'MMM d, yyyy')}
                   </p>
                 )}
               </div>

@@ -30,6 +30,7 @@ import {
 import { getTrips, getTasks, getDashboardStats, type AgencyTrip, type AgencyTask } from '@/services/agencyCRM';
 import { toast } from '@/hooks/use-toast';
 import { format, differenceInDays, isPast, isToday } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { cn } from '@/lib/utils';
 
 // Stat Card Component
@@ -119,7 +120,7 @@ function TripPreviewCard({
   trip: AgencyTrip; 
   onClick: () => void;
 }) {
-  const daysUntil = differenceInDays(new Date(trip.start_date!), new Date());
+  const daysUntil = differenceInDays(parseLocalDate(trip.start_date!), new Date());
   
   const getUrgencyStyles = () => {
     if (daysUntil <= 7) return { bg: 'bg-red-50 dark:bg-red-950/30', text: 'text-red-600 dark:text-red-400', border: 'border-red-200 dark:border-red-800' };
@@ -438,10 +439,10 @@ export default function AgentDashboard() {
   const upcomingTrips = trips
     .filter(trip => {
       if (!trip.start_date) return false;
-      const daysUntil = differenceInDays(new Date(trip.start_date), new Date());
+      const daysUntil = differenceInDays(parseLocalDate(trip.start_date), new Date());
       return daysUntil >= 0 && daysUntil <= 30;
     })
-    .sort((a, b) => new Date(a.start_date!).getTime() - new Date(b.start_date!).getTime())
+    .sort((a, b) => parseLocalDate(a.start_date!).getTime() - parseLocalDate(b.start_date!).getTime())
     .slice(0, 5);
 
   // Get overdue/urgent tasks

@@ -7,6 +7,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { parseLocalDate } from '@/utils/dateUtils';
 
 // ============================================================================
 // Types
@@ -94,15 +95,15 @@ export async function getDashboard(): Promise<DashboardResponse> {
 
   for (const trip of allTrips) {
     if (trip.start_date && trip.end_date) {
-      const start = new Date(trip.start_date);
-      const end = new Date(trip.end_date);
+      const start = parseLocalDate(trip.start_date);
+      const end = parseLocalDate(trip.end_date);
       daysAbroad += Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
     }
   }
 
   // Find last completed trip
   const now = new Date();
-  const pastTrips = allTrips.filter(t => new Date(t.end_date) < now);
+  const pastTrips = allTrips.filter(t => parseLocalDate(t.end_date) < now);
   const lastTrip = pastTrips.length > 0 ? {
     id: pastTrips[0].id,
     destination: pastTrips[0].destination,
@@ -113,8 +114,8 @@ export async function getDashboard(): Promise<DashboardResponse> {
 
   // Find upcoming trip
   const futureTrips = allTrips
-    .filter(t => new Date(t.start_date) >= now)
-    .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
+    .filter(t => parseLocalDate(t.start_date) >= now)
+    .sort((a, b) => parseLocalDate(a.start_date).getTime() - parseLocalDate(b.start_date).getTime());
 
   const upcomingTrip = futureTrips.length > 0 ? {
     id: futureTrips[0].id,

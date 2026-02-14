@@ -5,6 +5,7 @@
 
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCredits } from './useCredits';
@@ -91,7 +92,7 @@ export function useBulkUnlock() {
       // Step 2: Enrich each locked day sequentially
       for (const dayNumber of params.lockedDayNumbers) {
         try {
-          const dateObj = new Date(params.startDate);
+          const dateObj = parseLocalDate(params.startDate);
           dateObj.setDate(dateObj.getDate() + dayNumber - 1);
           const dateStr = dateObj.toISOString().split('T')[0];
 

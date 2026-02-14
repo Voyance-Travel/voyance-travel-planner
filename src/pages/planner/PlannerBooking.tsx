@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import {
   CreditCard,
   Plane,
@@ -190,7 +191,7 @@ export default function PlannerBooking() {
   const flightTaxes = flightSubtotal * flightTaxRate;
   const flightTotal = flightSubtotal + flightTaxes;
   const nights = state.basics.startDate && state.basics.endDate
-    ? Math.ceil((new Date(state.basics.endDate).getTime() - new Date(state.basics.startDate).getTime()) / (1000 * 60 * 60 * 24))
+    ? Math.ceil((parseLocalDate(state.basics.endDate).getTime() - parseLocalDate(state.basics.startDate).getTime()) / (1000 * 60 * 60 * 24))
     : 0;
   const hotelSubtotal = (state.hotel?.pricePerNight || 0) * nights;
   const hotelTaxRate = 0.15;
@@ -413,7 +414,7 @@ export default function PlannerBooking() {
                     <Calendar className="h-4 w-4" />
                     {state.basics.startDate && state.basics.endDate ? (
                       <>
-                        {format(new Date(state.basics.startDate), 'MMM d')} – {format(new Date(state.basics.endDate), 'MMM d, yyyy')}
+                        {format(parseLocalDate(state.basics.startDate), 'MMM d')} – {format(parseLocalDate(state.basics.endDate), 'MMM d, yyyy')}
                       </>
                     ) : 'Dates not set'}
                   </span>

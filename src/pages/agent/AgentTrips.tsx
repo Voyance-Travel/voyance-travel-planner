@@ -31,6 +31,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { getTrips, type AgencyTrip, PIPELINE_STAGES } from '@/services/agencyCRM';
 import { format, differenceInDays, isPast, isFuture } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 
 const STATUS_COLORS: Record<string, string> = {
   inquiry: 'bg-blue-500/10 text-blue-600 border-blue-200',
@@ -237,7 +238,7 @@ export default function AgentTrips() {
                                 {trip.start_date && trip.end_date && (
                                   <span className="flex items-center gap-1">
                                     <Calendar className="h-3.5 w-3.5" />
-                                    {format(new Date(trip.start_date), 'MMM d')} – {format(new Date(trip.end_date), 'MMM d, yyyy')}
+                                    {format(parseLocalDate(trip.start_date), 'MMM d')} – {format(parseLocalDate(trip.end_date), 'MMM d, yyyy')}
                                   </span>
                                 )}
                                 {trip.traveler_count && (
@@ -324,7 +325,7 @@ export default function AgentTrips() {
                             )}
                             {trip.start_date && (
                               <p className="text-xs text-muted-foreground">
-                                {format(new Date(trip.start_date), 'MMM d, yyyy')}
+                                {format(parseLocalDate(trip.start_date), 'MMM d, yyyy')}
                               </p>
                             )}
                             <div className="mt-2 pt-2 border-t">

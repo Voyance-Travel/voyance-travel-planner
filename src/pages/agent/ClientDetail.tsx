@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { 
   Edit,
   Trash2,
@@ -302,7 +303,7 @@ export default function ClientDetail() {
                             {trip.start_date && (
                               <span className="flex items-center gap-1">
                                 <Calendar className="h-3 w-3" />
-                                {format(new Date(trip.start_date), 'MMM d, yyyy')}
+                                {format(parseLocalDate(trip.start_date), 'MMM d, yyyy')}
                               </span>
                             )}
                           </div>

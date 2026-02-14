@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { Plane, MapPin, Clock, Calendar, Loader2, RefreshCw, AlertCircle, Sparkles, CheckCircle, Users, Hotel, DollarSign, Bookmark } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -689,8 +690,8 @@ export default function ItineraryPreview({
             <div>
               <p className="text-xs text-slate-400">Dates</p>
               <p className="font-medium">
-                {format(new Date(tripDetails.startDate), 'MMM d')} -{' '}
-                {format(new Date(tripDetails.endDate), 'MMM d')}
+                {format(parseLocalDate(tripDetails.startDate), 'MMM d')} -{' '}
+                {format(parseLocalDate(tripDetails.endDate), 'MMM d')}
               </p>
             </div>
           </div>

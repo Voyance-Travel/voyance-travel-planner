@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useSearchParams, Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { format, differenceInDays } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import {
   CheckCircle,
   Loader2,
@@ -221,7 +222,7 @@ export default function TripConfirmation() {
     .trim() || 'your destination';
 
   const nights = trip 
-    ? differenceInDays(new Date(trip.end_date), new Date(trip.start_date))
+    ? differenceInDays(parseLocalDate(trip.end_date), parseLocalDate(trip.start_date))
     : 0;
 
   const handleDownloadPdf = useCallback(async () => {
@@ -350,7 +351,7 @@ export default function TripConfirmation() {
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-background/80 backdrop-blur-sm border border-border/50">
                 <Calendar className="h-4 w-4 text-primary" />
                 <span className="text-sm font-medium">
-                  {format(new Date(trip?.start_date || new Date()), 'MMM d')} – {format(new Date(trip?.end_date || new Date()), 'MMM d')}
+                  {format(parseLocalDate(trip?.start_date) || new Date(), 'MMM d')} – {format(parseLocalDate(trip?.end_date) || new Date(), 'MMM d')}
                 </span>
               </div>
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-background/80 backdrop-blur-sm border border-border/50">
@@ -417,10 +418,10 @@ export default function TripConfirmation() {
                         Departure
                       </p>
                       <p className="text-2xl font-serif font-bold text-foreground">
-                        {format(new Date(trip.start_date), 'MMMM d')}
+                        {format(parseLocalDate(trip.start_date), 'MMMM d')}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {format(new Date(trip.start_date), 'EEEE, yyyy')}
+                        {format(parseLocalDate(trip.start_date), 'EEEE, yyyy')}
                       </p>
                     </div>
 
@@ -441,10 +442,10 @@ export default function TripConfirmation() {
                         Return
                       </p>
                       <p className="text-2xl font-serif font-bold text-foreground">
-                        {format(new Date(trip.end_date), 'MMMM d')}
+                        {format(parseLocalDate(trip.end_date), 'MMMM d')}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {format(new Date(trip.end_date), 'EEEE, yyyy')}
+                        {format(parseLocalDate(trip.end_date), 'EEEE, yyyy')}
                       </p>
                     </div>
                   </div>

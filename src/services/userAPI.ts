@@ -5,6 +5,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { parseLocalDate } from '@/utils/dateUtils';
 import { useQuery } from '@tanstack/react-query';
 
 // ============================================================================
@@ -198,7 +199,7 @@ export async function getTripStats(): Promise<TripStats> {
     if (t.status === 'completed') return true;
     // Date-based: trip has ended (end_date is in the past)
     // Include drafts that have past end dates - these are real trips that happened
-    if (t.end_date && new Date(t.end_date) < now) return true;
+    if (t.end_date && parseLocalDate(t.end_date) < now) return true;
     return false;
   });
   
@@ -206,11 +207,11 @@ export async function getTripStats(): Promise<TripStats> {
     // Explicitly completed trips are not upcoming
     if (t.status === 'completed') return false;
     // Trip has already ended - not upcoming
-    if (t.end_date && new Date(t.end_date) < now) return false;
+    if (t.end_date && parseLocalDate(t.end_date) < now) return false;
     // Trip hasn't ended yet (future or currently ongoing)
-    if (t.end_date && new Date(t.end_date) >= now) return true;
+    if (t.end_date && parseLocalDate(t.end_date) >= now) return true;
     // No end date but has future start date
-    if (t.start_date && new Date(t.start_date) >= now) return true;
+    if (t.start_date && parseLocalDate(t.start_date) >= now) return true;
     return false;
   });
   
@@ -232,8 +233,8 @@ export async function getTripStats(): Promise<TripStats> {
   let totalDays = 0;
   completedTrips.forEach(trip => {
     if (trip.start_date && trip.end_date) {
-      const start = new Date(trip.start_date);
-      const end = new Date(trip.end_date);
+      const start = parseLocalDate(trip.start_date);
+      const end = parseLocalDate(trip.end_date);
       totalDays += Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
     }
   });

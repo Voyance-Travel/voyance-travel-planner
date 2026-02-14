@@ -11,6 +11,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import worldSvgUrl from '@/assets/world.svg';
 
 interface TravelMapProps {
@@ -194,7 +195,7 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
     trips.forEach(trip => {
       const coords = getCoordinates(trip.destination) || getCoordinates(trip.destination_country || '');
       if (coords) {
-        const isCompleted = trip.status === 'completed' || (trip.end_date && new Date(trip.end_date) < new Date());
+        const isCompleted = trip.status === 'completed' || (trip.end_date && parseLocalDate(trip.end_date) < new Date());
         const isUpcoming = !isCompleted && ['booked', 'planning', 'active', 'draft'].includes(trip.status);
         
         result.push({
@@ -203,8 +204,8 @@ export default function TravelMap({ userId, className }: TravelMapProps) {
           country: trip.destination_country || '',
           visited: isCompleted,
           upcoming: isUpcoming,
-          visitDate: trip.end_date ? format(new Date(trip.end_date), 'MMM yyyy') : undefined,
-          upcomingDate: trip.start_date ? format(new Date(trip.start_date), 'MMM yyyy') : undefined,
+          visitDate: trip.end_date ? format(parseLocalDate(trip.end_date), 'MMM yyyy') : undefined,
+          upcomingDate: trip.start_date ? format(parseLocalDate(trip.start_date), 'MMM yyyy') : undefined,
           rating: isCompleted ? 4 + Math.floor(Math.random() * 2) : undefined,
           lat: coords.lat,
           lng: coords.lng,

@@ -17,6 +17,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 
 interface FriendProfileCardProps {
   friendId: string;
@@ -204,7 +205,7 @@ export default function FriendProfileCard({ friendId, children, className }: Fri
                       <span>{trip.destination}</span>
                     </div>
                     <span className="text-muted-foreground">
-                      {format(new Date(trip.start_date), 'MMM yyyy')}
+                      {format(parseLocalDate(trip.start_date), 'MMM yyyy')}
                     </span>
                   </div>
                 ))}

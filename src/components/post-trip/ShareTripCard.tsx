@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { parseLocalDate } from '@/utils/dateUtils';
 import type { TripPhoto } from '@/hooks/useTripPhotos';
 
 interface ShareTripCardProps {
@@ -95,7 +96,7 @@ export function ShareTripCard({ isOpen, onClose, trip, photos, highlights }: Sha
             <div className="p-4 text-white">
               <h3 className="text-lg font-semibold mb-1">{trip.destination}</h3>
               <p className="text-white/70 text-sm mb-3">
-                {trip.start_date && new Date(trip.start_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                {trip.start_date && parseLocalDate(trip.start_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
               </p>
               
               {highlights.length > 0 && (
