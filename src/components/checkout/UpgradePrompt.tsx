@@ -68,7 +68,7 @@ export function UpgradePrompt({
   const canUseQuickTopUp = actionCost <= BOOST_PACK.credits && context !== 'trip_generation';
 
   const getContextMessage = () => {
-    if (context === 'route') return 'Route optimization is free! But you need credits to unlock days first.';
+    if (context === 'route') return 'Route optimization is free! Unlock at least one day to optimize your route.';
     if (context === 'budget') return 'Group budgeting is included with any unlocked trip.';
     return null;
   };
