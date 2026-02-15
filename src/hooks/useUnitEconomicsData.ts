@@ -212,11 +212,13 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
 
   if (!roles || roles.length === 0) return null;
 
-  // Parallel fetch all data sources
-  const [costResult, ledgerResult, balanceResult, tripResult, profileResult, profileNamesResult, tierResult, groupBudgetResult] = await Promise.all([
-    supabase.from('trip_cost_tracking').select('*')
-      .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-      .order('created_at', { ascending: true }),
+  // Parallel fetch all data sources — cost data uses server-side RPC aggregation
+  const thirtyDaysAgoISO = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const [costSummaryResult, ledgerResult, balanceResult, tripResult, profileResult, profileNamesResult, tierResult, groupBudgetResult] = await Promise.all([
+    supabase.rpc('get_unit_economics_summary', {
+      p_start_date: thirtyDaysAgoISO,
+      p_end_date: new Date().toISOString(),
+    }),
     supabase.from('credit_ledger').select('user_id, credits_delta, action_type, transaction_type, is_free_credit, amount_cents, created_at, notes'),
     supabase.from('credit_balances').select('user_id, purchased_credits, free_credits'),
     supabase.from('trips').select('id, user_id, created_at', { count: 'exact' }),
@@ -227,59 +229,57 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
   ]);
 
   const warnings: string[] = [];
-  const costEntries = costResult.data || [];
   const ledgerEntries = ledgerResult.data || [];
   const balances = balanceResult.data || [];
   const trips = tripResult.data || [];
 
-  // ---- COSTS ----
-  let googlePlacesCalls = 0, googleGeocodingCalls = 0, googlePhotosCalls = 0, googleRoutesCalls = 0;
-  let perplexityCalls = 0, amadeusCalls = 0;
-  let totalInputTokens = 0, totalOutputTokens = 0, aiCallCount = 0;
-  let totalEstimatedCost = 0;
+  // ---- COSTS (from server-side RPC aggregation) ----
+  const cs = costSummaryResult.data as any || {};
   
+  const googlePlacesCalls = Number(cs.google_places_calls) || 0;
+  const googleGeocodingCalls = Number(cs.google_geocoding_calls) || 0;
+  const googlePhotosCalls = Number(cs.google_photos_calls) || 0;
+  const googleRoutesCalls = Number(cs.google_routes_calls) || 0;
+  const perplexityCalls = Number(cs.perplexity_calls) || 0;
+  const amadeusCalls = Number(cs.amadeus_calls) || 0;
+  const totalInputTokens = Number(cs.total_input_tokens) || 0;
+  const totalOutputTokens = Number(cs.total_output_tokens) || 0;
+  const aiCallCount = Number(cs.ai_call_count) || 0;
+  const totalEstimatedCost = Number(cs.total_cost_usd) || 0;
+  const totalCostEntries = Number(cs.total_records) || 0;
+  const uniqueApiUserCount = Number(cs.unique_users) || 0;
+  const uniqueCostTripCount = Number(cs.unique_trips) || 0;
+
+  // Action breakdown from RPC
   const actions: Record<string, { count: number; cost: number }> = {};
+  for (const a of (cs.cost_by_action || [])) {
+    actions[a.action_type || 'unknown'] = { count: Number(a.count) || 0, cost: Number(a.cost) || 0 };
+  }
+
+  // Model breakdown from RPC
   const models: Record<string, { count: number; inputTokens: number; outputTokens: number }> = {};
+  for (const m of (cs.cost_by_model || [])) {
+    models[m.model || 'unknown'] = {
+      count: Number(m.count) || 0,
+      inputTokens: Number(m.input_tokens) || 0,
+      outputTokens: Number(m.output_tokens) || 0,
+    };
+  }
+
+  // Category breakdown from RPC
   const categoryMap: Record<string, CostCategory> = {};
-
-  for (const entry of costEntries) {
-    const cost = entry.estimated_cost_usd || 0;
-    totalEstimatedCost += cost;
-
-    googlePlacesCalls += entry.google_places_calls || 0;
-    googleGeocodingCalls += entry.google_geocoding_calls || 0;
-    googlePhotosCalls += entry.google_photos_calls || 0;
-    googleRoutesCalls += entry.google_routes_calls || 0;
-    perplexityCalls += entry.perplexity_calls || 0;
-    amadeusCalls += entry.amadeus_calls || 0;
-    totalInputTokens += entry.input_tokens || 0;
-    totalOutputTokens += entry.output_tokens || 0;
-    if (entry.input_tokens || entry.output_tokens) aiCallCount++;
-
-    // Action breakdown
-    const action = entry.action_type || 'unknown';
-    if (!actions[action]) actions[action] = { count: 0, cost: 0 };
-    actions[action].count++;
-    actions[action].cost += cost;
-
-    // Model breakdown
-    const model = entry.model || 'unknown';
-    if (!models[model]) models[model] = { count: 0, inputTokens: 0, outputTokens: 0 };
-    models[model].count++;
-    models[model].inputTokens += entry.input_tokens || 0;
-    models[model].outputTokens += entry.output_tokens || 0;
-
-    // Category breakdown
-    const cat = entry.cost_category || 'other';
-    if (!categoryMap[cat]) {
-      categoryMap[cat] = { category: cat, label: CATEGORY_LABELS[cat] || cat, count: 0, cost: 0, googlePlaces: 0, googlePhotos: 0, perplexity: 0, amadeus: 0 };
-    }
-    categoryMap[cat].count++;
-    categoryMap[cat].cost += cost;
-    categoryMap[cat].googlePlaces += entry.google_places_calls || 0;
-    categoryMap[cat].googlePhotos += entry.google_photos_calls || 0;
-    categoryMap[cat].perplexity += entry.perplexity_calls || 0;
-    categoryMap[cat].amadeus += entry.amadeus_calls || 0;
+  for (const c of (cs.cost_by_category || [])) {
+    const cat = c.category || 'other';
+    categoryMap[cat] = {
+      category: cat,
+      label: CATEGORY_LABELS[cat] || cat,
+      count: Number(c.count) || 0,
+      cost: Number(c.cost) || 0,
+      googlePlaces: Number(c.google_places) || 0,
+      googlePhotos: Number(c.google_photos) || 0,
+      perplexity: Number(c.perplexity) || 0,
+      amadeus: Number(c.amadeus) || 0,
+    };
   }
 
   const googleTotalCost =
@@ -292,10 +292,11 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
   const amadeusCost = amadeusCalls * 0.024;
   const aiCost = Math.max(0, totalEstimatedCost - googleTotalCost - perplexityCost - amadeusCost);
 
-  const costDates = costEntries.map(e => e.created_at);
-  const uniqueCostTripIds = new Set(costEntries.filter(e => e.trip_id).map(e => e.trip_id));
+  // Date range from RPC
+  const costPeriodStart = cs.date_range?.start ? String(cs.date_range.start).split('T')[0] : '';
+  const costPeriodEnd = cs.date_range?.end_date ? String(cs.date_range.end_date).split('T')[0] : '';
 
-  if (costEntries.length > 0 && uniqueCostTripIds.size === 0) {
+  if (totalCostEntries > 0 && uniqueCostTripCount === 0) {
     warnings.push('Cost tracking entries have no trip_id linkage — per-trip costs are estimated');
   }
 
@@ -368,7 +369,7 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
   const userPurchases = Object.values(userPurchaseMap).sort((a, b) => b.totalRevenue - a.totalRevenue);
 
   // ---- USER METRICS ----
-  const uniqueApiUsers = new Set(costEntries.filter(e => e.user_id).map(e => e.user_id));
+  // uniqueApiUserCount comes from the RPC
   
   
   // Count paid users from actual purchase transactions in ledger (not system-granted credits)
@@ -395,14 +396,14 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
   }
 
   // ---- DAILY TIME SERIES ----
-  // Merge cost data + ledger data by day
+  // Merge cost data from RPC + ledger data by day
   const dailyMap: Record<string, DailyMetric> = {};
   
-  for (const entry of costEntries) {
-    const day = entry.created_at.split('T')[0];
+  for (const d of (cs.cost_by_date || [])) {
+    const day = String(d.date);
     if (!dailyMap[day]) dailyMap[day] = { date: day, apiCost: 0, revenue: 0, trips: 0, users: 0, costEntries: 0 };
-    dailyMap[day].apiCost += entry.estimated_cost_usd || 0;
-    dailyMap[day].costEntries++;
+    dailyMap[day].apiCost += Number(d.cost) || 0;
+    dailyMap[day].costEntries += Number(d.records) || 0;
   }
 
   // Merge trip creation dates
@@ -465,14 +466,14 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
   const dailyMetrics = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
 
   // ---- DATA QUALITY ----
-  const costDataDays = new Set(costEntries.map(e => e.created_at.split('T')[0])).size;
+  const costDataDays = (cs.cost_by_date || []).length;
 
   return {
     costs: {
       totalCost: totalEstimatedCost,
-      totalEntries: costEntries.length,
-      periodStart: costDates[0]?.split('T')[0] || '',
-      periodEnd: costDates[costDates.length - 1]?.split('T')[0] || '',
+      totalEntries: totalCostEntries,
+      periodStart: costPeriodStart,
+      periodEnd: costPeriodEnd,
       google: { calls: googlePlacesCalls + googleGeocodingCalls + googlePhotosCalls + googleRoutesCalls, cost: googleTotalCost },
       ai: { calls: aiCallCount, inputTokens: totalInputTokens, outputTokens: totalOutputTokens, cost: aiCost },
       perplexity: { calls: perplexityCalls, cost: perplexityCost },
@@ -495,20 +496,20 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
       totalUsers: profileResult.count || 0,
       usersWithBalance: balances.length,
       paidUsers,
-      activeApiUsers: uniqueApiUsers.size,
+      activeApiUsers: uniqueApiUserCount,
       outstandingPurchased,
       outstandingFree,
     },
     trips: {
       totalTrips: tripResult.count || trips.length,
       uniqueTripUsers: new Set(trips.map(t => t.user_id)).size,
-      trackedTrips: uniqueCostTripIds.size,
+      trackedTrips: uniqueCostTripCount,
     },
     dailyMetrics,
     dataQuality: {
-      hasCostData: costEntries.length > 0,
+      hasCostData: totalCostEntries > 0,
       hasRevenueData: purchaseCount > 0,
-      hasTripLinkage: uniqueCostTripIds.size > 0,
+      hasTripLinkage: uniqueCostTripCount > 0,
       costDataDays,
       warnings,
     },
