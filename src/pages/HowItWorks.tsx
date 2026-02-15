@@ -320,7 +320,7 @@ export default function HowItWorks() {
                   <div>
                     <h4 className="font-semibold text-foreground mb-1">Build It Yourself</h4>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      Already have an itinerary from ChatGPT, a blog, or a friend? Paste it in — we'll parse, structure, and enhance it.
+                      Already have an itinerary from another app, a blog, or a friend? Paste it in - we'll parse, structure, and enhance it.
                     </p>
                   </div>
                 </div>

@@ -1178,7 +1178,7 @@ Example: "We love local food markets, sunset viewpoints, and avoiding tourist cr
               className="min-h-[100px] resize-none text-sm"
             />
             <p className="text-xs text-muted-foreground">
-              Share must-sees, skip requests, or paste research from ChatGPT. Our AI will incorporate it into your itinerary.
+              Share must-sees, skip requests, or paste any research you've gathered. Our AI will incorporate it into your itinerary.
             </p>
           </div>
         </div>
