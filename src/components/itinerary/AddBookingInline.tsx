@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plane, Hotel, Plus, ArrowRight, Loader2, CalendarIcon, ChevronDown, ChevronUp, Upload } from 'lucide-react';
+import { Plane, Hotel, Plus, ArrowRight, Loader2, CalendarIcon, ChevronDown, ChevronUp, Upload, Sparkles } from 'lucide-react';
 import { format } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,7 @@ import { AirportAutocomplete } from '@/components/common/AirportAutocomplete';
 import { enrichHotel } from '@/services/hotelAPI';
 import { cn } from '@/lib/utils';
 import { FlightImportModal } from './FlightImportModal';
+import { FindMyHotelsDrawer } from './FindMyHotelsDrawer';
 import { 
   type HotelBooking, 
   findOverlappingHotel, 
@@ -491,16 +492,7 @@ export function AddHotelInline({
     hotelData.checkOutDate ? parseLocalDate(hotelData.checkOutDate) : tripEndDate
   );
 
-  const handleBrowseHotels = () => {
-    const params = new URLSearchParams({
-      tripId,
-      destination,
-      startDate,
-      endDate,
-      travelers: String(travelers),
-    });
-    navigate(`/planner/hotel?${params.toString()}`);
-  };
+  // Removed: handleBrowseHotels — replaced by FindMyHotelsDrawer
 
   const handleSaveManualHotel = async () => {
     if (!hotelData.name) {
@@ -609,12 +601,15 @@ export function AddHotelInline({
   return (
     <>
       <div className="flex gap-2">
-        <Button onClick={handleBrowseHotels}>
-          <Plus className="h-4 w-4 mr-2" />
-          Browse Hotels
-        </Button>
+        <FindMyHotelsDrawer
+          tripId={tripId}
+          destination={destination}
+          startDate={startDate}
+          endDate={endDate}
+          travelers={travelers}
+        />
         <Button variant="outline" onClick={() => setShowManualEntry(true)}>
-          {editMode ? 'Edit Details' : 'Enter Details'}
+          {editMode ? 'Edit Details' : 'I Have a Hotel'}
         </Button>
       </div>
 
