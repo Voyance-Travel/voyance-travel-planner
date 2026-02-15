@@ -1174,7 +1174,7 @@ function FlightHotelStep({
               onChange={(e) => setMustDoActivities(e.target.value)}
               placeholder={`Paste notes, other AI suggestions, or must-sees...
 
-Example: "We definitely want to visit teamLab, try ramen at Afuri, and see Meiji Shrine early morning. Skip Shibuya Crossing."`}
+Example: "We love local food markets, sunset viewpoints, and avoiding tourist crowds. Skip the big bus tours."`}
               className="min-h-[100px] resize-none text-sm"
             />
             <p className="text-xs text-muted-foreground">
