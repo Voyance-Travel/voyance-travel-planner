@@ -1094,6 +1094,16 @@ export default function TripDetail() {
                   isEditable={true}
                   isPreview={!!(trip.itinerary_data as any)?.isPreview}
                   creationSource={trip.creation_source}
+                  onDaysChange={(updatedDays) => {
+                    // Keep trip state in sync so ItineraryAssistant always sees current days
+                    setTrip(prev => prev ? {
+                      ...prev,
+                      itinerary_data: JSON.parse(JSON.stringify({
+                        ...(prev.itinerary_data as Record<string, unknown> || {}),
+                        days: updatedDays,
+                      })),
+                    } : null);
+                  }}
                   onBookingAdded={() => window.location.reload()}
                   onUnlockComplete={(enrichedItinerary) => {
                     refreshEntitlements();
