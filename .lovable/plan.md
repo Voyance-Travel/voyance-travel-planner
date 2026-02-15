@@ -1,49 +1,32 @@
 
 
-# Fix: credit_ledger Missing Swap Activity Entries
+# Fix: Profiles HEAD 503 Error in Unit Economics Dashboard
 
-## Root Cause (Confirmed)
+## Problem
+The dashboard fires a HEAD request to `profiles?select=id` with `count: 'exact'` (line 225), which intermittently returns a 503 error. This is redundant because line 226 already fetches `profiles` with `id, display_name` successfully.
 
-The `spend-credits` edge function correctly deducts credits and updates `trip_action_usage` for swaps, but the `credit_ledger` insert **silently fails** every time.
+## Root Cause
+PostgREST HEAD requests with `count: 'exact'` can time out or fail under load, especially on tables with many policies. Since the dashboard already fetches all profile rows on line 226, the HEAD-only count query is unnecessary overhead.
 
-**Why:** The `credit_ledger.activity_id` column is type `uuid`, but itinerary activity IDs are non-UUID strings like `ai-alt-1771174353473-0`, `vicens_001`, `sagrada-001`. When the edge function attempts to insert these as `activity_id`, the database rejects the row. The Supabase JS client returns `{ data: null, error: {...} }` without throwing, so the function continues and returns `success: true` without ever logging the ledger entry.
+## Fix (1 file)
 
-**Proof:**
-- `trip_action_usage` shows 9 swap uses (this table uses `action_type` as text, no UUID issue)
-- `credit_ledger` shows 0 swap entries (this table has `activity_id uuid` column)
-- All other actions (unlock_day, ai_message, regenerate_day) work because they pass `null` for `activity_id`
+**File:** `src/hooks/useUnitEconomicsData.ts`
 
-## Fix (Single File Change)
+1. Remove the HEAD count query on line 225 (`supabase.from('profiles').select('id', { count: 'exact', head: true })`)
+2. Update the destructuring to remove `profileResult` from the Promise.all array
+3. Change line 496 from `profileResult.count || 0` to `profileNamesResult.data?.length || 0`
 
-**File:** `supabase/functions/spend-credits/index.ts`
+This eliminates the 503-producing request entirely while preserving the same `totalUsers` metric from data already being fetched.
 
-In all three places where `credit_ledger` is inserted (free cap path at ~line 344, group cap path at ~line 254, and paid path at ~line 450):
+## Technical Detail
 
-Change `activity_id: activityId || null` to `activity_id: null` and move the raw `activityId` string into the `metadata` JSON object instead.
-
-This ensures:
-- The ledger insert never fails due to UUID type mismatch
-- The activity ID is still recorded (in metadata) for audit/debugging
-- No schema migration needed
-
-## Technical Details
-
-Three insert locations to update in `spend-credits/index.ts`:
-
-1. **Group cap free path (~line 256):** Change `activity_id: activityId || null` to `activity_id: null`, add `activityId` to metadata
-2. **Tier free cap path (~line 353):** Same change  
-3. **Paid FIFO path (~line 459):** Same change
-
-Additionally, add error checking after each `credit_ledger` insert to log failures:
+Current (8 parallel queries):
 ```text
-const { error: ledgerErr } = await supabaseAdmin.from('credit_ledger').insert({...});
-if (ledgerErr) console.error('[spend-credits] Ledger insert failed:', ledgerErr);
+profiles?select=id (HEAD, count:exact)   -- 503 error, redundant
+profiles?select=id,display_name          -- works fine, returns all rows
 ```
 
-## Verification
-
-After deploying:
-- Perform a swap; check `credit_ledger` for a new `swap_activity` row
-- Dashboard at `/admin/margins` should show Swap Activity with non-zero uses
-- The `metadata` column should contain the activity ID string for reference
-
+After fix (7 parallel queries):
+```text
+profiles?select=id,display_name          -- kept, .length used for count
+```
