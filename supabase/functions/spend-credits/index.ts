@@ -251,7 +251,7 @@ serve(async (req) => {
             .eq('trip_id', tripId);
 
           // Log zero-cost entry
-          await supabaseAdmin
+          const { error: groupLedgerErr } = await supabaseAdmin
             .from('credit_ledger')
             .insert({
               user_id: user.id,
@@ -260,10 +260,11 @@ serve(async (req) => {
               is_free_credit: true,
               action_type: action,
               trip_id: tripId,
-              activity_id: activityId || null,
+              activity_id: null,
               notes: `${action.replace(/_/g, ' ')} - group cap (${used + 1}/${cap})`,
-              metadata: { ...metadata, day_index: dayIndex, group_cap_used: true },
+              metadata: { ...metadata, day_index: dayIndex, group_cap_used: true, activityId: activityId || null },
             });
+          if (groupLedgerErr) console.error('[spend-credits] Group cap ledger insert failed:', groupLedgerErr);
 
           const balance = await syncBalanceCache(supabaseAdmin, user.id);
 
@@ -341,7 +342,7 @@ serve(async (req) => {
             updated_at: new Date().toISOString(),
           }, { onConflict: 'user_id,trip_id,action_type' });
 
-        await supabaseAdmin
+        const { error: freeCapLedgerErr } = await supabaseAdmin
           .from('credit_ledger')
           .insert({
             user_id: user.id,
@@ -350,10 +351,11 @@ serve(async (req) => {
             is_free_credit: true,
             action_type: action,
             trip_id: tripId,
-            activity_id: activityId || null,
+            activity_id: null,
             notes: `${action.replace(/_/g, ' ')} - free (${currentUsage + 1}/${freeCap})`,
-            metadata: { ...metadata, day_index: dayIndex, free_cap_used: true, usage: currentUsage + 1, cap: freeCap },
+            metadata: { ...metadata, day_index: dayIndex, free_cap_used: true, usage: currentUsage + 1, cap: freeCap, activityId: activityId || null },
           });
+        if (freeCapLedgerErr) console.error('[spend-credits] Free cap ledger insert failed:', freeCapLedgerErr);
 
         const balance = await syncBalanceCache(supabaseAdmin, user.id);
 
@@ -447,7 +449,7 @@ serve(async (req) => {
     const balance = await syncBalanceCache(supabaseAdmin, user.id);
 
     // ── Ledger entry ──
-    await supabaseAdmin
+    const { error: paidLedgerErr } = await supabaseAdmin
       .from('credit_ledger')
       .insert({
         user_id: user.id,
@@ -456,7 +458,7 @@ serve(async (req) => {
         is_free_credit: false,
         action_type: action,
         trip_id: tripId || null,
-        activity_id: activityId || null,
+        activity_id: null,
         notes: `${action.replace(/_/g, ' ')} - ${deductResult.deducted} credits`,
         metadata: {
           ...metadata,
@@ -464,8 +466,10 @@ serve(async (req) => {
           is_variable_cost: isVariable,
           original_cost: cost,
           fifo_deductions: deductResult.purchases,
+          activityId: activityId || null,
         },
       });
+    if (paidLedgerErr) console.error('[spend-credits] Paid ledger insert failed:', paidLedgerErr);
 
     return new Response(
       JSON.stringify({
