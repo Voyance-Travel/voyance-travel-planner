@@ -277,8 +277,15 @@ serve(async (req) => {
       alternatives: alternatives.length 
     });
 
-    // Track Viator API call
+    // Track Viator API call — Viator charges per search request
     costTracker.addMetadata('results_count', results.length);
+    costTracker.addMetadata('query', activityName);
+    costTracker.addMetadata('destination', destination);
+    // Viator API cost: ~$0.005 per search call (partner tier estimate)
+    // Record as custom metadata since there's no dedicated viator counter
+    // The cost tracker will save with $0 token/google cost, so we manually set estimated cost
+    // by recording it as a perplexity-equivalent call ($0.005/call)
+    costTracker.recordPerplexity(1); // $0.005 per call — same ballpark as Viator search
     await costTracker.save();
 
     return new Response(

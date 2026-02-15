@@ -214,7 +214,9 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
 
   // Parallel fetch all data sources
   const [costResult, ledgerResult, balanceResult, tripResult, profileResult, profileNamesResult, tierResult, groupBudgetResult] = await Promise.all([
-    supabase.from('trip_cost_tracking').select('*').order('created_at', { ascending: true }),
+    supabase.from('trip_cost_tracking').select('*')
+      .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+      .order('created_at', { ascending: true }),
     supabase.from('credit_ledger').select('user_id, credits_delta, action_type, transaction_type, is_free_credit, amount_cents, created_at, notes'),
     supabase.from('credit_balances').select('user_id, purchased_credits, free_credits'),
     supabase.from('trips').select('id, user_id, created_at', { count: 'exact' }),

@@ -123,6 +123,7 @@ async function fetchRealCostMetrics(): Promise<RealCostMetrics | null> {
       supabase
         .from('trip_cost_tracking')
         .select('*')
+        .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
         .order('created_at', { ascending: false }),
       supabase
         .from('trips')
