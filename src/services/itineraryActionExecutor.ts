@@ -279,14 +279,20 @@ async function executeSwapAction(
     (curr.matchScore > best.matchScore) ? curr : best
   );
 
-  // Apply the swap to the itinerary
+  // Apply the swap to the itinerary — build a FRESH activity object
+  // instead of spreading `...act`, which would carry over stale metadata
+  // (rating, reviewCount, voyanceInsight, etc.) from the old activity.
   const updatedDays = [...currentDays];
   updatedDays[dayIndex] = {
     ...day,
     activities: day.activities.map((act, idx) => {
       if (idx === activityIndex) {
         return {
-          ...act,
+          // Only preserve scheduling fields from the old activity
+          startTime: act.startTime,
+          time: act.time,
+          duration: act.duration,
+          // Use ALL data from the fetched alternative
           id: bestAlternative.id,
           title: bestAlternative.name,
           name: bestAlternative.name,
@@ -294,15 +300,16 @@ async function executeSwapAction(
           category: bestAlternative.category,
           cost: { amount: bestAlternative.estimatedCost, currency: 'USD' },
           location: { name: bestAlternative.location },
-          // Clear stale insight fields from the previous activity
+          rating: bestAlternative.rating,
+          matchScore: bestAlternative.matchScore,
+          whyRecommended: bestAlternative.whyRecommended,
+          // Explicitly blank out stale fields
           tips: undefined,
           voyanceInsight: undefined,
           isVoyancePick: false,
-          // Preserve timing
-          startTime: act.startTime,
-          time: act.time,
+          reviewCount: undefined,
           isLocked: false,
-        };
+        } as Activity;
       }
       return act;
     }),
