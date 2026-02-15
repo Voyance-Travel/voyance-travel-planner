@@ -192,25 +192,25 @@ function AnimatedRoutes() {
           <Route path="/onboard/conversation" element={<OnboardConversation />} />
           
           {/* Profile Routes */}
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/profile/edit" element={<ProfileEdit />} />
-          <Route path="/profile/settings" element={<Settings />} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/profile/edit" element={<ProtectedRoute><ProfileEdit /></ProtectedRoute>} />
+          <Route path="/profile/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           <Route path="/settings" element={<Navigate to="/profile/settings" replace />} />
           
           {/* Trip Planning Routes */}
           <Route path="/planner" element={<Navigate to="/start" replace />} />
-          <Route path="/planner/multi-city" element={<MultiCityPlanner />} />
-          <Route path="/planner/flight" element={<PlannerFlight />} />
-          <Route path="/planner/hotel" element={<PlannerHotel />} />
-          <Route path="/planner/summary" element={<PlannerSummary />} />
-          <Route path="/planner/itinerary" element={<PlannerItinerary />} />
-          <Route path="/planner/booking" element={<PlannerBooking />} />
+          <Route path="/planner/multi-city" element={<ProtectedRoute><MultiCityPlanner /></ProtectedRoute>} />
+          <Route path="/planner/flight" element={<ProtectedRoute><PlannerFlight /></ProtectedRoute>} />
+          <Route path="/planner/hotel" element={<ProtectedRoute><PlannerHotel /></ProtectedRoute>} />
+          <Route path="/planner/summary" element={<ProtectedRoute><PlannerSummary /></ProtectedRoute>} />
+          <Route path="/planner/itinerary" element={<ProtectedRoute><PlannerItinerary /></ProtectedRoute>} />
+          <Route path="/planner/booking" element={<ProtectedRoute><PlannerBooking /></ProtectedRoute>} />
           
           {/* Trip Management Routes */}
-          <Route path="/trip/dashboard" element={<TripDashboard />} />
-          <Route path="/trip/:tripId" element={<TripDetail />} />
-          <Route path="/trip/:tripId/active" element={<ActiveTrip />} />
-          <Route path="/trip/:tripId/recap" element={<TripRecap />} />
+          <Route path="/trip/dashboard" element={<ProtectedRoute><TripDashboard /></ProtectedRoute>} />
+          <Route path="/trip/:tripId" element={<ProtectedRoute><TripDetail /></ProtectedRoute>} />
+          <Route path="/trip/:tripId/active" element={<ProtectedRoute><ActiveTrip /></ProtectedRoute>} />
+          <Route path="/trip/:tripId/recap" element={<ProtectedRoute><TripRecap /></ProtectedRoute>} />
           <Route path="/trips/:tripId/confirmation" element={<TripConfirmation />} />
           
           {/* Itinerary Routes */}
@@ -255,20 +255,20 @@ function AnimatedRoutes() {
           } />
           
           {/* Agent CRM Routes */}
-          <Route path="/agent" element={<AgentDashboard />} />
-          <Route path="/agent/clients" element={<AgentClients />} />
-          <Route path="/agent/clients/new" element={<AccountForm />} />
-          <Route path="/agent/clients/:clientId" element={<ClientDetail />} />
-          <Route path="/agent/clients/:clientId/edit" element={<AccountForm />} />
-          <Route path="/agent/trips" element={<AgentTrips />} />
-          <Route path="/agent/trips/new" element={<TripForm />} />
-          <Route path="/agent/trips/:tripId" element={<TripWorkspace />} />
-          <Route path="/agent/trips/:tripId/edit" element={<TripForm />} />
-          <Route path="/agent/tasks" element={<AgentTasks />} />
+          <Route path="/agent" element={<ProtectedRoute><AgentDashboard /></ProtectedRoute>} />
+          <Route path="/agent/clients" element={<ProtectedRoute><AgentClients /></ProtectedRoute>} />
+          <Route path="/agent/clients/new" element={<ProtectedRoute><AccountForm /></ProtectedRoute>} />
+          <Route path="/agent/clients/:clientId" element={<ProtectedRoute><ClientDetail /></ProtectedRoute>} />
+          <Route path="/agent/clients/:clientId/edit" element={<ProtectedRoute><AccountForm /></ProtectedRoute>} />
+          <Route path="/agent/trips" element={<ProtectedRoute><AgentTrips /></ProtectedRoute>} />
+          <Route path="/agent/trips/new" element={<ProtectedRoute><TripForm /></ProtectedRoute>} />
+          <Route path="/agent/trips/:tripId" element={<ProtectedRoute><TripWorkspace /></ProtectedRoute>} />
+          <Route path="/agent/trips/:tripId/edit" element={<ProtectedRoute><TripForm /></ProtectedRoute>} />
+          <Route path="/agent/tasks" element={<ProtectedRoute><AgentTasks /></ProtectedRoute>} />
           <Route path="/agent/library" element={<Navigate to="/agent" replace />} />
-          <Route path="/agent/settings" element={<AgentSettings />} />
-          <Route path="/agent/documents" element={<AgentDocuments />} />
-          <Route path="/agent/payouts" element={<AgentPayouts />} />
+          <Route path="/agent/settings" element={<ProtectedRoute><AgentSettings /></ProtectedRoute>} />
+          <Route path="/agent/documents" element={<ProtectedRoute><AgentDocuments /></ProtectedRoute>} />
+          <Route path="/agent/payouts" element={<ProtectedRoute><AgentPayouts /></ProtectedRoute>} />
           
           {/* 404 */}
           <Route path="*" element={<NotFound />} />
