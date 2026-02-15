@@ -214,7 +214,7 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
 
   // Parallel fetch all data sources — cost data uses server-side RPC aggregation
   const thirtyDaysAgoISO = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const [costSummaryResult, ledgerResult, balanceResult, tripResult, profileResult, profileNamesResult, tierResult, groupBudgetResult] = await Promise.all([
+  const [costSummaryResult, ledgerResult, balanceResult, tripResult, profileNamesResult, tierResult, groupBudgetResult] = await Promise.all([
     supabase.rpc('get_unit_economics_summary', {
       p_start_date: thirtyDaysAgoISO,
       p_end_date: new Date().toISOString(),
@@ -222,7 +222,6 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
     supabase.from('credit_ledger').select('user_id, credits_delta, action_type, transaction_type, is_free_credit, amount_cents, created_at, notes'),
     supabase.from('credit_balances').select('user_id, purchased_credits, free_credits'),
     supabase.from('trips').select('id, user_id, created_at', { count: 'exact' }),
-    supabase.from('profiles').select('id', { count: 'exact', head: true }),
     supabase.from('profiles').select('id, display_name'),
     supabase.from('user_tiers').select('tier, updated_at'),
     supabase.from('group_budgets').select('tier, initial_credits, remaining_credits'),
@@ -493,7 +492,7 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
       spendByAction,
     },
     users: {
-      totalUsers: profileResult.count || 0,
+      totalUsers: profileNamesResult.data?.length || 0,
       usersWithBalance: balances.length,
       paidUsers,
       activeApiUsers: uniqueApiUserCount,
