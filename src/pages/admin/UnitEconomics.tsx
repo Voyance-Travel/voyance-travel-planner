@@ -47,9 +47,10 @@ const COST_MODEL = {
   },
 };
 
+// Period is set dynamically inside the component via liveQueryPeriod
 const FALLBACK_DATA = {
   trips: 61,
-  period: "Jan 25 – Feb 4, 2026",
+  period: "", // Overridden at render time by liveQueryPeriod
   services: {
     google: { total: 30.82, perTrip: 0.5052, calls: null, callsPerTrip: 55, label: "Google Places", color: "#4285F4" },
     lovableAI: { total: 3.93, perTrip: 0.0644, perCall: 0.013, calls: 303, callsPerTrip: 4.97, label: "Lovable AI (Gemini)", color: "#A855F7" },
@@ -495,7 +496,7 @@ export default function UnitEconomics() {
       };
     }
     
-    if (!hasRealData) return FALLBACK_DATA;
+    if (!hasRealData) return { ...FALLBACK_DATA, period: liveQueryPeriod };
     
     // Legacy fallback using realMetrics (kept for backward compat)
     return {
