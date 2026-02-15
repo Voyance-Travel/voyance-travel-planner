@@ -303,6 +303,8 @@ export interface EditorialItineraryProps {
   onUnlockComplete?: (enrichedItinerary: any) => void;
   /** Metadata from parsed trip input (accommodation notes, practical tips) */
   parsedMetadata?: { accommodationNotes?: string[]; practicalTips?: string[]; unparsed?: string[]; source?: string };
+  /** Called whenever the local days state changes (swaps, locks, reorders, etc.) so parent can stay in sync */
+  onDaysChange?: (days: EditorialDay[]) => void;
 }
 
 // =============================================================================
@@ -919,6 +921,7 @@ export function EditorialItinerary({
   onPaymentRequest,
   onUnlockComplete,
   parsedMetadata,
+  onDaysChange,
 }: EditorialItineraryProps) {
   const queryClient = useQueryClient();
   const [days, setDays] = useState<EditorialDay[]>(initialDays);
@@ -955,6 +958,17 @@ export function EditorialItinerary({
       }
     }
   }, [initialDaysFingerprint, hasChanges]);
+
+  // Notify parent of local days changes so sibling components (e.g. ItineraryAssistant) stay in sync
+  const daysFingerprint = useMemo(() => JSON.stringify(days.map(d => ({ n: d.dayNumber, a: d.activities.map(a => a.id) }))), [days]);
+  const prevDaysFingerprint = useRef(daysFingerprint);
+  useEffect(() => {
+    if (daysFingerprint !== prevDaysFingerprint.current) {
+      prevDaysFingerprint.current = daysFingerprint;
+      onDaysChange?.(days);
+    }
+  }, [daysFingerprint, days, onDaysChange]);
+
   const [addActivityModal, setAddActivityModal] = useState<{ dayIndex: number } | null>(null);
   const [importModal, setImportModal] = useState<{ dayIndex: number } | null>(null);
   const [editActivityModal, setEditActivityModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
