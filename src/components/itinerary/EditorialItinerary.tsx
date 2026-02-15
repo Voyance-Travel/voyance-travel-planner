@@ -55,7 +55,7 @@ import type { ActivityType, ItineraryActivity, WeatherCondition, DayItinerary } 
 import { convertFrontendDayToBackend, convertFrontendActivityToBackend } from '@/types/itinerary';
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
-import { useDestinationImages } from '@/hooks/useDestinationImages';
+
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
 import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternativesDrawer';
 import { RegenerateGuidedAssistDialog } from './RegenerateGuidedAssistDialog';
@@ -1306,12 +1306,7 @@ export function EditorialItinerary({
     );
   }, [validationIssues]);
 
-  // Fetch destination hero image
-  const { heroImage, isLoading: imagesLoading } = useDestinationImages(
-    destination,
-    destinationCountry,
-    tripId
-  );
+  // Hero image removed — TripDetail page renders its own hero via DynamicDestinationPhotos
 
   // Scroll selected day button into view
   useEffect(() => {
@@ -2656,13 +2651,6 @@ export function EditorialItinerary({
         </div>
       )}
 
-      {/* Destination Hero Image */}
-      <DestinationHeroImage 
-        destination={destination} 
-        destinationCountry={destinationCountry} 
-        imageUrl={heroImage}
-        isLoading={imagesLoading}
-      />
 
       {/* Navigation Tabs - Horizontally scrollable on mobile */}
       <div className="border-b border-border overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
@@ -3951,14 +3939,6 @@ export function EditorialItinerary({
 // =============================================================================
 // DESTINATION IMAGE COMPONENTS (Static images - no carousel)
 // =============================================================================
-
-interface DestinationHeroImageProps {
-  destination: string;
-  destinationCountry?: string;
-  imageUrl: string | null;
-  isLoading?: boolean;
-}
-
 // Helper to normalize destination strings (remove IATA codes like "(FCO)")
 function normalizeDestination(dest: string): string {
   return (dest || '')
@@ -3966,72 +3946,6 @@ function normalizeDestination(dest: string): string {
     .replace(/\b(international\s+)?airport\b/gi, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
-}
-
-function generateGradientDataUrl(label: string): string {
-  let hash = 0;
-  for (let i = 0; i < label.length; i++) {
-    hash = label.charCodeAt(i) + ((hash << 5) - hash);
-  }
-
-  const hue1 = Math.abs(hash % 360);
-  const hue2 = (hue1 + 40) % 360;
-
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900">
-    <defs>
-      <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" style="stop-color:hsl(${hue1},60%,40%)"/>
-        <stop offset="100%" style="stop-color:hsl(${hue2},70%,30%)"/>
-      </linearGradient>
-    </defs>
-    <rect width="100%" height="100%" fill="url(#g)"/>
-    <text x="50%" y="50%" font-family="system-ui" font-size="52" fill="white" fill-opacity="0.28" text-anchor="middle" dy=".35em">${label}</text>
-  </svg>`;
-
-  return `data:image/svg+xml;base64,${btoa(svg)}`;
-}
-
-// Hero image at the top
-function DestinationHeroImage({ destination, destinationCountry, imageUrl, isLoading }: DestinationHeroImageProps) {
-  const [hasError, setHasError] = useState(false);
-  const cleanDestination = normalizeDestination(destination);
-  
-  const displayUrl = hasError ? generateGradientDataUrl(cleanDestination) : (imageUrl || generateGradientDataUrl(cleanDestination));
-
-  if (isLoading || !imageUrl) {
-    return (
-      <div className="relative overflow-hidden rounded-xl mb-6">
-        <div className="relative h-48 md:h-64 bg-gradient-to-br from-primary/20 to-accent/20 animate-pulse flex items-center justify-center">
-          <div className="text-center">
-            <h2 className="text-2xl md:text-3xl font-serif text-foreground">{cleanDestination}</h2>
-            {destinationCountry && (
-              <p className="text-muted-foreground text-sm">{destinationCountry}</p>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative overflow-hidden rounded-xl mb-6">
-      <div className="relative h-48 md:h-64">
-        <img
-          src={displayUrl}
-          alt={`${cleanDestination} hero`}
-          className="w-full h-full object-cover"
-          onError={() => setHasError(true)}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-        <div className="absolute bottom-4 left-4 right-4">
-          <h2 className="text-2xl md:text-3xl font-serif text-white drop-shadow-lg">{cleanDestination}</h2>
-          {destinationCountry && (
-            <p className="text-white/80 text-sm">{destinationCountry}</p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 
