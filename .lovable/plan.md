@@ -1,58 +1,49 @@
 
-# Fix Remaining Date Off-by-One Instances
 
-## Problem
-The previous fix applied `parseLocalDate` to ~20 files, but **21 more frontend files** still use `new Date(trip.start_date)` or `new Date(trip.end_date)`, which causes dates to display one day early in US timezones. Additionally, `Profile.tsx` -- the confirmed bug location -- was missed.
+# Fix: credit_ledger Missing Swap Activity Entries
 
-## What Already Exists
-- `parseLocalDate` utility in `src/utils/dateUtils.ts` -- splits "YYYY-MM-DD" and constructs `new Date(year, month-1, day)` at local midnight
-- Already imported and used in ~21 files from the previous fix
+## Root Cause (Confirmed)
 
-## Files to Update (21 files)
+The `spend-credits` edge function correctly deducts credits and updates `trip_action_usage` for swaps, but the `credit_ledger` insert **silently fails** every time.
 
-### Pages (6 files)
-1. **src/pages/Profile.tsx** -- `computeTripProgress` and `transformTrip` (lines 85, 134-135)
-2. **src/pages/TripConfirmation.tsx** -- nights calculation and date display (lines 224, 420-448)
-3. **src/pages/agent/ClientDetail.tsx** -- trip date display (line 305)
-4. **src/pages/agent/AgentTrips.tsx** -- trip list date formatting (lines 240, 327)
-5. **src/pages/agent/TripWorkspace.tsx** -- daysUntilTrip calculation (line 347)
-6. **src/pages/agent/TripManagement.tsx** (if present)
+**Why:** The `credit_ledger.activity_id` column is type `uuid`, but itinerary activity IDs are non-UUID strings like `ai-alt-1771174353473-0`, `vicens_001`, `sagrada-001`. When the edge function attempts to insert these as `activity_id`, the database rejects the row. The Supabase JS client returns `{ data: null, error: {...} }` without throwing, so the function continues and returns `success: true` without ever logging the ledger entry.
 
-### Components (6 files)
-7. **src/components/agent/TripCockpit.tsx** -- daysUntilTrip (line 102)
-8. **src/components/profile/LinkToTripModal.tsx** -- date display (line 235)
-9. **src/components/profile/FriendProfileCard.tsx** -- date display (line 207)
-10. **src/components/profile/FriendsActivityFeed.tsx** -- date comparison (line 96)
-11. **src/components/profile/ClientAgentPortal.tsx** -- date display and diff (lines 399, 436-437)
-12. **src/components/profile/TravelMap.tsx** -- date comparisons and formatting (lines 197, 206-207)
-13. **src/components/post-trip/ShareTripCard.tsx** -- date display (line 98)
+**Proof:**
+- `trip_action_usage` shows 9 swap uses (this table uses `action_type` as text, no UUID issue)
+- `credit_ledger` shows 0 swap entries (this table has `activity_id uuid` column)
+- All other actions (unlock_day, ai_message, regenerate_day) work because they pass `null` for `activity_id`
 
-### Services (4 files)
-14. **src/services/userStatsAPI.ts** -- date comparisons and calculations (lines 116-118, 151, 167, 217, 253)
-15. **src/services/userDashboardAPI.ts** -- days abroad calculation (lines 97-98)
-16. **src/services/userAPI.ts** -- total days calculation (lines 235-236)
-17. **src/services/tripsDebugAPI.ts** -- trip categorization (line 159)
-18. **src/services/itineraryAPI.ts** -- day date generation (line 293)
+## Fix (Single File Change)
 
-### Other files found in search
-19-21. Any remaining files from the full 21-file match list
+**File:** `supabase/functions/spend-credits/index.ts`
 
-## Change Pattern
+In all three places where `credit_ledger` is inserted (free cap path at ~line 344, group cap path at ~line 254, and paid path at ~line 450):
 
-For each file, the change is mechanical:
+Change `activity_id: activityId || null` to `activity_id: null` and move the raw `activityId` string into the `metadata` JSON object instead.
 
-1. Add import (if not already present):
-   ```typescript
-   import { parseLocalDate } from '@/utils/dateUtils';
-   ```
+This ensures:
+- The ledger insert never fails due to UUID type mismatch
+- The activity ID is still recorded (in metadata) for audit/debugging
+- No schema migration needed
 
-2. Replace every `new Date(trip.start_date)` with `parseLocalDate(trip.start_date)` and `new Date(trip.end_date)` with `parseLocalDate(trip.end_date)`.
+## Technical Details
 
-3. For cases where a non-null Date is needed (e.g., passed to `format()`), use the non-null assertion or add a guard, since `parseLocalDate` from `dateUtils.ts` takes a plain string and returns a Date (the version in dateUtils always returns Date, not Date|null).
+Three insert locations to update in `spend-credits/index.ts`:
 
-## Out of Scope
-- **Edge functions** (`supabase/functions/`) -- these run server-side in UTC, so `new Date()` is correct there. No changes needed.
-- The `parseLocalDate` utility itself is already correct and doesn't need modification.
+1. **Group cap free path (~line 256):** Change `activity_id: activityId || null` to `activity_id: null`, add `activityId` to metadata
+2. **Tier free cap path (~line 353):** Same change  
+3. **Paid FIFO path (~line 459):** Same change
 
-## Technical Risk
-Minimal -- this is a mechanical find-and-replace with no logic changes. Each replacement produces identical behavior for UTC+0 and later timezones, and fixes the off-by-one for UTC-negative timezones.
+Additionally, add error checking after each `credit_ledger` insert to log failures:
+```text
+const { error: ledgerErr } = await supabaseAdmin.from('credit_ledger').insert({...});
+if (ledgerErr) console.error('[spend-credits] Ledger insert failed:', ledgerErr);
+```
+
+## Verification
+
+After deploying:
+- Perform a swap; check `credit_ledger` for a new `swap_activity` row
+- Dashboard at `/admin/margins` should show Swap Activity with non-zero uses
+- The `metadata` column should contain the activity ID string for reference
+
