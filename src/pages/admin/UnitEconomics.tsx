@@ -396,7 +396,8 @@ export default function UnitEconomics() {
   const { data: econData, isLoading: econLoading, refetch: refetchEcon } = useUnitEconomicsData();
   
   // Use real data when available, otherwise fallback
-  const hasRealData = !!realMetrics && realMetrics.totalTrips > 0;
+  // Check BOTH data sources — econData (comprehensive) OR realMetrics (legacy)
+  const hasRealData = (!!econData && econData.trips.totalTrips > 0) || (!!realMetrics && realMetrics.totalTrips > 0);
   
   // Data quality warning from the hook
   const dataQualityWarning = realMetrics?.dataQualityWarning;
@@ -459,6 +460,14 @@ export default function UnitEconomics() {
     return { blendedAOV: aov, blendedCostPerUser: cost };
   }, [revenueMix, mixConfig, scenario, volume]);
   
+  // Always compute a live date range label (30-day rolling window → today)
+  const liveQueryPeriod = useMemo(() => {
+    const end = new Date();
+    const start = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return `${fmt(start)} – ${fmt(end)}`;
+  }, []);
+
   const VERIFIED_DATA = useMemo(() => {
     // When we have real econData, use ACTUAL observed costs ÷ actual trips
     // This replaces the old approach of hardcoded fallback per-trip rates
@@ -466,7 +475,8 @@ export default function UnitEconomics() {
       const trips = econData.trips.totalTrips;
       return {
         trips,
-        period: `${econData.costs.periodStart} – ${econData.costs.periodEnd}`,
+        // Use the query window dates, not the data's min/max created_at
+        period: liveQueryPeriod,
         services: {
           google: { 
             total: econData.costs.google.cost, 
@@ -514,7 +524,7 @@ export default function UnitEconomics() {
     // Legacy fallback using realMetrics (kept for backward compat)
     return {
       trips: realMetrics!.totalTrips,
-      period: `${realMetrics!.periodStart} – ${realMetrics!.periodEnd}`,
+      period: liveQueryPeriod,
       services: {
         google: { 
           total: realMetrics!.google.totalCost, 
@@ -555,7 +565,7 @@ export default function UnitEconomics() {
       fixed: FALLBACK_DATA.fixed,
       revenue: FALLBACK_DATA.revenue,
     };
-  }, [hasRealData, realMetrics, econData]);
+  }, [hasRealData, realMetrics, econData, liveQueryPeriod]);
 
   const revenue = VERIFIED_DATA.revenue[tier];
   const scenarioConfig = SCENARIOS[scenario];
