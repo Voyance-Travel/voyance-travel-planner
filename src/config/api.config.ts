@@ -49,7 +49,7 @@ export const CONFIG = {
   // Feature toggles - now using Cloud edge functions
   features: {
     useRealFlights: true,      // Amadeus via Cloud edge function
-    useRealHotels: true,       // Amadeus via Cloud edge function  
+    useRealHotels: false,      // Amadeus removed — hotels now AI-suggested via credits
     enablePayments: true,      // Stripe via Cloud edge function
     enableMaps: !!GOOGLE_MAPS_API_KEY,
     enableActivities: true,    // Viator via Cloud edge function

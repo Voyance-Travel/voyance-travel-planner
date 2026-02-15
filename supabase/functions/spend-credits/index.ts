@@ -471,6 +471,24 @@ serve(async (req) => {
       });
     if (paidLedgerErr) console.error('[spend-credits] Paid ledger insert failed:', paidLedgerErr);
 
+    // ── Cost tracking for hotel_search (for Unit Economics dashboard) ──
+    if (action === 'hotel_search' && tripId) {
+      const { error: costErr } = await supabaseAdmin
+        .from('trip_cost_tracking')
+        .insert({
+          user_id: user.id,
+          trip_id: tripId,
+          action_type: 'hotel_search',
+          cost_category: 'ai_generation',
+          estimated_cost_usd: 0.03, // AI-only cost (no Amadeus API)
+          input_tokens: 0,
+          output_tokens: 0,
+          model: 'credit-gated',
+          notes: `Hotel search: ${deductResult.deducted} credits spent for ${metadata?.destination || 'unknown'}`,
+        });
+      if (costErr) console.error('[spend-credits] Cost tracking insert failed:', costErr);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,

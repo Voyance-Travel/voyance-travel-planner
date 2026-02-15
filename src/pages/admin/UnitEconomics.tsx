@@ -15,35 +15,35 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 // =============================================================================
 // FALLBACK STATIC DATA (used when no tracking data available)
-// Source: Google Cloud Console, Lovable Cloud, Perplexity API, Amadeus Docs
+// Source: Google Cloud Console, Lovable Cloud, Perplexity API
+// Note: Amadeus removed (Feb 2026) — hotels now AI-suggested via credits
 // =============================================================================
 
 // =============================================================================
 // COST MODEL: Per-Trip Base + Per-Day Scaling (from verified production data)
 // 
-// Decomposition of $35.85 variable across 61 trips:
-//   Per-trip base: $0.163 (Perplexity + Amadeus + AI setup)
-//   Per-day increment: $0.100 (Google Places + AI content)
+// Decomposition of variable costs across trips:
+//   Per-trip base: $0.043 (Perplexity + AI setup)
+//   Per-day increment: $0.085 (Google Places + AI content, reduced after second image removal)
 //
-// Validation: 5-day average = $0.163 + (5 × $0.100) = $0.663
-// Observed: $0.587/trip (estimates slightly conservative = correct for planning)
+// Validation: 5-day average = $0.043 + (5 × $0.085) = $0.468
+// Note: Amadeus costs eliminated Feb 2026 — hotels now credit-gated AI feature
 // =============================================================================
 
 const COST_MODEL = {
   // Per-trip (once) costs
   tripBase: {
     perplexity: 0.018,      // Destination intelligence
-    amadeus: 0.120,         // Hotel search (5 calls × $0.024) when live
     aiSetup: 0.025,         // DNA calculation, trip structure
-    total: 0.163,
+    total: 0.043,           // Amadeus removed — hotel search is now a credit-gated AI feature
   },
-  // Per-day costs
+  // Per-day costs (reduced: second itinerary image removed → fewer Google Photos calls)
   perDay: {
     googleRestaurants: 0.045,
     googleActivities: 0.030,
-    googlePhotos: 0.015,    // Post-cache estimate
+    googlePhotos: 0.005,    // Reduced from 0.015 — second image slot removed, only hero remains
     aiContent: 0.010,       // Day content generation
-    total: 0.100,
+    total: 0.090,           // Was 0.100, saved $0.010/day from photo reduction
   },
 };
 
@@ -54,7 +54,6 @@ const FALLBACK_DATA = {
     google: { total: 30.82, perTrip: 0.5052, calls: null, callsPerTrip: 55, label: "Google Places", color: "#4285F4" },
     lovableAI: { total: 3.93, perTrip: 0.0644, perCall: 0.013, calls: 303, callsPerTrip: 4.97, label: "Lovable AI (Gemini)", color: "#A855F7" },
     perplexity: { total: 1.10, perTrip: 0.0180, perCall: 0.005, calls: 208, callsPerTrip: 3.41, label: "Perplexity (Sonar)", color: "#06B6D4" },
-    amadeus: { total: 0, perTrip: 0, perCall: 0.024, calls: 0, callsPerTrip: 5, label: "Amadeus Hotels", color: "#F59E0B" },
   },
   fixed: {
     lovableCloud: 25.00,
@@ -76,11 +75,7 @@ const REVENUE_MIX_PRESETS = {
   optimistic: { flex_100: 4, flex_300: 8, flex_500: 10, voyager: 20, explorer: 30, adventurer: 28, label: "Optimistic", description: "Heavy Explorer/Adventurer adoption" },
 };
 
-// Amadeus: 1 hotel list + 4 offer batches (~200 hotels) = 5 calls
-const AMADEUS_CALLS_PER_TRIP = 5;
-const AMADEUS_COST_PER_CALL = 0.024;
-const AMADEUS_FREE_MONTHLY = 2000; // per endpoint
-const AMADEUS_FREE_TRIPS = Math.floor(AMADEUS_FREE_MONTHLY / AMADEUS_CALLS_PER_TRIP); // 400 trips
+// Amadeus integration removed Feb 2026 — replaced by credit-gated AI hotel suggestions (40 credits/search)
 
 const PHOTO_CACHE_SAVINGS_RATIO = 0.33; // Estimated, not yet verified post-deployment
 
@@ -163,11 +158,10 @@ const FREE_USER_ECONOMICS = {
 };
 
 // Helper function: Calculate variable cost for N days
-function calculateTripCost(days: number, includeAmadeus: boolean = false): number {
+function calculateTripCost(days: number): number {
   const base = COST_MODEL.tripBase.perplexity + COST_MODEL.tripBase.aiSetup;
-  const amadeus = includeAmadeus ? COST_MODEL.tripBase.amadeus : 0;
   const perDay = days * COST_MODEL.perDay.total;
-  return base + amadeus + perDay;
+  return base + perDay;
 }
 
 // AI Model breakdown (fallback static data)
@@ -178,20 +172,14 @@ const FALLBACK_AI_MODELS = [
   { model: "gemini-2.5-flash", calls: 11, usage: "Fallback" },
 ];
 
-type Scenario = 'A' | 'B';
+type Scenario = 'A';
 
-const SCENARIOS: Record<Scenario, { name: string; description: string; fullDescription: string; caching: boolean; amadeus: boolean; amadeusWithinFree: boolean }> = {
+const SCENARIOS: Record<Scenario, { name: string; description: string; fullDescription: string; caching: boolean }> = {
   A: { 
     name: "Current Production", 
-    description: "Caching enabled, no Amadeus", 
-    fullDescription: "Current live state: Photo caching enabled, no Amadeus hotel integration.",
-    caching: true, amadeus: false, amadeusWithinFree: true 
-  },
-  B: { 
-    name: "With Amadeus", 
-    description: "Caching + Amadeus hotels (auto free/paid by volume)", 
-    fullDescription: "Future state: Amadeus hotel search enabled. Free tier covers up to 400 trips/mo (2,000 calls). Beyond that, each trip adds ~$0.12.",
-    caching: true, amadeus: true, amadeusWithinFree: false 
+    description: "Caching enabled, AI hotel suggestions (no Amadeus)", 
+    fullDescription: "Current live state: Photo caching enabled. Amadeus removed — hotels are now an AI-powered credit feature (40 credits/search).",
+    caching: true, 
   },
 };
 
@@ -374,7 +362,7 @@ const EXPENSE_COLUMNS = [
   { key: "lovableFixed", label: "Lovable (fixed)", tooltip: "Lovable Cloud platform fee: $25/mo flat. Includes hosting, DB, auth, edge functions. Does not scale with usage." },
   { key: "lovableAI", label: "Lovable AI", tooltip: "AI token costs via Lovable AI Gateway (Gemini models). Rate: ~$0.064/trip. Scales linearly with volume." },
   { key: "perplexity", label: "Perplexity", tooltip: "Perplexity Sonar API for destination intelligence & travel advisories. Rate: $0.005/call × ~3.4 calls/trip = $0.018/trip." },
-  { key: "amadeus", label: "Amadeus", tooltip: "Amadeus hotel search: 5 calls/trip × $0.024/call = $0.12/trip. FREE for first 400 trips/mo (2000 call quota)." },
+  { key: "domain", label: "Domain", tooltip: "Custom domain cost: $49/year ÷ 12 = $4.08/mo. Fixed regardless of volume." },
   { key: "domain", label: "Domain", tooltip: "Custom domain cost: $49/year ÷ 12 = $4.08/mo. Fixed regardless of volume." },
   { key: "total", label: "Total", tooltip: "Sum of all costs for that month. This is your total infrastructure spend before any revenue." },
 ];
@@ -422,14 +410,11 @@ export default function UnitEconomics() {
     // Scenario-aware tier costs
     // We preserve each tier's "extras" (swaps, chat, etc.) by treating the existing
     // estimatedCostToUs as the baseline, then swapping in scenario-adjusted base/per-day costs.
-    const baselineTripBase = COST_MODEL.tripBase.total; // includes Amadeus in the baseline model
+    const baselineTripBase = COST_MODEL.tripBase.total;
     const baselinePerDay = COST_MODEL.perDay.total;
 
     const googleMultiplier = scenarioCfg.caching ? (1 - PHOTO_CACHE_SAVINGS_RATIO) : 1;
-    const scenarioAmadeusPerTrip = scenarioCfg.amadeus
-      ? ((scenarioCfg.amadeusWithinFree || volume <= AMADEUS_FREE_TRIPS) ? 0 : (AMADEUS_CALLS_PER_TRIP * AMADEUS_COST_PER_CALL))
-      : 0;
-    const scenarioTripBase = COST_MODEL.tripBase.perplexity + COST_MODEL.tripBase.aiSetup + scenarioAmadeusPerTrip;
+    const scenarioTripBase = COST_MODEL.tripBase.perplexity + COST_MODEL.tripBase.aiSetup;
     const scenarioPerDay =
       (COST_MODEL.perDay.googleRestaurants + COST_MODEL.perDay.googleActivities + COST_MODEL.perDay.googlePhotos) * googleMultiplier +
       COST_MODEL.perDay.aiContent;
@@ -504,15 +489,6 @@ export default function UnitEconomics() {
             label: "Perplexity (Sonar)", 
             color: "#06B6D4" 
           },
-          amadeus: { 
-            total: econData.costs.amadeus.cost, 
-            perTrip: econData.costs.amadeus.cost / trips,
-            perCall: 0.024, 
-            calls: econData.costs.amadeus.calls, 
-            callsPerTrip: econData.costs.amadeus.calls / trips, 
-            label: "Amadeus Hotels", 
-            color: "#F59E0B" 
-          },
         },
         fixed: FALLBACK_DATA.fixed,
         revenue: FALLBACK_DATA.revenue,
@@ -552,15 +528,6 @@ export default function UnitEconomics() {
           label: "Perplexity (Sonar)", 
           color: "#06B6D4" 
         },
-        amadeus: { 
-          total: realMetrics!.amadeus.totalCost, 
-          perTrip: realMetrics!.amadeus.totalCost / realMetrics!.totalTrips,
-          perCall: 0.024, 
-          calls: realMetrics!.amadeus.totalCalls, 
-          callsPerTrip: realMetrics!.amadeus.totalCalls / realMetrics!.totalTrips, 
-          label: "Amadeus Hotels", 
-          color: "#F59E0B" 
-        },
       },
       fixed: FALLBACK_DATA.fixed,
       revenue: FALLBACK_DATA.revenue,
@@ -586,18 +553,9 @@ export default function UnitEconomics() {
     const aiPerTrip = VERIFIED_DATA.services.lovableAI.perTrip;
     const perplexityPerTrip = VERIFIED_DATA.services.perplexity.perTrip;
 
-    // Amadeus: $0 within free tier (400 trips), $0.12/trip beyond
-    let amadeusPerTrip = 0;
-    if (scenarioConfig.amadeus) {
-      if (scenarioConfig.amadeusWithinFree || volume <= AMADEUS_FREE_TRIPS) {
-        amadeusPerTrip = 0;
-      } else {
-        // Beyond free tier: pay for all calls
-        amadeusPerTrip = AMADEUS_CALLS_PER_TRIP * AMADEUS_COST_PER_CALL; // $0.12
-      }
-    }
+    // Amadeus removed — hotel search is now credit-gated AI feature (no API cost to us)
 
-    const variablePerTrip = googlePerTrip + aiPerTrip + perplexityPerTrip + amadeusPerTrip;
+    const variablePerTrip = googlePerTrip + aiPerTrip + perplexityPerTrip;
     const variableTotal = variablePerTrip * volume;
 
     // TRUE fixed cost: Cloud + Domain + DevOps overhead (testing, internal usage)
@@ -640,7 +598,6 @@ export default function UnitEconomics() {
       googleBase, // Export for debugging
       ai: { perTrip: aiPerTrip, total: aiPerTrip * volume },
       perplexity: { perTrip: perplexityPerTrip, total: perplexityPerTrip * volume },
-      amadeus: { perTrip: amadeusPerTrip, total: amadeusPerTrip * volume },
       variable: { perTrip: variablePerTrip, total: variableTotal },
       fixed: { perTrip: fixedPerTrip, total: fixedTotal },
       fullyLoaded,
@@ -756,15 +713,7 @@ export default function UnitEconomics() {
       });
     }
     
-    if (scenarioConfig.caching && !scenarioConfig.amadeus) {
-      list.push({
-        type: 'opportunity',
-        title: 'Amadeus hotel search available',
-        description: `Hotel search can be enabled with 2,000 free calls/month (covers ~400 trips).`,
-        impact: `0 cost within free tier`,
-        action: 'Enable Amadeus integration for hotel pricing and booking links.',
-      });
-    }
+    
     
     // Conversion rate warnings
     if (conversionRate < 5) {
@@ -1234,11 +1183,6 @@ export default function UnitEconomics() {
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#475569", marginTop: 6 }}>
               <span>1</span><span>250</span><span>500</span><span>1,000</span>
             </div>
-            {volume > AMADEUS_FREE_TRIPS && scenarioConfig.amadeus && (
-              <p style={{ fontSize: 10, color: "#F59E0B", marginTop: 6 }}>
-                ⚠️ Beyond Amadeus free tier ({AMADEUS_FREE_TRIPS} trips)
-              </p>
-            )}
           </div>
 
           {/* Conversion Rate Slider */}
@@ -1932,7 +1876,6 @@ export default function UnitEconomics() {
                 const margin = revenue > 0 ? (netProfit / revenue) * 100 : -100;
                 const blendedCostPerTrip = totalCost / vol;
 
-                const isAmadeusThreshold = vol === 400;
                 const isKeyVolume = vol === 100 || vol === 500 || vol === 1000;
                 const isCurrentVolume = vol === volume;
                 
@@ -1945,11 +1888,11 @@ export default function UnitEconomics() {
 
                 return (
                   <tr key={vol} style={{ 
-                    background: isCurrentVolume ? "rgba(99, 179, 170, 0.15)" : isAmadeusThreshold ? "rgba(245, 158, 11, 0.08)" : isKeyVolume ? "rgba(99, 179, 170, 0.05)" : "transparent",
+                    background: isCurrentVolume ? "rgba(99, 179, 170, 0.15)" : isKeyVolume ? "rgba(99, 179, 170, 0.05)" : "transparent",
                     outline: isCurrentVolume ? "1px solid rgba(99, 179, 170, 0.4)" : "none",
                   }}>
                     <td style={{ padding: "10px 12px", color: "#E2E8F0", fontWeight: 600, borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
-                      {vol.toLocaleString()}{isCurrentVolume ? " ◀" : ""}{isAmadeusThreshold ? " ⚠️" : ""}
+                      {vol.toLocaleString()}{isCurrentVolume ? " ◀" : ""}
                     </td>
                     <td style={{ padding: "10px 12px", color: "#34D399", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", borderBottom: "1px solid rgba(30, 41, 59, 0.5)" }}>
                       {paid % 1 === 0 ? paid.toFixed(0) : paid.toFixed(1)}
@@ -2429,17 +2372,8 @@ export default function UnitEconomics() {
                 const lovableFixed = 25.00;
                 const lovableAI = VERIFIED_DATA.services.lovableAI.perTrip * vol;
                 const perplexity = VERIFIED_DATA.services.perplexity.perTrip * vol;
-                // Amadeus: depends on scenario
-                let amadeus = 0;
-                if (scenarioConfig.amadeus) {
-                  if (scenarioConfig.amadeusWithinFree || vol <= AMADEUS_FREE_TRIPS) {
-                    amadeus = 0;
-                  } else {
-                    amadeus = (vol - AMADEUS_FREE_TRIPS) * (AMADEUS_CALLS_PER_TRIP * AMADEUS_COST_PER_CALL);
-                  }
-                }
                 const domain = 4.08;
-                const total = google + lovableFixed + lovableAI + perplexity + amadeus + domain;
+                const total = google + lovableFixed + lovableAI + perplexity + domain;
 
                 return (
                   <tr key={vol}>
@@ -2449,7 +2383,6 @@ export default function UnitEconomics() {
                       `$${lovableFixed.toFixed(2)}`,
                       `$${lovableAI.toFixed(2)}`,
                       `$${perplexity.toFixed(2)}`,
-                      `$${amadeus.toFixed(2)}`,
                       `$${domain.toFixed(2)}`,
                       `$${total.toFixed(2)}`,
                     ].map((cell, j) => (

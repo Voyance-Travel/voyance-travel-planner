@@ -98,12 +98,8 @@ export const AI_COSTS = {
 // ============================================================================
 
 export const EXTERNAL_API_COSTS = {
-  // Amadeus (free tier: 2,000 calls/mo per endpoint)
-  amadeus: {
-    flight_search: { cost: 0, freeTier: 2000, paidCost: 0.01, desc: 'Flight offers search' },
-    hotel_list: { cost: 0, freeTier: 2000, paidCost: 0.01, desc: 'Hotel list by city' },
-    hotel_offers: { cost: 0, freeTier: 2000, paidCost: 0.01, desc: 'Hotel price offers' },
-  },
+  // Amadeus removed Feb 2026 — hotel search is now a credit-gated AI feature (40cr/search)
+  // amadeus: { REMOVED },
   
   // Google APIs ($200/mo free credit)
   google: {

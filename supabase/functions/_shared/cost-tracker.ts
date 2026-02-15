@@ -141,8 +141,7 @@ export const GOOGLE_API_PRICING = {
 // Other API pricing
 export const OTHER_API_PRICING = {
   perplexity: { perCall: 0.005 },
-  amadeus_flight_search: { perCall: 0, freeTierMonthly: 2000 },
-  amadeus_hotel_search: { perCall: 0, freeTierMonthly: 2000 },
+  // Amadeus removed Feb 2026 — hotel search is now credit-gated AI feature
 } as const;
 
 // =============================================================================
