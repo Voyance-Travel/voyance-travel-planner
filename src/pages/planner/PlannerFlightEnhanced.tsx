@@ -473,7 +473,7 @@ export default function PlannerFlightEnhanced() {
     params.set('outboundCabin', selectedOutboundCabin);
     params.set('returnCabin', selectedReturnCabin);
 
-    navigate(`/planner/hotel?${params.toString()}`);
+    navigate(`/planner/summary?${params.toString()}`);
   };
 
   const handleSkipFlights = () => {
@@ -507,13 +507,13 @@ export default function PlannerFlightEnhanced() {
     const params = getNavigationParams();
     params.set('skippedFlight', 'true');
     if (data.flight) params.set('manualFlight', 'true');
-    navigate(`/planner/hotel?${params.toString()}`);
+    navigate(`/planner/summary?${params.toString()}`);
   };
 
   const handleSkipWithoutDetails = () => {
     const params = getNavigationParams();
     params.set('skippedFlight', 'true');
-    navigate(`/planner/hotel?${params.toString()}`);
+    navigate(`/planner/summary?${params.toString()}`);
   };
 
   return (

@@ -756,8 +756,8 @@ function FlightHotelStep({
   setReturnFlight: (f: ManualFlightEntry) => void;
   showReturnFlight: boolean;
   setShowReturnFlight: (s: boolean) => void;
-  hotelChoice: 'skip' | 'own' | 'search';
-  setHotelChoice: (c: 'skip' | 'own' | 'search') => void;
+  hotelChoice: 'skip' | 'own';
+  setHotelChoice: (c: 'skip' | 'own') => void;
   manualHotel: ManualHotelEntry;
   setManualHotel: (h: ManualHotelEntry) => void;
   isFirstTimeVisitor: boolean;
@@ -784,15 +784,6 @@ function FlightHotelStep({
     setShowFlightDetails(true);
   };
 
-  const handleSearchHotels = () => {
-    const params = new URLSearchParams({
-      destination,
-      checkIn: startDate,
-      checkOut: endDate,
-      guests: travelers.toString(),
-    });
-    navigate(`/planner/hotel?${params.toString()}`);
-  };
 
   const hasFlightData = outboundFlight.arrivalTime || outboundFlight.departureAirport;
 
@@ -1043,7 +1034,7 @@ function FlightHotelStep({
             </label>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             {/* I have my own */}
             <button
               type="button"
@@ -1061,25 +1052,6 @@ function FlightHotelStep({
               <PenLine className="h-5 w-5 mx-auto mb-2 text-muted-foreground" />
               <div className="text-sm font-medium text-foreground">I have my own hotel</div>
               <div className="text-[10px] text-muted-foreground mt-1">Enter details</div>
-            </button>
-
-            {/* Search */}
-            <button
-              type="button"
-              onClick={() => {
-                setHotelChoice('search');
-                handleSearchHotels();
-              }}
-              className={cn(
-                'p-4 rounded-xl border-2 text-center transition-all',
-                hotelChoice === 'search'
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border hover:border-primary/40'
-              )}
-            >
-              <Search className="h-5 w-5 mx-auto mb-2 text-muted-foreground" />
-              <div className="text-sm font-medium text-foreground">Search</div>
-              <div className="text-[10px] text-muted-foreground mt-1">Browse hotels</div>
             </button>
 
             {/* Skip */}
@@ -1404,7 +1376,7 @@ export default function Start() {
   const [showReturnFlight, setShowReturnFlight] = useState(false);
 
   // Hotel state
-  const [hotelChoice, setHotelChoice] = useState<'skip' | 'own' | 'search'>('skip');
+  const [hotelChoice, setHotelChoice] = useState<'skip' | 'own'>('skip');
   const [manualHotel, setManualHotel] = useState<ManualHotelEntry>({
     name: '',
     address: '',
