@@ -44,7 +44,7 @@ export const FRONTEND_CONFIG = {
   ENABLE_EMAILS: true,
   ENABLE_EXPLORE_GENERATOR: true,
   USE_ADVANCED_ARCHETYPES: true,
-  USE_AMADEUS_API: true,
+  USE_AMADEUS_API: false, // Removed Feb 2026 — hotels now credit-gated AI feature
   USE_STRICT_GENERATOR: true,
   
   // Debug/Dev Settings
