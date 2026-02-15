@@ -20,6 +20,7 @@ import { ROUTES } from '@/config/routes';
 import { Button } from '@/components/ui/button';
 import { NotificationBell } from '@/components/common/NotificationBell';
 import { VoyanceWordmark } from '@/components/common/VoyanceWordmark';
+import { usePopupCoordination } from '@/stores/popup-coordination-store';
 
 // Explore dropdown items
 const exploreItems = [
@@ -52,6 +53,8 @@ export default function TopNav() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, isAuthenticated, logout } = useAuth();
+  const { activePopup } = usePopupCoordination();
+  const isTourActive = activePopup === 'site_tour' || activePopup === 'itinerary_tour';
 
   // Track scroll position
   useEffect(() => {
@@ -338,11 +341,14 @@ export default function TopNav() {
 
           {/* Mobile Menu Button */}
           <button
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            onClick={() => { if (!isTourActive) setIsMenuOpen(!isMenuOpen); }}
             className={`lg:hidden p-2 transition-colors ${
+              isTourActive ? 'opacity-30 cursor-not-allowed' : ''
+            } ${
               isTransparent ? 'text-white' : 'text-foreground'
             }`}
             aria-label="Toggle menu"
+            disabled={isTourActive}
           >
             {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </button>
