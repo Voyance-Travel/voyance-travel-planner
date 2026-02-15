@@ -26,7 +26,7 @@ type Step = 'paste' | 'review' | 'creating';
 const PLACEHOLDER = `Paste your trip research here...
 
 Examples of what works:
-• ChatGPT or Claude itinerary output
+• AI-generated itinerary output
 • Day-by-day plans with activities
 • Tables with times, costs, locations
 • Your prompt + the AI's response
