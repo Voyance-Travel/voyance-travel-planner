@@ -294,6 +294,10 @@ async function executeSwapAction(
           category: bestAlternative.category,
           cost: { amount: bestAlternative.estimatedCost, currency: 'USD' },
           location: { name: bestAlternative.location },
+          // Clear stale insight fields from the previous activity
+          tips: undefined,
+          voyanceInsight: undefined,
+          isVoyancePick: false,
           // Preserve timing
           startTime: act.startTime,
           time: act.time,
