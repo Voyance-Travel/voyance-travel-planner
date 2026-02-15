@@ -19,9 +19,14 @@ interface BulkUnlockBannerProps {
 }
 
 export function getBulkUnlockCost(lockedDays: number): number {
-  if (lockedDays >= 7) return 500;
-  if (lockedDays >= 4) return 300;
-  return 150; // 2-3 days
+  // Tiered bulk pricing, but never more than individual cost
+  let tierPrice: number;
+  if (lockedDays >= 7) tierPrice = 500;
+  else if (lockedDays >= 4) tierPrice = 300;
+  else tierPrice = 150; // 2-3 days
+
+  const individualPrice = lockedDays * CREDIT_COSTS.UNLOCK_DAY;
+  return Math.min(tierPrice, individualPrice);
 }
 
 export function BulkUnlockBanner({
