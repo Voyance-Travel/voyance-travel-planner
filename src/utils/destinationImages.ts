@@ -450,21 +450,19 @@ const GENERIC_TRAVEL_IMAGES = [
  */
 export function getDestinationImage(destination: string): string {
   const normalized = destination.toLowerCase().trim();
+  // Also try extracting just the city name (before comma or parenthetical)
+  const cityOnly = normalized.split(',')[0].replace(/\s*\([^)]*\)\s*$/, '').trim();
   
-  // Check curated images first
-  if (CURATED_DESTINATION_IMAGES[normalized]) {
-    return CURATED_DESTINATION_IMAGES[normalized][0];
-  }
+  // Check curated images with multiple matching strategies (same as getDestinationImages)
+  const match = CURATED_DESTINATION_IMAGES[normalized]
+    || CURATED_DESTINATION_IMAGES[normalized.replace(/\s+/g, '-')]
+    || CURATED_DESTINATION_IMAGES[normalized.replace(/-/g, ' ')]
+    || CURATED_DESTINATION_IMAGES[cityOnly]
+    || CURATED_DESTINATION_IMAGES[cityOnly.replace(/\s+/g, '-')]
+    || CURATED_DESTINATION_IMAGES[cityOnly.replace(/-/g, ' ')];
   
-  // Try variations (with/without spaces, dashes)
-  const withDash = normalized.replace(/\s+/g, '-');
-  const withSpace = normalized.replace(/-/g, ' ');
-  
-  if (CURATED_DESTINATION_IMAGES[withDash]) {
-    return CURATED_DESTINATION_IMAGES[withDash][0];
-  }
-  if (CURATED_DESTINATION_IMAGES[withSpace]) {
-    return CURATED_DESTINATION_IMAGES[withSpace][0];
+  if (match && match.length > 0) {
+    return match[0];
   }
   
   // Return a generic travel image based on destination hash

@@ -12,7 +12,7 @@ export default function CinematicHero() {
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
       {/* Background Image */}
-      <div className="absolute inset-0">
+      <div className="absolute inset-0 bg-[#2c3e50]">
         <img
           src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=1920&q=80"
           alt="Scenic mountain road at sunset"

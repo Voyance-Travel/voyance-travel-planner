@@ -400,7 +400,7 @@ export default function Archetypes() {
             ))}
           </div>
 
-          {/* Beyond 27 - Deeper personalization */}
+          {/* Beyond 29 - Deeper personalization */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -415,7 +415,7 @@ export default function Archetypes() {
                 Your Type Is Just the Beginning
               </h3>
               <p className="text-muted-foreground max-w-xl mx-auto">
-                Once we place you in one of 27 types, we don't stop there. Your preferences, 
+                Once we place you in one of 29 types, we don't stop there. Your preferences, 
                 adjustments, and feedback shape every itinerary to fit <em>you</em> specifically.
               </p>
             </div>

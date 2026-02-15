@@ -28,7 +28,7 @@ export default function HeroSection({
   return (
     <section className="relative pt-32 pb-24 overflow-hidden">
       {/* Background */}
-      <div className="absolute inset-0">
+      <div className="absolute inset-0 bg-[#2c3e50]">
         <img
           src="https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920"
           alt="Scenic lake and mountains"
