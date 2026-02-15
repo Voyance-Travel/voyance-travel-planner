@@ -1618,6 +1618,10 @@ export function EditorialItinerary({
             rating: newActivity.rating ?? a.rating,
             tags: newActivity.tags,
             isLocked: false,
+            // Clear stale Voyance intelligence from old activity
+            tips: undefined,
+            voyanceInsight: undefined,
+            isVoyancePick: false,
             // Clear old enrichment data so it can be re-fetched
             photos: undefined,
             website: undefined,
