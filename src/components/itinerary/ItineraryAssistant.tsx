@@ -246,6 +246,25 @@ export function ItineraryAssistant({
     toast.loading('Applying changes...', { id: actionId, description: 'This may take a few seconds' });
     
     try {
+      // Spend credits for swap actions BEFORE executing
+      if (action.type === 'suggest_activity_swap') {
+        console.log('[ActionExecutor] Spending credits for swap_activity');
+        const creditResult = await spendCredits.mutateAsync({
+          action: 'SWAP_ACTIVITY',
+          tripId,
+          metadata: {
+            source: 'itinerary_assistant',
+            target_day: action.params.target_day,
+            target_activity: action.params.target_activity_title,
+          },
+        });
+        console.log('[ActionExecutor] Credit spend result:', creditResult);
+        if (!creditResult.success) {
+          console.log('[ActionExecutor] Credit spend FAILED — aborting swap');
+          throw new Error('Insufficient credits for swap');
+        }
+      }
+
       // Execute the action using the action executor
       const result = await executeAction(action, tripId, currentDays, destination);
       

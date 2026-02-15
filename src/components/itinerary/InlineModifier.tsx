@@ -160,6 +160,25 @@ export function InlineModifier({
     setIsApplying(true);
 
     try {
+      // Spend credits for swap actions BEFORE executing
+      if (pendingChange.action.type === 'suggest_activity_swap') {
+        console.log('[ActionExecutor] Spending credits for swap_activity');
+        const creditResult = await spendCredits.mutateAsync({
+          action: 'SWAP_ACTIVITY',
+          tripId,
+          metadata: {
+            source: 'inline_modifier',
+            target_day: pendingChange.action.params.target_day,
+            target_activity: pendingChange.action.params.target_activity_title,
+          },
+        });
+        console.log('[ActionExecutor] Credit spend result:', creditResult);
+        if (!creditResult.success) {
+          console.log('[ActionExecutor] Credit spend FAILED — aborting swap');
+          throw new Error('Insufficient credits for swap');
+        }
+      }
+
       const result: ActionExecutionResult = await executeAction(
         {
           type: pendingChange.action.type as 'suggest_activity_swap' | 'adjust_day_pacing' | 'apply_filter' | 'regenerate_day',
@@ -186,7 +205,7 @@ export function InlineModifier({
     } finally {
       setIsApplying(false);
     }
-  }, [pendingChange, tripId, days, destination, onItineraryUpdate]);
+  }, [pendingChange, tripId, days, destination, onItineraryUpdate, spendCredits]);
 
   /** Propose as suggestion — propose_approve guest */
   const handleProposeSuggestion = useCallback(async () => {
