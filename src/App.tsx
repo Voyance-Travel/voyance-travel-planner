@@ -201,7 +201,7 @@ function AnimatedRoutes() {
           <Route path="/planner" element={<Navigate to="/start" replace />} />
           <Route path="/planner/multi-city" element={<ProtectedRoute><MultiCityPlanner /></ProtectedRoute>} />
           <Route path="/planner/flight" element={<ProtectedRoute><PlannerFlight /></ProtectedRoute>} />
-          <Route path="/planner/hotel" element={<ProtectedRoute><PlannerHotel /></ProtectedRoute>} />
+          <Route path="/planner/hotel" element={<Navigate to="/start" replace />} />
           <Route path="/planner/summary" element={<ProtectedRoute><PlannerSummary /></ProtectedRoute>} />
           <Route path="/planner/itinerary" element={<ProtectedRoute><PlannerItinerary /></ProtectedRoute>} />
           <Route path="/planner/booking" element={<ProtectedRoute><PlannerBooking /></ProtectedRoute>} />
