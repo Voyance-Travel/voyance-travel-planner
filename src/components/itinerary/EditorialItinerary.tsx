@@ -3556,7 +3556,7 @@ export function EditorialItinerary({
                     </div>
                     <div className="flex-1 text-center sm:text-left">
                       <h4 className="font-medium text-foreground mb-1">No accommodation added</h4>
-                      <p className="text-sm text-muted-foreground">Find and book a hotel, or add your existing reservation details.</p>
+                      <p className="text-sm text-muted-foreground">Find AI-matched hotels or add your existing reservation details.</p>
                     </div>
                     <div className="flex gap-2 shrink-0">
                       <AddHotelInline

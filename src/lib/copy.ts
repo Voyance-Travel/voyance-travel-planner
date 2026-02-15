@@ -23,7 +23,7 @@ export const copy = {
     explore: "Start exploring",
     viewDNA: "View My Travel DNA",
     buildItinerary: "Build My Itinerary",
-    findHotels: "Find Hotels",
+    findHotels: "Find My Hotels",
   },
 
   // Loading states
