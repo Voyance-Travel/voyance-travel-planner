@@ -412,9 +412,11 @@ serve(async (req) => {
             }
 
             // Ledger entry
+            const ledgerActionType = clubInfo ? 'club_purchase' : 'stripe_purchase';
             const { error: ledgerErr } = await supabaseAdmin.from("credit_ledger").insert({
               user_id: userId,
               transaction_type: 'purchase',
+              action_type: ledgerActionType,
               credits_delta: creditsToAdd,
               is_free_credit: false,
               stripe_session_id: session.id,
