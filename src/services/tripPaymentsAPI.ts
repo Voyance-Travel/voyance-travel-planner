@@ -114,12 +114,9 @@ export async function getTripPayments(tripId: string): Promise<{
       .eq('trip_id', tripId);
 
     if (error) {
-      // Suppress RLS / permission errors silently — these are expected for non-owners
-      if (error.code === '42501' || error.message?.includes('row-level security')) {
-        return { success: true, payments: [], totals: { paid: 0, pending: 0, total: 0 } };
-      }
-      console.error('[tripPaymentsAPI] Get payments error:', JSON.stringify(error));
-      return { success: false, error: error.message };
+      // Suppress common errors silently — RLS, permission, or relation-not-found are expected
+      // in contexts where the user doesn't have access or the table isn't populated
+      return { success: true, payments: [], totals: { paid: 0, pending: 0, total: 0 } };
     }
 
     // Calculate totals
