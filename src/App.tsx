@@ -62,6 +62,7 @@ import OnboardConversation from "./pages/OnboardConversation";
 import Profile from "./pages/Profile";
 import ProfileEdit from "./pages/ProfileEdit";
 import Settings from "./pages/Settings";
+import CreditsAndBilling from "./pages/CreditsAndBilling";
 
 // Pages - Trip Planning
 import MultiCityPlanner from "./pages/planner/MultiCityPlanner";
@@ -195,6 +196,7 @@ function AnimatedRoutes() {
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/profile/edit" element={<ProtectedRoute><ProfileEdit /></ProtectedRoute>} />
           <Route path="/profile/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+          <Route path="/profile/credits" element={<ProtectedRoute><CreditsAndBilling /></ProtectedRoute>} />
           <Route path="/settings" element={<Navigate to="/profile/settings" replace />} />
           
           {/* Trip Planning Routes */}
