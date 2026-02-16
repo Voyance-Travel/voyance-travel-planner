@@ -427,7 +427,7 @@ export default function PersonalizationProof() {
             <ArrowRight className="h-4 w-4" />
           </Button>
           <p className="text-xs text-muted-foreground mt-2">
-            2-minute quiz. No account required to start.
+            5-minute quiz. No account required to start.
           </p>
         </motion.div>
       </div>

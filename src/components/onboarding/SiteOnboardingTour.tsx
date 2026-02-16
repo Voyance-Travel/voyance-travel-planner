@@ -74,7 +74,7 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
     {
       id: 'travel-dna',
       title: 'Your Travel DNA',
-      description: '2-minute quiz that identifies your traveler type. Every recommendation personalizes to match.',
+      description: '5-minute quiz that identifies your traveler type. Every recommendation personalizes to match.',
       icon: <Dna className="h-5 w-5" />,
       route: ROUTES.QUIZ,
       position: 'center',
