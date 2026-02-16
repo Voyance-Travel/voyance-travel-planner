@@ -562,41 +562,41 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
   {
     id: 'balanced_story_collector',
     name: 'The Balanced Story Collector',
-    category: 'EXPLORER',
+    category: 'FALLBACK',
     tagline: 'Every journey adds a chapter worth reading.',
     primaryTraits: [
-      // All traits near middle — wins when nothing is extreme
-      { trait: 'planning', weight: 1, sweetSpot: 0, range: [-4, 4] },
-      { trait: 'social', weight: 1, sweetSpot: 0, range: [-4, 4] },
-      { trait: 'comfort', weight: 1, sweetSpot: 0, range: [-4, 4] },
-      { trait: 'pace', weight: 1, sweetSpot: 0, range: [-4, 4] },
-      { trait: 'authenticity', weight: 1, sweetSpot: 0, range: [-4, 4] },
-      { trait: 'adventure', weight: 1, sweetSpot: 0, range: [-4, 4] },
+      // Tighter profile — only wins when traits are truly neutral and no featured archetype matches well
+      { trait: 'planning', weight: 0.5, sweetSpot: 0, range: [-2, 2] },
+      { trait: 'social', weight: 0.5, sweetSpot: 0, range: [-2, 2] },
+      { trait: 'comfort', weight: 0.5, sweetSpot: 0, range: [-2, 2] },
+      { trait: 'pace', weight: 0.5, sweetSpot: 0, range: [-2, 2] },
+      { trait: 'authenticity', weight: 0.5, sweetSpot: 0, range: [-2, 2] },
+      { trait: 'adventure', weight: 0.5, sweetSpot: 0, range: [-2, 2] },
     ],
-    signatureAnswers: ['ad3', 'e2', 'd3', 'c2'],  // "both" and "balanced" answers
+    signatureAnswers: ['ad3', 'e2', 'd3', 'c2'],
   },
   {
     id: 'flexible_wanderer',
     name: 'The Flexible Wanderer',
-    category: 'EXPLORER',
+    category: 'FALLBACK',
     tagline: "Plans are just suggestions—the road decides.",
     primaryTraits: [
-      { trait: 'planning', weight: 3, sweetSpot: -5, range: [-10, 0] },
-      { trait: 'adventure', weight: 2, sweetSpot: 5, range: [2, 10] },
-      { trait: 'authenticity', weight: 1, sweetSpot: 4, range: [0, 10] },
+      { trait: 'planning', weight: 1.5, sweetSpot: -5, range: [-10, 0] },
+      { trait: 'adventure', weight: 1, sweetSpot: 5, range: [2, 10] },
+      { trait: 'authenticity', weight: 0.5, sweetSpot: 4, range: [0, 10] },
     ],
-    signatureAnswers: ['ad4', 'cd4', 'rm5', 'ld3', 'tt6'],  // All "none" answers - truly neutral
+    signatureAnswers: ['ad4', 'cd4', 'rm5', 'ld3', 'tt6'],
   },
   
   // Default fallback
   {
     id: 'explorer',
     name: 'The Explorer',
-    category: 'EXPLORER',
+    category: 'FALLBACK',
     tagline: 'The world is your playground.',
     primaryTraits: [
-      { trait: 'adventure', weight: 1, sweetSpot: 5, range: [-5, 10] },
-      { trait: 'authenticity', weight: 1, sweetSpot: 5, range: [-5, 10] },
+      { trait: 'adventure', weight: 0.5, sweetSpot: 5, range: [-3, 10] },
+      { trait: 'authenticity', weight: 0.5, sweetSpot: 5, range: [-3, 10] },
     ],
     signatureAnswers: [],
   },
@@ -1490,6 +1490,11 @@ function matchArchetypesV2(
         score += bonus;
         // Don't add to reasons (too granular)
       }
+    }
+    
+    // Penalize FALLBACK archetypes to prevent them from dominating
+    if (archetype.category === 'FALLBACK') {
+      score *= 0.6; // 40% penalty — fallbacks should only win when nothing else fits
     }
     
     archetypeScores.push({ archetype, score, reasons });
