@@ -12,7 +12,8 @@ import {
   Briefcase,
   Compass,
   Map,
-  Users
+  Users,
+  Coins
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
@@ -38,6 +39,7 @@ const navLinks = [
 const userMenuItems = [
   { href: ROUTES.PROFILE.VIEW, label: 'My Profile', icon: User, tourId: 'profile-link' },
   { href: ROUTES.TRIP.DASHBOARD, label: 'My Trips', icon: MapPin, tourId: 'my-trips' },
+  { href: ROUTES.PROFILE.CREDITS, label: 'Credits & Billing', icon: Coins, tourId: undefined },
   { href: ROUTES.PROFILE.SETTINGS, label: 'Settings', icon: Settings, tourId: undefined },
 ];
 

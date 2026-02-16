@@ -73,6 +73,7 @@ import { LockedPhotoPlaceholder } from './LockedPhotoPlaceholder';
 import { LockedField } from './LockedField';
 import { useAuth } from '@/contexts/AuthContext';
 import { UpgradePrompt } from '@/components/checkout/UpgradePrompt';
+import { CreditQuickBuy } from '@/components/checkout/CreditQuickBuy';
 import { AddFlightInline, AddHotelInline } from './AddBookingInline';
 import { TripCollaboratorsPanel } from './TripCollaboratorsPanel';
 import { GuestDNABanner } from './GuestDNABanner';
@@ -2514,13 +2515,15 @@ export function EditorialItinerary({
                 </div>
               );
             })()}
-            {/* Credit Balance Pill */}
+            {/* Credit Balance Pill — Clickable with Quick Buy Popover */}
             {creditData && (
-              <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md bg-primary/5 border border-primary/20 text-xs sm:text-sm shrink-0">
-                <Coins className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-primary" />
-                <span className="font-medium text-primary">{totalCredits}</span>
-                <span className="text-muted-foreground hidden sm:inline">credits</span>
-              </div>
+              <CreditQuickBuy currentBalance={totalCredits}>
+                <button className="flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md bg-primary/5 border border-primary/20 text-xs sm:text-sm shrink-0 cursor-pointer hover:bg-primary/10 hover:border-primary/30 transition-colors">
+                  <Coins className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-primary" />
+                  <span className="font-medium text-primary">{totalCredits}</span>
+                  <span className="text-muted-foreground hidden sm:inline">credits</span>
+                </button>
+              </CreditQuickBuy>
             )}
           </div>
           

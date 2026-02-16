@@ -36,6 +36,7 @@ export const ROUTES = {
     VIEW: '/profile',
     EDIT: '/profile/edit',
     SETTINGS: '/profile/settings',
+    CREDITS: '/profile/credits',
     COMPLETE: '/profile/complete',
   },
   
