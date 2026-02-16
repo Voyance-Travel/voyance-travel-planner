@@ -8,7 +8,7 @@
  * - Day-by-day budget breakdown
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   DollarSign,
@@ -38,6 +38,8 @@ import { cn } from '@/lib/utils';
 import { useTripBudget } from '@/hooks/useTripBudget';
 import { BudgetSetupDialog } from './BudgetSetupDialog';
 import { BudgetWarning } from './BudgetWarning';
+import { useTripMembers } from '@/services/tripBudgetAPI';
+import { useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import type { BudgetCategory } from '@/services/tripBudgetService';
 
 interface ItineraryActivity {
@@ -99,6 +101,35 @@ const categoryColors: Record<BudgetCategory, string> = {
 export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, hasHotel, hasFlight }: BudgetTabProps) {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
   const syncAttempted = useRef(false);
+  const { data: rawTripMembers = [] } = useTripMembers(tripId);
+  const { data: collaborators = [] } = useTripCollaborators(tripId);
+  
+  // Build member names for per-person budget
+  const memberNames = useMemo(() => {
+    const names: { id: string; name: string }[] = [];
+    const seenIds = new Set<string>();
+    
+    rawTripMembers.forEach(m => {
+      if (m.id && !seenIds.has(m.id)) {
+        names.push({ id: m.id, name: m.name || m.email?.split('@')[0] || 'Unknown' });
+        seenIds.add(m.id);
+      }
+    });
+    
+    // Add collaborators not already in trip_members
+    collaborators.forEach(c => {
+      if (c.user_id && !rawTripMembers.some(m => m.userId === c.user_id)) {
+        const profileName = c.profile?.display_name || c.profile?.handle || 'Guest';
+        const syntheticId = `collab-${c.id}`;
+        if (!seenIds.has(syntheticId)) {
+          names.push({ id: syntheticId, name: profileName });
+          seenIds.add(syntheticId);
+        }
+      }
+    });
+    
+    return names;
+  }, [rawTripMembers, collaborators]);
   
   const {
     settings,
@@ -204,6 +235,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           settings={null}
           open={showSetupDialog}
           onOpenChange={setShowSetupDialog}
+          memberNames={memberNames}
           onSave={async (newSettings) => {
             await updateSettings(newSettings);
             refetch();
@@ -489,6 +521,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         settings={settings}
         open={showSetupDialog}
         onOpenChange={setShowSetupDialog}
+        memberNames={memberNames}
         onSave={async (newSettings) => {
           await updateSettings(newSettings);
           refetch();

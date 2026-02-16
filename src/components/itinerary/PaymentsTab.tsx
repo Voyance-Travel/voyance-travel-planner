@@ -1156,15 +1156,29 @@ export function PaymentsTab({
                         {/* Assigned items list */}
                         <div className="space-y-1.5 mt-2">
                           {breakdown.items.map(({ item, splitAmount }) => (
-                            <div key={item.id} className="flex items-center justify-between text-xs px-1">
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                setAssigningItem(item);
+                                const syntheticIds = item.assignedMemberIds
+                                  .map(id => realIdToSyntheticId.get(id) || id)
+                                  .filter((id, i, arr) => arr.indexOf(id) === i);
+                                setAssignMemberIds(syntheticIds);
+                              }}
+                              className="w-full flex items-center justify-between text-xs px-1 py-1.5 rounded hover:bg-muted/50 transition-colors cursor-pointer"
+                            >
                               <div className="flex items-center gap-1.5 text-muted-foreground min-w-0">
                                 {getItemIcon(item.type)}
                                 <span className="truncate">{item.name}</span>
                               </div>
-                              <span className="font-medium text-foreground shrink-0 ml-2">
-                                {formatCurrency(splitAmount)}
-                              </span>
-                            </div>
+                              <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                <span className="font-medium text-foreground">
+                                  {formatCurrency(splitAmount)}
+                                </span>
+                                <Users className="h-3 w-3 text-primary opacity-60" />
+                              </div>
+                            </button>
                           ))}
                         </div>
                       </Card>

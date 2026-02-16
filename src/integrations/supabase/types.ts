@@ -6588,6 +6588,7 @@ export type Database = {
           budget_currency: string | null
           budget_include_flight: boolean | null
           budget_include_hotel: boolean | null
+          budget_individual_cents: Json | null
           budget_input_mode: string | null
           budget_tier: string | null
           budget_total_cents: number | null
@@ -6636,6 +6637,7 @@ export type Database = {
           budget_currency?: string | null
           budget_include_flight?: boolean | null
           budget_include_hotel?: boolean | null
+          budget_individual_cents?: Json | null
           budget_input_mode?: string | null
           budget_tier?: string | null
           budget_total_cents?: number | null
@@ -6684,6 +6686,7 @@ export type Database = {
           budget_currency?: string | null
           budget_include_flight?: boolean | null
           budget_include_hotel?: boolean | null
+          budget_individual_cents?: Json | null
           budget_input_mode?: string | null
           budget_tier?: string | null
           budget_total_cents?: number | null
