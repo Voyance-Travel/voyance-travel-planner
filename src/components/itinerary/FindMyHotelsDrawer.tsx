@@ -89,9 +89,13 @@ export function FindMyHotelsDrawer({
       } else {
         toast.success(`Finding your perfect hotels (${result.spent ?? creditCost} credits used)`);
       }
-    } catch (err) {
+    } catch (err: any) {
       // Error handling (including out-of-credits modal) is done by the hook
       console.error('[FindMyHotels] Credit spend failed:', err);
+      // Show explicit error for non-credit errors (auth failures, network issues)
+      if (!err?.message?.startsWith('Not enough credits')) {
+        toast.error(err?.message || 'Failed to start hotel search. Please try again.');
+      }
     } finally {
       setIsSpending(false);
     }
