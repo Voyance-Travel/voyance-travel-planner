@@ -228,24 +228,39 @@ function calculateArchetypeScore(
   let score = 0;
   const matchedRequirements: string[] = [];
   const penalties: string[] = [];
+  const traitProximities: number[] = [];
 
-  // Check required traits with proportional scoring (Fix A)
+  // Skip default archetype in normal scoring — handled separately
+  if (profile.isDefault) {
+    return {
+      id: archetypeId,
+      name: profile.name,
+      category: profile.category,
+      score: -Infinity, // Will never win in normal sorting
+      confidence: 'low',
+      matchedRequirements: [],
+      penalties: [],
+    };
+  }
+
+  // Check required traits with proportional scoring
   const required = profile.required || {};
   
   for (const [trait, requirement] of Object.entries(required)) {
     const traitValue = scores[trait];
-    if (traitValue === undefined || traitValue === null || typeof traitValue !== 'number') {
-      console.warn(`[ArchetypeMatcher] Missing trait: ${trait}`);
+    if (traitValue === undefined || traitValue === null || typeof traitValue !== 'number' || !isFinite(traitValue)) {
       continue;
     }
-    if (!isFinite(traitValue)) continue;
     const proximity = calculateProximity(traitValue, requirement);
+    traitProximities.push(proximity);
     score += proximity * 30;
     if (proximity >= 1.0) {
       matchedRequirements.push(trait);
-    } else {
-      score -= (1 - proximity) * 15;
+    } else if (proximity < 0.5) {
+      // Only penalize actual contradictions (far from requirement)
+      score -= (1 - proximity) * 8;
     }
+    // Near-misses (proximity 0.5-0.99) get partial credit but NO penalty
   }
 
   // Apply booster scores
@@ -279,26 +294,15 @@ function calculateArchetypeScore(
     matchedRequirements.push(`life stage: ${lifeStage}`);
   }
 
-  // Handle default archetype (Balanced Story Collector) — Fix C: tightened bonuses
-  if (profile.isDefault) {
-    const numericTraits = Object.entries(scores)
-      .filter(([key, value]) => typeof value === 'number' && key !== 'life_stage')
-      .map(([, value]) => value as number);
-
-    if (numericTraits.length > 0) {
-      const mean = numericTraits.reduce((a, b) => a + b, 0) / numericTraits.length;
-      const variance = numericTraits.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / numericTraits.length;
-      
-      if (profile.maxTraitSpread && Math.sqrt(variance) <= profile.maxTraitSpread) {
-        score += 10; // Was 20
-        matchedRequirements.push('balanced traits');
-      }
+  // Bonus for having at least one excellent trait match
+  if (traitProximities.length > 0) {
+    const bestProximity = Math.max(...traitProximities);
+    if (bestProximity >= 0.8) {
+      score += bestProximity * 20;
     }
-    // Minimal base score
-    score += 5; // Was 10
   }
 
-  // Calculate confidence based on score and how many traits contributed
+  // Calculate confidence
   let confidence: 'high' | 'medium' | 'low' = 'medium';
   if (score > 50 && matchedRequirements.length >= 2) {
     confidence = 'high';
@@ -310,7 +314,7 @@ function calculateArchetypeScore(
     id: archetypeId,
     name: profile.name,
     category: profile.category,
-    score,
+    score: (typeof score === 'number' && isFinite(score)) ? score : 0,
     confidence,
     matchedRequirements,
     penalties,
@@ -328,27 +332,47 @@ export function matchArchetypes(
 
   for (const [archetypeId, profile] of Object.entries(archetypeProfiles)) {
     const match = calculateArchetypeScore(archetypeId, profile, scores, lifeStage);
-    matches.push(match);
+    // Only include non-default archetypes in the competition
+    if (!profile.isDefault) {
+      matches.push(match);
+    }
   }
 
   // Sort by score descending
   matches.sort((a, b) => b.score - a.score);
 
-  // Fix B: Suppress BSC when strong specialized matches exist
-  const bestNonDefault = matches.find(m => !archetypeProfiles[m.id]?.isDefault);
-  const defaultMatch = matches.find(m => archetypeProfiles[m.id]?.isDefault);
-  if (bestNonDefault && defaultMatch && bestNonDefault.score > 35) {
-    defaultMatch.score = defaultMatch.score * 0.5;
+  // Diagnostic logging
+  console.log('[ArchetypeMatcher] Top 5 matches:',
+    matches.slice(0, 5).map(m => `${m.id}: ${m.score.toFixed(1)}`).join(', '));
+
+  // BSC only wins if no non-default archetype scores above the minimum threshold
+  const MIN_MATCH_SCORE = 15;
+  const topMatch = matches[0];
+
+  if (!topMatch || topMatch.score < MIN_MATCH_SCORE) {
+    console.log('[ArchetypeMatcher] No strong match — defaulting to BSC');
+    const bscProfile = archetypeProfiles['balanced_story_collector'];
+    const bscMatch: ArchetypeMatch = {
+      id: 'balanced_story_collector',
+      name: bscProfile?.name || 'The Balanced Story Collector',
+      category: bscProfile?.category || 'BALANCED',
+      score: 10,
+      confidence: 'low',
+      matchedRequirements: ['fallback'],
+      penalties: [],
+    };
+    return {
+      primary: bscMatch,
+      secondary: matches[0]?.score > 0 ? matches[0] : null,
+      allMatches: [bscMatch, ...matches.filter(m => m.score > 0)],
+      traitScores: scores,
+      lifeStage,
+    };
   }
-  // Re-sort after suppression
-  matches.sort((a, b) => b.score - a.score);
 
   // Update confidence based on score gaps
   if (matches.length >= 2) {
-    const topScore = matches[0].score;
-    const secondScore = matches[1].score;
-    const gap = topScore - secondScore;
-
+    const gap = matches[0].score - matches[1].score;
     if (gap > 20) {
       matches[0].confidence = 'high';
     } else if (gap > 10) {
@@ -358,36 +382,13 @@ export function matchArchetypes(
     }
   }
 
-  // Sanitize all scores to prevent NaN/Infinity from reaching the save pipeline
-  const sanitizedMatches = matches.map(match => ({
-    ...match,
-    score: (typeof match.score === 'number' && isFinite(match.score)) ? match.score : 0,
-    confidence: match.confidence || 'low',
-  }));
-
-  // Re-sort after sanitization
-  sanitizedMatches.sort((a, b) => b.score - a.score);
-
-  // Get primary and secondary
-  const primary = sanitizedMatches[0];
-  const secondary = sanitizedMatches.length > 1 && sanitizedMatches[1].score > 0 ? sanitizedMatches[1] : null;
-
-  // Absolute last-resort fallback
-  if (!primary || !primary.id) {
-    console.warn('[ArchetypeMatcher] No valid primary archetype — falling back to BSC');
-    return {
-      primary: { id: 'balanced_story_collector', name: 'The Balanced Story Collector', category: 'BALANCED', score: 0, confidence: 'low' as const, matchedRequirements: [], penalties: [] },
-      secondary: null,
-      allMatches: [{ id: 'balanced_story_collector', name: 'The Balanced Story Collector', category: 'BALANCED', score: 0, confidence: 'low' as const, matchedRequirements: [], penalties: [] }],
-      traitScores: scores,
-      lifeStage,
-    };
-  }
+  const primary = matches[0];
+  const secondary = matches.length > 1 && matches[1].score > 0 ? matches[1] : null;
 
   return {
     primary,
     secondary,
-    allMatches: sanitizedMatches.filter(m => m.score > 0),
+    allMatches: matches.filter(m => m.score > 0),
     traitScores: scores,
     lifeStage,
   };
