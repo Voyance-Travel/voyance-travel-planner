@@ -1,7 +1,8 @@
 /**
  * Budget Setup Dialog
  * 
- * Modal for setting up trip budget with input mode toggle and allocation sliders.
+ * Modal for setting up trip budget with input mode toggle, allocation sliders,
+ * and optional per-person budget differentiation.
  */
 
 import { useState, useEffect } from 'react';
@@ -28,7 +29,9 @@ interface BudgetSetupDialogProps {
   settings: TripBudgetSettings | null;
   travelers: number;
   spendStyle?: 'value_focused' | 'balanced' | 'splurge_forward';
-  onSave: (settings: Partial<TripBudgetSettings>) => Promise<void>;
+  onSave: (settings: Partial<TripBudgetSettings> & { budget_individual_cents?: Record<string, number> }) => Promise<void>;
+  /** Optional member names for per-person budget differentiation */
+  memberNames?: { id: string; name: string }[];
 }
 
 export function BudgetSetupDialog({
@@ -38,6 +41,7 @@ export function BudgetSetupDialog({
   travelers,
   spendStyle = 'balanced',
   onSave,
+  memberNames = [],
 }: BudgetSetupDialogProps) {
   const [inputMode, setInputMode] = useState<'total' | 'per_person'>(settings?.budget_input_mode || 'total');
   const [amount, setAmount] = useState('');
@@ -48,6 +52,9 @@ export function BudgetSetupDialog({
     settings?.budget_allocations || getDefaultAllocations(spendStyle)
   );
   const [isSaving, setIsSaving] = useState(false);
+  // Per-person individual budgets: { memberId: dollarString }
+  const [individualBudgets, setIndividualBudgets] = useState<Record<string, string>>({});
+  const [useIndividualBudgets, setUseIndividualBudgets] = useState(false);
 
   // Initialize from settings
   useEffect(() => {
@@ -57,13 +64,39 @@ export function BudgetSetupDialog({
         : settings.budget_total_cents / 100;
       setAmount(displayAmount.toString());
     }
-  }, [settings, inputMode, travelers]);
+    
+    // Initialize individual budgets from saved data
+    const savedIndividual = (settings as any)?.budget_individual_cents as Record<string, number> | null;
+    if (savedIndividual && memberNames.length >= 2) {
+      const restored: Record<string, string> = {};
+      let hasAny = false;
+      memberNames.forEach(m => {
+        const cents = savedIndividual[m.id];
+        if (cents && cents > 0) {
+          restored[m.id] = (cents / 100).toString();
+          hasAny = true;
+        }
+      });
+      if (hasAny) {
+        setIndividualBudgets(restored);
+        setUseIndividualBudgets(true);
+      }
+    }
+  }, [settings, inputMode, travelers, memberNames]);
 
   // Calculate totals
   const numericAmount = parseFloat(amount) || 0;
-  const totalCents = inputMode === 'per_person' 
-    ? Math.round(numericAmount * travelers * 100)
-    : Math.round(numericAmount * 100);
+  
+  // If using individual budgets, sum them for the total
+  const individualTotal = useIndividualBudgets && memberNames.length >= 2
+    ? memberNames.reduce((sum, m) => sum + (parseFloat(individualBudgets[m.id] || '0') || 0), 0)
+    : 0;
+  
+  const totalCents = useIndividualBudgets && memberNames.length >= 2
+    ? Math.round(individualTotal * 100)
+    : inputMode === 'per_person' 
+      ? Math.round(numericAmount * travelers * 100)
+      : Math.round(numericAmount * 100);
   const perPersonCents = Math.round(totalCents / travelers);
 
   const formatCurrency = (cents: number) => {
@@ -82,7 +115,6 @@ export function BudgetSetupDialog({
     // Ensure allocations sum to 100
     const total = Object.values(newAllocations).reduce((a, b) => a + b, 0);
     if (total !== 100) {
-      // Adjust buffer to compensate
       const diff = 100 - total;
       newAllocations.buffer_percent = Math.max(0, newAllocations.buffer_percent + diff);
     }
@@ -93,14 +125,25 @@ export function BudgetSetupDialog({
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await onSave({
+      const saveData: Partial<TripBudgetSettings> & { budget_individual_cents?: Record<string, number> } = {
         budget_total_cents: totalCents,
         budget_input_mode: inputMode,
         budget_include_hotel: includeHotel,
         budget_include_flight: includeFlight,
         budget_warnings_enabled: warningsEnabled,
         budget_allocations: allocations,
-      });
+      };
+      
+      // Include individual budgets if enabled
+      if (useIndividualBudgets && memberNames.length >= 2) {
+        const individualCents: Record<string, number> = {};
+        memberNames.forEach(m => {
+          individualCents[m.id] = Math.round((parseFloat(individualBudgets[m.id] || '0') || 0) * 100);
+        });
+        saveData.budget_individual_cents = individualCents;
+      }
+      
+      await onSave(saveData);
       onOpenChange(false);
     } finally {
       setIsSaving(false);
@@ -140,7 +183,7 @@ export function BudgetSetupDialog({
               <Button
                 variant={inputMode === 'total' ? 'default' : 'ghost'}
                 size="sm"
-                onClick={() => setInputMode('total')}
+                onClick={() => { setInputMode('total'); setUseIndividualBudgets(false); }}
               >
                 <Wallet className="h-4 w-4 mr-2" />
                 Total Trip
@@ -155,29 +198,77 @@ export function BudgetSetupDialog({
               </Button>
             </div>
 
-            {/* Amount Input */}
-            <div className="space-y-2">
-              <Label htmlFor="budget-amount">
-                {inputMode === 'total' ? 'Total Budget' : 'Budget Per Person'}
-              </Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-                <Input
-                  id="budget-amount"
-                  type="number"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0"
-                  className="pl-7 text-lg"
-                />
+            {/* Per-Person Individual Budgets */}
+            {inputMode === 'per_person' && memberNames.length >= 2 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="individual-toggle">Individual amounts</Label>
+                    <p className="text-xs text-muted-foreground">Set different budgets per traveler</p>
+                  </div>
+                  <Switch
+                    id="individual-toggle"
+                    checked={useIndividualBudgets}
+                    onCheckedChange={setUseIndividualBudgets}
+                  />
+                </div>
+                
+                {useIndividualBudgets && (
+                  <div className="space-y-2 p-3 bg-muted/30 rounded-lg">
+                    {memberNames.map(member => (
+                      <div key={member.id} className="flex items-center gap-3">
+                        <span className="text-sm font-medium min-w-0 truncate flex-1">
+                          {member.name}
+                        </span>
+                        <div className="relative w-28">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                          <Input
+                            type="number"
+                            value={individualBudgets[member.id] || ''}
+                            onChange={(e) => setIndividualBudgets(prev => ({
+                              ...prev,
+                              [member.id]: e.target.value,
+                            }))}
+                            placeholder="0"
+                            className="pl-6 h-8 text-sm"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between pt-2 border-t border-border">
+                      <span className="text-sm font-semibold">Total</span>
+                      <span className="text-sm font-semibold">{formatCurrency(totalCents)}</span>
+                    </div>
+                  </div>
+                )}
               </div>
-              <p className="text-sm text-muted-foreground">
-                {inputMode === 'total' 
-                  ? `${formatCurrency(perPersonCents)} per person for ${travelers} traveler${travelers > 1 ? 's' : ''}`
-                  : `${formatCurrency(totalCents)} total for ${travelers} traveler${travelers > 1 ? 's' : ''}`
-                }
-              </p>
-            </div>
+            )}
+
+            {/* Amount Input — hidden when using individual budgets */}
+            {!(useIndividualBudgets && inputMode === 'per_person' && memberNames.length >= 2) && (
+              <div className="space-y-2">
+                <Label htmlFor="budget-amount">
+                  {inputMode === 'total' ? 'Total Budget' : 'Budget Per Person'}
+                </Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                  <Input
+                    id="budget-amount"
+                    type="number"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0"
+                    className="pl-7 text-lg"
+                  />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {inputMode === 'total' 
+                    ? `${formatCurrency(perPersonCents)} per person for ${travelers} traveler${travelers > 1 ? 's' : ''}`
+                    : `${formatCurrency(totalCents)} total for ${travelers} traveler${travelers > 1 ? 's' : ''}`
+                  }
+                </p>
+              </div>
+            )}
 
             {/* Include Options */}
             <div className="space-y-3 pt-2">

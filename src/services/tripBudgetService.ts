@@ -256,6 +256,7 @@ export async function updateTripBudgetSettings(
   if (settings.budget_warnings_enabled !== undefined) updateData.budget_warnings_enabled = settings.budget_warnings_enabled;
   if (settings.budget_warning_threshold !== undefined) updateData.budget_warning_threshold = settings.budget_warning_threshold;
   if (settings.budget_allocations !== undefined) updateData.budget_allocations = settings.budget_allocations;
+  if ((settings as any).budget_individual_cents !== undefined) updateData.budget_individual_cents = (settings as any).budget_individual_cents;
 
   const { error } = await supabase
     .from('trips')

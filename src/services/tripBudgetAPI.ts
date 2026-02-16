@@ -109,14 +109,18 @@ export async function addTripMember(input: {
   name?: string;
   role?: TripMemberRole;
 }): Promise<TripMember> {
+  // Use upsert to prevent duplicate key errors on (trip_id, email)
   const { data, error } = await supabase
     .from('trip_members')
-    .insert({
-      trip_id: input.tripId,
-      email: input.email,
-      name: input.name || null,
-      role: input.role || 'attendee',
-    })
+    .upsert(
+      {
+        trip_id: input.tripId,
+        email: input.email,
+        name: input.name || null,
+        role: input.role || 'attendee',
+      },
+      { onConflict: 'trip_id,email' }
+    )
     .select()
     .single();
 
