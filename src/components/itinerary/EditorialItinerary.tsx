@@ -2672,39 +2672,63 @@ export function EditorialItinerary({
       )}
 
 
-      {/* Navigation Tabs - Horizontally scrollable on mobile */}
-      <div className="border-b border-border overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
-        <div className="flex gap-1 min-w-max">
-          {[
-            { id: 'itinerary', label: 'Itinerary', fullLabel: 'Day-by-Day Itinerary', icon: <Calendar className="h-4 w-4" /> },
-            { id: 'budget', label: 'Budget', fullLabel: 'Budget', icon: <Wallet className="h-4 w-4" /> },
-            { id: 'payments', label: 'Payments', fullLabel: 'Payments', icon: <CreditCard className="h-4 w-4" /> },
-            { id: 'details', label: 'Details', fullLabel: 'Trip Details', icon: <Plane className="h-4 w-4" /> },
-            { id: 'needtoknow', label: 'Info', fullLabel: 'Need to Know', icon: <Info className="h-4 w-4" /> },
-            ...(collaborators.length > 0 ? [{ id: 'collab', label: 'Group', fullLabel: 'Group Chat & Vote', icon: <MessageCircle className="h-4 w-4" /> }] : []),
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as typeof activeTab)}
-              className={cn(
-                "px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-sans tracking-wide transition-colors relative flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0",
-                activeTab === tab.id
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {tab.icon}
-              <span className="sm:hidden">{tab.label}</span>
-              <span className="hidden sm:inline">{tab.fullLabel}</span>
-              {activeTab === tab.id && (
-                <motion.div
-                  layoutId="editorialItineraryTab"
-                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
-                />
-              )}
-            </button>
-          ))}
+      {/* Navigation Tabs - Horizontally scrollable on mobile with fade indicator */}
+      <div className="relative">
+        <div 
+          className="border-b border-border overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0"
+          ref={(el) => {
+            if (!el) return;
+            const updateFade = () => {
+              const sibling = el.parentElement?.querySelector('[data-tab-fade]') as HTMLElement | null;
+              if (sibling) {
+                const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 2;
+                sibling.style.opacity = (el.scrollWidth > el.clientWidth && !atEnd) ? '1' : '0';
+              }
+            };
+            el.addEventListener('scroll', updateFade);
+            // Run on mount and after a short delay for layout
+            updateFade();
+            setTimeout(updateFade, 100);
+          }}
+        >
+          <div className="flex gap-1 min-w-max">
+            {[
+              { id: 'itinerary', label: 'Itinerary', fullLabel: 'Day-by-Day Itinerary', icon: <Calendar className="h-4 w-4" /> },
+              { id: 'budget', label: 'Budget', fullLabel: 'Budget', icon: <Wallet className="h-4 w-4" /> },
+              { id: 'payments', label: 'Payments', fullLabel: 'Payments', icon: <CreditCard className="h-4 w-4" /> },
+              { id: 'details', label: 'Details', fullLabel: 'Trip Details', icon: <Plane className="h-4 w-4" /> },
+              { id: 'needtoknow', label: 'Info', fullLabel: 'Need to Know', icon: <Info className="h-4 w-4" /> },
+              ...(collaborators.length > 0 ? [{ id: 'collab', label: 'Group', fullLabel: 'Group Chat & Vote', icon: <MessageCircle className="h-4 w-4" /> }] : []),
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                className={cn(
+                  "px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-sans tracking-wide transition-colors relative flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0",
+                  activeTab === tab.id
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {tab.icon}
+                <span className="sm:hidden">{tab.label}</span>
+                <span className="hidden sm:inline">{tab.fullLabel}</span>
+                {activeTab === tab.id && (
+                  <motion.div
+                    layoutId="editorialItineraryTab"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+                  />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
+        {/* Fade gradient indicating more tabs */}
+        <div 
+          data-tab-fade
+          className="absolute right-0 top-0 bottom-0 w-12 pointer-events-none bg-gradient-to-l from-background to-transparent transition-opacity duration-200 sm:hidden"
+          style={{ opacity: 0 }}
+        />
       </div>
 
       {/* Tab Content */}
@@ -6109,7 +6133,7 @@ function ActivityRow({
                       e.stopPropagation();
                       onViewReviews?.(activity);
                     }}
-                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors min-h-[44px] sm:min-h-0 py-2 sm:py-0"
                     title="View reviews and details"
                   >
                     <Star className="h-3 w-3" />

@@ -266,7 +266,7 @@ export function InlineBookingActions({
           href={directUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline"
+          className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline min-h-[44px] sm:min-h-0 py-2 sm:py-0"
         >
           <ExternalLink className="h-3 w-3 flex-shrink-0" />
           <span className="sm:hidden">Details</span>
@@ -280,7 +280,7 @@ export function InlineBookingActions({
           href={directUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline"
+          className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline min-h-[44px] sm:min-h-0 py-2 sm:py-0"
         >
           <ExternalLink className="h-3 w-3 flex-shrink-0" />
           <span className="sm:hidden">Reserve</span>
@@ -310,7 +310,7 @@ export function InlineBookingActions({
           href={directUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline"
+          className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline min-h-[44px] sm:min-h-0 py-2 sm:py-0"
         >
           <ExternalLink className="h-3 w-3 flex-shrink-0" />
           <span className="sm:hidden">Details</span>
