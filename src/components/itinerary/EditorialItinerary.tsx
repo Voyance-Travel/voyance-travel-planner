@@ -3111,6 +3111,8 @@ export function EditorialItinerary({
             travelers={travelers}
             totalDays={days.length}
             itineraryDays={days}
+            hasHotel={!!(hotelSelection?.pricePerNight || hotelSelection?.name)}
+            hasFlight={!!(flightSelection?.outbound)}
             onActivityRemove={(activityId) => {
               // Remove the activity from itinerary days when deleted from budget
               setDays(prev => prev.map(day => ({

@@ -26,6 +26,7 @@ import {
   Sparkles,
   Plane,
   Hotel,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -62,6 +63,10 @@ interface BudgetTabProps {
   itineraryDays?: ItineraryDay[];
   /** Called when a planned budget entry is removed so the linked activity can be removed from the itinerary */
   onActivityRemove?: (activityId: string) => void;
+  /** Whether hotel selection exists */
+  hasHotel?: boolean;
+  /** Whether flight selection exists */
+  hasFlight?: boolean;
 }
 
 const categoryIcons: Record<BudgetCategory, React.ReactNode> = {
@@ -91,7 +96,7 @@ const categoryColors: Record<BudgetCategory, string> = {
   misc: 'bg-slate-500',
 };
 
-export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove }: BudgetTabProps) {
+export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, hasHotel, hasFlight }: BudgetTabProps) {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
   const syncAttempted = useRef(false);
   
@@ -217,10 +222,26 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       animate={{ opacity: 1, y: 0 }}
       className="space-y-6 py-6"
     >
-      {/* Warning Banner */}
+      {/* Over-budget Warning Banner */}
       {warningLevel !== 'none' && summary && (
         <BudgetWarning summary={summary} />
       )}
+
+      {/* Missing items warning */}
+      {(() => {
+        const missingItems: string[] = [];
+        if ((settings?.budget_include_hotel ?? true) && !hasHotel) missingItems.push('Hotel');
+        if ((settings?.budget_include_flight ?? false) && !hasFlight) missingItems.push('Flights');
+        if (missingItems.length === 0) return null;
+        return (
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <p className="text-sm">
+              Some budgeted categories have no items yet: <span className="font-medium">{missingItems.join(', ')}</span>. Your actual spend may be higher than shown.
+            </p>
+          </div>
+        );
+      })()}
 
       {/* Budget Overview */}
       <div className="grid md:grid-cols-3 gap-4">

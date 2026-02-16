@@ -1194,17 +1194,86 @@ export function PaymentsTab({
                             <p className="font-semibold text-muted-foreground">{formatCurrency(unassigned.assigned)}</p>
                           </div>
                         </div>
+
+                        {/* Split All Evenly button */}
+                        {tripMembers.length >= 2 && unassigned.items.length > 1 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full mt-2 mb-2 gap-2 text-xs"
+                            onClick={async () => {
+                              try {
+                                const { data: { user } } = await supabase.auth.getUser();
+                                if (!user) { toast.error('Please sign in'); return; }
+
+                                // Resolve all member IDs
+                                const allMemberIds = tripMembers.map(m => m.id);
+                                const resolvedIds: string[] = [];
+                                for (const id of allMemberIds) {
+                                  const realId = await resolveRealMemberId(id);
+                                  if (realId) resolvedIds.push(realId);
+                                }
+                                if (resolvedIds.length < 2) { toast.error('Need at least 2 members'); return; }
+
+                                // Batch assign all unassigned items
+                                for (const { item } of unassigned.items) {
+                                  // Delete existing payments
+                                  if (item.allPayments.length > 0) {
+                                    const deleteIds = item.allPayments.map(p => p.id);
+                                    await supabase.from('trip_payments').delete().in('id', deleteIds);
+                                  }
+                                  const splitAmount = Math.round(item.amountCents / resolvedIds.length);
+                                  const remainder = item.amountCents - (splitAmount * resolvedIds.length);
+                                  const rows = resolvedIds.map((realMemberId, i) => ({
+                                    trip_id: tripId,
+                                    user_id: user.id,
+                                    item_type: item.type,
+                                    item_id: item.id,
+                                    item_name: item.name,
+                                    amount_cents: splitAmount + (i === 0 ? remainder : 0),
+                                    currency: 'USD',
+                                    quantity: 1,
+                                    status: 'pending' as const,
+                                    assigned_member_id: realMemberId,
+                                  }));
+                                  const { error } = await supabase.from('trip_payments').insert(rows);
+                                  if (error) console.error('Failed to assign item:', item.name, error);
+                                }
+                                toast.success(`Split ${unassigned.items.length} items evenly among ${resolvedIds.length} members`);
+                                fetchPayments();
+                              } catch (err) {
+                                console.error('Error splitting all:', err);
+                                toast.error('Failed to split items');
+                              }
+                            }}
+                          >
+                            <Split className="h-3.5 w-3.5" />
+                            Split All Evenly ({tripMembers.length} ways)
+                          </Button>
+                        )}
+
                         <div className="space-y-1.5 mt-2">
                           {unassigned.items.map(({ item, splitAmount }) => (
-                            <div key={item.id} className="flex items-center justify-between text-xs px-1">
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                setAssigningItem(item);
+                                setAssignMemberIds(item.assignedMemberIds || []);
+                              }}
+                              className="w-full flex items-center justify-between text-xs px-1 py-1.5 rounded hover:bg-muted/50 transition-colors cursor-pointer"
+                            >
                               <div className="flex items-center gap-1.5 text-muted-foreground min-w-0">
                                 {getItemIcon(item.type)}
                                 <span className="truncate">{item.name}</span>
                               </div>
-                              <span className="font-medium text-muted-foreground shrink-0 ml-2">
-                                {formatCurrency(splitAmount)}
-                              </span>
-                            </div>
+                              <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                <span className="font-medium text-muted-foreground">
+                                  {formatCurrency(splitAmount)}
+                                </span>
+                                <UserPlus className="h-3 w-3 text-primary opacity-60" />
+                              </div>
+                            </button>
                           ))}
                         </div>
                       </Card>

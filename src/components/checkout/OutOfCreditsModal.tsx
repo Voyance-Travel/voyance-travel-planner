@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Coins, Zap, Sparkles, ArrowRight, Loader2, Eye } from 'lucide-react';
+import { Coins, Zap, Sparkles, ArrowRight, Loader2, Eye, Users } from 'lucide-react';
 import { CREDIT_PACKS, BOOST_PACK, CREDIT_COSTS, formatCredits, getRecommendedPack, CREDIT_EXPIRATION_COPY } from '@/config/pricing';
 import { EmbeddedCheckoutModal } from './EmbeddedCheckoutModal';
 import { useOutOfCredits } from '@/contexts/OutOfCreditsContext';
@@ -16,6 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { ROUTES } from '@/config/routes';
+import { useTripPermission } from '@/services/tripCollaboratorsAPI';
 
 const ACTION_LABELS: Partial<Record<keyof typeof CREDIT_COSTS, string>> = {
   SWAP_ACTIVITY: 'Swap Activity',
@@ -41,6 +42,10 @@ export function OutOfCreditsModal() {
   } | null>(null);
 
   const { action, creditsNeeded = 0, creditsAvailable = 0, tripId } = state;
+
+  // Check if user is a guest on this trip (not the owner)
+  const { data: tripPermission } = useTripPermission(tripId);
+  const isGuestOnSharedTrip = tripId && tripPermission && !tripPermission.isOwner && tripPermission.permission !== null;
 
   const actionCost = action ? CREDIT_COSTS[action] : creditsNeeded;
   const actionLabel = action ? ACTION_LABELS[action] || action : 'this action';
@@ -121,6 +126,18 @@ export function OutOfCreditsModal() {
               <span className="font-semibold text-destructive">+{formatCredits(deficit)} more</span>
             </div>
           </div>
+
+          {/* Guest on shared trip hint */}
+          {isGuestOnSharedTrip && (
+            <div className="px-6 py-3 border-b border-border bg-primary/5">
+              <div className="flex items-start gap-2">
+                <Users className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                <p className="text-xs text-muted-foreground">
+                  You're a guest on this trip. Ask the trip owner to unlock AI features for you, or purchase credits for your own account.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Purchase options */}
           <div className="px-6 py-4 space-y-3">
