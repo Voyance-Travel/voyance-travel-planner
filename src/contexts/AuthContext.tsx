@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { User as SupabaseUser, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { logLogin, logSignup, logLogout, logOAuthLogin } from '@/services/authAuditAPI';
@@ -194,16 +194,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Initialize auth state - SEPARATED initial load from ongoing changes
   // to prevent race condition where isLoading becomes false before user data loads
+  // Ref to track initial load completion — survives across closures & re-renders
+  const initialLoadCompleteRef = useRef(false);
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     let isMounted = true;
-    let loadingTimeout: ReturnType<typeof setTimeout>;
-    let initialLoadComplete = false;
+    // Reset on mount (handles StrictMode double-mount)
+    initialLoadCompleteRef.current = false;
     
     // Safety timeout: never show loading spinner for more than 8 seconds
-    loadingTimeout = setTimeout(() => {
-      if (isMounted && isLoading) {
+    loadingTimeoutRef.current = setTimeout(() => {
+      // Guard: skip if auth already completed (ref is always current)
+      if (initialLoadCompleteRef.current) {
+        console.log('[Auth] Timeout fired but auth already complete — skipping');
+        return;
+      }
+      if (isMounted) {
         console.warn('[Auth] Loading timeout - forcing isLoading to false');
         setIsLoading(false);
+        // Do NOT call setUser here — it triggers re-renders and loops
       }
     }, 8000);
     
@@ -211,19 +221,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, newSession) => {
-      console.log('[Auth] Auth state changed:', event, 'initialLoadComplete:', initialLoadComplete);
+      console.log('[Auth] Auth state changed:', event, 'initialLoadComplete:', initialLoadCompleteRef.current);
       
       // Always update session synchronously
       setSession(newSession);
       
       // If this is initial load, let initializeAuth handle everything
-      if (!initialLoadComplete) {
+      if (!initialLoadCompleteRef.current) {
+        return;
+      }
+
+      // After initial load, only handle SIGNED_IN / SIGNED_OUT / TOKEN_REFRESHED
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+        return;
+      }
+
+      // For TOKEN_REFRESHED, just keep the session — no need to reload user data
+      if (event === 'TOKEN_REFRESHED') {
         return;
       }
       
-      // Handle ongoing auth changes (after initial load)
+      // Handle ongoing SIGNED_IN (e.g. OAuth callback, tab focus re-auth)
       if (newSession?.user) {
-        // Fire and forget for ongoing changes - don't control isLoading
         (async () => {
           if (!isMounted) return;
           
@@ -246,8 +266,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.error('[Auth] Error loading user data:', error);
           }
         })();
-      } else {
-        setUser(null);
       }
     });
 
@@ -256,7 +274,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         console.log('[Auth] Starting initial auth check...');
         
-        // Get the current session
         const { data: { session: initialSession } } = await supabase.auth.getSession();
         
         if (!isMounted) return;
@@ -271,11 +288,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('[Auth] Session found, validating user...');
         setSession(initialSession);
         
-        // Validate the session by checking if the user actually exists
         const { data: userData, error: userError } = await supabase.auth.getUser();
         if (userError) {
-          // Only sign out for auth-specific errors (invalid/expired token)
-          // NOT for transient network errors which would incorrectly destroy valid sessions
           const isAuthError = userError.message?.toLowerCase().includes('invalid') ||
                               userError.message?.toLowerCase().includes('expired') ||
                               userError.message?.toLowerCase().includes('not authorized') ||
@@ -291,11 +305,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return;
           }
           
-          // For network errors, log but continue with the session we have
           console.warn('[Auth] getUser failed (non-auth error), continuing with session:', userError.message);
         }
         
-        // User is valid - load their data BEFORE setting loading to false
         console.log('[Auth] User valid, loading profile data...');
         const { profile, preferences } = await loadUserData(initialSession.user);
         
@@ -306,8 +318,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         console.error('[Auth] Error during initial auth:', error);
       } finally {
-        // Mark initial load complete and stop loading
-        initialLoadComplete = true;
+        // Cancel the safety timeout — auth completed normally
+        if (loadingTimeoutRef.current) {
+          clearTimeout(loadingTimeoutRef.current);
+          loadingTimeoutRef.current = null;
+        }
+        initialLoadCompleteRef.current = true;
         if (isMounted) {
           setIsLoading(false);
           console.log('[Auth] isLoading set to false');
@@ -319,7 +335,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       isMounted = false;
-      clearTimeout(loadingTimeout);
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
       subscription.unsubscribe();
     };
   }, []);
