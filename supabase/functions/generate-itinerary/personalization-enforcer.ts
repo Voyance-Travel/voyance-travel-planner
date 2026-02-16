@@ -768,7 +768,11 @@ export function deriveForcedSlots(
  */
 export function deriveScheduleConstraints(
   traits: Partial<TraitScores>,
-  mobilityNeeds?: string
+  mobilityNeeds?: string,
+  preferences?: {
+    recoveryStyle?: string[];
+    activeHoursPerDay?: 'light' | 'moderate' | 'full';
+  }
 ): ScheduleConstraints {
   const pace = traits.pace ?? 0; // -10 (relaxed) to +10 (packed)
   const comfort = traits.comfort ?? 0; // -10 (budget) to +10 (luxury)
@@ -847,6 +851,43 @@ export function deriveScheduleConstraints(
   }
   if (pace <= -4) {
     requiredMeals.push('breakfast'); // Very relaxed = leisurely breakfast
+  }
+  
+  // =========================================================================
+  // Gap 3: Recovery Style constraints
+  // =========================================================================
+  if (preferences?.recoveryStyle) {
+    if (preferences.recoveryStyle.includes('early_sleep')) {
+      // Cap end time for early sleepers
+      const currentEndMins = parseInt(latestEnd.split(':')[0]) * 60 + parseInt(latestEnd.split(':')[1]);
+      const earlyCap = 20 * 60 + 30; // 20:30
+      if (currentEndMins > earlyCap) {
+        latestEnd = '20:30';
+      }
+    }
+    if (preferences.recoveryStyle.includes('alone_time')) {
+      // Reduce max activities to ensure unscheduled blocks
+      maxActivities = Math.max(2, maxActivities - 1);
+      bufferMinutes = Math.max(bufferMinutes, 45);
+    }
+  }
+  
+  // =========================================================================
+  // Gap 4: Active Hours Per Day constraints
+  // =========================================================================
+  if (preferences?.activeHoursPerDay) {
+    const hourRanges: Record<string, [number, number]> = {
+      'light': [3, 5],
+      'moderate': [6, 8],
+      'full': [9, 12],
+    };
+    const range = hourRanges[preferences.activeHoursPerDay];
+    if (range) {
+      const [, maxHours] = range;
+      // Cap max activities based on active hours (~1.5h per activity avg)
+      const hourBasedMax = Math.floor(maxHours / 1.5);
+      maxActivities = Math.min(maxActivities, hourBasedMax);
+    }
   }
   
   return {

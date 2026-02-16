@@ -75,6 +75,14 @@ export interface TravelerDNA {
   // Companions
   companions?: 'solo' | 'couple' | 'family' | 'friends' | 'group';
   childrenCount?: number;
+  
+  // NEW: Preference fields wired into generation (Phase 16)
+  dailyBudgetTier?: 'budget' | 'moderate' | 'comfort' | 'premium' | 'luxury';
+  accommodationStyle?: string;
+  recoveryStyle?: string[];
+  activeHoursPerDay?: 'light' | 'moderate' | 'full';
+  recommendationStyle?: 'popular' | 'off_the_beaten_path';
+  aiAssistanceLevel?: 'full' | 'balanced' | 'minimal';
 }
 
 export interface TripContext {
@@ -782,6 +790,98 @@ export function buildPersonaManuscript(dna: TravelerDNA, tripContext: TripContex
     lines.push('');
   }
   
+  // ============================================================================
+  // NEW PHASE 16: Wire collected preferences into prompt
+  // ============================================================================
+  
+  // Gap 1: Daily Budget Constraint
+  if (dna.dailyBudgetTier) {
+    const budgetRanges: Record<string, string> = {
+      'budget': '$50-150 per person per day (meals, activities, local transport — NOT flights/hotels)',
+      'moderate': '$150-300 per person per day',
+      'comfort': '$300-500 per person per day',
+      'premium': '$500-800 per person per day',
+      'luxury': '$800+ per person per day',
+    };
+    lines.push(`💰 DAILY BUDGET CONSTRAINT`);
+    lines.push(`${'─'.repeat(50)}`);
+    lines.push(`   Target daily spend: ${budgetRanges[dna.dailyBudgetTier] || dna.dailyBudgetTier}`);
+    lines.push(`   Every day's activities + meals + transport MUST stay within this range.`);
+    lines.push(`   If suggesting a premium activity, balance it by suggesting a free/low-cost activity the same day.`);
+    lines.push('');
+  }
+  
+  // Gap 2: Accommodation Context
+  if (dna.accommodationStyle) {
+    const styleMap: Record<string, string> = {
+      'hotel': 'standard hotels',
+      'boutique': 'boutique hotels',
+      'hostel': 'hostels',
+      'airbnb': 'vacation rentals / Airbnb',
+      'resort': 'resorts',
+      'luxury_cocoon': 'luxury suites',
+    };
+    const stayType = styleMap[dna.accommodationStyle] || dna.accommodationStyle;
+    lines.push(`🏨 ACCOMMODATION CONTEXT`);
+    lines.push(`${'─'.repeat(50)}`);
+    lines.push(`   Traveler stays in: ${stayType}`);
+    lines.push(`   Reference their accommodation type naturally when mentioning "head back" or "freshen up."`);
+    lines.push(`   Match activity suggestions to this level — don't suggest room service for a hostel guest.`);
+    lines.push('');
+  }
+  
+  // Gap 3: Recovery Style
+  if (dna.recoveryStyle && dna.recoveryStyle.length > 0) {
+    lines.push(`🧘 RECOVERY PREFERENCES`);
+    lines.push(`${'─'.repeat(50)}`);
+    lines.push(`   How they recover: ${dna.recoveryStyle.join(', ')}`);
+    if (dna.recoveryStyle.includes('early_sleep')) {
+      lines.push(`   ⚠️ EARLY SLEEPER: No activities after 8:30 PM. Dinner by 7:00 PM.`);
+    }
+    if (dna.recoveryStyle.includes('spa_treatments')) {
+      lines.push(`   Include a spa/wellness activity every 2-3 days.`);
+    }
+    if (dna.recoveryStyle.includes('alone_time')) {
+      lines.push(`   Include at least one 1.5+ hour unscheduled block per day for personal time.`);
+    }
+    if (dna.recoveryStyle.includes('drinks_socializing')) {
+      lines.push(`   Include evening social venues (bars, lounges) for wind-down.`);
+    }
+    lines.push('');
+  }
+  
+  // Gap 5: Recommendation Style
+  if (dna.recommendationStyle) {
+    lines.push(`🔍 RECOMMENDATION STYLE`);
+    lines.push(`${'─'.repeat(50)}`);
+    if (dna.recommendationStyle === 'off_the_beaten_path') {
+      lines.push(`   IMPORTANT: Prefer hidden gems, local favorites, and lesser-known spots.`);
+      lines.push(`   Avoid: Top-10 lists, tourist-trap restaurants, overcrowded attractions.`);
+      lines.push(`   At least 60% of suggestions should be places most tourists wouldn't find.`);
+    } else {
+      lines.push(`   Prioritize well-reviewed, popular destinations that are popular for good reason.`);
+      lines.push(`   Include established favorites with strong ratings and reviews.`);
+    }
+    lines.push('');
+  }
+  
+  // Gap 6: AI Assistance Level (affects itinerary detail level)
+  if (dna.aiAssistanceLevel === 'minimal') {
+    lines.push(`📋 PLANNING FLEXIBILITY`);
+    lines.push(`${'─'.repeat(50)}`);
+    lines.push(`   This traveler prefers to plan themselves. Generate a LOOSE framework:`);
+    lines.push(`   - Suggest neighborhoods/areas to explore, not specific activities`);
+    lines.push(`   - Give 2-3 options per time slot instead of one fixed plan`);
+    lines.push(`   - Include more unscheduled "explore on your own" blocks`);
+    lines.push('');
+  } else if (dna.aiAssistanceLevel === 'balanced') {
+    lines.push(`📋 PLANNING FLEXIBILITY`);
+    lines.push(`${'─'.repeat(50)}`);
+    lines.push(`   Provide specific suggestions but frame them as options, not a fixed schedule.`);
+    lines.push('');
+  }
+  // 'full' = default behavior (detailed plan), no extra prompt needed
+  
   lines.push(`${'='.repeat(70)}`);
   lines.push(`END OF TRAVELER DNA PROFILE`);
   lines.push(`${'='.repeat(70)}`);
@@ -1445,6 +1545,13 @@ export function buildTravelerDNA(
     travelVibes,
     companions: (Array.isArray(preferences?.travel_companions) ? preferences.travel_companions[0] : preferences?.companion_type) as TravelerDNA['companions'],
     childrenCount: preferences?.children_count as number | undefined,
+    // NEW: Wire collected preferences into generation (Phase 16)
+    dailyBudgetTier: (preferences?.daily_budget_tier || preferences?.budget_tier) as TravelerDNA['dailyBudgetTier'],
+    accommodationStyle: (preferences?.accommodation_style || preferences?.hotel_style) as string | undefined,
+    recoveryStyle: ((preferences?.recovery_style || []) as string[]).filter(Boolean),
+    activeHoursPerDay: (preferences?.active_hours_per_day) as TravelerDNA['activeHoursPerDay'],
+    recommendationStyle: (preferences?.recommendation_style) as TravelerDNA['recommendationStyle'],
+    aiAssistanceLevel: (preferences?.ai_assistance_level) as TravelerDNA['aiAssistanceLevel'],
   };
 }
 

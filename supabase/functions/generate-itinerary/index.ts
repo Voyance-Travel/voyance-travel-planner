@@ -7000,9 +7000,14 @@ RULES FOR VOYANCE PICKS:
       console.log(`[Stage 1.96] ${forcedSlots.length} forced differentiator slots required per day (context: tripType=${slotContext.tripType}, hasChildren=${slotContext.hasChildren}, archetype=${slotContext.primaryArchetype})`);
       
       // Derive schedule constraints (pace, walking, buffer times) - Phase 2 Fix: use unified profile
+      // Phase 16: Pass recovery style and active hours for proper enforcement
       const scheduleConstraints = deriveScheduleConstraints(
         traitScores,
-        unifiedProfile.mobilityNeeds || prefs?.mobility_needs
+        unifiedProfile.mobilityNeeds || prefs?.mobility_needs,
+        {
+          recoveryStyle: prefs?.recovery_style as string[] | undefined,
+          activeHoursPerDay: prefs?.active_hours_per_day as 'light' | 'moderate' | 'full' | undefined,
+        }
       );
       const scheduleConstraintsPrompt = buildScheduleConstraintsPrompt(scheduleConstraints);
       console.log(`[Stage 1.96] Schedule constraints: ${scheduleConstraints.minActivitiesPerDay}-${scheduleConstraints.maxActivitiesPerDay} activities/day, ${scheduleConstraints.bufferMinutesBetweenActivities}min buffers`);
