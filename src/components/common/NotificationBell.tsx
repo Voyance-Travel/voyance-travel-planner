@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, X, ChevronRight, MessageSquare, Plane, Flag, Cloud, RefreshCw, UserPlus, Check } from 'lucide-react';
+import { Bell, X, ChevronRight, MessageSquare, Plane, Flag, Cloud, RefreshCw, UserPlus, Check, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { 
   useUserNotifications, 
   useDismissNotification,
+  useMarkAllAsRead,
   formatNotificationTime,
   type TripNotification 
 } from '@/services/tripNotificationsAPI';
@@ -40,18 +41,16 @@ function humanizeActivityId(id: string): string {
 function sanitizeNotificationText(text: string, activityId?: string): string {
   if (!text) return activityId ? humanizeActivityId(activityId) : 'Activity';
   
-  // Get a readable name from the activity ID for replacements
   const activityNameFromId = activityId ? humanizeActivityId(activityId) : 'Activity';
   
-  // Replace common issues from old data
   return text
     .replace(/undefined/gi, activityNameFromId)
     .replace(/\[object Object\]/gi, '')
     .replace(/Coming up: Activity$/i, `Coming up: ${activityNameFromId}`)
     .replace(/How was Activity\?/i, `How was ${activityNameFromId}?`)
-    .replace(/at\s*\.\s*Time/gi, 'Time') // Clean "at . Time" 
-    .replace(/at\s+Time/gi, 'Time') // Clean "at Time"
-    .replace(/\s+/g, ' ') // Normalize whitespace
+    .replace(/at\s*\.\s*Time/gi, 'Time')
+    .replace(/at\s+Time/gi, 'Time')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
@@ -64,6 +63,9 @@ const iconMap: Record<string, typeof Bell> = {
   activity_change: RefreshCw,
   friend_request: UserPlus,
   trip_invite: UserPlus,
+  proposal_created: MessageSquare,
+  member_joined: UserPlus,
+  proposal_decided: Flag,
 };
 
 const colorMap: Record<string, string> = {
@@ -75,6 +77,9 @@ const colorMap: Record<string, string> = {
   activity_change: 'text-orange-500 bg-orange-500/10',
   friend_request: 'text-primary bg-primary/10',
   trip_invite: 'text-emerald-500 bg-emerald-500/10',
+  proposal_created: 'text-violet-500 bg-violet-500/10',
+  member_joined: 'text-emerald-500 bg-emerald-500/10',
+  proposal_decided: 'text-orange-500 bg-orange-500/10',
 };
 
 interface FriendRequest {
@@ -104,7 +109,6 @@ function usePendingFriendRequests(userId: string | null) {
       
       if (!data || data.length === 0) return [];
       
-      // Fetch requester profiles
       const requesterIds = data.map(r => r.requester_id);
       const { data: profiles } = await supabase
         .from('profiles_friends')
@@ -156,13 +160,40 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   
   const { data: rawNotifications = [], isLoading } = useUserNotifications(user?.id || null);
   const { data: friendRequests = [], isLoading: friendRequestsLoading } = usePendingFriendRequests(user?.id || null);
   const dismissMutation = useDismissNotification();
+  const markAllReadMutation = useMarkAllAsRead();
   const respondMutation = useRespondToFriendRequest();
 
-  // Sanitize notifications to clean up any bad data from old notifications
+  // Realtime subscription for instant notification updates
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`notifications-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'trip_notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['user-notifications', user.id] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, queryClient]);
+
+  // Sanitize notifications
   const notifications = useMemo(() => {
     return rawNotifications.map(n => ({
       ...n,
@@ -171,10 +202,19 @@ export function NotificationBell() {
     }));
   }, [rawNotifications]);
 
-  const unreadCount = notifications.filter(n => !n.sent).length + friendRequests.length;
+  const unreadCount = notifications.filter(n => !n.read && !n.sent).length + friendRequests.length;
 
   const handleNotificationClick = (notification: TripNotification) => {
-    // Navigate to trip or activity
+    // Mark as read
+    if (!notification.read && !notification.sent) {
+      dismissMutation.mutate({
+        tripId: notification.tripId,
+        notificationId: notification.id,
+        source: notification.source,
+      });
+    }
+    
+    // Navigate to trip
     if (notification.type === 'feedback_prompt' && notification.activityId) {
       navigate(`/trips/${notification.tripId}?activity=${notification.activityId}`);
     } else {
@@ -187,8 +227,15 @@ export function NotificationBell() {
     e.stopPropagation();
     dismissMutation.mutate({
       tripId: notification.tripId,
-      notificationId: notification.id
+      notificationId: notification.id,
+      source: notification.source,
     });
+  };
+
+  const handleMarkAllRead = () => {
+    if (user?.id) {
+      markAllReadMutation.mutate(user.id);
+    }
   };
 
   const handleFriendResponse = (e: React.MouseEvent, requestId: string, response: 'accepted' | 'declined') => {
@@ -226,11 +273,25 @@ export function NotificationBell() {
       <PopoverContent className="w-80 p-0" align="end">
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <h3 className="font-semibold">Notifications</h3>
-          {unreadCount > 0 && (
-            <Badge variant="secondary" className="text-xs">
-              {unreadCount} new
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={handleMarkAllRead}
+                  disabled={markAllReadMutation.isPending}
+                >
+                  <CheckCheck className="h-3 w-3 mr-1" />
+                  Read all
+                </Button>
+                <Badge variant="secondary" className="text-xs">
+                  {unreadCount} new
+                </Badge>
+              </>
+            )}
+          </div>
         </div>
 
         <ScrollArea className="h-[300px]">
@@ -302,13 +363,17 @@ export function NotificationBell() {
               {notifications.map((notification) => {
                 const Icon = iconMap[notification.type] || Bell;
                 const colorClass = colorMap[notification.type] || 'text-muted-foreground bg-muted';
+                const isRead = notification.read || notification.sent;
                 
                 return (
                   <motion.div
                     key={notification.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="px-4 py-3 hover:bg-muted/50 cursor-pointer transition-colors group"
+                    className={cn(
+                      "px-4 py-3 hover:bg-muted/50 cursor-pointer transition-colors group",
+                      !isRead && "bg-primary/5"
+                    )}
                     onClick={() => handleNotificationClick(notification)}
                   >
                     <div className="flex gap-3">
@@ -318,7 +383,7 @@ export function NotificationBell() {
                       
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
-                          <p className="text-sm font-medium line-clamp-1">
+                          <p className={cn("text-sm line-clamp-1", !isRead ? "font-semibold" : "font-medium")}>
                             {notification.title}
                           </p>
                           <button
@@ -341,6 +406,9 @@ export function NotificationBell() {
                           <span className="text-[10px] text-muted-foreground/60">
                             {formatNotificationTime(notification.scheduledFor)}
                           </span>
+                          {!isRead && (
+                            <span className="ml-auto w-2 h-2 rounded-full bg-primary flex-shrink-0" />
+                          )}
                         </div>
                       </div>
                       

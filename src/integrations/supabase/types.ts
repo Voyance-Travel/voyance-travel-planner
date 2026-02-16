@@ -6016,6 +6016,8 @@ export type Database = {
           id: string
           metadata: Json | null
           notification_type: string
+          read: boolean | null
+          scheduled_for: string | null
           sent: boolean | null
           sent_at: string | null
           trip_id: string
@@ -6027,6 +6029,8 @@ export type Database = {
           id?: string
           metadata?: Json | null
           notification_type: string
+          read?: boolean | null
+          scheduled_for?: string | null
           sent?: boolean | null
           sent_at?: string | null
           trip_id: string
@@ -6038,6 +6042,8 @@ export type Database = {
           id?: string
           metadata?: Json | null
           notification_type?: string
+          read?: boolean | null
+          scheduled_for?: string | null
           sent?: boolean | null
           sent_at?: string | null
           trip_id?: string
