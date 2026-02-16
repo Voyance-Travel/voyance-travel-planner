@@ -837,6 +837,62 @@ export async function submitQuizComplete(
     preferences.traveler_type = dna.primary_archetype_name;
     preferences.emotional_drivers = dna.emotional_drivers;
 
+    // 3b. Seed additional preferences from DNA trait scores
+    // This ensures preferences are pre-populated even when quiz questions
+    // don't directly map to preference fields
+    if (dna.trait_scores) {
+      const traits = dna.trait_scores;
+      
+      // Travel pace: pace trait > 3 = active, < -3 = relaxed, else moderate
+      if (!preferences.travel_pace) {
+        if (traits.pace >= 3) preferences.travel_pace = 'active';
+        else if (traits.pace <= -3) preferences.travel_pace = 'relaxed';
+        else preferences.travel_pace = 'moderate';
+      }
+      
+      // Interests from trait scores
+      if (!preferences.interests || preferences.interests.length === 0) {
+        const seededInterests: string[] = [];
+        if (traits.authenticity >= 3) seededInterests.push('local_culture', 'history');
+        if (traits.adventure >= 3) seededInterests.push('adventure');
+        if (traits.comfort >= 3) seededInterests.push('wellness');
+        if (traits.social >= 3) seededInterests.push('nightlife');
+        if (traits.authenticity >= 1) seededInterests.push('food_culinary');
+        if (traits.adventure <= -2) seededInterests.push('beach_water');
+        if (seededInterests.length > 0) preferences.interests = [...new Set(seededInterests)];
+      }
+      
+      // Accommodation style from comfort trait
+      if (!preferences.accommodation_style) {
+        if (traits.comfort >= 5) preferences.accommodation_style = 'luxury_suites';
+        else if (traits.comfort >= 2) preferences.accommodation_style = 'hotels';
+        else if (traits.comfort <= -3) preferences.accommodation_style = 'hostels';
+        else preferences.accommodation_style = 'vacation_rentals';
+      }
+      
+      // Planning preference from planning trait
+      if (!preferences.planning_preference) {
+        if (traits.planning >= 4) preferences.planning_preference = 'detailed';
+        else if (traits.planning <= -3) preferences.planning_preference = 'spontaneous';
+        else preferences.planning_preference = 'flexible';
+      }
+      
+      // Activity level from pace + adventure
+      if (!preferences.activity_level) {
+        const energyScore = (traits.pace + traits.adventure) / 2;
+        if (energyScore >= 3) preferences.activity_level = 'high';
+        else if (energyScore <= -2) preferences.activity_level = 'low';
+        else preferences.activity_level = 'moderate';
+      }
+      
+      // Social energy from social trait
+      if (!preferences.social_energy) {
+        if (traits.social >= 3) preferences.social_energy = 'extrovert';
+        else if (traits.social <= -3) preferences.social_energy = 'introvert';
+        else preferences.social_energy = 'ambivert';
+      }
+    }
+
     // 4. Save preferences - MERGE with existing, don't overwrite
     // Only update fields that were explicitly set by the quiz
     const mergedPreferences = existingPreferences

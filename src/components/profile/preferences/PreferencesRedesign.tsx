@@ -141,9 +141,9 @@ export default function PreferencesRedesign({
     [onPreferenceChange]
   );
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (hasUnsavedChanges) {
-      onSave();
+      await Promise.resolve(onSave());
       setHasUnsavedChanges(false);
     }
 
@@ -155,9 +155,9 @@ export default function PreferencesRedesign({
     }
   };
 
-  const handlePrevious = () => {
+  const handlePrevious = async () => {
     if (hasUnsavedChanges) {
-      onSave();
+      await Promise.resolve(onSave());
       setHasUnsavedChanges(false);
     }
     if (activeSection > 0) {
@@ -165,9 +165,10 @@ export default function PreferencesRedesign({
     }
   };
 
-  const handleSectionClick = (index: number) => {
+  const handleSectionClick = async (index: number) => {
+    if (index === activeSection) return;
     if (hasUnsavedChanges) {
-      onSave();
+      await Promise.resolve(onSave());
       setHasUnsavedChanges(false);
     }
     setActiveSection(index);
@@ -213,7 +214,7 @@ export default function PreferencesRedesign({
         </div>
 
         {/* Section Navigation */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide md:grid md:grid-cols-3 lg:grid-cols-7">
           {PREFERENCE_SECTIONS.map((section, index) => {
             const Icon = section.icon;
             const isActive = index === activeSection;
@@ -267,15 +268,10 @@ export default function PreferencesRedesign({
 
       {/* Main Content Area */}
       <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeSection}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.3 }}
-            className="p-4 sm:p-8"
-          >
+        <div
+          key={`section-content-${activeSection}`}
+          className="p-4 sm:p-8 animate-in fade-in duration-200"
+        >
             {/* Section Header */}
             <div className="border-l-4 border-primary pl-4 sm:pl-6 mb-6 sm:mb-8">
               <div className="flex items-center gap-3 mb-2">
@@ -352,8 +348,7 @@ export default function PreferencesRedesign({
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
-          </motion.div>
-        </AnimatePresence>
+        </div>
       </div>
     </div>
   );
