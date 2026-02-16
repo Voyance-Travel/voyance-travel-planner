@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { usePopupCoordination } from '@/stores/popup-coordination-store';
+import { fetchOnboardingState, mergeOnboardingState } from '@/utils/onboardingState';
 
 interface TourStep {
   id: string;
@@ -49,6 +50,7 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
   const location = useLocation();
   const { requestPopup, closePopup } = usePopupCoordination();
   const navigationTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   const firstName = user?.name?.split(' ')[0] || 'there';
 
@@ -121,55 +123,61 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
     },
   ];
 
-  // Clear stale tour flags when a NEW user signs in
-  // This handles the case where a previous account on the same browser
-  // already completed the tour — the new user should see it fresh
-  useEffect(() => {
-    if (!user) return;
-    const completedForUserId = localStorage.getItem(STORAGE_KEY);
-    // Store which user ID completed the tour, not just "true"
-    // If stored value is "true" (legacy) or a different user ID, clear it
-    if (completedForUserId && completedForUserId !== user.id) {
-      localStorage.removeItem(STORAGE_KEY);
-    }
-  }, [user]);
-
-  // Robust polling: keep trying to acquire the popup slot
-  // IMPORTANT: Wait for welcome credits to finish first (it has priority 1)
+  // Check tour completion from DB + localStorage, then decide whether to show
   useEffect(() => {
     if (!user) return;
     if (isVisible) return;
-    const completedVal = localStorage.getItem(STORAGE_KEY);
-    if (completedVal === user.id) return; // This user already completed tour
 
-    // Tour has highest priority now — request slot quickly
-    const initialTimer = setTimeout(() => {
-      const allowed = requestPopup('site_tour');
-      if (allowed) {
-        setIsVisible(true);
+    let cancelled = false;
+
+    const checkAndRequest = async () => {
+      // Fast path: localStorage says this user already completed
+      const localVal = localStorage.getItem(STORAGE_KEY);
+      if (localVal === user.id) return;
+
+      // Clear stale value from a different user
+      if (localVal && localVal !== user.id) {
+        localStorage.removeItem(STORAGE_KEY);
       }
-    }, 1000);
 
-    // Fallback: poll every 2s in case the initial attempt was blocked
-    const interval = setInterval(() => {
-      const val = localStorage.getItem(STORAGE_KEY);
-      if (val === user?.id) {
-        clearInterval(interval);
+      // Slow path: check DB (survives logout / browser clear)
+      const dbState = await fetchOnboardingState(user.id);
+      if (dbState.site_tour_completed) {
+        // Re-sync localStorage so next check is fast
+        localStorage.setItem(STORAGE_KEY, user.id);
         return;
       }
-      const state = usePopupCoordination.getState();
-      if (!state.activePopup) {
-        const allowed = state.requestPopup('site_tour');
-        if (allowed) {
-          setIsVisible(true);
-          clearInterval(interval);
+
+      if (cancelled) return;
+
+      // Neither localStorage nor DB has completion — try to show tour
+      const initialTimer = setTimeout(() => {
+        if (cancelled) return;
+        const allowed = requestPopup('site_tour');
+        if (allowed) setIsVisible(true);
+      }, 1000);
+
+      // Fallback polling
+      const interval = setInterval(() => {
+        if (cancelled) return;
+        const val = localStorage.getItem(STORAGE_KEY);
+        if (val === user?.id) { clearInterval(interval); return; }
+        const state = usePopupCoordination.getState();
+        if (!state.activePopup) {
+          const allowed = state.requestPopup('site_tour');
+          if (allowed) { setIsVisible(true); clearInterval(interval); }
         }
-      }
-    }, 2000);
+      }, 2000);
+
+      // Store cleanup refs so the outer cleanup can clear them
+      cleanupRef.current = () => { clearTimeout(initialTimer); clearInterval(interval); };
+    };
+
+    checkAndRequest();
 
     return () => {
-      clearTimeout(initialTimer);
-      clearInterval(interval);
+      cancelled = true;
+      cleanupRef.current?.();
     };
   }, [user, isVisible, requestPopup]);
 
@@ -267,20 +275,28 @@ export function SiteOnboardingTour({ onComplete }: SiteOnboardingTourProps) {
     }
   }, [currentStep]);
 
-  const handleComplete = useCallback((destination: 'quiz' | 'start' = 'start') => {
-    if (user?.id) localStorage.setItem(STORAGE_KEY, user.id);
-    setIsVisible(false);
-    closePopup('site_tour');
-    onComplete?.();
-    navigate(destination === 'quiz' ? ROUTES.QUIZ : ROUTES.START);
-  }, [onComplete, navigate, closePopup, user]);
-
-  const handleSkip = useCallback(() => {
-    if (user?.id) localStorage.setItem(STORAGE_KEY, user.id);
+  const markTourComplete = useCallback(() => {
+    if (user?.id) {
+      localStorage.setItem(STORAGE_KEY, user.id);
+      // Persist to DB (fire-and-forget)
+      mergeOnboardingState(user.id, {
+        site_tour_completed: true,
+        site_tour_completed_at: new Date().toISOString(),
+      });
+    }
     setIsVisible(false);
     closePopup('site_tour');
     onComplete?.();
   }, [onComplete, closePopup, user]);
+
+  const handleComplete = useCallback((destination: 'quiz' | 'start' = 'start') => {
+    markTourComplete();
+    navigate(destination === 'quiz' ? ROUTES.QUIZ : ROUTES.START);
+  }, [markTourComplete, navigate]);
+
+  const handleSkip = useCallback(() => {
+    markTourComplete();
+  }, [markTourComplete]);
 
   if (!isVisible) return null;
 

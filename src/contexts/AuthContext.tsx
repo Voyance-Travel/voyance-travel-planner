@@ -384,6 +384,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) {
       logLogout().catch(console.error);
     }
+
+    // Preserve onboarding/tour keys BEFORE signOut clears localStorage
+    const TOUR_KEYS = [
+      'voyance_site_tour_completed',
+      'voyance_itinerary_tour_completed',
+      'voyance_welcome_shown',
+      'voyance_onboarding_nudge_shown',
+      'voyance_welcome_bonus_claimed',
+    ] as const;
+    const savedTourState: Record<string, string> = {};
+    TOUR_KEYS.forEach(key => {
+      const val = localStorage.getItem(key);
+      if (val) savedTourState[key] = val;
+    });
     
     const { error } = await supabase.auth.signOut();
     if (error) {
@@ -404,6 +418,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     Object.keys(localStorage)
       .filter(key => key.startsWith('voyance_quiz_'))
       .forEach(key => localStorage.removeItem(key));
+
+    // Restore tour/onboarding keys so they survive logout
+    Object.entries(savedTourState).forEach(([key, val]) => {
+      localStorage.setItem(key, val);
+    });
     
     setSession(null);
     setUser(null);
