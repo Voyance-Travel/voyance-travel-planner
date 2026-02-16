@@ -10,6 +10,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBonusCredits } from '@/hooks/useBonusCredits';
 import { usePopupCoordination, POPUP_STORAGE } from '@/stores/popup-coordination-store';
+import { fetchOnboardingState, mergeOnboardingState } from '@/utils/onboardingState';
 import WelcomeCreditsModal from './WelcomeCreditsModal';
 import CreditEarningProgressBar from './CreditEarningProgressBar';
 
@@ -20,9 +21,28 @@ export function WelcomeBonusManager() {
   
   const { requestPopup, closePopup, hasActiveModal } = usePopupCoordination();
 
+  const [dbChecked, setDbChecked] = useState(false);
+  const [dbWelcomeShown, setDbWelcomeShown] = useState(false);
+
+  // Check DB for welcome_shown flag on mount
+  useEffect(() => {
+    if (!user) return;
+    fetchOnboardingState(user.id).then(state => {
+      if (state.welcome_shown) {
+        setDbWelcomeShown(true);
+        // Re-sync localStorage
+        sessionStorage.setItem(POPUP_STORAGE.WELCOME_SHOWN, user.id);
+        localStorage.setItem('voyance_welcome_bonus_claimed', user.id);
+      }
+      setDbChecked(true);
+    });
+  }, [user]);
+
   // Helper to check if welcome modal should be allowed
   const shouldShowWelcome = () => {
     if (!user) return false;
+    if (!dbChecked) return false; // Wait for DB check
+    if (dbWelcomeShown) return false;
     // Per-user persistent check — already claimed in DB
     if (hasClaimedBonus('welcome')) return false;
     // Per-user session check: prevents re-showing within the same tab session
@@ -52,7 +72,7 @@ export function WelcomeBonusManager() {
       }
     }, 2000); // Delay to let tour claim slot first
     return () => clearTimeout(timer);
-  }, [user, authLoading, bonusLoading, hasClaimedBonus, requestPopup]);
+  }, [user, authLoading, bonusLoading, hasClaimedBonus, requestPopup, dbChecked]);
 
   // React to being granted from the popup queue (e.g. if another popup grabbed the slot first)
   const activePopup = usePopupCoordination((s) => s.activePopup);
@@ -66,7 +86,14 @@ export function WelcomeBonusManager() {
   const handleCloseWelcome = () => {
     setShowWelcomeModal(false);
     closePopup('welcome_credits');
-    if (user?.id) localStorage.setItem('voyance_welcome_bonus_claimed', user.id);
+    if (user?.id) {
+      localStorage.setItem('voyance_welcome_bonus_claimed', user.id);
+      // Persist to DB
+      mergeOnboardingState(user.id, {
+        welcome_shown: true,
+        welcome_shown_at: new Date().toISOString(),
+      });
+    }
   };
 
   // Don't render anything if not authenticated

@@ -4201,6 +4201,7 @@ export type Database = {
           home_airport: string | null
           id: string
           last_name: string | null
+          onboarding_state: Json | null
           preferred_currency: string | null
           preferred_language: string | null
           quiz_completed: boolean | null
@@ -4219,6 +4220,7 @@ export type Database = {
           home_airport?: string | null
           id: string
           last_name?: string | null
+          onboarding_state?: Json | null
           preferred_currency?: string | null
           preferred_language?: string | null
           quiz_completed?: boolean | null
@@ -4237,6 +4239,7 @@ export type Database = {
           home_airport?: string | null
           id?: string
           last_name?: string | null
+          onboarding_state?: Json | null
           preferred_currency?: string | null
           preferred_language?: string | null
           quiz_completed?: boolean | null
