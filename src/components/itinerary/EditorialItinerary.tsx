@@ -2517,7 +2517,7 @@ export function EditorialItinerary({
             })()}
             {/* Credit Balance Pill — Clickable with Quick Buy Popover */}
             {creditData && (
-              <CreditQuickBuy currentBalance={totalCredits}>
+              <CreditQuickBuy currentBalance={totalCredits} tripId={tripId}>
                 <button className="flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md bg-primary/5 border border-primary/20 text-xs sm:text-sm shrink-0 cursor-pointer hover:bg-primary/10 hover:border-primary/30 transition-colors">
                   <Coins className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-primary" />
                   <span className="font-medium text-primary">{totalCredits}</span>
