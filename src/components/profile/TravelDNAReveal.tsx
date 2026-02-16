@@ -400,8 +400,8 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
           });
         }
         
-        if (profileError) console.error('travel_dna_profiles error:', profileError);
-        if (userError) console.error('profiles error:', userError);
+        if (profileError) console.error('travel_dna_profiles error:', JSON.stringify(profileError, null, 2));
+        if (userError) console.error('profiles error:', JSON.stringify(userError, null, 2));
       } catch (error) {
         console.error('Failed to load travel DNA:', error);
       } finally {
