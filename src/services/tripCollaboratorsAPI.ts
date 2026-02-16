@@ -208,17 +208,41 @@ export async function updateCollaboratorPermission(
 }
 
 /**
- * Remove a collaborator from a trip
+ * Remove a collaborator from a trip (cleans both trip_collaborators and trip_members)
  */
 export async function removeTripCollaborator(collaboratorId: string): Promise<void> {
+  // First get the collaborator to know user_id and trip_id
+  const { data: collab, error: fetchError } = await supabase
+    .from('trip_collaborators')
+    .select('user_id, trip_id')
+    .eq('id', collaboratorId)
+    .single();
+
+  if (fetchError || !collab) {
+    console.error('[TripCollaborators] Error fetching collaborator:', fetchError);
+    throw fetchError || new Error('Collaborator not found');
+  }
+
+  // Delete from trip_collaborators
   const { error } = await supabase
     .from('trip_collaborators')
     .delete()
     .eq('id', collaboratorId);
 
   if (error) {
-    console.error('[TripCollaborators] Error removing:', error);
+    console.error('[TripCollaborators] Error removing collaborator:', error);
     throw error;
+  }
+
+  // Also remove from trip_members (non-blocking — best effort)
+  try {
+    await supabase
+      .from('trip_members')
+      .delete()
+      .eq('trip_id', collab.trip_id)
+      .eq('user_id', collab.user_id);
+  } catch (e) {
+    console.error('[TripCollaborators] Error removing from trip_members:', e);
   }
 }
 

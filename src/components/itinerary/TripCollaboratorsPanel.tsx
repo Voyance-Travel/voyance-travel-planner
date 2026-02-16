@@ -10,11 +10,21 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Crown, Users, Eye, Edit3, UserPlus, MoreVertical, 
-  X, Shield, ChevronDown, ChevronUp, Dna, Loader2, Sparkles, Link2
+  X, Shield, ChevronDown, ChevronUp, Dna, Loader2, Sparkles, Link2, UserMinus
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -85,6 +95,7 @@ export function TripCollaboratorsPanel({
   const [showFriendPicker, setShowFriendPicker] = useState(false);
   const [collaboratorDNA, setCollaboratorDNA] = useState<Record<string, { hasDNA: boolean; compatibility: number | null }>>({});
   const [updatingPreferences, setUpdatingPreferences] = useState<string | null>(null);
+  const [removingCollaborator, setRemovingCollaborator] = useState<TripCollaborator | null>(null);
 
   const isOwner = permission?.isOwner ?? false;
   const totalMembers = 1 + collaborators.length;
@@ -123,9 +134,13 @@ export function TripCollaboratorsPanel({
   };
 
   const handleRemove = async (collaborator: TripCollaborator) => {
-    if (confirm(`Remove ${collaborator.profile?.display_name || 'this collaborator'} from the trip?`)) {
-      removeCollaborator.mutate(collaborator.id);
-    }
+    setRemovingCollaborator(collaborator);
+  };
+
+  const confirmRemove = async () => {
+    if (!removingCollaborator) return;
+    removeCollaborator.mutate(removingCollaborator.id);
+    setRemovingCollaborator(null);
   };
 
   const handleTogglePreferences = async (collaborator: TripCollaborator) => {
@@ -186,6 +201,7 @@ export function TripCollaboratorsPanel({
   const collaboratorUserIds = new Set(collaborators.map(c => c.user_id));
 
   return (
+    <>
     <Card className={cn(compact && "border-0 shadow-none bg-transparent")}>
       {!compact && (
         <CardHeader className="pb-2">
@@ -466,6 +482,31 @@ export function TripCollaboratorsPanel({
         </div>
       </CardContent>
     </Card>
+
+    {/* Remove Collaborator Confirmation Dialog */}
+    <AlertDialog open={!!removingCollaborator} onOpenChange={(open) => !open && setRemovingCollaborator(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
+            <UserMinus className="h-5 w-5 text-destructive" />
+            Remove from trip?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            Remove <strong>{removingCollaborator?.profile?.display_name || 'this guest'}</strong> from this trip? They will lose access to the itinerary and won't be able to view or edit it.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={confirmRemove}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            Remove
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
