@@ -63,8 +63,11 @@ function ConfettiParticle({ delay, x }: { delay: number; x: number }) {
   );
 }
 
+const FALLBACK_IDS = ['balanced_story_collector', 'explorer', 'flexible_wanderer'];
+
 /** DNA Reveal Card shown on the completion screen */
 function DNARevealCard({ dnaResult }: { dnaResult: DNAResult }) {
+  const navigate = useNavigate();
   const narrative = dnaResult.primary_archetype_name 
     ? getArchetypeNarrative(dnaResult.primary_archetype_name) 
     : null;
@@ -82,6 +85,7 @@ function DNARevealCard({ dnaResult }: { dnaResult: DNAResult }) {
 
   const confidence = dnaResult.dna_confidence_score || 85;
   const archetypeId = dnaResult.primary_archetype_name || '';
+  const isFallbackResult = FALLBACK_IDS.includes(archetypeId);
   const rarity = getRarityLabel(archetypeId) || dnaResult.dna_rarity || 'Uncommon';
 
   return (
@@ -151,7 +155,11 @@ function DNARevealCard({ dnaResult }: { dnaResult: DNAResult }) {
             <span className="text-background/15">·</span>
             <span className="text-xs text-background/35">{rarity}</span>
             <span className="text-background/15">·</span>
-            <span className="text-xs text-background/35">{confidence}% match</span>
+            {!isFallbackResult ? (
+              <span className="text-xs text-background/35">{confidence}% match</span>
+            ) : (
+              <span className="text-xs text-background/35">Broad match</span>
+            )}
 
             {validSecondary && (
               <>
@@ -190,6 +198,25 @@ function DNARevealCard({ dnaResult }: { dnaResult: DNAResult }) {
               </motion.div>
             ))}
           </div>
+        </motion.div>
+      )}
+
+      {/* Fallback archetype retake prompt */}
+      {isFallbackResult && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1.5 }}
+          className="mt-4 p-3 rounded-lg bg-accent/10 border border-accent/20 text-sm text-muted-foreground"
+        >
+          Want a more specific result? Try answering with stronger preferences —
+          the quiz works best when you lean into what makes you unique.
+          <button 
+            onClick={() => navigate('/quiz?retake=true')}
+            className="ml-2 underline font-medium text-accent hover:text-accent/80 transition-colors"
+          >
+            Retake Quiz
+          </button>
         </motion.div>
       )}
 
