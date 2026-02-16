@@ -202,17 +202,18 @@ function meetsRequirement(
  * Returns 1.0 if fully met, proportional credit if close
  */
 function calculateProximity(score: number | undefined, requirement: TraitRequirement): number {
-  if (score === undefined) return 0;
+  if (score === undefined || score === null) return 0;
+  if (typeof score !== 'number' || !isFinite(score)) return 0;
   let proximity = 1.0;
   if (requirement.min !== undefined && score < requirement.min) {
     const gap = requirement.min - score;
-    proximity = Math.min(proximity, Math.max(0, 1 - (gap / 0.3)));
+    proximity = Math.min(proximity, Math.max(0, 1 - (gap / Math.max(0.01, 0.3))));
   }
   if (requirement.max !== undefined && score > requirement.max) {
     const gap = score - requirement.max;
-    proximity = Math.min(proximity, Math.max(0, 1 - (gap / 0.3)));
+    proximity = Math.min(proximity, Math.max(0, 1 - (gap / Math.max(0.01, 0.3))));
   }
-  return proximity;
+  return isNaN(proximity) || !isFinite(proximity) ? 0 : proximity;
 }
 
 /**
@@ -233,15 +234,17 @@ function calculateArchetypeScore(
   
   for (const [trait, requirement] of Object.entries(required)) {
     const traitValue = scores[trait];
-    if (typeof traitValue === 'number') {
-      const proximity = calculateProximity(traitValue, requirement);
-      score += proximity * 30; // Full 30 if met, partial credit if close
-      if (proximity >= 1.0) {
-        matchedRequirements.push(trait);
-      } else {
-        // Small penalty scaled by how far off — NOT a flat -50
-        score -= (1 - proximity) * 15;
-      }
+    if (traitValue === undefined || traitValue === null || typeof traitValue !== 'number') {
+      console.warn(`[ArchetypeMatcher] Missing trait: ${trait}`);
+      continue;
+    }
+    if (!isFinite(traitValue)) continue;
+    const proximity = calculateProximity(traitValue, requirement);
+    score += proximity * 30;
+    if (proximity >= 1.0) {
+      matchedRequirements.push(trait);
+    } else {
+      score -= (1 - proximity) * 15;
     }
   }
 
@@ -355,14 +358,36 @@ export function matchArchetypes(
     }
   }
 
+  // Sanitize all scores to prevent NaN/Infinity from reaching the save pipeline
+  const sanitizedMatches = matches.map(match => ({
+    ...match,
+    score: (typeof match.score === 'number' && isFinite(match.score)) ? match.score : 0,
+    confidence: match.confidence || 'low',
+  }));
+
+  // Re-sort after sanitization
+  sanitizedMatches.sort((a, b) => b.score - a.score);
+
   // Get primary and secondary
-  const primary = matches[0];
-  const secondary = matches.length > 1 && matches[1].score > 0 ? matches[1] : null;
+  const primary = sanitizedMatches[0];
+  const secondary = sanitizedMatches.length > 1 && sanitizedMatches[1].score > 0 ? sanitizedMatches[1] : null;
+
+  // Absolute last-resort fallback
+  if (!primary || !primary.id) {
+    console.warn('[ArchetypeMatcher] No valid primary archetype — falling back to BSC');
+    return {
+      primary: { id: 'balanced_story_collector', name: 'The Balanced Story Collector', category: 'BALANCED', score: 0, confidence: 'low' as const, matchedRequirements: [], penalties: [] },
+      secondary: null,
+      allMatches: [{ id: 'balanced_story_collector', name: 'The Balanced Story Collector', category: 'BALANCED', score: 0, confidence: 'low' as const, matchedRequirements: [], penalties: [] }],
+      traitScores: scores,
+      lifeStage,
+    };
+  }
 
   return {
     primary,
     secondary,
-    allMatches: matches.filter(m => m.score > 0),
+    allMatches: sanitizedMatches.filter(m => m.score > 0),
     traitScores: scores,
     lifeStage,
   };

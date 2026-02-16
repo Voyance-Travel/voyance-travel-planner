@@ -757,7 +757,7 @@ export async function saveTravelDNA(
   }
 
   if (error) {
-    console.error('Failed to save travel DNA:', error);
+    console.error('Failed to save travel DNA:', JSON.stringify(error, null, 2));
     return false;
   }
 
@@ -950,7 +950,7 @@ export async function submitQuizComplete(
         .eq('id', userId);
         
       if (profileError) {
-        console.error('Failed to update profile with travel_dna:', profileError);
+        console.error('Failed to update profile with travel_dna:', JSON.stringify(profileError, null, 2));
       }
     } catch (profileErr) {
       console.error('Error updating profile:', profileErr);
