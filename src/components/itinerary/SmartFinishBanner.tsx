@@ -1,15 +1,17 @@
 /**
- * Smart Finish Review Dialog
+ * Smart Finish Banner + Review Dialog
  * 
- * Shows DNA gap analysis in a popup dialog for manual/imported itineraries.
- * "Your research. Our polish. 50 credits."
+ * Prominent CTA banner for manual/imported itineraries.
+ * "This trip has great bones — want us to finish it?"
+ * Shows gap analysis in a dialog when user clicks to review.
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, AlertTriangle, Info, CheckCircle2, 
-  Loader2, Zap, Coins
+  Loader2, Zap, Coins, Wand2, X, ChevronRight,
+  Route, Star, Clock, MapPin
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -49,16 +51,24 @@ const severityIcon = {
   info: <Info className="h-4 w-4 text-blue-400" />,
 };
 
+const ENRICHMENT_FEATURES = [
+  { icon: Star, label: 'Insider tips & local picks' },
+  { icon: Route, label: 'Route optimization' },
+  { icon: Clock, label: 'Timing hacks' },
+  { icon: MapPin, label: 'DNA-matched fixes' },
+];
+
 export function SmartFinishBanner({
   tripId,
   isManualMode,
   smartFinishPurchased,
   onPurchaseComplete,
+  className,
 }: SmartFinishBannerProps) {
   const [analysis, setAnalysis] = useState<GapAnalysis | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isPurchasing, setIsPurchasing] = useState(false);
-  const [isOpen, setIsOpen] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [hasAnalyzed, setHasAnalyzed] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
@@ -66,7 +76,7 @@ export function SmartFinishBanner({
   const { data: creditData } = useCredits();
   const totalCredits = creditData?.totalCredits ?? 0;
 
-  const shouldShow = isManualMode && !smartFinishPurchased;
+  const shouldShow = isManualMode && !smartFinishPurchased && !dismissed;
 
   const runAnalysis = useCallback(async () => {
     if (!shouldShow || hasAnalyzed) return;
@@ -79,9 +89,6 @@ export function SmartFinishBanner({
       if (data) {
         setAnalysis(data);
         setHasAnalyzed(true);
-        if (data.gapCount > 0) {
-          setIsOpen(true);
-        }
       }
     } catch (err) {
       console.error('Gap analysis failed:', err);
@@ -99,14 +106,12 @@ export function SmartFinishBanner({
   const handlePurchase = async () => {
     setIsPurchasing(true);
     try {
-      // Spend credits via the spend-credits edge function
       await spendCredits.mutateAsync({
         action: 'SMART_FINISH',
         tripId,
         metadata: { source: 'smart_finish_banner' },
       });
 
-      // Mark smart_finish_purchased on the trip
       const { error: updateError } = await supabase
         .from('trips')
         .update({ smart_finish_purchased: true })
@@ -116,7 +121,6 @@ export function SmartFinishBanner({
         console.error('Failed to mark smart finish purchased:', updateError);
       }
 
-      // Trigger enrichment
       supabase.functions.invoke('enrich-manual-trip', {
         body: { tripId },
       }).catch(err => console.error('Enrichment trigger failed:', err));
@@ -125,10 +129,9 @@ export function SmartFinishBanner({
         description: 'Your itinerary is being enriched with route optimization, reviews, and tips.',
       });
 
-      setIsOpen(false);
+      setIsDialogOpen(false);
       onPurchaseComplete?.();
     } catch (err: any) {
-      // useSpendCredits handles insufficient credits via the modal
       if (!err?.message?.startsWith('Not enough credits')) {
         toast.error('Failed to activate Smart Finish. Please try again.');
       }
@@ -137,52 +140,107 @@ export function SmartFinishBanner({
     }
   };
 
-  const handleDismiss = () => {
-    setIsOpen(false);
-    setDismissed(true);
-  };
-
   if (!shouldShow) return null;
-
-  const triggerButton = hasAnalyzed && analysis && analysis.gapCount > 0 && !isOpen && (
-    <button
-      onClick={() => setIsOpen(true)}
-      className={cn(
-        "flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all",
-        "border border-amber-200/50 bg-amber-50/50 hover:bg-amber-100/60",
-        "dark:border-amber-800/30 dark:bg-amber-950/20 dark:hover:bg-amber-950/40",
-        "text-amber-700 dark:text-amber-300"
-      )}
-    >
-      <Sparkles className="h-4 w-4" />
-      <span>
-        {analysis.gapCount} gap{analysis.gapCount !== 1 ? 's' : ''} found
-      </span>
-      <Badge variant="outline" className="text-[10px] border-amber-300 dark:border-amber-700">
-        Review
-      </Badge>
-    </button>
-  );
 
   return (
     <>
-      {triggerButton}
+      {/* ── Persistent Banner ── */}
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={cn(
+          "relative overflow-hidden rounded-xl border",
+          "border-amber-200/60 dark:border-amber-800/40",
+          "bg-gradient-to-br from-amber-50/80 via-orange-50/50 to-amber-50/80",
+          "dark:from-amber-950/30 dark:via-orange-950/20 dark:to-amber-950/30",
+          "p-4 sm:p-5",
+          className
+        )}
+      >
+        {/* Dismiss button */}
+        <button
+          onClick={() => setDismissed(true)}
+          className="absolute top-3 right-3 p-1 rounded-md text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/40 transition-colors"
+          aria-label="Dismiss"
+        >
+          <X className="h-4 w-4" />
+        </button>
 
-      {isLoading && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-          <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
-          Analyzing your itinerary...
+        {/* Decorative sparkle */}
+        <div className="absolute -top-6 -right-6 h-24 w-24 rounded-full bg-amber-400/10 dark:bg-amber-400/5 blur-2xl" />
+
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          {/* Icon + Text */}
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            <div className="shrink-0 p-2.5 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 shadow-md shadow-amber-500/20">
+              <Wand2 className="h-5 w-5 text-white" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-foreground leading-tight">
+                This trip has great bones — want us to finish it?
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                Smart Finish adds insider tips, timing hacks, route optimization, and DNA-matched fixes to your itinerary.
+              </p>
+
+              {/* Feature pills */}
+              <div className="flex flex-wrap gap-1.5 mt-2.5">
+                {ENRICHMENT_FEATURES.map(({ icon: Icon, label }) => (
+                  <span
+                    key={label}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100/80 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
+                  >
+                    <Icon className="h-3 w-3" />
+                    {label}
+                  </span>
+                ))}
+              </div>
+
+              {/* Gap count if analyzed */}
+              {hasAnalyzed && analysis && analysis.gapCount > 0 && (
+                <button
+                  onClick={() => setIsDialogOpen(true)}
+                  className="inline-flex items-center gap-1.5 mt-2 text-xs text-amber-600 dark:text-amber-400 hover:underline"
+                >
+                  <AlertTriangle className="h-3 w-3" />
+                  {analysis.gapCount} gap{analysis.gapCount !== 1 ? 's' : ''} found — review details
+                  <ChevronRight className="h-3 w-3" />
+                </button>
+              )}
+
+              {isLoading && (
+                <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Analyzing your itinerary…
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* CTA Button */}
+          <div className="shrink-0 sm:self-center">
+            <Button
+              onClick={handlePurchase}
+              disabled={isPurchasing}
+              className="w-full sm:w-auto gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 shadow-md shadow-amber-500/20 font-semibold"
+              size="lg"
+            >
+              {isPurchasing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              Smart Finish — {CREDIT_COSTS.SMART_FINISH} credits
+            </Button>
+            <p className="text-[10px] text-center text-muted-foreground mt-1.5">
+              Your research. Our polish.
+            </p>
+          </div>
         </div>
-      )}
+      </motion.div>
 
-      {hasAnalyzed && (!analysis || analysis.gapCount === 0) && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-          <CheckCircle2 className="h-4 w-4 text-green-500" />
-          Your itinerary aligns well with your Travel DNA.
-        </div>
-      )}
-
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      {/* ── Gap Analysis Dialog ── */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <div className="flex items-center gap-2">
@@ -247,7 +305,7 @@ export function SmartFinishBanner({
               variant="ghost"
               size="sm"
               className="text-xs text-muted-foreground"
-              onClick={handleDismiss}
+              onClick={() => setIsDialogOpen(false)}
             >
               Dismiss
             </Button>
