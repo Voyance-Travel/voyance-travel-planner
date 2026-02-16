@@ -40,19 +40,19 @@ export const TYPE_RARITY: Record<string, TypeRarity> = {
     description: 'Just 4% blend tech and travel like you',
   },
   explorer: {
-    percentage: 8.5,
-    tier: 'common',
-    description: '8.5% of travelers share your discovery-driven style',
+    percentage: 15.0,
+    tier: 'very-common',
+    description: 'A natural explorer drawn to new experiences',
   },
   balanced_story_collector: {
-    percentage: 5.5,
-    tier: 'uncommon',
-    description: '5.5% of travelers balance experiences like you',
+    percentage: 15.0,
+    tier: 'very-common',
+    description: 'A versatile traveler who enjoys a mix of everything',
   },
   flexible_wanderer: {
-    percentage: 6.0,
-    tier: 'uncommon',
-    description: '6% of travelers embrace your go-with-the-flow style',
+    percentage: 15.0,
+    tier: 'very-common',
+    description: 'An adaptable traveler who goes with the flow',
   },
 
   // ═══════════════════════════════════════════════════════════════
