@@ -2,12 +2,11 @@
  * Credits & Billing page — manage credits, purchase history, and usage.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Coins, Zap, Crown, ArrowLeft, ArrowRight, Clock, Receipt, TrendingDown, Loader2, Sparkles } from 'lucide-react';
+import { Coins, Zap, Crown, ArrowLeft, ArrowRight, Receipt, TrendingDown, Loader2, Sparkles, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { FLEXIBLE_CREDITS, VOYANCE_CLUB_PACKS, formatCredits, CREDIT_EXPIRATION_COPY } from '@/config/pricing';
 import { useCredits } from '@/hooks/useCredits';
@@ -25,8 +24,33 @@ interface LedgerEntry {
   credits_delta: number;
   notes: string | null;
   metadata: Record<string, unknown> | null;
+  trip_id: string | null;
   created_at: string;
 }
+
+const ACTION_LABELS: Record<string, string> = {
+  trip_generation: 'Trip Generation',
+  unlock_day: 'Day Unlock',
+  group_unlock: 'Bulk Day Unlock',
+  swap_activity: 'Activity Swap',
+  regenerate_day: 'Day Regeneration',
+  ai_message: 'AI Message',
+  hotel_search: 'Hotel Search',
+  restaurant_rec: 'Restaurant Rec',
+  smart_finish: 'Smart Finish',
+  hotel_optimization: 'Hotel Optimization',
+  mystery_getaway: 'Mystery Getaway',
+  transport_mode_change: 'Transport Change',
+  bonus_welcome: 'Welcome Bonus',
+  bonus_launch: 'Early Adopter Bonus',
+  bonus_quiz_completion: 'Quiz Completion Bonus',
+  admin_manual_grant: 'Credit Grant',
+  monthly_free_grant: 'Monthly Free Credits',
+  stripe_purchase: 'Credit Purchase',
+  club_purchase: 'Club Credit Pack',
+};
+
+const PAGE_SIZE = 20;
 
 export default function CreditsAndBilling() {
   const navigate = useNavigate();
@@ -34,6 +58,9 @@ export default function CreditsAndBilling() {
   const { data: creditData, isLoading: creditsLoading } = useCredits();
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [ledgerLoading, setLedgerLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [summary, setSummary] = useState<{ earned: number; spent: number } | null>(null);
   const [checkoutConfig, setCheckoutConfig] = useState<{
     priceId: string;
     productId: string;
@@ -41,21 +68,58 @@ export default function CreditsAndBilling() {
     name: string;
   } | null>(null);
 
-  // Fetch recent credit ledger entries
+  // Fetch recent credit ledger entries + summary
   useEffect(() => {
     if (!user?.id) return;
     setLedgerLoading(true);
-    supabase
+
+    Promise.all([
+      supabase
+        .from('credit_ledger')
+        .select('id, transaction_type, action_type, credits_delta, notes, metadata, trip_id, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(PAGE_SIZE + 1),
+      supabase
+        .from('credit_ledger')
+        .select('credits_delta')
+        .eq('user_id', user.id),
+    ]).then(([ledgerRes, summaryRes]) => {
+      if (!ledgerRes.error && ledgerRes.data) {
+        setHasMore(ledgerRes.data.length > PAGE_SIZE);
+        setLedger((ledgerRes.data as LedgerEntry[]).slice(0, PAGE_SIZE));
+      }
+      if (!summaryRes.error && summaryRes.data) {
+        let earned = 0;
+        let spent = 0;
+        for (const row of summaryRes.data) {
+          if (row.credits_delta > 0) earned += row.credits_delta;
+          else spent += Math.abs(row.credits_delta);
+        }
+        setSummary({ earned, spent });
+      }
+      setLedgerLoading(false);
+    });
+  }, [user?.id]);
+
+  const loadMore = useCallback(async () => {
+    if (!user?.id || !ledger.length || loadingMore) return;
+    setLoadingMore(true);
+    const lastEntry = ledger[ledger.length - 1];
+    const { data, error } = await supabase
       .from('credit_ledger')
-      .select('id, transaction_type, action_type, credits_delta, notes, metadata, created_at')
+      .select('id, transaction_type, action_type, credits_delta, notes, metadata, trip_id, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
-      .limit(20)
-      .then(({ data, error }) => {
-        if (!error && data) setLedger(data as LedgerEntry[]);
-        setLedgerLoading(false);
-      });
-  }, [user?.id]);
+      .lt('created_at', lastEntry.created_at)
+      .limit(PAGE_SIZE + 1);
+
+    if (!error && data) {
+      setHasMore(data.length > PAGE_SIZE);
+      setLedger(prev => [...prev, ...(data as LedgerEntry[]).slice(0, PAGE_SIZE)]);
+    }
+    setLoadingMore(false);
+  }, [user?.id, ledger, loadingMore]);
 
   const handleBuyPack = (pack: { priceId: string; productId: string; credits: number; name: string }) => {
     setCheckoutConfig(pack);
@@ -64,6 +128,34 @@ export default function CreditsAndBilling() {
   const totalCredits = creditData?.totalCredits ?? 0;
   const freeCredits = creditData?.effectiveFreeCredits ?? 0;
   const purchasedCredits = creditData?.purchasedCredits ?? 0;
+
+  const getEntryLabel = (entry: LedgerEntry): string => {
+    const key = entry.action_type || entry.transaction_type;
+    return ACTION_LABELS[key] || key.replace(/_/g, ' ');
+  };
+
+  const getEntryDescription = (entry: LedgerEntry): string => {
+    // Build a helpful description from notes and metadata
+    const meta = entry.metadata as Record<string, unknown> | null;
+    const parts: string[] = [];
+
+    if (meta?.destination) parts.push(String(meta.destination));
+    if (meta?.dayNumber) parts.push(`Day ${meta.dayNumber}`);
+    if (meta?.days) parts.push(`${meta.days} days`);
+    if (meta?.old_activity && meta?.new_activity) {
+      parts.push(`${String(meta.old_activity).split(':')[0]} → ${String(meta.new_activity).split(':')[0]}`);
+    }
+
+    if (parts.length > 0) return parts.join(' · ');
+
+    // Fall back to notes (strip the "- X credits" suffix)
+    if (entry.notes) {
+      const cleaned = entry.notes.replace(/\s*-\s*\d+\s*credits?\s*$/i, '').trim();
+      if (cleaned && cleaned !== getEntryLabel(entry).toLowerCase()) return cleaned;
+    }
+
+    return '';
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -104,13 +196,102 @@ export default function CreditsAndBilling() {
                 Top Up
               </Button>
             </div>
-            <p className="text-[11px] text-muted-foreground mt-4 border-t border-border pt-3">
+            {/* Summary bar */}
+            {summary && (
+              <div className="flex gap-4 mt-4 pt-3 border-t border-border text-xs text-muted-foreground">
+                <span>Total earned: <strong className="text-emerald-600">{formatCredits(summary.earned)}</strong></span>
+                <span>Total spent: <strong className="text-foreground">{formatCredits(summary.spent)}</strong></span>
+                <span>Remaining: <strong className="text-primary">{formatCredits(totalCredits)}</strong></span>
+              </div>
+            )}
+            <p className="text-[11px] text-muted-foreground mt-3 border-t border-border pt-3">
               {CREDIT_EXPIRATION_COPY.balanceTooltip}
             </p>
           </CardContent>
         </Card>
 
-        {/* Section 2: Quick Top-Up */}
+        {/* Section 2: Credit Activity / Transaction History */}
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+            <Receipt className="h-5 w-5 text-muted-foreground" />
+            Credit Activity
+          </h2>
+          <Card>
+            <CardContent className="p-0">
+              {ledgerLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : ledger.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground text-sm">
+                  No credit activity yet.
+                </div>
+              ) : (
+                <>
+                  <div className="divide-y divide-border">
+                    {ledger.map((entry) => {
+                      const isCredit = entry.credits_delta > 0;
+                      const isFree = entry.credits_delta === 0;
+                      const label = getEntryLabel(entry);
+                      const description = getEntryDescription(entry);
+
+                      return (
+                        <div key={entry.id} className="flex items-center justify-between px-4 py-3 gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className={`p-1.5 rounded-lg shrink-0 ${isCredit ? 'bg-emerald-500/10' : isFree ? 'bg-primary/10' : 'bg-muted'}`}>
+                              {isCredit ? (
+                                <Coins className="h-3.5 w-3.5 text-emerald-600" />
+                              ) : (
+                                <TrendingDown className="h-3.5 w-3.5 text-muted-foreground" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-foreground truncate">
+                                {label}
+                              </p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {new Date(entry.created_at).toLocaleDateString('en-US', {
+                                  month: 'short', day: 'numeric', year: 'numeric',
+                                  hour: 'numeric', minute: '2-digit',
+                                })}
+                                {description && ` · ${description}`}
+                              </p>
+                            </div>
+                          </div>
+                          <span className={`text-sm font-semibold whitespace-nowrap ${
+                            isCredit ? 'text-emerald-600' : isFree ? 'text-muted-foreground' : 'text-foreground'
+                          }`}>
+                            {isFree ? 'Free' : `${isCredit ? '+' : ''}${formatCredits(entry.credits_delta)}`}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {hasMore && (
+                    <div className="border-t border-border px-4 py-3">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full gap-2 text-muted-foreground hover:text-foreground"
+                        onClick={loadMore}
+                        disabled={loadingMore}
+                      >
+                        {loadingMore ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                        Show more
+                      </Button>
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Section 3: Quick Top-Up */}
         <div id="topup-section" className="mb-8">
           <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
             <Zap className="h-5 w-5 text-primary" />
@@ -146,7 +327,7 @@ export default function CreditsAndBilling() {
           </div>
         </div>
 
-        {/* Section 3: Voyance Club */}
+        {/* Section 4: Voyance Club */}
         <div className="mb-8">
           <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
             <Crown className="h-5 w-5 text-primary" />
@@ -191,62 +372,6 @@ export default function CreditsAndBilling() {
               Compare all plans in detail →
             </Link>
           </p>
-        </div>
-
-        {/* Section 4: Recent Activity */}
-        <div className="mb-8">
-          <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-            <Receipt className="h-5 w-5 text-muted-foreground" />
-            Recent Activity
-          </h2>
-          <Card>
-            <CardContent className="p-0">
-              {ledgerLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                </div>
-              ) : ledger.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground text-sm">
-                  No credit activity yet.
-                </div>
-              ) : (
-                <div className="divide-y divide-border">
-                  {ledger.map((entry) => {
-                    const isCredit = entry.credits_delta > 0;
-                    return (
-                      <div key={entry.id} className="flex items-center justify-between px-4 py-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className={`p-1.5 rounded-lg ${isCredit ? 'bg-emerald-500/10' : 'bg-muted'}`}>
-                            {isCredit ? (
-                              <Coins className="h-3.5 w-3.5 text-emerald-600" />
-                            ) : (
-                              <TrendingDown className="h-3.5 w-3.5 text-muted-foreground" />
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-foreground truncate capitalize">
-                              {(entry.action_type || entry.transaction_type).replace(/_/g, ' ')}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(entry.created_at).toLocaleDateString('en-US', {
-                                month: 'short', day: 'numeric', year: 'numeric'
-                              })}
-                              {entry.notes && ` · ${entry.notes}`}
-                            </p>
-                          </div>
-                        </div>
-                        <span className={`text-sm font-semibold whitespace-nowrap ${
-                          isCredit ? 'text-emerald-600' : 'text-foreground'
-                        }`}>
-                          {isCredit ? '+' : ''}{formatCredits(entry.credits_delta)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </div>
       </main>
       <Footer />
