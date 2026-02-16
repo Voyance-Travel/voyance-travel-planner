@@ -2396,27 +2396,46 @@ export function EditorialItinerary({
         return;
       }
 
-      // Check if an invite already exists for this trip
+      // Check if an invite already exists for this trip (including expired ones,
+      // since there's a unique constraint on (trip_id, email) with NULLS NOT DISTINCT)
       const { data: existingInvite } = await supabase
         .from('trip_invites')
-        .select('token')
+        .select('token, expires_at')
         .eq('trip_id', tripId)
         .eq('invited_by', user.id)
         .is('email', null)
-        .gt('expires_at', new Date().toISOString())
         .maybeSingle();
 
       let token = existingInvite?.token;
 
-      if (!token) {
-        // Create new invite
+      if (existingInvite && existingInvite.expires_at && new Date(existingInvite.expires_at) < new Date()) {
+        // Existing invite is expired — refresh it with a new expiration
+        const { data: updated, error } = await supabase
+          .from('trip_invites')
+          .update({
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            uses_count: 0,
+            accepted_at: null,
+            accepted_by: null,
+            max_uses: Math.max(1, travelers - 1),
+          })
+          .eq('trip_id', tripId)
+          .eq('invited_by', user.id)
+          .is('email', null)
+          .select('token')
+          .single();
+
+        if (error) throw error;
+        token = updated.token;
+      } else if (!token) {
+        // No invite exists at all — create new one
         const { data: newInvite, error } = await supabase
           .from('trip_invites')
           .insert({
             trip_id: tripId,
             invited_by: user.id,
-            max_uses: travelers - 1, // Allow remaining travelers to join
-            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
+            max_uses: Math.max(1, travelers - 1),
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           })
           .select('token')
           .single();
@@ -2433,9 +2452,9 @@ export function EditorialItinerary({
       setInviteCopied(true);
       setTimeout(() => setInviteCopied(false), 2000);
       toast.success('Invite link copied!');
-    } catch (err) {
-      console.error('Failed to create share link:', err);
-      toast.error('Failed to create invite link');
+    } catch (err: any) {
+      console.error('Failed to create share link:', err?.message || err);
+      toast.error(err?.message || 'Failed to create invite link');
     } finally {
       setIsCreatingInvite(false);
     }
