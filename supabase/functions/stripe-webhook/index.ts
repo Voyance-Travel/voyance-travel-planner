@@ -190,10 +190,38 @@ serve(async (req) => {
       // Checkout Session Completed
       // ========================================
       case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Checkout.Session;
-        log("Checkout completed", { sessionId: session.id, metadata: session.metadata });
+        // ALWAYS retrieve full session from Stripe API — event.data.object may have
+        // empty/partial metadata depending on webhook payload style (Thin vs Snapshot)
+        const sessionFromEvent = event.data.object as Stripe.Checkout.Session;
+        log("Checkout event received, retrieving full session", { sessionId: sessionFromEvent.id });
+
+        let session: Stripe.Checkout.Session;
+        try {
+          session = await stripe.checkout.sessions.retrieve(sessionFromEvent.id, {
+            expand: ['line_items'],
+          });
+        } catch (retrieveErr) {
+          log("CRITICAL: Failed to retrieve full session from Stripe", {
+            sessionId: sessionFromEvent.id,
+            error: retrieveErr instanceof Error ? retrieveErr.message : String(retrieveErr),
+          });
+          // Fall back to event data
+          session = sessionFromEvent;
+        }
+
+        log("Full session retrieved", {
+          sessionId: session.id,
+          metadata: session.metadata,
+          payment_status: session.payment_status,
+          amount_total: session.amount_total,
+          customer: session.customer,
+        });
 
         const metadata = session.metadata || {};
+
+        if (!metadata || Object.keys(metadata).length === 0) {
+          log("WARNING: session.metadata is empty or null", { sessionId: session.id, rawMetadata: session.metadata });
+        }
 
         // Trip Pass Fulfillment
         if (metadata.type === "trip_pass") {
@@ -273,9 +301,19 @@ serve(async (req) => {
           const creditsToAdd = parseInt(metadata.credits || "0", 10);
           const amountCents = session.amount_total || 0;
 
-          if (userId && creditsToAdd > 0) {
-            log("Processing credit purchase", { userId, creditsToAdd, priceId, productId });
+          // Defensive null checks
+          if (!userId) {
+            log("CRITICAL: credit_purchase missing user_id", { metadata, sessionId: session.id });
+            break;
+          }
+          if (!creditsToAdd || isNaN(creditsToAdd) || creditsToAdd <= 0) {
+            log("CRITICAL: credit_purchase missing or invalid credits", { credits: metadata.credits, metadata, sessionId: session.id });
+            break;
+          }
 
+          log("Processing credit purchase", { userId, creditsToAdd, priceId, productId, amountCents });
+
+          if (userId && creditsToAdd > 0) {
             // IDEMPOTENCY CHECK
             const { data: existingLedger } = await supabaseAdmin
               .from("credit_ledger")
@@ -298,7 +336,7 @@ serve(async (req) => {
               bonusExpires.setMonth(bonusExpires.getMonth() + 6);
 
               // Base credits (never expire)
-              await supabaseAdmin.from('credit_purchases').insert({
+              const { error: baseErr } = await supabaseAdmin.from('credit_purchases').insert({
                 user_id: userId,
                 credit_type: 'club_base',
                 amount: clubInfo.baseCredits,
@@ -308,9 +346,10 @@ serve(async (req) => {
                 stripe_session_id: session.id,
                 club_tier: clubInfo.tier,
               });
+              if (baseErr) log("CRITICAL: club base credit_purchases INSERT FAILED", JSON.stringify(baseErr));
 
               // Bonus credits (6 month expiry)
-              await supabaseAdmin.from('credit_purchases').insert({
+              const { error: bonusErr } = await supabaseAdmin.from('credit_purchases').insert({
                 user_id: userId,
                 credit_type: 'club_bonus',
                 amount: clubInfo.bonusCredits,
@@ -320,6 +359,7 @@ serve(async (req) => {
                 stripe_session_id: session.id,
                 club_tier: clubInfo.tier,
               });
+              if (bonusErr) log("CRITICAL: club bonus credit_purchases INSERT FAILED", JSON.stringify(bonusErr));
 
               // Award club badge
               await supabaseAdmin.from('user_badges').upsert({
@@ -349,7 +389,7 @@ serve(async (req) => {
               const flexExpires = new Date();
               flexExpires.setMonth(flexExpires.getMonth() + 12);
 
-              await supabaseAdmin.from('credit_purchases').insert({
+              const { error: flexErr } = await supabaseAdmin.from('credit_purchases').insert({
                 user_id: userId,
                 credit_type: 'flex',
                 amount: creditsToAdd,
@@ -358,15 +398,21 @@ serve(async (req) => {
                 source: 'stripe',
                 stripe_session_id: session.id,
               });
+              if (flexErr) log("CRITICAL: flex credit_purchases INSERT FAILED", JSON.stringify(flexErr));
 
               log("Flex pack fulfilled", { credits: creditsToAdd });
             }
 
             // Sync balance cache
-            await syncBalanceCache(supabaseAdmin, userId);
+            try {
+              await syncBalanceCache(supabaseAdmin, userId);
+              log("Balance cache synced", { userId });
+            } catch (syncErr) {
+              log("CRITICAL: syncBalanceCache FAILED", { error: syncErr instanceof Error ? syncErr.message : String(syncErr) });
+            }
 
             // Ledger entry
-            await supabaseAdmin.from("credit_ledger").insert({
+            const { error: ledgerErr } = await supabaseAdmin.from("credit_ledger").insert({
               user_id: userId,
               transaction_type: 'purchase',
               credits_delta: creditsToAdd,
@@ -378,6 +424,14 @@ serve(async (req) => {
               notes: clubInfo
                 ? `${clubInfo.tier} club pack - ${creditsToAdd} credits (${clubInfo.baseCredits} base + ${clubInfo.bonusCredits} bonus)`
                 : `Flex credit pack - ${creditsToAdd} credits`,
+            });
+            if (ledgerErr) log("CRITICAL: credit_ledger INSERT FAILED", JSON.stringify(ledgerErr));
+
+            log("Credit fulfillment complete", {
+              purchaseOk: clubInfo ? true : true, // logged individually above
+              ledgerOk: !ledgerErr,
+              creditsAdded: creditsToAdd,
+              sessionId: session.id,
             });
 
             // ── Upsert user_tiers (only upgrade, never downgrade) ──
