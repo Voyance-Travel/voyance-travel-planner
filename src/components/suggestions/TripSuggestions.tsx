@@ -185,6 +185,45 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
             vote_deadline: voteDeadline ? new Date(voteDeadline).toISOString() : null,
           });
         if (error) throw error;
+
+        // Notify other trip members about the new suggestion
+        try {
+          const { data: trip } = await supabase
+            .from('trips')
+            .select('user_id, name, destination')
+            .eq('id', tripId)
+            .maybeSingle();
+
+          const { data: collabs } = await supabase
+            .from('trip_collaborators')
+            .select('user_id')
+            .eq('trip_id', tripId)
+            .not('accepted_at', 'is', null);
+
+          const recipientIds = new Set<string>();
+          if (trip?.user_id && trip.user_id !== user.id) recipientIds.add(trip.user_id);
+          collabs?.forEach(c => { if (c.user_id && c.user_id !== user.id) recipientIds.add(c.user_id); });
+
+          const deadlineText = voteDeadline ? ` Vote by ${new Date(voteDeadline).toLocaleDateString()}.` : '';
+          const notifRows = Array.from(recipientIds).map(recipientId => ({
+            trip_id: tripId,
+            user_id: recipientId,
+            notification_type: 'proposal_created',
+            sent: false,
+            metadata: {
+              title: 'New suggestion',
+              message: `${displayName} suggested "${title.trim()}" on ${trip?.name || 'your trip'}.${deadlineText}`,
+              proposerName: displayName,
+              tripName: trip?.name,
+            },
+          }));
+
+          if (notifRows.length > 0) {
+            await supabase.from('trip_notifications').insert(notifRows);
+          }
+        } catch (notifErr) {
+          console.error('Failed to send suggestion notifications:', notifErr);
+        }
       }
 
       setTitle('');
