@@ -116,7 +116,7 @@ export function useSpendCredits() {
       
       toast({
         title: 'Action failed',
-        description: error.message,
+        description: error.message || 'Something went wrong. Please try again.',
         variant: 'destructive',
       });
     },

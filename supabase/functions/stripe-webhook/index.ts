@@ -574,9 +574,12 @@ serve(async (req) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    log("ERROR", { message });
-    return new Response(JSON.stringify({ error: message }), {
-      headers: { "Content-Type": "application/json" }, status: 500,
+    const stack = error instanceof Error ? error.stack : undefined;
+    log("CRITICAL ERROR", { message, stack });
+    // Return 200 to prevent Stripe from retrying and marking endpoint as failing.
+    // The error is logged above for manual investigation.
+    return new Response(JSON.stringify({ received: true, error: 'fulfillment_failed', details: message }), {
+      headers: { "Content-Type": "application/json" }, status: 200,
     });
   }
 });
