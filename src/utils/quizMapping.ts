@@ -542,6 +542,10 @@ function getArchetypeDisplayName(id: string): string {
     sabbatical_scholar: 'The Sabbatical Scholar',
     healing_journeyer: 'The Healing Journeyer',
     retirement_ranger: 'The Retirement Ranger',
+    // CONNECTOR (additional)
+    community_builder: 'The Community Builder',
+    // RESTORER (additional)
+    sanctuary_seeker: 'The Sanctuary Seeker',
     // BALANCED / FLEXIBLE archetypes
     balanced_story_collector: 'The Balanced Story Collector',
     flexible_wanderer: 'The Flexible Wanderer',
@@ -584,6 +588,11 @@ function getArchetypeCategory(id: string): string {
     midlife_explorer: 'TRANSFORMER',
     sabbatical_scholar: 'TRANSFORMER',
     healing_journeyer: 'TRANSFORMER',
+    retirement_ranger: 'TRANSFORMER',
+    // CONNECTOR (additional)
+    community_builder: 'CONNECTOR',
+    // RESTORER (additional)
+    sanctuary_seeker: 'RESTORER',
   };
   return categories[id] || 'EXPLORER';
 }
@@ -623,6 +632,11 @@ function getArchetypeTagline(id: string): string {
     midlife_explorer: "It's never too late to become who you were meant to be.",
     sabbatical_scholar: 'Taking time off to find time on.',
     healing_journeyer: 'Travel is the medicine for the soul.',
+    retirement_ranger: 'Your next chapter deserves the whole world as its backdrop.',
+    // CONNECTOR (additional)
+    community_builder: 'You travel to connect, contribute, and belong.',
+    // RESTORER (additional)
+    sanctuary_seeker: 'You seek places that feel like a sacred refuge.',
   };
   return taglines[id] || 'The world awaits your discovery.';
 }
