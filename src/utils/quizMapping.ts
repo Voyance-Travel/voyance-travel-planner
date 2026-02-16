@@ -404,12 +404,51 @@ export async function saveUserPreferences(
  * Uses sophisticated trait calculation and AI-powered Perfect Trip generation
  * @param existingOverrides - User's manual trait adjustments to consider during calculation
  */
+/**
+ * Convert V3 25-trait (0-1) scores to V2 8-trait (-10/+10) scores
+ * so the edge function can process V3 quiz answers correctly.
+ */
+function convertV3ToV2Traits(v3: Record<string, number | string>): Record<string, number> {
+  const get = (key: string, def: number = 0.5): number => {
+    const val = v3[key];
+    return typeof val === 'number' ? val : def;
+  };
+  const scale = (val: number, center: number, factor: number) => (val - center) * factor;
+
+  return {
+    pace: Math.max(-10, Math.min(10, scale(get('pace'), 0.5, 14) + scale(get('morning_energy'), 0.5, 4) - scale(get('restoration_need'), 0.5, 4))),
+    social: Math.max(-10, Math.min(10, scale(get('social_energy'), 0.5, 14) + scale(get('group_size_pref'), 0.5, 6))),
+    comfort: Math.max(-10, Math.min(10, scale(get('quality_intrinsic'), 0.5, 10) + scale(get('budget_tier'), 0.5, 6) + scale(get('status_seeking', 0.3), 0.3, 4))),
+    adventure: Math.max(-10, Math.min(10, scale(get('adventure'), 0.5, 12) + scale(get('novelty_seeking'), 0.5, 8))),
+    authenticity: Math.max(-10, Math.min(10, scale(get('cultural_depth'), 0.5, 10) + scale(get('food_focus', 0.3), 0.3, 5) + scale(get('art_focus', 0.2), 0.2, 5))),
+    planning: Math.max(-10, Math.min(10, scale(get('planning'), 0.5, 14) - scale(get('flexibility'), 0.5, 6))),
+    budget: Math.max(-10, Math.min(10, -scale(get('budget_tier'), 0.5, 14) - scale(get('status_seeking', 0.3), 0.3, 6))),
+    transformation: Math.max(-10, Math.min(10, scale(get('spirituality', 0.2), 0.2, 8) + scale(get('healing_focus', 0), 0, 6) + scale(get('learning_focus', 0.3), 0.3, 6))),
+  };
+}
+
 export async function calculateTravelDNAAdvanced(
   answers: Record<string, string | string[]>,
   userId?: string,
   existingOverrides?: Record<string, number> | null
 ): Promise<TravelDNAPayload> {
   try {
+    // Pre-compute V2 traits from V3 quiz answers so edge function gets valid trait data
+    let precomputedTraits: Record<string, number> | null = null;
+    try {
+      // Dynamic import to avoid circular dependencies
+      const { calculateTraitScores } = await import('@/services/engines/travelDNA/archetype-matcher');
+      const flatAnswers: Record<string, string> = {};
+      for (const [k, v] of Object.entries(answers)) {
+        if (typeof v === 'string') flatAnswers[k] = v;
+      }
+      const { scores } = calculateTraitScores(flatAnswers);
+      precomputedTraits = convertV3ToV2Traits(scores as unknown as Record<string, number | string>);
+      console.log('[TravelDNA] Pre-computed V2 traits:', JSON.stringify(precomputedTraits));
+    } catch (err) {
+      console.warn('[TravelDNA] Failed to pre-compute traits:', err);
+    }
+
     const response = await fetch(
       `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/calculate-travel-dna`,
       {
@@ -421,8 +460,8 @@ export async function calculateTravelDNAAdvanced(
         body: JSON.stringify({ 
           answers, 
           userId,
-          // Pass existing overrides so the edge function knows about user adjustments
           existingOverrides: existingOverrides || null,
+          precomputedTraits,
         }),
       }
     );

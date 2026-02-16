@@ -1945,7 +1945,7 @@ serve(async (req) => {
   }
   
   try {
-    const { answers, userId, existingOverrides } = await req.json();
+    const { answers, userId, existingOverrides, precomputedTraits } = await req.json();
     
     if (!answers) {
       return new Response(
@@ -1956,6 +1956,9 @@ serve(async (req) => {
     
     console.log('[TravelDNA V2] Calculating for user:', userId);
     console.log('[TravelDNA V2] Quiz answers:', Object.keys(answers));
+    if (precomputedTraits) {
+      console.log('[TravelDNA V2] Received pre-computed V2 traits from frontend:', precomputedTraits);
+    }
     if (existingOverrides && Object.keys(existingOverrides).length > 0) {
       console.log('[TravelDNA V2] User has existing trait overrides:', existingOverrides);
     }
@@ -1972,7 +1975,7 @@ serve(async (req) => {
     
     function assertBudgetPolarity(key: string, expectedSign: 'positive' | 'negative') {
       const delta = getBudgetDelta(key);
-      if (delta === undefined) return;  // Key doesn't exist in either table
+      if (delta === undefined) return;
       if (expectedSign === 'positive' && delta < 0) {
         console.error(`[TravelDNA V2 POLARITY ERROR] ${key} budget delta ${delta} expected positive`);
       }
@@ -1981,21 +1984,63 @@ serve(async (req) => {
       }
     }
     
-    // Anchor assertions for budget polarity invariants (legacy + v2 keys)
-    // Legacy keys
-    assertBudgetPolarity('budget', 'positive');       // budget tier → frugal → positive
-    assertBudgetPolarity('luxury', 'negative');       // luxury tier → splurge → negative
-    assertBudgetPolarity('premium', 'negative');      // premium tier → splurge-ish
-    assertBudgetPolarity('curated_luxe', 'negative'); // traveler type → splurge
-    // V2 answer keys (c1-c4 from Q3: Budget style)
-    assertBudgetPolarity('c1', 'positive');           // budget-conscious → frugal
-    assertBudgetPolarity('c3', 'negative');           // quality-first → splurge
-    assertBudgetPolarity('c4', 'negative');           // no-expense-spared → splurge
-    // V2 destination keys
-    assertBudgetPolarity('b4', 'negative');           // luxury seeker → splurge
+    assertBudgetPolarity('budget', 'positive');
+    assertBudgetPolarity('luxury', 'negative');
+    assertBudgetPolarity('premium', 'negative');
+    assertBudgetPolarity('curated_luxe', 'negative');
+    assertBudgetPolarity('c1', 'positive');
+    assertBudgetPolarity('c3', 'negative');
+    assertBudgetPolarity('c4', 'negative');
+    assertBudgetPolarity('b4', 'negative');
     
-    // Step 1: Calculate trait scores with contributions
-    const { rawScores, finalScores, signalStrength, fillRates, contributions } = calculateTraitScoresV2(answers);
+    // Step 1: Calculate trait scores
+    // If frontend sent pre-computed V2 traits (from V3 quiz), use those as the base
+    // Otherwise fall back to legacy answer parsing
+    let rawScores: TraitScores;
+    let finalScores: TraitScores;
+    let signalStrength: Partial<Record<Trait, number>> = {};
+    let fillRates: Record<Trait, number> = {} as Record<Trait, number>;
+    let contributions: TraitContribution[] = [];
+    
+    if (precomputedTraits && typeof precomputedTraits === 'object') {
+      // V3 quiz path: frontend already converted 25-trait scores to 8-trait system
+      console.log('[TravelDNA V2] Using pre-computed traits (V3 quiz path)');
+      rawScores = {
+        planning: precomputedTraits.planning ?? 0,
+        social: precomputedTraits.social ?? 0,
+        comfort: precomputedTraits.comfort ?? 0,
+        pace: precomputedTraits.pace ?? 0,
+        authenticity: precomputedTraits.authenticity ?? 0,
+        adventure: precomputedTraits.adventure ?? 0,
+        budget: precomputedTraits.budget ?? 0,
+        transformation: precomputedTraits.transformation ?? 0,
+      };
+      // Apply saturation to pre-computed values
+      finalScores = {
+        planning: applySaturation(rawScores.planning),
+        social: applySaturation(rawScores.social),
+        comfort: applySaturation(rawScores.comfort),
+        pace: applySaturation(rawScores.pace),
+        authenticity: applySaturation(rawScores.authenticity),
+        adventure: applySaturation(rawScores.adventure),
+        budget: applySaturation(rawScores.budget),
+        transformation: applySaturation(rawScores.transformation),
+      };
+      // Set fill rates to 100% since we have complete data from V3 quiz
+      for (const trait of ALL_TRAITS) {
+        fillRates[trait] = 100;
+        signalStrength[trait] = Math.abs(finalScores[trait]);
+      }
+    } else {
+      // Legacy quiz path: parse answers using ANSWER_DELTAS
+      const result = calculateTraitScoresV2(answers);
+      rawScores = result.rawScores;
+      finalScores = result.finalScores;
+      signalStrength = result.signalStrength;
+      fillRates = result.fillRates;
+      contributions = result.contributions;
+    }
+    
     console.log('[TravelDNA V2] Raw scores:', rawScores);
     console.log('[TravelDNA V2] Final scores (saturated):', finalScores);
     console.log('[TravelDNA V2] Fill rates:', fillRates);
