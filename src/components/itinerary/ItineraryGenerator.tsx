@@ -196,6 +196,17 @@ export function ItineraryGenerator({
         setPrePhase(null);
         await new Promise(resolve => setTimeout(resolve, 900));
         if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
+
+        // Show credit summary toast after generation
+        if (gateResult.creditsCharged > 0) {
+          toast.success(
+            `Trip generated! ${gateResult.creditsCharged} credits used · ${gateResult.currentBalance} remaining`,
+            { duration: 5000 }
+          );
+        } else if (gateResult.isFirstTrip) {
+          toast.success('Your first trip is free! 🎉', { duration: 4000 });
+        }
+
         onComplete(allDays, overview, gateResult.isFirstTrip);
       } else {
         // LOCKED — no credits, no AI, no API calls
