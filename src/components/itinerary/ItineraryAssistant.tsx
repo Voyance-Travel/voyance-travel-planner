@@ -282,17 +282,36 @@ export function ItineraryAssistant({
       }));
 
       if (result.success) {
-        // Update local state with new days
-        if (result.updatedDays) {
-          setCurrentDays(result.updatedDays);
+        // Sort activities chronologically before updating UI state
+        const sortedDays = result.updatedDays?.map(day => ({
+          ...day,
+          activities: [...day.activities].sort((a, b) => {
+            const getMin = (t?: string) => {
+              if (!t) return 0;
+              const n = t.trim().toUpperCase();
+              const m = n.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/);
+              if (!m) return 0;
+              let h = parseInt(m[1], 10);
+              const min = parseInt(m[2], 10);
+              if (m[3] === 'PM' && h !== 12) h += 12;
+              if (m[3] === 'AM' && h === 12) h = 0;
+              return h * 60 + min;
+            };
+            return getMin(a.startTime || a.time) - getMin(b.startTime || b.time);
+          }),
+        }));
+
+        // Update local state with sorted days
+        if (sortedDays) {
+          setCurrentDays(sortedDays);
           
           // Also update localStorage for local trips
           if (isLocalTrip) {
-            updateLocalTripItinerary(tripId, result.updatedDays);
+            updateLocalTripItinerary(tripId, sortedDays);
           }
           
           // Notify parent to update its state
-          onItineraryUpdate?.(result.updatedDays);
+          onItineraryUpdate?.(sortedDays);
         }
 
         toast.success('Action applied', {

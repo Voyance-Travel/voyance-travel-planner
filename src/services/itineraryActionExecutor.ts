@@ -624,13 +624,61 @@ async function executeFilterAction(
 }
 
 // ============================================================================
+// CHRONOLOGICAL SORTING
+// ============================================================================
+
+/**
+ * Parse time string (e.g., "9:00 AM", "14:30", "3:00 PM") to minutes since midnight
+ */
+function parseTimeToMinutes(timeStr: string | undefined): number {
+  if (!timeStr) return 0;
+  const normalized = timeStr.trim().toUpperCase();
+
+  // 12-hour format: "9:00 AM", "3:00 PM"
+  const match12 = normalized.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/);
+  if (match12) {
+    let hours = parseInt(match12[1], 10);
+    const minutes = parseInt(match12[2], 10);
+    const period = match12[3];
+    if (period === 'PM' && hours !== 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+    return hours * 60 + minutes;
+  }
+
+  // 24-hour format: "14:30"
+  const match24 = normalized.match(/^(\d{1,2}):(\d{2})$/);
+  if (match24) {
+    return parseInt(match24[1], 10) * 60 + parseInt(match24[2], 10);
+  }
+
+  return 0;
+}
+
+/**
+ * Sort a day's activities chronologically by startTime/time.
+ * Applied before every database write so AI-added activities land in the right position.
+ */
+function sortActivitiesChronologically(days: ItineraryDay[]): ItineraryDay[] {
+  return days.map(day => ({
+    ...day,
+    activities: [...day.activities].sort((a, b) => {
+      const aMin = parseTimeToMinutes(a.startTime || a.time);
+      const bMin = parseTimeToMinutes(b.startTime || b.time);
+      return aMin - bMin;
+    }),
+  }));
+}
+
+// ============================================================================
 // DATABASE UPDATE
 // ============================================================================
 
 /**
- * Update the trip's itinerary_data in the database
+ * Update the trip's itinerary_data in the database.
+ * Always sorts activities chronologically before persisting.
  */
 async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]): Promise<void> {
+  const sortedDays = sortActivitiesChronologically(updatedDays);
   try {
     // First get the current trip to preserve other itinerary_data fields
     const { data: trip, error: fetchError } = await supabase
@@ -649,7 +697,7 @@ async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]):
     // Update with new days - serialize to JSON for Supabase
     const itineraryUpdate: Json = {
       ...currentData,
-      days: JSON.parse(JSON.stringify(updatedDays)),
+      days: JSON.parse(JSON.stringify(sortedDays)),
     } as Json;
     
     const { error: updateError } = await supabase
