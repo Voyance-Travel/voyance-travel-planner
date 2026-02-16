@@ -100,6 +100,7 @@ import { validateItinerary, matchesSkipList, type ValidationIssue } from '@/util
 import { VoyanceInsight } from './VoyanceInsight';
 import { VoyancePickCallout } from './VoyancePickCallout';
 import { TransitBadge } from './TransitBadge';
+import { TransitGapIndicator, computeGapMinutes } from './TransitGapIndicator';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { useActionCap } from '@/hooks/useActionCap';
 import { AddActivityModal } from './AddActivityModal';
@@ -5519,6 +5520,22 @@ function DayCard({
                     );
                   }
 
+                  const nextActivity = activityIndex < day.activities.length - 1 
+                    ? day.activities[activityIndex + 1] 
+                    : null;
+                  const isLastActivity = activityIndex === day.activities.length - 1;
+                  const hasTransitBadgeVisible = showTransportDetails && !!activity.transportation && !isLastActivity;
+                  
+                  // Compute gap to next activity
+                  const gapMinutes = nextActivity 
+                    ? computeGapMinutes(
+                        activity.endTime,
+                        activity.startTime || activity.time,
+                        activity.duration,
+                        nextActivity.startTime || nextActivity.time,
+                      )
+                    : null;
+
                   return (
                   <div className={cn(
                     "transition-all duration-300",
@@ -5532,7 +5549,7 @@ function DayCard({
                       activityIndex={activityIndex}
                       totalActivities={day.activities.length}
                       totalDays={totalDays}
-                      isLast={activityIndex === day.activities.length - 1}
+                      isLast={isLastActivity}
                       isEditable={isEditable}
                       isPreview={dayIsPreview}
                       canViewPremium={canViewPremium}
@@ -5560,6 +5577,14 @@ function DayCard({
                        collaboratorColorMap={collaboratorColorMap}
                        aiLocked={aiLocked}
                      />
+                    {/* Compact transit gap indicator between activities */}
+                    {!isLastActivity && gapMinutes !== null && !dayIsPreview && (
+                      <TransitGapIndicator
+                        gapMinutes={gapMinutes}
+                        transportation={activity.transportation}
+                        hasTransitBadge={hasTransitBadgeVisible}
+                      />
+                    )}
                   </div>
                   );
                 }}

@@ -7338,6 +7338,84 @@ RULES FOR VOYANCE PICKS:
       //   console.error("[Stage 2.6] VALIDATION FAILED - would trigger regeneration");
       // }
 
+      // =======================================================================
+      // STAGE 2.7: Transit Gap Enforcement
+      // Shift activity start times forward when consecutive activities have
+      // insufficient buffer (< 15 min gap). This catches cases where the AI
+      // ignored the buffer constraints from the personalization enforcer.
+      // =======================================================================
+      const MIN_GAP_MINUTES = 15;
+      let gapFixCount = 0;
+      
+      for (const day of aiResult.days) {
+        if (!day.activities || day.activities.length < 2) continue;
+        
+        for (let i = 0; i < day.activities.length - 1; i++) {
+          const current = day.activities[i];
+          const next = day.activities[i + 1];
+          
+          const parseT = (t?: string): number | null => {
+            if (!t) return null;
+            const n = t.trim().toUpperCase();
+            const m = n.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/);
+            if (!m) return null;
+            let h = parseInt(m[1], 10);
+            const min = parseInt(m[2], 10);
+            if (m[3] === 'PM' && h !== 12) h += 12;
+            if (m[3] === 'AM' && h === 12) h = 0;
+            return h * 60 + min;
+          };
+          
+          const fmtT = (mins: number): string => {
+            let h = Math.floor(mins / 60) % 24;
+            const m = mins % 60;
+            const period = h >= 12 ? 'PM' : 'AM';
+            if (h > 12) h -= 12;
+            if (h === 0) h = 12;
+            return `${h}:${String(m).padStart(2, '0')} ${period}`;
+          };
+          
+          // Compute current activity's end time
+          const startMins = parseT(current.startTime);
+          if (startMins === null) continue;
+          
+          // Parse duration
+          let durMins = 60;
+          if (current.duration) {
+            const d = String(current.duration).toLowerCase();
+            const hm = d.match(/([\d.]+)\s*(?:hours?|hrs?|h)/);
+            const mm = d.match(/([\d.]+)\s*(?:minutes?|mins?|m(?!onth))/);
+            durMins = 0;
+            if (hm) durMins += parseFloat(hm[1]) * 60;
+            if (mm) durMins += parseFloat(mm[1]);
+            if (durMins === 0) durMins = 60;
+          }
+          
+          const endMins = startMins + durMins;
+          const nextStartMins = parseT(next.startTime);
+          if (nextStartMins === null) continue;
+          
+          const gap = nextStartMins - endMins;
+          
+          if (gap < MIN_GAP_MINUTES) {
+            const newStart = endMins + MIN_GAP_MINUTES;
+            const oldTime = next.startTime;
+            next.startTime = fmtT(newStart);
+            // Also update endTime if it exists
+            if (next.endTime) {
+              const nextDur = (parseT(next.endTime) || (newStart + 60)) - (parseT(oldTime) || newStart);
+              next.endTime = fmtT(newStart + Math.max(nextDur, 30));
+            }
+            gapFixCount++;
+            console.log(`[Stage 2.7] Day ${day.dayNumber}: Shifted "${next.title || next.name}" from ${oldTime} → ${next.startTime} (gap was ${gap} min)`);
+          }
+        }
+      }
+      
+      if (gapFixCount > 0) {
+        console.log(`[Stage 2.7] Fixed ${gapFixCount} insufficient transit gaps across all days`);
+      }
+
       // STAGE 3: Early Save (Critical - ensures user gets itinerary)
       await earlySaveItinerary(supabase, tripId, aiResult.days);
 
