@@ -9,6 +9,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePopupCoordination } from '@/stores/popup-coordination-store';
+import { fetchOnboardingState, mergeOnboardingState } from '@/utils/onboardingState';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, ChevronRight, ChevronLeft, Lock, MoreHorizontal, 
@@ -131,27 +132,37 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
   const { requestPopup, closePopup } = usePopupCoordination();
   const { user } = useAuth();
 
-  // Clear stale tour flags when a different user signs in
+  // Show tour only once per user — check localStorage (fast) then DB (durable)
   useEffect(() => {
     if (!user) return;
-    const completedVal = localStorage.getItem(STORAGE_KEY);
-    if (completedVal && completedVal !== user.id) {
-      localStorage.removeItem(STORAGE_KEY);
-    }
-  }, [user]);
+    let cancelled = false;
 
-  // Show tour only once per user, gated through popup coordination
-  useEffect(() => {
-    if (!user) return;
+    // Fast path: localStorage already has completion for this user
     if (localStorage.getItem(STORAGE_KEY) === user.id) return;
 
-    const timer = setTimeout(() => {
-      const allowed = requestPopup('itinerary_tour');
-      if (allowed) {
-        setIsVisible(true);
+    // Slow path: check DB
+    (async () => {
+      const dbState = await fetchOnboardingState(user.id);
+      if (cancelled) return;
+
+      if (dbState.itinerary_tour_completed) {
+        // Re-sync localStorage so next check is fast
+        localStorage.setItem(STORAGE_KEY, user.id);
+        return;
       }
-    }, 1000);
-    return () => clearTimeout(timer);
+
+      // Neither localStorage nor DB says completed — show tour
+      const timer = setTimeout(() => {
+        if (cancelled) return;
+        const allowed = requestPopup('itinerary_tour');
+        if (allowed) setIsVisible(true);
+      }, 1000);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      cancelled = false; // keep ref for cleanup
+      return () => clearTimeout(timer);
+    })();
+
+    return () => { cancelled = true; };
   }, [user, requestPopup]);
 
   // Update highlight position when step changes
@@ -221,7 +232,14 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
   }, [currentStep]);
 
   const handleComplete = useCallback(() => {
-    if (user?.id) localStorage.setItem(STORAGE_KEY, user.id);
+    if (user?.id) {
+      localStorage.setItem(STORAGE_KEY, user.id);
+      // Persist to DB (fire-and-forget)
+      mergeOnboardingState(user.id, {
+        itinerary_tour_completed: true,
+        itinerary_tour_completed_at: new Date().toISOString(),
+      });
+    }
     setIsVisible(false);
     closePopup('itinerary_tour');
     onComplete?.();
