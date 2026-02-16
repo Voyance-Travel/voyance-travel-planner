@@ -25,7 +25,7 @@ export function TripCostEstimate({ tripDays, className }: TripCostEstimateProps)
   const totalCredits = creditData?.totalCredits ?? 0;
   const isFirstTrip = (entitlementsData as EntitlementsResponse | undefined)?.is_first_trip ?? false;
 
-  const freeDays = isFirstTrip ? 2 : 1;
+  const freeDays = isFirstTrip ? 2 : 0;
   const paidDays = Math.max(0, tripDays - freeDays);
   const estimatedCost = paidDays * BASE_RATE_PER_DAY;
   const shortfall = Math.max(0, estimatedCost - totalCredits);
@@ -66,7 +66,7 @@ export function TripCostEstimate({ tripDays, className }: TripCostEstimateProps)
       </div>
       <p className="text-xs text-muted-foreground pl-6">
         You have {totalCredits} credits available
-        {freeDays > 0 && ` (Day 1 is always free)`}
+        {isFirstTrip && freeDays > 0 && ` (Days 1–${freeDays} are free on your first trip)`}
       </p>
       {shortfall > 0 && (
         <div className="flex items-start gap-2 pl-6">
