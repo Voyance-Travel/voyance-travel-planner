@@ -166,13 +166,16 @@ export function calculateTraitScores(
     }
   }
 
-  // Average the accumulated trait values
+  // Fix D: Use weighted-max instead of simple average to preserve strong signals
   for (const [trait, values] of Object.entries(traitAccumulator)) {
     if (trait in traits && typeof traits[trait] === 'number') {
       const sum = values.reduce((a, b) => a + b, 0);
       const avg = sum / values.length;
+      const max = Math.max(...values);
+      // 70% strongest signal, 30% average — prevents dilution
+      const weightedScore = (max * 0.7) + (avg * 0.3);
       // Clamp to 0-1 range
-      (traits as Record<string, number | string>)[trait] = Math.max(0, Math.min(1, avg));
+      (traits as Record<string, number | string>)[trait] = Math.max(0, Math.min(1, weightedScore));
     }
   }
 
@@ -195,6 +198,24 @@ function meetsRequirement(
 }
 
 /**
+ * Calculate how close a trait score is to meeting a requirement (0.0-1.0)
+ * Returns 1.0 if fully met, proportional credit if close
+ */
+function calculateProximity(score: number | undefined, requirement: TraitRequirement): number {
+  if (score === undefined) return 0;
+  let proximity = 1.0;
+  if (requirement.min !== undefined && score < requirement.min) {
+    const gap = requirement.min - score;
+    proximity = Math.min(proximity, Math.max(0, 1 - (gap / 0.3)));
+  }
+  if (requirement.max !== undefined && score > requirement.max) {
+    const gap = score - requirement.max;
+    proximity = Math.min(proximity, Math.max(0, 1 - (gap / 0.3)));
+  }
+  return proximity;
+}
+
+/**
  * Calculate match score for a single archetype
  */
 function calculateArchetypeScore(
@@ -207,23 +228,21 @@ function calculateArchetypeScore(
   const matchedRequirements: string[] = [];
   const penalties: string[] = [];
 
-  // Check required traits (must all be met for a base score)
-  let meetsAllRequired = true;
+  // Check required traits with proportional scoring (Fix A)
   const required = profile.required || {};
   
   for (const [trait, requirement] of Object.entries(required)) {
     const traitValue = scores[trait];
-    if (typeof traitValue === 'number' && meetsRequirement(traitValue, requirement)) {
-      matchedRequirements.push(trait);
-      score += 30; // Base points for meeting required traits
-    } else {
-      meetsAllRequired = false;
+    if (typeof traitValue === 'number') {
+      const proximity = calculateProximity(traitValue, requirement);
+      score += proximity * 30; // Full 30 if met, partial credit if close
+      if (proximity >= 1.0) {
+        matchedRequirements.push(trait);
+      } else {
+        // Small penalty scaled by how far off — NOT a flat -50
+        score -= (1 - proximity) * 15;
+      }
     }
-  }
-
-  // If doesn't meet all required, heavily penalize
-  if (!meetsAllRequired && Object.keys(required).length > 0) {
-    score -= 50;
   }
 
   // Apply booster scores
@@ -257,9 +276,8 @@ function calculateArchetypeScore(
     matchedRequirements.push(`life stage: ${lifeStage}`);
   }
 
-  // Handle default archetype (Balanced Story Collector)
+  // Handle default archetype (Balanced Story Collector) — Fix C: tightened bonuses
   if (profile.isDefault) {
-    // Calculate variance - lower variance = better match for balanced
     const numericTraits = Object.entries(scores)
       .filter(([key, value]) => typeof value === 'number' && key !== 'life_stage')
       .map(([, value]) => value as number);
@@ -268,14 +286,13 @@ function calculateArchetypeScore(
       const mean = numericTraits.reduce((a, b) => a + b, 0) / numericTraits.length;
       const variance = numericTraits.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / numericTraits.length;
       
-      // Lower variance = higher score (more balanced)
       if (profile.maxTraitSpread && Math.sqrt(variance) <= profile.maxTraitSpread) {
-        score += 20;
+        score += 10; // Was 20
         matchedRequirements.push('balanced traits');
       }
     }
-    // Default gets a small base score so it's always available
-    score += 10;
+    // Minimal base score
+    score += 5; // Was 10
   }
 
   // Calculate confidence based on score and how many traits contributed
@@ -312,6 +329,15 @@ export function matchArchetypes(
   }
 
   // Sort by score descending
+  matches.sort((a, b) => b.score - a.score);
+
+  // Fix B: Suppress BSC when strong specialized matches exist
+  const bestNonDefault = matches.find(m => !archetypeProfiles[m.id]?.isDefault);
+  const defaultMatch = matches.find(m => archetypeProfiles[m.id]?.isDefault);
+  if (bestNonDefault && defaultMatch && bestNonDefault.score > 35) {
+    defaultMatch.score = defaultMatch.score * 0.5;
+  }
+  // Re-sort after suppression
   matches.sort((a, b) => b.score - a.score);
 
   // Update confidence based on score gaps
@@ -355,7 +381,7 @@ export function determineArchetype(answers: Record<string, string>): MatchResult
  */
 export function getPrimaryArchetype(answers: Record<string, string>): string {
   const result = determineArchetype(answers);
-  return result.primary?.id || 'balanced_story_collector';
+  return result.primary?.id ?? result.allMatches[0]?.id ?? 'balanced_story_collector';
 }
 
 /**
