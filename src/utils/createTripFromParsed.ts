@@ -173,6 +173,8 @@ export async function createTripFromParsed(
         status: 'draft',
         creation_source: 'manual_paste',
         itinerary_data: itineraryData as any,
+        // Manual trips: unlock ALL days — user's own content is free
+        unlocked_day_count: parsed.days.length,
         metadata: {
           source: 'manual_paste',
           lastUpdated: new Date().toISOString(),

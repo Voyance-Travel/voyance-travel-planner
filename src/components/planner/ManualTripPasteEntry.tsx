@@ -381,7 +381,7 @@ export function ManualTripPasteEntry({ }: ManualTripPasteEntryProps = {}) {
             </div>
 
             <p className="text-[11px] text-center text-muted-foreground">
-              Free - you can edit everything after. Want AI enrichment? Smart Finish is available inside.
+              Free — all your content stays unlocked. Want insider tips &amp; route optimization? Try Smart Finish inside.
             </p>
           </motion.div>
         )}
