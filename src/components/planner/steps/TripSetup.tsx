@@ -124,7 +124,14 @@ export default function TripSetup({ formData, updateFormData, onContinue }: Trip
                 id="startDate"
                 type="date"
                 value={formData.startDate}
-                onChange={(e) => updateFormData({ startDate: e.target.value })}
+                onChange={(e) => {
+                  const newStart = e.target.value;
+                  if (newStart && formData.endDate && newStart > formData.endDate) {
+                    updateFormData({ startDate: newStart, endDate: newStart });
+                  } else {
+                    updateFormData({ startDate: newStart });
+                  }
+                }}
                 className="pl-10 h-12"
               />
             </div>
