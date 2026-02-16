@@ -3066,6 +3066,7 @@ export function EditorialItinerary({
                           changingTransportActivityId={changingTransportActivityId}
                           collaboratorColorMap={collaboratorColorMap}
                           aiLocked={aiLocked}
+                          guestMustPropose={guestMustPropose}
                         />
                       )}
                     </>
@@ -5311,6 +5312,8 @@ interface DayCardProps {
   changingTransportActivityId?: string | null;
   collaboratorColorMap?: Map<string, CollaboratorAttribution>;
   aiLocked?: boolean;
+  /** Guest in propose & vote mode — show reduced menu with only Propose Replacement */
+  guestMustPropose?: boolean;
 }
 
 function DayCard({
@@ -5356,6 +5359,7 @@ function DayCard({
   changingTransportActivityId,
   collaboratorColorMap,
   aiLocked,
+  guestMustPropose,
 }: DayCardProps) {
   // Per-day preview: a day is preview only if the global flag is set AND the day itself is a preview
   // Fully generated days (e.g., first 2 free days) should NOT be gated even if other days are locked
@@ -5572,6 +5576,7 @@ function DayCard({
                       totalDays={totalDays}
                       isLast={isLastActivity}
                       isEditable={isEditable}
+                      guestMustPropose={guestMustPropose}
                       isPreview={dayIsPreview}
                       canViewPremium={canViewPremium}
                       travelers={travelers}
@@ -5729,6 +5734,8 @@ interface ActivityRowProps {
   /** Color map for collaborator attribution badges */
   collaboratorColorMap?: Map<string, CollaboratorAttribution>;
   aiLocked?: boolean;
+  /** Guest in propose & vote mode — show reduced menu with only Propose Replacement */
+  guestMustPropose?: boolean;
 }
 
 function ActivityRow({
@@ -5766,6 +5773,7 @@ function ActivityRow({
   changingTransportActivityId,
   collaboratorColorMap,
   aiLocked,
+  guestMustPropose,
 }: ActivityRowProps) {
   const [showProposeReplacement, setShowProposeReplacement] = useState(false);
   const activityType = getActivityType(activity);
@@ -6388,6 +6396,51 @@ function ActivityRow({
                 )}
                 
                 {/* Propose Replacement Dialog */}
+                <ProposeReplacementDialog
+                  isOpen={showProposeReplacement}
+                  onClose={() => setShowProposeReplacement(false)}
+                  tripId={tripId}
+                  activityId={activity.id}
+                  activityTitle={sanitizeActivityName(activity.title || '')}
+                  destination={destination}
+                  activityForDrawer={{
+                    id: activity.id,
+                    title: activity.title || 'Activity',
+                    type: (activity.type || activity.category || 'activity') as any,
+                    description: activity.description || '',
+                    time: activity.startTime || '',
+                    duration: activity.duration || '60 min',
+                    cost: activity.cost?.amount || 0,
+                    location: { name: activity.location?.name || '', address: activity.location?.address || '' },
+                    isLocked: false,
+                    bookingRequired: false,
+                    tags: activity.tags || [],
+                  }}
+                />
+              </div>
+            )}
+            {/* Guest propose-only menu (Propose & Vote mode) */}
+            {!isEditable && guestMustPropose && !isPreview && (
+              <div className="flex items-center gap-0.5">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className="p-1.5 rounded transition-colors hover:bg-secondary text-muted-foreground"
+                      aria-label="Propose changes"
+                    >
+                      <MoreHorizontal className="h-3.5 w-3.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="bg-background border shadow-lg z-50 min-w-[160px]">
+                    <DropdownMenuItem
+                      onClick={() => setShowProposeReplacement(true)}
+                      className="cursor-pointer gap-2"
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                      Propose Replacement
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <ProposeReplacementDialog
                   isOpen={showProposeReplacement}
                   onClose={() => setShowProposeReplacement(false)}

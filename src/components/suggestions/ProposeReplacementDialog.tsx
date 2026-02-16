@@ -76,6 +76,49 @@ export function ProposeReplacementDialog({
 
       if (error) throw error;
 
+      // Notify all other trip members about the proposal
+      try {
+        // Get trip owner
+        const { data: trip } = await supabase
+          .from('trips')
+          .select('user_id, name, destination')
+          .eq('id', tripId)
+          .maybeSingle();
+
+        // Get collaborators
+        const { data: collabs } = await supabase
+          .from('trip_collaborators')
+          .select('user_id')
+          .eq('trip_id', tripId)
+          .not('accepted_at', 'is', null);
+
+        const recipientIds = new Set<string>();
+        if (trip?.user_id && trip.user_id !== user.id) recipientIds.add(trip.user_id);
+        collabs?.forEach(c => { if (c.user_id && c.user_id !== user.id) recipientIds.add(c.user_id); });
+
+        const deadlineText = deadline ? ` Vote by ${new Date(deadline).toLocaleDateString()}.` : '';
+        const notifications = Array.from(recipientIds).map(recipientId => ({
+          trip_id: tripId,
+          user_id: recipientId,
+          notification_type: 'proposal_created',
+          sent: false,
+          metadata: {
+            title: `Replacement proposed`,
+            message: `${displayName} proposed replacing "${activityTitle}" with "${replacement.trim()}" on ${trip?.name || 'your trip'}.${deadlineText}`,
+            proposerName: displayName,
+            activityTitle,
+            replacementTitle: replacement.trim(),
+            tripName: trip?.name,
+          },
+        }));
+
+        if (notifications.length > 0) {
+          await supabase.from('trip_notifications').insert(notifications);
+        }
+      } catch (notifErr) {
+        console.error('Failed to send proposal notifications:', notifErr);
+      }
+
       toast.success('Replacement proposed! Your group can now vote on it.');
       setReplacement('');
       setReason('');
