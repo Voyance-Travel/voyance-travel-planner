@@ -4,12 +4,10 @@ import { SignInForm } from '@/components/auth/SignInForm';
 import Head from '@/components/common/Head';
 import HeroImageWithFallback from '@/components/common/HeroImageWithFallback';
 import AuthLayout from '@/components/layout/AuthLayout';
-import { useAuth } from '@/contexts/AuthContext';
 import { Compass } from 'lucide-react';
 
 export default function SignIn() {
   const [searchParams] = useSearchParams();
-  const { isLoading: authLoading } = useAuth();
   const nextPath = searchParams.get('next') || '/profile';
   const isRedirectedFromProtected = nextPath && nextPath.startsWith('/');
 
@@ -119,17 +117,7 @@ export default function SignIn() {
             transition={{ duration: 0.6, delay: 0.2 }}
             className="flex-1 flex flex-col justify-center px-8 md:px-12 lg:px-14 xl:px-16 py-12"
           >
-            {authLoading ? (
-              <div className="flex flex-col items-center justify-center py-20">
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                  className="w-12 h-12 rounded-full border-2 border-primary/20 border-t-primary mb-4"
-                />
-                <p className="text-muted-foreground">Loading...</p>
-              </div>
-            ) : (
-              <>
+            <>
                 {/* Welcome header */}
                 <div className="mb-8">
                   
@@ -180,7 +168,6 @@ export default function SignIn() {
                   </p>
                 </motion.div>
               </>
-            )}
           </motion.div>
         </div>
       </div>
