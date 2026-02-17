@@ -607,6 +607,7 @@ export function AddHotelInline({
           startDate={startDate}
           endDate={endDate}
           travelers={travelers}
+          onHotelSelected={onHotelAdded}
         />
         <Button variant="outline" onClick={() => setShowManualEntry(true)}>
           {editMode ? 'Edit Details' : 'I Have a Hotel'}

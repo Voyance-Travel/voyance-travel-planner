@@ -1164,25 +1164,36 @@ export async function recalculateDNAFromPreferences(
     
     // 4. CRITICAL: Check if V2 traits are all zero (archetype-matcher failed)
     // If so, compute directly from preferences to avoid BSC fallback
+    // NOTE: Do NOT re-call the edge function — it will just return zeros again.
+    // Instead, use direct preference mapping and local archetype matching.
     if (dna.trait_scores) {
       const allZero = Object.values(dna.trait_scores).every(v => v === 0);
       if (allZero) {
-        console.warn('[DNA Recalc] All V2 traits are zero — archetype-matcher failed, using direct preference mapping');
+        console.warn('[DNA Recalc] All V2 traits are zero — using direct preference mapping (no re-call)');
         const directTraits = computeV2TraitsFromPreferences(preferences);
         console.log('[DNA Recalc] Direct V2 traits:', JSON.stringify(directTraits));
         dna.trait_scores = directTraits;
         
-        // Re-run edge function with corrected traits
+        // Use local archetype matching with corrected traits instead of re-calling edge function
         try {
-          dna = await calculateTravelDNAAdvanced(answers, userId, existingOverrides);
-          // Check again
-          if (dna.trait_scores && Object.values(dna.trait_scores).every(v => v === 0)) {
-            dna.trait_scores = directTraits;
-          }
+          const localDna = calculateTravelDNA(answers);
+          // Keep the local archetype but use our corrected traits
+          dna.primary_archetype_name = localDna.primary_archetype_name || dna.primary_archetype_name;
+          dna.secondary_archetype_name = localDna.secondary_archetype_name || dna.secondary_archetype_name;
+          dna.trait_scores = directTraits; // Always keep direct traits
         } catch {
-          // Keep direct traits, use local fallback for archetype
-          dna = calculateTravelDNA(answers);
-          dna.trait_scores = directTraits;
+          // Keep direct traits as-is
+        }
+        
+        // Persist corrected traits to travel_dna_profiles so next load reads real values
+        try {
+          await supabase
+            .from('travel_dna_profiles')
+            .update({ trait_scores: directTraits as unknown as Json })
+            .eq('user_id', userId);
+          console.log('[DNA Recalc] Persisted fallback V2 traits to travel_dna_profiles');
+        } catch (persistErr) {
+          console.error('[DNA Recalc] Failed to persist fallback traits:', persistErr);
         }
       }
     }
