@@ -18,7 +18,7 @@ interface HotelSearchParams {
   priceRange?: { min?: number; max?: number };
   starRating?: number[];
   amenities?: string[];
-  tripId?: string; // For cost control context
+  tripId?: string;
 }
 
 // ============= SUPABASE CLIENT =============
@@ -159,6 +159,9 @@ const airportToCityCode: Record<string, string> = {
   'ZRH': 'ZRH', 'BRU': 'BRU', 'ATH': 'ATH', 'CAI': 'CAI',
   'BOM': 'BOM', 'DEL': 'DEL', 'PEK': 'BJS', 'PKX': 'BJS',
   'PVG': 'SHA', 'SHA': 'SHA',
+  'AUS': 'AUS', 'DFW': 'DFW', 'IAH': 'HOU', 'HOU': 'HOU',
+  'SEA': 'SEA', 'BOS': 'BOS', 'DEN': 'DEN', 'PHX': 'PHX',
+  'MSP': 'MSP', 'DTW': 'DTW', 'CLT': 'CLT', 'MCO': 'MCO',
 };
 
 const cityNameToCode: Record<string, string> = {
@@ -172,6 +175,9 @@ const cityNameToCode: Record<string, string> = {
   'stockholm': 'STO', 'helsinki': 'HEL', 'munich': 'MUC', 'frankfurt': 'FRA',
   'zurich': 'ZRH', 'brussels': 'BRU', 'athens': 'ATH', 'cairo': 'CAI',
   'mumbai': 'BOM', 'delhi': 'DEL', 'beijing': 'BJS', 'shanghai': 'SHA',
+  'austin': 'AUS', 'dallas': 'DFW', 'houston': 'HOU', 'seattle': 'SEA',
+  'boston': 'BOS', 'denver': 'DEN', 'phoenix': 'PHX', 'minneapolis': 'MSP',
+  'detroit': 'DTW', 'charlotte': 'CLT', 'orlando': 'MCO',
 };
 
 function smartConvertToHotelCityCode(input: string): string {
@@ -204,6 +210,43 @@ function smartConvertToHotelCityCode(input: string): string {
   return normalized.substring(0, 3);
 }
 
+// ============= PRICE CLAMPING =============
+function clampPrice(pricePerNight: number, hotelName: string): number {
+  const MIN_PRICE = 50;
+  const MAX_PRICE = 2000;
+
+  if (pricePerNight < MIN_PRICE) {
+    console.warn(`[Hotels] Price too low for ${hotelName}: $${pricePerNight} → $${MIN_PRICE}`);
+    return MIN_PRICE;
+  }
+  if (pricePerNight > MAX_PRICE) {
+    console.warn(`[Hotels] Price too high for ${hotelName}: $${pricePerNight} → $${MAX_PRICE}`);
+    return MAX_PRICE;
+  }
+  return Math.round(pricePerNight);
+}
+
+// ============= NEIGHBORHOOD EXTRACTION =============
+function extractNeighborhood(formattedAddress: string | undefined, destination: string): string | null {
+  if (!formattedAddress) return null;
+  const parts = formattedAddress.split(',').map(p => p.trim());
+  if (parts.length >= 3) {
+    const candidate = parts[1];
+    const cityLower = destination.toLowerCase();
+    if (
+      candidate.toLowerCase() !== cityLower &&
+      !candidate.match(/^[A-Z]{2}$/) &&
+      candidate.length > 1
+    ) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+// ============= DEBUG LOGGING =============
+let _firstHotelLogged = false;
+
 // ============= FIELD NORMALIZATION =============
 function normalizeHotelData(hotel: any, offer: any, params: HotelSearchParams): any {
   const checkIn = new Date(params.checkIn);
@@ -211,13 +254,34 @@ function normalizeHotelData(hotel: any, offer: any, params: HotelSearchParams): 
   const nights = Math.max(1, Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)));
   
   const totalPrice = parseFloat(offer?.price?.total || '0');
-  const pricePerNight = totalPrice > 0 ? totalPrice / nights : 150;
+  const rawPricePerNight = totalPrice > 0 ? totalPrice / nights : 150;
+  const pricePerNight = clampPrice(rawPricePerNight, hotel?.hotel?.name || hotel?.name || 'Unknown');
   
   const hotelData = hotel.hotel || hotel;
   
   const photos: string[] = [];
   if (hotelData.media?.length) {
     photos.push(...hotelData.media.map((m: any) => m.uri).filter(Boolean));
+  }
+
+  // Debug: log first hotel's raw data
+  if (!_firstHotelLogged) {
+    _firstHotelLogged = true;
+    console.log('[Hotels] 📋 Sample raw hotel:', JSON.stringify({
+      hotelId: hotelData.hotelId || hotelData.id,
+      name: hotelData.name,
+      rating: hotelData.rating,
+      chainCode: hotelData.chainCode,
+      address: hotelData.address,
+      mediaCount: hotelData.media?.length || 0,
+      amenitiesCount: Array.isArray(hotelData.amenities) ? hotelData.amenities.length : 0,
+    }));
+    console.log('[Hotels] 📋 Sample offer:', JSON.stringify({
+      priceTotal: offer?.price?.total,
+      currency: offer?.price?.currency,
+      roomCategory: offer?.room?.typeEstimated?.category,
+      beds: offer?.room?.typeEstimated?.beds,
+    }));
   }
   
   return {
@@ -231,9 +295,9 @@ function normalizeHotelData(hotel: any, offer: any, params: HotelSearchParams): 
     rating: normalizeRating(hotelData.rating),
     starRating: normalizeRating(hotelData.rating),
     stars: normalizeRating(hotelData.rating),
-    pricePerNight: Math.round(pricePerNight),
-    totalPrice: totalPrice > 0 ? totalPrice : pricePerNight * nights,
-    price: totalPrice > 0 ? totalPrice : pricePerNight * nights,
+    pricePerNight,
+    totalPrice: totalPrice > 0 ? Math.min(totalPrice, pricePerNight * nights) : pricePerNight * nights,
+    price: totalPrice > 0 ? Math.min(totalPrice, pricePerNight * nights) : pricePerNight * nights,
     currency: offer?.price?.currency || 'USD',
     roomType: offer?.room?.typeEstimated?.category || 'Standard Room',
     bedType: offer?.room?.typeEstimated?.beds || 1,
@@ -263,8 +327,79 @@ function normalizeRating(rating: any): number {
   return Math.min(5, Math.max(1, num || 3));
 }
 
+// ============= AUTO-ENRICHMENT WITH GOOGLE PLACES =============
+async function autoEnrichHotels(results: any[], destination: string): Promise<any[]> {
+  const GOOGLE_MAPS_API_KEY = Deno.env.get('GOOGLE_MAPS_API_KEY');
+  if (!GOOGLE_MAPS_API_KEY || results.length === 0) return results;
+
+  const enrichLimit = Math.min(results.length, 10);
+  console.log(`[Hotels] 🔍 Auto-enriching ${enrichLimit} hotels with Google Places`);
+
+  const enrichPromises = results.slice(0, enrichLimit).map(async (hotel: any) => {
+    try {
+      const enrichResult = await enrichHotelByName(hotel.name, destination);
+      if (enrichResult.success && enrichResult.enrichment) {
+        const e = enrichResult.enrichment;
+        return {
+          ...hotel,
+          rating: e.rating ? Math.round(e.rating) : hotel.rating,
+          starRating: e.rating ? Math.round(e.rating) : hotel.starRating,
+          stars: e.rating ? Math.round(e.rating) : hotel.stars,
+          reviewScore: e.rating ? e.rating * 2 : hotel.reviewScore,
+          reviewCount: e.reviewCount || hotel.reviewCount,
+          neighborhood: extractNeighborhood(e.address, destination) || hotel.neighborhood,
+          address: e.address || hotel.address,
+          imageUrl: e.photos?.[0] || hotel.imageUrl,
+          photos: e.photos?.length ? e.photos : hotel.photos,
+          images: e.photos?.length ? e.photos : hotel.images,
+          website: e.website || hotel.website,
+          googleMapsUrl: e.googleMapsUrl || hotel.googleMapsUrl,
+          placeId: e.placeId || hotel.placeId,
+          latitude: e.coordinates?.lat || hotel.latitude,
+          longitude: e.coordinates?.lng || hotel.longitude,
+          _enriched: true,
+        };
+      }
+      return hotel;
+    } catch (err) {
+      console.warn(`[Hotels] Enrichment failed for ${hotel.name}:`, err);
+      return hotel;
+    }
+  });
+
+  const enrichedResults = await Promise.all(enrichPromises);
+
+  // Replace enriched hotels in results array
+  for (let i = 0; i < enrichedResults.length; i++) {
+    results[i] = enrichedResults[i];
+  }
+
+  const enrichedCount = enrichedResults.filter((h: any) => h._enriched).length;
+  console.log(`[Hotels] ✅ Enrichment complete: ${enrichedCount} of ${enrichLimit} enriched`);
+  return results;
+}
+
+// ============= RESULTS SUMMARY LOGGING =============
+function logResultsSummary(results: any[]): void {
+  if (results.length === 0) return;
+  console.log('[Hotels] 📊 Final results summary:', JSON.stringify({
+    count: results.length,
+    enriched: results.filter((h: any) => h._enriched).length,
+    withPhotos: results.filter((h: any) => h.imageUrl).length,
+    starDistribution: results.reduce((acc: any, h: any) => {
+      acc[h.stars] = (acc[h.stars] || 0) + 1;
+      return acc;
+    }, {}),
+    priceRange: {
+      min: Math.min(...results.map((h: any) => h.pricePerNight)),
+      max: Math.max(...results.map((h: any) => h.pricePerNight)),
+    },
+  }));
+}
+
 // ============= SEARCH HOTELS (with caching) =============
 async function searchHotels(params: HotelSearchParams): Promise<any[]> {
+  _firstHotelLogged = false; // Reset for each search
   console.log('[Hotels] Search params:', JSON.stringify(params));
   
   // STEP 1: Check cache first
@@ -297,7 +432,6 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
     }
 
     const hotelsData = await hotelsResponse.json();
-    // Production: up to 5 batches of 50 = 250 hotels max; Sandbox: 15
     const maxBatches = isProduction ? 5 : 1;
     const batchSize = 50;
     const maxHotels = isProduction ? maxBatches * batchSize : 15;
@@ -308,7 +442,6 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
       return generateFallbackHotels(params, cityCode);
     }
 
-    // Split into batches of 50 for Amadeus API limit
     const hotelIdBatches: string[][] = [];
     for (let i = 0; i < allHotelIds.length; i += batchSize) {
       hotelIdBatches.push(allHotelIds.slice(i, i + batchSize));
@@ -316,7 +449,6 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
 
     console.log('[Hotels] Step 2 - Getting offers for', allHotelIds.length, 'hotels in', hotelIdBatches.length, 'batches');
 
-    // Fetch all batches in parallel
     const batchPromises = hotelIdBatches.map(async (hotelIds, batchIndex) => {
       const offersParams = new URLSearchParams({
         hotelIds: hotelIds.join(','),
@@ -351,7 +483,7 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
     const allOffers = batchResults.flat();
     console.log('[Hotels] Total offers from all batches:', allOffers.length);
 
-    // Sandbox fix for empty results
+    // Sandbox fix for empty results — relaxed retry
     if (!allOffers.length) {
       const originalNights = Math.max(
         1,
@@ -391,7 +523,6 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
         console.log('[Hotels] ✅ Relaxed retry returned', relaxedCount, 'offers');
 
         if (relaxedCount > 0) {
-          const nightsMultiplier = originalNights;
           const guestsMultiplier = Math.sqrt(originalAdults);
 
           const relaxedParams: HotelSearchParams = {
@@ -400,10 +531,10 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
             checkOut: relaxedCheckOut,
           };
 
-          const results = (relaxedData.data || []).map((hotelOffer: any) => {
+          let results = (relaxedData.data || []).map((hotelOffer: any) => {
             const normalized = normalizeHotelData(hotelOffer, hotelOffer.offers?.[0], relaxedParams);
             const basePrice = Number(normalized.pricePerNight) || 150;
-            const scaledPricePerNight = Math.round(basePrice * guestsMultiplier);
+            const scaledPricePerNight = clampPrice(Math.round(basePrice * guestsMultiplier), normalized.name);
             const scaledTotalPrice = Math.round(scaledPricePerNight * originalNights);
 
             return {
@@ -413,12 +544,16 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
               nights: originalNights,
               pricePerNight: scaledPricePerNight,
               totalPrice: scaledTotalPrice,
+              price: scaledTotalPrice,
               source: 'amadeus',
               _priceScaled: true,
             };
           });
+
+          // Auto-enrich with Google Places
+          results = await autoEnrichHotels(results, params.destination);
           
-          // Cache the results
+          logResultsSummary(results);
           await cacheResults(params, results);
           return results;
         }
@@ -429,10 +564,15 @@ async function searchHotels(params: HotelSearchParams): Promise<any[]> {
     }
 
     // Transform with full normalization
-    const results = allOffers.map((hotelOffer: any) => 
+    let results = allOffers.map((hotelOffer: any) => 
       normalizeHotelData(hotelOffer, hotelOffer.offers?.[0], params)
     );
+
+    // Auto-enrich with Google Places
+    results = await autoEnrichHotels(results, params.destination);
     
+    logResultsSummary(results);
+
     // STEP 3: Cache results
     await cacheResults(params, results);
     
@@ -521,7 +661,6 @@ async function searchHotelsByName(
   }
 
   try {
-    // Construct search query for hotels
     const textQuery = `${query} hotel ${destination}`;
     console.log('[Hotels] Searching Google Places:', textQuery);
 
@@ -724,7 +863,6 @@ async function bookHotel(
     tripId: request.tripId,
   });
 
-  // Step 1: Verify payment is confirmed
   const { data: payment, error: paymentError } = await supabase
     .from('trip_payments')
     .select('*')
@@ -751,7 +889,6 @@ async function bookHotel(
 
   console.log('[Hotels] Payment verified:', request.paymentId);
 
-  // Step 2: Get Amadeus token
   let token: string;
   try {
     token = await getAmadeusToken();
@@ -769,7 +906,6 @@ async function bookHotel(
     ? 'https://api.amadeus.com'
     : 'https://test.api.amadeus.com';
 
-  // Step 3: Build Amadeus booking payload
   const leadGuest = request.guests[0];
   const bookingPayload = {
     data: {
@@ -782,8 +918,6 @@ async function bookHotel(
         phone: guest.phone || '+1555555555',
         email: guest.email || leadGuest.email || 'guest@example.com',
       })),
-      // Note: In production, payment would be handled differently
-      // For sandbox/test mode, we simulate the booking
       payments: request.paymentInfo
         ? [
             {
@@ -805,7 +939,6 @@ async function bookHotel(
     guestCount: request.guests.length,
   });
 
-  // Step 4: Call Amadeus Hotel Booking API
   const response = await fetch(`${baseUrl}/v1/booking/hotel-bookings`, {
     method: 'POST',
     headers: {
@@ -817,26 +950,21 @@ async function bookHotel(
 
   const data = await response.json();
 
-  // Handle sandbox limitations - simulate success
   if (!response.ok) {
     console.error('[Hotels] Amadeus booking API error:', response.status, data);
 
-    // In sandbox mode, the booking API may not be available
-    // Simulate a successful booking for testing
     if (!isProduction && (response.status === 401 || response.status === 403 || response.status === 400)) {
       console.log('[Hotels] Sandbox mode - simulating successful booking');
 
       const simulatedConfirmation = `SIM-${Date.now().toString(36).toUpperCase()}`;
       const simulatedBookingId = `HBKG-${request.tripId.slice(0, 8).toUpperCase()}`;
 
-      // Update payment record with simulated confirmation
       await supabase.from('trip_payments').update({
         status: 'completed',
         external_booking_id: simulatedBookingId,
         updated_at: new Date().toISOString(),
       }).eq('id', request.paymentId);
 
-      // Update trip with hotel booking confirmation
       await updateTripHotelConfirmation(supabase, request.tripId, request.hotelId, {
         confirmationNumber: simulatedConfirmation,
         bookingId: simulatedBookingId,
@@ -856,7 +984,6 @@ async function bookHotel(
       };
     }
 
-    // Real failure - update payment and signal refund
     await supabase.from('trip_payments').update({
       status: 'failed',
       updated_at: new Date().toISOString(),
@@ -870,7 +997,6 @@ async function bookHotel(
     };
   }
 
-  // Step 5: Extract confirmation from Amadeus response
   const hotelBooking = data.data?.hotelBookings?.[0];
   const confirmationNumber =
     hotelBooking?.hotelProviderInformation?.[0]?.confirmationNumber ||
@@ -883,14 +1009,12 @@ async function bookHotel(
     status: bookingStatus,
   });
 
-  // Step 6: Update payment record with confirmation
   await supabase.from('trip_payments').update({
     status: 'completed',
     external_booking_id: confirmationNumber,
     updated_at: new Date().toISOString(),
   }).eq('id', request.paymentId);
 
-  // Step 7: Update trip with hotel booking confirmation
   await updateTripHotelConfirmation(supabase, request.tripId, request.hotelId, {
     confirmationNumber,
     bookingId: data.data?.id,
@@ -910,7 +1034,6 @@ async function bookHotel(
   };
 }
 
-// Helper to update trip hotel selection with confirmation
 async function updateTripHotelConfirmation(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   tripId: string,
@@ -925,7 +1048,6 @@ async function updateTripHotelConfirmation(
   }
 ) {
   try {
-    // Get current trip data
     const { data: trip, error } = await supabase
       .from('trips')
       .select('hotel_selection')
@@ -937,11 +1059,9 @@ async function updateTripHotelConfirmation(
       return;
     }
 
-    // Handle both array and object formats
     let hotelSelection = trip.hotel_selection;
     
     if (Array.isArray(hotelSelection)) {
-      // Find and update the matching hotel
       hotelSelection = hotelSelection.map((hotel: any) => {
         if (hotel.id === hotelId || hotel.hotelId === hotelId) {
           return {
@@ -953,7 +1073,6 @@ async function updateTripHotelConfirmation(
         return hotel;
       });
     } else if (hotelSelection && typeof hotelSelection === 'object') {
-      // Single hotel object
       hotelSelection = {
         ...hotelSelection,
         booking: confirmation,
@@ -990,7 +1109,6 @@ serve(async (req) => {
 
     // Hotel booking action
     if (body.action === 'book') {
-      // Auth check
       const authHeader = req.headers.get('Authorization');
       if (!authHeader) {
         return new Response(
@@ -1046,10 +1164,15 @@ serve(async (req) => {
       });
     }
 
-    // Default: search - track Amadeus API calls (up to 6 batches)
+    // Default: search — track Amadeus + Google Places API calls
     const hotels = await searchHotels(body);
     const batchCount = Math.min(6, Math.ceil(hotels.length / 50));
     costTracker.recordAmadeus(batchCount);
+    // Track Google Places enrichment calls
+    const enrichedCount = hotels.filter((h: any) => h._enriched).length;
+    if (enrichedCount > 0) {
+      costTracker.recordGooglePlaces(enrichedCount);
+    }
     await costTracker.save();
     
     return new Response(JSON.stringify({
@@ -1057,6 +1180,7 @@ serve(async (req) => {
       hotels,
       count: hotels.length,
       source: hotels[0]?.source || 'unknown',
+      enriched: enrichedCount,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
