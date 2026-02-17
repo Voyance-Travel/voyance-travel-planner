@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, AlertTriangle, Info, CheckCircle2, 
   Loader2, Zap, Coins, Wand2, X, ChevronRight,
-  Route, Star, Clock, MapPin
+  Route, Star, Clock, MapPin, RefreshCw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +24,7 @@ import { toast } from 'sonner';
 import { useSpendCredits } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
 import { CREDIT_COSTS } from '@/config/pricing';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface Gap {
   hint: string;
@@ -71,15 +72,18 @@ export function SmartFinishBanner({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [hasAnalyzed, setHasAnalyzed] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const [enrichmentFailed, setEnrichmentFailed] = useState(false);
 
   const spendCredits = useSpendCredits();
   const { data: creditData } = useCredits();
+  const queryClient = useQueryClient();
   const totalCredits = creditData?.totalCredits ?? 0;
 
-  const shouldShow = isManualMode && !smartFinishPurchased && !dismissed;
+  // Show banner if: manual & not purchased, OR if purchased but enrichment failed (retry mode)
+  const shouldShow = isManualMode && (!smartFinishPurchased || enrichmentFailed) && !dismissed;
 
   const runAnalysis = useCallback(async () => {
-    if (!shouldShow || hasAnalyzed) return;
+    if (!shouldShow || hasAnalyzed || enrichmentFailed) return;
     setIsLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('analyze-trip-gaps', {
@@ -95,23 +99,55 @@ export function SmartFinishBanner({
     } finally {
       setIsLoading(false);
     }
-  }, [tripId, shouldShow, hasAnalyzed]);
+  }, [tripId, shouldShow, hasAnalyzed, enrichmentFailed]);
 
   useEffect(() => {
-    if (!shouldShow || hasAnalyzed) return;
+    if (!shouldShow || hasAnalyzed || enrichmentFailed) return;
     const timer = setTimeout(runAnalysis, 3000);
     return () => clearTimeout(timer);
-  }, [shouldShow, hasAnalyzed, runAnalysis]);
+  }, [shouldShow, hasAnalyzed, enrichmentFailed, runAnalysis]);
+
+  const handleRetryEnrichment = async () => {
+    setIsPurchasing(true);
+    try {
+      toast.info('Retrying enrichment…', { description: 'No additional credits will be charged.' });
+
+      const { data, error } = await supabase.functions.invoke('enrich-manual-trip', {
+        body: { tripId },
+      });
+
+      if (error || !data?.success) {
+        const errorMsg = data?.error || error?.message || 'Unknown error';
+        toast.error('Enrichment failed again.', { description: errorMsg });
+        return;
+      }
+
+      toast.success('Your itinerary has been enriched!', {
+        description: `${data.tipsAdded || 0} tips, ${data.gapFixes?.length || 0} fixes, ${data.routeHints?.length || 0} route hints added.`,
+      });
+      setEnrichmentFailed(false);
+      queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+      queryClient.invalidateQueries({ queryKey: ['trips'] });
+      onPurchaseComplete?.();
+    } catch (err: any) {
+      toast.error('Something went wrong. Please try again later.');
+      console.error('Retry enrichment error:', err);
+    } finally {
+      setIsPurchasing(false);
+    }
+  };
 
   const handlePurchase = async () => {
     setIsPurchasing(true);
     try {
+      // Step 1: Deduct credits
       await spendCredits.mutateAsync({
         action: 'SMART_FINISH',
         tripId,
         metadata: { source: 'smart_finish_banner' },
       });
 
+      // Step 2: Mark as purchased
       const { error: updateError } = await supabase
         .from('trips')
         .update({ smart_finish_purchased: true })
@@ -121,15 +157,58 @@ export function SmartFinishBanner({
         console.error('Failed to mark smart finish purchased:', updateError);
       }
 
-      supabase.functions.invoke('enrich-manual-trip', {
-        body: { tripId },
-      }).catch(err => console.error('Enrichment trigger failed:', err));
+      toast.info('Smart Finish activated!', {
+        description: 'Enriching your itinerary with tips, fixes & optimization…',
+      });
 
-      toast.success('Smart Finish activated!', {
-        description: 'Your itinerary is being enriched with route optimization, reviews, and tips.',
+      // Step 3: Await enrichment (NOT fire-and-forget)
+      const { data, error } = await supabase.functions.invoke('enrich-manual-trip', {
+        body: { tripId },
+      });
+
+      if (error || !data?.success) {
+        const errorMsg = data?.error || error?.message || 'Enrichment failed';
+        console.error('[SmartFinish] Enrichment failed:', errorMsg);
+        
+        toast.error('Enrichment failed — your credits have been refunded.', {
+          description: 'You can retry at no cost.',
+          duration: 6000,
+        });
+
+        // Refund credits by granting them back
+        try {
+          await supabase.functions.invoke('spend-credits', {
+            body: {
+              action: 'REFUND',
+              tripId,
+              metadata: { reason: 'smart_finish_enrichment_failed', originalAction: 'SMART_FINISH' },
+            },
+          });
+        } catch (refundErr) {
+          console.error('[SmartFinish] Refund failed:', refundErr);
+          // Even if refund via edge function fails, reset the flag so user can retry
+        }
+
+        // Reset smart_finish_purchased so banner stays visible for retry
+        await supabase
+          .from('trips')
+          .update({ smart_finish_purchased: false })
+          .eq('id', tripId);
+
+        setEnrichmentFailed(true);
+        queryClient.invalidateQueries({ queryKey: ['credits'] });
+        return;
+      }
+
+      // Success!
+      toast.success('Your itinerary has been enriched!', {
+        description: `${data.tipsAdded || 0} insider tips, ${data.gapFixes?.length || 0} DNA fixes, ${data.routeHints?.length || 0} route hints added.`,
       });
 
       setIsDialogOpen(false);
+      setEnrichmentFailed(false);
+      queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+      queryClient.invalidateQueries({ queryKey: ['trips'] });
       onPurchaseComplete?.();
     } catch (err: any) {
       if (!err?.message?.startsWith('Not enough credits')) {
@@ -150,9 +229,9 @@ export function SmartFinishBanner({
         animate={{ opacity: 1, y: 0 }}
         className={cn(
           "relative overflow-hidden rounded-xl border",
-          "border-amber-200/60 dark:border-amber-800/40",
-          "bg-gradient-to-br from-amber-50/80 via-orange-50/50 to-amber-50/80",
-          "dark:from-amber-950/30 dark:via-orange-950/20 dark:to-amber-950/30",
+          enrichmentFailed
+            ? "border-red-200/60 dark:border-red-800/40 bg-gradient-to-br from-red-50/80 via-orange-50/50 to-red-50/80 dark:from-red-950/30 dark:via-orange-950/20 dark:to-red-950/30"
+            : "border-amber-200/60 dark:border-amber-800/40 bg-gradient-to-br from-amber-50/80 via-orange-50/50 to-amber-50/80 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-amber-950/30",
           "p-4 sm:p-5",
           className
         )}
@@ -172,32 +251,43 @@ export function SmartFinishBanner({
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
           {/* Icon + Text */}
           <div className="flex items-start gap-3 flex-1 min-w-0">
-            <div className="shrink-0 p-2.5 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 shadow-md shadow-amber-500/20">
-              <Wand2 className="h-5 w-5 text-white" />
+            <div className={cn(
+              "shrink-0 p-2.5 rounded-xl shadow-md",
+              enrichmentFailed
+                ? "bg-gradient-to-br from-red-400 to-orange-500 shadow-red-500/20"
+                : "bg-gradient-to-br from-amber-400 to-orange-500 shadow-amber-500/20"
+            )}>
+              {enrichmentFailed ? <RefreshCw className="h-5 w-5 text-white" /> : <Wand2 className="h-5 w-5 text-white" />}
             </div>
             <div className="min-w-0">
               <h3 className="text-sm font-semibold text-foreground leading-tight">
-                This trip has great bones — want us to finish it?
+                {enrichmentFailed
+                  ? 'Enrichment failed — retry at no extra cost'
+                  : 'This trip has great bones — want us to finish it?'}
               </h3>
               <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                Smart Finish adds insider tips, timing hacks, route optimization, and DNA-matched fixes to your itinerary.
+                {enrichmentFailed
+                  ? 'Your credits were refunded. Click below to try enriching your itinerary again.'
+                  : 'Smart Finish adds insider tips, timing hacks, route optimization, and DNA-matched fixes to your itinerary.'}
               </p>
 
-              {/* Feature pills */}
-              <div className="flex flex-wrap gap-1.5 mt-2.5">
-                {ENRICHMENT_FEATURES.map(({ icon: Icon, label }) => (
-                  <span
-                    key={label}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100/80 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
-                  >
-                    <Icon className="h-3 w-3" />
-                    {label}
-                  </span>
-                ))}
-              </div>
+              {/* Feature pills (only show when not in retry mode) */}
+              {!enrichmentFailed && (
+                <div className="flex flex-wrap gap-1.5 mt-2.5">
+                  {ENRICHMENT_FEATURES.map(({ icon: Icon, label }) => (
+                    <span
+                      key={label}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100/80 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
+                    >
+                      <Icon className="h-3 w-3" />
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              )}
 
               {/* Gap count if analyzed */}
-              {hasAnalyzed && analysis && analysis.gapCount > 0 && (
+              {!enrichmentFailed && hasAnalyzed && analysis && analysis.gapCount > 0 && (
                 <button
                   onClick={() => setIsDialogOpen(true)}
                   className="inline-flex items-center gap-1.5 mt-2 text-xs text-amber-600 dark:text-amber-400 hover:underline"
@@ -219,21 +309,37 @@ export function SmartFinishBanner({
 
           {/* CTA Button */}
           <div className="shrink-0 sm:self-center">
-            <Button
-              onClick={handlePurchase}
-              disabled={isPurchasing}
-              className="w-full sm:w-auto gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 shadow-md shadow-amber-500/20 font-semibold"
-              size="lg"
-            >
-              {isPurchasing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="h-4 w-4" />
-              )}
-              Smart Finish — {CREDIT_COSTS.SMART_FINISH} credits
-            </Button>
+            {enrichmentFailed ? (
+              <Button
+                onClick={handleRetryEnrichment}
+                disabled={isPurchasing}
+                className="w-full sm:w-auto gap-2 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white border-0 shadow-md shadow-red-500/20 font-semibold"
+                size="lg"
+              >
+                {isPurchasing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                Retry Enrichment (Free)
+              </Button>
+            ) : (
+              <Button
+                onClick={handlePurchase}
+                disabled={isPurchasing}
+                className="w-full sm:w-auto gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 shadow-md shadow-amber-500/20 font-semibold"
+                size="lg"
+              >
+                {isPurchasing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                Smart Finish — {CREDIT_COSTS.SMART_FINISH} credits
+              </Button>
+            )}
             <p className="text-[10px] text-center text-muted-foreground mt-1.5">
-              Your research. Our polish.
+              {enrichmentFailed ? 'No additional credits charged.' : 'Your research. Our polish.'}
             </p>
           </div>
         </div>
