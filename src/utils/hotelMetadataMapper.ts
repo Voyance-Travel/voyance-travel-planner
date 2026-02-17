@@ -321,11 +321,12 @@ export function scorePriceAlignment(
     return 0.4;
   }
   
-  // Standard scoring for other tiers
-  if (ratio <= 1.0) return 1.0; // At or below target = perfect
-  if (ratio <= 1.3) return 0.7; // Acceptable stretch
-  if (ratio <= 1.6) return 0.4; // Significant stretch
-  return 0.1; // Misaligned
+  // Standard scoring for other tiers — smoother curve
+  if (ratio <= 1.0) return 1.0;   // At or below target = perfect
+  if (ratio <= 1.2) return 0.85;  // 20% over = good
+  if (ratio <= 1.5) return 0.65;  // 50% over = acceptable
+  if (ratio <= 2.0) return 0.4;   // 2x over = stretch
+  return 0.2;                      // Way over but not zero
 }
 
 /**

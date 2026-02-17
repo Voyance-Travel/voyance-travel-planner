@@ -9,7 +9,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { 
   Sparkles, Star, MapPin, Heart, ExternalLink, Loader2, Dna, 
-  Hotel, CreditCard, X, ChevronRight 
+  Hotel, CreditCard, X, ChevronRight, Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +22,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSpendCredits } from '@/hooks/useSpendCredits';
 import { useDNAHotelRecommendations, type DNARecommendedHotel, type IdealHotelProfile } from '@/hooks/useDNAHotelRecommendations';
 import { CREDIT_COSTS } from '@/config/pricing';
+import { saveHotelSelection } from '@/services/supabase/trips';
 
 interface FindMyHotelsDrawerProps {
   tripId: string;
@@ -31,6 +32,7 @@ interface FindMyHotelsDrawerProps {
   travelers: number;
   tripType?: string;
   className?: string;
+  onHotelSelected?: () => void;
 }
 
 // Module-level lock to prevent multiple component instances from firing simultaneously
@@ -44,10 +46,13 @@ export function FindMyHotelsDrawer({
   travelers,
   tripType,
   className,
+  onHotelSelected,
 }: FindMyHotelsDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [hasPaid, setHasPaid] = useState(false);
   const [isSpending, setIsSpending] = useState(false);
+  const [selectedHotelId, setSelectedHotelId] = useState<string | null>(null);
+  const [isSavingHotel, setIsSavingHotel] = useState(false);
   const { user } = useAuth();
   const { mutateAsync: spendCredits } = useSpendCredits();
 
@@ -115,6 +120,33 @@ export function FindMyHotelsDrawer({
       globalSpendLock = false;
     }
   }, [hasPaid, spendCredits, tripId, destination, creditCost, idempotencyKey]);
+
+  const handleSelectHotel = useCallback(async (hotel: DNARecommendedHotel) => {
+    if (isSavingHotel) return;
+    setIsSavingHotel(true);
+    try {
+      await saveHotelSelection(tripId, {
+        id: hotel.id,
+        name: hotel.name,
+        address: hotel.neighborhood || undefined,
+        starRating: hotel.stars || undefined,
+        pricePerNight: hotel.pricePerNight || undefined,
+        imageUrl: hotel.imageUrl || undefined,
+      });
+
+      setSelectedHotelId(hotel.id);
+      toast.success(`${hotel.name} saved to your trip!`);
+      onHotelSelected?.();
+
+      // Close drawer after short delay
+      setTimeout(() => setIsOpen(false), 1200);
+    } catch (err) {
+      console.error('Failed to save hotel:', err);
+      toast.error('Could not save hotel. Please try again.');
+    } finally {
+      setIsSavingHotel(false);
+    }
+  }, [tripId, isSavingHotel, onHotelSelected]);
 
   // Top 10 sorted by match score (already sorted by the hook)
   const displayHotels = recommendations.slice(0, 10);
@@ -227,6 +259,9 @@ export function FindMyHotelsDrawer({
                         hotel={hotel}
                         rank={index + 1}
                         destination={destination}
+                        isSelected={selectedHotelId === hotel.id}
+                        isSaving={isSavingHotel}
+                        onSelect={() => handleSelectHotel(hotel)}
                       />
                     </motion.div>
                   ))}
@@ -266,10 +301,16 @@ function HotelRecommendationCard({
   hotel,
   rank,
   destination,
+  isSelected,
+  isSaving,
+  onSelect,
 }: {
   hotel: DNARecommendedHotel;
   rank: number;
   destination: string;
+  isSelected: boolean;
+  isSaving: boolean;
+  onSelect: () => void;
 }) {
   const matchColor = hotel.dnaMatchScore >= 80 ? 'text-green-600' 
     : hotel.dnaMatchScore >= 60 ? 'text-amber-600' 
@@ -282,9 +323,11 @@ function HotelRecommendationCard({
     <div
       className={cn(
         'rounded-xl border transition-all group',
-        hotel.isTopPick
-          ? 'border-primary/30 bg-primary/[0.03]'
-          : 'border-border',
+        isSelected
+          ? 'border-primary/50 bg-primary/[0.05] ring-1 ring-primary/20'
+          : hotel.isTopPick
+            ? 'border-primary/30 bg-primary/[0.03]'
+            : 'border-border',
       )}
     >
       <div className="flex gap-4 p-4">
@@ -364,8 +407,25 @@ function HotelRecommendationCard({
             </div>
           )}
 
-          {/* External Booking Link */}
-          <div className="mt-3">
+          {/* Actions: Select + Booking Link */}
+          <div className="flex items-center justify-between mt-3">
+            <Button
+              size="sm"
+              variant={isSelected ? 'default' : 'outline'}
+              onClick={(e) => { e.stopPropagation(); onSelect(); }}
+              disabled={isSaving || isSelected}
+              className="text-xs h-8 gap-1.5"
+            >
+              {isSelected ? (
+                <>
+                  <Check className="h-3 w-3" />
+                  Selected
+                </>
+              ) : (
+                <>Select This Hotel</>
+              )}
+            </Button>
+
             <a
               href={bookingUrl}
               target="_blank"
@@ -389,7 +449,6 @@ function HotelRecommendationCard({
  */
 function generateBookingUrl(hotelName: string, destination: string): string {
   // Strip IATA codes and ensure we use the full city name
-  // "Austin, Texas" is better than "AUS" for Booking.com search
   const cleanDest = destination
     .replace(/\s*\([A-Z]{3}\)\s*/g, '') // remove "(AUS)" etc.
     .trim();
