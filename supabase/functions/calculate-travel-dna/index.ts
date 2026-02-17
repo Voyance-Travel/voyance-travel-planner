@@ -2436,6 +2436,40 @@ serve(async (req) => {
     
     console.log('[TravelDNA V2] Calculation complete');
     
+    // ═══════════════════════════════════════
+    // SERVER-SIDE PERSIST: Save archetype + traits to DB (bypasses RLS via service role)
+    // This ensures the archetype is always saved even if client-side save fails
+    // ═══════════════════════════════════════
+    if (userId) {
+      try {
+        const supabaseAdmin = createClient(
+          Deno.env.get("SUPABASE_URL") ?? "",
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+          { auth: { persistSession: false } }
+        );
+        const { error: persistError } = await supabaseAdmin
+          .from('travel_dna_profiles')
+          .update({
+            primary_archetype_name: result.primary_archetype_name,
+            secondary_archetype_name: result.secondary_archetype_name || null,
+            trait_scores: result.trait_scores,
+            dna_confidence_score: result.confidence,
+            dna_rarity: result.dna_rarity,
+            archetype_matches: result.archetype_matches,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', userId);
+        
+        if (persistError) {
+          console.error('[TravelDNA V2] ❌ Server-side persist failed:', persistError.message);
+        } else {
+          console.log('[TravelDNA V2] ✅ Archetype + traits persisted to DB for user:', userId);
+        }
+      } catch (e) {
+        console.error('[TravelDNA V2] Server-side persist exception:', e);
+      }
+    }
+    
     return new Response(
       JSON.stringify(result),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
