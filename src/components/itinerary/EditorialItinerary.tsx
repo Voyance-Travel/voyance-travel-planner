@@ -2769,8 +2769,9 @@ export function EditorialItinerary({
               onSave={effectiveIsEditable ? handleSave : undefined}
               isSaving={isSaving}
               onExportPDF={(() => {
-                // PDF export gated by entitlements (requires purchase or Smart Finish, never free on first trip)
-                const canExport = entitlements?.can_export_pdf || smartFinishPurchased || isPaid || (!isPreview && !isManualMode);
+                // PDF export gated by entitlements — requires purchase, Smart Finish, or manual mode (user's own content)
+                // SECURITY: (!isPreview && !isManualMode) was too permissive — allowed unpaid generated trips to export
+                const canExport = entitlements?.can_export_pdf || smartFinishPurchased || isPaid || isManualMode;
                 if (!canExport) return undefined;
                 return async () => {
                 const { generateConsumerTripPdf } = await import('@/utils/consumerPdfGenerator');
