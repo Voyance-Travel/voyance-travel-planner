@@ -293,8 +293,36 @@ function generateMockHotels(params: HotelSearchParams): HotelOption[] {
 // Hotel API Functions
 // ============================================================================
 
-// Module-level dedup: prevent identical concurrent hotel searches
-const _inflightSearches = new Map<string, Promise<HotelOption[]>>();
+// ============================================================================
+// Window-global dedup: survives Vite code-splitting (multiple module instances)
+// ============================================================================
+interface CachedResult {
+  data: HotelOption[];
+  timestamp: number;
+}
+
+interface WindowWithHotelDedup extends Window {
+  __hotelInflightSearches?: Map<string, Promise<HotelOption[]>>;
+  __hotelResultCache?: Map<string, CachedResult>;
+}
+
+function getInflightMap(): Map<string, Promise<HotelOption[]>> {
+  const w = window as unknown as WindowWithHotelDedup;
+  if (!w.__hotelInflightSearches) {
+    w.__hotelInflightSearches = new Map();
+  }
+  return w.__hotelInflightSearches;
+}
+
+function getResultCache(): Map<string, CachedResult> {
+  const w = window as unknown as WindowWithHotelDedup;
+  if (!w.__hotelResultCache) {
+    w.__hotelResultCache = new Map();
+  }
+  return w.__hotelResultCache;
+}
+
+const RESULT_CACHE_TTL = 30_000; // 30s — prevents re-render cascade
 
 function searchCacheKey(params: HotelSearchParams): string {
   return `${params.destination}|${params.checkIn}|${params.checkOut}|${params.guests}`;
@@ -302,28 +330,43 @@ function searchCacheKey(params: HotelSearchParams): string {
 
 /**
  * Search for hotels - uses Cloud edge function, falls back to mock data.
- * Deduplicates concurrent identical requests at the module level.
+ * Deduplicates via window-global singleton (survives Vite code-splitting).
  */
 export async function searchHotels(params: HotelSearchParams & { skipCache?: boolean }): Promise<HotelOption[]> {
+  const inflightMap = getInflightMap();
+  const resultCache = getResultCache();
   const key = searchCacheKey(params);
-  
-  // If an identical request is already in-flight, return the existing promise
-  const inflight = _inflightSearches.get(key);
+
+  // 1. Check short-lived result cache (prevents re-render cascade)
+  if (!params.skipCache) {
+    const cached = resultCache.get(key);
+    if (cached && Date.now() - cached.timestamp < RESULT_CACHE_TTL) {
+      console.log(`[HotelAPI] 📦 Cache hit for ${key} (${Math.round((Date.now() - cached.timestamp) / 1000)}s old)`);
+      return cached.data;
+    }
+  }
+
+  // 2. Check for in-flight request
+  const inflight = inflightMap.get(key);
   if (inflight && !params.skipCache) {
-    console.log('[HotelAPI] ⏩ Dedup: returning in-flight request for', key);
+    console.log(`[HotelAPI] ♻️ Dedup: returning in-flight request for ${key} | map size: ${inflightMap.size}`);
     return inflight;
   }
 
-  console.log('[HotelAPI] 🆕 Starting new search for key:', key, '| inflight map size:', _inflightSearches.size);
-  const promise = _searchHotelsImpl(params);
-  _inflightSearches.set(key, promise);
-  
-  // Clear from map once resolved (success or error)
-  promise.finally(() => {
-    _inflightSearches.delete(key);
-    console.log('[HotelAPI] 🗑️ Cleared inflight key:', key);
-  });
-  
+  console.log(`[HotelAPI] 🆕 Starting new search for key: ${key} | inflight map size: ${inflightMap.size}`);
+
+  // 3. Create actual search promise
+  const promise = _searchHotelsImpl(params)
+    .then((results) => {
+      resultCache.set(key, { data: results, timestamp: Date.now() });
+      return results;
+    })
+    .finally(() => {
+      inflightMap.delete(key);
+      console.log(`[HotelAPI] 🗑️ Cleared inflight key: ${key}`);
+    });
+
+  inflightMap.set(key, promise);
   return promise;
 }
 
