@@ -143,6 +143,10 @@ export function LiveActivityCard({
                   'w-full h-full object-cover',
                   isCompleted && 'grayscale opacity-60'
                 )}
+                onError={(e) => {
+                  // Hide broken images gracefully
+                  (e.currentTarget.parentElement as HTMLElement).style.display = 'none';
+                }}
               />
             </div>
           )}
