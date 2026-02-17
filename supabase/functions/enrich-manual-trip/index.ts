@@ -184,9 +184,12 @@ Respond ONLY with valid JSON:
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[enrich-manual-trip] Error:", msg);
+    const status = msg.includes("Not authenticated") ? 401
+      : msg.includes("required") || msg.includes("not found") || msg.includes("Not your trip") ? 400
+      : 500;
     return new Response(JSON.stringify({ error: msg }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 400,
+      status,
     });
   }
 });
