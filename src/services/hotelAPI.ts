@@ -362,8 +362,11 @@ export async function searchHotels(params: HotelSearchParams & { skipCache?: boo
       return results;
     })
     .finally(() => {
-      inflightMap.delete(key);
-      console.log(`[HotelAPI] 🗑️ Cleared inflight key: ${key}`);
+      // Don't clear inflight immediately — use setTimeout to let concurrent renders hit the cache
+      setTimeout(() => {
+        inflightMap.delete(key);
+        console.log(`[HotelAPI] 🗑️ Cleared inflight key: ${key}`);
+      }, RESULT_CACHE_TTL);
     });
 
   inflightMap.set(key, promise);

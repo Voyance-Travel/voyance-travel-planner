@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { getItineraryBySlug } from '@/data/sampleItineraries';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DndContext,
@@ -161,9 +162,10 @@ export function DemoPlayground() {
     });
   };
 
+  const { user } = useAuth();
   const demoCta = {
     label: 'Build My Trip',
-    onClick: () => navigate('/build'),
+    onClick: () => navigate(user ? '/start' : '/auth?redirect=/start'),
   };
 
   const handleOptimize = () => {

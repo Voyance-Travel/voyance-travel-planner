@@ -2,9 +2,27 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Sparkles, ChevronRight, Zap, Shield, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function DemoCTA() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const handleBuildTrip = () => {
+    if (user) {
+      navigate('/start');
+    } else {
+      navigate('/auth?redirect=/start');
+    }
+  };
+
+  const handleTakeQuiz = () => {
+    if (user) {
+      navigate('/quiz');
+    } else {
+      navigate('/auth?redirect=/quiz');
+    }
+  };
 
   return (
     <section className="py-24 relative overflow-hidden">
@@ -40,16 +58,16 @@ export function DemoCTA() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10">
             <Button 
               size="lg" 
-              onClick={() => navigate('/archetypes')}
+              onClick={handleBuildTrip}
               className="min-w-[220px] h-14 text-lg group"
             >
               <Sparkles className="h-5 w-5 mr-2 group-hover:rotate-12 transition-transform" />
-              Discover Your Travel DNA
+              Build My Itinerary
             </Button>
             <Button 
               size="lg" 
               variant="outline" 
-              onClick={() => navigate('/quiz')}
+              onClick={handleTakeQuiz}
               className="min-w-[220px] h-14 text-lg"
             >
               Take the Quiz
