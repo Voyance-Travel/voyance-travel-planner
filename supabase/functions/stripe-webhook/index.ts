@@ -9,6 +9,9 @@ import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 const log = (step: string, details?: unknown) => {
   console.log(`[STRIPE-WEBHOOK] ${step}`, details ? JSON.stringify(details) : '');
 };
+const logError = (step: string, details?: unknown) => {
+  console.error(`[STRIPE-WEBHOOK] ${step}`, details ? JSON.stringify(details) : '');
+};
 
 // Club pack product IDs → tier mapping
 const CLUB_PRODUCT_MAP: Record<string, { tier: string; baseCredits: number; bonusCredits: number }> = {
@@ -220,7 +223,7 @@ serve(async (req) => {
         const metadata = session.metadata || {};
 
         if (!metadata || Object.keys(metadata).length === 0) {
-          log("WARNING: session.metadata is empty or null", { sessionId: session.id, rawMetadata: session.metadata });
+          logError("WARNING: session.metadata is empty or null", { sessionId: session.id, rawMetadata: session.metadata });
         }
 
         // Trip Pass Fulfillment
@@ -303,11 +306,11 @@ serve(async (req) => {
 
           // Defensive null checks
           if (!userId) {
-            log("CRITICAL: credit_purchase missing user_id", { metadata, sessionId: session.id });
+            logError("CRITICAL: credit_purchase missing user_id", { metadata, sessionId: session.id });
             break;
           }
           if (!creditsToAdd || isNaN(creditsToAdd) || creditsToAdd <= 0) {
-            log("CRITICAL: credit_purchase missing or invalid credits", { credits: metadata.credits, metadata, sessionId: session.id });
+            logError("CRITICAL: credit_purchase missing or invalid credits", { credits: metadata.credits, metadata, sessionId: session.id });
             break;
           }
 
@@ -346,7 +349,7 @@ serve(async (req) => {
                 stripe_session_id: session.id,
                 club_tier: clubInfo.tier,
               });
-              if (baseErr) log("CRITICAL: club base credit_purchases INSERT FAILED", JSON.stringify(baseErr));
+              if (baseErr) logError("CRITICAL: club base credit_purchases INSERT FAILED", JSON.stringify(baseErr));
 
               // Bonus credits (6 month expiry)
               const { error: bonusErr } = await supabaseAdmin.from('credit_purchases').insert({
@@ -359,7 +362,7 @@ serve(async (req) => {
                 stripe_session_id: session.id,
                 club_tier: clubInfo.tier,
               });
-              if (bonusErr) log("CRITICAL: club bonus credit_purchases INSERT FAILED", JSON.stringify(bonusErr));
+              if (bonusErr) logError("CRITICAL: club bonus credit_purchases INSERT FAILED", JSON.stringify(bonusErr));
 
               // Award club badge
               await supabaseAdmin.from('user_badges').upsert({
@@ -398,7 +401,7 @@ serve(async (req) => {
                 source: 'stripe',
                 stripe_session_id: session.id,
               });
-              if (flexErr) log("CRITICAL: flex credit_purchases INSERT FAILED", JSON.stringify(flexErr));
+              if (flexErr) logError("CRITICAL: flex credit_purchases INSERT FAILED", JSON.stringify(flexErr));
 
               log("Flex pack fulfilled", { credits: creditsToAdd });
             }
@@ -427,7 +430,7 @@ serve(async (req) => {
                 ? `${clubInfo.tier} club pack - ${creditsToAdd} credits (${clubInfo.baseCredits} base + ${clubInfo.bonusCredits} bonus)`
                 : `Flex credit pack - ${creditsToAdd} credits`,
             });
-            if (ledgerErr) log("CRITICAL: credit_ledger INSERT FAILED", JSON.stringify(ledgerErr));
+            if (ledgerErr) logError("CRITICAL: credit_ledger INSERT FAILED", JSON.stringify(ledgerErr));
 
             log("Credit fulfillment complete", {
               purchaseOk: clubInfo ? true : true, // logged individually above
@@ -469,8 +472,97 @@ serve(async (req) => {
         }
 
         // ========================================
-        // Group Unlock Purchase Fulfillment
+        // Credit Top-Up Fulfillment (from add-credits function)
         // ========================================
+        if (metadata.type === "credit_topup") {
+          const userId = metadata.user_id;
+          const amountCents = parseInt(metadata.amount_cents || "0", 10);
+
+          if (!userId) {
+            logError("CRITICAL: credit_topup missing user_id", { metadata, sessionId: session.id });
+            break;
+          }
+          if (!amountCents || amountCents <= 0) {
+            logError("CRITICAL: credit_topup missing or invalid amount_cents", { metadata, sessionId: session.id });
+            break;
+          }
+
+          // Convert cents to credits (1 cent = 1 credit for top-ups)
+          const creditsToAdd = amountCents;
+          log("Processing credit top-up", { userId, creditsToAdd, amountCents });
+
+          // IDEMPOTENCY CHECK
+          const { data: existingLedger } = await supabaseAdmin
+            .from("credit_ledger")
+            .select("id")
+            .eq("stripe_session_id", session.id)
+            .eq("transaction_type", "purchase")
+            .maybeSingle();
+
+          if (existingLedger) {
+            log("Duplicate credit top-up event, skipping", { sessionId: session.id });
+            break;
+          }
+
+          // Insert credit_purchases row (12 month expiry like flex)
+          const topupExpires = new Date();
+          topupExpires.setMonth(topupExpires.getMonth() + 12);
+
+          const { error: purchaseErr } = await supabaseAdmin.from('credit_purchases').insert({
+            user_id: userId,
+            credit_type: 'topup',
+            amount: creditsToAdd,
+            remaining: creditsToAdd,
+            expires_at: topupExpires.toISOString(),
+            source: 'stripe',
+            stripe_session_id: session.id,
+          });
+          if (purchaseErr) logError("CRITICAL: topup credit_purchases INSERT FAILED", JSON.stringify(purchaseErr));
+
+          // Sync balance cache
+          try {
+            await syncBalanceCache(supabaseAdmin, userId);
+            log("Balance cache synced for topup", { userId });
+          } catch (syncErr) {
+            logError("CRITICAL: syncBalanceCache FAILED for topup", { error: syncErr instanceof Error ? syncErr.message : String(syncErr) });
+          }
+
+          // Ledger entry
+          const { error: ledgerErr } = await supabaseAdmin.from("credit_ledger").insert({
+            user_id: userId,
+            transaction_type: 'purchase',
+            action_type: 'topup',
+            credits_delta: creditsToAdd,
+            is_free_credit: false,
+            stripe_session_id: session.id,
+            amount_cents: amountCents,
+            notes: `Quick Top-Up - ${creditsToAdd} credits ($${(amountCents / 100).toFixed(2)})`,
+          });
+          if (ledgerErr) logError("CRITICAL: topup credit_ledger INSERT FAILED", JSON.stringify(ledgerErr));
+
+          log("Credit top-up fulfillment complete", {
+            purchaseOk: !purchaseErr,
+            ledgerOk: !ledgerErr,
+            creditsAdded: creditsToAdd,
+            sessionId: session.id,
+          });
+
+          // Upsert user_tiers to at least 'flex'
+          const { data: currentTierData } = await supabaseAdmin
+            .from('user_tiers')
+            .select('tier')
+            .eq('user_id', userId)
+            .maybeSingle();
+          if (!currentTierData) {
+            await supabaseAdmin.from('user_tiers').insert({
+              user_id: userId,
+              tier: 'flex',
+              first_purchase_at: new Date().toISOString(),
+              highest_purchase: 'flex',
+            });
+          }
+        }
+
         if (metadata.type === "group_unlock") {
           const userId = metadata.user_id;
           const tripId = metadata.trip_id;
@@ -508,6 +600,24 @@ serve(async (req) => {
 
             log("Group unlock fulfilled", { tripId, tier: groupInfo.tier });
           }
+        }
+
+        // Catch-all: log if metadata.type was set but didn't match any handler
+        if (metadata.type && !['trip_pass', 'day_purchase', 'credit_purchase', 'credit_topup', 'group_unlock'].includes(metadata.type)) {
+          logError("WARNING: Unhandled metadata.type in checkout.session.completed", {
+            type: metadata.type,
+            metadata,
+            sessionId: session.id,
+          });
+        }
+
+        // Also warn if no type was set but there IS a user_id (possible missing handler)
+        if (!metadata.type && metadata.user_id && !metadata.tripId) {
+          logError("WARNING: checkout.session.completed with user_id but no type", {
+            metadata,
+            sessionId: session.id,
+            amount_total: session.amount_total,
+          });
         }
 
         break;

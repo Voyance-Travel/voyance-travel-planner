@@ -86,7 +86,10 @@ async function deductFIFO(
     .gt('remaining', 0)
     .order('expires_at', { ascending: true, nullsFirst: false });
 
-  if (error) throw new Error('Failed to fetch credit purchases');
+  if (error) {
+    console.error('[SPEND-CREDITS] Failed to fetch credit purchases:', JSON.stringify(error));
+    throw new Error('Failed to fetch credit purchases');
+  }
 
   // Filter out expired rows
   const now = new Date();
@@ -200,14 +203,17 @@ serve(async (req) => {
 
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
     if (authError || !user) {
+      console.error('[SPEND-CREDITS] Auth failed:', authError?.message || 'No user');
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    console.log('[SPEND-CREDITS] User authenticated:', { userId: user.id });
 
     const body: SpendRequest = await req.json();
     const { action, tripId, activityId, dayIndex, creditsAmount, metadata } = body;
+    console.log('[SPEND-CREDITS] Request:', { action, tripId, dayIndex, creditsAmount });
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
