@@ -197,11 +197,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Ref to track initial load completion — survives across closures & re-renders
   const initialLoadCompleteRef = useRef(false);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Prevent onAuthStateChange from triggering redundant loads while initializeAuth runs
+  const isProcessingAuthRef = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
     // Reset on mount (handles StrictMode double-mount)
     initialLoadCompleteRef.current = false;
+    isProcessingAuthRef.current = false;
     
     // Safety timeout: never show loading spinner for more than 8 seconds
     loadingTimeoutRef.current = setTimeout(() => {
@@ -213,7 +216,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (isMounted) {
         console.warn('[Auth] Loading timeout - forcing isLoading to false');
         setIsLoading(false);
-        // Do NOT call setUser here — it triggers re-renders and loops
+        // Do NOT call setUser or setSession here — only unblock the UI
       }
     }, 8000);
     
@@ -223,39 +226,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } = supabase.auth.onAuthStateChange((event, newSession) => {
       console.log('[Auth] Auth state changed:', event, 'initialLoadComplete:', initialLoadCompleteRef.current);
       
-      // Always update session synchronously
-      setSession(newSession);
-      
-      // If this is initial load, let initializeAuth handle everything
+      // During initial load, let initializeAuth handle everything — don't touch state
       if (!initialLoadCompleteRef.current) {
         return;
       }
 
-      // After initial load, only handle SIGNED_IN / SIGNED_OUT / TOKEN_REFRESHED
+      // Skip if we're already processing an auth change (prevents cascading re-entry)
+      if (isProcessingAuthRef.current) {
+        console.log('[Auth] Already processing auth change — skipping');
+        return;
+      }
+
+      // After initial load, only handle meaningful events
       if (event === 'SIGNED_OUT') {
+        setSession(null);
         setUser(null);
         return;
       }
 
-      // For TOKEN_REFRESHED, just keep the session — no need to reload user data
+      // For TOKEN_REFRESHED, update session only — no user data reload needed
       if (event === 'TOKEN_REFRESHED') {
+        setSession(newSession);
+        return;
+      }
+
+      // For INITIAL_SESSION after initial load is complete, skip entirely
+      if (event === 'INITIAL_SESSION') {
         return;
       }
       
       // Handle ongoing SIGNED_IN (e.g. OAuth callback, tab focus re-auth)
-      if (newSession?.user) {
+      if (event === 'SIGNED_IN' && newSession?.user) {
+        isProcessingAuthRef.current = true;
+        setSession(newSession);
+        
         (async () => {
-          if (!isMounted) return;
+          if (!isMounted) {
+            isProcessingAuthRef.current = false;
+            return;
+          }
           
           try {
-            if (event === 'SIGNED_IN') {
-              await syncProfile(newSession.user);
-              await migrateLocalTripsToAccount(newSession.user);
-              
-              const provider = newSession.user.app_metadata?.provider;
-              if (provider && provider !== 'email') {
-                logOAuthLogin(provider).catch(console.error);
-              }
+            await syncProfile(newSession.user);
+            await migrateLocalTripsToAccount(newSession.user);
+            
+            const provider = newSession.user.app_metadata?.provider;
+            if (provider && provider !== 'email') {
+              logOAuthLogin(provider).catch(console.error);
             }
 
             const { profile, preferences } = await loadUserData(newSession.user);
@@ -264,6 +281,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           } catch (error) {
             console.error('[Auth] Error loading user data:', error);
+          } finally {
+            isProcessingAuthRef.current = false;
           }
         })();
       }
