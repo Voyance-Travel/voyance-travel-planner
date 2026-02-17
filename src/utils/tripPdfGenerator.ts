@@ -18,6 +18,8 @@ export interface TripPdfData {
   days: EditorialDay[];
   bookings?: BookingItem[];
   branding: AgentBranding;
+  /** Day numbers that are unlocked. If provided, locked days are redacted. */
+  unlockedDayNumbers?: Set<number>;
 }
 
 export interface BookingItem {
@@ -253,8 +255,11 @@ export async function generateTripPdf(data: TripPdfData): Promise<void> {
     data.days.forEach((day) => {
       checkPageBreak(50);
       
+      // Check if this day is locked
+      const isDayLocked = data.unlockedDayNumbers && !data.unlockedDayNumbers.has(day.dayNumber);
+      
       // Day header
-      pdf.setFillColor(...COLORS.primary);
+      pdf.setFillColor(...(isDayLocked ? COLORS.muted : COLORS.primary));
       pdf.roundedRect(margin, y - 3, contentWidth, 18, 2, 2, 'F');
       
       pdf.setTextColor(...COLORS.white);
@@ -273,12 +278,22 @@ export async function generateTripPdf(data: TripPdfData): Promise<void> {
       
       y += 22;
       
-      // Activities
-      if (day.activities && day.activities.length > 0) {
+      if (isDayLocked) {
+        // Locked day — redacted placeholder
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(...COLORS.muted);
+        pdf.text('🔒 Day ' + day.dayNumber + ' is locked', margin + 5, y);
+        y += 6;
+        pdf.setFontSize(9);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text('Unlock this day at travelwithvoyance.com to see full details', margin + 5, y);
+        y += 10;
+      } else if (day.activities && day.activities.length > 0) {
+        // Activities
         day.activities.forEach((activity) => {
           checkPageBreak(25);
           
-          // Time
           const timeStr = activity.startTime || activity.time || '';
           if (timeStr) {
             pdf.setFontSize(9);
@@ -287,7 +302,6 @@ export async function generateTripPdf(data: TripPdfData): Promise<void> {
             pdf.text(timeStr, margin, y);
           }
           
-          // Title
           pdf.setFontSize(10);
           pdf.setFont('helvetica', 'bold');
           pdf.setTextColor(...COLORS.dark);
@@ -295,7 +309,6 @@ export async function generateTripPdf(data: TripPdfData): Promise<void> {
           
           y += 5;
           
-          // Description
           if (activity.description) {
             pdf.setFontSize(9);
             pdf.setFont('helvetica', 'normal');
@@ -305,7 +318,6 @@ export async function generateTripPdf(data: TripPdfData): Promise<void> {
             y += Math.min(descLines.length, 2) * 4;
           }
           
-          // Location
           if (activity.location?.name || activity.location?.address) {
             pdf.setFontSize(8);
             pdf.setTextColor(...COLORS.muted);

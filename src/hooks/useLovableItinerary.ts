@@ -214,7 +214,7 @@ export function useLovableItinerary(tripId: string | null) {
   }, [tripId]);
 
   // Generate itinerary day by day using Lovable AI
-  const generateItinerary = useCallback(async (preferences?: GenerationPreferences) => {
+  const generateItinerary = useCallback(async (preferences?: GenerationPreferences & { maxDays?: number }) => {
     if (!tripId) return;
 
     const startTime = Date.now();
@@ -289,13 +289,16 @@ export function useLovableItinerary(tripId: string | null) {
       }));
 
       // Step 2: Generate each day (5% - 80%)
+      // Lazy generation: only generate up to maxDays if specified (prevents generating unpaid days)
+      const maxDays = preferences?.maxDays ?? totalDays;
+      const daysToGenerate = Math.min(maxDays, totalDays);
       const generatedDays: GeneratedDay[] = [];
       const previousActivities: string[] = [];
 
-      for (let dayNum = 1; dayNum <= totalDays; dayNum++) {
+      for (let dayNum = 1; dayNum <= daysToGenerate; dayNum++) {
         if (!isMounted.current || abortController.current?.signal.aborted) break;
 
-        const dayProgress = 5 + ((dayNum - 1) / totalDays) * 75;
+        const dayProgress = 5 + ((dayNum - 1) / daysToGenerate) * 75;
         setState(prev => ({
           ...prev,
           currentDay: dayNum,

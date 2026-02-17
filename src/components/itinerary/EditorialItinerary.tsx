@@ -3010,51 +3010,30 @@ export function EditorialItinerary({
                     );
                   }
 
-                  // Days with activities but locked: show DayCard wrapped in FrostedGateOverlay
+                  // Days with activities but locked: show LockedDayCard (no real content in DOM)
+                  // SECURITY: Previously used FrostedGateOverlay+DayCard which leaked activities to DevTools
                   return (
                     <>
                       {!canViewThisDay && !isManualMode && hasActivities ? (
-                        <FrostedGateOverlay
+                        <LockedDayCard
                           dayNumber={selectedDay.dayNumber}
+                          title={selectedDay.title || selectedDay.theme || `Day ${selectedDay.dayNumber}`}
                           activityCount={selectedDay.activities.length}
-                          creditCost={CREDIT_COSTS.UNLOCK_DAY}
+                          teaserLine={`Unlock Day ${selectedDay.dayNumber} to discover ${selectedDay.activities.length} curated activities with full details.`}
+                          intelligenceBadges={{ finds: selectedDay.activities.length, timingHacks: 2, trapsAvoided: 1, tips: 2 }}
                           onUnlock={() => handleUnlockDay(selectedDay.dayNumber)}
-                          isUnlocking={unlockingDayNumber === selectedDay.dayNumber}
-                        >
-                          <DayCard
-                            key={selectedDay.dayNumber}
-                            day={selectedDay}
-                            dayIndex={selectedDayIndex}
-                            totalDays={days.length}
-                            travelers={travelers}
-                            budgetTier={budgetTier}
-                            tripCurrency={tripCurrency}
-                            displayCost={displayCost}
-                            destination={destination}
-                            destinationCountry={destinationCountry}
-                            isExpanded={true}
-                            isRegenerating={false}
-                            isEditable={false}
-                            isPreview={effectiveIsPreview}
-                            canViewPremium={false}
-                            tripId={tripId}
-                            onUnlockTrip={() => setCreditNudge({ action: 'UNLOCK_DAY' })}
-                            onUnlockDay={handleUnlockDay}
-                            unlockingDayNumber={unlockingDayNumber}
-                            getPaymentForItem={getPaymentForItem}
-                            refreshPayments={refreshPayments}
-                            onToggle={() => {}}
-                            onActivityLock={handleActivityLock}
-                            onActivityMove={handleActivityMove}
-                            onActivityRemove={handleActivityRemove}
-                            onDayLock={handleDayLock}
-                            onDayRegenerate={() => {}}
-                            onAddActivity={() => {}}
-                            onTimeEdit={() => {}}
-                            onActivityEdit={() => {}}
-                            aiLocked={aiLocked}
-                          />
-                        </FrostedGateOverlay>
+                          creditsNeeded={CREDIT_COSTS.UNLOCK_DAY}
+                          tripId={tripId}
+                          onManualBuild={() => {
+                            if (tripId) {
+                              enableManualBuilder(tripId);
+                              toast.success('Manual builder mode enabled! Edit freely.');
+                            }
+                          }}
+                          isFirstTrip={!!selectedDay.metadata?.isFirstTrip}
+                          canAfford={totalCredits >= CREDIT_COSTS.UNLOCK_DAY}
+                          currentBalance={totalCredits}
+                        />
                       ) : (
                         <DayCard
                           key={selectedDay.dayNumber}
