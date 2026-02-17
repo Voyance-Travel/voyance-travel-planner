@@ -199,6 +199,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Prevent onAuthStateChange from triggering redundant loads while initializeAuth runs
   const isProcessingAuthRef = useRef(false);
+  // Track current user ID to skip redundant SIGNED_IN events for the same user
+  const currentUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -239,6 +241,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // After initial load, only handle meaningful events
       if (event === 'SIGNED_OUT') {
+        currentUserIdRef.current = null;
         setSession(null);
         setUser(null);
         return;
@@ -257,6 +260,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       // Handle ongoing SIGNED_IN (e.g. OAuth callback, tab focus re-auth)
       if (event === 'SIGNED_IN' && newSession?.user) {
+        // Skip if this is the same user we already loaded during initializeAuth
+        // This prevents redundant setUser/setSession calls that cause re-renders
+        if (currentUserIdRef.current === newSession.user.id) {
+          console.log('[Auth] SIGNED_IN for already-loaded user — skipping redundant load');
+          setSession(newSession); // Update session token silently
+          return;
+        }
         isProcessingAuthRef.current = true;
         setSession(newSession);
         
@@ -277,6 +287,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             const { profile, preferences } = await loadUserData(newSession.user);
             if (isMounted) {
+              currentUserIdRef.current = newSession.user.id;
               setUser(transformProfile(newSession.user, profile, preferences));
             }
           } catch (error) {
@@ -299,6 +310,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         if (!initialSession?.user) {
           console.log('[Auth] No session found');
+          currentUserIdRef.current = null;
           setSession(null);
           setUser(null);
           return;
@@ -318,6 +330,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.warn('[Auth] Stale session detected, signing out:', userError.message);
             await supabase.auth.signOut();
             if (isMounted) {
+              currentUserIdRef.current = null;
               setSession(null);
               setUser(null);
             }
@@ -331,6 +344,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { profile, preferences } = await loadUserData(initialSession.user);
         
         if (isMounted) {
+          currentUserIdRef.current = initialSession.user.id;
           setUser(transformProfile(initialSession.user, profile, preferences));
           console.log('[Auth] Initial load complete, user set');
         }
@@ -462,6 +476,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(key, val);
     });
     
+    currentUserIdRef.current = null;
     setSession(null);
     setUser(null);
   };
