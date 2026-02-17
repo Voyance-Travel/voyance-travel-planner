@@ -144,7 +144,8 @@ export function HotelGalleryModal({
                     : "max-w-[85vw] max-h-[80vh] object-contain"
                 )}
                 onError={(e) => {
-                  e.currentTarget.src = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800';
+                  // Hide broken image, show placeholder background
+                  e.currentTarget.style.display = 'none';
                 }}
               />
             </motion.div>
@@ -202,7 +203,7 @@ export function HotelGalleryModal({
                     alt={`Thumbnail ${idx + 1}`}
                     className="w-full h-full object-cover"
                     onError={(e) => {
-                      e.currentTarget.src = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=100';
+                      e.currentTarget.style.display = 'none';
                     }}
                   />
                 </button>

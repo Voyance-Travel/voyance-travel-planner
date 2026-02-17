@@ -7559,6 +7559,61 @@ RULES FOR VOYANCE PICKS:
         }
       }
 
+      // =======================================================================
+      // STAGE 4.7: Batch Geocode — fill in missing coordinates for route maps
+      // Activities with addresses but no lat/lng from Google Places verification
+      // =======================================================================
+      if (GOOGLE_MAPS_API_KEY) {
+        const activitiesToGeocode: { dayIdx: number; actIdx: number; address: string }[] = [];
+        for (let di = 0; di < enrichedDays.length; di++) {
+          for (let ai = 0; ai < enrichedDays[di].activities.length; ai++) {
+            const act = enrichedDays[di].activities[ai];
+            if (!act.location?.coordinates && act.location?.address && act.location.address.length > 5) {
+              activitiesToGeocode.push({ dayIdx: di, actIdx: ai, address: act.location.address });
+            }
+          }
+        }
+
+        if (activitiesToGeocode.length > 0) {
+          console.log(`[Stage 4.7] Batch geocoding ${activitiesToGeocode.length} activities without coordinates`);
+          // Process in batches of 5 to respect rate limits
+          const GEO_BATCH = 5;
+          for (let gi = 0; gi < activitiesToGeocode.length; gi += GEO_BATCH) {
+            const batch = activitiesToGeocode.slice(gi, gi + GEO_BATCH);
+            const results = await Promise.all(batch.map(async (item) => {
+              try {
+                const resp = await fetch(
+                  `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(item.address)}&key=${GOOGLE_MAPS_API_KEY}`
+                );
+                const data = await resp.json();
+                const loc = data.results?.[0]?.geometry?.location;
+                return loc ? { ...item, lat: loc.lat as number, lng: loc.lng as number } : null;
+              } catch {
+                return null;
+              }
+            }));
+            for (const r of results) {
+              if (r) {
+                enrichedDays[r.dayIdx].activities[r.actIdx].location = {
+                  ...enrichedDays[r.dayIdx].activities[r.actIdx].location,
+                  coordinates: { lat: r.lat, lng: r.lng },
+                };
+              }
+            }
+            if (gi + GEO_BATCH < activitiesToGeocode.length) {
+              await new Promise(r => setTimeout(r, 200));
+            }
+          }
+          const geocoded = activitiesToGeocode.length;
+          const succeeded = enrichedDays.reduce(
+            (s, d) => s + d.activities.filter(a => a.location?.coordinates).length, 0
+          ) - enrichedDays.reduce(
+            (s, d) => s + d.activities.filter(a => a.location?.coordinates && a.verified?.placeId).length, 0
+          );
+          console.log(`[Stage 4.7] Geocoded ${succeeded}/${geocoded} activities`);
+        }
+      }
+
       // STAGE 5: Trip Overview (with enriched data from Stage 1.9)
       const overview = generateTripOverview(enrichedDays, context, {
         travelAdvisory: fetchedTravelAdvisory,

@@ -3442,18 +3442,14 @@ export function EditorialItinerary({
                         alt={hotelSelection.name || 'Hotel'}
                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                         onError={(e) => { 
-                          e.currentTarget.src = `https://source.unsplash.com/800x400/?hotel,${destination}`;
-                        }}
-                      />
-                    ) : hotelSelection?.name ? (
-                      <img
-                        src={`https://source.unsplash.com/800x400/?hotel,${hotelSelection.name.split(' ')[0]},${destination}`}
-                        alt={hotelSelection.name}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        onError={(e) => { 
+                          // source.unsplash.com is discontinued — fall back to gradient
                           e.currentTarget.style.display = 'none';
                         }}
                       />
+                    ) : hotelSelection?.name ? (
+                      <div className="w-full h-full flex items-center justify-center bg-secondary/50">
+                        <Hotel className="h-12 w-12 text-muted-foreground/30" />
+                      </div>
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-secondary/50">
                         <Hotel className="h-12 w-12 text-muted-foreground/30" />
