@@ -35,6 +35,7 @@ import { toast } from 'sonner';
 // Import destination autocomplete and airport autocomplete
 import { DestinationAutocomplete } from '@/components/planner/shared/DestinationAutocomplete';
 import { AirportAutocomplete } from '@/components/common/AirportAutocomplete';
+import { AirlineAutocomplete } from '@/components/common/AirlineAutocomplete';
 import { HotelAutocomplete } from '@/components/common/HotelAutocomplete';
 import { FlightImportModal } from '@/components/itinerary/FlightImportModal';
 import type { ManualFlightEntry } from '@/components/itinerary/AddBookingInline';
@@ -78,6 +79,13 @@ const tripOccasions = [
 ];
 
 const CELEBRATION_TRIP_TYPES = ['birthday', 'anniversary', 'honeymoon'] as const;
+
+// Pacing options
+const pacingOptions = [
+  { id: 'relaxed' as const, label: 'Relaxed', description: '2-3 activities/day', emoji: '🌿' },
+  { id: 'balanced' as const, label: 'Balanced', description: '4-5 activities/day', emoji: '⚖️' },
+  { id: 'packed' as const, label: 'Full Day', description: '6+ activities/day', emoji: '🔥' },
+];
 
 // Budget presets
 const budgetPresets = [
@@ -262,6 +270,8 @@ function TripDetailsStep({
   setTransports,
   planMode,
   setPlanMode,
+  pacing,
+  setPacing,
   onChatDetailsExtracted,
   onContinue,
   onManualAuthRequired,
@@ -290,6 +300,8 @@ function TripDetailsStep({
   setTransports: (t: InterCityTransport[]) => void;
   planMode: 'single' | 'multi' | 'chat' | 'manual';
   setPlanMode: (m: 'single' | 'multi' | 'chat' | 'manual') => void;
+  pacing: 'relaxed' | 'balanced' | 'packed';
+  setPacing: (p: 'relaxed' | 'balanced' | 'packed') => void;
   onChatDetailsExtracted: (details: any) => void;
   onContinue: () => void;
   onManualAuthRequired: () => void;
@@ -643,6 +655,34 @@ function TripDetailsStep({
           </motion.div>
         )}
 
+        {/* Pacing Section */}
+        {planMode !== 'chat' && planMode !== 'manual' && (
+        <div className="space-y-2 sm:space-y-3">
+          <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
+            Pacing
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            {pacingOptions.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setPacing(option.id)}
+                className={cn(
+                  'p-2.5 rounded-lg border text-center transition-all',
+                  pacing === option.id
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:border-primary/40'
+                )}
+              >
+                <div className="text-base mb-0.5">{option.emoji}</div>
+                <div className="text-xs font-medium text-foreground">{option.label}</div>
+                <div className="text-[10px] text-muted-foreground">{option.description}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+        )}
+
         {/* Budget Section - Collapsible */}
         {planMode !== 'chat' && planMode !== 'manual' && (
         <Collapsible open={showBudget} onOpenChange={setShowBudget}>
@@ -918,11 +958,10 @@ function FlightHotelStep({
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <Label className="text-xs text-muted-foreground">Airline</Label>
-                        <Input
-                          placeholder="e.g. Delta"
+                        <AirlineAutocomplete
                           value={outboundFlight.airline}
-                          onChange={(e) => setOutboundFlight({ ...outboundFlight, airline: e.target.value })}
-                          className="text-sm"
+                          onChange={(val) => setOutboundFlight({ ...outboundFlight, airline: val })}
+                          placeholder="e.g. Delta"
                         />
                       </div>
                       <div>
@@ -1342,6 +1381,7 @@ export default function Start() {
   const [tripType, setTripType] = useState<string>('leisure');
   const [celebrationDay, setCelebrationDay] = useState<number | undefined>();
   const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount);
+  const [pacing, setPacing] = useState<'relaxed' | 'balanced' | 'packed'>('balanced');
   const [linkedGuests, setLinkedGuests] = useState<LinkedGuest[]>([]);
   const [showGuestModal, setShowGuestModal] = useState(false);
 
@@ -1514,6 +1554,7 @@ export default function Start() {
             isFirstTimeVisitor,
             mustDoActivities: mustDoActivities || null,
             celebrationDay: celebrationDay || null,
+            pacing: pacing || 'balanced',
             lastUpdated: new Date().toISOString(),
           },
         })
@@ -1650,6 +1691,8 @@ export default function Start() {
                       else if (m === 'multi') setIsMultiCity(true);
                       // 'chat' and 'manual' don't affect multi-city state
                     }}
+                    pacing={pacing}
+                    setPacing={setPacing}
                     onChatDetailsExtracted={async (details) => {
                       // Create trip directly from extracted details — don't rely on async state updates
                       const dest = details.destination || '';
