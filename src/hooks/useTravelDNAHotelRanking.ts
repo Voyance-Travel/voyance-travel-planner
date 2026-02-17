@@ -216,20 +216,25 @@ function calculateDNAMatchScore(
   for (const { hotelScore, userTrait, weight } of dimensionMappings) {
     // Clamp to 0–1 for safety (quiz may store raw values)
     const clampedTrait = Math.max(0, Math.min(1, userTrait));
+    // Pure alignment: how close is the hotel to what the user wants
     const alignment = Math.max(0, Math.min(1, 1 - Math.abs(hotelScore - clampedTrait)));
-    const prioritizedAlignment = alignment * (0.5 + clampedTrait * 0.5);
+    // No prioritization penalty — weights already handle importance
     
-    totalScore += prioritizedAlignment * weight;
+    totalScore += alignment * weight;
     totalWeight += weight;
   }
   
   // Normalize to 0-100
   const rawScore = (totalScore / totalWeight) * 100;
   
-  // Apply quality filter bonus (good hotels get a slight boost)
-  const qualityBonus = metadata.qualityScore >= 0.8 ? 5 : metadata.qualityScore >= 0.7 ? 2 : 0;
+  // Scale to use more of the 0-100 range
+  // Map the typical 40-80 raw range to 45-95 display range
+  const scaledScore = Math.min(100, rawScore * 1.25 + 12);
   
-  return Math.max(10, Math.min(100, Math.round(rawScore + qualityBonus)));
+  // Apply quality filter bonus (good hotels get a slight boost)
+  const qualityBonus = metadata.qualityScore >= 0.8 ? 3 : metadata.qualityScore >= 0.7 ? 1 : 0;
+  
+  return Math.max(15, Math.min(99, Math.round(scaledScore + qualityBonus)));
 }
 
 // ============================================================================
