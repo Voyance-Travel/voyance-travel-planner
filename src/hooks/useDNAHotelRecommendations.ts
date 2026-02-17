@@ -156,16 +156,20 @@ function scoreAndRankHotels(
     let totalWeight = 0;
     for (const { hotelScore, userTrait, weight } of dimensions) {
       const clampedTrait = Math.max(0, Math.min(1, userTrait));
+      // Pure alignment scoring — no prioritization penalty
       const alignment = Math.max(0, Math.min(1, 1 - Math.abs(hotelScore - clampedTrait)));
-      totalScore += alignment * (0.5 + clampedTrait * 0.5) * weight;
+      totalScore += alignment * weight;
       totalWeight += weight;
     }
 
     let rawScore = (totalScore / totalWeight) * 100;
+    
+    // Scale to use more of the 0-100 range (typical raw range 40-80 → 45-95)
+    rawScore = Math.min(100, rawScore * 1.25 + 12);
 
     // Quality bonus
-    if (metadata.qualityScore >= 0.8) rawScore += 5;
-    else if (metadata.qualityScore >= 0.7) rawScore += 2;
+    if (metadata.qualityScore >= 0.8) rawScore += 3;
+    else if (metadata.qualityScore >= 0.7) rawScore += 1;
 
     // Neighborhood bonus from AI profile
     const lowerNeighborhood = (hotel.neighborhood || '').toLowerCase();
@@ -173,7 +177,7 @@ function scoreAndRankHotels(
       rawScore += 8;
     }
 
-    const dnaMatchScore = Math.max(10, Math.min(100, Math.round(isNaN(rawScore) ? 50 : rawScore)));
+    const dnaMatchScore = Math.max(15, Math.min(99, Math.round(isNaN(rawScore) ? 50 : rawScore)));
 
     // Generate match reasons
     const matchReasons: string[] = [];

@@ -1057,6 +1057,20 @@ async function updateTripHotelConfirmation(
   }
 }
 
+// ============= SERVER-SIDE DEDUP =============
+const inflightSearches = new Map<string, Promise<Response>>();
+const serverResultCache = new Map<string, { response: string; timestamp: number }>();
+const SERVER_CACHE_TTL = 60_000; // 60 seconds
+
+function makeSearchCacheKey(body: any): string {
+  return JSON.stringify({
+    d: (body.destination || body.city || '').toLowerCase().trim(),
+    ci: body.checkIn || '',
+    co: body.checkOut || '',
+    g: body.guests || 1,
+  });
+}
+
 // ============= HTTP HANDLER =============
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -1127,22 +1141,55 @@ serve(async (req) => {
       });
     }
 
-    // Default: search — track Google Places API calls
-    const hotels = await searchHotels(body);
-    const enrichedCount = hotels.filter((h: any) => h._enriched).length;
-    // Each hotel = 1 text search result + potential photo fetches
-    costTracker.recordGooglePlaces(1 + enrichedCount);
-    await costTracker.save();
-    
-    return new Response(JSON.stringify({
-      success: true,
-      hotels,
-      count: hotels.length,
-      source: hotels[0]?.source || 'unknown',
-      enriched: enrichedCount,
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    // Default: search — with server-side dedup
+    const dedupKey = makeSearchCacheKey(body);
+
+    // Check server result cache
+    const cachedResult = serverResultCache.get(dedupKey);
+    if (cachedResult && Date.now() - cachedResult.timestamp < SERVER_CACHE_TTL && !body.skipCache) {
+      console.log(`[Hotels] 📦 Server result cache hit (${Math.round((Date.now() - cachedResult.timestamp) / 1000)}s old)`);
+      return new Response(cachedResult.response, {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Check inflight dedup
+    if (inflightSearches.has(dedupKey) && !body.skipCache) {
+      console.log('[Hotels] ♻️ Server dedup: returning inflight result');
+      return inflightSearches.get(dedupKey)!;
+    }
+
+    console.log('[Hotels] 🆕 New search for:', dedupKey);
+
+    const searchPromise = (async () => {
+      try {
+        const hotels = await searchHotels(body);
+        const enrichedCount = hotels.filter((h: any) => h._enriched).length;
+        costTracker.recordGooglePlaces(1 + enrichedCount);
+        await costTracker.save();
+        
+        const responseBody = JSON.stringify({
+          success: true,
+          hotels,
+          count: hotels.length,
+          source: hotels[0]?.source || 'unknown',
+          enriched: enrichedCount,
+        });
+
+        // Cache result
+        serverResultCache.set(dedupKey, { response: responseBody, timestamp: Date.now() });
+
+        return new Response(responseBody, {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } finally {
+        // Clear inflight after 5 seconds
+        setTimeout(() => inflightSearches.delete(dedupKey), 5_000);
+      }
+    })();
+
+    inflightSearches.set(dedupKey, searchPromise);
+    return searchPromise;
 
   } catch (error: unknown) {
     console.error('[Hotels] Handler error:', error);
