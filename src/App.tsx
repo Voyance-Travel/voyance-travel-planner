@@ -206,6 +206,10 @@ function AnimatedRoutes() {
         <Route path="/planner/itinerary" element={<ProtectedRoute><PlannerItinerary /></ProtectedRoute>} />
         <Route path="/planner/booking" element={<ProtectedRoute><PlannerBooking /></ProtectedRoute>} />
         
+        {/* Legacy route redirects */}
+        <Route path="/dashboard" element={<Navigate to="/trip/dashboard" replace />} />
+        <Route path="/my-trips" element={<Navigate to="/trip/dashboard" replace />} />
+        
         {/* Trip Management Routes */}
         <Route path="/trip/dashboard" element={<ProtectedRoute><TripDashboard /></ProtectedRoute>} />
         <Route path="/trip/:tripId" element={<ProtectedRoute><TripDetail /></ProtectedRoute>} />

@@ -94,7 +94,7 @@ export async function getTripLearning(tripId: string): Promise<TripLearning | nu
     .maybeSingle();
 
   if (error) {
-    console.error('[TripLearnings] Error fetching:', error);
+    console.error('[TripLearnings] Error fetching:', error?.message || JSON.stringify(error));
     return null;
   }
 
@@ -124,7 +124,7 @@ export async function getUserTripLearnings(limit = 5): Promise<TripLearning[]> {
     .limit(limit);
 
   if (error) {
-    console.error('[TripLearnings] Error fetching all:', error);
+    console.error('[TripLearnings] Error fetching all:', error?.message || JSON.stringify(error));
     return [];
   }
 
