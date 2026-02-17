@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Loader2, CheckCircle, MapPin, Clock, DollarSign, RefreshCw, Star, Image, Wallet, Lightbulb, AlertCircle, LogIn } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle, MapPin, Clock, DollarSign, RefreshCw, Star, Image, Wallet, Lightbulb, AlertCircle, LogIn, Coins } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +21,9 @@ import { ROUTES } from '@/config/routes';
 import { useGenerationGate, type GateResult } from '@/hooks/useGenerationGate';
 import { generateFullPreview, type FullPreview, type PreviewDay } from '@/services/fullPreviewService';
 import { convertPreviewToGeneratedDays, createLockedPlaceholderDays } from '@/utils/previewConverter';
+import { calculateTripCredits } from '@/lib/tripCostCalculator';
+import { useCredits } from '@/hooks/useCredits';
+import { formatCredits } from '@/config/pricing';
 
 interface ItineraryGeneratorProps {
   tripId: string;
@@ -95,12 +98,29 @@ export function ItineraryGenerator({
   const [hasStarted, setHasStarted] = useState(false);
   const [showNudgeCard, setShowNudgeCard] = useState(true);
   const [showGenericWarning, setShowGenericWarning] = useState(false);
+  const [showCostConfirm, setShowCostConfirm] = useState(false);
   const [prePhase, setPrePhase] = useState<Extract<GenerationStep, 'gathering-dna' | 'personalizing' | 'preparing'> | null>(null);
   const autoStartTriggered = useRef(false);
   const generationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Generation gate — pre-authorizes credits before generation
   const { authorize } = useGenerationGate();
+  
+  // Credit data for cost estimation
+  const { data: creditData } = useCredits();
+  const currentBalance = creditData?.totalCredits ?? 0;
+  
+  // Pre-calculate estimated cost for display
+  const totalDaysEstimate = useMemo(() => {
+    try {
+      return differenceInCalendarDays(parseLocalDate(endDate), parseLocalDate(startDate)) + 1;
+    } catch { return 1; }
+  }, [startDate, endDate]);
+  
+  const costEstimate = useMemo(() => {
+    const cities = isMultiCity ? [] : [destination];
+    return calculateTripCredits({ days: totalDaysEstimate, cities });
+  }, [totalDaysEstimate, destination, isMultiCity]);
 
   // Keep the pre-generation experience on screen until the first day is ready,
   // so we don't flash back to the generic spinner state.
@@ -112,9 +132,25 @@ export function ItineraryGenerator({
     }
   }, [prePhase, days.length, status]);
 
+  // Show cost confirmation before generating (for non-first-trip users)
+  const handleGenerateClick = () => {
+    // If cost > 0, show confirmation first
+    if (costEstimate.totalCredits > 0) {
+      setShowCostConfirm(true);
+      return;
+    }
+    handleGenerate();
+  };
+
+  const handleConfirmGenerate = () => {
+    setShowCostConfirm(false);
+    handleGenerate();
+  };
+
   const handleGenerate = async () => {
     setHasStarted(true);
     setShowGenericWarning(false);
+    setShowCostConfirm(false);
 
     // Safety timeout: if generation hasn't completed in 180s, show error
     // First-time 5-day trips with full Places enrichment can take 120s+
@@ -250,7 +286,7 @@ export function ItineraryGenerator({
       if (showPreferenceNudge) {
         setShowGenericWarning(true);
       } else {
-        handleGenerate();
+        handleGenerateClick();
       }
     }
   }, [autoStart, user, showPreferenceNudge]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -384,7 +420,7 @@ export function ItineraryGenerator({
                 onClick={() => {
                   setShowGenericWarning(false);
                   setShowNudgeCard(false);
-                  handleGenerate();
+                  handleGenerateClick();
                 }}
                 className="text-muted-foreground"
               >
@@ -448,25 +484,89 @@ export function ItineraryGenerator({
           )}
 
           
-          <div className="flex flex-col gap-3">
-            <Button 
-              size="lg" 
-              onClick={handleGenerate} 
-              className="gap-2"
+          {/* Cost Confirmation Dialog */}
+          {showCostConfirm && costEstimate.totalCredits > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4 text-left"
             >
-              <Sparkles className="h-5 w-5" />
-              Generate Itinerary
-            </Button>
-            
-            {onCancel && (
-              <Button variant="ghost" onClick={onCancel}>
-                Cancel
+              <div className="flex items-center gap-2 mb-3">
+                <Coins className="h-4 w-4 text-primary" />
+                <span className="text-sm font-semibold text-foreground">Cost Breakdown</span>
+              </div>
+              <div className="space-y-1.5 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{totalDaysEstimate} days × 60 cr/day</span>
+                  <span className="text-foreground">{costEstimate.baseCredits} cr</span>
+                </div>
+                {costEstimate.multiCityFee > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Multi-city fee</span>
+                    <span className="text-foreground">+{costEstimate.multiCityFee} cr</span>
+                  </div>
+                )}
+                {costEstimate.complexity.multiplier > 1 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">{costEstimate.complexity.tierLabel} complexity</span>
+                    <span className="text-foreground">×{costEstimate.complexity.multiplier}</span>
+                  </div>
+                )}
+                <div className="border-t border-border pt-1.5 flex justify-between font-semibold">
+                  <span className="text-foreground">Total</span>
+                  <span className="text-primary">{formatCredits(costEstimate.totalCredits)} credits</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Your balance</span>
+                  <span className={currentBalance >= costEstimate.totalCredits ? 'text-foreground' : 'text-destructive'}>
+                    {formatCredits(currentBalance)} credits
+                  </span>
+                </div>
+                {currentBalance >= costEstimate.totalCredits && (
+                  <div className="text-xs text-muted-foreground">
+                    After: {formatCredits(currentBalance - costEstimate.totalCredits)} credits remaining
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2 mt-4">
+                <Button size="sm" onClick={handleConfirmGenerate} className="flex-1 gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Confirm & Generate
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setShowCostConfirm(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
+          {!showCostConfirm && (
+            <div className="flex flex-col gap-3">
+              <Button 
+                size="lg" 
+                onClick={handleGenerateClick} 
+                className="gap-2"
+              >
+                <Sparkles className="h-5 w-5" />
+                Generate Itinerary
+                {costEstimate.totalCredits > 0 && (
+                  <span className="text-xs opacity-80">· {formatCredits(costEstimate.totalCredits)} cr</span>
+                )}
               </Button>
-            )}
-          </div>
+              
+              {onCancel && (
+                <Button variant="ghost" onClick={onCancel}>
+                  Cancel
+                </Button>
+              )}
+            </div>
+          )}
 
           <p className="text-xs text-muted-foreground mt-6">
-            Includes activities, restaurants, transportation, and local tips
+            {costEstimate.totalCredits > 0 
+              ? `${formatCredits(costEstimate.totalCredits)} credits for ${totalDaysEstimate} days · Day unlocks charged separately`
+              : 'Includes activities, restaurants, transportation, and local tips'
+            }
           </p>
         </div>
       </motion.div>
