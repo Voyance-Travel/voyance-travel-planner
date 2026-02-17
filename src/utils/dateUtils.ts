@@ -6,7 +6,9 @@ import { format as dateFnsFormat, parseISO } from 'date-fns';
  * Use this instead of parseISO() when displaying date-only strings from the database.
  */
 export const parseLocalDate = (dateStr: string): Date => {
+  if (!dateStr) return new Date(); // Graceful fallback for missing dates
   const [year, month, day] = dateStr.split('-').map(Number);
+  if (isNaN(year) || isNaN(month) || isNaN(day)) return new Date();
   return new Date(year, month - 1, day);
 };
 

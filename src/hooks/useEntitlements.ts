@@ -203,35 +203,23 @@ export function useEntitlements(tripId?: string) {
   const query = useQuery({
     queryKey: ['entitlements', user?.id, tripId],
     queryFn: async (): Promise<EntitlementsResponse> => {
-      console.log('[Entitlements] Fetching entitlements', { userId: user?.id, tripId });
       const { data, error } = await supabase.functions.invoke('get-entitlements', {
         body: tripId ? { tripId } : undefined,
       });
       
       if (error) {
         const errorBody = error.message || '';
-        console.error('[Entitlements] Error fetching:', errorBody);
-        if (errorBody.includes('401') || errorBody.includes('Session expired') || errorBody.includes('invalid')) {
-          console.warn('[Entitlements] Session expired, returning defaults');
-          return getDefaultEntitlements(user?.id || '');
-        }
-        // For ANY error, return defaults rather than throwing
-        // This prevents all days from locking when the function is temporarily unavailable
-        console.warn('[Entitlements] Returning defaults due to error');
+        // Only warn, don't error-spam on transient failures
+        console.warn('[Entitlements] Fetch issue, using defaults:', errorBody);
         return getDefaultEntitlements(user?.id || '');
       }
-      console.log('[Entitlements] Received:', { 
-        is_first_trip: data?.is_first_trip, 
-        has_completed_purchase: data?.has_completed_purchase,
-        credits_balance: data?.credits_balance,
-        can_view_photos: data?.can_view_photos,
-      });
       return data;
     },
     enabled: isAuthenticated && !!user?.id,
     staleTime: 60000,
     refetchOnWindowFocus: true,
-    retry: 2,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
   });
 
   return {
