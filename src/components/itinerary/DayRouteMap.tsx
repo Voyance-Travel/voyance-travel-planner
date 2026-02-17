@@ -66,6 +66,71 @@ export function DayRouteMap({ activities, className }: DayRouteMapProps) {
   }, [pins]);
 
   if (pins.length === 0) {
+    // Try to build directions from address strings even without coordinates
+    const addressActivities = activities.filter(a =>
+      a.location?.address || a.location?.name
+    );
+
+    if (addressActivities.length >= 2) {
+      const addresses = addressActivities.map(a =>
+        encodeURIComponent(a.location?.address || a.location?.name || '')
+      );
+      const origin = addresses[0];
+      const destination = addresses[addresses.length - 1];
+      const waypoints = addresses.slice(1, -1).join('|');
+      const addrDirectionsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypoints ? `&waypoints=${waypoints}` : ''}&travelmode=walking`;
+
+      return (
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.3 }}
+          className={cn("overflow-hidden", className)}
+        >
+          <div className="mx-4 sm:mx-6 my-3">
+            <div className="rounded-xl overflow-hidden border border-border/50 bg-muted/30 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-medium text-muted-foreground">Today's Route</span>
+                <a
+                  href={addrDirectionsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Open in Google Maps
+                </a>
+              </div>
+              <div className="space-y-2">
+                {addressActivities.map((a, i) => (
+                  <div key={a.id} className="flex items-center gap-2">
+                    <div className="flex flex-col items-center">
+                      <div
+                        className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white"
+                        style={{ backgroundColor: `#${PIN_COLORS[i % PIN_COLORS.length].replace('0x', '')}` }}
+                      >
+                        {LABEL_CHARS[i]}
+                      </div>
+                      {i < addressActivities.length - 1 && (
+                        <div className="w-px h-4 border-l-2 border-dashed border-border" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-xs text-foreground truncate block">{a.title}</span>
+                      <span className="text-[10px] text-muted-foreground truncate block">
+                        {a.location?.name || a.location?.address}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      );
+    }
+
     return (
       <motion.div
         initial={{ height: 0, opacity: 0 }}
