@@ -398,15 +398,19 @@ function logResultsSummary(results: any[]): void {
 }
 
 // ============= SEARCH HOTELS (with caching) =============
-async function searchHotels(params: HotelSearchParams): Promise<any[]> {
+async function searchHotels(params: HotelSearchParams & { skipCache?: boolean }): Promise<any[]> {
   _firstHotelLogged = false; // Reset for each search
   console.log('[Hotels] Search params:', JSON.stringify(params));
   
-  // STEP 1: Check cache first
-  const cached = await getCachedResults(params);
-  if (cached) {
-    console.log('[Hotels] Returning cached results');
-    return cached;
+  // STEP 1: Check cache first (unless skipCache is set)
+  if (!params.skipCache) {
+    const cached = await getCachedResults(params);
+    if (cached) {
+      console.log('[Hotels] Returning cached results');
+      return cached;
+    }
+  } else {
+    console.log('[Hotels] ⏭️ Skipping cache (skipCache=true)');
   }
   
   // STEP 2: Call Amadeus API
