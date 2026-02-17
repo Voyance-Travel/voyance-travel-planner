@@ -49,8 +49,10 @@ export function EmbeddedCheckoutModal({
           priceId, 
           mode, 
           returnPath,
-          // Day purchase fields
+          // Credit purchase fields
           productId,
+          credits,
+          // Legacy day purchase fields
           days,
           packageTier,
         },
@@ -70,7 +72,7 @@ export function EmbeddedCheckoutModal({
       setError(message);
       throw err;
     }
-  }, [priceId, mode, returnPath, productId, days, packageTier]);
+  }, [priceId, mode, returnPath, productId, credits, days, packageTier]);
 
   const options = { fetchClientSecret };
 
