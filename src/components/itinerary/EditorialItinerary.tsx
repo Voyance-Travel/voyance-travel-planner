@@ -67,6 +67,7 @@ import { PaymentsTab } from './PaymentsTab';
 import { BudgetTab } from '@/components/planner/budget/BudgetTab';
 import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useTripBudget } from '@/hooks/useTripBudget';
+import { useTripMembers } from '@/services/tripBudgetAPI';
 import { syncItineraryToBudget } from '@/services/tripBudgetService';
 import { useEntitlements, canViewPremiumContentForDay } from '@/hooks/useEntitlements';
 import { LockedPhotoPlaceholder } from './LockedPhotoPlaceholder';
@@ -1262,6 +1263,7 @@ export function EditorialItinerary({
   // Get trip permission for current user
   const { data: tripPermission } = useTripPermission(tripId);
   const { data: collaborators = [] } = useTripCollaborators(tripId);
+  const { data: tripMembers = [] } = useTripMembers(tripId);
   const { guestEditMode, isPropose, setGuestEditMode, isUpdating: isUpdatingEditMode } = useGuestEditMode(tripId);
   
   // Get budget settings to pass limit to PaymentsTab
@@ -1279,11 +1281,30 @@ export function EditorialItinerary({
 
   // Build collaborator color map for activity attribution (only for group trips)
   const collaboratorColorMap = useMemo(() => {
-    if (collaborators.length === 0) return undefined;
+    // Merge collaborators (trip_collaborators) with tripMembers (trip_members)
+    const allParticipantIds = new Set<string>();
+    const mergedCollaborators: Array<{ user_id: string; profile?: { display_name?: string | null; handle?: string | null } | null }> = [];
+
+    collaborators.forEach(c => {
+      allParticipantIds.add(c.user_id);
+      mergedCollaborators.push(c);
+    });
+
+    tripMembers.forEach(m => {
+      if (m.userId && !allParticipantIds.has(m.userId)) {
+        allParticipantIds.add(m.userId);
+        mergedCollaborators.push({
+          user_id: m.userId,
+          profile: { display_name: m.name || m.email?.split('@')[0] || null, handle: null },
+        });
+      }
+    });
+
+    if (mergedCollaborators.length === 0) return undefined;
     const ownerId = user?.id || '__owner__';
     const ownerDisplayName = user?.name || user?.email?.split('@')[0] || 'You';
-    return buildCollaboratorColorMap(ownerId, ownerDisplayName, collaborators);
-  }, [collaborators, user]);
+    return buildCollaboratorColorMap(ownerId, ownerDisplayName, mergedCollaborators);
+  }, [collaborators, tripMembers, user]);
 
   // Calculate intelligence value stats for the itinerary
   const { skippedItems } = useSkipList(destination);
