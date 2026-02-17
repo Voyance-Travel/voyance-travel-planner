@@ -4,7 +4,6 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { AnimatePresence } from 'framer-motion';
 import { ScrollToTop } from "@/components/common/ScrollToTop";
 import { OfflineBanner } from "@/components/common/OfflineBanner";
 import { useImagePreloader } from "@/hooks/useImagePreloader";
@@ -142,141 +141,115 @@ function JourneyTracker() {
   return null;
 }
 
-// Animated routes wrapper
+// Routes wrapper — no opacity animation to prevent washed-out rendering
 function AnimatedRoutes() {
   const location = useLocation();
   
   return (
-    <AnimatePresence mode="wait">
-      <PageTransition key={location.pathname}>
-        <Routes location={location}>
-          {/* Public Routes */}
-          <Route path="/" element={<Home />} />
-          <Route path="/demo" element={<Demo />} />
-          <Route path="/explore" element={<Explore />} />
-          <Route path="/destinations" element={<Destinations />} />
-          <Route path="/destination/:slug" element={<DestinationDetail />} />
-          <Route path="/guides" element={<Guides />} />
-          <Route path="/guides/:slug" element={<GuideDetail />} />
-          <Route path="/travel-tips" element={<TravelTips />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/archetypes" element={<Archetypes />} />
-          <Route path="/how-it-works" element={<HowItWorks />} />
-          <Route path="/careers" element={<Careers />} />
-          <Route path="/press" element={<Press />} />
-          <Route path="/contact" element={<Contact />} />
-          <Route path="/faq" element={<FAQ />} />
-          <Route path="/help" element={<HelpCenter />} />
-          <Route path="/sample-itinerary" element={<SampleItinerary />} />
-          
-          {/* Public Share Routes */}
-          <Route path="/share/:shareToken" element={<TripShare />} />
-          <Route path="/intake/:intakeToken" element={<ClientIntakeForm />} />
-          <Route path="/invite/:token" element={<AcceptInvite />} />
-          
-          {/* Auth Routes */}
-          <Route path="/signin" element={<SignIn />} />
-          <Route path="/sign-in" element={<Navigate to="/signin" replace />} />
-          <Route path="/signup" element={<SignUp />} />
-          <Route path="/sign-up" element={<Navigate to="/signup" replace />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          
-          {/* Onboarding Routes */}
-          <Route path="/welcome" element={<Welcome />} />
-          <Route path="/start" element={
-            <ProtectedRoute>
-              <Start />
-            </ProtectedRoute>
-          } />
-          <Route path="/quiz" element={<Quiz />} />
-          <Route path="/onboard/conversation" element={<OnboardConversation />} />
-          
-          {/* Profile Routes */}
-          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-          <Route path="/profile/edit" element={<ProtectedRoute><ProfileEdit /></ProtectedRoute>} />
-          <Route path="/profile/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-          <Route path="/profile/credits" element={<ProtectedRoute><CreditsAndBilling /></ProtectedRoute>} />
-          <Route path="/settings" element={<Navigate to="/profile/settings" replace />} />
-          
-          {/* Trip Planning Routes */}
-          <Route path="/planner" element={<Navigate to="/start" replace />} />
-          <Route path="/planner/multi-city" element={<ProtectedRoute><MultiCityPlanner /></ProtectedRoute>} />
-          <Route path="/planner/flight" element={<ProtectedRoute><PlannerFlight /></ProtectedRoute>} />
-          <Route path="/planner/hotel" element={<Navigate to="/start" replace />} />
-          <Route path="/planner/summary" element={<ProtectedRoute><PlannerSummary /></ProtectedRoute>} />
-          <Route path="/planner/itinerary" element={<ProtectedRoute><PlannerItinerary /></ProtectedRoute>} />
-          <Route path="/planner/booking" element={<ProtectedRoute><PlannerBooking /></ProtectedRoute>} />
-          
-          {/* Trip Management Routes */}
-          <Route path="/trip/dashboard" element={<ProtectedRoute><TripDashboard /></ProtectedRoute>} />
-          <Route path="/trip/:tripId" element={<ProtectedRoute><TripDetail /></ProtectedRoute>} />
-          <Route path="/trip/:tripId/active" element={<ProtectedRoute><ActiveTrip /></ProtectedRoute>} />
-          <Route path="/trip/:tripId/recap" element={<ProtectedRoute><TripRecap /></ProtectedRoute>} />
-          <Route path="/trips/:tripId/confirmation" element={<TripConfirmation />} />
-          
-          {/* Itinerary Routes */}
-          <Route path="/itinerary/:id" element={<ItineraryView />} />
-          
-          {/* Legal Routes */}
-          <Route path="/privacy" element={<Privacy />} />
-          <Route path="/terms" element={<Terms />} />
-          <Route path="/pricing" element={<Pricing />} />
-          <Route path="/payment-success" element={<PaymentSuccess />} />
-          
-          {/* Admin Routes - Protected */}
-          <Route path="/admin/bulk-import" element={
-            <ProtectedRoute>
-              <BulkImport />
-            </ProtectedRoute>
-          } />
-          <Route path="/admin/data-cleanup" element={
-            <ProtectedRoute>
-              <DataCleanup />
-            </ProtectedRoute>
-          } />
-          <Route path="/admin/image-curation" element={
-            <ProtectedRoute>
-              <ImageCuration />
-            </ProtectedRoute>
-          } />
-          <Route path="/admin/margins" element={
-            <ProtectedRoute>
-              <UnitEconomics />
-            </ProtectedRoute>
-          } />
-          <Route path="/admin/test-suites" element={
-            <ProtectedRoute>
-              <TestSuites />
-            </ProtectedRoute>
-           } />
-          <Route path="/admin/user-tracking" element={
-            <ProtectedRoute>
-              <UserTracking />
-            </ProtectedRoute>
-          } />
-          
-          {/* Agent CRM Routes */}
-          <Route path="/agent" element={<ProtectedRoute><AgentDashboard /></ProtectedRoute>} />
-          <Route path="/agent/clients" element={<ProtectedRoute><AgentClients /></ProtectedRoute>} />
-          <Route path="/agent/clients/new" element={<ProtectedRoute><AccountForm /></ProtectedRoute>} />
-          <Route path="/agent/clients/:clientId" element={<ProtectedRoute><ClientDetail /></ProtectedRoute>} />
-          <Route path="/agent/clients/:clientId/edit" element={<ProtectedRoute><AccountForm /></ProtectedRoute>} />
-          <Route path="/agent/trips" element={<ProtectedRoute><AgentTrips /></ProtectedRoute>} />
-          <Route path="/agent/trips/new" element={<ProtectedRoute><TripForm /></ProtectedRoute>} />
-          <Route path="/agent/trips/:tripId" element={<ProtectedRoute><TripWorkspace /></ProtectedRoute>} />
-          <Route path="/agent/trips/:tripId/edit" element={<ProtectedRoute><TripForm /></ProtectedRoute>} />
-          <Route path="/agent/tasks" element={<ProtectedRoute><AgentTasks /></ProtectedRoute>} />
-          <Route path="/agent/library" element={<Navigate to="/agent" replace />} />
-          <Route path="/agent/settings" element={<ProtectedRoute><AgentSettings /></ProtectedRoute>} />
-          <Route path="/agent/documents" element={<ProtectedRoute><AgentDocuments /></ProtectedRoute>} />
-          <Route path="/agent/payouts" element={<ProtectedRoute><AgentPayouts /></ProtectedRoute>} />
-          
-          {/* 404 */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </PageTransition>
-    </AnimatePresence>
+    <PageTransition>
+      <Routes location={location}>
+        {/* Public Routes */}
+        <Route path="/" element={<Home />} />
+        <Route path="/demo" element={<Demo />} />
+        <Route path="/explore" element={<Explore />} />
+        <Route path="/destinations" element={<Destinations />} />
+        <Route path="/destination/:slug" element={<DestinationDetail />} />
+        <Route path="/guides" element={<Guides />} />
+        <Route path="/guides/:slug" element={<GuideDetail />} />
+        <Route path="/travel-tips" element={<TravelTips />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/archetypes" element={<Archetypes />} />
+        <Route path="/how-it-works" element={<HowItWorks />} />
+        <Route path="/careers" element={<Careers />} />
+        <Route path="/press" element={<Press />} />
+        <Route path="/contact" element={<Contact />} />
+        <Route path="/faq" element={<FAQ />} />
+        <Route path="/help" element={<HelpCenter />} />
+        <Route path="/sample-itinerary" element={<SampleItinerary />} />
+        
+        {/* Public Share Routes */}
+        <Route path="/share/:shareToken" element={<TripShare />} />
+        <Route path="/intake/:intakeToken" element={<ClientIntakeForm />} />
+        <Route path="/invite/:token" element={<AcceptInvite />} />
+        
+        {/* Auth Routes */}
+        <Route path="/signin" element={<SignIn />} />
+        <Route path="/sign-in" element={<Navigate to="/signin" replace />} />
+        <Route path="/signup" element={<SignUp />} />
+        <Route path="/sign-up" element={<Navigate to="/signup" replace />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        
+        {/* Onboarding Routes */}
+        <Route path="/welcome" element={<Welcome />} />
+        <Route path="/start" element={
+          <ProtectedRoute>
+            <Start />
+          </ProtectedRoute>
+        } />
+        <Route path="/quiz" element={<Quiz />} />
+        <Route path="/onboard/conversation" element={<OnboardConversation />} />
+        
+        {/* Profile Routes */}
+        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/profile/edit" element={<ProtectedRoute><ProfileEdit /></ProtectedRoute>} />
+        <Route path="/profile/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+        <Route path="/profile/credits" element={<ProtectedRoute><CreditsAndBilling /></ProtectedRoute>} />
+        <Route path="/settings" element={<Navigate to="/profile/settings" replace />} />
+        
+        {/* Trip Planning Routes */}
+        <Route path="/planner" element={<Navigate to="/start" replace />} />
+        <Route path="/planner/multi-city" element={<ProtectedRoute><MultiCityPlanner /></ProtectedRoute>} />
+        <Route path="/planner/flight" element={<ProtectedRoute><PlannerFlight /></ProtectedRoute>} />
+        <Route path="/planner/hotel" element={<Navigate to="/start" replace />} />
+        <Route path="/planner/summary" element={<ProtectedRoute><PlannerSummary /></ProtectedRoute>} />
+        <Route path="/planner/itinerary" element={<ProtectedRoute><PlannerItinerary /></ProtectedRoute>} />
+        <Route path="/planner/booking" element={<ProtectedRoute><PlannerBooking /></ProtectedRoute>} />
+        
+        {/* Trip Management Routes */}
+        <Route path="/trip/dashboard" element={<ProtectedRoute><TripDashboard /></ProtectedRoute>} />
+        <Route path="/trip/:tripId" element={<ProtectedRoute><TripDetail /></ProtectedRoute>} />
+        <Route path="/trip/:tripId/active" element={<ProtectedRoute><ActiveTrip /></ProtectedRoute>} />
+        <Route path="/trip/:tripId/recap" element={<ProtectedRoute><TripRecap /></ProtectedRoute>} />
+        <Route path="/trips/:tripId/confirmation" element={<TripConfirmation />} />
+        
+        {/* Itinerary Routes */}
+        <Route path="/itinerary/:id" element={<ItineraryView />} />
+        
+        {/* Legal Routes */}
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/pricing" element={<Pricing />} />
+        <Route path="/payment-success" element={<PaymentSuccess />} />
+        
+        {/* Admin Routes - Protected */}
+        <Route path="/admin/bulk-import" element={<ProtectedRoute><BulkImport /></ProtectedRoute>} />
+        <Route path="/admin/data-cleanup" element={<ProtectedRoute><DataCleanup /></ProtectedRoute>} />
+        <Route path="/admin/image-curation" element={<ProtectedRoute><ImageCuration /></ProtectedRoute>} />
+        <Route path="/admin/margins" element={<ProtectedRoute><UnitEconomics /></ProtectedRoute>} />
+        <Route path="/admin/test-suites" element={<ProtectedRoute><TestSuites /></ProtectedRoute>} />
+        <Route path="/admin/user-tracking" element={<ProtectedRoute><UserTracking /></ProtectedRoute>} />
+        
+        {/* Agent CRM Routes */}
+        <Route path="/agent" element={<ProtectedRoute><AgentDashboard /></ProtectedRoute>} />
+        <Route path="/agent/clients" element={<ProtectedRoute><AgentClients /></ProtectedRoute>} />
+        <Route path="/agent/clients/new" element={<ProtectedRoute><AccountForm /></ProtectedRoute>} />
+        <Route path="/agent/clients/:clientId" element={<ProtectedRoute><ClientDetail /></ProtectedRoute>} />
+        <Route path="/agent/clients/:clientId/edit" element={<ProtectedRoute><AccountForm /></ProtectedRoute>} />
+        <Route path="/agent/trips" element={<ProtectedRoute><AgentTrips /></ProtectedRoute>} />
+        <Route path="/agent/trips/new" element={<ProtectedRoute><TripForm /></ProtectedRoute>} />
+        <Route path="/agent/trips/:tripId" element={<ProtectedRoute><TripWorkspace /></ProtectedRoute>} />
+        <Route path="/agent/trips/:tripId/edit" element={<ProtectedRoute><TripForm /></ProtectedRoute>} />
+        <Route path="/agent/tasks" element={<ProtectedRoute><AgentTasks /></ProtectedRoute>} />
+        <Route path="/agent/library" element={<Navigate to="/agent" replace />} />
+        <Route path="/agent/settings" element={<ProtectedRoute><AgentSettings /></ProtectedRoute>} />
+        <Route path="/agent/documents" element={<ProtectedRoute><AgentDocuments /></ProtectedRoute>} />
+        <Route path="/agent/payouts" element={<ProtectedRoute><AgentPayouts /></ProtectedRoute>} />
+        
+        {/* 404 */}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </PageTransition>
   );
 }
 
