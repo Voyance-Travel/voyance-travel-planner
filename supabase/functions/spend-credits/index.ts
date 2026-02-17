@@ -429,6 +429,33 @@ serve(async (req) => {
       );
     }
 
+    // ── Idempotency check: skip duplicate charges ──
+    const idempotencyKey = metadata?.idempotencyKey as string | undefined;
+    if (idempotencyKey && tripId) {
+      const { data: existing } = await supabaseAdmin
+        .from('credit_ledger')
+        .select('id, credits_delta')
+        .eq('user_id', user.id)
+        .eq('action_type', action)
+        .eq('trip_id', tripId)
+        .contains('metadata', { idempotencyKey })
+        .limit(1);
+      if (existing && existing.length > 0) {
+        console.log('[spend-credits] Idempotent hit — returning cached result for key:', idempotencyKey);
+        const balance = await syncBalanceCache(supabaseAdmin, user.id);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            spent: Math.abs(existing[0].credits_delta),
+            action,
+            idempotent: true,
+            newBalance: { total: balance.total, purchased: balance.purchased, free: balance.free },
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     // ── FIFO deduction with write-ahead ledger ──
     let deductResult;
     try {

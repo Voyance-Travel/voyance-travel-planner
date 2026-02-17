@@ -6,7 +6,7 @@
  * sorted by match score with external booking links.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { 
   Sparkles, Star, MapPin, Heart, ExternalLink, Loader2, Dna, 
   Hotel, CreditCard, X, ChevronRight 
@@ -67,11 +67,18 @@ export function FindMyHotelsDrawer({
 
   const creditCost = CREDIT_COSTS.HOTEL_SEARCH;
 
+  const spendAttemptedRef = useRef(false);
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
+
   const handleOpenAndPay = useCallback(async () => {
     if (hasPaid) {
       setIsOpen(true);
       return;
     }
+
+    // Idempotency guard: prevent duplicate spend calls
+    if (spendAttemptedRef.current) return;
+    spendAttemptedRef.current = true;
 
     setIsSpending(true);
     try {
@@ -79,7 +86,7 @@ export function FindMyHotelsDrawer({
         action: 'HOTEL_SEARCH',
         tripId,
         creditsAmount: creditCost,
-        metadata: { destination },
+        metadata: { destination, idempotencyKey },
       });
 
       setHasPaid(true);
@@ -91,16 +98,16 @@ export function FindMyHotelsDrawer({
         toast.success(`Finding your perfect hotels (${result.spent ?? creditCost} credits used)`);
       }
     } catch (err: any) {
-      // Error handling (including out-of-credits modal) is done by the hook
+      // Reset ref on error so user can retry
+      spendAttemptedRef.current = false;
       console.error('[FindMyHotels] Credit spend failed:', err);
-      // Show explicit error for non-credit errors (auth failures, network issues)
       if (!err?.message?.startsWith('Not enough credits')) {
         toast.error(err?.message || 'Failed to start hotel search. Please try again.');
       }
     } finally {
       setIsSpending(false);
     }
-  }, [hasPaid, spendCredits, tripId, destination, creditCost]);
+  }, [hasPaid, spendCredits, tripId, destination, creditCost, idempotencyKey]);
 
   // Top 10 sorted by match score (already sorted by the hook)
   const displayHotels = recommendations.slice(0, 10);

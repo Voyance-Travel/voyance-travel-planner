@@ -71,21 +71,21 @@ async function fetchTravelDNA(userId: string): Promise<TravelDNAData | null> {
     return null;
   }
   
-  // Parse trait scores from JSON
+  // Parse trait scores from JSON — normalize to 0–1 range
   const rawTraitScores = dnaResult.data?.trait_scores;
   let traitScores: DNATraitScores | null = null;
   
   if (rawTraitScores && typeof rawTraitScores === 'object') {
     const scores = rawTraitScores as Record<string, unknown>;
     traitScores = {
-      planning: typeof scores.planning === 'number' ? scores.planning : 0.5,
-      social: typeof scores.social === 'number' ? scores.social : 0.5,
-      comfort: typeof scores.comfort === 'number' ? scores.comfort : 0.5,
-      pace: typeof scores.pace === 'number' ? scores.pace : 0.5,
-      budget: typeof scores.budget === 'number' ? scores.budget : 0.5,
-      adventure: typeof scores.adventure === 'number' ? scores.adventure : 0.5,
-      culture: typeof scores.culture === 'number' ? scores.culture : 0.5,
-      authenticity: typeof scores.authenticity === 'number' ? scores.authenticity : 0.5,
+      planning: normalizeTraitValue(scores.planning),
+      social: normalizeTraitValue(scores.social),
+      comfort: normalizeTraitValue(scores.comfort),
+      pace: normalizeTraitValue(scores.pace),
+      budget: normalizeTraitValue(scores.budget),
+      adventure: normalizeTraitValue(scores.adventure),
+      culture: normalizeTraitValue(scores.culture),
+      authenticity: normalizeTraitValue(scores.authenticity),
     };
   }
   
@@ -94,6 +94,18 @@ async function fetchTravelDNA(userId: string): Promise<TravelDNAData | null> {
     budgetTier: prefsResult.data?.budget_tier || null,
     primaryArchetype: dnaResult.data?.primary_archetype_name || null,
   };
+}
+
+/**
+ * Normalize a trait value to 0–1 range.
+ * Quiz may store values as 0–1, 0–100, or 1–10.
+ */
+function normalizeTraitValue(value: unknown): number {
+  if (typeof value !== 'number' || isNaN(value)) return 0.5;
+  if (value >= 0 && value <= 1) return value;
+  if (value > 1 && value <= 100) return value / 100;
+  if (value > 100) return Math.min(1, value / 100);
+  return 0.5;
 }
 
 // ============================================================================
@@ -202,11 +214,10 @@ function calculateDNAMatchScore(
   let totalWeight = 0;
   
   for (const { hotelScore, userTrait, weight } of dimensionMappings) {
-    // Calculate alignment: how well does the hotel match what the user wants?
-    // If user has high trait (wants it) and hotel has it → high score
-    // If user has low trait (doesn't care) → hotel score matters less
-    const alignment = 1 - Math.abs(hotelScore - userTrait);
-    const prioritizedAlignment = alignment * (0.5 + userTrait * 0.5); // Boost if user cares about this trait
+    // Clamp to 0–1 for safety (quiz may store raw values)
+    const clampedTrait = Math.max(0, Math.min(1, userTrait));
+    const alignment = Math.max(0, Math.min(1, 1 - Math.abs(hotelScore - clampedTrait)));
+    const prioritizedAlignment = alignment * (0.5 + clampedTrait * 0.5);
     
     totalScore += prioritizedAlignment * weight;
     totalWeight += weight;
