@@ -397,9 +397,9 @@ function HotelRecommendationCard({
           </div>
 
           {/* Match reasons */}
-          {hotel.matchReasons.length > 0 && (
+          {hotel.matchReasons.filter(r => r !== 'Good overall match').length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2">
-              {hotel.matchReasons.map((reason, i) => (
+              {hotel.matchReasons.filter(r => r !== 'Good overall match').map((reason, i) => (
                 <span key={i} className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
                   {reason}
                 </span>

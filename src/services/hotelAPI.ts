@@ -294,89 +294,30 @@ function generateMockHotels(params: HotelSearchParams): HotelOption[] {
 // ============================================================================
 
 // ============================================================================
-// Window-global dedup: survives Vite code-splitting (multiple module instances)
+// Simple client-side result cache — server-side dedup handles concurrency
 // ============================================================================
-interface CachedResult {
-  data: HotelOption[];
-  timestamp: number;
-}
-
-interface WindowWithHotelDedup extends Window {
-  __hotelInflightSearches?: Map<string, Promise<HotelOption[]>>;
-  __hotelResultCache?: Map<string, CachedResult>;
-}
-
-function getInflightMap(): Map<string, Promise<HotelOption[]>> {
-  const w = window as unknown as WindowWithHotelDedup;
-  if (!w.__hotelInflightSearches) {
-    w.__hotelInflightSearches = new Map();
-  }
-  return w.__hotelInflightSearches;
-}
-
-function getResultCache(): Map<string, CachedResult> {
-  const w = window as unknown as WindowWithHotelDedup;
-  if (!w.__hotelResultCache) {
-    w.__hotelResultCache = new Map();
-  }
-  return w.__hotelResultCache;
-}
-
-const RESULT_CACHE_TTL = 30_000; // 30s — prevents re-render cascade
-
-function searchCacheKey(params: HotelSearchParams): string {
-  return `${params.destination}|${params.checkIn}|${params.checkOut}|${params.guests}`;
-}
+const clientResultCache = new Map<string, { data: HotelOption[]; timestamp: number }>();
+const CLIENT_CACHE_TTL = 60_000; // 60s
 
 /**
  * Search for hotels - uses Cloud edge function, falls back to mock data.
- * Deduplicates via window-global singleton (survives Vite code-splitting).
+ * Server-side dedup in the edge function prevents duplicate API calls.
  */
 export async function searchHotels(params: HotelSearchParams & { skipCache?: boolean }): Promise<HotelOption[]> {
-  const inflightMap = getInflightMap();
-  const resultCache = getResultCache();
-  const key = searchCacheKey(params);
+  const key = `${params.destination}|${params.checkIn}|${params.checkOut}|${params.guests}`;
 
-  // 1. Check short-lived result cache (prevents re-render cascade)
+  // Check client cache
   if (!params.skipCache) {
-    const cached = resultCache.get(key);
-    if (cached && Date.now() - cached.timestamp < RESULT_CACHE_TTL) {
-      console.log(`[HotelAPI] 📦 Cache hit for ${key} (${Math.round((Date.now() - cached.timestamp) / 1000)}s old)`);
+    const cached = clientResultCache.get(key);
+    if (cached && Date.now() - cached.timestamp < CLIENT_CACHE_TTL) {
+      console.log('[HotelAPI] 📦 Client cache hit');
       return cached.data;
     }
   }
 
-  // 2. Check for in-flight request
-  const inflight = inflightMap.get(key);
-  if (inflight && !params.skipCache) {
-    console.log(`[HotelAPI] ♻️ Dedup: returning in-flight request for ${key} | map size: ${inflightMap.size}`);
-    return inflight;
-  }
+  console.log('[HotelAPI] Searching hotels for:', params.destination);
 
-  console.log(`[HotelAPI] 🆕 Starting new search for key: ${key} | inflight map size: ${inflightMap.size}`);
-
-  // 3. Create actual search promise
-  const promise = _searchHotelsImpl(params)
-    .then((results) => {
-      resultCache.set(key, { data: results, timestamp: Date.now() });
-      return results;
-    })
-    .finally(() => {
-      // Don't clear inflight immediately — use setTimeout to let concurrent renders hit the cache
-      setTimeout(() => {
-        inflightMap.delete(key);
-        console.log(`[HotelAPI] 🗑️ Cleared inflight key: ${key}`);
-      }, RESULT_CACHE_TTL);
-    });
-
-  inflightMap.set(key, promise);
-  return promise;
-}
-
-async function _searchHotelsImpl(params: HotelSearchParams & { skipCache?: boolean }): Promise<HotelOption[]> {
   try {
-    console.log('[HotelAPI] Calling Cloud edge function');
-    
     const { data, error } = await supabase.functions.invoke('hotels', {
       body: {
         action: 'search',
@@ -388,18 +329,19 @@ async function _searchHotelsImpl(params: HotelSearchParams & { skipCache?: boole
         skipCache: params.skipCache || false,
       },
     });
-    
+
     if (error || !data?.success) {
-      console.warn('[HotelAPI] Cloud function error, using mock data:', error);
+      console.warn('[HotelAPI] Edge function error, using mock data:', error);
       return generateMockHotels(params);
     }
-    
+
     if (!data?.hotels?.length) {
       console.warn('[HotelAPI] No hotels from API, using mock data');
       return generateMockHotels(params);
     }
-    
-    console.log('[HotelAPI] Got', data.hotels.length, 'hotels from Cloud');
+
+    console.log('[HotelAPI] Got', data.hotels.length, 'hotels');
+    clientResultCache.set(key, { data: data.hotels, timestamp: Date.now() });
     return data.hotels;
   } catch (error) {
     console.warn('[HotelAPI] Search error, using mock data:', error);
