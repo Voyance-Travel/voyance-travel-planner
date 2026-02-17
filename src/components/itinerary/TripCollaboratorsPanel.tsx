@@ -98,8 +98,47 @@ export function TripCollaboratorsPanel({
   const [removingCollaborator, setRemovingCollaborator] = useState<TripCollaborator | null>(null);
 
   const isOwner = permission?.isOwner ?? false;
+
+  // Fetch trip owner's profile when user is a guest (not the owner)
+  const [ownerInfo, setOwnerInfo] = useState<{ name?: string; email?: string; avatarUrl?: string } | null>(null);
+  useEffect(() => {
+    if (isOwner || ownerName) return; // Skip if we're the owner or name is provided
+    
+    async function fetchOwnerProfile() {
+      try {
+        // Get the trip to find the owner's user_id
+        const { data: trip } = await supabase
+          .from('trips')
+          .select('user_id')
+          .eq('id', tripId)
+          .single();
+        
+        if (!trip?.user_id) return;
+        
+        // Get the owner's profile
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('display_name, avatar_url, handle')
+          .eq('id', trip.user_id)
+          .single();
+        
+        if (profile) {
+          setOwnerInfo({
+            name: profile.display_name || profile.handle || undefined,
+            avatarUrl: profile.avatar_url || undefined,
+          });
+        }
+      } catch (e) {
+        console.warn('[TripCollaboratorsPanel] Failed to fetch owner profile:', e);
+      }
+    }
+    
+    fetchOwnerProfile();
+  }, [tripId, isOwner, ownerName]);
+
   const totalMembers = 1 + collaborators.length;
-  const resolvedOwnerName = ownerName || ownerEmail?.split('@')[0] || 'Trip Owner';
+  const resolvedOwnerName = ownerName || ownerInfo?.name || ownerEmail?.split('@')[0] || 'Trip Owner';
+  const resolvedOwnerAvatar = ownerAvatarUrl || ownerInfo?.avatarUrl;
 
   // Fetch DNA status for all collaborators
   useEffect(() => {
@@ -184,7 +223,7 @@ export function TripCollaboratorsPanel({
 
   // Build all members array for the avatar stack
   const allMembers = [
-    { id: '__owner__', name: resolvedOwnerName, email: ownerEmail, avatarUrl: ownerAvatarUrl, isOwner: true },
+    { id: '__owner__', name: resolvedOwnerName, email: ownerEmail, avatarUrl: resolvedOwnerAvatar, isOwner: true },
     ...collaborators.map(c => ({
       id: c.id,
       name: c.profile?.display_name || c.profile?.handle || undefined,

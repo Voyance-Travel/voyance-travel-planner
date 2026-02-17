@@ -1,26 +1,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { sendEmail, isConfigured } from "../_shared/zoho-smtp.ts";
 
-// Allowed origins for CORS - restrict to actual domains
-const ALLOWED_ORIGINS = [
-  'https://voyance-travel-planner.lovable.app',
-  'https://id-preview--bbef7015-a2df-45af-893d-7d36d59f8dcd.lovable.app',
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'http://localhost:8080',
-];
-
-function getCorsHeaders(origin: string | null): Record<string, string> {
-  const allowedOrigin = origin && ALLOWED_ORIGINS.some(allowed => 
-    origin === allowed || origin.endsWith('.lovable.app')
-  ) ? origin : ALLOWED_ORIGINS[0];
-  
-  return {
-    "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-  };
-}
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
 
 interface ContactRequest {
   name: string;
@@ -64,8 +49,6 @@ function sanitizeInput(input: string, maxLength: number): string {
 }
 
 const handler = async (req: Request): Promise<Response> => {
-  const origin = req.headers.get('origin');
-  const corsHeaders = getCorsHeaders(origin);
   
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
