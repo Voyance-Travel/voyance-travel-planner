@@ -54,6 +54,18 @@ interface DNATraits {
   budget: number; adventure: number; culture: number; authenticity: number;
 }
 
+/**
+ * Normalize a trait value to 0–1 range.
+ * Quiz may store values as 0–1, 0–100, or 1–10.
+ */
+function normalizeTraitValue(value: unknown): number {
+  if (typeof value !== 'number' || isNaN(value)) return 0.5;
+  if (value >= 0 && value <= 1) return value;
+  if (value > 1 && value <= 100) return value / 100;
+  if (value > 100) return Math.min(1, value / 100);
+  return 0.5;
+}
+
 async function fetchUserDNA(userId: string) {
   const [dnaResult, prefsResult] = await Promise.all([
     supabase.from('travel_dna_profiles').select('trait_scores, primary_archetype_name').eq('user_id', userId).maybeSingle(),
@@ -62,14 +74,14 @@ async function fetchUserDNA(userId: string) {
 
   const rawTraits = dnaResult.data?.trait_scores as Record<string, unknown> | null;
   const traitScores: DNATraits | null = rawTraits ? {
-    planning: typeof rawTraits.planning === 'number' ? rawTraits.planning : 0.5,
-    social: typeof rawTraits.social === 'number' ? rawTraits.social : 0.5,
-    comfort: typeof rawTraits.comfort === 'number' ? rawTraits.comfort : 0.5,
-    pace: typeof rawTraits.pace === 'number' ? rawTraits.pace : 0.5,
-    budget: typeof rawTraits.budget === 'number' ? rawTraits.budget : 0.5,
-    adventure: typeof rawTraits.adventure === 'number' ? rawTraits.adventure : 0.5,
-    culture: typeof rawTraits.culture === 'number' ? rawTraits.culture : 0.5,
-    authenticity: typeof rawTraits.authenticity === 'number' ? rawTraits.authenticity : 0.5,
+    planning: normalizeTraitValue(rawTraits.planning),
+    social: normalizeTraitValue(rawTraits.social),
+    comfort: normalizeTraitValue(rawTraits.comfort),
+    pace: normalizeTraitValue(rawTraits.pace),
+    budget: normalizeTraitValue(rawTraits.budget),
+    adventure: normalizeTraitValue(rawTraits.adventure),
+    culture: normalizeTraitValue(rawTraits.culture),
+    authenticity: normalizeTraitValue(rawTraits.authenticity),
   } : null;
 
   return {
@@ -143,8 +155,9 @@ function scoreAndRankHotels(
     let totalScore = 0;
     let totalWeight = 0;
     for (const { hotelScore, userTrait, weight } of dimensions) {
-      const alignment = 1 - Math.abs(hotelScore - userTrait);
-      totalScore += alignment * (0.5 + userTrait * 0.5) * weight;
+      const clampedTrait = Math.max(0, Math.min(1, userTrait));
+      const alignment = Math.max(0, Math.min(1, 1 - Math.abs(hotelScore - clampedTrait)));
+      totalScore += alignment * (0.5 + clampedTrait * 0.5) * weight;
       totalWeight += weight;
     }
 
