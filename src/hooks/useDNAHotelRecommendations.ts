@@ -160,7 +160,7 @@ function scoreAndRankHotels(
       rawScore += 8;
     }
 
-    const dnaMatchScore = Math.min(100, Math.round(rawScore));
+    const dnaMatchScore = Math.max(0, Math.min(100, Math.round(isNaN(rawScore) ? 50 : rawScore)));
 
     // Generate match reasons
     const matchReasons: string[] = [];
