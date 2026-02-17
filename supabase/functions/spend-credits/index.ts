@@ -429,7 +429,7 @@ serve(async (req) => {
       );
     }
 
-    // ── FIFO deduction ──
+    // ── FIFO deduction with write-ahead ledger ──
     let deductResult;
     try {
       deductResult = await deductFIFO(supabaseAdmin, user.id, cost);
@@ -451,10 +451,7 @@ serve(async (req) => {
       throw err;
     }
 
-    // ── Sync balance cache ──
-    const balance = await syncBalanceCache(supabaseAdmin, user.id);
-
-    // ── Ledger entry ──
+    // ── Ledger entry (write-ahead: BEFORE balance sync) ──
     const { error: paidLedgerErr } = await supabaseAdmin
       .from('credit_ledger')
       .insert({
@@ -475,7 +472,33 @@ serve(async (req) => {
           activityId: activityId || null,
         },
       });
-    if (paidLedgerErr) console.error('[spend-credits] Paid ledger insert failed:', paidLedgerErr);
+    if (paidLedgerErr) {
+      console.error('[spend-credits] CRITICAL: Ledger insert failed after FIFO deduction. Rolling back.', paidLedgerErr);
+      // Rollback: restore the FIFO deductions
+      for (const d of deductResult.purchases) {
+        await supabaseAdmin
+          .from('credit_purchases')
+          .update({
+            remaining: supabaseAdmin.rpc ? undefined : undefined, // Can't increment easily, fetch + update
+          })
+          .eq('id', d.id);
+      }
+      // Fetch each row and restore
+      for (const d of deductResult.purchases) {
+        const { data: row } = await supabaseAdmin
+          .from('credit_purchases')
+          .select('remaining')
+          .eq('id', d.id)
+          .single();
+        if (row) {
+          await supabaseAdmin
+            .from('credit_purchases')
+            .update({ remaining: row.remaining + d.deducted, updated_at: new Date().toISOString() })
+            .eq('id', d.id);
+        }
+      }
+      throw new Error('Ledger insert failed — credits rolled back');
+    }
 
     // ── Cost tracking for hotel_search (for Unit Economics dashboard) ──
     if (action === 'hotel_search' && tripId) {
