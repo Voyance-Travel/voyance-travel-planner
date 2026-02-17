@@ -509,14 +509,16 @@ serve(async (req) => {
           trip_id: tripId,
           action_type: 'hotel_search',
           cost_category: 'ai_generation',
-          estimated_cost_usd: 0.03, // AI-only cost (no Amadeus API)
+          estimated_cost_usd: 0.03,
           input_tokens: 0,
           output_tokens: 0,
           model: 'credit-gated',
-          notes: `Hotel search: ${deductResult.deducted} credits spent for ${metadata?.destination || 'unknown'}`,
         });
       if (costErr) console.error('[spend-credits] Cost tracking insert failed:', costErr);
     }
+
+    // ── Sync balance cache AFTER successful deduction + ledger ──
+    const balance = await syncBalanceCache(supabaseAdmin, user.id);
 
     return new Response(
       JSON.stringify({
