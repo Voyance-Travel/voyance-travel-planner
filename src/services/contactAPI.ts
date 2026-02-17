@@ -2,7 +2,7 @@
  * Voyance Contact API
  * 
  * Uses Cloud edge function for contact form:
- * - send-contact-email: Sends contact form via SendGrid
+ * - send-contact-email: Sends contact form via Zoho SMTP
  */
 
 import { supabase } from '@/integrations/supabase/client';
