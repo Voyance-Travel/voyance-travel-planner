@@ -33,6 +33,9 @@ interface FindMyHotelsDrawerProps {
   className?: string;
 }
 
+// Module-level lock to prevent multiple component instances from firing simultaneously
+let globalSpendLock = false;
+
 export function FindMyHotelsDrawer({
   tripId,
   destination,
@@ -76,9 +79,10 @@ export function FindMyHotelsDrawer({
       return;
     }
 
-    // Idempotency guard: prevent duplicate spend calls
-    if (spendAttemptedRef.current) return;
+    // Multi-layer idempotency: ref guard + module-level lock
+    if (spendAttemptedRef.current || globalSpendLock) return;
     spendAttemptedRef.current = true;
+    globalSpendLock = true;
 
     setIsSpending(true);
     try {
@@ -98,14 +102,17 @@ export function FindMyHotelsDrawer({
         toast.success(`Finding your perfect hotels (${result.spent ?? creditCost} credits used)`);
       }
     } catch (err: any) {
-      // Reset ref on error so user can retry
+      // Reset guards on error so user can retry
       spendAttemptedRef.current = false;
+      globalSpendLock = false;
       console.error('[FindMyHotels] Credit spend failed:', err);
-      if (!err?.message?.startsWith('Not enough credits')) {
+      if (!err?.message?.startsWith('Not enough credits') && err?.message !== 'Duplicate spend request blocked') {
         toast.error(err?.message || 'Failed to start hotel search. Please try again.');
       }
     } finally {
       setIsSpending(false);
+      // Release module lock after completion (success keeps ref locked to prevent re-spend)
+      globalSpendLock = false;
     }
   }, [hasPaid, spendCredits, tripId, destination, creditCost, idempotencyKey]);
 
@@ -116,7 +123,8 @@ export function FindMyHotelsDrawer({
     <>
       <Button
         onClick={handleOpenAndPay}
-        disabled={isSpending}
+        disabled={isSpending || hasPaid}
+        style={{ pointerEvents: isSpending ? 'none' : 'auto' }}
         className={cn(
           'gap-2 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70',
           className
@@ -127,8 +135,8 @@ export function FindMyHotelsDrawer({
         ) : (
           <Sparkles className="h-4 w-4" />
         )}
-        {hasPaid ? 'View My Hotels' : `Find My Hotels`}
-        {!hasPaid && (
+        {isSpending ? 'Processing...' : hasPaid ? 'View My Hotels' : `Find My Hotels`}
+        {!hasPaid && !isSpending && (
           <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-1 bg-background/20 text-primary-foreground border-0">
             {creditCost} credits
           </Badge>

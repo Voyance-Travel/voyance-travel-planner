@@ -1061,6 +1061,66 @@ export function preferencesToQuizAnswers(
   
   return answers;
 }
+/**
+ * Compute V2 traits directly from stored preferences.
+ * Bypasses archetype-matcher (which expects quiz-format answers) to avoid all-zero results.
+ */
+function computeV2TraitsFromPreferences(preferences: UserPreferencesPayload): Record<string, number> {
+  const stringToScore = (val: unknown, mapping: Record<string, number>, defaultVal = 0): number => {
+    if (typeof val === 'number') return Math.max(-10, Math.min(10, val));
+    if (typeof val === 'string' && val in mapping) return mapping[val];
+    return defaultVal;
+  };
+
+  const pace = stringToScore(preferences.travel_pace, {
+    relaxed: -6, slow: -6, moderate: 0, moderate_pace: 0, active: 5, packed: 7, fast: 7, intense: 8,
+  });
+
+  const social = stringToScore(preferences.traveler_type, {
+    solo: -5, couple: -2, small_group: 3, family: 4, large_group: 7,
+  }) + (preferences.social_energy === 'introvert' ? -3 : preferences.social_energy === 'extrovert' ? 3 : 0);
+
+  const comfort = stringToScore(preferences.budget_tier, {
+    budget: -4, moderate: 0, comfort: 3, luxury: 6, ultra_luxury: 9,
+  }) + stringToScore(preferences.accommodation_style, {
+    hostel: -3, hotel: 0, airbnb: 0, boutique: 2, resort: 4, luxury_cocoon: 5, villa: 4,
+  }) * 0.5;
+
+  const adventure = stringToScore(preferences.activity_level, {
+    low: -4, moderate: 0, high: 5, extreme: 8,
+  });
+  // Boost from interests
+  const interests = preferences.interests || [];
+  const adventureBoost = interests.includes('adventure') || interests.includes('outdoor') ? 3 : 0;
+
+  const authenticity = (interests.includes('culture') || interests.includes('history') ? 4 : 0) +
+    (interests.includes('food') || interests.includes('local_cuisine') ? 2 : 0) +
+    stringToScore(preferences.dining_style, { local: 3, street_food: 4, fine_dining: 1 }, 0);
+
+  const planning = stringToScore(preferences.planning_preference, {
+    meticulous: 7, detailed: 7, balanced: 0, flexible: -5, spontaneous: -7,
+  });
+
+  const budget = stringToScore(preferences.budget_tier, {
+    budget: -6, moderate: 0, comfort: 3, luxury: 7, ultra_luxury: 10,
+  });
+
+  const vibes = preferences.travel_vibes || [];
+  const transformation = (vibes.includes('spiritual') || vibes.includes('wellness') ? 4 : 0) +
+    (vibes.includes('transformative') || vibes.includes('growth') ? 3 : 0) +
+    (interests.includes('wellness') ? 2 : 0);
+
+  return {
+    pace: Math.max(-10, Math.min(10, pace)),
+    social: Math.max(-10, Math.min(10, social)),
+    comfort: Math.max(-10, Math.min(10, comfort)),
+    adventure: Math.max(-10, Math.min(10, adventure + adventureBoost)),
+    authenticity: Math.max(-10, Math.min(10, authenticity)),
+    planning: Math.max(-10, Math.min(10, planning)),
+    budget: Math.max(-10, Math.min(10, budget)),
+    transformation: Math.max(-10, Math.min(10, transformation)),
+  };
+}
 
 /**
  * Recalculates Travel DNA from current preferences
@@ -1102,10 +1162,37 @@ export async function recalculateDNAFromPreferences(
       dna = calculateTravelDNA(answers);
     }
     
-    // 4. Save the new DNA
+    // 4. CRITICAL: Check if V2 traits are all zero (archetype-matcher failed)
+    // If so, compute directly from preferences to avoid BSC fallback
+    if (dna.trait_scores) {
+      const allZero = Object.values(dna.trait_scores).every(v => v === 0);
+      if (allZero) {
+        console.warn('[DNA Recalc] All V2 traits are zero — archetype-matcher failed, using direct preference mapping');
+        const directTraits = computeV2TraitsFromPreferences(preferences);
+        console.log('[DNA Recalc] Direct V2 traits:', JSON.stringify(directTraits));
+        dna.trait_scores = directTraits;
+        
+        // Re-run edge function with corrected traits
+        try {
+          dna = await calculateTravelDNAAdvanced(answers, userId, existingOverrides);
+          // Check again
+          if (dna.trait_scores && Object.values(dna.trait_scores).every(v => v === 0)) {
+            dna.trait_scores = directTraits;
+          }
+        } catch {
+          // Keep direct traits, use local fallback for archetype
+          dna = calculateTravelDNA(answers);
+          dna.trait_scores = directTraits;
+        }
+      }
+    }
+    
+    console.log('[DNA Recalc] Final V2 traits:', JSON.stringify(dna.trait_scores));
+    
+    // 5. Save the new DNA
     const dnaSuccess = await saveTravelDNA(userId, null, dna);
     
-    // 5. Update profiles table with new travel_dna
+    // 6. Update profiles table with new travel_dna
     try {
       const travelDnaJson = {
         primary_archetype_name: dna.primary_archetype_name || null,
