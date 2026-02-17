@@ -384,11 +384,19 @@ function HotelRecommendationCard({
 }
 
 /**
- * Generate external booking URL for a hotel
+ * Generate external booking URL for a hotel.
+ * Uses ss= search param with explicit city/state to avoid Booking.com resolving to wrong city.
  */
 function generateBookingUrl(hotelName: string, destination: string): string {
-  const query = encodeURIComponent(`${hotelName} ${destination}`);
-  return `https://www.booking.com/search.html?ss=${query}`;
+  // Strip IATA codes and ensure we use the full city name
+  // "Austin, Texas" is better than "AUS" for Booking.com search
+  const cleanDest = destination
+    .replace(/\s*\([A-Z]{3}\)\s*/g, '') // remove "(AUS)" etc.
+    .trim();
+  
+  // Include both hotel name and full destination for accuracy
+  const query = encodeURIComponent(`${hotelName}, ${cleanDest}`);
+  return `https://www.booking.com/searchresults.html?ss=${query}&dest_type=city&nflt=`;
 }
 
 export default FindMyHotelsDrawer;
