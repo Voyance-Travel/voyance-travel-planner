@@ -307,18 +307,22 @@ function searchCacheKey(params: HotelSearchParams): string {
 export async function searchHotels(params: HotelSearchParams & { skipCache?: boolean }): Promise<HotelOption[]> {
   const key = searchCacheKey(params);
   
-  // If an identical request is already in-flight, return it
+  // If an identical request is already in-flight, return the existing promise
   const inflight = _inflightSearches.get(key);
   if (inflight && !params.skipCache) {
-    console.log('[HotelAPI] Dedup: returning in-flight request for', key);
+    console.log('[HotelAPI] ⏩ Dedup: returning in-flight request for', key);
     return inflight;
   }
 
+  console.log('[HotelAPI] 🆕 Starting new search for key:', key, '| inflight map size:', _inflightSearches.size);
   const promise = _searchHotelsImpl(params);
   _inflightSearches.set(key, promise);
   
   // Clear from map once resolved (success or error)
-  promise.finally(() => _inflightSearches.delete(key));
+  promise.finally(() => {
+    _inflightSearches.delete(key);
+    console.log('[HotelAPI] 🗑️ Cleared inflight key:', key);
+  });
   
   return promise;
 }
