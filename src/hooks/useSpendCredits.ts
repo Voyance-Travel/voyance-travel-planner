@@ -3,6 +3,7 @@
  * On insufficient credits, triggers the global OutOfCreditsModal popup.
  */
 
+import { useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -61,6 +62,7 @@ export function useSpendCredits() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { showOutOfCredits } = useOutOfCredits();
+  const pendingRef = useRef<string | null>(null);
 
   return useMutation({
     mutationFn: async (params: SpendCreditsParams): Promise<SpendCreditsResponse> => {
@@ -68,39 +70,52 @@ export function useSpendCredits() {
         throw new Error('Must be logged in to spend credits');
       }
 
-      const apiAction = ACTION_MAP[params.action] || params.action.toLowerCase();
-
-      const { data, error } = await supabase.functions.invoke('spend-credits', {
-        body: {
-          action: apiAction,
-          tripId: params.tripId,
-          activityId: params.activityId,
-          dayIndex: params.dayIndex,
-          creditsAmount: params.creditsAmount,
-          metadata: params.metadata,
-        },
-      });
-
-      if (error) {
-        throw new Error(error.message || 'Failed to spend credits');
+      // Deduplication guard: prevent concurrent identical mutations
+      const dedupeKey = `${params.action}-${params.tripId}-${params.creditsAmount}`;
+      if (pendingRef.current === dedupeKey) {
+        console.log('[SpendCredits] Skipping duplicate mutation:', dedupeKey);
+        throw new Error('Duplicate spend request blocked');
       }
+      pendingRef.current = dedupeKey;
 
-      if (data.error) {
-        if (data.error === 'Insufficient credits') {
-          // Trigger the global out-of-credits modal
-          showOutOfCredits({
-            action: params.action,
-            creditsNeeded: data.required ?? CREDIT_COSTS[params.action],
-            creditsAvailable: data.available ?? 0,
+      try {
+        const apiAction = ACTION_MAP[params.action] || params.action.toLowerCase();
+
+        const { data, error } = await supabase.functions.invoke('spend-credits', {
+          body: {
+            action: apiAction,
             tripId: params.tripId,
-          });
-          throw new Error(`Not enough credits. Need ${data.required}, have ${data.available}.`);
-        }
-        throw new Error(data.error);
-      }
+            activityId: params.activityId,
+            dayIndex: params.dayIndex,
+            creditsAmount: params.creditsAmount,
+            metadata: params.metadata,
+          },
+        });
 
-      return data;
+        if (error) {
+          throw new Error(error.message || 'Failed to spend credits');
+        }
+
+        if (data.error) {
+          if (data.error === 'Insufficient credits') {
+            // Trigger the global out-of-credits modal
+            showOutOfCredits({
+              action: params.action,
+              creditsNeeded: data.required ?? CREDIT_COSTS[params.action],
+              creditsAvailable: data.available ?? 0,
+              tripId: params.tripId,
+            });
+            throw new Error(`Not enough credits. Need ${data.required}, have ${data.available}.`);
+          }
+          throw new Error(data.error);
+        }
+
+        return data;
+      } finally {
+        pendingRef.current = null;
+      }
     },
+    retry: false, // CRITICAL: Disable React Query retries for credit mutations
     onSuccess: (_data, variables) => {
       if (user?.id) {
         queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
@@ -113,6 +128,8 @@ export function useSpendCredits() {
     onError: (error: Error) => {
       // Don't show toast for insufficient credits — the modal handles it
       if (error.message.startsWith('Not enough credits')) return;
+      // Don't show toast for duplicate blocks
+      if (error.message === 'Duplicate spend request blocked') return;
       
       toast({
         title: 'Action failed',

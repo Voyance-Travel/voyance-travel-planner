@@ -408,9 +408,43 @@ export function useCreateTrip() {
 
   return useMutation({
     mutationFn: createTrip,
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success('Trip created!');
       queryClient.invalidateQueries({ queryKey: ['trips'] });
+
+      // Check if this is the user's second trip and grant bonus
+      try {
+        const { supabase } = await import('@/integrations/supabase/client');
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { count } = await supabase
+            .from('trips')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id);
+
+          if (count && count >= 2) {
+            const { default: useBonusCreditsModule } = await import('@/hooks/useBonusCredits');
+            // Direct API call since we can't use hooks here
+            const { data: existing } = await supabase
+              .from('user_credit_bonuses')
+              .select('id')
+              .eq('user_id', user.id)
+              .eq('bonus_type', 'second_itinerary')
+              .maybeSingle();
+
+            if (!existing) {
+              await supabase.functions.invoke('grant-bonus-credits', {
+                body: { bonusType: 'second_itinerary' },
+              });
+              toast.success('+50 credits earned for your second trip! ✈️');
+              queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
+              queryClient.invalidateQueries({ queryKey: ['bonus-credits', user.id] });
+            }
+          }
+        }
+      } catch (e) {
+        console.log('[useCreateTrip] Second trip bonus check failed:', e);
+      }
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Failed to create trip');
