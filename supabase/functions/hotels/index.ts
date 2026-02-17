@@ -226,22 +226,104 @@ function clampPrice(pricePerNight: number, hotelName: string): number {
   return Math.round(pricePerNight);
 }
 
+// ============= STAR RATING FROM BRAND + GOOGLE DATA =============
+function deriveStarRating(
+  googleRating: number | undefined,
+  priceLevel: number | undefined,
+  hotelName: string,
+  currentRating: number
+): number {
+  const nameLower = hotelName.toLowerCase();
+
+  // Budget brands: 2 stars
+  if (/motel 6|super 8|red roof|econo|days inn/i.test(nameLower)) return 2;
+  // Economy brands: 3 stars
+  if (/hampton|holiday inn express|la quinta|best western|comfort inn|fairfield/i.test(nameLower)) return 3;
+  // Mid-tier brands: 3 stars
+  if (/courtyard|hilton garden|homewood|residence inn|springhill|hyatt place|aloft/i.test(nameLower)) return 3;
+  // Upper mid-tier: 4 stars
+  if (/marriott(?! vacation)|hilton(?! garden)|hyatt(?! place)|sheraton|westin|embassy|doubletree/i.test(nameLower)) return 4;
+  // Luxury brands: 5 stars
+  if (/ritz|four seasons|st\. regis|waldorf|mandarin|peninsula|w hotel|^w /i.test(nameLower)) return 5;
+  // Premium brands: 4 stars
+  if (/jw marriott|omni|fairmont|intercontinental|sofitel|kimpton/i.test(nameLower)) return 4;
+
+  // Fallback: use price_level (Google 0-4 → 1-5 stars)
+  if (priceLevel !== undefined && priceLevel >= 0) {
+    return Math.min(5, Math.max(1, priceLevel + 1));
+  }
+  // Last resort: floor Google review rating (4.6 → 4, not 5)
+  if (googleRating && googleRating > 0) {
+    return Math.min(5, Math.max(1, Math.floor(googleRating)));
+  }
+  return currentRating;
+}
+
 // ============= NEIGHBORHOOD EXTRACTION =============
-function extractNeighborhood(formattedAddress: string | undefined, destination: string): string | null {
-  if (!formattedAddress) return null;
-  const parts = formattedAddress.split(',').map(p => p.trim());
-  if (parts.length >= 3) {
-    const candidate = parts[1];
-    const cityLower = destination.toLowerCase();
-    if (
-      candidate.toLowerCase() !== cityLower &&
-      !candidate.match(/^[A-Z]{2}$/) &&
-      candidate.length > 1
-    ) {
-      return candidate;
+function extractNeighborhood(
+  googleData: any,
+  hotelName: string,
+  fallbackCity: string
+): string {
+  // 1. Try Google's address_components for sublocality/neighborhood
+  if (googleData?.addressComponents) {
+    for (const comp of googleData.addressComponents) {
+      if (comp.types?.includes('sublocality') ||
+          comp.types?.includes('neighborhood') ||
+          comp.types?.includes('sublocality_level_1')) {
+        return comp.longText || comp.shortText;
+      }
     }
   }
-  return null;
+
+  // 2. Match against known neighborhoods by street/address keywords
+  const address = (googleData?.formattedAddress || '').toLowerCase();
+  const name = hotelName.toLowerCase();
+
+  const neighborhoodMap: Record<string, string[]> = {
+    'Downtown': ['congress ave', 'colorado st', 'lavaca st', 'san jacinto', 'brazos st', '6th st', '6th street', 'e 6th', 'w 6th', 'cesar chavez', 'convention center', 'downtown'],
+    'South Congress (SoCo)': ['s congress', 'south congress'],
+    'East Austin': ['e cesar chavez', 'e 7th', 'e 11th', 'e 12th', 'holly'],
+    'Rainey Street': ['rainey'],
+    'The Domain': ['domain', 'rock rose'],
+    'Mueller': ['mueller', 'barbara jordan'],
+    'Hyde Park': ['hyde park', 'guadalupe', 'duval st'],
+    'Zilker': ['zilker', 'barton springs'],
+    '2nd Street District': ['2nd st', 'second street'],
+    'Warehouse District': ['warehouse', 'w 4th', 'w 5th'],
+    'Red River Cultural District': ['red river'],
+    'Midtown': ['midtown'],
+    'Uptown': ['uptown'],
+    'French Quarter': ['french quarter', 'bourbon st', 'royal st'],
+    'SoHo': ['soho'],
+    'Times Square': ['times square', 'broadway'],
+  };
+
+  for (const [neighborhood, keywords] of Object.entries(neighborhoodMap)) {
+    for (const keyword of keywords) {
+      if (address.includes(keyword) || name.includes(keyword)) {
+        return neighborhood;
+      }
+    }
+  }
+
+  // 3. Try extracting from formatted_address parts
+  if (googleData?.formattedAddress) {
+    const parts = googleData.formattedAddress.split(',').map((s: string) => s.trim());
+    if (parts.length >= 4) {
+      const possibleNeighborhood = parts[1];
+      const cityLower = fallbackCity.toLowerCase();
+      if (possibleNeighborhood &&
+          possibleNeighborhood.toLowerCase() !== cityLower &&
+          !possibleNeighborhood.match(/^[A-Z]{2}\s/) &&
+          !possibleNeighborhood.match(/^[A-Z]{2}$/) &&
+          possibleNeighborhood.length > 1) {
+        return possibleNeighborhood;
+      }
+    }
+  }
+
+  return fallbackCity;
 }
 
 // ============= DEBUG LOGGING =============
@@ -340,14 +422,25 @@ async function autoEnrichHotels(results: any[], destination: string): Promise<an
       const enrichResult = await enrichHotelByName(hotel.name, destination);
       if (enrichResult.success && enrichResult.enrichment) {
         const e = enrichResult.enrichment;
+        const derivedStars = deriveStarRating(
+          e.rating,
+          e.priceLevel,
+          hotel.name,
+          hotel.stars || 3
+        );
         return {
           ...hotel,
-          rating: e.rating ? Math.round(e.rating) : hotel.rating,
-          starRating: e.rating ? Math.round(e.rating) : hotel.starRating,
-          stars: e.rating ? Math.round(e.rating) : hotel.stars,
+          // Use brand-derived star rating, NOT raw Google review score
+          rating: derivedStars,
+          starRating: derivedStars,
+          stars: derivedStars,
+          // Store Google review data separately
           reviewScore: e.rating ? e.rating * 2 : hotel.reviewScore,
           reviewCount: e.reviewCount || hotel.reviewCount,
-          neighborhood: extractNeighborhood(e.address, destination) || hotel.neighborhood,
+          googleReviewScore: e.rating || null,
+          googleReviewCount: e.reviewCount || null,
+          // Neighborhood from structured Google data
+          neighborhood: extractNeighborhood(e, hotel.name, destination),
           address: e.address || hotel.address,
           imageUrl: e.photos?.[0] || hotel.imageUrl,
           photos: e.photos?.length ? e.photos : hotel.photos,
@@ -369,7 +462,6 @@ async function autoEnrichHotels(results: any[], destination: string): Promise<an
 
   const enrichedResults = await Promise.all(enrichPromises);
 
-  // Replace enriched hotels in results array
   for (let i = 0; i < enrichedResults.length; i++) {
     results[i] = enrichedResults[i];
   }
@@ -750,7 +842,7 @@ async function enrichHotelByName(
         headers: {
           'Content-Type': 'application/json',
           'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.priceLevel,places.location,places.websiteUri,places.googleMapsUri,places.photos',
+          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.priceLevel,places.location,places.websiteUri,places.googleMapsUri,places.photos',
         },
         body: JSON.stringify({
           textQuery,
@@ -798,6 +890,8 @@ async function enrichHotelByName(
         placeId: place.id,
         name: place.displayName?.text || hotelName,
         address: place.formattedAddress,
+        formattedAddress: place.formattedAddress,
+        addressComponents: place.addressComponents,
         rating: place.rating,
         reviewCount: place.userRatingCount,
         priceLevel: place.priceLevel ? mapPriceLevel(place.priceLevel) : undefined,
