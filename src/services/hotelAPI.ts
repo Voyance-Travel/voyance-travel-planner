@@ -291,10 +291,37 @@ function generateMockHotels(params: HotelSearchParams): HotelOption[] {
 // Hotel API Functions
 // ============================================================================
 
+// Module-level dedup: prevent identical concurrent hotel searches
+const _inflightSearches = new Map<string, Promise<HotelOption[]>>();
+
+function searchCacheKey(params: HotelSearchParams): string {
+  return `${params.destination}|${params.checkIn}|${params.checkOut}|${params.guests}`;
+}
+
 /**
- * Search for hotels - uses Cloud edge function, falls back to mock data
+ * Search for hotels - uses Cloud edge function, falls back to mock data.
+ * Deduplicates concurrent identical requests at the module level.
  */
-export async function searchHotels(params: HotelSearchParams): Promise<HotelOption[]> {
+export async function searchHotels(params: HotelSearchParams & { skipCache?: boolean }): Promise<HotelOption[]> {
+  const key = searchCacheKey(params);
+  
+  // If an identical request is already in-flight, return it
+  const inflight = _inflightSearches.get(key);
+  if (inflight && !params.skipCache) {
+    console.log('[HotelAPI] Dedup: returning in-flight request for', key);
+    return inflight;
+  }
+
+  const promise = _searchHotelsImpl(params);
+  _inflightSearches.set(key, promise);
+  
+  // Clear from map once resolved (success or error)
+  promise.finally(() => _inflightSearches.delete(key));
+  
+  return promise;
+}
+
+async function _searchHotelsImpl(params: HotelSearchParams & { skipCache?: boolean }): Promise<HotelOption[]> {
   try {
     console.log('[HotelAPI] Calling Cloud edge function');
     
@@ -306,6 +333,7 @@ export async function searchHotels(params: HotelSearchParams): Promise<HotelOpti
         checkOut: params.checkOut,
         guests: params.guests || 1,
         rooms: params.rooms || 1,
+        skipCache: params.skipCache || false,
       },
     });
     
