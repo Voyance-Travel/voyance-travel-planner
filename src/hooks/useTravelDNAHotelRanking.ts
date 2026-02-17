@@ -9,6 +9,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { logger } from '@/lib/logger';
 import type { HotelOption } from '@/services/hotelAPI';
 import {
   mapHotelToMetadata,
@@ -217,7 +218,7 @@ function calculateDNAMatchScore(
   // Apply quality filter bonus (good hotels get a slight boost)
   const qualityBonus = metadata.qualityScore >= 0.8 ? 5 : metadata.qualityScore >= 0.7 ? 2 : 0;
   
-  return Math.min(100, Math.round(rawScore + qualityBonus));
+  return Math.max(10, Math.min(100, Math.round(rawScore + qualityBonus)));
 }
 
 // ============================================================================
@@ -310,6 +311,18 @@ export function useTravelDNAHotelRanking(
       const dnaMatchScore = calculateDNAMatchScore(metadata, traitScores);
       const matchReasons = generateMatchReasons(metadata, traitScores, dnaMatchScore);
       
+      logger.debug(`[DNA Ranking] ${hotel.name}: score=${dnaMatchScore}`, {
+        comfort: metadata.comfortScore,
+        adventure: metadata.adventureScore,
+        culture: metadata.cultureScore,
+        social: metadata.socialScore,
+        price: metadata.priceScore,
+        pace: metadata.paceScore,
+        authenticity: metadata.authenticityScore,
+        simplicity: metadata.simplicityScore,
+        quality: metadata.qualityScore,
+      });
+
       return {
         ...hotel,
         dnaMatchScore,
