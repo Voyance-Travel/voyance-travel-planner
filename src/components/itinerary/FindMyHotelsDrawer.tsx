@@ -78,6 +78,7 @@ export function FindMyHotelsDrawer({
       const result = await spendCredits({
         action: 'HOTEL_SEARCH',
         tripId,
+        creditsAmount: creditCost,
         metadata: { destination },
       });
 
