@@ -84,7 +84,8 @@ export function TransitGapIndicator({ gapMinutes, transportation, hasTransitBadg
   const isComfortable = gapMinutes >= 15;
 
   const icon = transportation ? getTransportIcon(transportation.method) : <Clock className="h-2.5 w-2.5" />;
-  const label = transportation?.duration || `${Math.abs(gapMinutes)} min`;
+  // Use real transport duration when available, fall back to computed gap
+  const label = transportation?.duration || `~${Math.abs(gapMinutes)} min`;
 
   return (
     <div className="flex items-center gap-2 py-1 pl-4">

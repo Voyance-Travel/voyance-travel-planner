@@ -102,6 +102,7 @@ import { VoyanceInsight } from './VoyanceInsight';
 import { VoyancePickCallout } from './VoyancePickCallout';
 import { TransitBadge } from './TransitBadge';
 import { TransitGapIndicator, computeGapMinutes } from './TransitGapIndicator';
+import { DayRouteMap } from './DayRouteMap';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { useActionCap } from '@/hooks/useActionCap';
 import { AddActivityModal } from './AddActivityModal';
@@ -5536,6 +5537,12 @@ function DayCard({
             transition={{ duration: 0.3 }}
           >
             <div className="border-t border-border">
+              {/* Route Map — shown when Show Routes is active */}
+              <AnimatePresence>
+                {showTransportDetails && (
+                  <DayRouteMap activities={day.activities} />
+                )}
+              </AnimatePresence>
               <DraggableActivityList
                 items={day.activities}
                 onReorder={(reordered) => onActivityReorder?.(reordered)}
