@@ -82,10 +82,15 @@ function transformProfile(
   };
 }
 
+// Module-level singleton: survives component unmount/remount (StrictMode, HMR, etc.)
+let authInitializedOnce = false;
+let cachedSession: Session | null = null;
+let cachedUser: User | null = null;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(() => cachedUser);
+  const [session, setSession] = useState<Session | null>(() => cachedSession);
+  const [isLoading, setIsLoading] = useState(() => !authInitializedOnce);
 
   // Load user data directly from Supabase
   const loadUserData = async (supabaseUser: SupabaseUser) => {
@@ -208,19 +213,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initialLoadCompleteRef.current = false;
     isProcessingAuthRef.current = false;
     
+    // If auth already initialized in a previous mount, restore cached state and skip
+    if (authInitializedOnce) {
+      console.log('[Auth] AuthProvider re-mounted but auth already initialized — skipping');
+      initialLoadCompleteRef.current = true;
+      setIsLoading(false);
+      // Still set up the listener below, but don't run initializeAuth again
+    }
+
     // Safety timeout: never show loading spinner for more than 8 seconds
-    loadingTimeoutRef.current = setTimeout(() => {
-      // Guard: skip if auth already completed (ref is always current)
-      if (initialLoadCompleteRef.current) {
-        console.log('[Auth] Timeout fired but auth already complete — skipping');
-        return;
-      }
-      if (isMounted) {
-        console.warn('[Auth] Loading timeout - forcing isLoading to false');
-        setIsLoading(false);
-        // Do NOT call setUser or setSession here — only unblock the UI
-      }
-    }, 8000);
+    if (!authInitializedOnce) {
+      loadingTimeoutRef.current = setTimeout(() => {
+        if (initialLoadCompleteRef.current) {
+          console.log('[Auth] Timeout fired but auth already complete — skipping');
+          return;
+        }
+        if (isMounted) {
+          console.warn('[Auth] Loading timeout - forcing isLoading to false');
+          setIsLoading(false);
+        }
+      }, 8000);
+    }
     
     // LISTENER for ONGOING auth changes (does NOT control isLoading after initial)
     const {
@@ -357,6 +370,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           loadingTimeoutRef.current = null;
         }
         initialLoadCompleteRef.current = true;
+        authInitializedOnce = true;
+        // Cache for potential re-mounts
         if (isMounted) {
           setIsLoading(false);
           console.log('[Auth] isLoading set to false');
@@ -364,7 +379,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    initializeAuth();
+    // Only run initial auth check if not already done in a previous mount
+    if (!authInitializedOnce) {
+      initializeAuth();
+    }
 
     return () => {
       isMounted = false;
@@ -375,6 +393,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe();
     };
   }, []);
+
+  // Keep module-level cache in sync so re-mounts get current state
+  useEffect(() => {
+    cachedUser = user;
+    cachedSession = session;
+  }, [user, session]);
 
   const login = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -432,6 +456,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    // Reset module-level cache so next login starts fresh
+    authInitializedOnce = false;
+    cachedUser = null;
+    cachedSession = null;
     // Log logout before signing out (user is still authenticated)
     if (user) {
       logLogout().catch(console.error);
