@@ -12,6 +12,7 @@ import { ItineraryGenerator } from '@/components/itinerary/ItineraryGenerator';
 import { EditorialItinerary } from '@/components/itinerary/EditorialItinerary';
 import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
 import { ItineraryAssistant } from '@/components/itinerary/ItineraryAssistant';
+import TravelIntelCard from '@/components/itinerary/TravelIntelCard';
 import { useEntitlements, canViewPremiumContentForDay } from '@/hooks/useEntitlements';
 import { computeUnlockedDayCount } from '@/lib/voyanceFlowController';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
@@ -1057,7 +1058,13 @@ export default function TripDetail() {
               )[0] || null;
 
               return (
-                <EditorialItinerary
+                <>
+                  <TravelIntelCard
+                    city={trip.destination}
+                    country={trip.destination_country || ((destinationMeta as any)?.country as string | undefined)}
+                    className="mb-4"
+                  />
+                  <EditorialItinerary
                   tripId={trip.id}
                   destination={trip.destination}
                   destinationCountry={
@@ -1149,6 +1156,7 @@ export default function TripDetail() {
                     }
                   }}
                 />
+                </>
               );
             })()
           )}
