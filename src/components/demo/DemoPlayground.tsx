@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { getItineraryBySlug } from '@/data/sampleItineraries';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DndContext,
@@ -93,6 +94,7 @@ const formatTime12h = (time24: string): string => {
 };
 
 export function DemoPlayground() {
+  const navigate = useNavigate();
   const [selectedDest, setSelectedDest] = useState(DESTINATIONS[0]);
   const [itinerary, setItinerary] = useState<ReturnType<typeof getItineraryBySlug>>(null);
   const [dayActivities, setDayActivities] = useState<Record<number, typeof itinerary extends { days: infer D } ? D extends Array<{ activities: infer A }> ? A : never : never>>({});
@@ -159,13 +161,19 @@ export function DemoPlayground() {
     });
   };
 
+  const demoCta = {
+    label: 'Build My Trip',
+    onClick: () => navigate('/build'),
+  };
+
   const handleOptimize = () => {
     setIsOptimizing(true);
     setTimeout(() => {
       setIsOptimizing(false);
-      toast.success('Routes optimized!', {
-        description: 'Saved 47 minutes of travel time today.',
+      toast.success('Routes optimized! Save 47 mins daily on your own trip.', {
+        description: 'This is a demo itinerary. Create your own trip to use this feature!',
         icon: <Route className="h-4 w-4" />,
+        action: demoCta,
       });
     }, 1500);
   };
@@ -175,19 +183,20 @@ export function DemoPlayground() {
       const next = new Set(prev);
       if (next.has(activityId)) {
         next.delete(activityId);
-        toast('Unlocked', { description: `"${activityTitle}" can be swapped` });
+        toast('Unlocked', { description: `"${activityTitle}" can be swapped. Build your own trip to keep your favorites!`, action: demoCta });
       } else {
         next.add(activityId);
-        toast.success('Locked', { description: `"${activityTitle}" stays in your trip` });
+        toast.success('Locked!', { description: `"${activityTitle}" stays in your trip. Try it on your own itinerary!`, action: demoCta });
       }
       return next;
     });
   };
 
   const handleSwap = (activityTitle: string) => {
-    toast.info('Finding alternatives...', {
-      description: 'Similar activities • Different vibes • Budget options',
-      duration: 3000,
+    toast.info('This is a demo itinerary. Create your own trip to swap activities!', {
+      description: 'AI will find alternatives matching your Travel DNA.',
+      duration: 4000,
+      action: demoCta,
     });
   };
 
@@ -197,26 +206,24 @@ export function DemoPlayground() {
   };
 
   const handleBook = (activityTitle: string) => {
-    toast.success('Booking available!', {
-      description: `In the full app, you'd book "${activityTitle}" directly.`,
-      action: {
-        label: 'Learn More',
-        onClick: () => {},
-      },
+    toast.info('This is a demo itinerary. Create your own trip to book activities!', {
+      description: `In your trip, you'll book "${activityTitle}" directly through our partners.`,
+      action: demoCta,
     });
   };
 
   const handleDelete = (activityTitle: string) => {
-    toast.success('Activity removed!', {
-      description: `"${activityTitle}" has been removed from your itinerary.`,
+    toast.info('This is a demo itinerary. Create your own trip to customize activities!', {
       icon: <Trash2 className="h-4 w-4" />,
+      action: demoCta,
     });
   };
 
   const handleAddCustom = () => {
-    toast.success('Add your own activity!', {
-      description: 'Search any experience, restaurant, or attraction to add it to your trip.',
+    toast.info('This is a demo itinerary. Create your own trip to add custom activities!', {
+      description: 'Search any experience, restaurant, or attraction to add.',
       icon: <Plus className="h-4 w-4" />,
+      action: demoCta,
     });
   };
 
