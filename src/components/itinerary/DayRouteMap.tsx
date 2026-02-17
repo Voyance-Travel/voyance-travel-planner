@@ -25,6 +25,8 @@ interface DayRouteMapProps {
     location?: {
       name?: string;
       address?: string;
+      lat?: number;
+      lng?: number;
       coordinates?: { lat: number; lng: number };
     };
   }>;
@@ -42,9 +44,11 @@ export function DayRouteMap({ activities, className }: DayRouteMapProps) {
   const pins: ActivityPin[] = useMemo(() => {
     return activities
       .map((a, i) => {
-        const coords = a.location?.coordinates;
-        if (!coords?.lat || !coords?.lng) return null;
-        return { id: a.id, title: a.title, lat: coords.lat, lng: coords.lng, index: i };
+        // Support both location.lat/lng and location.coordinates.lat/lng
+        const lat = a.location?.lat ?? a.location?.coordinates?.lat;
+        const lng = a.location?.lng ?? a.location?.coordinates?.lng;
+        if (!lat || !lng) return null;
+        return { id: a.id, title: a.title, lat, lng, index: i };
       })
       .filter(Boolean) as ActivityPin[];
   }, [activities]);

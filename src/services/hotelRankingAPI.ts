@@ -181,10 +181,13 @@ function calculateMatchScore(
   preferences: HotelUserPreferences,
   allPrices: number[]
 ): { matchScore: number; priceScore: number; locationScore: number; amenityScore: number } {
-  const priceScore = scorePrice(hotel.price, allPrices, preferences);
-  const locationScore = scoreLocation(hotel, preferences.locationPriority);
-  const amenityScore = scoreAmenities(hotel.amenities, preferences.preferredAmenities);
-  const ratingScore = scoreRating(hotel.rating);
+  // Null-safe defaults: if data is missing, use middle score (50) instead of 0
+  const priceScore = hotel.price ? scorePrice(hotel.price, allPrices, preferences) : 50;
+  const locationScore = scoreLocation(hotel, preferences.locationPriority) || 50;
+  const amenityScore = hotel.amenities?.length
+    ? scoreAmenities(hotel.amenities, preferences.preferredAmenities)
+    : 50;
+  const ratingScore = hotel.rating ? scoreRating(hotel.rating) : 50;
 
   // Weighted combination
   const weights = {
@@ -201,7 +204,7 @@ function calculateMatchScore(
     ratingScore * weights.rating
   );
 
-  return { matchScore: Math.min(100, matchScore), priceScore, locationScore, amenityScore };
+  return { matchScore: Math.max(1, Math.min(100, matchScore)), priceScore, locationScore, amenityScore };
 }
 
 function generateRationale(
