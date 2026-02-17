@@ -1402,6 +1402,119 @@ function calculateTraitScoresV2(answers: QuizAnswers): TraitCalculationResult {
 }
 
 // ============================================================================
+// PREFERENCE-BASED V2 TRAIT COMPUTATION (fallback when legacy parser fails)
+// Maps preference-format answers directly to V2 traits (-10 to +10 scale)
+// ============================================================================
+
+function computeV2TraitsFromPreferences(answers: QuizAnswers): Record<string, number> {
+  const traits: Record<string, number> = {
+    planning: 0, social: 0, comfort: 0, pace: 0,
+    authenticity: 0, adventure: 0, budget: 0, transformation: 0,
+  };
+
+  // Budget preference → budget trait (CANONICAL: positive = frugal)
+  const budgetMap: Record<string, number> = {
+    budget: 7, value: 5, moderate: 2, flexible: 0, premium: -4, luxury: -7,
+  };
+  if (answers.budget && budgetMap[answers.budget] !== undefined) {
+    traits.budget = budgetMap[answers.budget];
+  }
+
+  // Pace preference
+  const paceMap: Record<string, number> = {
+    slow: -6, relaxed: -3, moderate: 0, balanced: 0, active: 4, packed: 7, intense: 7,
+  };
+  if (answers.pace && paceMap[answers.pace] !== undefined) {
+    traits.pace = paceMap[answers.pace];
+  }
+
+  // Planning style
+  const planningMap: Record<string, number> = {
+    spontaneous: -6, flexible: -3, balanced: 0, moderate: 0, structured: 4, detailed: 7,
+  };
+  if (answers.planning_style && planningMap[answers.planning_style] !== undefined) {
+    traits.planning = planningMap[answers.planning_style];
+  }
+
+  // Accommodation → comfort trait
+  const accomMap: Record<string, number> = {
+    hostel: -5, budget: -3, mid_range: 0, moderate: 0, boutique: 3, luxury: 6, resort: 7,
+  };
+  if (answers.accommodation && accomMap[answers.accommodation] !== undefined) {
+    traits.comfort = accomMap[answers.accommodation];
+  }
+
+  // Travel companions → social trait
+  if (answers.travel_companions?.length) {
+    const companions = answers.travel_companions;
+    if (companions.includes('solo')) traits.social -= 4;
+    if (companions.includes('partner')) traits.social -= 1;
+    if (companions.includes('friends') || companions.includes('group')) traits.social += 4;
+    if (companions.includes('family')) traits.social += 2;
+    traits.social = Math.max(-10, Math.min(10, traits.social));
+  }
+
+  // Interests → adventure + authenticity + transformation
+  if (answers.interests?.length) {
+    const interests = answers.interests;
+    if (interests.includes('adventure') || interests.includes('outdoor')) traits.adventure += 4;
+    if (interests.includes('culture') || interests.includes('history')) {
+      traits.authenticity += 4;
+      traits.transformation += 2;
+    }
+    if (interests.includes('food') || interests.includes('culinary')) traits.authenticity += 2;
+    if (interests.includes('relaxation') || interests.includes('wellness')) {
+      traits.pace -= 3;
+      traits.transformation += 2;
+    }
+    if (interests.includes('nightlife') || interests.includes('entertainment')) {
+      traits.social += 2;
+      traits.pace += 2;
+    }
+    // Clamp all
+    for (const t of Object.keys(traits)) {
+      traits[t] = Math.max(-10, Math.min(10, traits[t]));
+    }
+  }
+
+  // Traveler type → broad trait adjustments
+  const travelerTypeMap: Record<string, Partial<Record<string, number>>> = {
+    explorer: { adventure: 4, authenticity: 3 },
+    relaxer: { pace: -5, comfort: 3 },
+    adventurer: { adventure: 6, pace: 3 },
+    culture_buff: { authenticity: 5, transformation: 3 },
+    foodie: { authenticity: 3 },
+    luxury: { comfort: 6, budget: -5 },
+    backpacker: { budget: 6, adventure: 3, comfort: -3 },
+    planner: { planning: 5 },
+    spontaneous: { planning: -5 },
+  };
+  if (answers.traveler_type && travelerTypeMap[answers.traveler_type]) {
+    for (const [t, v] of Object.entries(travelerTypeMap[answers.traveler_type]!)) {
+      traits[t] = Math.max(-10, Math.min(10, (traits[t] || 0) + (v || 0)));
+    }
+  }
+
+  // Travel vibes → additional signal
+  if (answers.travel_vibes?.length) {
+    for (const vibe of answers.travel_vibes) {
+      const vibeLower = vibe.toLowerCase();
+      if (vibeLower.includes('adventure')) traits.adventure += 2;
+      if (vibeLower.includes('relax') || vibeLower.includes('peace')) traits.pace -= 2;
+      if (vibeLower.includes('culture') || vibeLower.includes('local')) traits.authenticity += 2;
+      if (vibeLower.includes('luxury') || vibeLower.includes('comfort')) traits.comfort += 2;
+      if (vibeLower.includes('transform') || vibeLower.includes('grow')) traits.transformation += 2;
+    }
+    for (const t of Object.keys(traits)) {
+      traits[t] = Math.max(-10, Math.min(10, traits[t]));
+    }
+  }
+
+  console.log('[TravelDNA V2] computeV2TraitsFromPreferences result:', traits);
+  return traits;
+}
+
+// ============================================================================
 // V2 ARCHETYPE MATCHING - With blends and improved confidence
 // ============================================================================
 
@@ -2039,6 +2152,35 @@ serve(async (req) => {
       signalStrength = result.signalStrength;
       fillRates = result.fillRates;
       contributions = result.contributions;
+      
+      // ═══════════════════════════════════════
+      // FALLBACK: If legacy parsing produced all-zero/near-zero traits,
+      // compute traits directly from preference-format answer values.
+      // This prevents every user from getting "Balanced Story Collector".
+      // ═══════════════════════════════════════
+      const allNearZero = ALL_TRAITS.every(t => Math.abs(finalScores[t]) < 1.5);
+      if (allNearZero) {
+        console.log('[TravelDNA V2] ⚠️ Legacy parser produced near-zero traits — using preference-based fallback');
+        const prefTraits = computeV2TraitsFromPreferences(answers);
+        if (Object.values(prefTraits).some(v => Math.abs(v) >= 2)) {
+          rawScores = { ...prefTraits } as TraitScores;
+          finalScores = {
+            planning: applySaturation(prefTraits.planning ?? 0),
+            social: applySaturation(prefTraits.social ?? 0),
+            comfort: applySaturation(prefTraits.comfort ?? 0),
+            pace: applySaturation(prefTraits.pace ?? 0),
+            authenticity: applySaturation(prefTraits.authenticity ?? 0),
+            adventure: applySaturation(prefTraits.adventure ?? 0),
+            budget: applySaturation(prefTraits.budget ?? 0),
+            transformation: applySaturation(prefTraits.transformation ?? 0),
+          };
+          for (const trait of ALL_TRAITS) {
+            fillRates[trait] = Math.abs(finalScores[trait]) > 0 ? 75 : 0;
+            signalStrength[trait] = Math.abs(finalScores[trait]);
+          }
+          console.log('[TravelDNA V2] ✅ Preference-based traits:', finalScores);
+        }
+      }
     }
     
     console.log('[TravelDNA V2] Raw scores:', rawScores);

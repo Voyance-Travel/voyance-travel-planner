@@ -97,47 +97,24 @@ async function cacheResults(params: HotelSearchParams, results: any[]): Promise<
   }
 }
 
-// ============= TOKEN MANAGEMENT =============
-let cachedToken: { token: string; expiresAt: number } | null = null;
-
-async function getAmadeusToken(): Promise<string> {
-  if (cachedToken && Date.now() < cachedToken.expiresAt - 60000) {
-    console.log('[Hotels] Using cached token');
-    return cachedToken.token;
-  }
-
-  const apiKey = Deno.env.get('AMADEUS_API_KEY') || Deno.env.get('AMADEUS_CLIENT_ID') || '';
-  const apiSecret = Deno.env.get('AMADEUS_API_SECRET') || Deno.env.get('AMADEUS_CLIENT_SECRET') || '';
-
-  if (!apiKey || !apiSecret) {
-    console.error('[Hotels] Missing credentials');
-    throw new Error('Amadeus credentials not configured');
-  }
-
-  const isProduction = Deno.env.get('AMADEUS_MODE') === 'production';
-  const baseUrl = isProduction ? 'https://api.amadeus.com' : 'https://test.api.amadeus.com';
-  console.log(`[Hotels] Fetching new Amadeus access token (${isProduction ? 'PRODUCTION' : 'TEST'} MODE)`);
-  
-  const response = await fetch(`${baseUrl}/v1/security/oauth2/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `grant_type=client_credentials&client_id=${apiKey}&client_secret=${apiSecret}`,
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    console.error('[Hotels] Token error:', error);
-    throw new Error(`Auth failed: ${response.status}`);
-  }
-
-  const data = await response.json();
-  cachedToken = {
-    token: data.access_token,
-    expiresAt: Date.now() + (data.expires_in * 1000),
+// ============= PRICE ESTIMATION FROM GOOGLE PRICE LEVEL =============
+function estimateNightlyPrice(priceLevel: number | undefined, starRating: number): number {
+  // Google price_level: 0=Free, 1=Inexpensive, 2=Moderate, 3=Expensive, 4=Very Expensive
+  const basePrices: Record<number, number> = {
+    0: 80,
+    1: 120,
+    2: 200,
+    3: 350,
+    4: 550,
   };
+  let price = basePrices[priceLevel ?? 2] || 200;
 
-  console.log('[Hotels] Token obtained');
-  return cachedToken.token;
+  // Adjust by star rating
+  if (starRating >= 5) price *= 1.4;
+  else if (starRating >= 4) price *= 1.15;
+  else if (starRating <= 2) price *= 0.7;
+
+  return clampPrice(Math.round(price), `star-${starRating}`);
 }
 
 // ============= AIRPORT TO CITY CODE CONVERSION =============
@@ -329,85 +306,7 @@ function extractNeighborhood(
 // ============= DEBUG LOGGING =============
 let _firstHotelLogged = false;
 
-// ============= FIELD NORMALIZATION =============
-function normalizeHotelData(hotel: any, offer: any, params: HotelSearchParams): any {
-  const checkIn = new Date(params.checkIn);
-  const checkOut = new Date(params.checkOut);
-  const nights = Math.max(1, Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)));
-  
-  const totalPrice = parseFloat(offer?.price?.total || '0');
-  const rawPricePerNight = totalPrice > 0 ? totalPrice / nights : 150;
-  const pricePerNight = clampPrice(rawPricePerNight, hotel?.hotel?.name || hotel?.name || 'Unknown');
-  
-  const hotelData = hotel.hotel || hotel;
-  
-  const photos: string[] = [];
-  if (hotelData.media?.length) {
-    photos.push(...hotelData.media.map((m: any) => m.uri).filter(Boolean));
-  }
-
-  // Debug: log first hotel's raw data
-  if (!_firstHotelLogged) {
-    _firstHotelLogged = true;
-    console.log('[Hotels] 📋 Sample raw hotel:', JSON.stringify({
-      hotelId: hotelData.hotelId || hotelData.id,
-      name: hotelData.name,
-      rating: hotelData.rating,
-      chainCode: hotelData.chainCode,
-      address: hotelData.address,
-      mediaCount: hotelData.media?.length || 0,
-      amenitiesCount: Array.isArray(hotelData.amenities) ? hotelData.amenities.length : 0,
-    }));
-    console.log('[Hotels] 📋 Sample offer:', JSON.stringify({
-      priceTotal: offer?.price?.total,
-      currency: offer?.price?.currency,
-      roomCategory: offer?.room?.typeEstimated?.category,
-      beds: offer?.room?.typeEstimated?.beds,
-    }));
-  }
-  
-  return {
-    id: hotelData.hotelId || hotelData.id || `hotel-${Date.now()}`,
-    hotelId: hotelData.hotelId || hotelData.id,
-    name: hotelData.name || 'Hotel',
-    address: hotelData.address?.lines?.join(', ') || hotelData.address?.line1 || '',
-    city: hotelData.address?.cityName || params.destination,
-    location: hotelData.address?.cityName || params.destination,
-    neighborhood: hotelData.address?.cityName || 'City Center',
-    rating: normalizeRating(hotelData.rating),
-    starRating: normalizeRating(hotelData.rating),
-    stars: normalizeRating(hotelData.rating),
-    pricePerNight,
-    totalPrice: totalPrice > 0 ? Math.min(totalPrice, pricePerNight * nights) : pricePerNight * nights,
-    price: totalPrice > 0 ? Math.min(totalPrice, pricePerNight * nights) : pricePerNight * nights,
-    currency: offer?.price?.currency || 'USD',
-    roomType: offer?.room?.typeEstimated?.category || 'Standard Room',
-    bedType: offer?.room?.typeEstimated?.beds || 1,
-    description: offer?.room?.description?.text || `Comfortable room in ${hotelData.name || 'the hotel'}`,
-    imageUrl: photos[0] || null,
-    photos: photos,
-    images: photos,
-    amenities: Array.isArray(hotelData.amenities) ? hotelData.amenities : [],
-    cancellationPolicy: offer?.policies?.cancellation?.description?.text || 'See hotel policy for details',
-    checkIn: params.checkIn,
-    checkOut: params.checkOut,
-    nights,
-    latitude: hotelData.geoCode?.latitude || hotelData.latitude,
-    longitude: hotelData.geoCode?.longitude || hotelData.longitude,
-    reviewScore: hotelData.rating ? hotelData.rating * 2 : 8.0,
-    reviewCount: 0,
-    website: null,
-    googleMapsUrl: null,
-    placeId: null,
-    source: 'amadeus',
-  };
-}
-
-function normalizeRating(rating: any): number {
-  if (!rating) return 3;
-  const num = typeof rating === 'string' ? parseInt(rating, 10) : rating;
-  return Math.min(5, Math.max(1, num || 3));
-}
+// ============= FIELD NORMALIZATION (removed Amadeus-specific normalizeHotelData) =============
 
 // ============= AUTO-ENRICHMENT WITH GOOGLE PLACES =============
 async function autoEnrichHotels(results: any[], destination: string): Promise<any[]> {
@@ -505,168 +404,134 @@ async function searchHotels(params: HotelSearchParams & { skipCache?: boolean })
     console.log('[Hotels] ⏭️ Skipping cache (skipCache=true)');
   }
   
-  // STEP 2: Call Amadeus API
+  // STEP 2: Search via Google Places Text Search (replaces Amadeus)
   try {
-    const token = await getAmadeusToken();
-    
-    const cityCode = smartConvertToHotelCityCode(params.cityCode || params.destination);
-    console.log('[Hotels] Searching city code:', cityCode, 'from input:', params.destination);
-
-    const isProduction = Deno.env.get('AMADEUS_MODE') === 'production';
-    const baseUrl = isProduction ? 'https://api.amadeus.com' : 'https://test.api.amadeus.com';
-    const hotelsUrl = `${baseUrl}/v1/reference-data/locations/hotels/by-city?cityCode=${cityCode}&radius=50&radiusUnit=KM&hotelSource=ALL`;
-    console.log('[Hotels] Step 1 - Fetching hotel list');
-    
-    const hotelsResponse = await fetch(hotelsUrl, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    if (!hotelsResponse.ok) {
-      const errorText = await hotelsResponse.text();
-      console.error('[Hotels] City search failed:', hotelsResponse.status, errorText);
-      return generateFallbackHotels(params, cityCode);
+    const GOOGLE_MAPS_API_KEY = Deno.env.get('GOOGLE_MAPS_API_KEY');
+    if (!GOOGLE_MAPS_API_KEY) {
+      console.error('[Hotels] Google Maps API key not configured');
+      return generateFallbackHotels(params, params.destination);
     }
 
-    const hotelsData = await hotelsResponse.json();
-    const maxBatches = isProduction ? 5 : 1;
-    const batchSize = 50;
-    const maxHotels = isProduction ? maxBatches * batchSize : 15;
-    const allHotelIds = (hotelsData.data || []).slice(0, maxHotels).map((h: any) => h.hotelId);
+    const cityName = (params.destination || '').replace(/\s*\([A-Z]{3}\)\s*/g, '').trim();
+    console.log('[Hotels] 🔍 Searching Google Places for hotels in:', cityName);
 
-    if (allHotelIds.length === 0) {
-      console.log('[Hotels] No hotels found for city:', cityCode);
-      return generateFallbackHotels(params, cityCode);
-    }
-
-    const hotelIdBatches: string[][] = [];
-    for (let i = 0; i < allHotelIds.length; i += batchSize) {
-      hotelIdBatches.push(allHotelIds.slice(i, i + batchSize));
-    }
-
-    console.log('[Hotels] Step 2 - Getting offers for', allHotelIds.length, 'hotels in', hotelIdBatches.length, 'batches');
-
-    const batchPromises = hotelIdBatches.map(async (hotelIds, batchIndex) => {
-      const offersParams = new URLSearchParams({
-        hotelIds: hotelIds.join(','),
-        checkInDate: params.checkIn,
-        checkOutDate: params.checkOut,
-        adults: String(params.guests || 1),
-        roomQuantity: String(params.rooms || 1),
-        currency: 'USD',
-      });
-
-      try {
-        const offersResponse = await fetch(
-          `${baseUrl}/v3/shopping/hotel-offers?${offersParams}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-
-        if (!offersResponse.ok) {
-          console.error(`[Hotels] Batch ${batchIndex + 1} failed:`, offersResponse.status);
-          return [];
-        }
-
-        const offersData = await offersResponse.json();
-        console.log(`[Hotels] Batch ${batchIndex + 1}: ${offersData.data?.length || 0} offers`);
-        return offersData.data || [];
-      } catch (err) {
-        console.error(`[Hotels] Batch ${batchIndex + 1} error:`, err);
-        return [];
+    // Step 2a: Text Search for hotels in the city
+    const response = await fetch(
+      'https://places.googleapis.com/v1/places:searchText',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
+          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.priceLevel,places.location,places.websiteUri,places.googleMapsUri,places.photos,places.types',
+        },
+        body: JSON.stringify({
+          textQuery: `hotels in ${cityName}`,
+          includedType: 'lodging',
+          maxResultCount: 10,
+          languageCode: 'en',
+        }),
       }
-    });
-
-    const batchResults = await Promise.all(batchPromises);
-    const allOffers = batchResults.flat();
-    console.log('[Hotels] Total offers from all batches:', allOffers.length);
-
-    // Sandbox fix for empty results — relaxed retry
-    if (!allOffers.length) {
-      const originalNights = Math.max(
-        1,
-        Math.ceil(
-          (new Date(params.checkOut).getTime() - new Date(params.checkIn).getTime()) /
-            (1000 * 60 * 60 * 24)
-        )
-      );
-      const originalAdults = params.guests || 1;
-
-      console.log('[Hotels] ⚠️ Empty results - retrying with relaxed params');
-
-      const toISODate = (d: Date) => d.toISOString().split('T')[0];
-      const relaxedCheckOut = (() => {
-        const d = new Date(params.checkIn);
-        d.setDate(d.getDate() + 1);
-        return toISODate(d);
-      })();
-
-      const relaxedOffersParams = new URLSearchParams({
-        hotelIds: allHotelIds.slice(0, 10).join(','),
-        checkInDate: params.checkIn,
-        checkOutDate: relaxedCheckOut,
-        adults: '1',
-        roomQuantity: '1',
-        currency: 'USD',
-      });
-
-      const relaxedResp = await fetch(
-        `${baseUrl}/v3/shopping/hotel-offers?${relaxedOffersParams}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      if (relaxedResp.ok) {
-        const relaxedData = await relaxedResp.json();
-        const relaxedCount = relaxedData.data?.length || 0;
-        console.log('[Hotels] ✅ Relaxed retry returned', relaxedCount, 'offers');
-
-        if (relaxedCount > 0) {
-          const guestsMultiplier = Math.sqrt(originalAdults);
-
-          const relaxedParams: HotelSearchParams = {
-            ...params,
-            guests: 1,
-            checkOut: relaxedCheckOut,
-          };
-
-          let results = (relaxedData.data || []).map((hotelOffer: any) => {
-            const normalized = normalizeHotelData(hotelOffer, hotelOffer.offers?.[0], relaxedParams);
-            const basePrice = Number(normalized.pricePerNight) || 150;
-            const scaledPricePerNight = clampPrice(Math.round(basePrice * guestsMultiplier), normalized.name);
-            const scaledTotalPrice = Math.round(scaledPricePerNight * originalNights);
-
-            return {
-              ...normalized,
-              checkIn: params.checkIn,
-              checkOut: params.checkOut,
-              nights: originalNights,
-              pricePerNight: scaledPricePerNight,
-              totalPrice: scaledTotalPrice,
-              price: scaledTotalPrice,
-              source: 'amadeus',
-              _priceScaled: true,
-            };
-          });
-
-          // Auto-enrich with Google Places
-          results = await autoEnrichHotels(results, params.destination);
-          
-          logResultsSummary(results);
-          await cacheResults(params, results);
-          return results;
-        }
-      }
-
-      console.log('[Hotels] Falling back to Step 1 hotel list');
-      return hotelsData.data.slice(0, 10).map((hotel: any) => normalizeHotelData(hotel, null, params));
-    }
-
-    // Transform with full normalization
-    let results = allOffers.map((hotelOffer: any) => 
-      normalizeHotelData(hotelOffer, hotelOffer.offers?.[0], params)
     );
 
-    // Auto-enrich with Google Places
-    results = await autoEnrichHotels(results, params.destination);
-    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[Hotels] Google Places search failed:', response.status, errorText);
+      return generateFallbackHotels(params, params.destination);
+    }
+
+    const data = await response.json();
+    const places = data.places || [];
+    console.log('[Hotels] Found', places.length, 'hotels via Google Places');
+
+    if (places.length === 0) {
+      return generateFallbackHotels(params, params.destination);
+    }
+
+    const checkIn = new Date(params.checkIn);
+    const checkOut = new Date(params.checkOut);
+    const nights = Math.max(1, Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)));
+
+    // Step 2b: Build hotel objects from Google Places data + fetch photos
+    const results = await Promise.all(
+      places.slice(0, 8).map(async (place: any, index: number) => {
+        const hotelName = place.displayName?.text || 'Unknown Hotel';
+        const priceLevel = place.priceLevel ? mapPriceLevel(place.priceLevel) : undefined;
+        const starRating = deriveStarRating(place.rating, priceLevel, hotelName, 3);
+        const pricePerNight = estimateNightlyPrice(priceLevel, starRating);
+        const neighborhood = extractNeighborhood(
+          { formattedAddress: place.formattedAddress, addressComponents: place.addressComponents },
+          hotelName,
+          cityName
+        );
+
+        // Download photos to storage
+        const photos: string[] = [];
+        if (place.photos?.length > 0) {
+          for (let i = 0; i < Math.min(place.photos.length, 3); i++) {
+            try {
+              const photo = place.photos[i];
+              const googlePhotoUrl = `https://places.googleapis.com/v1/${photo.name}/media?maxHeightPx=800&maxWidthPx=1200&key=${GOOGLE_MAPS_API_KEY}`;
+              const cacheResult = await getCachedPhotoUrl(
+                'hotel',
+                `${place.id}-${i}`,
+                googlePhotoUrl,
+                { destination: cityName, placeName: hotelName, placeId: place.id }
+              );
+              photos.push(cacheResult.url);
+            } catch (e) {
+              console.warn(`[Hotels] Photo fetch failed for ${hotelName}:`, e);
+            }
+          }
+        }
+
+        // Build Booking.com affiliate URL
+        const cleanDest = cityName.replace(/\s*\([A-Z]{3}\)\s*/g, '').trim();
+        const bookingQuery = encodeURIComponent(`${hotelName}, ${cleanDest}`);
+        const bookingUrl = `https://www.booking.com/searchresults.html?ss=${bookingQuery}&checkin=${params.checkIn}&checkout=${params.checkOut}&group_adults=${params.guests || 1}&no_rooms=${params.rooms || 1}&dest_type=city`;
+
+        return {
+          id: place.id || `gp-hotel-${index}`,
+          hotelId: place.id,
+          name: hotelName,
+          address: place.formattedAddress || '',
+          city: cityName,
+          location: cityName,
+          neighborhood,
+          rating: starRating,
+          starRating,
+          stars: starRating,
+          pricePerNight,
+          totalPrice: pricePerNight * nights,
+          price: pricePerNight * nights,
+          currency: 'USD',
+          roomType: 'Standard Room',
+          bedType: 1,
+          description: `Comfortable stay at ${hotelName} in ${neighborhood}, ${cityName}`,
+          imageUrl: photos[0] || null,
+          photos,
+          images: photos,
+          amenities: ['WiFi', 'Air Conditioning'],
+          cancellationPolicy: 'See hotel policy for details',
+          checkIn: params.checkIn,
+          checkOut: params.checkOut,
+          nights,
+          latitude: place.location?.latitude || null,
+          longitude: place.location?.longitude || null,
+          reviewScore: place.rating ? place.rating * 2 : 8.0,
+          reviewCount: place.userRatingCount || 0,
+          googleReviewScore: place.rating || null,
+          googleReviewCount: place.userRatingCount || null,
+          website: place.websiteUri || null,
+          googleMapsUrl: place.googleMapsUri || null,
+          placeId: place.id,
+          bookingUrl,
+          source: 'google_places',
+          _enriched: true,
+        };
+      })
+    );
+
     logResultsSummary(results);
 
     // STEP 3: Cache results
@@ -1198,7 +1063,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const costTracker = trackCost('hotels_search', 'amadeus');
+  const costTracker = trackCost('hotels_search', 'google_places');
 
   try {
     const body = await req.json();
@@ -1262,15 +1127,11 @@ serve(async (req) => {
       });
     }
 
-    // Default: search — track Amadeus + Google Places API calls
+    // Default: search — track Google Places API calls
     const hotels = await searchHotels(body);
-    const batchCount = Math.min(6, Math.ceil(hotels.length / 50));
-    costTracker.recordAmadeus(batchCount);
-    // Track Google Places enrichment calls
     const enrichedCount = hotels.filter((h: any) => h._enriched).length;
-    if (enrichedCount > 0) {
-      costTracker.recordGooglePlaces(enrichedCount);
-    }
+    // Each hotel = 1 text search result + potential photo fetches
+    costTracker.recordGooglePlaces(1 + enrichedCount);
     await costTracker.save();
     
     return new Response(JSON.stringify({
