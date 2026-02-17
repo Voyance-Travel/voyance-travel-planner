@@ -252,7 +252,8 @@ export function useDNAHotelRecommendations({
       tripType,
     ),
     enabled: !!destination && enabled && !isDNALoading,
-    staleTime: 30 * 60 * 1000, // 30 minutes
+    staleTime: 30 * 60 * 1000,
+    gcTime: 35 * 60 * 1000,
   });
 
   // Step 3: Search for real hotels
@@ -270,6 +271,7 @@ export function useDNAHotelRecommendations({
     }),
     enabled: !!destination && !!profile && enabled,
     staleTime: 10 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
   });
 
   // Step 4: Score and rank
