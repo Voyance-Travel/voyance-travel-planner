@@ -82,15 +82,31 @@ function transformProfile(
   };
 }
 
-// Module-level singleton: survives component unmount/remount (StrictMode, HMR, etc.)
-let authInitializedOnce = false;
-let cachedSession: Session | null = null;
-let cachedUser: User | null = null;
+// Singleton guard on globalThis — survives Vite HMR module re-evaluation
+const AUTH_GLOBAL_KEY = '__voyance_auth_singleton';
+interface AuthSingleton {
+  initialized: boolean;
+  cachedSession: Session | null;
+  cachedUser: User | null;
+  mountCount: number;
+}
+function getAuthSingleton(): AuthSingleton {
+  if (!(globalThis as any)[AUTH_GLOBAL_KEY]) {
+    (globalThis as any)[AUTH_GLOBAL_KEY] = {
+      initialized: false,
+      cachedSession: null,
+      cachedUser: null,
+      mountCount: 0,
+    };
+  }
+  return (globalThis as any)[AUTH_GLOBAL_KEY];
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => cachedUser);
-  const [session, setSession] = useState<Session | null>(() => cachedSession);
-  const [isLoading, setIsLoading] = useState(() => !authInitializedOnce);
+  const singleton = getAuthSingleton();
+  const [user, setUser] = useState<User | null>(() => singleton.cachedUser);
+  const [session, setSession] = useState<Session | null>(() => singleton.cachedSession);
+  const [isLoading, setIsLoading] = useState(() => !singleton.initialized);
 
   // Load user data directly from Supabase
   const loadUserData = async (supabaseUser: SupabaseUser) => {
@@ -209,20 +225,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let isMounted = true;
-    // Reset on mount (handles StrictMode double-mount)
-    initialLoadCompleteRef.current = false;
+    const sg = getAuthSingleton();
+    sg.mountCount += 1;
+    console.log('[Auth] AuthProvider MOUNTED, count:', sg.mountCount);
+    
     isProcessingAuthRef.current = false;
     
     // If auth already initialized in a previous mount, restore cached state and skip
-    if (authInitializedOnce) {
+    if (sg.initialized) {
       console.log('[Auth] AuthProvider re-mounted but auth already initialized — skipping');
       initialLoadCompleteRef.current = true;
       setIsLoading(false);
       // Still set up the listener below, but don't run initializeAuth again
+    } else {
+      initialLoadCompleteRef.current = false;
     }
 
     // Safety timeout: never show loading spinner for more than 8 seconds
-    if (!authInitializedOnce) {
+    if (!sg.initialized) {
       loadingTimeoutRef.current = setTimeout(() => {
         if (initialLoadCompleteRef.current) {
           console.log('[Auth] Timeout fired but auth already complete — skipping');
@@ -370,7 +390,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           loadingTimeoutRef.current = null;
         }
         initialLoadCompleteRef.current = true;
-        authInitializedOnce = true;
+        getAuthSingleton().initialized = true;
         // Cache for potential re-mounts
         if (isMounted) {
           setIsLoading(false);
@@ -380,11 +400,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     // Only run initial auth check if not already done in a previous mount
-    if (!authInitializedOnce) {
+    if (!getAuthSingleton().initialized) {
       initializeAuth();
     }
 
     return () => {
+      console.log('[Auth] AuthProvider UNMOUNTED');
       isMounted = false;
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
@@ -394,10 +415,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Keep module-level cache in sync so re-mounts get current state
+  // Keep singleton cache in sync so re-mounts get current state
   useEffect(() => {
-    cachedUser = user;
-    cachedSession = session;
+    const sg = getAuthSingleton();
+    sg.cachedUser = user;
+    sg.cachedSession = session;
   }, [user, session]);
 
   const login = async (email: string, password: string) => {
@@ -456,10 +478,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    // Reset module-level cache so next login starts fresh
-    authInitializedOnce = false;
-    cachedUser = null;
-    cachedSession = null;
+    // Reset singleton cache so next login starts fresh
+    const sg = getAuthSingleton();
+    sg.initialized = false;
+    sg.cachedUser = null;
+    sg.cachedSession = null;
     // Log logout before signing out (user is still authenticated)
     if (user) {
       logLogout().catch(console.error);
