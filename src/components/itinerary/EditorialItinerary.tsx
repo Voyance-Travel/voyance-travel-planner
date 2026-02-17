@@ -1283,19 +1283,25 @@ export function EditorialItinerary({
   const collaboratorColorMap = useMemo(() => {
     // Merge collaborators (trip_collaborators) with tripMembers (trip_members)
     const allParticipantIds = new Set<string>();
+    const existingNames = new Set<string>();
     const mergedCollaborators: Array<{ user_id: string; profile?: { display_name?: string | null; handle?: string | null } | null }> = [];
 
     collaborators.forEach(c => {
       allParticipantIds.add(c.user_id);
       mergedCollaborators.push(c);
+      if (c.profile?.display_name) existingNames.add(c.profile.display_name.toLowerCase());
     });
 
     tripMembers.forEach(m => {
-      if (m.userId && !allParticipantIds.has(m.userId)) {
-        allParticipantIds.add(m.userId);
+      const memberId = m.userId || `member_${m.id}`;
+      const memberName = m.name || m.email?.split('@')[0] || '';
+      // Skip if already present by userId OR by display name
+      if (!allParticipantIds.has(memberId) && !existingNames.has(memberName.toLowerCase())) {
+        allParticipantIds.add(memberId);
+        existingNames.add(memberName.toLowerCase());
         mergedCollaborators.push({
-          user_id: m.userId,
-          profile: { display_name: m.name || m.email?.split('@')[0] || null, handle: null },
+          user_id: memberId,
+          profile: { display_name: memberName || null, handle: null },
         });
       }
     });
