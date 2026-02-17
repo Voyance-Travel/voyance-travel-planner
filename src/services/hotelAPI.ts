@@ -51,6 +51,8 @@ export interface HotelOption {
   website?: string;
   googleMapsUrl?: string;
   placeId?: string;
+  googleReviewScore?: number;
+  googleReviewCount?: number;
 }
 
 export interface HotelDestination {
