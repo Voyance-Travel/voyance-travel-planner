@@ -17,6 +17,8 @@ export interface ConsumerTripPdfData {
   endDate: string;
   travelers: number;
   days?: EditorialDay[];
+  /** Day numbers that are unlocked (viewable). If provided, locked days are redacted. */
+  unlockedDayNumbers?: Set<number>;
   flight?: {
     airline: string;
     departure: string;
@@ -116,9 +118,12 @@ export async function generateConsumerTripPdf(data: ConsumerTripPdfData): Promis
       const dateStr = day.date ? fmtDate(day.date) : '';
       const theme = day.title || day.theme || '';
 
+      // Check if this day is locked (not unlocked)
+      const isDayLocked = data.unlockedDayNumbers && !data.unlockedDayNumbers.has(day.dayNumber);
+
       daysHtml += `
         <div style="margin-bottom: 28px;">
-          <div style="background: ${accentColor}; color: white; border-radius: 6px; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+          <div style="background: ${isDayLocked ? '#9ca3af' : accentColor}; color: white; border-radius: 6px; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
             <div>
               <span style="font-weight: 700; font-size: 14px; margin-right: 16px;">Day ${day.dayNumber}</span>
               <span style="font-size: 13px; opacity: 0.9;">${escapeHtml(theme)}</span>
@@ -127,7 +132,15 @@ export async function generateConsumerTripPdf(data: ConsumerTripPdfData): Promis
           </div>
       `;
 
-      if (day.activities && day.activities.length > 0) {
+      if (isDayLocked) {
+        // Locked day — show redacted placeholder
+        daysHtml += `
+          <div style="padding: 20px 16px; text-align: center; background: #f9fafb; border: 1px dashed #d1d5db; border-radius: 6px;">
+            <p style="font-size: 13px; font-weight: 600; color: #6b7280; margin: 0 0 6px;">🔒 Day ${day.dayNumber} is locked</p>
+            <p style="font-size: 11px; color: #9ca3af; margin: 0;">Unlock this day at travelwithvoyance.com to see full details</p>
+          </div>
+        `;
+      } else if (day.activities && day.activities.length > 0) {
         for (const act of day.activities) {
           const timeStr = act.startTime || act.time || '';
           const locationName = act.location?.name || act.location?.address || '';

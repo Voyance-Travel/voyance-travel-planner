@@ -2774,6 +2774,12 @@ export function EditorialItinerary({
                 if (!canExport) return undefined;
                 return async () => {
                 const { generateConsumerTripPdf } = await import('@/utils/consumerPdfGenerator');
+                // Build set of unlocked day numbers to enforce paywall in PDF
+                const unlockedDayNumbers = new Set(
+                  days
+                    .filter(d => canViewPremiumContentForDay(entitlements, d.dayNumber))
+                    .map(d => d.dayNumber)
+                );
                 generateConsumerTripPdf({
                   tripName: `Trip to ${destination}`,
                   destination,
@@ -2781,6 +2787,7 @@ export function EditorialItinerary({
                   endDate,
                   travelers,
                   days,
+                  unlockedDayNumbers,
                   flight: flightSelection?.outbound ? {
                     airline: flightSelection.outbound.airline || '',
                     departure: flightSelection.outbound.departure?.time || '',
