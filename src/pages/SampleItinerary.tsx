@@ -9,8 +9,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin, Clock, Star, 
-  Lock, Unlock, RefreshCw, Plane, Hotel, Calendar,
-  Utensils, Camera, Palmtree, Users, ArrowRight, Edit3, MoveUp, MoveDown
+  Calendar,
+  Utensils, Camera, Palmtree, Users, ArrowRight, Plane, Hotel
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -122,42 +122,6 @@ export default function SampleItinerary() {
       return () => clearInterval(interval);
     }
   }, [itineraryData]);
-
-  const handleActivityLock = (dayIndex: number, activityId: string, locked: boolean) => {
-    if (!itineraryData) return;
-    const updatedDays = [...itineraryData.days];
-    const activity = updatedDays[dayIndex].activities.find(a => a.id === activityId);
-    if (activity) {
-      activity.isLocked = locked;
-      setItineraryData({ ...itineraryData, days: updatedDays });
-      toast.success(locked ? 'Activity locked' : 'Activity unlocked');
-    }
-  };
-
-  const handleDayLock = (dayIndex: number) => {
-    if (!itineraryData) return;
-    const updatedDays = [...itineraryData.days];
-    const allLocked = updatedDays[dayIndex].activities.every(a => a.isLocked);
-    updatedDays[dayIndex].activities.forEach(a => a.isLocked = !allLocked);
-    setItineraryData({ ...itineraryData, days: updatedDays });
-    toast.success(allLocked ? 'Day unlocked' : 'Day locked');
-  };
-
-  const handleDayRegenerate = (dayIndex: number) => {
-    toast.info(`Sign in to regenerate Day ${dayIndex + 1}`);
-  };
-
-  const handleActivityEdit = () => {
-    toast.info('Sign in to edit and customize activities');
-  };
-
-  const handleActivityMove = (direction: 'up' | 'down') => {
-    toast.info(`Sign in to reorder activities ${direction}`);
-  };
-
-  const handleHotelClick = () => {
-    toast.info('Sign in to view full hotel details and alternatives');
-  };
 
   const handleSaveItinerary = () => {
     if (!user) {
@@ -399,18 +363,18 @@ export default function SampleItinerary() {
                   exit={{ opacity: 0 }}
                   className="space-y-6"
                 >
-                  {itineraryData.days.map((day, dayIndex) => (
+                  {/* Sample banner */}
+                  <div className="p-4 rounded-lg bg-primary/5 border border-primary/20 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      This is a <span className="font-semibold text-foreground">sample itinerary</span>. Create your own trip to unlock editing, swapping, hotel search, and all interactive features!
+                    </p>
+                  </div>
+                  {itineraryData.days.map((day) => (
                     <DayCard
                       key={day.dayNumber}
                       day={day}
-                      dayIndex={dayIndex}
                       isExpanded={expandedDays.includes(day.dayNumber)}
                       onToggle={() => toggleDay(day.dayNumber)}
-                      onActivityLock={handleActivityLock}
-                      onDayLock={handleDayLock}
-                      onDayRegenerate={handleDayRegenerate}
-                      onActivityEdit={handleActivityEdit}
-                      onActivityMove={handleActivityMove}
                     />
                   ))}
                 </motion.div>
@@ -448,10 +412,9 @@ export default function SampleItinerary() {
                 </div>
               </div>
 
-              {/* Hotel Info - Clickable */}
+              {/* Hotel Info - Read-only for sample */}
               <div 
-                className="bg-card border border-border overflow-hidden cursor-pointer hover:border-primary/50 transition-colors group"
-                onClick={handleHotelClick}
+                className="bg-card border border-border overflow-hidden"
               >
                 {itineraryData.hotelInfo.images[0] && (
                   <div className="relative overflow-hidden">
@@ -532,24 +495,16 @@ export default function SampleItinerary() {
 }
 
 // ============================================================================
-// DAY CARD COMPONENT
+// DAY CARD COMPONENT — Read-only for sample itinerary
 // ============================================================================
 
 interface DayCardProps {
   day: DayItinerary;
-  dayIndex: number;
   isExpanded: boolean;
   onToggle: () => void;
-  onActivityLock: (dayIndex: number, activityId: string, locked: boolean) => void;
-  onDayLock: (dayIndex: number) => void;
-  onDayRegenerate: (dayIndex: number) => void;
-  onActivityEdit: () => void;
-  onActivityMove: (direction: 'up' | 'down') => void;
 }
 
-function DayCard({ day, dayIndex, isExpanded, onToggle, onActivityLock, onDayLock, onDayRegenerate, onActivityEdit, onActivityMove }: DayCardProps) {
-  const allLocked = day.activities.every(a => a.isLocked);
-
+function DayCard({ day, isExpanded, onToggle }: DayCardProps) {
   return (
     <div className="border border-border bg-card overflow-hidden">
       {/* Day Header */}
@@ -565,36 +520,15 @@ function DayCard({ day, dayIndex, isExpanded, onToggle, onActivityLock, onDayLoc
             </div>
           </div>
           
-          {/* Day Actions - At Top */}
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => onDayLock(dayIndex)}
-              className="h-8 w-8"
-              title={allLocked ? 'Unlock Day' : 'Lock Day'}
-            >
-              {allLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => onDayRegenerate(dayIndex)}
-              className="h-8 w-8"
-              title="Regenerate Day"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onToggle}
-              className="h-8 w-8"
-              title={isExpanded ? 'Collapse' : 'Expand'}
-            >
-              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </Button>
-          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onToggle}
+            className="h-8 w-8"
+            title={isExpanded ? 'Collapse' : 'Expand'}
+          >
+            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </Button>
         </div>
       </div>
 
@@ -612,13 +546,7 @@ function DayCard({ day, dayIndex, isExpanded, onToggle, onActivityLock, onDayLoc
                 <ActivityRow
                   key={activity.id}
                   activity={activity}
-                  dayIndex={dayIndex}
-                  activityIndex={activityIndex}
-                  totalActivities={day.activities.length}
                   isLast={activityIndex === day.activities.length - 1}
-                  onLock={onActivityLock}
-                  onEdit={onActivityEdit}
-                  onMove={onActivityMove}
                 />
               ))}
             </div>
@@ -641,21 +569,15 @@ function DayCard({ day, dayIndex, isExpanded, onToggle, onActivityLock, onDayLoc
 }
 
 // ============================================================================
-// ACTIVITY ROW COMPONENT - Clean editorial style
+// ACTIVITY ROW COMPONENT — Read-only for sample itinerary
 // ============================================================================
 
 interface ActivityRowProps {
   activity: ItineraryActivity;
-  dayIndex: number;
-  activityIndex: number;
-  totalActivities: number;
   isLast: boolean;
-  onLock: (dayIndex: number, activityId: string, locked: boolean) => void;
-  onEdit: () => void;
-  onMove: (direction: 'up' | 'down') => void;
 }
 
-function ActivityRow({ activity, dayIndex, activityIndex, totalActivities, isLast, onLock, onEdit, onMove }: ActivityRowProps) {
+function ActivityRow({ activity, isLast }: ActivityRowProps) {
   const style = activityStyles[activity.type];
   const showPhoto = activity.type !== 'transportation' && activity.photos?.[0];
 
@@ -690,7 +612,7 @@ function ActivityRow({ activity, dayIndex, activityIndex, totalActivities, isLas
               <span className="text-xs text-muted-foreground uppercase tracking-wide">{style.label}</span>
               {activity.rating && (
                 <span className="flex items-center gap-0.5 text-xs text-muted-foreground">
-                  <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                  <Star className="h-3 w-3 fill-current text-amber-500" />
                   {activity.rating}
                 </span>
               )}
@@ -705,67 +627,10 @@ function ActivityRow({ activity, dayIndex, activityIndex, totalActivities, isLas
             </div>
           </div>
 
-          {/* Actions & Cost */}
-          <div className="flex flex-col items-end gap-2 ml-4">
-            {activity.cost > 0 && (
-              <span className="font-medium">${activity.cost}</span>
-            )}
-            <div className="flex items-center gap-1">
-              {/* Move Up */}
-              <button
-                onClick={() => onMove('up')}
-                disabled={activityIndex === 0}
-                className={cn(
-                  "p-1.5 rounded transition-colors",
-                  activityIndex === 0 
-                    ? "opacity-30 cursor-not-allowed" 
-                    : "hover:bg-secondary text-muted-foreground"
-                )}
-                title="Move up"
-              >
-                <MoveUp className="h-3.5 w-3.5" />
-              </button>
-              {/* Move Down */}
-              <button
-                onClick={() => onMove('down')}
-                disabled={activityIndex === totalActivities - 1}
-                className={cn(
-                  "p-1.5 rounded transition-colors",
-                  activityIndex === totalActivities - 1 
-                    ? "opacity-30 cursor-not-allowed" 
-                    : "hover:bg-secondary text-muted-foreground"
-                )}
-                title="Move down"
-              >
-                <MoveDown className="h-3.5 w-3.5" />
-              </button>
-              {/* Edit */}
-              <button
-                onClick={onEdit}
-                className="p-1.5 rounded transition-colors hover:bg-secondary text-muted-foreground"
-                title="Edit activity"
-              >
-                <Edit3 className="h-3.5 w-3.5" />
-              </button>
-              {/* Lock */}
-              <button
-                onClick={() => onLock(dayIndex, activity.id, !activity.isLocked)}
-                className={cn(
-                  "p-1.5 rounded transition-colors",
-                  activity.isLocked 
-                    ? "bg-primary/10 text-primary" 
-                    : "hover:bg-secondary text-muted-foreground"
-                )}
-                title={activity.isLocked ? "Unlock" : "Lock"}
-              >
-                {activity.isLocked ? (
-                  <Lock className="h-3.5 w-3.5" />
-                ) : (
-                  <Unlock className="h-3.5 w-3.5" />
-                )}
-              </button>
-            </div>
-          </div>
+          {/* Cost only — no actions */}
+          {activity.cost > 0 && (
+            <span className="font-medium ml-4">${activity.cost}</span>
+          )}
         </div>
       </div>
     </div>
