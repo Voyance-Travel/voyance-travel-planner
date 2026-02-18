@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
+import { useBonusCredits } from '@/hooks/useBonusCredits';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import {
@@ -109,6 +110,8 @@ export default function EditorialTripSummary({
   const [activitiesBudget, setActivitiesBudget] = useState(data.activitiesBudget || 0);
   const [isEditingBudget, setIsEditingBudget] = useState(false);
   const [hotelImageIndex, setHotelImageIndex] = useState(0);
+  const { claimBonus, hasClaimedBonus } = useBonusCredits();
+  const hasTriggeredShareBonus = useRef(false);
 
   const nights = Math.ceil(
     (new Date(data.endDate).getTime() - new Date(data.startDate).getTime()) / (1000 * 60 * 60 * 24)
@@ -169,6 +172,19 @@ export default function EditorialTripSummary({
     }
   };
 
+  const triggerFirstShareBonus = useCallback(async () => {
+    if (hasTriggeredShareBonus.current || hasClaimedBonus('first_share')) return;
+    hasTriggeredShareBonus.current = true;
+    try {
+      const result = await claimBonus('first_share');
+      if (result.granted) {
+        toast.success(`+${result.credits} credits earned for sharing your trip! 📤`);
+      }
+    } catch (e) {
+      console.error('[EditorialTripSummary] first_share bonus failed:', e);
+    }
+  }, [claimBonus, hasClaimedBonus]);
+
   const handleShare = async (method: 'copy' | 'email' | 'message') => {
     const tripUrl = window.location.href;
     const tripText = `Check out my trip to ${data.destination}! ${format(new Date(data.startDate), 'MMM d')} - ${format(new Date(data.endDate), 'MMM d, yyyy')}`;
@@ -177,11 +193,13 @@ export default function EditorialTripSummary({
         case 'copy':
           await navigator.clipboard.writeText(`${tripText}\n${tripUrl}`);
           toast.success('Trip link copied!');
+          triggerFirstShareBonus();
           break;
         case 'email': {
           const emailSubject = encodeURIComponent(`My Trip to ${data.destination}`);
           const emailBody = encodeURIComponent(`${tripText}\n\nView trip: ${tripUrl}`);
           window.open(`mailto:?subject=${emailSubject}&body=${emailBody}`);
+          triggerFirstShareBonus();
           break;
         }
         case 'message':
@@ -191,6 +209,7 @@ export default function EditorialTripSummary({
             await navigator.clipboard.writeText(`${tripText}\n${tripUrl}`);
             toast.success('Link copied!');
           }
+          triggerFirstShareBonus();
           break;
       }
     } catch {

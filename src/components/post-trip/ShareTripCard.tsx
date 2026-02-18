@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { parseLocalDate } from '@/utils/dateUtils';
 import type { TripPhoto } from '@/hooks/useTripPhotos';
+import { useBonusCredits } from '@/hooks/useBonusCredits';
 
 interface ShareTripCardProps {
   isOpen: boolean;
@@ -27,14 +28,30 @@ interface ShareTripCardProps {
 export function ShareTripCard({ isOpen, onClose, trip, photos, highlights }: ShareTripCardProps) {
   const [friendEmail, setFriendEmail] = useState('');
   const [copied, setCopied] = useState(false);
+  const { claimBonus, hasClaimedBonus } = useBonusCredits();
+  const hasTriggeredShareBonus = useRef(false);
 
   const shareUrl = `${window.location.origin}/trip/${trip.id}`;
+
+  const triggerFirstShareBonus = async () => {
+    if (hasTriggeredShareBonus.current || hasClaimedBonus('first_share')) return;
+    hasTriggeredShareBonus.current = true;
+    try {
+      const result = await claimBonus('first_share');
+      if (result.granted) {
+        toast.success(`+${result.credits} credits earned for sharing your first trip! 📤`);
+      }
+    } catch (e) {
+      console.error('[ShareTripCard] first_share bonus failed:', e);
+    }
+  };
 
   const copyLink = () => {
     navigator.clipboard.writeText(shareUrl);
     setCopied(true);
     toast.success('Link copied!');
     setTimeout(() => setCopied(false), 2000);
+    triggerFirstShareBonus();
   };
 
   const shareNative = async () => {
@@ -45,6 +62,7 @@ export function ShareTripCard({ isOpen, onClose, trip, photos, highlights }: Sha
           text: `Check out my trip to ${trip.destination}! Planned with Voyance.`,
           url: shareUrl,
         });
+        triggerFirstShareBonus();
       } catch (e) {
         // User cancelled
       }
@@ -66,6 +84,7 @@ export function ShareTripCard({ isOpen, onClose, trip, photos, highlights }: Sha
     window.open(`mailto:${friendEmail}?subject=${subject}&body=${body}`);
     setFriendEmail('');
     toast.success('Opening email...');
+    triggerFirstShareBonus();
   };
 
   return (
