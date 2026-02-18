@@ -345,12 +345,12 @@ export function matchArchetypes(
   console.log('[ArchetypeMatcher] Top 5 matches:',
     matches.slice(0, 5).map(m => `${m.id}: ${m.score.toFixed(1)}`).join(', '));
 
-  // BSC only wins if no non-default archetype scores above the minimum threshold
-  const MIN_MATCH_SCORE = 15;
   const topMatch = matches[0];
 
-  if (!topMatch || topMatch.score < MIN_MATCH_SCORE) {
-    console.log('[ArchetypeMatcher] No strong match — defaulting to BSC');
+  // BSC only wins if there are literally NO scored archetypes — the top-scoring
+  // archetype always wins, even with a low score. BSC is too generic for personalization.
+  if (!topMatch || matches.length === 0) {
+    console.log('[ArchetypeMatcher] No archetypes found — defaulting to BSC');
     const bscProfile = archetypeProfiles['balanced_story_collector'];
     const bscMatch: ArchetypeMatch = {
       id: 'balanced_story_collector',
@@ -363,11 +363,18 @@ export function matchArchetypes(
     };
     return {
       primary: bscMatch,
-      secondary: matches[0]?.score > 0 ? matches[0] : null,
-      allMatches: [bscMatch, ...matches.filter(m => m.score > 0)],
+      secondary: null,
+      allMatches: [bscMatch],
       traitScores: scores,
       lifeStage,
     };
+  }
+
+  // If the top match has a very low score, mark it low-confidence
+  // but still use it — it's better than BSC for personalization
+  if (topMatch.score < 15) {
+    console.log(`[ArchetypeMatcher] Low-confidence match: ${topMatch.id} (${topMatch.score.toFixed(1)})`);
+    topMatch.confidence = 'low';
   }
 
   // Update confidence based on score gaps
@@ -407,7 +414,7 @@ export function determineArchetype(answers: Record<string, string>): MatchResult
  */
 export function getPrimaryArchetype(answers: Record<string, string>): string {
   const result = determineArchetype(answers);
-  return result.primary?.id ?? result.allMatches[0]?.id ?? 'balanced_story_collector';
+  return result.primary?.id ?? result.allMatches[0]?.id ?? 'cultural_anthropologist';
 }
 
 /**
