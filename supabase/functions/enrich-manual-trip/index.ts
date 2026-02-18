@@ -12,6 +12,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { fetchTravelerDNA } from "../_shared/traveler-dna.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -112,16 +113,10 @@ serve(async (req) => {
     const itinerary = trip.itinerary_data as any;
     if (!itinerary?.days) throw new Error("No itinerary data");
 
-    // Load DNA for detailed gap fixes
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("travel_dna")
-      .eq("id", user.id)
-      .single();
-
-    const dna = profile?.travel_dna as any;
-    const archetype = dna?.primaryArchetype || dna?.archetype || "Balanced Traveler";
-    const traits = dna?.traits || dna?.traitScores || {};
+    // Load DNA for detailed gap fixes using shared canonical builder
+    const { dna: travelerDNA } = await fetchTravelerDNA(supabase, user.id);
+    const archetype = travelerDNA.primaryArchetype || "Balanced Traveler";
+    const traits = travelerDNA.traits || {};
 
     // Build activity list for AI enrichment
     const activitySummaries = itinerary.days.flatMap((day: any) =>
