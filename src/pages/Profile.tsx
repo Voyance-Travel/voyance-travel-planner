@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
@@ -179,7 +180,6 @@ export default function Profile() {
   const [isLoadingTrips, setIsLoadingTrips] = useState(true);
   const { data: creditData, refetch: refetchCredits } = useCredits();
   const [tripStats, setTripStats] = useState<TripStats | null>(null);
-  const [actualTravelDNA, setActualTravelDNA] = useState<{ archetype: string; category?: string } | null>(null);
   // Redirect if not authenticated (only after auth loading completes)
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -187,11 +187,29 @@ export default function Profile() {
     }
   }, [isLoading, isAuthenticated, navigate]);
 
+  // Load actual Travel DNA from database — uses React Query so invalidateQueries(['travel-dna']) works
+  const { data: travelDNAData } = useQuery({
+    queryKey: ['travel-dna', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('travel_dna_profiles')
+        .select('primary_archetype_name')
+        .eq('user_id', user!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id,
+    staleTime: 30_000,
+  });
+  const actualTravelDNA = travelDNAData?.primary_archetype_name
+    ? { archetype: travelDNAData.primary_archetype_name }
+    : null;
+
   // Load trips from Supabase
   useEffect(() => {
     async function loadTrips() {
       if (!user?.id) return;
-      
       setIsLoadingTrips(true);
       try {
         const { data, error } = await supabase
@@ -199,18 +217,14 @@ export default function Profile() {
           .select('*')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false });
-        
         if (error) throw error;
-        if (data) {
-          setTrips(data.map(transformTrip));
-        }
+        if (data) setTrips(data.map(transformTrip));
       } catch (error) {
         console.error('Failed to load trips:', error);
       } finally {
         setIsLoadingTrips(false);
       }
     }
-    
     loadTrips();
   }, [user?.id]);
 
@@ -226,29 +240,6 @@ export default function Profile() {
       }
     }
     loadTripStats();
-  }, [user?.id]);
-
-  // Load actual Travel DNA from database
-  useEffect(() => {
-    async function loadTravelDNA() {
-      if (!user?.id) return;
-      try {
-        const { data, error } = await supabase
-          .from('travel_dna_profiles')
-          .select('primary_archetype_name')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        
-        if (!error && data?.primary_archetype_name) {
-          setActualTravelDNA({
-            archetype: data.primary_archetype_name,
-          });
-        }
-      } catch (error) {
-        console.error('Failed to load travel DNA:', error);
-      }
-    }
-    loadTravelDNA();
   }, [user?.id]);
 
   const [searchParams] = useSearchParams();
