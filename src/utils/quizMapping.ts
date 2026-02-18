@@ -1163,9 +1163,9 @@ export async function recalculateDNAFromPreferences(
     }
     
     // 4. CRITICAL: Check if V2 traits are all zero (archetype-matcher failed)
-    // If so, compute directly from preferences to avoid BSC fallback
+    // If so, compute directly from preferences to avoid BSC fallback.
     // NOTE: Do NOT re-call the edge function — it will just return zeros again.
-    // Instead, use direct preference mapping and local archetype matching.
+    // Instead, use direct preference mapping + V2-aware archetype matching.
     if (dna.trait_scores) {
       const allZero = Object.values(dna.trait_scores).every(v => v === 0);
       if (allZero) {
@@ -1173,29 +1173,50 @@ export async function recalculateDNAFromPreferences(
         const directTraits = computeV2TraitsFromPreferences(preferences);
         console.log('[DNA Recalc] Direct V2 traits:', JSON.stringify(directTraits));
         dna.trait_scores = directTraits;
-        
-        // Use local archetype matching with corrected traits instead of re-calling edge function
+
+        // Use the real V2 archetype-matcher on the corrected traits.
+        // This is the ONLY path that correctly resolves archetypes from V2 traits —
+        // calculateTravelDNA() uses STYLE_TO_ARCHETYPE (style string → archetype)
+        // which ignores V2 trait values and causes wrong/BSC results.
         try {
-          const localDna = calculateTravelDNA(answers);
-          // Keep the local archetype but use our corrected traits
-          dna.primary_archetype_name = localDna.primary_archetype_name || dna.primary_archetype_name;
-          dna.secondary_archetype_name = localDna.secondary_archetype_name || dna.secondary_archetype_name;
-          dna.trait_scores = directTraits; // Always keep direct traits
-        } catch {
-          // Keep direct traits as-is
-        }
-        
-        // Persist corrected traits to travel_dna_profiles so next load reads real values
-        try {
-          await supabase
-            .from('travel_dna_profiles')
-            .update({ trait_scores: directTraits as unknown as Json })
-            .eq('user_id', userId);
-          console.log('[DNA Recalc] Persisted fallback V2 traits to travel_dna_profiles');
-        } catch (persistErr) {
-          console.error('[DNA Recalc] Failed to persist fallback traits:', persistErr);
+          const { determineArchetype } = await import('@/services/engines/travelDNA/archetype-matcher');
+          // Build a synthetic V3 trait scores object compatible with determineArchetype
+          // by using a flat quiz-answer map constructed from preferences
+          const flatAnswers: Record<string, string> = {};
+          for (const [k, v] of Object.entries(answers)) {
+            if (typeof v === 'string') flatAnswers[k] = v;
+          }
+          const archetypeResult = determineArchetype(flatAnswers);
+          const primaryId = archetypeResult.primary?.id || dna.primary_archetype_name || 'cultural_anthropologist';
+          const secondaryId = archetypeResult.secondary?.id || dna.secondary_archetype_name || null;
+
+          console.log('[DNA Recalc] V2 archetype match:', primaryId, '| secondary:', secondaryId);
+
+          // Sync ALL archetype fields so every table gets the SAME value
+          dna.primary_archetype_name = primaryId;
+          dna.secondary_archetype_name = secondaryId;
+          dna.primary_archetype_display = getArchetypeDisplayName(primaryId);
+          dna.primary_archetype_category = getArchetypeCategory(primaryId);
+          dna.primary_archetype_tagline = getArchetypeTagline(primaryId);
+          dna.trait_scores = directTraits; // Always keep direct V2 traits
+        } catch (matchErr) {
+          console.error('[DNA Recalc] Archetype matching failed, keeping edge-function result:', matchErr);
+          // At minimum, populate display fields so all UI components are consistent
+          if (dna.primary_archetype_name) {
+            dna.primary_archetype_display = getArchetypeDisplayName(dna.primary_archetype_name);
+            dna.primary_archetype_category = getArchetypeCategory(dna.primary_archetype_name);
+            dna.primary_archetype_tagline = getArchetypeTagline(dna.primary_archetype_name);
+          }
         }
       }
+    }
+
+    // 4b. Even on the happy path (non-zero traits), ensure display fields are always populated.
+    // The edge function sometimes omits these, causing the header and DNA card to show different values.
+    if (dna.primary_archetype_name && !dna.primary_archetype_display) {
+      dna.primary_archetype_display = getArchetypeDisplayName(dna.primary_archetype_name);
+      dna.primary_archetype_category = getArchetypeCategory(dna.primary_archetype_name);
+      dna.primary_archetype_tagline = getArchetypeTagline(dna.primary_archetype_name);
     }
     
     console.log('[DNA Recalc] Final V2 traits:', JSON.stringify(dna.trait_scores));
