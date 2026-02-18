@@ -169,24 +169,34 @@ export function SmartFinishBanner({
       if (error || !data?.success) {
         const errorMsg = data?.error || error?.message || 'Enrichment failed';
         console.error('[SmartFinish] Enrichment failed:', errorMsg);
-        
-        toast.error('Enrichment failed — your credits have been refunded.', {
-          description: 'You can retry at no cost.',
-          duration: 6000,
-        });
 
-        // Refund credits by granting them back
+        // Attempt credit refund and show accurate feedback based on result
         try {
-          await supabase.functions.invoke('spend-credits', {
+          const { data: refundData, error: refundError } = await supabase.functions.invoke('spend-credits', {
             body: {
               action: 'REFUND',
               tripId,
               metadata: { reason: 'smart_finish_enrichment_failed', originalAction: 'SMART_FINISH' },
             },
           });
+
+          if (refundError || !refundData?.success) {
+            console.error('[SmartFinish] Refund failed:', refundError ?? refundData);
+            toast.error('Enrichment failed. Credit refund also failed — please contact support.', {
+              duration: 8000,
+            });
+          } else {
+            console.log(`[SmartFinish] Refund successful: +${refundData.refunded} credits restored`);
+            toast.error('Enrichment failed — your credits have been refunded.', {
+              description: 'You can retry at no cost.',
+              duration: 6000,
+            });
+          }
         } catch (refundErr) {
-          console.error('[SmartFinish] Refund failed:', refundErr);
-          // Even if refund via edge function fails, reset the flag so user can retry
+          console.error('[SmartFinish] Refund exception:', refundErr);
+          toast.error('Enrichment failed. Credit refund also failed — please contact support.', {
+            duration: 8000,
+          });
         }
 
         // Reset smart_finish_purchased so banner stays visible for retry
@@ -197,6 +207,7 @@ export function SmartFinishBanner({
 
         setEnrichmentFailed(true);
         queryClient.invalidateQueries({ queryKey: ['credits'] });
+        queryClient.invalidateQueries({ queryKey: ['entitlements'] });
         return;
       }
 

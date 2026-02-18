@@ -391,6 +391,85 @@ serve(async (req) => {
         }, { onConflict: 'user_id,trip_id,action_type' });
     }
 
+    // ── REFUND handler ──
+    // Reverses a previous credit spend. Called when Smart Finish enrichment fails.
+    // Adds credits back by creating a new credit_purchases row (immediate, no expiry).
+    if (action === 'REFUND') {
+      const REFUNDABLE_COSTS: Record<string, number> = {
+        SMART_FINISH: 50,
+        smart_finish: 50,
+        UNLOCK_DAY: 60,
+        unlock_day: 60,
+        HOTEL_OPTIMIZATION: 100,
+        hotel_optimization: 100,
+      };
+
+      const originalAction = metadata?.originalAction as string | undefined;
+      const refundAmount = originalAction ? (REFUNDABLE_COSTS[originalAction] ?? 0) : 0;
+
+      if (refundAmount <= 0) {
+        console.error('[spend-credits] REFUND: unknown or zero refund amount for action:', originalAction);
+        return new Response(
+          JSON.stringify({ error: 'No refund amount recognized for originalAction', originalAction }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Add credits back via a new credit_purchases row (simplest safe approach — no expiry)
+      const { error: purchaseErr } = await supabaseAdmin
+        .from('credit_purchases')
+        .insert({
+          user_id: user.id,
+          amount: refundAmount,
+          remaining: refundAmount,
+          credit_type: 'refund',
+          source: 'refund',
+          expires_at: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+
+      if (purchaseErr) {
+        console.error('[spend-credits] REFUND: failed to create credit_purchases row:', purchaseErr);
+        return new Response(
+          JSON.stringify({ error: 'Refund failed — could not restore credits' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Log the refund in the credit ledger for audit trail
+      await supabaseAdmin.from('credit_ledger').insert({
+        user_id: user.id,
+        transaction_type: 'refund',
+        credits_delta: refundAmount,
+        is_free_credit: false,
+        action_type: 'refund',
+        trip_id: tripId || null,
+        activity_id: null,
+        notes: `Refund for failed ${originalAction} — +${refundAmount} credits restored`,
+        metadata: {
+          reason: metadata?.reason || 'enrichment_failed',
+          originalAction,
+          tripId: tripId || null,
+        },
+      });
+
+      // Sync the balance cache so the UI immediately reflects the restored credits
+      const balance = await syncBalanceCache(supabaseAdmin, user.id);
+
+      console.log(`[spend-credits] REFUND: +${refundAmount} credits restored for user ${user.id} (originalAction: ${originalAction})`);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          refunded: refundAmount,
+          action: 'REFUND',
+          newBalance: { total: balance.total, purchased: balance.purchased, free: balance.free },
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // ── Determine cost ──
     let cost: number;
     const isVariable = VARIABLE_COST_ACTIONS.includes(action);
