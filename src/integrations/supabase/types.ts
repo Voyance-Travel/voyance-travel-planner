@@ -7819,6 +7819,7 @@ export type Database = {
       generate_share_token:
         | { Args: never; Returns: string }
         | { Args: { size?: number }; Returns: string }
+      get_current_user_email: { Args: never; Returns: string }
       get_founding_member_count: { Args: never; Returns: number }
       get_intake_account: {
         Args: { p_intake_token: string }
