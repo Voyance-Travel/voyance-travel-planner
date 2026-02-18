@@ -64,7 +64,7 @@ export function sanitizeActivityName(name: string | undefined | null): string {
   // Remove exact duplicate suffixes (e.g., "Veracruz All Natural All Natural" → "Veracruz All Natural")
   const words = sanitized.split(' ');
   const halfLen = Math.floor(words.length / 2);
-  if (halfLen > 1 && words.length % 2 === 0) {
+  if (halfLen > 0 && words.length % 2 === 0) {
     const firstHalf = words.slice(0, halfLen).join(' ');
     const secondHalf = words.slice(halfLen).join(' ');
     if (firstHalf === secondHalf) {

@@ -1211,9 +1211,10 @@ export async function recalculateDNAFromPreferences(
       }
     }
 
-    // 4b. Even on the happy path (non-zero traits), ensure display fields are always populated.
-    // The edge function sometimes omits these, causing the header and DNA card to show different values.
-    if (dna.primary_archetype_name && !dna.primary_archetype_display) {
+    // 4b. Always sync display fields from the canonical primary_archetype_name.
+    // The edge function may return a stale or incorrect display name (e.g., BSC),
+    // so we always recompute from the ID to guarantee all UI components are consistent.
+    if (dna.primary_archetype_name) {
       dna.primary_archetype_display = getArchetypeDisplayName(dna.primary_archetype_name);
       dna.primary_archetype_category = getArchetypeCategory(dna.primary_archetype_name);
       dna.primary_archetype_tagline = getArchetypeTagline(dna.primary_archetype_name);
