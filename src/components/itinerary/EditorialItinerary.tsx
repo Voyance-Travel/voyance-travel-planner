@@ -73,6 +73,7 @@ import { useEntitlements, canViewPremiumContentForDay } from '@/hooks/useEntitle
 import { LockedPhotoPlaceholder } from './LockedPhotoPlaceholder';
 import { LockedField } from './LockedField';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBonusCredits } from '@/hooks/useBonusCredits';
 import { UpgradePrompt } from '@/components/checkout/UpgradePrompt';
 import { CreditQuickBuy } from '@/components/checkout/CreditQuickBuy';
 import { AddFlightInline, AddHotelInline } from './AddBookingInline';
@@ -944,6 +945,7 @@ export function EditorialItinerary({
     return todayIndex >= 0 ? todayIndex : 0;
   });
   const { user } = useAuth();
+  const { claimBonus, hasClaimedBonus } = useBonusCredits();
   const dayButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -1357,6 +1359,26 @@ export function EditorialItinerary({
   useEffect(() => {
     preloadCostIndex();
   }, []);
+
+  // Grant second_itinerary bonus if user has 2+ trips (handles retroactive grants too)
+  useEffect(() => {
+    if (!user?.id || hasClaimedBonus('second_itinerary')) return;
+    const checkSecondTripBonus = async () => {
+      const { count } = await supabase
+        .from('trips')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+      if (count && count >= 2) {
+        claimBonus('second_itinerary', { tripCount: count }).then((result) => {
+          if (result.granted) {
+            toast.success(`+${result.credits} credits earned for creating your second trip! ✈️`);
+          }
+        }).catch((e) => console.warn('Failed to claim second_itinerary bonus:', e));
+      }
+    };
+    checkSecondTripBonus();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   // Safety fix for already-saved itineraries: ensure checkout renders before airport transfer on last day
   useEffect(() => {
@@ -2490,6 +2512,15 @@ export function EditorialItinerary({
       setInviteCopied(true);
       setTimeout(() => setInviteCopied(false), 2000);
       toast.success('Invite link copied!');
+
+      // Grant first_share bonus (fire-and-forget)
+      if (!hasClaimedBonus('first_share')) {
+        claimBonus('first_share', { tripId }).then((result) => {
+          if (result.granted) {
+            toast.success(`+${result.credits} credits earned for sharing your first trip! 📤`);
+          }
+        }).catch((e) => console.warn('Failed to claim first_share bonus:', e));
+      }
     } catch (err: any) {
       console.error('Failed to create share link:', err?.message || err);
       toast.error(err?.message || 'Failed to create invite link');
