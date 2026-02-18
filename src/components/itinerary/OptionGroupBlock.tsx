@@ -24,7 +24,7 @@ interface OptionGroupBlockProps {
 
 export function OptionGroupBlock({ options, onSelect, selectedId, currency = 'USD' }: OptionGroupBlockProps) {
   const [selected, setSelected] = useState(selectedId || options[0]?.id || '');
-  const [hasChosen, setHasChosen] = useState(false);
+  const [hasChosen, setHasChosen] = useState(!!selectedId);
 
   // Sync with prop changes (e.g. after reorder)
   useEffect(() => {

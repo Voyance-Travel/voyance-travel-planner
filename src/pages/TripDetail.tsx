@@ -1093,6 +1093,7 @@ export default function TripDetail() {
                         }
                       : undefined
                   }
+                  initialItineraryData={(trip.itinerary_data as Record<string, unknown>) || null}
                   parsedMetadata={(() => {
                     const meta = (trip.itinerary_data as any)?.metadata;
                     if (meta?.source === 'manual_paste') return meta;

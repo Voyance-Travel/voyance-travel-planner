@@ -309,6 +309,8 @@ export interface EditorialItineraryProps {
   parsedMetadata?: { accommodationNotes?: string[]; practicalTips?: string[]; unparsed?: string[]; source?: string };
   /** Called whenever the local days state changes (swaps, locks, reorders, etc.) so parent can stay in sync */
   onDaysChange?: (days: EditorialDay[]) => void;
+  /** Raw itinerary_data object so we can restore optionSelections on page load */
+  initialItineraryData?: Record<string, unknown> | null;
 }
 
 // =============================================================================
@@ -926,10 +928,15 @@ export function EditorialItinerary({
   onUnlockComplete,
   parsedMetadata,
   onDaysChange,
+  initialItineraryData,
 }: EditorialItineraryProps) {
   const queryClient = useQueryClient();
   const [days, setDays] = useState<EditorialDay[]>(initialDays);
   const [expandedDays, setExpandedDays] = useState<number[]>(initialDays.map(d => d.dayNumber));
+  // Persisted option group selections (key = optionGroup id, value = selected activity id)
+  const [optionSelections, setOptionSelections] = useState<Record<string, string>>(
+    () => (initialItineraryData?.optionSelections as Record<string, string>) || {}
+  );
   const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'payments' | 'details' | 'needtoknow' | 'collab'>('itinerary');
   const [selectedDayIndex, setSelectedDayIndex] = useState(() => {
     // Auto-select "Today" if trip is active
@@ -1682,6 +1689,7 @@ export function EditorialItinerary({
         const itineraryData: Record<string, unknown> = {
           days: JSON.parse(JSON.stringify(days)),
           status: 'ready',
+          optionSelections,
           savedAt: new Date().toISOString(),
         };
         // Preserve parsed metadata (accommodationNotes, practicalTips, source)
@@ -1754,6 +1762,7 @@ export function EditorialItinerary({
       const itineraryData: Record<string, unknown> = {
         days: JSON.parse(JSON.stringify(days)),
         status: 'ready',
+        optionSelections,
         savedAt: new Date().toISOString(),
       };
       if (parsedMetadata) {
@@ -3109,6 +3118,10 @@ export function EditorialItinerary({
                           collaboratorColorMap={collaboratorColorMap}
                           aiLocked={aiLocked}
                           guestMustPropose={guestMustPropose}
+                          optionSelections={optionSelections}
+                          onOptionSelect={(groupKey, selectedId) => {
+                            setOptionSelections(prev => ({ ...prev, [groupKey]: selectedId }));
+                          }}
                         />
                       )}
                     </>
@@ -5352,6 +5365,10 @@ interface DayCardProps {
   aiLocked?: boolean;
   /** Guest in propose & vote mode — show reduced menu with only Propose Replacement */
   guestMustPropose?: boolean;
+  /** Persisted option group selections: map of optionGroup key → selected activity id */
+  optionSelections?: Record<string, string>;
+  /** Called when user picks an option in an option group */
+  onOptionSelect?: (groupKey: string, selectedId: string) => void;
 }
 
 function DayCard({
@@ -5398,6 +5415,8 @@ function DayCard({
   collaboratorColorMap,
   aiLocked,
   guestMustPropose,
+  optionSelections = {},
+  onOptionSelect,
 }: DayCardProps) {
   // Per-day preview: a day is preview only if the global flag is set AND the day itself is a preview
   // Fully generated days (e.g., first 2 free days) should NOT be gated even if other days are locked
@@ -5570,15 +5589,19 @@ function DayCard({
                       <div className="px-6 py-3">
                         <OptionGroupBlock
                           options={groupOptions}
-                          selectedId={groupOptions[0]?.id}
+                          selectedId={optionSelections[activity.optionGroup!] || groupOptions[0]?.id}
                           currency={tripCurrency}
-                          onSelect={(selectedId) => {
+                          onSelect={(selectedActivityId) => {
+                            // Persist selection via parent callback (triggers auto-save → DB)
+                            const groupKey = activity.optionGroup!;
+                            onOptionSelect?.(groupKey, selectedActivityId);
+
                             // Reorder: put selected first in the group
                             const reordered = [...day.activities];
                             const groupIds = new Set(groupOptions.map(o => o.id));
                             const nonGroup = reordered.filter(a => !groupIds.has(a.id));
-                            const selected = groupOptions.find(o => o.id === selectedId);
-                            const rest = groupOptions.filter(o => o.id !== selectedId);
+                            const selected = groupOptions.find(o => o.id === selectedActivityId);
+                            const rest = groupOptions.filter(o => o.id !== selectedActivityId);
                             // Insert group at original position
                             const insertAt = reordered.findIndex(a => groupIds.has(a.id));
                             nonGroup.splice(insertAt, 0, ...(selected ? [selected, ...rest] : groupOptions));
