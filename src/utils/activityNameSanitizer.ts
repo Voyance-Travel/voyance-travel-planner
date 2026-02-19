@@ -67,8 +67,32 @@ export function sanitizeActivityName(name: string | undefined | null): string {
   if (halfLen > 0 && words.length % 2 === 0) {
     const firstHalf = words.slice(0, halfLen).join(' ');
     const secondHalf = words.slice(halfLen).join(' ');
-    if (firstHalf === secondHalf) {
+    if (firstHalf.toLowerCase() === secondHalf.toLowerCase()) {
       sanitized = firstHalf;
+    }
+  }
+
+  // Remove trailing single-word duplicates that already appear in the name
+  // e.g., "Barton Springs Pool Pool" → "Barton Springs Pool"
+  // e.g., "Zilker Botanical Garden Garden" → "Zilker Botanical Garden"
+  // e.g., "Franklin Barbecue Barbecue" → "Franklin Barbecue"
+  const trimWords = sanitized.split(' ');
+  if (trimWords.length >= 2) {
+    const lastWord = trimWords[trimWords.length - 1];
+    const withoutLast = trimWords.slice(0, -1).join(' ');
+    if (withoutLast.toLowerCase().includes(lastWord.toLowerCase())) {
+      sanitized = withoutLast;
+    }
+  }
+
+  // Remove trailing multi-word duplicates (e.g., "Cosmic Coffee Coffee & Beer" where "Coffee" repeats)
+  // Catch: "Name X X" where last word repeats immediately
+  const splitFinal = sanitized.split(' ');
+  if (splitFinal.length >= 3) {
+    const last = splitFinal[splitFinal.length - 1];
+    const secondLast = splitFinal[splitFinal.length - 2];
+    if (last.toLowerCase() === secondLast.toLowerCase()) {
+      sanitized = splitFinal.slice(0, -1).join(' ');
     }
   }
 

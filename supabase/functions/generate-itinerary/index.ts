@@ -4340,8 +4340,9 @@ async function generateSingleDayWithRetry(
     '7. NO DUPLICATE ACTIVITIES: NEVER schedule the same type of activity back-to-back',
     '8. **TRIP-WIDE UNIQUENESS**: Each unique experience (cooking class, wine tasting, etc.) should appear AT MOST ONCE in the ENTIRE trip',
     '9. VARIETY PER DAY: Mix sightseeing, cultural sites, museums, outdoor activities, dining',
-    isFirstDay ? '10. DAY 1 MUST start with: Arrival → Transfer → Check-in (in that order)' : '',
-    isLastDay && context.totalDays > 1 ? '10. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
+    '10. **ACTIVITY TITLE NAMING — CRITICAL**: The "title" field MUST be the venue or experience name ONLY. NEVER append the category, type, or a repeated word. Examples of WRONG titles: "Barton Springs Pool Pool", "Zilker Botanical Garden Garden", "Franklin Barbecue Barbecue", "Cosmic Coffee Coffee & Beer", "Record shopping shopping". CORRECT titles: "Barton Springs Pool", "Zilker Botanical Garden", "Franklin Barbecue", "Cosmic Coffee + Beer Garden". If the place name already contains the activity type (e.g., "Pool", "Garden", "Barbecue", "Coffee"), do NOT add it again.',
+    isFirstDay ? '11. DAY 1 MUST start with: Arrival → Transfer → Check-in (in that order)' : '',
+    isLastDay && context.totalDays > 1 ? '11. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
   ].filter(Boolean).join('\n');
 
   // Build list of previous experience types for stricter rejection
