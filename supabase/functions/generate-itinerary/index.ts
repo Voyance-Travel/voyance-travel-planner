@@ -7185,8 +7185,8 @@ RULES FOR VOYANCE PICKS:
       // The archetype determines TONE/NARRATIVE, user interests determine ACTIVITY MIX
       // =======================================================================
       let interestOverridePrompt = "";
-      const userInterests = unifiedProfile.interests || context.interests || [];
-      if (userInterests.length > 0) {
+      const userInterestsForOverride = unifiedProfile.interests || context.interests || [];
+      if (userInterestsForOverride.length > 0) {
         const interestActivityMap: Record<string, string> = {
           'food': 'At least 2-3 noteworthy dining experiences per day (food carts, local restaurants, markets, breweries)',
           'cuisine': 'At least 2-3 noteworthy dining experiences per day (food carts, local restaurants, markets, breweries)',
@@ -7206,7 +7206,7 @@ RULES FOR VOYANCE PICKS:
         };
         
         const matchedInterests: string[] = [];
-        for (const interest of userInterests) {
+        for (const interest of userInterestsForOverride) {
           const lower = interest.toLowerCase();
           for (const [key, instruction] of Object.entries(interestActivityMap)) {
             if (lower.includes(key) || key.includes(lower)) {
@@ -7239,7 +7239,7 @@ DO NOT replace the user's selected interests with archetype-default activities.
 If the archetype says "beach time 3-4 hours" but the user selected "Food & Cuisine" and the destination has no beaches, prioritize food experiences with the archetype's relaxed narrative tone instead.
 ${'='.repeat(60)}
 `;
-          console.log(`[Stage 1.991] ✓ Interest override prompt built for ${matchedInterests.length} interests: ${userInterests.join(', ')}`);
+          console.log(`[Stage 1.991] ✓ Interest override prompt built for ${matchedInterests.length} interests: ${userInterestsForOverride.join(', ')}`);
         }
       }
       
