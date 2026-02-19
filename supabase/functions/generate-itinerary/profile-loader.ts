@@ -155,7 +155,7 @@ export async function loadTravelerProfile(
   if (tripId) {
     const { data, error } = await supabase
       .from('trips')
-      .select('budget_tier, trip_type, additional_info, preferences')
+      .select('budget_tier, trip_type, metadata')
       .eq('id', tripId)
       .maybeSingle();
     
@@ -169,13 +169,36 @@ export async function loadTravelerProfile(
       // Resolve budget tier
       budgetTier = normalizeBudgetTier(data.budget_tier);
       
-      // Extract trip intents from trip_type and additional_info
+      // Extract trip intents from trip_type
       if (data.trip_type) {
         tripIntents.push(data.trip_type);
       }
-      if (data.additional_info?.tripStyle) {
-        tripIntents.push(data.additional_info.tripStyle);
+      // Extract vibe/priorities from metadata (set by parse-trip-input / Smart Finish)
+      const meta = data.metadata as any;
+      if (meta?.tripVibe) tripIntents.push(meta.tripVibe);
+      if (Array.isArray(meta?.tripPriorities)) {
+        tripIntents.push(...meta.tripPriorities);
       }
+    }
+  }
+  
+  // =========================================================================
+  // STEP 2b: Load User Preferences (interests, vibes, emotional drivers)
+  // =========================================================================
+  
+  let userPrefs: any = null;
+  
+  if (userId) {
+    const { data, error } = await supabase
+      .from('user_preferences')
+      .select('interests, travel_vibes, emotional_drivers, traveler_type')
+      .eq('user_id', userId)
+      .maybeSingle();
+    
+    if (error) {
+      console.warn(`[profile-loader] Error loading user_preferences: ${error.message}`);
+    } else if (data) {
+      userPrefs = data;
     }
   }
   
@@ -271,7 +294,7 @@ export async function loadTravelerProfile(
   // STEP 6: Extract Preferences
   // =========================================================================
   
-  const interests = extractInterests(travelDNA, tripData);
+  const interests = extractInterests(travelDNA, tripData, userPrefs, archetypeContext);
   const dietaryRestrictions = extractDietaryRestrictions(travelDNA);
   const avoidList = extractAvoidList(travelDNA, archetypeContext);
   const mobilityNeeds = extractMobilityNeeds(travelDNA);
@@ -352,32 +375,35 @@ function resolveTraitScores(travelDNA: any): TraitScores {
   };
 }
 
-function extractInterests(travelDNA: any, tripData: any): string[] {
+function extractInterests(travelDNA: any, tripData: any, userPrefs: any, archetypeContext: ArchetypeContext): string[] {
   const interests = new Set<string>();
   
-  // From Travel DNA
-  if (travelDNA?.interests) {
-    const dnaInterests = Array.isArray(travelDNA.interests) 
-      ? travelDNA.interests 
-      : [travelDNA.interests];
-    dnaInterests.forEach((i: string) => interests.add(i));
-  }
+  const addArray = (arr: unknown) => {
+    if (Array.isArray(arr)) arr.forEach((i: string) => { if (i) interests.add(i); });
+  };
   
-  // From travel_dna_v2 blob (fixed: was incorrectly referencing travel_dna)
-  if ((travelDNA?.travel_dna_v2 as any)?.interests) {
-    const blobInterests = (travelDNA.travel_dna_v2 as any).interests;
-    if (Array.isArray(blobInterests)) {
-      blobInterests.forEach((i: string) => interests.add(i));
-    }
-  }
+  // 1. user_preferences.interests (most explicit user signal)
+  addArray(userPrefs?.interests);
   
-  // From trip data
-  if (tripData?.preferences?.interests) {
-    const tripInterests = tripData.preferences.interests;
-    if (Array.isArray(tripInterests)) {
-      tripInterests.forEach((i: string) => interests.add(i));
-    }
-  }
+  // 2. user_preferences.travel_vibes (e.g., "mountain", "coastal", "bold")
+  addArray(userPrefs?.travel_vibes);
+  
+  // 3. travel_dna_profiles.tone_tags (e.g., "adventurous", "comfort-seeking")
+  addArray(travelDNA?.tone_tags);
+  
+  // 4. travel_dna_profiles.emotional_drivers (e.g., "discovery", "connection")
+  addArray(travelDNA?.emotional_drivers);
+  
+  // 5. trip_type from trip data (e.g., "honeymoon", "adventure")
+  if (tripData?.trip_type) interests.add(tripData.trip_type);
+  
+  // 6. Archetype prefer list (e.g., "local restaurants", "hidden gems")
+  addArray(archetypeContext?.definition?.prefer);
+  
+  // 7. Legacy: travel_dna_v2 blob interests
+  addArray((travelDNA?.travel_dna_v2 as any)?.interests);
+  
+  console.log(`[profile-loader] Extracted ${interests.size} interests: ${Array.from(interests).slice(0, 8).join(', ')}`);
   
   return Array.from(interests);
 }
