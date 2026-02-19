@@ -2933,7 +2933,9 @@ async function getUserPreferences(supabase: any, userId: string) {
         emotional_drivers,
         food_likes,
         food_dislikes,
-        ai_assistance_level
+        recovery_style,
+        active_hours_per_day,
+        allergies
       `)
       .eq('user_id', userId)
       .maybeSingle();
@@ -3400,27 +3402,7 @@ function buildPreferenceContext(insights: any, prefs: any): string {
       personaItems.push(`Planning style: ${planningMap[prefs.planning_preference] || prefs.planning_preference}`);
     }
     
-    // AI Assistance Level - affects how detailed the itinerary output is
-    if (prefs.ai_assistance_level) {
-      const aiLevelInstructions: Record<string, string> = {
-        'full': `🤖 FULL AI PLANNING: 
-   → Provide SPECIFIC venue names, restaurant recommendations, and exact addresses
-   → Include detailed timing, booking links, and insider tips
-   → Suggest specific dishes to order, best seats, and optimal visiting strategies
-   → Fill in all details - user wants turnkey itinerary ready to follow`,
-        'balanced': `🤝 COLLABORATIVE PLANNING:
-   → Provide specific recommendations but leave some flexibility
-   → Name top venues but also suggest "alternatively, explore the neighborhood"
-   → Balance detailed suggestions with room for personal discovery`,
-        'minimal': `👤 MINIMAL ASSISTANCE - SKELETON ITINERARY:
-   → Provide GENERAL suggestions, NOT specific venue names
-   → Use phrases like "Breakfast in [neighborhood]" instead of specific restaurants
-   → Say "Afternoon: Explore [area] - museums/galleries" instead of naming venues
-   → Leave timing flexible: "Morning", "Afternoon", "Evening" blocks only
-   → User prefers to fill in their own specific choices`,
-      };
-      personaItems.push(aiLevelInstructions[prefs.ai_assistance_level] || '');
-    }
+    // (ai_assistance_level column removed — column does not exist in schema)
     
     if (personaItems.length > 0) {
       sections.push({ title: '🎭 TRAVELER PERSONA', items: personaItems });
@@ -6286,6 +6268,20 @@ serve(async (req) => {
       // when authorized. No duplicate check needed here.
       // =========================================================================
       let originalTotalDays = 0; // Set after context prep
+
+      // =======================================================================
+      // STAGE 1.1: Prepare trip context (MUST happen before any context.* access)
+      // =======================================================================
+      const context = await prepareContext(supabase, tripId, userId);
+      if (!context) {
+        console.error(`[generate-full] prepareContext returned null for trip ${tripId}`);
+        return new Response(
+          JSON.stringify({ error: "Trip not found or missing required data" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      originalTotalDays = context.totalDays;
+      console.log(`[Stage 1.1] ✓ Context prepared: ${context.totalDays} days in ${context.destination}`);
 
       // Get user preferences for personalization
       const insights = userId ? await getLearnedPreferences(supabase, userId) : null;
