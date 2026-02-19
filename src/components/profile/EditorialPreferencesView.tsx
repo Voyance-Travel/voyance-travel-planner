@@ -251,47 +251,40 @@ export default function EditorialPreferencesView() {
     }
   };
 
+  // Guard ref to prevent multiple concurrent recalculations
+  const recalcInProgressRef = useRef(false);
+
   // Recalculate Travel DNA from current preferences
   const handleRecalculateDNA = async () => {
     if (!user?.id) return;
+    if (recalcInProgressRef.current) return; // prevent duplicate fires
+    recalcInProgressRef.current = true;
     
     setIsRecalculating(true);
     try {
       const result = await recalculateDNAFromPreferences(user.id);
-      if (result.success && result.dna) {
-        // Invalidate DNA-related queries so UI refreshes with preserved overrides
-        queryClient.invalidateQueries({ queryKey: ['travel-dna'] });
-        queryClient.invalidateQueries({ queryKey: ['profile'] });
-        queryClient.invalidateQueries({ queryKey: ['preference-completion'] });
-        
-        toast.success('Travel DNA updated based on your preferences!', {
-          description: result.dna.primary_archetype_display 
-            ? `You're now: ${result.dna.primary_archetype_display}`
-            : undefined,
-        });
 
-        // Grant preferences_completion bonus if not yet claimed
-        if (!prefsCompletionGranted.current && !hasClaimedBonus('preferences_completion')) {
-          prefsCompletionGranted.current = true;
-          try {
-            const bonusResult = await claimBonus('preferences_completion');
-            if (bonusResult.granted) {
-              toast.success(`+${bonusResult.credits} credits earned!`, {
-                description: 'Thanks for setting your preferences!',
-              });
-            }
-          } catch (e) {
-            console.warn('[Preferences] Could not grant completion bonus:', e);
-          }
-        }
+      if (result.success && result.dna) {
+        queryClient.invalidateQueries({ queryKey: ['travel-dna', user.id] });
+        queryClient.invalidateQueries({ queryKey: ['profile'] });
+        
+        const primaryName = (result.dna as Record<string, unknown> & { archetype?: { primary?: string } })?.archetype?.primary;
+        toast.success('Travel DNA updated!', {
+          description: primaryName
+            ? `You're a ${primaryName.replace(/_/g, ' ')}!`
+            : 'Your personality profile has been refreshed.',
+        });
       } else {
-        toast.error('Failed to recalculate Travel DNA');
+        toast.error('Could not recalculate DNA', {
+          description: 'Try completing more preferences first.',
+        });
       }
     } catch (error) {
       console.error('Failed to recalculate DNA:', error);
       toast.error('Failed to update Travel DNA');
     } finally {
       setIsRecalculating(false);
+      recalcInProgressRef.current = false;
     }
   };
 
