@@ -164,6 +164,42 @@ serve(async (req) => {
 
     console.log(`[enrich-manual-trip] Starting Smart Finish for trip ${tripId} (${trip.destination})`);
 
+    // --- Ensure Travel DNA traits are non-zero before generation ---
+    // Users whose DNA was calculated during a prior bug may have all-zero trait_scores.
+    // Detect this and trigger a recalculation so generate-itinerary gets real values.
+    try {
+      const { data: dnaRow } = await supabase
+        .from("travel_dna_profiles")
+        .select("trait_scores")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const traits = (dnaRow?.trait_scores as Record<string, number>) || {};
+      const allZero = Object.values(traits).every(v => v === 0);
+
+      if (!dnaRow || allZero) {
+        console.log(`[enrich-manual-trip] DNA traits missing or all zeros — triggering recalculation`);
+        const recalcResp = await fetch(`${supabaseUrl}/functions/v1/calculate-travel-dna`, {
+          method: "POST",
+          headers: {
+            "Authorization": authHeader!,
+            "Content-Type": "application/json",
+            "apikey": Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+          },
+          body: JSON.stringify({ userId: user.id }),
+        });
+        if (recalcResp.ok) {
+          console.log(`[enrich-manual-trip] ✓ DNA recalculated successfully`);
+        } else {
+          console.warn(`[enrich-manual-trip] DNA recalc returned ${recalcResp.status} (non-fatal)`);
+        }
+      } else {
+        console.log(`[enrich-manual-trip] DNA traits look healthy, skipping recalc`);
+      }
+    } catch (dnaErr) {
+      console.warn("[enrich-manual-trip] DNA pre-check failed (non-fatal):", dnaErr);
+    }
+
     // --- Build user research context from parsed activities ---
     const researchContext = buildResearchContext(itinerary);
     console.log(`[enrich-manual-trip] Research context built: ${researchContext.length} chars, ${itinerary.days.length} days`);
