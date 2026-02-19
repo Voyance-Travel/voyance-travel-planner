@@ -2115,7 +2115,11 @@ serve(async (req) => {
     let fillRates: Record<Trait, number> = {} as Record<Trait, number>;
     let contributions: TraitContribution[] = [];
     
-    if (precomputedTraits && typeof precomputedTraits === 'object') {
+    // Only use precomputedTraits if they contain real signal (not all zeros from failed V3 parsing)
+    const precomputedHasSignal = precomputedTraits && typeof precomputedTraits === 'object' &&
+      ALL_TRAITS.some(t => Math.abs(precomputedTraits[t] ?? 0) >= 1.0);
+    
+    if (precomputedHasSignal) {
       // V3 quiz path: frontend already converted 25-trait scores to 8-trait system
       console.log('[TravelDNA V2] Using pre-computed traits (V3 quiz path)');
       rawScores = {
@@ -2145,7 +2149,10 @@ serve(async (req) => {
         signalStrength[trait] = Math.abs(finalScores[trait]);
       }
     } else {
-      // Legacy quiz path: parse answers using ANSWER_DELTAS
+      // Legacy quiz path (or precomputedTraits were all zeros): parse answers using ANSWER_DELTAS
+      if (precomputedTraits && !precomputedHasSignal) {
+        console.log('[TravelDNA V2] ⚠️ precomputedTraits received but all near-zero — falling back to legacy answer parsing');
+      }
       const result = calculateTraitScoresV2(answers);
       rawScores = result.rawScores;
       finalScores = result.finalScores;
