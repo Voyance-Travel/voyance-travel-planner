@@ -107,12 +107,31 @@ serve(async (req) => {
     // --- Load trip ---
     const { data: trip, error: tripError } = await supabase
       .from("trips")
-      .select("id, itinerary_data, destination, user_id, start_date, end_date, metadata, smart_finish_purchased")
+      .select("id, itinerary_data, destination, user_id, start_date, end_date, metadata, smart_finish_purchased, creation_source")
       .eq("id", tripId)
       .single();
 
     if (tripError || !trip) throw new Error("Trip not found");
     if (trip.user_id !== user.id) throw new Error("Not your trip");
+
+    // Guard: if Smart Finish already successfully completed, do not re-run generation.
+    // This prevents the retry loop where a page reload re-triggers enrichment and issues
+    // spurious refunds.
+    const meta = (trip.metadata as any) || {};
+    if (meta.smartFinishCompleted === true) {
+      console.log(`[enrich-manual-trip] Smart Finish already completed for trip ${tripId} — skipping.`);
+      return new Response(JSON.stringify({
+        success: true,
+        alreadyCompleted: true,
+        totalDays: 0,
+        totalActivities: 0,
+        tipsAdded: 0,
+        gapFixes: [],
+        routeHints: [],
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const itinerary = trip.itinerary_data as any;
     if (!itinerary?.days) throw new Error("No itinerary data to base generation on");
@@ -178,6 +197,22 @@ serve(async (req) => {
     }
 
     console.log(`[enrich-manual-trip] ✓ Smart Finish complete: ${generateData.totalDays} days, ${generateData.totalActivities} activities`);
+
+    // Mark completion in metadata so subsequent calls (e.g. page-reload retries) are
+    // short-circuited before any credit charge/refund cycle occurs.
+    const completedMeta = {
+      ...updatedMetadata,
+      smartFinishCompleted: true,
+      smartFinishCompletedAt: new Date().toISOString(),
+    };
+    await supabase
+      .from("trips")
+      .update({
+        metadata: completedMeta,
+        smart_finish_purchased: true,
+        creation_source: "smart_finish",
+      })
+      .eq("id", tripId);
 
     return new Response(JSON.stringify({
       success: true,
