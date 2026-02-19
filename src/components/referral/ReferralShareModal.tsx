@@ -74,7 +74,13 @@ export function ReferralShareModal({
         : `${window.location.origin}/start?ref=${code}`;
       setReferralLink(shareLink);
       
-      // TODO: Store referral code in database for tracking
+      // Store referral code in database for tracking
+      await supabase
+        .from('referral_codes' as any)
+        .upsert(
+          { user_id: user.id, code, trip_id: tripId || null },
+          { onConflict: 'code' }
+        );
     } catch (e) {
       console.error('Failed to generate referral link:', e);
       const fallbackLink = tripId 
