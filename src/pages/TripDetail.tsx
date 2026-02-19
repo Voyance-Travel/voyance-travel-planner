@@ -27,6 +27,7 @@ import type { Tables } from '@/integrations/supabase/types';
 import type { GeneratedDay, TripOverview } from '@/hooks/useItineraryGeneration';
 import { enrichHotel } from '@/services/hotelAPI';
 import { usePaymentVerification } from '@/hooks/usePaymentVerification';
+import { useStalePendingChargeRefund } from '@/hooks/useStalePendingChargeRefund';
 import DynamicDestinationPhotos from '@/components/planner/shared/DynamicDestinationPhotos';
 import TripPhotoGallery from '@/components/trip/TripPhotoGallery';
 import { getDestinationByCity, type Destination } from '@/services/supabase/destinations';
@@ -109,6 +110,9 @@ export default function TripDetail() {
       setPaymentsRefreshKey(prev => prev + 1);
     },
   });
+
+  // Stale pending charge safety net — auto-refund failed Smart Finish charges
+  useStalePendingChargeRefund(tripId);
 
   // =========================================================================
   // HOTEL ENRICHMENT: Auto-enrich if missing address/website/photos
