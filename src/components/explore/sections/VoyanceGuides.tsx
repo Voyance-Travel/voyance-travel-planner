@@ -1,9 +1,17 @@
+import { useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Clock, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getFeaturedGuides, guides as allGuides } from '@/data/guides';
 
 export default function VoyanceGuides() {
+  const handleImgError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    img.onerror = null;
+    img.style.display = 'none';
+    img.parentElement?.classList.add('bg-gradient-to-br', 'from-muted', 'to-muted-foreground/20');
+  }, []);
+
   // Use featured guides, or first 3 if none featured
   const featuredGuides = getFeaturedGuides();
   const displayGuides = featuredGuides.length > 0 ? featuredGuides.slice(0, 3) : allGuides.slice(0, 3);
@@ -50,6 +58,7 @@ export default function VoyanceGuides() {
                     src={guide.coverImage}
                     alt={guide.title}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    onError={handleImgError}
                   />
                   <div className="absolute top-3 left-3">
                     <span className="px-2 py-1 bg-white/90 backdrop-blur-sm rounded-full text-xs font-medium">

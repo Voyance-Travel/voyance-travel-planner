@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
+import { useCallback } from 'react';
 import { Link } from 'react-router-dom';
 
 const styles = [
@@ -42,6 +43,13 @@ const styles = [
 ];
 
 export default function ExploreByStyle() {
+  const handleImgError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    img.onerror = null;
+    img.style.display = 'none';
+    img.parentElement?.classList.add('bg-gradient-to-br', 'from-muted', 'to-muted-foreground/20');
+  }, []);
+
   return (
     <section className="py-20 bg-muted/30">
       <div className="max-w-7xl mx-auto px-4">
@@ -86,6 +94,7 @@ export default function ExploreByStyle() {
                     src={style.image}
                     alt={style.label}
                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    onError={handleImgError}
                   />
                   <div className="absolute inset-0 bg-black/30 group-hover:bg-black/40 transition-colors" />
                 </div>

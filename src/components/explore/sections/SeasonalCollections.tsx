@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Snowflake, Sun, Leaf, Flower } from 'lucide-react';
+import { useCallback } from 'react';
 
 const collections = [
   {
@@ -42,6 +43,13 @@ const collections = [
 ];
 
 export default function SeasonalCollections() {
+  const handleImgError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    img.onerror = null;
+    img.style.display = 'none';
+    img.parentElement?.classList.add('bg-gradient-to-br', 'from-muted', 'to-muted-foreground/20');
+  }, []);
+
   return (
     <section className="py-20 bg-background">
       <div className="max-w-7xl mx-auto px-4">
@@ -78,6 +86,7 @@ export default function SeasonalCollections() {
                     src={collection.image}
                     alt={collection.title}
                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    onError={handleImgError}
                   />
                   <div className={`absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent`} />
                   
