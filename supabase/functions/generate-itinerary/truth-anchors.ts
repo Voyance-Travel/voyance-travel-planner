@@ -444,9 +444,14 @@ export function isVenueOpenOnDay(
     if (timeRanges.length > 0) {
       const scheduledMins = parseHHMMToMinutes(scheduledTimeHHMM);
       if (scheduledMins !== null) {
-        const withinRange = timeRanges.some(
-          range => scheduledMins >= range.open && scheduledMins <= range.close
-        );
+        const withinRange = timeRanges.some(range => {
+          // Handle midnight crossover: e.g. open 05:00, close 00:00 means open until midnight
+          if (range.close <= range.open) {
+            // Crosses midnight: scheduled time is valid if >= open OR <= close
+            return scheduledMins >= range.open || scheduledMins <= range.close;
+          }
+          return scheduledMins >= range.open && scheduledMins <= range.close;
+        });
         if (!withinRange) {
           return { 
             isOpen: false, 
