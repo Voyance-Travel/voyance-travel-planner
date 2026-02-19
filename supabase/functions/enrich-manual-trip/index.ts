@@ -38,7 +38,7 @@ async function callAI(apiKey: string, prompt: string, attempt: number): Promise<
         { role: "user", content: prompt },
       ],
       temperature: 0.4,
-      max_tokens: 3000,
+      max_tokens: 8000,
     }),
   });
 
