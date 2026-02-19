@@ -79,6 +79,8 @@ const EXTRACT_TOOL = {
         accommodationNotes: { type: "array", items: { type: "string" } },
         practicalTips: { type: "array", items: { type: "string" } },
         unparsed: { type: "array", items: { type: "string" }, description: "Text that couldn't be parsed into structured data" },
+        tripVibe: { type: "string", description: "The overall vibe/intent of the trip inferred from the pasted text, e.g. 'foodie adventure', 'relaxing wellness retreat', 'party and nightlife', 'cultural deep dive', 'outdoor exploration', 'romantic getaway'. Capture the TONE and PURPOSE the user clearly intended." },
+        tripPriorities: { type: "array", items: { type: "string" }, description: "Top 3-5 specific priorities extracted from the text, e.g. ['food carts', 'craft breweries', 'late-night dining', 'live music']. These are the concrete things the user most wants to experience." },
       },
       required: ["days"],
       additionalProperties: false,

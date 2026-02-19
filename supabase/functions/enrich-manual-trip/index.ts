@@ -45,6 +45,14 @@ function buildResearchContext(itinerary: any): string {
     }
   }
 
+  // Include trip vibe/priorities if extracted by parse-trip-input
+  if (itinerary.tripVibe) {
+    lines.push(`TRIP VIBE/INTENT: ${itinerary.tripVibe}`);
+  }
+  if (itinerary.tripPriorities?.length) {
+    lines.push(`TRIP PRIORITIES: ${itinerary.tripPriorities.join(", ")}`);
+  }
+
   lines.push("USER'S RESEARCHED PLACES & ACTIVITIES (incorporate these into the itinerary where they fit the traveler's DNA):");
 
   // Deduplicate activities
@@ -153,6 +161,9 @@ serve(async (req) => {
       // Preserve parsed notes for display after Smart Finish completes
       accommodationNotes: itinerary.metadata?.accommodationNotes || itinerary.accommodationNotes || existingMetadata.accommodationNotes || [],
       practicalTips: itinerary.metadata?.practicalTips || itinerary.practicalTips || existingMetadata.practicalTips || [],
+      // Preserve trip vibe/priorities extracted by parse-trip-input
+      tripVibe: itinerary.tripVibe || existingMetadata.tripVibe || null,
+      tripPriorities: itinerary.tripPriorities || existingMetadata.tripPriorities || [],
     };
 
     const { error: metaUpdateError } = await supabase
