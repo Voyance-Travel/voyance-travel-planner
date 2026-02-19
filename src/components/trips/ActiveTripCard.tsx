@@ -29,6 +29,8 @@ import { cn } from '@/lib/utils';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { useTripHeroImage } from '@/hooks/useTripHeroImage';
  import { openMapLocation, isIOS } from '@/utils/mapNavigation';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface ActiveTripCardProps {
   trip: {
@@ -64,6 +66,51 @@ function getTimeOfDayGreeting() {
 
 export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
    const navigate = useNavigate();
+  const [userRating, setUserRating] = useState<number>(0);
+  const [hoverRating, setHoverRating] = useState<number>(0);
+  const [isSavingRating, setIsSavingRating] = useState(false);
+
+  // Load existing rating
+  useEffect(() => {
+    const loadRating = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('trip_ratings' as any)
+        .select('rating')
+        .eq('user_id', user.id)
+        .eq('trip_id', trip.id)
+        .maybeSingle();
+      if ((data as any)?.rating) setUserRating((data as any).rating as number);
+    };
+    loadRating();
+  }, [trip.id]);
+
+  const handleRatingClick = async (rating: number) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error('Sign in to rate your trip');
+      return;
+    }
+    setIsSavingRating(true);
+    const newRating = rating === userRating ? 0 : rating; // toggle off if same
+    try {
+      if (newRating === 0) {
+        await (supabase.from('trip_ratings' as any) as any).delete().eq('user_id', user.id).eq('trip_id', trip.id);
+      } else {
+        await supabase.from('trip_ratings' as any).upsert(
+          { user_id: user.id, trip_id: trip.id, rating: newRating, updated_at: new Date().toISOString() } as any,
+          { onConflict: 'user_id,trip_id' }
+        );
+      }
+      setUserRating(newRating);
+      if (newRating > 0) toast.success(`Rated ${newRating} star${newRating > 1 ? 's' : ''}!`);
+    } catch {
+      toast.error('Failed to save rating');
+    } finally {
+      setIsSavingRating(false);
+    }
+  };
 
   // Use smart hero image hook with API fallback for uncurated destinations
   const seededHero = trip.metadata?.hero_image;
@@ -240,15 +287,17 @@ export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
             {[1, 2, 3, 4, 5].map((rating) => (
               <button
                 key={rating}
+                disabled={isSavingRating}
                 className="p-1.5 rounded-full hover:bg-muted transition-colors group"
-                onClick={() => {
-                  // TODO: Implement quick rating
-                  // TODO: Implement quick rating
-                }}
+                onClick={() => handleRatingClick(rating)}
+                onMouseEnter={() => setHoverRating(rating)}
+                onMouseLeave={() => setHoverRating(0)}
               >
                 <Star className={cn(
                   "h-5 w-5 transition-colors",
-                  "text-muted-foreground/40 group-hover:text-amber-400 group-hover:fill-amber-400"
+                  (hoverRating || userRating) >= rating
+                    ? "text-amber-400 fill-amber-400"
+                    : "text-muted-foreground/40 group-hover:text-amber-400 group-hover:fill-amber-400"
                 )} />
               </button>
             ))}
