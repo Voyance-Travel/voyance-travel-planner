@@ -361,6 +361,8 @@ interface StrictDay {
     mealsIncluded?: number;
     pacingLevel?: 'relaxed' | 'moderate' | 'packed';
   };
+  accommodationNotes?: string[];
+  practicalTips?: string[];
   // Multi-city tags
   city?: string;
   country?: string;
@@ -4560,6 +4562,30 @@ For EVERY activity you generate, you MUST include ALL of these intelligence fiel
 7. "personalization.whyThisFits" (string): MUST reference specific traveler traits/preferences. NOT generic.
 
 DO NOT leave these fields empty or omit them. They are the core intelligence layer.
+
+${'='.repeat(70)}
+🔀 CHOICE PAIRS — MANDATORY FOR DINING AND KEY ACTIVITIES
+${'='.repeat(70)}
+For EVERY dining slot (breakfast, lunch, dinner) and at least 1-2 non-dining activity slots per day, generate TWO alternatives as separate activities with:
+- isOption: true
+- optionGroup: a shared ID like "breakfast-d{dayNumber}", "lunch-d{dayNumber}", "dinner-d{dayNumber}", "activity-d{dayNumber}-afternoon"
+- Both alternatives share the SAME startTime and endTime
+- Both should be high-quality, genuinely different options (not the same type of cuisine or experience)
+
+Example for a dinner slot:
+  { title: "Lardo", category: "dining", startTime: "19:00", endTime: "20:30", isOption: true, optionGroup: "dinner-d1", ... }
+  { title: "Canard", category: "dining", startTime: "19:00", endTime: "20:30", isOption: true, optionGroup: "dinner-d1", ... }
+
+For non-dining activities, pair different experiences (e.g. a museum vs a walking tour, a park vs a market).
+Transport, accommodation, and check-in/out activities do NOT need alternatives.
+
+${'='.repeat(70)}
+📋 ACCOMMODATION NOTES & PRACTICAL TIPS — REQUIRED (Day 1 only)
+${'='.repeat(70)}
+On Day 1 ONLY, include these top-level arrays in your response:
+- "accommodationNotes": 2-3 tips about where to stay (best neighborhoods, hotel styles, booking tips)
+- "practicalTips": 3-4 practical travel tips (transport, money-saving, cultural etiquette, safety, connectivity)
+These help the traveler prepare for their trip.
 `;
 
       // Build banned experience types list for this day
@@ -4701,6 +4727,8 @@ Generate activities for this day following ALL constraints above.`;
                           bestTime: { type: "string", description: "If hasTimingHack=true, explain why this time slot is optimal (e.g. '9am avoids the 11am-3pm crowds')" },
                           crowdLevel: { type: "string", enum: ["low", "moderate", "high"], description: "Expected crowd level at the scheduled time" },
                           voyanceInsight: { type: "string", description: "A unique Voyance-only insight about this place that typical travel guides miss" },
+                          isOption: { type: "boolean", description: "true if this is one of multiple either/or choices for a time slot" },
+                          optionGroup: { type: "string", description: "Shared ID for either/or options at the same time slot, e.g. 'dinner-d1', 'lunch-d2'" },
                           personalization: {
                             type: "object",
                             properties: {
@@ -4714,7 +4742,9 @@ Generate activities for this day following ALL constraints above.`;
                         },
                         required: ["id", "title", "startTime", "endTime", "category", "location", "cost", "bookingRequired", "personalization", "tips", "crowdLevel", "isHiddenGem", "hasTimingHack"]
                       }
-                    }
+                    },
+                    accommodationNotes: { type: "array", items: { type: "string" }, description: "2-3 accommodation tips for this destination (e.g. best neighborhoods to stay, hotel recommendations, booking tips)" },
+                    practicalTips: { type: "array", items: { type: "string" }, description: "3-4 practical travel tips for this destination (e.g. transport tips, money-saving advice, cultural etiquette, safety tips)" }
                   },
                   required: ["dayNumber", "date", "title", "activities"]
                 }
@@ -6078,6 +6108,9 @@ async function finalSaveItinerary(
           version: '2.0'
         }
       },
+      // Extract accommodationNotes and practicalTips from generated days (typically on Day 1)
+      accommodationNotes: enrichedData.days.flatMap(d => d.accommodationNotes || []).filter(Boolean).slice(0, 5),
+      practicalTips: enrichedData.days.flatMap(d => d.practicalTips || []).filter(Boolean).slice(0, 6),
       overview: enrichedData.overview,
       enrichmentMetadata: enrichedData.enrichmentMetadata
     };
@@ -8809,7 +8842,15 @@ General Requirements:
 - Fill the day from morning through evening: include 2-3 dining slots, 2-3 exploration activities, and evening activities where appropriate
 ${lockedActivities.length > 0 ? '- DO NOT generate activities for locked time slots listed above' : ''}
 ${collaboratorAttributionPrompt}
-${voyancePicksPrompt}`;
+${voyancePicksPrompt}
+
+CHOICE PAIRS — MANDATORY:
+For EVERY dining slot and at least 1-2 non-dining activity slots, generate TWO alternatives with:
+- isOption: true, optionGroup: shared ID like "dinner-d${dayNumber}", "lunch-d${dayNumber}", "activity-d${dayNumber}-afternoon"
+- Both share the SAME startTime/endTime but are genuinely different options
+- Transport/accommodation/check-in do NOT need alternatives
+Also include "accommodationNotes" (2-3 tips) and "practicalTips" (3-4 tips) arrays in the response.
+`;
 
       const userPrompt = `Generate Day ${dayNumber} of ${totalDays} in ${destination}${destinationCountry ? `, ${destinationCountry}` : ''}.
 
@@ -8910,9 +8951,11 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                             suggestedFor: { type: "string", description: "User ID of the traveler whose preferences most influenced this activity (group trips)" },
                             isHiddenGem: { type: "boolean", description: "true if this is a hidden gem discovered through deep research. NOT for mainstream tourist attractions." },
                             hasTimingHack: { type: "boolean", description: "true if scheduling at this specific time provides a meaningful advantage" },
-                            bestTime: { type: "string", description: "If hasTimingHack=true, explain why this time slot is optimal" },
+                            bestTime: { type: "string", description: "If hasTimingHack=true, explain why this time is optimal" },
                             crowdLevel: { type: "string", enum: ["low", "moderate", "high"], description: "Expected crowd level at the scheduled time" },
                             voyanceInsight: { type: "string", description: "A unique Voyance-only insight about this place" },
+                            isOption: { type: "boolean", description: "true if this is one of multiple either/or choices for a time slot" },
+                            optionGroup: { type: "string", description: "Shared ID for either/or options at the same time slot, e.g. 'dinner-d1', 'lunch-d2'" },
                             personalization: {
                               type: "object",
                               properties: {
@@ -8927,6 +8970,8 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                           required: ["title", "category", "startTime", "endTime", "location", "personalization", "tips", "crowdLevel", "isHiddenGem", "hasTimingHack"]
                         }
                       },
+                      accommodationNotes: { type: "array", items: { type: "string" }, description: "2-3 accommodation tips for this destination" },
+                      practicalTips: { type: "array", items: { type: "string" }, description: "3-4 practical travel tips for this destination" },
                       narrative: { type: "object", properties: { theme: { type: "string" }, highlights: { type: "array", items: { type: "string" } } } }
                     },
                     required: ["dayNumber", "date", "theme", "activities"]

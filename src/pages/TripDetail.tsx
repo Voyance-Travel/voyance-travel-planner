@@ -1106,6 +1106,15 @@ export default function TripDetail() {
                         source: 'smart_finish',
                       };
                     }
+                    // For regular AI-generated trips, check top-level itinerary_data
+                    const itData = trip.itinerary_data as any;
+                    if (itData?.accommodationNotes?.length || itData?.practicalTips?.length) {
+                      return {
+                        accommodationNotes: itData.accommodationNotes || [],
+                        practicalTips: itData.practicalTips || [],
+                        source: 'ai_generated',
+                      };
+                    }
                     return undefined;
                   })()}
                   isEditable={true}
