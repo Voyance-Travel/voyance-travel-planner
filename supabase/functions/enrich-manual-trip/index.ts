@@ -123,8 +123,6 @@ serve(async (req) => {
     if (trip.user_id !== user.id) throw new Error("Not your trip");
 
     // Guard: if Smart Finish already successfully completed, do not re-run generation.
-    // This prevents the retry loop where a page reload re-triggers enrichment and issues
-    // spurious refunds.
     const meta = (trip.metadata as any) || {};
     if (meta.smartFinishCompleted === true) {
       console.log(`[enrich-manual-trip] Smart Finish already completed for trip ${tripId} — skipping.`);
@@ -144,6 +142,26 @@ serve(async (req) => {
     const itinerary = trip.itinerary_data as any;
     if (!itinerary?.days) throw new Error("No itinerary data to base generation on");
 
+    // --- Record pending charge for server-side safety net ---
+    let pendingChargeId: string | null = null;
+    try {
+      const { data: pendingRow } = await supabase
+        .from("pending_credit_charges")
+        .insert({
+          user_id: user.id,
+          trip_id: tripId,
+          action: "SMART_FINISH",
+          credits_amount: 50,
+          status: "pending",
+        })
+        .select("id")
+        .single();
+      pendingChargeId = pendingRow?.id ?? null;
+      console.log(`[enrich-manual-trip] Pending charge recorded: ${pendingChargeId}`);
+    } catch (pcErr) {
+      console.warn("[enrich-manual-trip] Failed to record pending charge (non-fatal):", pcErr);
+    }
+
     console.log(`[enrich-manual-trip] Starting Smart Finish for trip ${tripId} (${trip.destination})`);
 
     // --- Build user research context from parsed activities ---
@@ -151,17 +169,14 @@ serve(async (req) => {
     console.log(`[enrich-manual-trip] Research context built: ${researchContext.length} chars, ${itinerary.days.length} days`);
 
     // --- Write research context into trip metadata so generate-itinerary picks it up ---
-    // Also preserve accommodationNotes and practicalTips so they survive the itinerary_data replacement
     const existingMetadata = (trip.metadata as any) || {};
     const updatedMetadata = {
       ...existingMetadata,
       mustDoActivities: researchContext,
       smartFinishSource: "manual_builder",
       smartFinishRequestedAt: new Date().toISOString(),
-      // Preserve parsed notes for display after Smart Finish completes
       accommodationNotes: itinerary.metadata?.accommodationNotes || itinerary.accommodationNotes || existingMetadata.accommodationNotes || [],
       practicalTips: itinerary.metadata?.practicalTips || itinerary.practicalTips || existingMetadata.practicalTips || [],
-      // Preserve trip vibe/priorities extracted by parse-trip-input
       tripVibe: itinerary.tripVibe || existingMetadata.tripVibe || null,
       tripPriorities: itinerary.tripPriorities || existingMetadata.tripPriorities || [],
     };
@@ -172,7 +187,6 @@ serve(async (req) => {
         metadata: updatedMetadata,
         smart_finish_purchased: true,
         smart_finish_purchased_at: new Date().toISOString(),
-        // Clear creation_source so the trip is treated as a normal AI-generated trip after Smart Finish
         creation_source: "smart_finish",
       })
       .eq("id", tripId);
@@ -213,8 +227,7 @@ serve(async (req) => {
 
     console.log(`[enrich-manual-trip] ✓ Smart Finish complete: ${generateData.totalDays} days, ${generateData.totalActivities} activities`);
 
-    // Mark completion in metadata so subsequent calls (e.g. page-reload retries) are
-    // short-circuited before any credit charge/refund cycle occurs.
+    // Mark completion in metadata
     const completedMeta = {
       ...updatedMetadata,
       smartFinishCompleted: true,
@@ -228,6 +241,14 @@ serve(async (req) => {
         creation_source: "smart_finish",
       })
       .eq("id", tripId);
+
+    // --- Mark pending charge as completed ---
+    if (pendingChargeId) {
+      await supabase
+        .from("pending_credit_charges")
+        .update({ status: "completed", resolved_at: new Date().toISOString(), resolution_note: "Smart Finish succeeded" })
+        .eq("id", pendingChargeId);
+    }
 
     return new Response(JSON.stringify({
       success: true,

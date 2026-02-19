@@ -4063,6 +4063,42 @@ export type Database = {
         }
         Relationships: []
       }
+      pending_credit_charges: {
+        Row: {
+          action: string
+          created_at: string
+          credits_amount: number
+          id: string
+          resolution_note: string | null
+          resolved_at: string | null
+          status: string
+          trip_id: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          credits_amount: number
+          id?: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          status?: string
+          trip_id: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          credits_amount?: number
+          id?: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          status?: string
+          trip_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       personalization_tag_stats: {
         Row: {
           completed_count: number | null
