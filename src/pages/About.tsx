@@ -142,10 +142,10 @@ function ChaosMockup() {
             animate={{ rotate: [-4, -3, -4] }}
             transition={{ duration: 2, repeat: Infinity }}
           >
-            <div className="font-bold mb-1">TODO:</div>
-            <div>• Compare hotels</div>
-            <div>• Check reviews</div>
-            <div>• Ask Sarah dates</div>
+            <div className="font-bold mb-1">Still need to:</div>
+            <div>• Compare hotel options</div>
+            <div>• Read more reviews</div>
+            <div>• Confirm dates w/ group</div>
           </motion.div>
           
           {/* Stress indicator */}
