@@ -4416,6 +4416,30 @@ export type Database = {
         }
         Relationships: []
       }
+      referral_codes: {
+        Row: {
+          code: string
+          created_at: string
+          id: string
+          trip_id: string | null
+          user_id: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          id?: string
+          trip_id?: string | null
+          user_id: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          id?: string
+          trip_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       saved_items: {
         Row: {
           created_at: string
