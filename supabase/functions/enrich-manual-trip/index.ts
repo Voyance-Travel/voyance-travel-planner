@@ -1,13 +1,15 @@
 /**
- * Enrich Manual Trip — Post Smart Finish purchase
- * 
- * Performs lightweight enrichment on manually-built itineraries:
- * - Route optimization hints
- * - Insider tips per activity (AI pass)
- * - DNA gap detailed fixes
- * - Marks trip as smart_finish_purchased
- * 
- * Cost: ~$0.10–0.22/call
+ * Enrich Manual Trip — Smart Finish via Full Generation
+ *
+ * When a user purchases Smart Finish on a manually-built itinerary, this function:
+ * 1. Reads the user's parsed research/activities from the existing itinerary_data
+ * 2. Converts them into a "mustDoActivities" research context string
+ * 3. Writes that context into trips.metadata so generate-itinerary can use it
+ * 4. Calls generate-itinerary with action: 'generate-full' to produce a complete,
+ *    polished Voyance itinerary — identical in quality to the standard flow
+ *
+ * This approach ensures Smart Finish produces the SAME output format as normal
+ * Voyance-generated trips, not a weird "enrichment" hybrid.
  */
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
@@ -18,60 +20,62 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+/**
+ * Convert parsed itinerary activities into a compact research string
+ * that can be injected as mustDoActivities into generate-itinerary's prompt
+ */
+function buildResearchContext(itinerary: any): string {
+  if (!itinerary?.days?.length) return "";
 
-async function callAI(apiKey: string, prompt: string, attempt: number): Promise<{ tips: any[]; gapFixes: any[]; routeHints: any[] }> {
-  const systemPrompt = attempt > 1
-    ? "You are Voyance, a travel intelligence engine. You MUST respond with ONLY valid JSON, no markdown, no code fences, no explanation text."
-    : "You are Voyance, a travel intelligence engine.";
+  const lines: string[] = [];
 
-  const response = await fetch(AI_GATEWAY_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.4,
-      max_tokens: 8000,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`AI gateway returned ${response.status}: ${errorText}`);
+  // Extract preferences/notes if present
+  if (itinerary.preferences) {
+    const prefs = itinerary.preferences;
+    if (prefs.rawPreferenceText) {
+      lines.push(`USER'S ORIGINAL PREFERENCES:\n"${prefs.rawPreferenceText}"\n`);
+    } else {
+      const parts: string[] = [];
+      if (prefs.focus?.length) parts.push(`Focus: ${prefs.focus.join(", ")}`);
+      if (prefs.avoid?.length) parts.push(`Avoid: ${prefs.avoid.join(", ")}`);
+      if (prefs.dietary?.length) parts.push(`Dietary: ${prefs.dietary.join(", ")}`);
+      if (prefs.pace) parts.push(`Pace: ${prefs.pace}`);
+      if (prefs.budget) parts.push(`Budget: ${prefs.budget}`);
+      if (parts.length) lines.push(`USER PREFERENCES: ${parts.join(" | ")}\n`);
+    }
   }
 
-  const aiData = await response.json();
-  const content = aiData.choices?.[0]?.message?.content || "";
+  lines.push("USER'S RESEARCHED PLACES & ACTIVITIES (incorporate these into the itinerary where they fit the traveler's DNA):");
 
-  if (!content.trim()) {
-    throw new Error("AI returned empty content");
+  // Deduplicate activities
+  const seen = new Set<string>();
+  for (const day of itinerary.days) {
+    const dayActivities = day.activities || [];
+    for (const activity of dayActivities) {
+      const name = activity.title || activity.name || "";
+      if (!name || seen.has(name.toLowerCase())) continue;
+      seen.add(name.toLowerCase());
+
+      const parts: string[] = [`- ${name}`];
+      if (activity.category) parts.push(`(${activity.category})`);
+      if (activity.location?.name || activity.location?.address) {
+        const loc = activity.location?.name || activity.location?.address;
+        parts.push(`at ${loc}`);
+      }
+      if (activity.notes || activity.description) {
+        const note = activity.notes || activity.description;
+        if (note.length < 200) parts.push(`— ${note}`);
+      }
+      lines.push(parts.join(" "));
+    }
   }
 
-  // Extract JSON from response
-  const jsonMatch = content.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error("No JSON object found in AI response");
+  // Add practical tips if present
+  if (itinerary.practicalTips?.length) {
+    lines.push(`\nPRACTICAL TIPS FROM USER'S RESEARCH:\n${itinerary.practicalTips.slice(0, 5).map((t: string) => `- ${t}`).join("\n")}`);
   }
 
-  const parsed = JSON.parse(jsonMatch[0]);
-
-  // Validate structure
-  if (!parsed.tips && !parsed.gapFixes && !parsed.routeHints) {
-    throw new Error("Parsed JSON missing expected fields (tips, gapFixes, routeHints)");
-  }
-
-  return {
-    tips: Array.isArray(parsed.tips) ? parsed.tips : [],
-    gapFixes: Array.isArray(parsed.gapFixes) ? parsed.gapFixes : [],
-    routeHints: Array.isArray(parsed.routeHints) ? parsed.routeHints : [],
-  };
+  return lines.join("\n");
 }
 
 serve(async (req) => {
@@ -79,18 +83,19 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-  );
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
+    // --- Auth ---
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("Not authenticated");
     const token = authHeader.replace("Bearer ", "");
 
     const anonClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
+      supabaseUrl,
       Deno.env.get("SUPABASE_ANON_KEY") ?? ""
     );
     const { data: { user }, error: authError } = await anonClient.auth.getUser(token);
@@ -99,10 +104,10 @@ serve(async (req) => {
     const { tripId } = await req.json();
     if (!tripId) throw new Error("tripId required");
 
-    // Load trip
+    // --- Load trip ---
     const { data: trip, error: tripError } = await supabase
       .from("trips")
-      .select("id, itinerary_data, destination, user_id, gap_analysis_result, start_date")
+      .select("id, itinerary_data, destination, user_id, start_date, end_date, metadata, smart_finish_purchased")
       .eq("id", tripId)
       .single();
 
@@ -110,185 +115,81 @@ serve(async (req) => {
     if (trip.user_id !== user.id) throw new Error("Not your trip");
 
     const itinerary = trip.itinerary_data as any;
-    if (!itinerary?.days) throw new Error("No itinerary data");
+    if (!itinerary?.days) throw new Error("No itinerary data to base generation on");
 
-    // Load DNA for detailed gap fixes — query V2 travel_dna_profiles directly
-    let archetype = "Balanced Traveler";
-    let traits: Record<string, number> = {};
+    console.log(`[enrich-manual-trip] Starting Smart Finish for trip ${tripId} (${trip.destination})`);
 
-    try {
-      // First try V2 source: travel_dna_profiles table (quiz results)
-      const { data: dnaProfile } = await supabase
-        .from("travel_dna_profiles")
-        .select("primary_archetype, secondary_archetype, trait_scores")
-        .eq("user_id", user.id)
-        .maybeSingle();
+    // --- Build user research context from parsed activities ---
+    const researchContext = buildResearchContext(itinerary);
+    console.log(`[enrich-manual-trip] Research context built: ${researchContext.length} chars, ${itinerary.days.length} days`);
 
-      if (dnaProfile?.trait_scores) {
-        // V2 path — map snake_case trait names from quiz to camelCase
-        const ts = dnaProfile.trait_scores as Record<string, number>;
-        archetype = dnaProfile.primary_archetype || "Balanced Traveler";
-        traits = {
-          pace: ts.pace ?? ts.travel_pace ?? 5,
-          social: ts.social ?? ts.social_style ?? 5,
-          adventure: ts.adventure ?? ts.adventure_level ?? 5,
-          authenticity: ts.authenticity ?? ts.cultural_authenticity ?? 5,
-          comfort: ts.comfort ?? ts.comfort_level ?? 5,
-          planning: ts.planning ?? ts.planning_style ?? 5,
-          budget: ts.budget ?? ts.budget_consciousness ?? 5,
-        };
-      } else {
-        // Fallback to legacy profiles.travel_dna
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("travel_dna")
-          .eq("id", user.id)
-          .single();
-
-        const dna = profile?.travel_dna as any;
-        archetype = dna?.primaryArchetype || dna?.archetype || "Balanced Traveler";
-        traits = dna?.traits || dna?.traitScores || {};
-      }
-    } catch (dnaErr) {
-      console.warn("[enrich-manual-trip] DNA fetch failed, using defaults:", (dnaErr as Error).message);
-    }
-
-    // Build activity list for AI enrichment
-    const activitySummaries = itinerary.days.flatMap((day: any) =>
-      (day.activities || []).map((a: any) => ({
-        dayNumber: day.dayNumber,
-        title: a.title,
-        category: a.category || a.type || "activity",
-        startTime: a.startTime || a.time,
-        location: a.location?.name || a.location?.address || "",
-      }))
-    );
-
-    const apiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!apiKey) throw new Error("AI API key not configured");
-
-    const prompt = `You are Voyance, a travel intelligence engine. Analyze this manually-built itinerary and provide:
-
-1. INSIDER TIPS: For each activity, provide 1 specific insider tip (what to order, best entrance, when to arrive, what most tourists miss).
-2. GAP FIXES: Based on the traveler's DNA (${archetype}, pace: ${traits.pace || 5}/10, comfort: ${traits.comfort || 5}/10), provide specific fixes for any pacing, meal, wellness, or timing issues.
-
-Traveler DNA: ${archetype}
-Destination: ${trip.destination}
-
-Activities:
-${activitySummaries.map((a: any) => `Day ${a.dayNumber}: ${a.title} (${a.category}) at ${a.startTime || 'unset'} - ${a.location}`).join('\n')}
-
-Respond ONLY with valid JSON:
-{
-  "tips": [
-    { "dayNumber": 1, "activityTitle": "...", "tip": "..." }
-  ],
-  "gapFixes": [
-    { "issue": "...", "fix": "...", "dayNumber": 1, "severity": "warning" }
-  ],
-  "routeHints": [
-    { "dayNumber": 1, "suggestion": "Consider starting at X which is closest to your hotel" }
-  ]
-}`;
-
-    // Try AI call with one retry on parse failure
-    let enrichment: { tips: any[]; gapFixes: any[]; routeHints: any[] };
-    try {
-      enrichment = await callAI(apiKey, prompt, 1);
-    } catch (firstErr) {
-      console.warn("[enrich-manual-trip] First AI attempt failed, retrying:", (firstErr as Error).message);
-      try {
-        enrichment = await callAI(apiKey, prompt, 2);
-      } catch (retryErr) {
-        console.error("[enrich-manual-trip] Retry also failed:", (retryErr as Error).message);
-        return new Response(JSON.stringify({
-          success: false,
-          error: "AI enrichment failed after retry. Please try again.",
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 500,
-        });
-      }
-    }
-
-    // Validate enrichment produced meaningful results
-    const totalItems = enrichment.tips.length + enrichment.gapFixes.length + enrichment.routeHints.length;
-    if (totalItems === 0) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: "AI enrichment returned no results. Please try again.",
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500,
-      });
-    }
-
-    // Merge tips into itinerary activities
-    const enrichedDays = itinerary.days.map((day: any) => ({
-      ...day,
-      activities: (day.activities || []).map((activity: any) => {
-        const tip = (enrichment.tips || []).find(
-          (t: any) => t.dayNumber === day.dayNumber && 
-            activity.title?.toLowerCase().includes(t.activityTitle?.toLowerCase()?.substring(0, 15))
-        );
-        return {
-          ...activity,
-          tips: tip?.tip || activity.tips,
-          enrichedBySmartFinish: true,
-        };
-      }),
-    }));
-
-    // Update trip with enrichment
-    const gapResult = trip.gap_analysis_result as any || {};
-    const updatedGapResult = {
-      ...gapResult,
-      detailedFixes: enrichment.gapFixes || [],
-      routeHints: enrichment.routeHints || [],
-      enrichedAt: new Date().toISOString(),
+    // --- Write research context into trip metadata so generate-itinerary picks it up ---
+    const existingMetadata = (trip.metadata as any) || {};
+    const updatedMetadata = {
+      ...existingMetadata,
+      mustDoActivities: researchContext,
+      smartFinishSource: "manual_builder",
+      smartFinishRequestedAt: new Date().toISOString(),
     };
 
-    const { error: updateError } = await supabase
+    const { error: metaUpdateError } = await supabase
       .from("trips")
       .update({
-        itinerary_data: { ...itinerary, days: enrichedDays },
+        metadata: updatedMetadata,
         smart_finish_purchased: true,
         smart_finish_purchased_at: new Date().toISOString(),
-        gap_analysis_result: updatedGapResult as any,
+        // Clear creation_source so the trip is treated as a normal AI-generated trip after Smart Finish
+        creation_source: "smart_finish",
       })
       .eq("id", tripId);
 
-    if (updateError) throw new Error(`Failed to update trip: ${updateError.message}`);
-
-    // Verify enrichment was applied
-    const { data: updatedTrip } = await supabase
-      .from("trips")
-      .select("itinerary_data")
-      .eq("id", tripId)
-      .single();
-
-    const hasEnrichment = (updatedTrip?.itinerary_data as any)?.days?.some(
-      (day: any) => day.activities?.some((a: any) => a.enrichedBySmartFinish)
-    );
-
-    if (!hasEnrichment) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: "Enrichment was not persisted. Please try again.",
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500,
-      });
+    if (metaUpdateError) {
+      throw new Error(`Failed to write research context: ${metaUpdateError.message}`);
     }
+
+    console.log(`[enrich-manual-trip] Metadata written, calling generate-itinerary...`);
+
+    // --- Call generate-itinerary with generate-full action ---
+    const generateResponse = await fetch(`${supabaseUrl}/functions/v1/generate-itinerary`, {
+      method: "POST",
+      headers: {
+        "Authorization": authHeader,
+        "Content-Type": "application/json",
+        "apikey": Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      },
+      body: JSON.stringify({
+        action: "generate-full",
+        tripId,
+      }),
+    });
+
+    if (!generateResponse.ok) {
+      const errText = await generateResponse.text();
+      console.error(`[enrich-manual-trip] generate-itinerary returned ${generateResponse.status}: ${errText}`);
+      throw new Error(`Generation failed: ${generateResponse.status}`);
+    }
+
+    const generateData = await generateResponse.json();
+
+    if (!generateData.success) {
+      const errMsg = generateData.error || "Generation returned failure status";
+      console.error(`[enrich-manual-trip] generate-itinerary failed:`, errMsg);
+      throw new Error(errMsg);
+    }
+
+    console.log(`[enrich-manual-trip] ✓ Smart Finish complete: ${generateData.totalDays} days, ${generateData.totalActivities} activities`);
 
     return new Response(JSON.stringify({
       success: true,
-      gapFixes: enrichment.gapFixes,
-      routeHints: enrichment.routeHints,
-      tipsAdded: enrichment.tips.length,
+      totalDays: generateData.totalDays,
+      totalActivities: generateData.totalActivities,
+      tipsAdded: generateData.totalActivities || 0,
+      gapFixes: [],
+      routeHints: [],
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[enrich-manual-trip] Error:", msg);
