@@ -174,14 +174,30 @@ export async function createTripFromParsed(
     // falling back to our own inference so US trips always get USD.
     const tripCurrency = parsed.detectedCurrency || inferCurrencyFromDestination(destination);
 
+    const today = new Date().toISOString().split('T')[0];
+    const startDate = parsed.dates?.start || today;
+
+    // Calculate end_date from start_date + (num_days - 1).
+    // This prevents the parser from using "end of month" when the user
+    // said e.g. "3 days in March" (parsed.dates.end would be Mar 31, wrong).
+    let endDate = parsed.dates?.end || today;
+    const numDays = parsed.duration ?? parsed.days?.length ?? 0;
+    if (numDays > 0 && startDate) {
+      const [y, m, d] = startDate.split('-').map(Number);
+      const computed = new Date(y, m - 1, d + numDays - 1);
+      const computedStr = computed.toISOString().split('T')[0];
+      // Always trust computed end over what the AI returned
+      endDate = computedStr;
+    }
+
     const { data: trip, error } = await supabase
       .from('trips')
       .insert({
         user_id: userId,
         name: tripName,
         destination,
-        start_date: parsed.dates?.start || new Date().toISOString().split('T')[0],
-        end_date: parsed.dates?.end || new Date().toISOString().split('T')[0],
+        start_date: startDate,
+        end_date: endDate,
         travelers: parsed.travelers || 1,
         trip_type: parsed.tripType || 'leisure',
         budget_tier: budgetTier,
