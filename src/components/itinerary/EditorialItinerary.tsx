@@ -3164,6 +3164,7 @@ export function EditorialItinerary({
                           onOptionSelect={(groupKey, selectedId) => {
                             setOptionSelections(prev => ({ ...prev, [groupKey]: selectedId }));
                           }}
+                          compactCards={isManualMode || creationSource === 'smart_finish'}
                         />
                       )}
                     </>
@@ -5411,6 +5412,8 @@ interface DayCardProps {
   optionSelections?: Record<string, string>;
   /** Called when user picks an option in an option group */
   onOptionSelect?: (groupKey: string, selectedId: string) => void;
+  /** Compact card mode for Smart Finish / manual trips — matches regular itinerary layout */
+  compactCards?: boolean;
 }
 
 function DayCard({
@@ -5459,6 +5462,7 @@ function DayCard({
   guestMustPropose,
   optionSelections = {},
   onOptionSelect,
+  compactCards = false,
 }: DayCardProps) {
   // Per-day preview: a day is preview only if the global flag is set AND the day itself is a preview
   // Fully generated days (e.g., first 2 free days) should NOT be gated even if other days are locked
@@ -5711,6 +5715,7 @@ function DayCard({
                        changingTransportActivityId={changingTransportActivityId}
                        collaboratorColorMap={collaboratorColorMap}
                        aiLocked={aiLocked}
+                       compact={compactCards}
                      />
                     {/* Compact transit gap indicator between activities */}
                     {!isLastActivity && gapMinutes !== null && !dayIsPreview && (
@@ -5845,6 +5850,8 @@ interface ActivityRowProps {
   aiLocked?: boolean;
   /** Guest in propose & vote mode — show reduced menu with only Propose Replacement */
   guestMustPropose?: boolean;
+  /** Compact card mode — hides description, full address, inline ratings, booking badges */
+  compact?: boolean;
 }
 
 function ActivityRow({
@@ -5883,6 +5890,7 @@ function ActivityRow({
   collaboratorColorMap,
   aiLocked,
   guestMustPropose,
+  compact = false,
 }: ActivityRowProps) {
   const [showProposeReplacement, setShowProposeReplacement] = useState(false);
   const activityType = getActivityType(activity);
@@ -6189,9 +6197,9 @@ function ActivityRow({
                 
                 if (isNonReviewable || aiLocked || !canViewPremium) return null;
                 
-                // Show rating badge if we have a rating, otherwise show "See Reviews" button
-                // Always allow viewing reviews for reviewable activities - the edge function fetches them on-demand
-                if (rating) {
+                // In compact mode, always show "See Reviews" instead of inline star ratings
+                // Show rating badge if we have a rating and NOT in compact mode
+                if (rating && !compact) {
                   return (
                     <Badge 
                       variant="secondary" 
@@ -6226,7 +6234,7 @@ function ActivityRow({
                   </button>
                 );
               })()}
-              {activity.bookingRequired && (
+              {activity.bookingRequired && !compact && (
                 <Badge variant="outline" className="text-xs border-accent/50 text-accent">
                   Booking Required
                 </Badge>
@@ -6243,8 +6251,8 @@ function ActivityRow({
                   <>
                     <h4 className="font-serif text-base sm:text-lg font-medium text-foreground leading-snug">{venue}</h4>
                     <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 italic line-clamp-1">{activityTitle}</p>
-                    {/* Address gated by premium access */}
-                    {hasAddress && address !== venue && (
+                    {/* Address gated by premium access — hidden in compact mode */}
+                    {hasAddress && address !== venue && !compact && (
                       <div className={cn(
                         "flex items-start gap-1.5 mt-1.5 text-xs text-muted-foreground",
                         !canViewPremium && "blur-sm pointer-events-none select-none"
@@ -6260,7 +6268,8 @@ function ActivityRow({
               return (
                 <>
                   <h4 className="font-serif text-base sm:text-lg font-medium text-foreground leading-snug">{activityTitle}</h4>
-                  {(activity as any).closedRisk && (
+                  {/* Closed risk warning — hidden in compact mode */}
+                  {(activity as any).closedRisk && !compact && (
                     <div className="flex items-center gap-1.5 mt-1 px-2 py-1 bg-destructive/10 border border-destructive/20 rounded-md">
                       <AlertTriangle className="h-3 w-3 text-destructive flex-shrink-0" />
                       <span className="text-xs text-destructive font-medium">
@@ -6268,14 +6277,15 @@ function ActivityRow({
                       </span>
                     </div>
                   )}
-                  {activity.description && (
+                  {/* Description — hidden in compact mode */}
+                  {activity.description && !compact && (
                     <p className={cn(
                       "text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 line-clamp-2 leading-relaxed",
                       !canViewPremium && "blur-sm pointer-events-none select-none"
                     )}>{activity.description}</p>
                   )}
 
-                  {/* Location - blurred when premium is gated */}
+                  {/* Location — in compact mode show only location name, no full address */}
                   {(activity.location?.name || hasAddress) && (
                     <div className={cn(
                       "mt-1.5",
@@ -6285,7 +6295,7 @@ function ActivityRow({
                         <MapPin className="h-3 w-3 text-primary/60 shrink-0" />
                         <span className="truncate">{activity.location?.name || address}</span>
                       </div>
-                      {activity.location?.name && hasAddress && address !== activity.location?.name && (
+                      {!compact && activity.location?.name && hasAddress && address !== activity.location?.name && (
                         <div className="hidden sm:block pl-5 mt-0.5 text-xs text-muted-foreground/70 leading-snug">
                           {address}
                         </div>

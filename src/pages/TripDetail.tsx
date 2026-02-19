@@ -1097,6 +1097,15 @@ export default function TripDetail() {
                   parsedMetadata={(() => {
                     const meta = (trip.itinerary_data as any)?.metadata;
                     if (meta?.source === 'manual_paste') return meta;
+                    // For Smart Finish trips, check trip.metadata for preserved notes
+                    const tripMeta = trip.metadata as any;
+                    if (tripMeta?.accommodationNotes?.length || tripMeta?.practicalTips?.length) {
+                      return {
+                        accommodationNotes: tripMeta.accommodationNotes || [],
+                        practicalTips: tripMeta.practicalTips || [],
+                        source: 'smart_finish',
+                      };
+                    }
                     return undefined;
                   })()}
                   isEditable={true}

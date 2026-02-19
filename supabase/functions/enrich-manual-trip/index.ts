@@ -143,12 +143,16 @@ serve(async (req) => {
     console.log(`[enrich-manual-trip] Research context built: ${researchContext.length} chars, ${itinerary.days.length} days`);
 
     // --- Write research context into trip metadata so generate-itinerary picks it up ---
+    // Also preserve accommodationNotes and practicalTips so they survive the itinerary_data replacement
     const existingMetadata = (trip.metadata as any) || {};
     const updatedMetadata = {
       ...existingMetadata,
       mustDoActivities: researchContext,
       smartFinishSource: "manual_builder",
       smartFinishRequestedAt: new Date().toISOString(),
+      // Preserve parsed notes for display after Smart Finish completes
+      accommodationNotes: itinerary.metadata?.accommodationNotes || itinerary.accommodationNotes || existingMetadata.accommodationNotes || [],
+      practicalTips: itinerary.metadata?.practicalTips || itinerary.practicalTips || existingMetadata.practicalTips || [],
     };
 
     const { error: metaUpdateError } = await supabase
