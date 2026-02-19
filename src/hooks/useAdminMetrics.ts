@@ -113,6 +113,64 @@ async function fetchAdminMetrics(): Promise<AdminMetrics> {
   const activeUsers = balances?.length || 0;
   const paidUsers = usersWithPurchases.size;
 
+  // --- Daily metrics aggregation (last 30 days) ---
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const since = thirtyDaysAgo.toISOString();
+
+  // Fetch spend ledger entries with timestamps
+  const { data: dailySpends } = await supabase
+    .from('credit_ledger')
+    .select('credits_delta, created_at')
+    .eq('transaction_type', 'spend')
+    .gte('created_at', since);
+
+  // Fetch purchase ledger entries with timestamps + revenue
+  const { data: dailyPurchases } = await supabase
+    .from('credit_ledger')
+    .select('credits_delta, amount_cents, created_at')
+    .eq('transaction_type', 'purchase')
+    .gte('created_at', since);
+
+  // Fetch new signups
+  const { data: dailySignups } = await supabase
+    .from('profiles')
+    .select('created_at')
+    .gte('created_at', since);
+
+  // Build a date→metrics map
+  const dailyMap = new Map<string, { creditsSpent: number; creditsPurchased: number; revenue: number; newUsers: number }>();
+
+  const toDateKey = (ts: string) => ts.slice(0, 10); // YYYY-MM-DD
+
+  for (const entry of dailySpends || []) {
+    const key = toDateKey(entry.created_at);
+    const bucket = dailyMap.get(key) || { creditsSpent: 0, creditsPurchased: 0, revenue: 0, newUsers: 0 };
+    bucket.creditsSpent += Math.abs(entry.credits_delta || 0);
+    dailyMap.set(key, bucket);
+  }
+  for (const entry of dailyPurchases || []) {
+    const key = toDateKey(entry.created_at);
+    const bucket = dailyMap.get(key) || { creditsSpent: 0, creditsPurchased: 0, revenue: 0, newUsers: 0 };
+    bucket.creditsPurchased += entry.credits_delta || 0;
+    bucket.revenue += (entry.amount_cents || 0) / 100;
+    dailyMap.set(key, bucket);
+  }
+  for (const entry of dailySignups || []) {
+    const key = toDateKey(entry.created_at);
+    const bucket = dailyMap.get(key) || { creditsSpent: 0, creditsPurchased: 0, revenue: 0, newUsers: 0 };
+    bucket.newUsers += 1;
+    dailyMap.set(key, bucket);
+  }
+
+  // Fill in missing dates and sort
+  const dailyMetrics: AdminMetrics['dailyMetrics'] = [];
+  for (let d = new Date(thirtyDaysAgo); d <= new Date(); d.setDate(d.getDate() + 1)) {
+    const key = d.toISOString().slice(0, 10);
+    const bucket = dailyMap.get(key) || { creditsSpent: 0, creditsPurchased: 0, revenue: 0, newUsers: 0 };
+    dailyMetrics.push({ date: key, ...bucket });
+  }
+
   return {
     totalCreditsSpent,
     totalCreditsPurchased,
@@ -124,7 +182,7 @@ async function fetchAdminMetrics(): Promise<AdminMetrics> {
     activityBreakdown,
     outstandingPurchasedCredits,
     outstandingFreeCredits,
-    dailyMetrics: [], // TODO: Implement daily aggregation
+    dailyMetrics,
   };
 }
 
