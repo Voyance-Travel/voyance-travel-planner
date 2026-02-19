@@ -6304,6 +6304,33 @@ export type Database = {
           },
         ]
       }
+      trip_ratings: {
+        Row: {
+          created_at: string
+          id: string
+          rating: number
+          trip_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          rating: number
+          trip_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          rating?: number
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       trip_rental_cars: {
         Row: {
           booking_url: string | null
