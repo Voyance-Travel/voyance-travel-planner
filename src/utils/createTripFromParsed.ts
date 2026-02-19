@@ -53,10 +53,15 @@ function mapCategory(cat?: string): string {
 
 function activityToItinerary(activity: ParsedActivity, isSelected: boolean): ItineraryActivity {
   const id = crypto.randomUUID();
+  // Merge notes into description — do NOT set `tips` as that triggers VoyanceInsight badges
+  // which are meant only for AI-generated content, not user's raw research notes
+  const combinedDescription = [activity.description, activity.notes]
+    .filter(Boolean).join(' — ') || undefined;
+
   return {
     id,
     title: activity.name,
-    description: activity.description || undefined,
+    description: combinedDescription,
     startTime: activity.time || undefined,
     time: activity.time || undefined,
     category: mapCategory(activity.category),
@@ -68,58 +73,35 @@ function activityToItinerary(activity: ParsedActivity, isSelected: boolean): Iti
       ? { name: activity.location, address: activity.location }
       : { name: '', address: '' },
     bookingRequired: activity.bookingRequired || false,
-    tips: activity.notes || undefined,
-    isOption: activity.isOption || false,
-    optionGroup: activity.optionGroup || undefined,
+    // Do NOT set tips — that renders "Voyance Insight" badges meant for AI content
+    // Do NOT set isOption/optionGroup — that renders "choose one" UI blocks
+    // User's raw research should just be a flat list; Smart Finish (generate-itinerary) will curate
     source: 'parsed',
   };
 }
 
 function convertDay(day: ParsedDay): ItineraryDay {
-  // Group activities by optionGroup
+  // Flat map — option groups are collapsed to just the first option per group.
+  // The "choose one" UI is intentionally NOT rendered for parsed activities;
+  // Smart Finish (generate-itinerary) will curate the best single recommendation.
+  const seen = new Set<string>();
   const activities: ItineraryActivity[] = [];
-  const processedGroups = new Set<string>();
 
   for (const activity of day.activities) {
     if (activity.isOption && activity.optionGroup) {
-      if (processedGroups.has(activity.optionGroup)) continue;
-      processedGroups.add(activity.optionGroup);
-
-      // Find all options in this group
-      const groupOptions = day.activities.filter(
-        a => a.optionGroup === activity.optionGroup
-      );
-
-      // First option becomes primary, rest are alternatives
-      const primary = activityToItinerary(groupOptions[0], true);
-      if (groupOptions.length > 1) {
-        primary.alternativeOptions = groupOptions.slice(1).map(a => ({
-          name: a.name,
-          notes: a.notes,
-        }));
-      }
-      // Keep isOption and optionGroup for all options so frontend can render "Choose one"
-      for (const opt of groupOptions) {
-        activities.push(activityToItinerary(opt, false));
-      }
-      // Remove the duplicates we just added and use the group approach
-      // Actually, let's keep all options as separate activities with isOption=true
-      // so the frontend can render them as radio groups
-      // Remove what we just pushed and re-add properly
-    } else {
-      activities.push(activityToItinerary(activity, true));
+      // Only include the first option from each group to avoid duplicate slots
+      if (seen.has(activity.optionGroup)) continue;
+      seen.add(activity.optionGroup);
     }
+    activities.push(activityToItinerary(activity, true));
   }
-
-  // Simpler approach: just map all activities, keeping isOption/optionGroup intact
-  const simpleActivities = day.activities.map(a => activityToItinerary(a, true));
 
   return {
     dayNumber: day.dayNumber,
     date: day.date,
     title: day.theme ? `Day ${day.dayNumber} — ${day.theme}` : `Day ${day.dayNumber}`,
     theme: day.theme,
-    activities: simpleActivities,
+    activities,
     metadata: day.dailyBudget ? { dailyBudget: day.dailyBudget } : undefined,
   };
 }
