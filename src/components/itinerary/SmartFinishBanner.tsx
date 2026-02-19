@@ -228,6 +228,8 @@ export function SmartFinishBanner({
       setEnrichmentFailed(false);
       queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
       queryClient.invalidateQueries({ queryKey: ['trips'] });
+      queryClient.invalidateQueries({ queryKey: ['credits'] });
+      queryClient.invalidateQueries({ queryKey: ['entitlements'] });
       onPurchaseComplete?.();
     } catch (err: any) {
       if (!err?.message?.startsWith('Not enough credits')) {
