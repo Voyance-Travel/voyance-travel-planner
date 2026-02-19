@@ -443,8 +443,16 @@ export async function calculateTravelDNAAdvanced(
         if (typeof v === 'string') flatAnswers[k] = v;
       }
       const { scores } = calculateTraitScores(flatAnswers);
-      precomputedTraits = convertV3ToV2Traits(scores as unknown as Record<string, number | string>);
-      console.log('[TravelDNA] Pre-computed V2 traits:', JSON.stringify(precomputedTraits));
+      const converted = convertV3ToV2Traits(scores as unknown as Record<string, number | string>);
+      // Only send precomputedTraits if they have real signal (not all zeros from legacy answers
+      // that didn't match any V3 question IDs)
+      const hasSignal = Object.values(converted).some(v => Math.abs(v) >= 1.0);
+      if (hasSignal) {
+        precomputedTraits = converted;
+        console.log('[TravelDNA] Pre-computed V2 traits:', JSON.stringify(precomputedTraits));
+      } else {
+        console.log('[TravelDNA] Pre-computed traits are all near-zero (legacy answers?) — skipping, edge function will use legacy parsing');
+      }
     } catch (err) {
       console.warn('[TravelDNA] Failed to pre-compute traits:', err);
     }
