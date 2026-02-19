@@ -11,8 +11,7 @@
  */
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "npm:@supabase/supabase-js@2.90.1";
-import { fetchTravelerDNA } from "../_shared/traveler-dna.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -113,10 +112,46 @@ serve(async (req) => {
     const itinerary = trip.itinerary_data as any;
     if (!itinerary?.days) throw new Error("No itinerary data");
 
-    // Load DNA for detailed gap fixes using shared canonical builder
-    const { dna: travelerDNA } = await fetchTravelerDNA(supabase, user.id);
-    const archetype = travelerDNA.primaryArchetype || "Balanced Traveler";
-    const traits = travelerDNA.traits || {};
+    // Load DNA for detailed gap fixes — query V2 travel_dna_profiles directly
+    let archetype = "Balanced Traveler";
+    let traits: Record<string, number> = {};
+
+    try {
+      // First try V2 source: travel_dna_profiles table (quiz results)
+      const { data: dnaProfile } = await supabase
+        .from("travel_dna_profiles")
+        .select("primary_archetype, secondary_archetype, trait_scores")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (dnaProfile?.trait_scores) {
+        // V2 path — map snake_case trait names from quiz to camelCase
+        const ts = dnaProfile.trait_scores as Record<string, number>;
+        archetype = dnaProfile.primary_archetype || "Balanced Traveler";
+        traits = {
+          pace: ts.pace ?? ts.travel_pace ?? 5,
+          social: ts.social ?? ts.social_style ?? 5,
+          adventure: ts.adventure ?? ts.adventure_level ?? 5,
+          authenticity: ts.authenticity ?? ts.cultural_authenticity ?? 5,
+          comfort: ts.comfort ?? ts.comfort_level ?? 5,
+          planning: ts.planning ?? ts.planning_style ?? 5,
+          budget: ts.budget ?? ts.budget_consciousness ?? 5,
+        };
+      } else {
+        // Fallback to legacy profiles.travel_dna
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("travel_dna")
+          .eq("id", user.id)
+          .single();
+
+        const dna = profile?.travel_dna as any;
+        archetype = dna?.primaryArchetype || dna?.archetype || "Balanced Traveler";
+        traits = dna?.traits || dna?.traitScores || {};
+      }
+    } catch (dnaErr) {
+      console.warn("[enrich-manual-trip] DNA fetch failed, using defaults:", (dnaErr as Error).message);
+    }
 
     // Build activity list for AI enrichment
     const activitySummaries = itinerary.days.flatMap((day: any) =>
