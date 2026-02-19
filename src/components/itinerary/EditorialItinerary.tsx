@@ -1506,13 +1506,24 @@ export function EditorialItinerary({
     normalizeCurrencyCode(destinationInfo?.currencySymbol);
   const daysCurrency = inferCurrencyFromDays(days);
 
+  // Also try to infer USD from destination string directly (e.g. "Austin, Texas", "New York, NY")
+  const destLower = (destination || '').toLowerCase();
+  const isUSDestination =
+    countryCurrency === 'USD' ||
+    destLower.includes('texas') || destLower.includes(', tx') ||
+    destLower.includes(', ny') || destLower.includes(', ca') ||
+    destLower.includes(', fl') || destLower.includes(', il') ||
+    destLower.includes('united states') || destLower.includes(', usa') ||
+    destLower.includes(', us');
+
   const localCurrency =
     (countryCurrency && destinationCurrency && countryCurrency !== destinationCurrency
       ? countryCurrency
       : destinationCurrency) ||
     countryCurrency ||
+    (isUSDestination ? 'USD' : null) ||
     daysCurrency ||
-    'EUR';
+    'USD'; // Default to USD instead of EUR
   
   // Display currency based on user preference toggle
   const tripCurrency = showLocalCurrency ? localCurrency : 'USD';
