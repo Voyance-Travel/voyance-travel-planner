@@ -419,6 +419,55 @@ serve(async (req) => {
 
     const parsed = JSON.parse(toolCall.function.arguments);
 
+    // --- Month-reference date fixing ---
+    // When users type "in March", "next June", etc., the AI often defaults
+    // start_date to today. Detect month names in the original text and
+    // override start_date to the 1st of the nearest upcoming occurrence.
+    if (parsed.dates?.start || !parsed.dates) {
+      const monthNames: Record<string, number> = {
+        january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+        july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
+        jan: 0, feb: 1, mar: 2, apr: 3, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+      };
+      // Match patterns like "in March", "in march", "next April", "next april"
+      const monthMatch = text.match(/\b(?:in|next|this coming)\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\b/i);
+      if (monthMatch) {
+        const targetMonth = monthNames[monthMatch[1].toLowerCase()];
+        if (targetMonth !== undefined) {
+          const now = new Date();
+          let year = now.getFullYear();
+          const currentMonth = now.getMonth();
+          const currentDay = now.getDate();
+
+          // "next" keyword always means next occurrence even if current month
+          const isNext = /^next\b/i.test(monthMatch[0]);
+
+          if (targetMonth < currentMonth || (targetMonth === currentMonth && !isNext && currentDay > 1)) {
+            // Month already passed this year (or we're past the 1st of current month) → next year
+            year += 1;
+          } else if (targetMonth === currentMonth && isNext) {
+            year += 1;
+          }
+
+          const startDate = `${year}-${String(targetMonth + 1).padStart(2, '0')}-01`;
+
+          if (!parsed.dates) {
+            parsed.dates = { start: startDate, end: null };
+          } else {
+            parsed.dates.start = startDate;
+          }
+
+          // Recalculate end date if we have duration
+          const duration = parsed.duration || parsed.days?.length;
+          if (duration && duration > 0) {
+            const startD = new Date(year, targetMonth, 1);
+            startD.setDate(startD.getDate() + duration - 1);
+            parsed.dates.end = `${startD.getFullYear()}-${String(startD.getMonth() + 1).padStart(2, '0')}-${String(startD.getDate()).padStart(2, '0')}`;
+          }
+        }
+      }
+    }
+
     // --- Destination-aware currency normalization ---
     // Detect the canonical currency for the destination so that trips to
     // e.g. Austin, Texas are always USD even if the source material used € signs.
@@ -430,9 +479,6 @@ serve(async (req) => {
         if (day.activities) {
           for (const activity of day.activities) {
             activity.source = 'parsed';
-            // If the activity has a currency that conflicts with the destination,
-            // override it. Only keep activity-level currency if it explicitly
-            // matches the destination (e.g., "free" cost stays 0 in any currency).
             if (activity.currency && destinationCurrency) {
               activity.currency = destinationCurrency;
             } else if (!activity.currency && destinationCurrency) {
