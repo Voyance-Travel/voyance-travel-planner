@@ -269,6 +269,10 @@ interface GenerationContext {
   mustDoActivities?: string;
   /** Whether this generation is triggered by Smart Finish (user-pasted research must be honored) */
   isSmartFinish?: boolean;
+  /** Trip vibe/intent extracted from pasted text (e.g. "foodie adventure") */
+  tripVibe?: string;
+  /** Specific trip priorities extracted from pasted text */
+  tripPriorities?: string[];
   groupArchetypes?: TravelerArchetype[];
   // Collaborator user IDs and names for suggestedFor attribution
   collaboratorTravelers?: Array<{ userId: string; name: string }>;
@@ -3809,6 +3813,8 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     // User research notes / must-do activities from Page 2 paste field
     mustDoActivities: trip.metadata?.mustDoActivities || undefined,
     isSmartFinish: trip.metadata?.smartFinishSource === 'manual_builder' || trip.creation_source === 'smart_finish',
+    tripVibe: trip.metadata?.tripVibe || undefined,
+    tripPriorities: trip.metadata?.tripPriorities || undefined,
   };
 
   // Set daily budget based on tier (fallback)
@@ -4436,24 +4442,26 @@ ${'='.repeat(70)}
 
 When rules conflict, follow this priority order (1 = highest):
 
-1. DESTINATION ESSENTIALS (highest priority)
+1. USER'S EXPLICIT INTERESTS & RESEARCH (highest priority)
+   → If the user selected "Food & Cuisine", "Adventure", or "Nightlife" in their profile, those determine WHAT activities appear
+   → If the user pasted specific restaurant/venue names, those MUST appear by name
+   → User interests override archetype activity restrictions
+
+2. DESTINATION ESSENTIALS
    → First-time visitors MUST see iconic landmarks (Colosseum in Rome, Eiffel Tower in Paris)
    → These are non-negotiable unless user explicitly says "skip"
 
-2. ARCHETYPE IDENTITY (critical - defines WHO the traveler is)
-   → The PRIMARY archetype's meaning, avoid list, and day structure are LAW
-   → "Flexible Wanderer" = unscheduled blocks, max 2 activities, NO luxury/spa/fine dining
-   → "Beach Therapist" = beach-focused, NOT spa-focused. No spa treatments.
-   → If an activity violates the archetype's avoid list, DO NOT INCLUDE IT
+3. ARCHETYPE NARRATIVE TONE (defines HOW activities are described, NOT what activities to include)
+   → The archetype determines writing style, pacing feel, and descriptive tone
+   → "Beach Therapist" = use relaxed, restorative language. Does NOT mean only beach activities.
+   → "Flexible Wanderer" = emphasize spontaneity in descriptions. Does NOT mean skip user's interests.
+   → The archetype is the FLAVOR of the writing, not the MENU of activities.
+   → Archetype "avoid" list applies ONLY when it doesn't conflict with the user's explicit interests.
 
-3. EXPERIENCE AFFINITY (what TO prioritize - the "pull" side)
+4. EXPERIENCE AFFINITY (secondary guidance)
    → Each archetype has HIGH/MEDIUM/LOW/NEVER experience categories
-   → PRIORITIZE experiences from HIGH categories
-   → AVOID experiences from NEVER categories (hard block)
-
-4. DESTINATION-SPECIFIC GUIDE (city × archetype recommendations)
-   → When available, use mustDo/perfectFor/hiddenGems specific to this destination
-   → These are CURATED for this archetype in THIS city
+   → Use these to fill REMAINING slots after user interests and research are placed
+   → NEVER categories still apply unless user explicitly selected that interest
 
 5. BUDGET CONSTRAINTS
    → Budget tier + budget trait score determine price limits
@@ -4462,7 +4470,6 @@ When rules conflict, follow this priority order (1 = highest):
 
 6. PACING CONSTRAINTS
    → Pace trait determines activity density and timing
-   → Pace -5 = max 2-3 activities, start at 10am, 60min buffers, unscheduled blocks
    → These are HARD LIMITS, not suggestions
 
 7. VARIETY RULES
@@ -4472,9 +4479,9 @@ When rules conflict, follow this priority order (1 = highest):
 
 8. TRAIT MODIFIERS (lowest priority — fine-tuning only)
    → Traits adjust timing and intensity within the above constraints
-   → Traits do NOT override archetype identity, budget, or pacing constraints
 
-CRITICAL: The archetype's "NEVER" experience categories and "avoid" list are NON-NEGOTIABLE.
+CRITICAL: User's explicit profile interests and pasted research ALWAYS outrank archetype defaults.
+The archetype shapes the narrative VOICE, not the activity SELECTION.
 
 ${'='.repeat(70)}
 
@@ -7141,6 +7148,69 @@ RULES FOR VOYANCE PICKS:
       console.log(`[Stage 1.99] ✓ Generated unified archetype constraints for ${unifiedProfile.archetype} (${generationHierarchy.length} chars, dynamic=${!!destinationId})`);
       
       // =======================================================================
+      // STAGE 1.991: Interest Override — User's explicit interests OUTRANK archetype
+      // The archetype determines TONE/NARRATIVE, user interests determine ACTIVITY MIX
+      // =======================================================================
+      let interestOverridePrompt = "";
+      const userInterests = unifiedProfile.interests || context.interests || [];
+      if (userInterests.length > 0) {
+        const interestActivityMap: Record<string, string> = {
+          'food': 'At least 2-3 noteworthy dining experiences per day (food carts, local restaurants, markets, breweries)',
+          'cuisine': 'At least 2-3 noteworthy dining experiences per day (food carts, local restaurants, markets, breweries)',
+          'culinary': 'At least 2-3 noteworthy dining experiences per day (food carts, local restaurants, markets, breweries)',
+          'food & cuisine': 'At least 2-3 noteworthy dining experiences per day (food carts, local restaurants, markets, breweries)',
+          'adventure': 'At least 1 adventure/active/outdoor activity per day (hiking, water sports, zip-lining, climbing)',
+          'adventure & thrills': 'At least 1 adventure/active/outdoor activity per day (hiking, water sports, zip-lining, climbing)',
+          'nightlife': 'Evening entertainment on at least half the nights (bars, live music, clubs, night markets)',
+          'nightlife & entertainment': 'Evening entertainment on at least half the nights (bars, live music, clubs, night markets)',
+          'culture': 'At least 1 cultural experience per day (museums, galleries, historic sites, local traditions)',
+          'culture & history': 'At least 1 cultural experience per day (museums, galleries, historic sites, local traditions)',
+          'nature': 'At least 1 nature/outdoor experience per day (parks, gardens, scenic viewpoints, nature reserves)',
+          'nature & outdoors': 'At least 1 nature/outdoor experience per day (parks, gardens, scenic viewpoints, nature reserves)',
+          'shopping': 'Include shopping opportunities (local markets, boutiques, artisan shops)',
+          'wellness': 'Include wellness activities (yoga, spa, meditation, hot springs)',
+          'art': 'Include art experiences (galleries, street art, studios, art districts)',
+        };
+        
+        const matchedInterests: string[] = [];
+        for (const interest of userInterests) {
+          const lower = interest.toLowerCase();
+          for (const [key, instruction] of Object.entries(interestActivityMap)) {
+            if (lower.includes(key) || key.includes(lower)) {
+              matchedInterests.push(`- ${interest}: ${instruction}`);
+              break;
+            }
+          }
+        }
+        
+        if (matchedInterests.length > 0) {
+          interestOverridePrompt = `
+${'='.repeat(60)}
+🎯 USER'S EXPLICIT INTERESTS — ACTIVITY MIX REQUIREMENTS
+${'='.repeat(60)}
+
+The user has EXPLICITLY selected these interests in their profile. These determine WHAT TYPES of activities to include:
+
+${matchedInterests.join('\n')}
+
+⚠️ CRITICAL RULE: The user's archetype (${unifiedProfile.archetype || 'none'}) determines the NARRATIVE TONE and DESCRIPTIONS of activities, but does NOT override which TYPES of activities to include.
+
+Example: A "Beach Therapist" who selected "Food & Cuisine" and "Nightlife" should get:
+- Food-focused days with great restaurants, food carts, and culinary experiences
+- Evening entertainment and bar recommendations
+- Written with a relaxed, restorative tone: "unwind over world-class ramen" not "rush to the ramen shop"
+
+The archetype is FLAVOR, not the MENU. User interests ARE the menu.
+
+DO NOT replace the user's selected interests with archetype-default activities.
+If the archetype says "beach time 3-4 hours" but the user selected "Food & Cuisine" and the destination has no beaches, prioritize food experiences with the archetype's relaxed narrative tone instead.
+${'='.repeat(60)}
+`;
+          console.log(`[Stage 1.991] ✓ Interest override prompt built for ${matchedInterests.length} interests: ${userInterests.join(', ')}`);
+        }
+      }
+      
+      // =======================================================================
       // STAGE 1.995: Trip Type Modifiers - First-class input for celebrations/groups/purpose
       // =======================================================================
       const tripTypePrompt = buildTripTypePromptSection(
@@ -7204,11 +7274,36 @@ RULES FOR VOYANCE PICKS:
         }
       }
 
+      // =======================================================================
+      // STAGE 1.9995: Trip Vibe Override — user's trip-specific intent
+      // =======================================================================
+      let tripVibePrompt = "";
+      if (context.tripVibe || (context.tripPriorities && context.tripPriorities.length > 0)) {
+        const vibeParts: string[] = [];
+        vibeParts.push(`\n${'='.repeat(60)}`);
+        vibeParts.push(`🎯 THIS TRIP'S SPECIFIC VIBE & INTENT`);
+        vibeParts.push(`${'='.repeat(60)}`);
+        if (context.tripVibe) {
+          vibeParts.push(`\nTrip Vibe: "${context.tripVibe}"`);
+          vibeParts.push(`This is what the traveler WANTS from THIS specific trip. It overrides the archetype's default activity mix.`);
+        }
+        if (context.tripPriorities && context.tripPriorities.length > 0) {
+          vibeParts.push(`\nTrip Priorities (MUST be reflected in activity selection):`);
+          for (const p of context.tripPriorities) {
+            vibeParts.push(`  - ${p}`);
+          }
+        }
+        vibeParts.push(`\n⚠️ The trip vibe is MORE SPECIFIC than the archetype. If the vibe says "foodie adventure" but the archetype says "beach therapy", prioritize food experiences with a relaxed descriptive tone.`);
+        vibeParts.push(`${'='.repeat(60)}\n`);
+        tripVibePrompt = vibeParts.join('\n');
+        console.log(`[Stage 1.9995] ✓ Trip vibe prompt: "${context.tripVibe}", ${context.tripPriorities?.length || 0} priorities`);
+      }
+
       // Combine all context for maximum personalization
-      // Order: ARCHETYPE CONSTRAINTS → TRIP TYPE → SKIP LIST → DIETARY ENFORCEMENT → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → HIDDEN GEMS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE → USER RESEARCH
+      // Order: ARCHETYPE CONSTRAINTS → INTEREST OVERRIDE → TRIP VIBE → TRIP TYPE → SKIP LIST → DIETARY ENFORCEMENT → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → HIDDEN GEMS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE → USER RESEARCH
       // NOTE: generationHierarchy includes destination essentials, archetype behavioral rules, budget guardrails (Phase 2 Fix)
       // Phase 2 Fix: Removed unifiedDNAContext - all traveler data now comes from generationHierarchy via unified profile
-      const preferenceContext = generationHierarchy + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + hiddenGemsContext + voyancePicksContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt + userResearchPrompt;
+      const preferenceContext = generationHierarchy + '\n\n' + interestOverridePrompt + '\n\n' + tripVibePrompt + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + hiddenGemsContext + voyancePicksContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt + userResearchPrompt;
 
       // STAGE 2: AI Generation (batch with validation and retry)
       let aiResult;
