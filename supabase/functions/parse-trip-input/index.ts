@@ -253,6 +253,92 @@ Use these exact category values:
 8. "Free" or "free" → cost: 0
 9. Be thorough but don't hallucinate data that isn't in the text.`;
 
+/**
+ * Infer the canonical currency for a destination string.
+ * Priority: US states/cities → USD, Eurozone → EUR, UK → GBP, JP → JPY, etc.
+ * Returns null if the destination is too ambiguous to determine.
+ */
+function inferDestinationCurrency(destination: string): string | null {
+  const d = destination.toLowerCase();
+  if (!d) return null;
+
+  // United States — state names, abbreviations, and major cities
+  const usIndicators = [
+    'united states', ', usa', ', us', 'u.s.a', 'u.s.',
+    // States
+    'alabama', 'alaska', 'arizona', 'arkansas', 'california', 'colorado',
+    'connecticut', 'delaware', 'florida', 'georgia', 'hawaii', 'idaho',
+    'illinois', 'indiana', 'iowa', 'kansas', 'kentucky', 'louisiana',
+    'maine', 'maryland', 'massachusetts', 'michigan', 'minnesota',
+    'mississippi', 'missouri', 'montana', 'nebraska', 'nevada',
+    'new hampshire', 'new jersey', 'new mexico', 'new york', 'north carolina',
+    'north dakota', 'ohio', 'oklahoma', 'oregon', 'pennsylvania',
+    'rhode island', 'south carolina', 'south dakota', 'tennessee', 'texas',
+    'utah', 'vermont', 'virginia', 'washington', 'west virginia',
+    'wisconsin', 'wyoming', 'district of columbia', 'washington d.c.',
+    // State abbreviations (as suffix ", TX" etc.)
+    ', tx', ', ca', ', ny', ', fl', ', il', ', pa', ', oh', ', ga',
+    ', nc', ', mi', ', wa', ', az', ', ma', ', tn', ', in', ', mo',
+    ', md', ', wi', ', co', ', mn', ', sc', ', al', ', la', ', ky',
+    ', or', ', ok', ', ct', ', ut', ', ia', ', nv', ', ar', ', ms',
+    ', ks', ', nm', ', ne', ', wv', ', id', ', hi', ', nh', ', me',
+    ', mt', ', ri', ', de', ', sd', ', nd', ', ak', ', vt', ', wy',
+    // Major US cities that could be ambiguous
+    'austin', 'nashville', 'denver', 'portland', 'seattle', 'chicago',
+    'los angeles', 'san francisco', 'new orleans', 'miami', 'boston',
+    'atlanta', 'dallas', 'houston', 'phoenix', 'philadelphia', 'detroit',
+    'las vegas', 'minneapolis', 'salt lake city', 'san diego', 'san antonio',
+    'jacksonville', 'memphis', 'louisville', 'baltimore', 'milwaukee',
+  ];
+  if (usIndicators.some(i => d.includes(i))) return 'USD';
+
+  // Canada
+  if (d.includes('canada') || d.includes('ontario') || d.includes('british columbia') ||
+      d.includes('quebec') || d.includes('alberta') || d.includes('toronto') ||
+      d.includes('vancouver') || d.includes('montreal') || d.includes(', bc') ||
+      d.includes(', on') || d.includes(', qc') || d.includes(', ab')) return 'CAD';
+
+  // UK
+  if (d.includes('united kingdom') || d.includes('england') || d.includes('scotland') ||
+      d.includes('wales') || d.includes('northern ireland') || d.includes('london') ||
+      d.includes('manchester') || d.includes('edinburgh') || d.includes(', uk') ||
+      d.includes(', gb')) return 'GBP';
+
+  // Eurozone countries
+  const euCountries = [
+    'france', 'paris', 'germany', 'berlin', 'spain', 'madrid', 'barcelona',
+    'italy', 'rome', 'milan', 'portugal', 'lisbon', 'netherlands', 'amsterdam',
+    'belgium', 'brussels', 'austria', 'vienna', 'greece', 'athens',
+    'ireland', 'dublin', 'finland', 'helsinki', 'luxembourg',
+    'malta', 'cyprus', 'slovakia', 'slovenia', 'estonia', 'latvia',
+    'lithuania', 'croatia', 'europe',
+  ];
+  if (euCountries.some(i => d.includes(i))) return 'EUR';
+
+  // Japan
+  if (d.includes('japan') || d.includes('tokyo') || d.includes('osaka') ||
+      d.includes('kyoto') || d.includes('hiroshima') || d.includes('sapporo')) return 'JPY';
+
+  // Australia
+  if (d.includes('australia') || d.includes('sydney') || d.includes('melbourne') ||
+      d.includes('brisbane') || d.includes('perth') || d.includes(', au')) return 'AUD';
+
+  // Mexico
+  if (d.includes('mexico') || d.includes('cancun') || d.includes('mexico city') ||
+      d.includes('oaxaca') || d.includes('guadalajara') || d.includes('tulum')) return 'MXN';
+
+  // Thailand
+  if (d.includes('thailand') || d.includes('bangkok') || d.includes('chiang mai') ||
+      d.includes('phuket') || d.includes('koh samui')) return 'THB';
+
+  // India
+  if (d.includes('india') || d.includes('mumbai') || d.includes('delhi') ||
+      d.includes('bangalore') || d.includes('goa') || d.includes('kerala')) return 'INR';
+
+  // Return null if destination is too ambiguous
+  return null;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -331,15 +417,34 @@ serve(async (req) => {
 
     const parsed = JSON.parse(toolCall.function.arguments);
 
-    // Add source: 'parsed' to all activities
+    // --- Destination-aware currency normalization ---
+    // Detect the canonical currency for the destination so that trips to
+    // e.g. Austin, Texas are always USD even if the source material used € signs.
+    const destinationCurrency = inferDestinationCurrency(parsed.destination || '');
+
+    // Add source: 'parsed' to all activities and normalize currency
     if (parsed.days) {
       for (const day of parsed.days) {
         if (day.activities) {
           for (const activity of day.activities) {
             activity.source = 'parsed';
+            // If the activity has a currency that conflicts with the destination,
+            // override it. Only keep activity-level currency if it explicitly
+            // matches the destination (e.g., "free" cost stays 0 in any currency).
+            if (activity.currency && destinationCurrency) {
+              activity.currency = destinationCurrency;
+            } else if (!activity.currency && destinationCurrency) {
+              activity.currency = destinationCurrency;
+            }
           }
         }
       }
+    }
+
+    // Attach the resolved destination currency at the top level so
+    // createTripFromParsed can use it when inserting the trip record.
+    if (destinationCurrency) {
+      parsed.detectedCurrency = destinationCurrency;
     }
 
     return new Response(JSON.stringify(parsed), {

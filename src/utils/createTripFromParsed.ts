@@ -106,13 +106,19 @@ function convertDay(day: ParsedDay): ItineraryDay {
   };
 }
 
-export function convertParsedToItineraryData(parsed: ParsedTripInput) {
+export function convertParsedToItineraryData(parsed: ParsedTripInput & { detectedCurrency?: string }) {
   const days = parsed.days.map(convertDay);
+  const currency = (parsed as any).detectedCurrency || inferCurrencyFromDestination(parsed.destination || '');
 
   return {
     days,
+    // Store currency in overview so EditorialItinerary can find it
+    overview: {
+      currency,
+    },
     metadata: {
       source: 'manual_paste',
+      currency,
       accommodationNotes: parsed.accommodationNotes || [],
       practicalTips: parsed.practicalTips || [],
       unparsed: parsed.unparsed || [],
@@ -121,8 +127,31 @@ export function convertParsedToItineraryData(parsed: ParsedTripInput) {
   };
 }
 
+/** Map a destination string to its canonical currency code (mirrors the edge function logic). */
+function inferCurrencyFromDestination(destination: string): string {
+  const d = destination.toLowerCase();
+  const usStates = ['texas','california','new york','florida','illinois','washington',
+    'colorado','georgia','tennessee','oregon','nevada','arizona','ohio','michigan',
+    'massachusetts','pennsylvania','virginia','north carolina','south carolina'];
+  const usAbbr = [', tx',', ca',', ny',', fl',', il',', wa',', co',', ga',
+    ', tn',', or',', nv',', az',', oh',', mi',', ma',', pa',', va',', nc',', sc'];
+  const usCities = ['austin','nashville','denver','portland','seattle','chicago',
+    'los angeles','san francisco','new orleans','miami','boston','atlanta',
+    'dallas','houston','phoenix','philadelphia','las vegas','san diego'];
+  if ([...usStates,...usAbbr,...usCities,'united states',', usa',', us'].some(x => d.includes(x))) return 'USD';
+  if (['canada','toronto','vancouver','montreal'].some(x => d.includes(x))) return 'CAD';
+  if (['united kingdom','england','scotland','london','manchester',', uk'].some(x => d.includes(x))) return 'GBP';
+  if (['france','germany','spain','italy','portugal','netherlands','belgium','austria',
+       'greece','ireland','paris','berlin','madrid','rome','amsterdam','lisbon','vienna',
+       'athens','dublin','europe'].some(x => d.includes(x))) return 'EUR';
+  if (['japan','tokyo','osaka','kyoto'].some(x => d.includes(x))) return 'JPY';
+  if (['australia','sydney','melbourne','brisbane'].some(x => d.includes(x))) return 'AUD';
+  if (['mexico','cancun','tulum','oaxaca'].some(x => d.includes(x))) return 'MXN';
+  return 'USD'; // Default to USD
+}
+
 export async function createTripFromParsed(
-  parsed: ParsedTripInput,
+  parsed: ParsedTripInput & { detectedCurrency?: string },
   userId: string
 ): Promise<{ tripId: string } | { error: string }> {
   try {
@@ -140,6 +169,10 @@ export async function createTripFromParsed(
       };
       budgetTier = mapping[parsed.preferences.budgetLevel] || 'moderate';
     }
+
+    // Use the currency the edge function resolved from the destination,
+    // falling back to our own inference so US trips always get USD.
+    const tripCurrency = parsed.detectedCurrency || inferCurrencyFromDestination(destination);
 
     const { data: trip, error } = await supabase
       .from('trips')
@@ -159,6 +192,7 @@ export async function createTripFromParsed(
         unlocked_day_count: parsed.days.length,
         metadata: {
           source: 'manual_paste',
+          currency: tripCurrency,
           lastUpdated: new Date().toISOString(),
         },
       })
