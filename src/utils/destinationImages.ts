@@ -124,7 +124,7 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1596422846543-75c6fc197f11?w=1200', // Busan coastal view
   ],
   'jeju': [
-    'https://images.unsplash.com/photo-1597668889648-f6c85fe33c57?w=1200', // Jeju landscape
+    'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=1200', // Jeju landscape
     'https://images.unsplash.com/photo-1623083500086-8a7cd5a8f4a6?w=1200', // Jeju coast
     'https://images.unsplash.com/photo-1599707367072-cd6ada2bc375?w=1200', // Jeju nature
   ],
@@ -139,12 +139,12 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1553653924-39b70295f8da?w=1200', // Jiufen
   ],
   'hong kong': [
-    'https://images.unsplash.com/photo-1536599018102-9f803c979b2d?w=1200', // Victoria Harbour
+    'https://images.unsplash.com/photo-1506970845246-18f21d533b20?w=1200', // Victoria Harbour
     'https://images.unsplash.com/photo-1531259683007-016a7b628fc3?w=1200', // Hong Kong skyline
     'https://images.unsplash.com/photo-1518599904199-0ca897819ddb?w=1200', // Street view
   ],
   'hong-kong': [
-    'https://images.unsplash.com/photo-1536599018102-9f803c979b2d?w=1200',
+    'https://images.unsplash.com/photo-1506970845246-18f21d533b20?w=1200',
     'https://images.unsplash.com/photo-1531259683007-016a7b628fc3?w=1200',
     'https://images.unsplash.com/photo-1518599904199-0ca897819ddb?w=1200',
   ],
@@ -191,7 +191,7 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1522083165195-3424ed129620?w=1200',
   ],
   'baltimore': [
-    'https://images.unsplash.com/photo-1575438276866-8ee7e60acf2d?w=1200', // Inner Harbor
+    'https://images.unsplash.com/photo-1572120360610-d971b9d7767c?w=1200', // Inner Harbor
     'https://images.unsplash.com/photo-1588859211408-94e55a9f2f00?w=1200', // Baltimore skyline
     'https://images.unsplash.com/photo-1601042879364-f3947d3f9c16?w=1200', // Downtown Baltimore
   ],
@@ -216,7 +216,7 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1544027993-37dbfe43562a?w=1200', // Philadelphia downtown
   ],
   'boston': [
-    'https://images.unsplash.com/photo-1501979376754-00b7c04c6a81?w=1200', // Boston skyline
+    'https://images.unsplash.com/photo-1562788869-4ed32648eb72?w=1200', // Boston skyline
     'https://images.unsplash.com/photo-1573155993874-d5d48af862ba?w=1200', // Boston Common
     'https://images.unsplash.com/photo-1559335936-d2b8d7e93d17?w=1200', // Boston waterfront
   ],
@@ -241,12 +241,12 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1542223616-9de9adb5f3c8?w=1200', // Seattle waterfront
   ],
   'portland': [
-    'https://images.unsplash.com/photo-1545085799-5b88ea4d36f2?w=1200', // Portland skyline
+    'https://images.unsplash.com/photo-1507608616759-54f48f0af0ee?w=1200', // Portland skyline
     'https://images.unsplash.com/photo-1548039149-e21405d4de92?w=1200', // Portland bridges
     'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1200', // Portland downtown
   ],
   'nashville': [
-    'https://images.unsplash.com/photo-1546464677-905db9a3a6c3?w=1200', // Nashville skyline
+    'https://images.unsplash.com/photo-1587162146766-e06b1189b907?w=1200', // Nashville skyline
     'https://images.unsplash.com/photo-1571690022330-9e951a9ff0f9?w=1200', // Nashville downtown
     'https://images.unsplash.com/photo-1545601445-4d6a0a0565f0?w=1200', // Nashville music scene
   ],
@@ -547,6 +547,17 @@ export function generateDestinationGradient(seed: string): string {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
+/**
+ * onError handler for <img> elements — swaps to gradient fallback on 404.
+ * Usage: <img onError={handleImageError} ... />
+ */
+export function handleImageError(e: React.SyntheticEvent<HTMLImageElement>, destination?: string) {
+  const img = e.currentTarget;
+  if (img.dataset.fallbackApplied) return; // prevent infinite loop
+  img.dataset.fallbackApplied = 'true';
+  img.src = generateDestinationGradient(destination || 'travel');
+}
+
 export {
   CURATED_DESTINATION_IMAGES,
   GENERIC_TRAVEL_IMAGES,
@@ -557,6 +568,7 @@ export default {
   getDestinationImages,
   hasCuratedImages,
   generateDestinationGradient,
+  handleImageError,
   CURATED_DESTINATION_IMAGES,
   GENERIC_TRAVEL_IMAGES,
 };
