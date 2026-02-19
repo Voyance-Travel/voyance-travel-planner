@@ -235,10 +235,35 @@ export async function loadTravelerProfile(
   
   // =========================================================================
   // STEP 5: Resolve Trait Scores with Defaults
+  // Fallback chain: travel_dna_profiles.trait_scores → profiles.travel_dna blob
   // =========================================================================
   
-  const traitScores = resolveTraitScores(travelDNA);
-  if (Object.keys(traitScores).some(k => traitScores[k as keyof TraitScores] !== 0)) {
+  let traitScores = resolveTraitScores(travelDNA);
+  const hasSignal = Object.values(traitScores).some(v => v !== 0);
+  
+  if (!hasSignal && userId) {
+    // Fallback: try profiles.travel_dna blob for legacy users
+    console.warn(`[profile-loader] trait_scores all zeros — trying profiles.travel_dna fallback`);
+    const { data: profileBlob } = await supabase
+      .from('profiles')
+      .select('travel_dna')
+      .eq('id', userId)
+      .maybeSingle();
+    
+    if (profileBlob?.travel_dna) {
+      const legacyDna = profileBlob.travel_dna as Record<string, unknown>;
+      const legacyScores = resolveTraitScores({ trait_scores: legacyDna.trait_scores });
+      const legacyHasSignal = Object.values(legacyScores).some(v => v !== 0);
+      if (legacyHasSignal) {
+        traitScores = legacyScores;
+        console.log(`[profile-loader] ✓ Recovered trait scores from profiles.travel_dna fallback`);
+      } else {
+        console.warn(`[profile-loader] profiles.travel_dna also has zero traits — using defaults`);
+      }
+    }
+  }
+  
+  if (Object.values(traitScores).some(v => v !== 0)) {
     dataCompleteness += 20;
   }
   
