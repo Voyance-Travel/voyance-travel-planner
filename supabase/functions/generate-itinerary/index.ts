@@ -4407,6 +4407,9 @@ async function generateSingleDayWithRetry(
       // Get archetype day structure for activity limits
       const archetypeDefinition = getArchetypeDefinition(context.travelerDNA?.primaryArchetype);
       const maxActivitiesFromArchetype = archetypeDefinition.dayStructure.maxScheduledActivities;
+      // Use archetype min if defined, otherwise derive from schedule constraints or default to reasonable floor
+      const minActivitiesFromArchetype = archetypeDefinition.dayStructure.minScheduledActivities 
+        || Math.max(3, Math.ceil(maxActivitiesFromArchetype * 0.6));
       
       // =========================================================================
       // PHASE 12: Experience Affinity - What TO prioritize (the "pull" side)
@@ -4585,7 +4588,9 @@ ${context.actualDailyBudgetPerPerson < 10 ? `🚨 EXTREMELY TIGHT BUDGET: This b
 - Include a "budget_note" field in your response: a 1-sentence honest note like "This budget is very tight for Tokyo — we've maximized free activities but meals will be the main expense."
 - Still aim to fill the day with great experiences — many of the best travel moments are free.` : context.actualDailyBudgetPerPerson < 30 ? `⚡ TIGHT BUDGET: This is a lean budget. Lean heavily on free attractions, street food, and self-guided exploration. Limit paid activities to 1-2 per day max. Use realistic local prices — do not underestimate costs to fit the budget.` : `Stay within this cap. If an activity is expensive, balance with free/cheap alternatives elsewhere in the day.`}` : ''}
 ARCHETYPE: ${context.travelerDNA?.primaryArchetype || 'balanced'}
-MAX ACTIVITIES: ${maxActivitiesFromArchetype} (from archetype day structure - this is a HARD LIMIT)
+ACTIVITY COUNT: ${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} per day (from archetype day structure - HARD LIMITS)
+⚠️ MINIMUM ${minActivitiesFromArchetype} activities required. Going UNDER = FAILURE. Going OVER ${maxActivitiesFromArchetype} = FAILURE.
+Include a mix of: 2-3 dining slots (breakfast/lunch/dinner), 2-3 exploration/activity slots, and evening activities where appropriate.
 ${multiCityPrompt}
 
 ${previousActivities.length > 0 ? `AVOID REPEATING THESE SPECIFIC ACTIVITIES: ${previousActivities.join(', ')}\n` : ''}
@@ -4593,7 +4598,7 @@ NOTE: The previous-activities list is ONLY for de-duplication. Do NOT treat it a
 ${bannedTypes.length > 0 ? `\n🚫 BANNED EXPERIENCE TYPES (already done on previous days - DO NOT INCLUDE): ${bannedTypes.join(', ')}\n` : ''}
 
 CRITICAL REMINDERS:
-1. Maximum ${maxActivitiesFromArchetype} scheduled activities. Going over = FAILURE.
+1. ${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} scheduled activities required. Going under ${minActivitiesFromArchetype} OR over ${maxActivitiesFromArchetype} = FAILURE.
 2. Check the archetype's avoid list. If it says "no spa", there are ZERO spa activities.
 3. Check the budget constraints. If value-focused, no €100+ experiences.
 4. ${context.travelerDNA?.primaryArchetype === 'flexible_wanderer' || context.travelerDNA?.primaryArchetype === 'slow_traveler' || (context.travelerDNA?.traits?.pace || 0) <= -3 ? 'Include at least one 2+ hour UNSCHEDULED block labeled "Free time to explore [neighborhood]"' : 'Follow the pacing guidelines for this archetype'}
@@ -8617,6 +8622,8 @@ FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
         { pace: traitScores.pace, budget: traitScores.budget }
       );
       const maxActivitiesFromArchetype = archetypeContext.definition.dayStructure.maxScheduledActivities;
+      const minActivitiesFromArchetype = archetypeContext.definition.dayStructure.minScheduledActivities 
+        || Math.max(3, Math.ceil(maxActivitiesFromArchetype * 0.6));
 
       // ==========================================================================
       // VOYANCE PICKS: Founder-curated must-includes for this destination
@@ -8698,7 +8705,8 @@ General Requirements:
 - ONLY recommend restaurants and dining spots with 4+ star ratings - no low-quality or poorly-reviewed venues
 - Every activity MUST have a "title" field (the display name)
 - All times MUST be in 24-hour HH:MM format
-- MAX ${maxActivitiesFromArchetype} scheduled activities (from archetype day structure - HARD LIMIT)
+- ACTIVITY COUNT: ${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} scheduled activities (HARD LIMITS — going under ${minActivitiesFromArchetype} OR over ${maxActivitiesFromArchetype} = FAILURE)
+- Fill the day from morning through evening: include 2-3 dining slots, 2-3 exploration activities, and evening activities where appropriate
 ${lockedActivities.length > 0 ? '- DO NOT generate activities for locked time slots listed above' : ''}
 ${collaboratorAttributionPrompt}
 ${voyancePicksPrompt}`;
@@ -8711,7 +8719,7 @@ Budget: ${effectiveBudgetTier}${actualDailyBudgetPerPerson != null ? ` (~$${actu
 ⚠️ HARD BUDGET CAP: The user has set a real budget of ~$${Math.round(actualDailyBudgetPerPerson * (travelers || 1))}/day total ($${actualDailyBudgetPerPerson}/person) for activities.
 ${actualDailyBudgetPerPerson < 10 ? `🚨 EXTREMELY TIGHT BUDGET: Do your best — prioritize FREE activities (parks, temples, markets, viewpoints, walking tours). For meals, suggest cheapest realistic options (street food, convenience stores). Do NOT invent fake low prices — use real local costs. Include a "budget_note" field with an honest 1-sentence note about budget feasibility.` : actualDailyBudgetPerPerson < 30 ? `⚡ TIGHT BUDGET: Lean heavily on free attractions, street food, self-guided exploration. Limit paid activities to 1-2/day. Use realistic local prices.` : `Stay within this cap. Balance expensive activities with free alternatives.`}` : ''}
 ARCHETYPE: ${primaryArchetype}
-MAX ACTIVITIES: ${maxActivitiesFromArchetype} (from archetype day structure - HARD LIMIT)
+ACTIVITY COUNT: ${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} per day (HARD LIMITS — going under OR over = FAILURE)
 ${preferences?.pace ? `Pace: ${preferences.pace}` : ''}
 ${preferences?.dayFocus ? `Day focus: ${preferences.dayFocus}` : ''}
 ${preferenceContext}
@@ -8719,7 +8727,7 @@ ${tripIntentsContext}
 ${previousDayActivities?.length ? `\nAvoid repeating these specific venues/activities (be creative and pick DIFFERENT ones): ${previousDayActivities.join(', ')}` : ''}
 
 CRITICAL REMINDERS:
-1. Maximum ${maxActivitiesFromArchetype} scheduled activities. Going over = FAILURE.
+1. ${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} scheduled activities required. Going under ${minActivitiesFromArchetype} OR over ${maxActivitiesFromArchetype} = FAILURE.
 2. Check the archetype's avoid list. If it says "no spa", there are ZERO spa activities.
 3. Check the budget constraints. If value-focused, no €100+ experiences.
 4. ${primaryArchetype === 'flexible_wanderer' || primaryArchetype === 'slow_traveler' || (traitScores.pace || 0) <= -3 ? 'Include at least one 2+ hour UNSCHEDULED block labeled "Free time to explore [neighborhood]"' : 'Follow the pacing guidelines for this archetype'}

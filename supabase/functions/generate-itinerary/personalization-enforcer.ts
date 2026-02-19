@@ -1123,8 +1123,8 @@ export function validateDayPersonalization(
   if (coreActivities.length < constraints.minActivitiesPerDay && dayNumber > 1) {
     violations.push({
       type: 'too_few_activities',
-      details: `Day has ${coreActivities.length} activities, min is ${constraints.minActivitiesPerDay}`,
-      severity: 'minor'
+      details: `Day has ${coreActivities.length} activities, min is ${constraints.minActivitiesPerDay}. Add more activities to fill the day.`,
+      severity: 'major'
     });
   }
   
