@@ -267,6 +267,8 @@ interface GenerationContext {
   // Phase 3: Premium features
   preBookedCommitments?: PreBookedCommitment[];
   mustDoActivities?: string;
+  /** Whether this generation is triggered by Smart Finish (user-pasted research must be honored) */
+  isSmartFinish?: boolean;
   groupArchetypes?: TravelerArchetype[];
   // Collaborator user IDs and names for suggestedFor attribution
   collaboratorTravelers?: Array<{ userId: string; name: string }>;
@@ -3806,6 +3808,7 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     celebrationDay: trip.metadata?.celebrationDay,
     // User research notes / must-do activities from Page 2 paste field
     mustDoActivities: trip.metadata?.mustDoActivities || undefined,
+    isSmartFinish: trip.metadata?.smartFinishSource === 'manual_builder' || trip.creation_source === 'smart_finish',
   };
 
   // Set daily budget based on tier (fallback)
@@ -7187,15 +7190,17 @@ RULES FOR VOYANCE PICKS:
       // =======================================================================
       let userResearchPrompt = "";
       if (context.mustDoActivities && context.mustDoActivities.trim()) {
-        const mustDoAnalysis = parseMustDoInput(context.mustDoActivities, context.destination);
+        // For Smart Finish trips, force all user-researched items to 'must' priority
+        const forceAllMust = !!context.isSmartFinish;
+        const mustDoAnalysis = parseMustDoInput(context.mustDoActivities, context.destination, forceAllMust);
         if (mustDoAnalysis.length > 0) {
           const scheduled = scheduleMustDos(mustDoAnalysis, context.totalDays);
           userResearchPrompt = scheduled.promptSection;
-          console.log(`[Stage 1.999] ✓ User research notes parsed: ${mustDoAnalysis.length} items, ${scheduled.scheduled.length} scheduled`);
+          console.log(`[Stage 1.999] ✓ User research notes parsed: ${mustDoAnalysis.length} items (forceAllMust=${forceAllMust}), ${scheduled.scheduled.length} scheduled`);
         } else {
-          // Raw text fallback — inject as-is
-          userResearchPrompt = `\n## 📋 USER'S MUST-SEES & RESEARCH NOTES\nThe traveler shared these preferences/notes. INCORPORATE them into the itinerary:\n"${context.mustDoActivities.trim()}"\n\nRespect any "skip" or "avoid" requests. Include their must-sees on appropriate days.\n`;
-          console.log(`[Stage 1.999] ✓ User research notes injected as raw text (${context.mustDoActivities.length} chars)`);
+          // Raw text fallback — inject as-is with MANDATORY language
+          userResearchPrompt = `\n## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED and CHOSEN these specific venues. You MUST include ALL of them in the itinerary. These are NON-NEGOTIABLE. Do NOT substitute your own recommendations for these.\n\n"${context.mustDoActivities.trim()}"\n\nRULES:\n- EVERY venue/restaurant listed above MUST appear by name in the final itinerary\n- Only add AI recommendations to fill REMAINING empty meal/activity slots\n- If a user-specified venue conflicts with another, keep the user's venue and move the other\n- Respect any "skip" or "avoid" requests\n`;
+          console.log(`[Stage 1.999] ✓ User research notes injected as raw text with MANDATORY enforcement (${context.mustDoActivities.length} chars)`);
         }
       }
 

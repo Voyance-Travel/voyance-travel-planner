@@ -115,19 +115,41 @@ const KNOWN_LANDMARKS: Record<string, {
 
 export function parseMustDoInput(
   userInput: string,
-  destination: string
+  destination: string,
+  forceAllMust: boolean = false
 ): MustDoPriority[] {
   const priorities: MustDoPriority[] = [];
   
-  // Split by common separators
-  const items = userInput
-    .split(/[,;\n]/)
+  // Split by newlines first (preserves multi-word venue names that may contain commas)
+  const lines = userInput
+    .split(/\n/)
     .map(s => s.trim())
     .filter(s => s.length > 0);
   
+  // Further split lines by semicolons only (NOT commas — venue names often contain commas)
+  const items: string[] = [];
+  for (const line of lines) {
+    // Skip header/context lines that aren't actual venue entries
+    if (line.startsWith('USER\'S ') || line.startsWith('PRACTICAL TIPS') || line.startsWith('USER PREFERENCES')) {
+      continue;
+    }
+    // Handle semicolon-separated items within a line
+    const subItems = line.split(';').map(s => s.trim()).filter(s => s.length > 0);
+    items.push(...subItems);
+  }
+  
   for (const item of items) {
-    const priority = parseItem(item, destination);
+    // Strip leading "- " from research context format
+    const cleaned = item.replace(/^-\s*/, '').trim();
+    if (!cleaned || cleaned.length < 2) continue;
+    
+    const priority = parseItem(cleaned, destination);
     if (priority) {
+      // When forceAllMust is true, upgrade ALL items to 'must' priority
+      // This ensures user-researched venues are never downgraded to optional
+      if (forceAllMust) {
+        priority.priority = 'must';
+      }
       priorities.push(priority);
     }
   }
@@ -334,9 +356,12 @@ function buildMustDoPrompt(
 ): string {
   if (scheduled.length === 0 && unschedulable.length === 0) return '';
   
-  let prompt = `## 🎯 MUST-DO PRIORITIES (USER REQUIREMENTS)
+  let prompt = `## 🚨 MANDATORY USER-SPECIFIED VENUES & ACTIVITIES
 
-The traveler has specified these as REQUIRED experiences. They MUST appear in the itinerary:
+⚠️ CRITICAL: The traveler has PERSONALLY RESEARCHED and CHOSEN these specific venues/restaurants.
+You MUST include ALL of them in the itinerary BY THEIR EXACT NAME.
+Do NOT substitute AI-generated alternatives. Only fill REMAINING empty slots with your own recommendations.
+FAILURE TO INCLUDE ANY OF THESE IS A HARD FAILURE.
 
 `;
 
@@ -379,12 +404,14 @@ The traveler has specified these as REQUIRED experiences. They MUST appear in th
     prompt += '\n';
   }
 
-  prompt += `### CRITICAL RULES
-1. MUST-level items are NON-NEGOTIABLE - they MUST appear on the specified day
-2. Build the rest of the day around these anchors
-3. If a must-do requires booking, mention this prominently
-4. Geographic clustering: schedule nearby activities on the same day as must-dos
-5. Never replace a must-do with an alternative, even if "similar"
+  prompt += `### CRITICAL RULES (VIOLATION = ITINERARY REJECTION)
+1. ALL listed items are NON-NEGOTIABLE — they MUST appear using their EXACT NAME
+2. Build the rest of the day around these user-specified anchors
+3. If a venue requires booking, mention this prominently
+4. Geographic clustering: schedule nearby user venues on the same day
+5. NEVER replace a user-specified venue with an AI alternative, even if "similar"
+6. Only use AI recommendations to fill REMAINING empty slots after ALL user venues are placed
+7. If you cannot fit all user venues, ADD more activity slots — do NOT drop user venues
 `;
 
   return prompt;
