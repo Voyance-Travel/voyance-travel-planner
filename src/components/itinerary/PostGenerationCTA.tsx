@@ -12,6 +12,7 @@ import { Palette, Share2, CreditCard, ChevronDown, ArrowRight } from 'lucide-rea
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import TripShareModal from '@/components/sharing/TripShareModal';
+import { trackInteraction } from '@/hooks/useAnalyticsTracker';
 
 interface PostGenerationCTAProps {
   tripId: string;
@@ -36,9 +37,11 @@ export function PostGenerationCTA({
 
   // Track CTA clicks for future optimization
   const trackClick = (action: 'customize' | 'share' | 'book') => {
-    // Analytics tracking - log which CTA users prefer
-    console.log(`[CTA Track] ${action} clicked for trip ${tripId}`);
-    // TODO: Send to analytics backend
+    trackInteraction('post_gen_cta_click', `cta-${action}`, action, {
+      trip_id: tripId,
+      cta_type: action,
+      destination,
+    });
   };
 
   const handleCustomize = () => {
