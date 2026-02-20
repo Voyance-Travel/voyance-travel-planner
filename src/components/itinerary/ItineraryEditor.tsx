@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO } from 'date-fns';
+import { safeFormatDate } from '@/utils/dateUtils';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import type { GeneratedDay, GeneratedActivity, TripOverview } from '@/hooks/useItineraryGeneration';
 
@@ -686,7 +687,7 @@ function DayCard({
             <Badge variant="secondary">Day {day.dayNumber}</Badge>
             {day.date && (
               <span className="text-sm text-muted-foreground">
-                {format(parseISO(day.date), 'EEEE, MMM d')}
+                {safeFormatDate(day.date, 'EEEE, MMM d', `Day ${day.dayNumber}`)}
               </span>
             )}
             {lockedCount > 0 && (

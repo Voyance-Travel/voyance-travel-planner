@@ -15,7 +15,7 @@ import { GenerationPhases } from '@/components/planner/shared/GenerationPhases';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { format, differenceInCalendarDays } from 'date-fns';
-import { parseLocalDate } from '@/utils/dateUtils';
+import { parseLocalDate, safeFormatDate } from '@/utils/dateUtils';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { ROUTES } from '@/config/routes';
 import { useGenerationGate, type GateResult } from '@/hooks/useGenerationGate';
@@ -833,7 +833,7 @@ export function ItineraryGenerator({
                       Day {day.dayNumber}
                     </Badge>
                     <span className="text-sm text-muted-foreground">
-                      {format(parseLocalDate(day.date), 'EEEE, MMM d')}
+                      {safeFormatDate(day.date, 'EEEE, MMM d', `Day ${day.dayNumber}`)}
                     </span>
                     {day.metadata?.pacingLevel && (
                       <Badge variant="outline" className="text-xs capitalize">

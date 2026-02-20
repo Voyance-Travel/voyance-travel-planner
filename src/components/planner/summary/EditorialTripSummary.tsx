@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from 'react';
 import { useBonusCredits } from '@/hooks/useBonusCredits';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
+import { safeFormatDate } from '@/utils/dateUtils';
 import {
   MapPin,
   Calendar,
@@ -187,7 +188,7 @@ export default function EditorialTripSummary({
 
   const handleShare = async (method: 'copy' | 'email' | 'message') => {
     const tripUrl = window.location.href;
-    const tripText = `Check out my trip to ${data.destination}! ${format(new Date(data.startDate), 'MMM d')} - ${format(new Date(data.endDate), 'MMM d, yyyy')}`;
+    const tripText = `Check out my trip to ${data.destination}! ${safeFormatDate(data.startDate, 'MMM d', '')} - ${safeFormatDate(data.endDate, 'MMM d, yyyy', '')}`;
     try {
       switch (method) {
         case 'copy':
@@ -259,7 +260,7 @@ export default function EditorialTripSummary({
               <div className="flex flex-wrap items-center gap-6 text-white/90 text-base drop-shadow-md">
                 <span className="flex items-center gap-2">
                   <Calendar className="w-4 h-4" />
-                  {format(new Date(data.startDate), 'MMM d')} – {format(new Date(data.endDate), 'MMM d, yyyy')}
+                  {safeFormatDate(data.startDate, 'MMM d', 'TBD')} – {safeFormatDate(data.endDate, 'MMM d, yyyy', 'TBD')}
                 </span>
                 <span className="w-px h-4 bg-white/40" />
                 <span className="flex items-center gap-2">
@@ -421,7 +422,7 @@ export default function EditorialTripSummary({
                   {/* Outbound */}
                   <div className="group">
                     <p className="text-xs text-muted-foreground uppercase tracking-wider mb-4">
-                      Outbound · {format(new Date(data.startDate), 'EEEE, MMMM d')}
+                      Outbound · {safeFormatDate(data.startDate, 'EEEE, MMMM d', 'Date TBD')}
                     </p>
                     <div className="flex items-center justify-between py-6 border-y border-border/50">
                       <div className="flex items-center gap-8 md:gap-12">

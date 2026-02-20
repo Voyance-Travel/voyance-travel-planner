@@ -941,7 +941,10 @@ export function EditorialItinerary({
   const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'payments' | 'details' | 'needtoknow' | 'collab'>('itinerary');
   const [selectedDayIndex, setSelectedDayIndex] = useState(() => {
     // Auto-select "Today" if trip is active
-    const todayIndex = initialDays.findIndex(d => d.date && isToday(parseISO(d.date)));
+    const todayIndex = initialDays.findIndex(d => {
+      if (!d.date) return false;
+      try { return isToday(parseISO(d.date)); } catch { return false; }
+    });
     return todayIndex >= 0 ? todayIndex : 0;
   });
   const { user } = useAuth();
@@ -2950,7 +2953,8 @@ export function EditorialItinerary({
               <div className="flex-1 overflow-x-auto">
                 <div className="flex gap-2 justify-center" data-tour="day-picker">
                   {days.map((day, index) => {
-                    const dayDate = day.date ? parseISO(day.date) : null;
+                    let dayDate: Date | null = null;
+                    try { dayDate = day.date ? parseISO(day.date) : null; if (dayDate && isNaN(dayDate.getTime())) dayDate = null; } catch { dayDate = null; }
                     const isSelected = index === selectedDayIndex;
                     const isTodayDay = dayDate ? isToday(dayDate) : false;
                     
