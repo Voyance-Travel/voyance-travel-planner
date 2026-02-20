@@ -104,28 +104,50 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
   const { data: rawTripMembers = [] } = useTripMembers(tripId);
   const { data: collaborators = [] } = useTripCollaborators(tripId);
   
-  // Build member names for per-person budget
+  // Build member names for per-person budget (deduplicated)
   const memberNames = useMemo(() => {
     const names: { id: string; name: string }[] = [];
     const seenIds = new Set<string>();
-    
-    rawTripMembers.forEach(m => {
-      if (m.id && !seenIds.has(m.id)) {
-        names.push({ id: m.id, name: m.name || m.email?.split('@')[0] || 'Unknown' });
-        seenIds.add(m.id);
-      }
-    });
-    
-    // Add collaborators not already in trip_members
+    const seenNames = new Set<string>();
+    const seenLastNames = new Set<string>();
+
+    // Add collaborators first (they have richer profile data)
     collaborators.forEach(c => {
-      if (c.user_id && !rawTripMembers.some(m => m.userId === c.user_id)) {
+      if (c.user_id) {
         const profileName = c.profile?.display_name || c.profile?.handle || 'Guest';
         const syntheticId = `collab-${c.id}`;
-        if (!seenIds.has(syntheticId)) {
-          names.push({ id: syntheticId, name: profileName });
-          seenIds.add(syntheticId);
-        }
+        names.push({ id: syntheticId, name: profileName });
+        seenIds.add(c.user_id);
+        seenIds.add(syntheticId);
+        const nameLower = profileName.toLowerCase();
+        seenNames.add(nameLower);
+        const parts = nameLower.split(/\s+/);
+        if (parts.length > 1) seenLastNames.add(parts[parts.length - 1]);
       }
+    });
+
+    // Add trip members not already represented
+    rawTripMembers.forEach(m => {
+      if (!m.id) return;
+      const memberName = m.name || m.email?.split('@')[0] || 'Unknown';
+      const nameLower = memberName.toLowerCase();
+      
+      // Skip if user_id already seen
+      if (m.userId && seenIds.has(m.userId)) return;
+      if (seenIds.has(m.id)) return;
+      // Skip exact name match
+      if (seenNames.has(nameLower)) return;
+      // Skip unlinked members with matching last name (fuzzy dedup)
+      if (!m.userId) {
+        const parts = nameLower.split(/\s+/);
+        if (parts.length > 1 && seenLastNames.has(parts[parts.length - 1])) return;
+      }
+
+      names.push({ id: m.id, name: memberName });
+      seenIds.add(m.id);
+      seenNames.add(nameLower);
+      const parts = nameLower.split(/\s+/);
+      if (parts.length > 1) seenLastNames.add(parts[parts.length - 1]);
     });
     
     return names;
