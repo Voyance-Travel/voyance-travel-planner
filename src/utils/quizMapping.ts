@@ -976,7 +976,7 @@ export async function submitQuizComplete(
       const travelDnaJson = {
         primary_archetype_name: dna.primary_archetype_name || null,
         secondary_archetype_name: dna.secondary_archetype_name || null,
-        dna_confidence_score: dna.dna_confidence_score || null,
+        dna_confidence_score: dna.dna_confidence_score ?? null,
         dna_rarity: dna.dna_rarity || null,
         trait_scores: dna.trait_scores || {},
         tone_tags: dna.tone_tags || [],
@@ -1238,7 +1238,7 @@ export async function recalculateDNAFromPreferences(
       const travelDnaJson = {
         primary_archetype_name: dna.primary_archetype_name || null,
         secondary_archetype_name: dna.secondary_archetype_name || null,
-        dna_confidence_score: dna.dna_confidence_score || null,
+        dna_confidence_score: dna.dna_confidence_score ?? null,
         dna_rarity: dna.dna_rarity || null,
         trait_scores: dna.trait_scores || {},
         tone_tags: dna.tone_tags || [],

@@ -83,7 +83,7 @@ function DNARevealCard({ dnaResult }: { dnaResult: DNAResult }) {
     ? secondaryNarrative 
     : null;
 
-  const confidence = dnaResult.dna_confidence_score || 85;
+  const confidence = dnaResult.dna_confidence_score ?? null;
   const archetypeId = dnaResult.primary_archetype_name || '';
   const isFallbackResult = FALLBACK_IDS.includes(archetypeId);
   const rarity = getRarityLabel(archetypeId) || dnaResult.dna_rarity || 'Uncommon';
@@ -155,10 +155,12 @@ function DNARevealCard({ dnaResult }: { dnaResult: DNAResult }) {
             <span className="text-background/15">·</span>
             <span className="text-xs text-background/35">{rarity}</span>
             <span className="text-background/15">·</span>
-            {!isFallbackResult ? (
+            {isFallbackResult ? (
+              <span className="text-xs text-background/35">Broad match</span>
+            ) : confidence !== null ? (
               <span className="text-xs text-background/35">{confidence}% match</span>
             ) : (
-              <span className="text-xs text-background/35">Broad match</span>
+              <span className="text-xs text-background/35">Your match</span>
             )}
 
             {validSecondary && (

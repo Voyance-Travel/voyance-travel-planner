@@ -39,7 +39,7 @@ interface DisambiguationQuestion {
 
 interface MicroDisambiguationProps {
   userId: string;
-  confidence: number;
+  confidence: number | null;
   onResolved?: () => void;
   className?: string;
 }
