@@ -247,6 +247,10 @@ function calculateArchetypeScore(
   const required = profile.required || {};
   let requiredMet = true;
   
+  // Normalize required-gate budget: every archetype gets the same 30-point max from gates
+  const requiredTraitCount = Object.keys(required).length;
+  const pointsPerRequiredTrait = requiredTraitCount > 0 ? 30 / requiredTraitCount : 30;
+  
   for (const [trait, requirement] of Object.entries(required)) {
     const traitValue = scores[trait];
     if (traitValue === undefined || traitValue === null || typeof traitValue !== 'number' || !isFinite(traitValue)) {
@@ -258,7 +262,7 @@ function calculateArchetypeScore(
     if (meetsRequirement(traitValue, requirement)) {
       matchedRequirements.push(trait);
       // Bonus for meeting the requirement
-      score += 30;
+      score += pointsPerRequiredTrait;
       traitProximities.push(1.0);
     } else {
       // Required trait FAILED — this is a hard gate
