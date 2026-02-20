@@ -1719,13 +1719,13 @@ function normalizeUserContext(
   // Trip pace overrides user pace trait
   if (tripContext?.pace) {
     const paceMap: Record<string, number> = {
-      'slow': -6, 'relaxed': -3, 'moderate': 0, 'active': 4, 'packed': 7
+      'slow': -6, 'relaxed': -3, 'balanced': 0, 'moderate': 0, 'active': 4, 'packed': 7
     };
     if (paceMap[tripContext.pace] !== undefined) {
       const tripPace = paceMap[tripContext.pace];
-      // Blend 50/50 with user preference (trip pace is strong signal)
+      // Trip-level pacing is an explicit user choice — weight it heavily (80/20)
       const oldPace = blendedTraits.pace;
-      blendedTraits.pace = Math.round((blendedTraits.pace * 0.5 + tripPace * 0.5) * 10) / 10;
+      blendedTraits.pace = Math.round((blendedTraits.pace * 0.2 + tripPace * 0.8) * 10) / 10;
       if (blendedTraits.pace !== oldPace) {
         tripOverrides.push(`pace (${tripContext.pace})`);
       }
@@ -3803,7 +3803,7 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     childrenAges: trip.metadata?.childrenAges || [],
     tripType: trip.trip_type,
     budgetTier: trip.budget_tier,
-    pace: trip.metadata?.pace || 'moderate',
+    pace: trip.metadata?.pacing || trip.metadata?.pace || 'moderate',
     interests: trip.metadata?.interests || [],
     currency: 'USD',
     // Phase 2: Origin city and timezone for jet lag calculation
