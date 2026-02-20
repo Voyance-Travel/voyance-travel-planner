@@ -243,24 +243,41 @@ function calculateArchetypeScore(
     };
   }
 
-  // Check required traits with proportional scoring
+  // Check required traits as HARD GATES — if any required trait fails, disqualify
   const required = profile.required || {};
+  let requiredMet = true;
   
   for (const [trait, requirement] of Object.entries(required)) {
     const traitValue = scores[trait];
     if (traitValue === undefined || traitValue === null || typeof traitValue !== 'number' || !isFinite(traitValue)) {
+      // Missing trait = requirement not met
+      requiredMet = false;
       continue;
     }
-    const proximity = calculateProximity(traitValue, requirement);
-    traitProximities.push(proximity);
-    score += proximity * 30;
-    if (proximity >= 1.0) {
+    
+    if (meetsRequirement(traitValue, requirement)) {
       matchedRequirements.push(trait);
-    } else if (proximity < 0.5) {
-      // Only penalize actual contradictions (far from requirement)
-      score -= (1 - proximity) * 8;
+      // Bonus for meeting the requirement
+      score += 30;
+      traitProximities.push(1.0);
+    } else {
+      // Required trait FAILED — this is a hard gate
+      requiredMet = false;
+      traitProximities.push(0);
     }
-    // Near-misses (proximity 0.5-0.99) get partial credit but NO penalty
+  }
+
+  // If any required trait is not met, disqualify this archetype
+  if (!requiredMet && Object.keys(required).length > 0) {
+    return {
+      id: archetypeId,
+      name: profile.name,
+      category: profile.category,
+      score: -Infinity,
+      confidence: 'low',
+      matchedRequirements,
+      penalties: ['failed required gate'],
+    };
   }
 
   // Apply booster scores
