@@ -241,8 +241,8 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'authenticity', weight: 2, sweetSpot: 5, range: [2, 8] },
     ],
     fineGrained: [
-      { trait: 'photo_focus', min: 0.4, weight: 8, sweetSpot: 0.7 },
-      { trait: 'flexibility', min: 0.5, weight: 6 },
+      { trait: 'photo_focus', min: 0.3, weight: 10, sweetSpot: 0.7 },
+      { trait: 'flexibility', min: 0.4, weight: 6 },
     ],
     signatureAnswers: ['a3', 'e2', 'e4', 'h3', 'sm5'],
   },
@@ -279,7 +279,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'comfort', weight: 2, sweetSpot: 4, range: [1, 7] },
     ],
     fineGrained: [
-      { trait: 'family_focus', min: 0.4, weight: 15, sweetSpot: 0.8 },
+      { trait: 'family_focus', min: 0.3, weight: 18, sweetSpot: 0.8 },
     ],
     signatureAnswers: ['sm2', 'f4', 'e1', 'e2', 'h4'],
   },
@@ -372,7 +372,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'authenticity', weight: 2, sweetSpot: 5, range: [2, 8] },
     ],
     fineGrained: [
-      { trait: 'niche_interest', min: 0.4, weight: 10, sweetSpot: 0.7 },
+      { trait: 'niche_interest', min: 0.3, weight: 12, sweetSpot: 0.7 },
     ],
     signatureAnswers: ['e1', 'cd1', 'cd2', 'tt3'],
   },
@@ -505,7 +505,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'authenticity', weight: 2, sweetSpot: 5, range: [2, 9] },
     ],
     fineGrained: [
-      { trait: 'food_focus', min: 0.5, weight: 18, sweetSpot: 0.85 },  // CORE: must love food
+      { trait: 'food_focus', min: 0.4, weight: 20, sweetSpot: 0.85 },  // CORE: must love food (lowered min from 0.5 for sparse trait)
       { trait: 'cultural_depth', min: 0.3, weight: 6, sweetSpot: 0.7 },  // Bonus for cultural interest
       { trait: 'status_seeking', max: 0.7, weight: 4 },  // Mild penalty if too status-driven (raised from 0.6)
     ],
@@ -521,7 +521,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'comfort', weight: 2, sweetSpot: 4, range: [1, 7] },
     ],
     fineGrained: [
-      { trait: 'art_focus', min: 0.4, weight: 15, sweetSpot: 0.8 },  // CORE: must love art
+      { trait: 'art_focus', min: 0.25, weight: 18, sweetSpot: 0.8 },  // CORE: must love art (lowered min from 0.4 for sparse trait)
       { trait: 'cultural_depth', min: 0.4, weight: 8, sweetSpot: 0.8 },
       { trait: 'food_focus', max: 0.6, weight: 4 },  // Penalty if food is dominant (not art)
     ],
@@ -612,6 +612,10 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'transformation', weight: 3, sweetSpot: 7, range: [4, 10] },
       { trait: 'pace', weight: 3, sweetSpot: -5, range: [-10, 0] },
       { trait: 'comfort', weight: 2, sweetSpot: 4, range: [0, 7] },
+    ],
+    fineGrained: [
+      { trait: 'healing_focus', min: 0.25, weight: 20, sweetSpot: 0.8 },  // CORE: travel as medicine
+      { trait: 'restoration_need', min: 0.5, weight: 8, sweetSpot: 0.75 },
     ],
     hardNo: [
       { trait: 'pace', range: [5, 10], penalty: -15 },

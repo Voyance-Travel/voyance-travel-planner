@@ -85,7 +85,8 @@
           "label": "Back to a place I loved. Why risk it on somewhere new?",
           "traits": {
             "novelty_seeking": 0.2,
-            "flexibility": 0.4
+            "flexibility": 0.4,
+            "niche_interest": 0.35
           }
         },
         {
@@ -134,7 +135,8 @@
           "label": "Book the cheaper one. That's four nice dinners.",
           "traits": {
             "budget_tier": 0.25,
-            "quality_intrinsic": 0.3
+            "quality_intrinsic": 0.3,
+            "food_focus": 0.4
           }
         },
         {
@@ -294,7 +296,8 @@
           "traits": {
             "social_energy": 0.6,
             "group_size_pref": 0.55,
-            "quality_intrinsic": 0.6
+            "quality_intrinsic": 0.6,
+            "family_focus": 0.25
           }
         },
         {
@@ -439,7 +442,8 @@
           "label": "A kitchen. I want to cook at least some meals and feel like I live there.",
           "traits": {
             "cultural_depth": 0.65,
-            "budget_tier": 0.4
+            "budget_tier": 0.4,
+            "food_focus": 0.5
           }
         },
         {
@@ -447,7 +451,8 @@
           "label": "Something interesting. I'd rather stay somewhere weird and memorable than comfortable and forgettable.",
           "traits": {
             "novelty_seeking": 0.75,
-            "adventure": 0.6
+            "adventure": 0.6,
+            "photo_focus": 0.35
           }
         },
         {
@@ -545,7 +550,8 @@
           "id": "q10a",
           "label": "I need to escape. My regular life is fine, but I need breaks from it to stay sane.",
           "traits": {
-            "restoration_need": 0.75
+            "restoration_need": 0.75,
+            "healing_focus": 0.35
           }
         },
         {
@@ -635,7 +641,8 @@
           "label": "I have stories. Things happened that I'll be telling for years.",
           "traits": {
             "adventure": 0.8,
-            "novelty_seeking": 0.7
+            "novelty_seeking": 0.7,
+            "photo_focus": 0.3
           }
         },
         {
@@ -653,7 +660,8 @@
           "traits": {
             "learning_focus": 0.8,
             "spirituality": 0.7,
-            "cultural_depth": 0.7
+            "cultural_depth": 0.7,
+            "art_focus": 0.3
           }
         },
         {
@@ -686,7 +694,8 @@
           "traits": {
             "cultural_depth": 0.85,
             "flexibility": 0.7,
-            "social_energy": 0.6
+            "social_energy": 0.6,
+            "food_focus": 0.3
           }
         },
         {
@@ -695,7 +704,8 @@
           "traits": {
             "cultural_depth": 0.75,
             "planning": 0.7,
-            "learning_focus": 0.7
+            "learning_focus": 0.7,
+            "niche_interest": 0.3
           }
         },
         {
@@ -802,7 +812,8 @@
           "traits": {
             "cultural_depth": 0.9,
             "social_energy": 0.6,
-            "learning_focus": 0.7
+            "learning_focus": 0.7,
+            "art_focus": 0.25
           }
         },
         {
@@ -837,7 +848,8 @@
           "traits": {
             "social_energy": 0.1,
             "spirituality": 0.7,
-            "restoration_need": 0.7
+            "restoration_need": 0.7,
+            "healing_focus": 0.4
           }
         }
       ]
@@ -1002,7 +1014,8 @@
           "label": "Close friends or family. The right people make any trip better.",
           "traits": {
             "social_energy": 0.6,
-            "group_size_pref": 0.5
+            "group_size_pref": 0.5,
+            "family_focus": 0.4
           }
         },
         {
@@ -1054,7 +1067,8 @@
           "traits": {
             "restoration_need": 0.85,
             "pace": 0.1,
-            "flexibility": 0.7
+            "flexibility": 0.7,
+            "healing_focus": 0.3
           }
         },
         {
