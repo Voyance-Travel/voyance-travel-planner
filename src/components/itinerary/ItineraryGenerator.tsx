@@ -24,6 +24,8 @@ import { convertPreviewToGeneratedDays, createLockedPlaceholderDays } from '@/ut
 import { calculateTripCredits } from '@/lib/tripCostCalculator';
 import { useCredits } from '@/hooks/useCredits';
 import { formatCredits } from '@/config/pricing';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface ItineraryGeneratorProps {
   tripId: string;
@@ -85,6 +87,7 @@ export function ItineraryGenerator({
 
   // Out of credits modal
   const { showOutOfCredits } = useOutOfCredits();
+  const queryClient = useQueryClient();
 
   // Get auth state
   const { user } = useAuth();
@@ -102,6 +105,7 @@ export function ItineraryGenerator({
   const [prePhase, setPrePhase] = useState<Extract<GenerationStep, 'gathering-dna' | 'personalizing' | 'preparing'> | null>(null);
   const autoStartTriggered = useRef(false);
   const generationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gateResultRef = useRef<GateResult | null>(null);
 
   // Generation gate — pre-authorizes credits before generation
   const { authorize } = useGenerationGate();
@@ -155,12 +159,39 @@ export function ItineraryGenerator({
     // Safety timeout: if generation hasn't completed in 180s, show error
     // First-time 5-day trips with full Places enrichment can take 120s+
     if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
-    generationTimeoutRef.current = setTimeout(() => {
+    generationTimeoutRef.current = setTimeout(async () => {
       console.error('[ItineraryGenerator] Generation timed out after 180s');
       setPrePhase(null);
       reset();
       setHasStarted(false);
-      toast.error('Generation timed out. Please try again.');
+
+      // Auto-refund on timeout if credits were charged
+      const gr = gateResultRef.current;
+      if (gr && gr.creditsCharged > 0) {
+        try {
+          await supabase.functions.invoke('spend-credits', {
+            body: {
+              action: 'REFUND',
+              tripId,
+              creditsAmount: gr.creditsCharged,
+              metadata: {
+                originalAction: 'trip_generation',
+                reason: 'generation_timeout',
+              },
+            },
+          });
+          toast.info(`Generation timed out — ${gr.creditsCharged} credits have been refunded.`, { duration: 6000 });
+          if (userId) {
+            queryClient.invalidateQueries({ queryKey: ['credits', userId] });
+            queryClient.invalidateQueries({ queryKey: ['entitlements', userId] });
+          }
+        } catch (refundErr) {
+          console.error('[ItineraryGenerator] Timeout auto-refund failed:', refundErr);
+          toast.error('Generation timed out. Automatic refund failed — please contact support.', { duration: 8000 });
+        }
+      } else {
+        toast.error('Generation timed out. Please try again.');
+      }
     }, 180_000);
 
     // Pre-generation phases (matches the newer streaming UX)
@@ -197,6 +228,7 @@ export function ItineraryGenerator({
     }
 
     console.log(`[ItineraryGenerator] Gate result: mode=${gateResult.mode}, cost=${gateResult.tripCost}, charged=${gateResult.creditsCharged}`);
+    gateResultRef.current = gateResult;
 
     try {
       const totalRequestedDays = gateResult.requestedDays;
@@ -268,11 +300,40 @@ export function ItineraryGenerator({
       if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
       console.error('[ItineraryGenerator] Generation failed:', err);
       setPrePhase(null);
-      // If useItineraryGeneration didn't already set the error, surface it
-      if (status !== 'error') {
-        toast.error('Generation failed. Please try again.');
-        setHasStarted(false);
+
+      // AUTO-REFUND: If credits were charged but generation failed, refund them
+      if (gateResult.creditsCharged > 0) {
+        console.log(`[ItineraryGenerator] Refunding ${gateResult.creditsCharged} credits for failed generation`);
+        try {
+          await supabase.functions.invoke('spend-credits', {
+            body: {
+              action: 'REFUND',
+              tripId,
+              creditsAmount: gateResult.creditsCharged,
+              metadata: {
+                originalAction: 'trip_generation',
+                reason: 'generation_failed',
+                errorMessage: err instanceof Error ? err.message : 'Unknown error',
+              },
+            },
+          });
+          toast.info(`Generation failed — ${gateResult.creditsCharged} credits have been refunded.`, { duration: 6000 });
+          // Refresh credit balance in UI
+          if (userId) {
+            queryClient.invalidateQueries({ queryKey: ['credits', userId] });
+            queryClient.invalidateQueries({ queryKey: ['entitlements', userId] });
+          }
+        } catch (refundErr) {
+          console.error('[ItineraryGenerator] Auto-refund failed:', refundErr);
+          toast.error('Generation failed and automatic refund could not be processed. Please contact support.', { duration: 8000 });
+        }
+      } else {
+        // If useItineraryGeneration didn't already set the error, surface it
+        if (status !== 'error') {
+          toast.error('Generation failed. Please try again.');
+        }
       }
+      setHasStarted(false);
     }
   };
 

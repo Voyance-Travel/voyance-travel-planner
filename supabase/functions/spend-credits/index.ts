@@ -405,7 +405,10 @@ serve(async (req) => {
       };
 
       const originalAction = metadata?.originalAction as string | undefined;
-      const refundAmount = originalAction ? (REFUNDABLE_COSTS[originalAction] ?? 0) : 0;
+      // Support dynamic refund amounts (e.g. trip_generation) via creditsAmount param
+      const fixedRefund = originalAction ? (REFUNDABLE_COSTS[originalAction] ?? 0) : 0;
+      const dynamicRefund = (typeof creditsAmount === 'number' && creditsAmount > 0) ? creditsAmount : 0;
+      const refundAmount = dynamicRefund || fixedRefund;
 
       if (refundAmount <= 0) {
         console.error('[spend-credits] REFUND: unknown or zero refund amount for action:', originalAction);
