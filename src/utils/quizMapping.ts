@@ -486,15 +486,23 @@ export async function calculateTravelDNAAdvanced(
       const converted = convertV3ToV2Traits(scores as unknown as Record<string, number | string>);
       // Only send precomputedTraits if they have real signal (not all zeros from legacy answers
       // that didn't match any V3 question IDs)
-      const hasSignal = Object.values(converted).some(v => Math.abs(v) >= 1.0);
-      if (hasSignal) {
-        precomputedTraits = converted;
-        // Also extract fine-grained traits for supplementary archetype matching
-        fineGrainedTraits = extractFineGrainedTraits(scores as unknown as Record<string, number | string>);
-        console.log('[TravelDNA] Pre-computed V2 traits:', JSON.stringify(precomputedTraits));
-        console.log('[TravelDNA] Fine-grained V3 traits:', JSON.stringify(fineGrainedTraits));
+      // ALWAYS extract fine-grained V3 traits — they are the primary scoring signal
+      // and must never be gated behind V2 hasSignal
+      fineGrainedTraits = extractFineGrainedTraits(scores as unknown as Record<string, number | string>);
+      const hasFineGrainedSignal = Object.values(fineGrainedTraits).some(v => v > 0.05);
+      if (!hasFineGrainedSignal) {
+        console.warn('[TravelDNA] Fine-grained traits are all near-zero — possible legacy answers');
+        fineGrainedTraits = null;
       } else {
-        console.log('[TravelDNA] Pre-computed traits are all near-zero (legacy answers?) — skipping, edge function will use legacy parsing');
+        console.log('[TravelDNA] Fine-grained V3 traits (ALWAYS SENT):', JSON.stringify(fineGrainedTraits));
+      }
+      
+      const hasV2Signal = Object.values(converted).some(v => Math.abs(v) >= 1.0);
+      if (hasV2Signal) {
+        precomputedTraits = converted;
+        console.log('[TravelDNA] Pre-computed V2 traits:', JSON.stringify(precomputedTraits));
+      } else {
+        console.log('[TravelDNA] V2 traits are all near-zero — edge function will use legacy parsing for V2');
       }
     } catch (err) {
       console.warn('[TravelDNA] Failed to pre-compute traits:', err);
