@@ -534,6 +534,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateUser = (updates: Partial<User>) => {
     if (user) {
+      // Validate name and email before saving
+      if (updates.name !== undefined && !updates.name.trim()) {
+        console.error('[Auth] Cannot save empty name');
+        return;
+      }
+      if (updates.email !== undefined && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(updates.email)) {
+        console.error('[Auth] Cannot save invalid email');
+        return;
+      }
+
       setUser({ ...user, ...updates });
       
       // Sync to Supabase using upsert to prevent "0 rows updated" failures
