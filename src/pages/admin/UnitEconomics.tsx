@@ -1117,7 +1117,7 @@ export default function UnitEconomics() {
                       );
                     })}
                   {/* Show expected actions that are MISSING from spend tracking */}
-                  {['regenerate_day', 'swap_activity', 'transport_mode_change', 'smart_finish', 'unlock_day', 'trip_generation', 'hotel_search', 'ai_message'].filter(
+                  {['regenerate_day', 'swap_activity', 'transport_mode_change', 'smart_finish', 'unlock_day', 'trip_generation', 'hotel_search', 'ai_message', 'group_unlock'].filter(
                     a => !(econData.revenue.spendByAction || {})[a]
                   ).map(action => (
                     <tr key={action} style={{ borderBottom: "1px solid rgba(100, 116, 139, 0.1)", opacity: 0.6 }}>
