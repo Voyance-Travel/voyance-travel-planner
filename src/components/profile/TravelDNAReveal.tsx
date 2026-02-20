@@ -90,7 +90,7 @@ function ArchetypeHeroCard({
 }: { 
   narrative: ArchetypeNarrative;
   secondaryNarrative: ArchetypeNarrative | null;
-  confidence: number;
+  confidence: number | null;
   rarity: string;
 }) {
   const CategoryIcon = CATEGORY_ICONS[narrative.category] || Compass;
@@ -159,8 +159,12 @@ function ArchetypeHeroCard({
           <span className="text-background/15">|</span>
           <span className="text-xs text-background/35">{rarity}</span>
 
-          <span className="text-background/15">|</span>
-          <span className="text-xs text-background/35">{confidence}% match</span>
+          {confidence !== null && (
+            <>
+              <span className="text-background/15">|</span>
+              <span className="text-xs text-background/35">{confidence}% match</span>
+            </>
+          )}
 
           {secondaryNarrative && SecondaryIcon && (
             <>
@@ -473,7 +477,7 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
     ? secondaryNarrativeRaw 
     : null;
   const colors = getCategoryColors(narrative.category);
-  const confidence = dnaData.dna_confidence_score || 85;
+  const confidence = dnaData.dna_confidence_score ?? null;
   const archetypeId = dnaData.primary_archetype_name || '';
   const rarity = getRarityLabel(archetypeId) || dnaData.dna_rarity || 'Uncommon';
   const CategoryIcon = CATEGORY_ICONS[narrative.category] || Compass;
@@ -495,7 +499,7 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
 
 
       {/* Low confidence disambiguation */}
-      {confidence < 60 && (
+      {confidence !== null && confidence < 60 && (
         <MicroDisambiguation
           userId={userId}
           confidence={confidence}
@@ -630,7 +634,7 @@ export default function TravelDNAReveal({ userId, className }: TravelDNARevealPr
               >
                 <MicroDisambiguation 
                   userId={userId}
-                  confidence={confidence}
+                  confidence={confidence ?? 50}
                   onResolved={() => window.location.reload()}
                 />
                 <TraitOverrideSliders 
