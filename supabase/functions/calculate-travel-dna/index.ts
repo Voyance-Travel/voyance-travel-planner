@@ -2196,7 +2196,9 @@ serve(async (req) => {
       console.log('[TravelDNA V2] Received pre-computed V2 traits from frontend:', precomputedTraits);
     }
     if (fineGrainedTraits) {
-      console.log('[TravelDNA V2] Received fine-grained V3 traits:', fineGrainedTraits);
+      console.log('[TravelDNA V2] ✅ Received fine-grained V3 traits:', JSON.stringify(fineGrainedTraits));
+    } else {
+      console.warn('[TravelDNA V2] ⚠️ NO fine-grained V3 traits received — archetype matching will use V2-only (degraded accuracy for 23/27 archetypes)');
     }
     if (existingOverrides && Object.keys(existingOverrides).length > 0) {
       console.log('[TravelDNA V2] User has existing trait overrides:', existingOverrides);
