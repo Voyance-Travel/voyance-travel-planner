@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Mail, Lock, User, ArrowRight, Eye, EyeOff, Check, X } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,6 +12,15 @@ import { SocialLoginButtons } from '@/components/auth/SocialLoginButtons';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { consumeReturnPath } from '@/utils/authReturnPath';
+
+const signUpSchema = z.object({
+  firstName: z.string().trim().min(1, 'First name is required'),
+  lastName: z.string().trim().min(1, 'Last name is required'),
+  email: z.string().trim().email('Please enter a valid email address'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+});
+
+type SignUpFormData = z.infer<typeof signUpSchema>;
 
 interface PasswordStrength {
   score: number;
@@ -18,7 +30,6 @@ interface PasswordStrength {
 
 function getPasswordStrength(password: string): PasswordStrength {
   let score = 0;
-  
   if (password.length >= 8) score++;
   if (password.length >= 12) score++;
   if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
@@ -33,21 +44,26 @@ function getPasswordStrength(password: string): PasswordStrength {
 }
 
 export function SignUpForm() {
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [serverError, setServerError] = useState('');
   
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { signup } = useAuth();
-  
-  // Check for redirect path in query param (e.g. from auth gate on /start)
   const queryRedirect = searchParams.get('redirect') || searchParams.get('next');
-  
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors },
+  } = useForm<SignUpFormData>({
+    resolver: zodResolver(signUpSchema),
+    defaultValues: { firstName: '', lastName: '', email: '', password: '' },
+  });
+
+  const password = watch('password', '');
   const passwordStrength = getPasswordStrength(password);
   
   const passwordRequirements = [
@@ -57,34 +73,16 @@ export function SignUpForm() {
     { met: /\d/.test(password), text: 'One number' },
   ];
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    
-    if (!firstName.trim() || !lastName.trim()) {
-      setError('Please enter your first and last name');
-      return;
-    }
-    
-    if (!email || !password) {
-      setError('Please fill in all required fields');
-      return;
-    }
-    
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters');
-      return;
-    }
-    
+  const onSubmit = async (data: SignUpFormData) => {
+    setServerError('');
     setIsLoading(true);
     
     try {
-      await signup(email, password, { firstName: firstName.trim(), lastName: lastName.trim() });
-      // Return user to where they were; OnboardingRedirect will nudge them to take the quiz
+      await signup(data.email, data.password, { firstName: data.firstName.trim(), lastName: data.lastName.trim() });
       navigate(queryRedirect || consumeReturnPath('/'));
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create account. Please try again.';
-      setError(errorMessage);
+      setServerError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -92,10 +90,8 @@ export function SignUpForm() {
 
   return (
     <div className="space-y-6">
-      {/* Social Login Buttons */}
       <SocialLoginButtons mode="signup" />
       
-      {/* Divider */}
       <div className="relative">
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-slate-200" />
@@ -107,21 +103,20 @@ export function SignUpForm() {
         </div>
       </div>
 
-      {/* Email/Password Form */}
       <motion.form 
-        onSubmit={handleSubmit} 
+        onSubmit={handleSubmit(onSubmit)} 
         className="space-y-5"
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.2 }}
       >
-        {error && (
+        {serverError && (
           <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             className="p-3 text-sm text-red-600 bg-red-50 rounded-lg"
           >
-            {error}
+            {serverError}
           </motion.div>
         )}
         
@@ -134,12 +129,11 @@ export function SignUpForm() {
                 id="firstName"
                 type="text"
                 placeholder="First"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                className="pl-10 h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400"
-                required
+                {...register('firstName')}
+                className={`pl-10 h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400 ${errors.firstName ? 'border-red-400' : ''}`}
               />
             </div>
+            {errors.firstName && <p className="text-xs text-red-500">{errors.firstName.message}</p>}
           </div>
           <div className="space-y-2">
             <Label htmlFor="lastName" className="text-slate-700">Last Name</Label>
@@ -147,11 +141,10 @@ export function SignUpForm() {
               id="lastName"
               type="text"
               placeholder="Last"
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              className="h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400"
-              required
+              {...register('lastName')}
+              className={`h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400 ${errors.lastName ? 'border-red-400' : ''}`}
             />
+            {errors.lastName && <p className="text-xs text-red-500">{errors.lastName.message}</p>}
           </div>
         </div>
         
@@ -163,12 +156,11 @@ export function SignUpForm() {
               id="email"
               type="email"
               placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="pl-10 h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400"
-              required
+              {...register('email')}
+              className={`pl-10 h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400 ${errors.email ? 'border-red-400' : ''}`}
             />
           </div>
+          {errors.email && <p className="text-xs text-red-500">{errors.email.message}</p>}
         </div>
 
         <div className="space-y-2">
@@ -179,10 +171,8 @@ export function SignUpForm() {
               id="password"
               type={showPassword ? 'text' : 'password'}
               placeholder="Create a password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="pl-10 pr-10 h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400"
-              required
+              {...register('password')}
+              className={`pl-10 pr-10 h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400 ${errors.password ? 'border-red-400' : ''}`}
             />
             <button
               type="button"
@@ -192,8 +182,8 @@ export function SignUpForm() {
               {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </button>
           </div>
+          {errors.password && <p className="text-xs text-red-500">{errors.password.message}</p>}
           
-          {/* Password strength indicator */}
           {password && (
             <motion.div 
               initial={{ opacity: 0, height: 0 }}

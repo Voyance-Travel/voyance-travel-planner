@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams, Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,49 +13,50 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { consumeReturnPath } from '@/utils/authReturnPath';
 
+const signInSchema = z.object({
+  email: z.string().trim().email('Please enter a valid email address'),
+  password: z.string().min(1, 'Please enter your password'),
+});
+
+type SignInFormData = z.infer<typeof signInSchema>;
+
 export function SignInForm() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [serverError, setServerError] = useState('');
   
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const { login } = useAuth();
   
-  // Check for redirect path in: 1) location state, 2) query param, 3) sessionStorage, 4) default
   const stateFrom = (location.state as { from?: string | { pathname?: string; search?: string } })?.from;
   const queryNext = searchParams.get('next') || searchParams.get('redirect');
   const nextPath = typeof stateFrom === 'string' 
     ? stateFrom 
     : (stateFrom ? (stateFrom.pathname || '') + (stateFrom.search || '') : null)
       || queryNext 
-      || null; // null = will use consumeReturnPath at navigation time
+      || null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    
-    if (!email) {
-      setError('Please enter your email');
-      return;
-    }
-    
-    if (!password) {
-      setError('Please enter your password');
-      return;
-    }
-    
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<SignInFormData>({
+    resolver: zodResolver(signInSchema),
+    defaultValues: { email: '', password: '' },
+  });
+
+  const onSubmit = async (data: SignInFormData) => {
+    setServerError('');
     setIsLoading(true);
     
     try {
-      await login(email, password);
+      await login(data.email, data.password);
       navigate(nextPath || consumeReturnPath(ROUTES.PROFILE.VIEW));
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to sign in. Please try again.';
-      setError(errorMessage);
+      setServerError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -60,10 +64,8 @@ export function SignInForm() {
 
   return (
     <div className="space-y-6">
-      {/* Social Login Buttons */}
       <SocialLoginButtons mode="signin" />
       
-      {/* Divider */}
       <div className="relative">
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-slate-200" />
@@ -75,21 +77,20 @@ export function SignInForm() {
         </div>
       </div>
 
-      {/* Email/Password Form */}
       <motion.form 
-        onSubmit={handleSubmit} 
+        onSubmit={handleSubmit(onSubmit)} 
         className="space-y-5"
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.2 }}
       >
-        {error && (
+        {serverError && (
           <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             className="p-3 text-sm text-red-600 bg-red-50 rounded-lg"
           >
-            {error}
+            {serverError}
           </motion.div>
         )}
         
@@ -101,12 +102,11 @@ export function SignInForm() {
               id="email"
               type="email"
               placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="pl-10 h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400"
-              required
+              {...register('email')}
+              className={`pl-10 h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400 ${errors.email ? 'border-red-400' : ''}`}
             />
           </div>
+          {errors.email && <p className="text-xs text-red-500">{errors.email.message}</p>}
         </div>
 
         <div className="space-y-2">
@@ -125,10 +125,8 @@ export function SignInForm() {
               id="password"
               type={showPassword ? 'text' : 'password'}
               placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="pl-10 pr-10 h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400"
-              required
+              {...register('password')}
+              className={`pl-10 pr-10 h-12 bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-400 ${errors.password ? 'border-red-400' : ''}`}
             />
             <button
               type="button"
@@ -138,6 +136,7 @@ export function SignInForm() {
               {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </button>
           </div>
+          {errors.password && <p className="text-xs text-red-500">{errors.password.message}</p>}
         </div>
 
         <Button 
