@@ -177,8 +177,11 @@ function PreviewDayCard({ day, isExpanded, onToggle }: {
   onToggle: () => void;
 }) {
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return `Day ${day.dayNumber}`;
+      return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    } catch { return `Day ${day.dayNumber}`; }
   };
 
   return (

@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
-import { parseLocalDate } from '@/utils/dateUtils';
+import { parseLocalDate, safeFormatDate } from '@/utils/dateUtils';
 import { Plane, MapPin, Clock, Calendar, Loader2, RefreshCw, AlertCircle, Sparkles, CheckCircle, Users, Hotel, DollarSign, Bookmark } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -120,7 +120,7 @@ function StreamingDayCard({ day, isNew }: { day: DayItinerary; isNew: boolean })
               )}
             </div>
             <h3 className="text-lg font-semibold text-foreground">
-              {day.date ? format(new Date(day.date), 'EEEE, MMMM d') : day.theme}
+              {day.date ? safeFormatDate(day.date, 'EEEE, MMMM d', day.theme || `Day ${day.dayNumber}`) : day.theme}
             </h3>
             {day.theme && day.date && (
               <p className="text-sm text-muted-foreground mt-1">{day.theme}</p>

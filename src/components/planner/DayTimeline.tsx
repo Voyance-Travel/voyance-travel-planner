@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { format } from "date-fns";
+import { safeFormatDate } from "@/utils/dateUtils";
 import { Sun, Cloud, CloudRain, CloudSun } from "lucide-react";
 import type { TripActivity } from "@/types/trip";
 import { DayRegenerateButton } from "./DayRegenerateButton";
@@ -72,7 +72,7 @@ const DayTimeline: React.FC<DayTimelineProps> = ({
     }
   };
 
-  const formattedDate = format(new Date(date), "EEEE, MMMM d");
+  const formattedDate = safeFormatDate(date, "EEEE, MMMM d", `Day ${dayNumber}`);
 
   return (
     <div className="bg-muted/30 rounded-xl p-6">
