@@ -422,6 +422,11 @@ export function BudgetSetupDialog({
         </Tabs>
 
         <DialogFooter className="mt-6">
+          {totalCents <= 0 && (
+            <p className="text-sm text-destructive mr-auto self-center">
+              Please enter a budget amount greater than $0
+            </p>
+          )}
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
