@@ -503,6 +503,11 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     primaryTraits: [
       { trait: 'authenticity', weight: 2, sweetSpot: 5, range: [2, 9] },
     ],
+    fineGrained: [
+      { trait: 'food_focus', min: 0.5, weight: 18, sweetSpot: 0.85 },  // CORE: must love food
+      { trait: 'cultural_depth', min: 0.3, weight: 6, sweetSpot: 0.7 },  // Bonus for cultural interest
+      { trait: 'status_seeking', max: 0.7, weight: 4 },  // Mild penalty if too status-driven (raised from 0.6)
+    ],
     signatureAnswers: ['g3', 'cd1', 'b3'],  // food + immersion + city (food cities)
   },
   {
@@ -513,6 +518,11 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     primaryTraits: [
       { trait: 'authenticity', weight: 2, sweetSpot: 5, range: [2, 8] },
       { trait: 'comfort', weight: 2, sweetSpot: 4, range: [1, 7] },
+    ],
+    fineGrained: [
+      { trait: 'art_focus', min: 0.4, weight: 15, sweetSpot: 0.8 },  // CORE: must love art
+      { trait: 'cultural_depth', min: 0.4, weight: 8, sweetSpot: 0.8 },
+      { trait: 'food_focus', max: 0.6, weight: 4 },  // Penalty if food is dominant (not art)
     ],
     signatureAnswers: ['cd2', 'g2', 'b3', 'h1'],  // culture_depth: aesthetic + culture + city + boutique
   },
@@ -1589,7 +1599,8 @@ interface ArchetypeMatchingResult {
 
 function matchArchetypesV2(
   traits: TraitScores,
-  contributions: TraitContribution[]
+  contributions: TraitContribution[],
+  fineGrainedTraits?: Record<string, number> | null
 ): ArchetypeMatchingResult {
   // Collect all answer IDs for signature matching
   const answerIds = new Set(contributions.map(c => c.answer_id));
@@ -1666,6 +1677,49 @@ function matchArchetypesV2(
         const bonus = matchedSignatures.length * 5;
         score += bonus;
         // Don't add to reasons (too granular)
+      }
+    }
+    
+    // Apply fine-grained V3 trait scoring (the critical differentiator for most archetypes)
+    if (archetype.fineGrained && fineGrainedTraits) {
+      for (const fg of archetype.fineGrained) {
+        const traitValue = fineGrainedTraits[fg.trait];
+        if (traitValue === undefined) continue;
+        
+        // Check min/max constraints
+        const meetsMin = fg.min === undefined || traitValue >= fg.min;
+        const meetsMax = fg.max === undefined || traitValue <= fg.max;
+        
+        if (meetsMin && meetsMax) {
+          // Calculate bonus based on proximity to sweetSpot (if defined)
+          let matchQuality = 1.0;
+          if (fg.sweetSpot !== undefined) {
+            const distance = Math.abs(traitValue - fg.sweetSpot);
+            matchQuality = Math.max(0.3, 1 - distance); // Minimum 0.3 quality if in range
+          }
+          const bonus = matchQuality * fg.weight;
+          score += bonus;
+          if (bonus > 3) {
+            reasons.push({
+              trait: 'authenticity' as Trait, // Use authenticity as placeholder for fine-grained
+              effect: 'boost',
+              amount: Math.round(bonus * 10) / 10,
+              note: `Fine-grained ${fg.trait} at ${traitValue.toFixed(2)} (bonus: +${bonus.toFixed(1)})`,
+            });
+          }
+        } else {
+          // Outside acceptable range = penalty proportional to weight
+          const penalty = -(fg.weight * 0.5);
+          score += penalty;
+          if (penalty < -3) {
+            reasons.push({
+              trait: 'authenticity' as Trait,
+              effect: 'penalty',
+              amount: Math.round(penalty * 10) / 10,
+              note: `Fine-grained ${fg.trait} at ${traitValue.toFixed(2)} outside range${fg.min !== undefined ? ` min:${fg.min}` : ''}${fg.max !== undefined ? ` max:${fg.max}` : ''}`,
+            });
+          }
+        }
       }
     }
     
@@ -2122,7 +2176,7 @@ serve(async (req) => {
   }
   
   try {
-    const { answers, userId, existingOverrides, precomputedTraits } = await req.json();
+    const { answers, userId, existingOverrides, precomputedTraits, fineGrainedTraits } = await req.json();
     
     if (!answers) {
       return new Response(
@@ -2135,6 +2189,9 @@ serve(async (req) => {
     console.log('[TravelDNA V2] Quiz answers:', Object.keys(answers));
     if (precomputedTraits) {
       console.log('[TravelDNA V2] Received pre-computed V2 traits from frontend:', precomputedTraits);
+    }
+    if (fineGrainedTraits) {
+      console.log('[TravelDNA V2] Received fine-grained V3 traits:', fineGrainedTraits);
     }
     if (existingOverrides && Object.keys(existingOverrides).length > 0) {
       console.log('[TravelDNA V2] User has existing trait overrides:', existingOverrides);
@@ -2276,7 +2333,7 @@ serve(async (req) => {
     }
     
     // Step 2: Match archetypes with blends (use effectiveScores to incorporate user overrides)
-    const { matches, confidence } = matchArchetypesV2(effectiveScores, contributions);
+    const { matches, confidence } = matchArchetypesV2(effectiveScores, contributions, fineGrainedTraits || null);
     console.log('[TravelDNA V2] Top matches:', matches.slice(0, 3).map(m => `${m.name} (${m.pct}%)`));
     console.log('[TravelDNA V2] Confidence:', confidence);
     
