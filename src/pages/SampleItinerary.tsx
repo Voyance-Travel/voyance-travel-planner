@@ -51,8 +51,8 @@ const destinationImages: Record<string, string[]> = {
   ],
   'Denver, Colorado': [
     denverHero,
-    'https://images.unsplash.com/photo-1629163439121-18ada6494e00?w=1200',
-    'https://images.unsplash.com/photo-1596394516093-501ba68a0ba6?w=1200',
+    'https://images.unsplash.com/photo-1546156929-a4c0ac411f47?w=1200',
+    'https://images.unsplash.com/photo-1619856699906-09e1f4ef2cf4?w=1200',
   ],
   'New Orleans, Louisiana': [
     nolaHero,
