@@ -2856,36 +2856,42 @@ export function EditorialItinerary({
                 const canExport = entitlements?.can_export_pdf || smartFinishPurchased || isPaid || isManualMode;
                 if (!canExport) return undefined;
                 return async () => {
-                const { generateConsumerTripPdf } = await import('@/utils/consumerPdfGenerator');
-                // Build set of unlocked day numbers to enforce paywall in PDF
-                const unlockedDayNumbers = new Set(
-                  days
-                    .filter(d => canViewPremiumContentForDay(entitlements, d.dayNumber))
-                    .map(d => d.dayNumber)
-                );
-                generateConsumerTripPdf({
-                  tripName: `Trip to ${destination}`,
-                  destination,
-                  startDate,
-                  endDate,
-                  travelers,
-                  days,
-                  unlockedDayNumbers,
-                  flight: flightSelection?.outbound ? {
-                    airline: flightSelection.outbound.airline || '',
-                    departure: flightSelection.outbound.departure?.time || '',
-                    arrival: flightSelection.outbound.arrival?.time || '',
-                    departureAirport: flightSelection.outbound.departure?.airport || '',
-                    arrivalAirport: flightSelection.outbound.arrival?.airport || '',
-                  } : undefined,
-                  hotel: hotelSelection ? {
-                    name: hotelSelection.name || '',
-                    neighborhood: hotelSelection.neighborhood || '',
-                    checkIn: startDate,
-                    checkOut: endDate,
-                  } : undefined,
-                });
-                toast.success('PDF downloaded!');
+                try {
+                  toast.info('Generating PDF...');
+                  const { generateConsumerTripPdf } = await import('@/utils/consumerPdfGenerator');
+                  // Build set of unlocked day numbers to enforce paywall in PDF
+                  const unlockedDayNumbers = new Set(
+                    days
+                      .filter(d => canViewPremiumContentForDay(entitlements, d.dayNumber))
+                      .map(d => d.dayNumber)
+                  );
+                  await generateConsumerTripPdf({
+                    tripName: `Trip to ${destination}`,
+                    destination,
+                    startDate,
+                    endDate,
+                    travelers,
+                    days,
+                    unlockedDayNumbers,
+                    flight: flightSelection?.outbound ? {
+                      airline: flightSelection.outbound.airline || '',
+                      departure: flightSelection.outbound.departure?.time || '',
+                      arrival: flightSelection.outbound.arrival?.time || '',
+                      departureAirport: flightSelection.outbound.departure?.airport || '',
+                      arrivalAirport: flightSelection.outbound.arrival?.airport || '',
+                    } : undefined,
+                    hotel: hotelSelection ? {
+                      name: hotelSelection.name || '',
+                      neighborhood: hotelSelection.neighborhood || '',
+                      checkIn: startDate,
+                      checkOut: endDate,
+                    } : undefined,
+                  });
+                  toast.success('PDF downloaded!');
+                } catch (err) {
+                  console.error('PDF export failed:', err);
+                  toast.error('Failed to generate PDF. Please try again.');
+                }
                 };
               })()}
             />
@@ -3996,7 +4002,7 @@ export function EditorialItinerary({
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Link expires in 7 days. Up to {travelers - 1} {travelers - 1 === 1 ? 'person' : 'people'} can join.
+                    Link expires in 7 days.{travelers > 1 ? ` Up to ${travelers - 1} ${travelers - 1 === 1 ? 'person' : 'people'} can join.` : ' Share this trip with others.'}
                   </p>
                 </div>
 
