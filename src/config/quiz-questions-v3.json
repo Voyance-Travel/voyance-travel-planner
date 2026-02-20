@@ -1177,11 +1177,13 @@
             "budget_tier": 0.7
           }
         },
-        {
+         {
           "id": "q20b",
           "label": "I want access. Experiences that aren't available to everyone. Skip the line, private tours, exclusive tables.",
           "traits": {
-            "status_seeking": 0.9,
+            "food_focus": 0.6,
+            "quality_intrinsic": 0.7,
+            "status_seeking": 0.3,
             "budget_tier": 0.7
           }
         },
