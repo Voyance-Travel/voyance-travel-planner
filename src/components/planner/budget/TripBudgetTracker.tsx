@@ -99,8 +99,8 @@ export default function TripBudgetTracker({ tripId }: TripBudgetTrackerProps) {
   const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(null);
 
   const handleAddExpense = async () => {
-    if (!newExpense.description || !newExpense.plannedAmount) {
-      toast.error('Please fill in description and amount');
+    if (!newExpense.description || !newExpense.plannedAmount || parseFloat(newExpense.plannedAmount) <= 0) {
+      toast.error('Please fill in description and enter an amount greater than $0');
       return;
     }
 
