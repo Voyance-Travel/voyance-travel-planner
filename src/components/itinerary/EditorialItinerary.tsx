@@ -1296,26 +1296,53 @@ export function EditorialItinerary({
     // Merge collaborators (trip_collaborators) with tripMembers (trip_members)
     const allParticipantIds = new Set<string>();
     const existingNames = new Set<string>();
+    const existingLastNames = new Set<string>();
     const mergedCollaborators: Array<{ user_id: string; profile?: { display_name?: string | null; handle?: string | null } | null }> = [];
 
     collaborators.forEach(c => {
       allParticipantIds.add(c.user_id);
       mergedCollaborators.push(c);
-      if (c.profile?.display_name) existingNames.add(c.profile.display_name.toLowerCase());
+      if (c.profile?.display_name) {
+        const name = c.profile.display_name.toLowerCase();
+        existingNames.add(name);
+        // Track last name for fuzzy dedup (e.g. "A.L. Lightfoot" vs "Ashton Lightfoot")
+        const parts = name.split(/\s+/);
+        if (parts.length > 1) existingLastNames.add(parts[parts.length - 1]);
+      }
     });
+
+    // Also add the owner's name to dedup sets
+    const ownerName = (user?.name || user?.email?.split('@')[0] || '').toLowerCase();
+    if (ownerName) {
+      existingNames.add(ownerName);
+      const ownerParts = ownerName.split(/\s+/);
+      if (ownerParts.length > 1) existingLastNames.add(ownerParts[ownerParts.length - 1]);
+    }
 
     tripMembers.forEach(m => {
       const memberId = m.userId || `member_${m.id}`;
       const memberName = m.name || m.email?.split('@')[0] || '';
-      // Skip if already present by userId OR by display name
-      if (!allParticipantIds.has(memberId) && !existingNames.has(memberName.toLowerCase())) {
-        allParticipantIds.add(memberId);
-        existingNames.add(memberName.toLowerCase());
-        mergedCollaborators.push({
-          user_id: memberId,
-          profile: { display_name: memberName || null, handle: null },
-        });
+      const memberNameLower = memberName.toLowerCase();
+
+      // Skip if already present by userId
+      if (allParticipantIds.has(memberId)) return;
+      // Skip if exact name match
+      if (existingNames.has(memberNameLower)) return;
+      // Skip unlinked members whose last name matches an existing participant
+      // (handles variants like "A.L. Lightfoot" vs "Ashton Lightfoot")
+      if (!m.userId && memberNameLower) {
+        const parts = memberNameLower.split(/\s+/);
+        if (parts.length > 1 && existingLastNames.has(parts[parts.length - 1])) return;
       }
+
+      allParticipantIds.add(memberId);
+      existingNames.add(memberNameLower);
+      const nameParts = memberNameLower.split(/\s+/);
+      if (nameParts.length > 1) existingLastNames.add(nameParts[nameParts.length - 1]);
+      mergedCollaborators.push({
+        user_id: memberId,
+        profile: { display_name: memberName || null, handle: null },
+      });
     });
 
     if (mergedCollaborators.length === 0) return undefined;
