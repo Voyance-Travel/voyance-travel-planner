@@ -182,18 +182,60 @@ const PURCHASE_TIER_MAP: Record<string, string> = {
   purchase_group_small: 'group_small',
   purchase_group_medium: 'group_medium',
   purchase_group_large: 'group_large',
+  group_unlock_purchase: 'group_unlock',
   group_unlock: 'group_unlock',
   // Smart Finish
   purchase_smart_finish: 'smart_finish',
   smart_finish: 'smart_finish',
+  // Admin / manual
+  manual_grant: 'manual_grant',
+  admin_manual_grant: 'admin_grant',
+  admin_corrective_grant: 'corrective_grant',
   // Legacy
   purchase_boost: 'boost',
   purchase_single: 'single',
   purchase_starter: 'starter',
   purchase_weekend: 'weekend',
-  stripe_purchase: 'unknown',
-  purchase: 'unknown',
+  stripe_purchase: 'stripe',
+  purchase: 'purchase',
 };
+
+// Infer revenue from credits_delta when amount_cents is not available.
+// Uses known credit pack pricing. Falls back to $0.05/credit average.
+function inferRevenueFromCredits(creditsDelta: number, actionType: string, notes?: string | null): number {
+  // Try to extract dollar amount from notes (e.g. "2x Quick Top-Up $9 purchases")
+  if (notes) {
+    const dollarMatch = notes.match(/\$(\d+(?:\.\d{2})?)/);
+    const countMatch = notes.match(/(\d+)x\s/i);
+    if (dollarMatch) {
+      const amount = parseFloat(dollarMatch[1]);
+      const count = countMatch ? parseInt(countMatch[1]) : 1;
+      return amount * count;
+    }
+  }
+  
+  // Known pack sizes → prices
+  const abs = Math.abs(creditsDelta);
+  if (abs >= 1000) return 17.99;
+  if (abs >= 500) return 9.99;
+  if (abs >= 200) return 4.99;
+  if (abs >= 100) return 4.50;
+  
+  // Admin/corrective grants are not real revenue
+  if (actionType.startsWith('admin_') || actionType === 'corrective_grant') return 0;
+  
+  return 0;
+}
+
+// Determine tier label from credits_delta when action_type mapping fails
+function inferTierFromCredits(creditsDelta: number): string {
+  const abs = Math.abs(creditsDelta);
+  if (abs >= 1000) return 'creator';
+  if (abs >= 500) return 'explorer';
+  if (abs >= 200) return 'starter';
+  if (abs >= 100) return 'quick_topup';
+  return 'micro';
+}
 
 // ============================================================================
 // Data Fetching
@@ -300,25 +342,42 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
   }
 
   // ---- REVENUE (from credit_ledger) ----
+  // A "purchase" is transaction_type='purchase' (real Stripe purchase).
+  // Admin grants (transaction_type='credit', is_free_credit=false) are NOT revenue.
+  // Revenue is inferred from credits_delta/notes since amount_cents is often NULL.
   let totalRevenue = 0, totalCreditsPurchased = 0, totalCreditsGranted = 0, totalCreditsSpent = 0;
   let purchaseCount = 0;
   const tierRevMap: Record<string, TierRevenue> = {};
   const spendByAction: Record<string, { count: number; credits: number }> = {};
 
+  const isPurchaseEntry = (entry: any): boolean => {
+    return entry.transaction_type === 'purchase';
+  };
+
+  const isFreeGrantEntry = (entry: any): boolean => {
+    return entry.transaction_type === 'credit' && entry.is_free_credit === true;
+  };
+
   for (const entry of ledgerEntries) {
-    if (entry.transaction_type === 'purchase' || (entry.transaction_type === 'credit' && entry.amount_cents && entry.amount_cents > 0)) {
-      // Revenue-generating transaction
-      totalRevenue += (entry.amount_cents || 0) / 100;
+    if (isPurchaseEntry(entry)) {
+      // Real purchase — calculate revenue
+      const revenue = (entry.amount_cents && entry.amount_cents > 0)
+        ? entry.amount_cents / 100
+        : inferRevenueFromCredits(entry.credits_delta || 0, entry.action_type || '', entry.notes);
+      totalRevenue += revenue;
       totalCreditsPurchased += entry.credits_delta || 0;
       purchaseCount++;
 
-      // Try to map to tier
-      const tierKey = PURCHASE_TIER_MAP[entry.action_type || ''] || 'unknown';
+      // Map to tier
+      let tierKey = PURCHASE_TIER_MAP[entry.action_type || ''] || '';
+      if (!tierKey || tierKey === 'purchase') {
+        tierKey = inferTierFromCredits(entry.credits_delta || 0);
+      }
       if (!tierRevMap[tierKey]) tierRevMap[tierKey] = { tier: tierKey, count: 0, totalRevenue: 0, totalCredits: 0 };
       tierRevMap[tierKey].count++;
-      tierRevMap[tierKey].totalRevenue += (entry.amount_cents || 0) / 100;
+      tierRevMap[tierKey].totalRevenue += revenue;
       tierRevMap[tierKey].totalCredits += entry.credits_delta || 0;
-    } else if (entry.transaction_type === 'credit' && entry.is_free_credit) {
+    } else if (isFreeGrantEntry(entry)) {
       totalCreditsGranted += entry.credits_delta || 0;
     } else if (entry.transaction_type === 'spend') {
       totalCreditsSpent += Math.abs(entry.credits_delta || 0);
@@ -341,7 +400,7 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
   
   const userPurchaseMap: Record<string, UserPurchase> = {};
   for (const entry of ledgerEntries) {
-    if ((entry.transaction_type === 'purchase' || (entry.transaction_type === 'credit' && entry.amount_cents && entry.amount_cents > 0)) && entry.user_id) {
+    if (isPurchaseEntry(entry) && entry.user_id) {
       if (!userPurchaseMap[entry.user_id]) {
         userPurchaseMap[entry.user_id] = {
           userId: entry.user_id,
@@ -353,14 +412,20 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
         };
       }
       const up = userPurchaseMap[entry.user_id];
-      const tierKey = PURCHASE_TIER_MAP[entry.action_type || ''] || 'unknown';
+      let tierKey = PURCHASE_TIER_MAP[entry.action_type || ''] || '';
+      if (!tierKey || tierKey === 'purchase') {
+        tierKey = inferTierFromCredits(entry.credits_delta || 0);
+      }
+      const revenue = (entry.amount_cents && entry.amount_cents > 0)
+        ? entry.amount_cents / 100
+        : inferRevenueFromCredits(entry.credits_delta || 0, entry.action_type || '', entry.notes);
       up.purchases.push({
         tier: tierKey,
         credits: entry.credits_delta || 0,
-        revenue: (entry.amount_cents || 0) / 100,
+        revenue,
         date: entry.created_at,
       });
-      up.totalRevenue += (entry.amount_cents || 0) / 100;
+      up.totalRevenue += revenue;
       up.totalCredits += entry.credits_delta || 0;
       up.purchaseCount++;
     }
@@ -368,29 +433,19 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
   const userPurchases = Object.values(userPurchaseMap).sort((a, b) => b.totalRevenue - a.totalRevenue);
 
   // ---- USER METRICS ----
-  // uniqueApiUserCount comes from the RPC
-  
-  
-  // Count paid users from actual purchase transactions in ledger (not system-granted credits)
+  // Count paid users: anyone with a real purchase transaction
   const paidUsers = new Set(
     ledgerEntries
-      .filter(e => e.transaction_type === 'purchase' && (e.amount_cents || 0) > 0)
+      .filter(e => isPurchaseEntry(e))
       .map(e => (e as any).user_id)
       .filter(Boolean)
   ).size;
   
-  // Outstanding credits: only count purchased_credits that are backed by real Stripe purchases
-  // System-generated test credits in credit_balances.purchased_credits don't count
-  const realPurchasedCreditsFromLedger = ledgerEntries
-    .filter(e => e.transaction_type === 'purchase' && (e.amount_cents || 0) > 0)
-    .reduce((sum, e) => sum + (e.credits_delta || 0), 0);
-  const realSpentPurchasedCredits = ledgerEntries
-    .filter(e => e.transaction_type === 'spend' && !e.is_free_credit)
-    .reduce((sum, e) => sum + Math.abs(e.credits_delta || 0), 0);
-  const outstandingPurchased = Math.max(0, realPurchasedCreditsFromLedger - realSpentPurchasedCredits);
-  
+  // Outstanding credits from credit_balances (source of truth for display)
+  let outstandingPurchased = 0;
   let outstandingFree = 0;
   for (const b of balances) {
+    outstandingPurchased += b.purchased_credits || 0;
     outstandingFree += b.free_credits || 0;
   }
 
@@ -419,12 +474,15 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
     if (dailyMap[day]) dailyMap[day].users = users.size;
   }
 
-  // Merge revenue from ledger
+  // Merge revenue from ledger (purchase entries)
   for (const entry of ledgerEntries) {
-    if (entry.amount_cents && entry.amount_cents > 0) {
+    if (isPurchaseEntry(entry)) {
       const day = entry.created_at.split('T')[0];
       if (!dailyMap[day]) dailyMap[day] = { date: day, apiCost: 0, revenue: 0, trips: 0, users: 0, costEntries: 0 };
-      dailyMap[day].revenue += entry.amount_cents / 100;
+      const revenue = (entry.amount_cents && entry.amount_cents > 0)
+        ? entry.amount_cents / 100
+        : inferRevenueFromCredits(entry.credits_delta || 0, entry.action_type || '', entry.notes);
+      dailyMap[day].revenue += revenue;
     }
   }
 
