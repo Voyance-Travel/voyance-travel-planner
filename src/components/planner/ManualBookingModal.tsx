@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plane, Hotel, Calendar, Clock, AlertTriangle, ChevronRight } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { toast } from 'sonner';
 
 interface ManualFlightData {
   airline: string;
@@ -69,11 +70,26 @@ export function ManualBookingModal({ open, onClose, onSubmit, type, onSkip }: Ma
   const handleSubmit = () => {
     const result: { flight?: ManualFlightData; hotel?: ManualHotelData } = {};
     
-    if ((type === 'flight' || type === 'both') && flightData.airline) {
+    if (type === 'flight' || type === 'both') {
+      const missing: string[] = [];
+      if (!flightData.airline.trim()) missing.push('airline');
+      if (!flightData.departureAirport.trim()) missing.push('departure airport');
+      if (!flightData.arrivalAirport.trim()) missing.push('arrival airport');
+      if (!flightData.departureDate) missing.push('departure date');
+      if (!flightData.arrivalDate) missing.push('arrival date');
+      
+      if (missing.length > 0) {
+        toast.error(`Please fill in: ${missing.join(', ')}`);
+        return;
+      }
       result.flight = flightData;
     }
     
-    if ((type === 'hotel' || type === 'both') && hotelData.name) {
+    if (type === 'hotel' || type === 'both') {
+      if (!hotelData.name.trim()) {
+        toast.error('Please enter the hotel name');
+        return;
+      }
       result.hotel = hotelData;
     }
     

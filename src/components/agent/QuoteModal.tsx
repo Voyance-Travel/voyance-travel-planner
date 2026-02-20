@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Plus, Trash2, Send, FileText } from 'lucide-react';
 import {
   Dialog,
@@ -30,28 +32,39 @@ interface QuoteModalProps {
   onSuccess: () => void;
 }
 
-interface FormData {
-  name: string;
-  description: string;
-  expires_at: string;
-  agency_fee_cents: number;
-  discount_cents: number;
-  tax_cents: number;
-  terms_and_conditions: string;
-  notes: string;
-  line_items: Array<{
-    description: string;
-    quantity: number;
-    unit_price_cents: number;
-  }>;
-}
+const quoteSchema = z.object({
+  name: z.string().min(1, 'Quote name is required'),
+  description: z.string(),
+  expires_at: z.string(),
+  agency_fee_cents: z.number(),
+  discount_cents: z.number(),
+  tax_cents: z.number(),
+  terms_and_conditions: z.string(),
+  notes: z.string(),
+  line_items: z.array(z.object({
+    description: z.string().min(1, 'Description is required'),
+    quantity: z.number().min(1, 'Quantity must be at least 1'),
+    unit_price_cents: z.number().min(0, 'Price must be positive'),
+  })).min(1, 'At least one line item is required'),
+});
+
+type FormData = z.infer<typeof quoteSchema>;
 
 export default function QuoteModal({ open, onOpenChange, tripId, quote, onSuccess }: QuoteModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isEdit = !!quote;
 
-  const { register, handleSubmit, reset, watch, setValue, control } = useForm<FormData>({
+  const { register, handleSubmit, reset, watch, setValue, control, formState: { errors } } = useForm<FormData>({
+    resolver: zodResolver(quoteSchema),
     defaultValues: {
+      name: '',
+      description: '',
+      expires_at: '',
+      agency_fee_cents: 0,
+      discount_cents: 0,
+      tax_cents: 0,
+      terms_and_conditions: '',
+      notes: '',
       line_items: [{ description: '', quantity: 1, unit_price_cents: 0 }],
     },
   });
@@ -172,7 +185,8 @@ export default function QuoteModal({ open, onOpenChange, tripId, quote, onSucces
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="name">Quote Name</Label>
-              <Input id="name" {...register('name')} placeholder="Trip to Europe - Option A" />
+              <Input id="name" {...register('name')} placeholder="Trip to Europe - Option A" className={errors.name ? 'border-red-400' : ''} />
+              {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>}
             </div>
             <div>
               <Label htmlFor="expires_at">Valid Until</Label>

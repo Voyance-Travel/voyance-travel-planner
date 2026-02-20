@@ -170,6 +170,17 @@ export default function InvoiceBuilderModal({
       return;
     }
 
+    const invalidItems = lineItems.filter(item => !item.description.trim() || item.unit_price_cents <= 0);
+    if (invalidItems.length > 0) {
+      toast({ title: 'All line items must have a description and positive price', variant: 'destructive' });
+      return;
+    }
+
+    if (dueInDays < 1) {
+      toast({ title: 'Due date must be at least 1 day from now', variant: 'destructive' });
+      return;
+    }
+
     setIsLoading(true);
     try {
       await createInvoice({

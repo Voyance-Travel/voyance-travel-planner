@@ -86,6 +86,22 @@ export default function QuickConfirmationCapture({ open, onOpenChange, tripId, o
 
   const handleSubmit = async () => {
     if (!selectedCategory) return;
+
+    if (!formData.vendor_name.trim()) {
+      toast({ title: 'Vendor name is required', variant: 'destructive' });
+      return;
+    }
+
+    const netCost = parseFloat(formData.net_cost || '0');
+    const sellPrice = parseFloat(formData.sell_price || '0');
+    if (formData.net_cost && isNaN(netCost)) {
+      toast({ title: 'Net cost must be a valid number', variant: 'destructive' });
+      return;
+    }
+    if (formData.sell_price && isNaN(sellPrice)) {
+      toast({ title: 'Sell price must be a valid number', variant: 'destructive' });
+      return;
+    }
     
     setIsSubmitting(true);
     try {
