@@ -188,8 +188,14 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'EXPLORER',
     tagline: 'Cities speak to you in neon and noise.',
     primaryTraits: [
+      // Tightened: Urban Nomad needs moderate-to-high pace + positive social + positive comfort
+      // (cities = social, comfortable infrastructure) to differentiate from Wilderness Pioneer
       { trait: 'pace', weight: 2, sweetSpot: 5, range: [2, 8] },
-      { trait: 'social', weight: 2, sweetSpot: 3, range: [-2, 7] },
+      { trait: 'social', weight: 2, sweetSpot: 4, range: [1, 8] },
+      { trait: 'comfort', weight: 1, sweetSpot: 3, range: [0, 8] },
+    ],
+    hardNo: [
+      { trait: 'social', range: [-10, -3], penalty: -10 },
     ],
     signatureAnswers: ['b3', 'a2', 'g4', 'i3'],  // city + exploring + nightlife
   },
@@ -199,12 +205,15 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'EXPLORER',
     tagline: 'WiFi is optional, wilderness is essential.',
     primaryTraits: [
-      { trait: 'adventure', weight: 3, sweetSpot: 7, range: [4, 10] },
-      { trait: 'authenticity', weight: 2, sweetSpot: 7, range: [4, 10] },
-      { trait: 'comfort', weight: 2, sweetSpot: -3, range: [-10, 3] },
+      // Core signal: high adventure + low comfort + low social (wilderness = rugged + solitary)
+      // Removed authenticity requirement — nature lovers don't necessarily score high on cultural depth
+      { trait: 'adventure', weight: 3, sweetSpot: 7, range: [3, 10] },
+      { trait: 'comfort', weight: 3, sweetSpot: -4, range: [-10, 2] },
+      { trait: 'social', weight: 1, sweetSpot: -3, range: [-10, 3] },
     ],
     hardNo: [
-      { trait: 'comfort', range: [6, 10], penalty: -15 },
+      { trait: 'comfort', range: [6, 10], penalty: -20 },
+      { trait: 'adventure', range: [-10, 0], penalty: -15 },
     ],
     signatureAnswers: ['ad1', 'b2', 'g1', 'sm5', 'i2'],  // adventure_driver: frontier + nature + solo
   },
