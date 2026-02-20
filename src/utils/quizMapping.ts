@@ -420,10 +420,13 @@ function convertV3ToV2Traits(v3: Record<string, number | string>): Record<string
     social: Math.max(-10, Math.min(10, scale(get('social_energy'), 0.5, 14) + scale(get('group_size_pref'), 0.5, 6))),
     comfort: Math.max(-10, Math.min(10, scale(get('quality_intrinsic'), 0.5, 10) + scale(get('budget_tier'), 0.5, 6) + scale(get('status_seeking', 0.3), 0.3, 4))),
     adventure: Math.max(-10, Math.min(10, scale(get('adventure'), 0.5, 12) + scale(get('novelty_seeking'), 0.5, 8))),
-    authenticity: Math.max(-10, Math.min(10, scale(get('cultural_depth'), 0.5, 10) + scale(get('food_focus', 0.3), 0.3, 5) + scale(get('art_focus', 0.2), 0.2, 5))),
+    // Include learning_focus in authenticity — Cultural Anthropologist's core signal is
+    // cultural_depth + learning_focus, not just cultural_depth + food/art
+    authenticity: Math.max(-10, Math.min(10, scale(get('cultural_depth'), 0.5, 12) + scale(get('learning_focus', 0.3), 0.3, 6) + scale(get('food_focus', 0.3), 0.3, 4) + scale(get('art_focus', 0.2), 0.2, 3))),
     planning: Math.max(-10, Math.min(10, scale(get('planning'), 0.5, 14) - scale(get('flexibility'), 0.5, 6))),
     budget: Math.max(-10, Math.min(10, -scale(get('budget_tier'), 0.5, 14) - scale(get('status_seeking', 0.3), 0.3, 6))),
-    transformation: Math.max(-10, Math.min(10, scale(get('spirituality', 0.2), 0.2, 8) + scale(get('healing_focus', 0), 0, 6) + scale(get('learning_focus', 0.3), 0.3, 6))),
+    // Reduce learning_focus weight in transformation since it now also feeds authenticity
+    transformation: Math.max(-10, Math.min(10, scale(get('spirituality', 0.2), 0.2, 8) + scale(get('healing_focus', 0), 0, 6) + scale(get('learning_focus', 0.3), 0.3, 4))),
   };
 }
 

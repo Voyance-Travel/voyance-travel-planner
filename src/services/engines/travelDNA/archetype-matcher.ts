@@ -288,9 +288,9 @@ function calculateArchetypeScore(
     }
   }
 
-  // Apply life stage bonus
+  // Apply life stage bonus (capped at 8 to prevent dominating trait-based scoring)
   if (lifeStage && profile.lifeStageBonus?.[lifeStage]) {
-    score += profile.lifeStageBonus[lifeStage] * 20;
+    score += profile.lifeStageBonus[lifeStage] * 8;
     matchedRequirements.push(`life stage: ${lifeStage}`);
   }
 
