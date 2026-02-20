@@ -10,7 +10,6 @@ import { toast } from 'sonner';
 
 const profileSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name is too long'),
-  email: z.string().email('Invalid email address'),
   handle: z.string()
     .min(3, 'Handle must be at least 3 characters')
     .max(30, 'Handle is too long')
@@ -26,7 +25,7 @@ const profileSchema = z.object({
 type ProfileFormData = z.infer<typeof profileSchema>;
 
 interface ProfileEditFormProps {
-  defaultValues?: Partial<ProfileFormData>;
+  defaultValues?: Partial<ProfileFormData> & { email?: string };
   onSubmit: (data: ProfileFormData) => Promise<void>;
   onCancel?: () => void;
 }
@@ -46,7 +45,6 @@ export default function ProfileEditForm({
     resolver: zodResolver(profileSchema),
     defaultValues: {
       name: defaultValues?.name || '',
-      email: defaultValues?.email || '',
       handle: defaultValues?.handle || '',
       homeAirport: defaultValues?.homeAirport || '',
     }
@@ -85,24 +83,22 @@ export default function ProfileEditForm({
         )}
       </div>
 
-      {/* Email */}
+      {/* Email (read-only — changes require re-verification) */}
       <div className="space-y-2">
         <Label htmlFor="email">Email Address</Label>
         <div className="relative">
           <Input
-            {...register('email')}
             id="email"
             type="email"
-            className={`pl-10 ${errors.email ? 'border-destructive' : ''}`}
-            placeholder="john@example.com"
+            value={defaultValues?.email || ''}
+            readOnly
+            disabled
+            className="pl-10 bg-muted cursor-not-allowed"
           />
           <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         </div>
-        {errors.email && (
-          <p className="text-sm text-destructive">{errors.email.message}</p>
-        )}
         <p className="text-xs text-muted-foreground">
-          Changing your email will require verification
+          Email cannot be changed from this page for security reasons.
         </p>
       </div>
 
