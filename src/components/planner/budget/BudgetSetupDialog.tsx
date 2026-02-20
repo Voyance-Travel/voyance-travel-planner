@@ -224,11 +224,17 @@ export function BudgetSetupDialog({
                           <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                           <Input
                             type="number"
+                            min="0"
                             value={individualBudgets[member.id] || ''}
-                            onChange={(e) => setIndividualBudgets(prev => ({
-                              ...prev,
-                              [member.id]: e.target.value,
-                            }))}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '' || parseFloat(val) >= 0) {
+                                setIndividualBudgets(prev => ({
+                                  ...prev,
+                                  [member.id]: val,
+                                }));
+                              }
+                            }}
                             placeholder="0"
                             className="pl-6 h-8 text-sm"
                           />
@@ -255,8 +261,12 @@ export function BudgetSetupDialog({
                   <Input
                     id="budget-amount"
                     type="number"
+                    min="1"
                     value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '' || parseFloat(val) >= 0) setAmount(val);
+                    }}
                     placeholder="0"
                     className="pl-7 text-lg"
                   />
