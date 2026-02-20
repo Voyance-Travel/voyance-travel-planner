@@ -183,9 +183,12 @@ export default function TripSetup({ formData, updateFormData, onContinue }: Trip
               id="travelers"
               type="number"
               min={1}
-              max={10}
+              max={20}
               value={formData.travelers}
-              onChange={(e) => updateFormData({ travelers: parseInt(e.target.value) || 1 })}
+              onChange={(e) => {
+                const val = parseInt(e.target.value) || 1;
+                updateFormData({ travelers: Math.max(1, Math.min(20, val)) });
+              }}
               className="pl-10 h-12"
             />
           </div>

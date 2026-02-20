@@ -1904,7 +1904,7 @@ export default function Start() {
           setLinkedGuests(guests);
           // Auto-bump traveler count if guests exceed current count
           if (guests.length + 1 > travelers) {
-            setTravelers(guests.length + 1);
+            setTravelers(Math.min(20, guests.length + 1));
           }
         }}
       />
