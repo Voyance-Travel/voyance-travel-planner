@@ -86,13 +86,22 @@ export function AddActivityModal({ isOpen, onClose, onAdd, currency = 'USD', des
       toast.error('Please enter an activity title');
       return;
     }
+    if (startTime && endTime && endTime <= startTime) {
+      toast.error('End time must be after start time');
+      return;
+    }
+    const costNum = parseFloat(cost) || 0;
+    if (costNum < 0) {
+      toast.error('Cost cannot be negative');
+      return;
+    }
     onAdd({
       title: title.trim(),
       description,
       category,
       startTime,
       endTime,
-      cost: { amount: parseFloat(cost) || 0, currency },
+      cost: { amount: costNum, currency },
       location: {
         name: locationName,
         address: locationAddress,
@@ -246,7 +255,7 @@ export function AddActivityModal({ isOpen, onClose, onAdd, currency = 'USD', des
           {/* Cost */}
           <div>
             <label className="text-sm font-medium mb-1 block">Cost ($)</label>
-            <Input type="number" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="0" />
+            <Input type="number" min="0" value={cost} onChange={(e) => { const v = e.target.value; if (v === '' || parseFloat(v) >= 0) setCost(v); }} placeholder="0" />
           </div>
 
           {/* Description */}
