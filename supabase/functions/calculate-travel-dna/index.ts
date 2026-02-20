@@ -431,7 +431,6 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     ],
     signatureAnswers: ['rm4', 'g5', 'e2', 'tt3'],
   },
-  },
   {
     id: 'beach_therapist',
     name: 'The Beach Therapist',
@@ -449,7 +448,6 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'pace', range: [6, 10], penalty: -15 },
     ],
     signatureAnswers: ['rm2', 'i1', 'd1', 'd4', 'a1'],
-  },
   },
   {
     id: 'slow_traveler',
