@@ -1131,8 +1131,12 @@ function AddActivityModal({ isOpen, onClose, onAdd, currency = 'USD' }: AddActiv
   const [locationAddress, setLocationAddress] = useState('');
 
   const handleSubmit = () => {
+    if (!title.trim()) {
+      toast.error('Please enter an activity title');
+      return;
+    }
     onAdd({
-      title,
+      title: title.trim(),
       description,
       category,
       startTime,

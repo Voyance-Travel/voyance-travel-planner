@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Search, MapPin, Loader2, Globe } from 'lucide-react';
 import { useAddressSearch, type AddressResult } from '@/hooks/useAddressSearch';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface EditorialActivity {
   id?: string;
@@ -81,8 +82,12 @@ export function AddActivityModal({ isOpen, onClose, onAdd, currency = 'USD', des
   }, [searchQuery, destination, searchGoogle]);
 
   const handleSubmit = () => {
+    if (!title.trim()) {
+      toast.error('Please enter an activity title');
+      return;
+    }
     onAdd({
-      title,
+      title: title.trim(),
       description,
       category,
       startTime,
