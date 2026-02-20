@@ -437,16 +437,18 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'RESTORER',
     tagline: 'Salt water heals everything.',
     primaryTraits: [
-      { trait: 'pace', weight: 3, sweetSpot: -4, range: [-10, 0] },
+      { trait: 'pace', weight: 2, sweetSpot: -4, range: [-10, 0] },
       { trait: 'comfort', weight: 2, sweetSpot: 4, range: [0, 7] },
     ],
     fineGrained: [
-      { trait: 'nature_orientation', min: 0.55, max: 0.85, weight: 10, sweetSpot: 0.7 },
-      { trait: 'restoration_need', min: 0.7, weight: 10, sweetSpot: 0.85 },
-      { trait: 'spirituality', max: 0.5, weight: 4 },
+      { trait: 'nature_orientation', min: 0.6, max: 0.85, weight: 12, sweetSpot: 0.7 },
+      { trait: 'restoration_need', min: 0.7, weight: 12, sweetSpot: 0.85 },
+      { trait: 'spirituality', max: 0.4, weight: 6 },
     ],
     hardNo: [
       { trait: 'pace', range: [6, 10], penalty: -15 },
+      { trait: 'transformation', range: [5, 10], penalty: -15 },
+      { trait: 'authenticity', range: [6, 10], penalty: -10 },
     ],
     signatureAnswers: ['rm2', 'i1', 'd1', 'd4', 'a1'],
   },
@@ -460,10 +462,14 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'authenticity', weight: 3, sweetSpot: 7, range: [4, 10] },
       { trait: 'planning', weight: 2, sweetSpot: -3, range: [-8, 2] },
     ],
+    fineGrained: [
+      { trait: 'cultural_depth', min: 0.3, weight: 10, sweetSpot: 0.6 },
+      { trait: 'nature_orientation', max: 0.7, weight: 4 },  // Not primarily nature-focused
+    ],
     hardNo: [
       { trait: 'pace', range: [4, 10], penalty: -20 },
     ],
-    signatureAnswers: ['rm3', 'd1', 'h3', 'e3', 'e4'],  // restoration_mode: settle + slow + rental + flexible
+    signatureAnswers: ['rm3', 'd1', 'h3', 'e3', 'e4'],
   },
   {
     id: 'escape_artist',
@@ -551,7 +557,11 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'authenticity', weight: 3, sweetSpot: 8, range: [5, 10] },
       { trait: 'transformation', weight: 2, sweetSpot: 5, range: [2, 8] },
     ],
-    signatureAnswers: ['sm4', 'g1', 'h5', 'rm3'],  // community + outdoor + unique stays + settle
+    fineGrained: [
+      { trait: 'ethics_focus', min: 0.3, weight: 15, sweetSpot: 0.8 },
+      { trait: 'nature_orientation', min: 0.4, weight: 8, sweetSpot: 0.7 },
+    ],
+    signatureAnswers: ['sm4', 'g1', 'h5', 'rm3'],
   },
   {
     id: 'curated_luxe',
@@ -588,8 +598,13 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     primaryTraits: [
       { trait: 'transformation', weight: 3, sweetSpot: 6, range: [3, 9] },
       { trait: 'authenticity', weight: 2, sweetSpot: 5, range: [2, 8] },
+      { trait: 'comfort', weight: 2, sweetSpot: 3, range: [0, 7] },
     ],
-    signatureAnswers: ['tt2', 'a2', 'c2', 'c3'],  // transformation: reinvention + exploring + moderate/comfort budget
+    fineGrained: [
+      { trait: 'restoration_need', min: 0.3, weight: 8, sweetSpot: 0.5 },
+      { trait: 'cultural_depth', min: 0.3, weight: 8, sweetSpot: 0.6 },
+    ],
+    signatureAnswers: ['tt2', 'a2', 'c2', 'c3'],
   },
   {
     id: 'sabbatical_scholar',
@@ -601,7 +616,11 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'authenticity', weight: 2, sweetSpot: 6, range: [3, 9] },
       { trait: 'planning', weight: 2, sweetSpot: 3, range: [-2, 7] },
     ],
-    signatureAnswers: ['tt3', 'g2', 'cd1', 'sm5', 'sm4'],  // transformation: learning + culture + immersion + solo/community
+    fineGrained: [
+      { trait: 'learning_focus', min: 0.4, weight: 15, sweetSpot: 0.8 },
+      { trait: 'cultural_depth', min: 0.4, weight: 8, sweetSpot: 0.7 },
+    ],
+    signatureAnswers: ['tt3', 'g2', 'cd1', 'sm5', 'sm4'],
   },
   {
     id: 'healing_journeyer',
@@ -1713,8 +1732,8 @@ function matchArchetypesV2(
             });
           }
         } else {
-          // Outside acceptable range = penalty proportional to weight
-          const penalty = -(fg.weight * 0.5);
+          // Outside acceptable range = steeper penalty to prevent false matches
+          const penalty = -(fg.weight * 0.75);
           score += penalty;
           if (penalty < -3) {
             reasons.push({
