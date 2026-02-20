@@ -441,8 +441,9 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'comfort', weight: 2, sweetSpot: 4, range: [0, 7] },
     ],
     fineGrained: [
-      { trait: 'nature_orientation', min: 0.4, weight: 8 },
-      { trait: 'restoration_need', min: 0.5, weight: 8 },
+      { trait: 'nature_orientation', min: 0.55, max: 0.85, weight: 10, sweetSpot: 0.7 },
+      { trait: 'restoration_need', min: 0.7, weight: 10, sweetSpot: 0.85 },
+      { trait: 'spirituality', max: 0.5, weight: 4 },
     ],
     hardNo: [
       { trait: 'pace', range: [6, 10], penalty: -15 },
