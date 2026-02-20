@@ -49,10 +49,10 @@ const PinterestIcon = forwardRef<SVGSVGElement, SVGProps<SVGSVGElement>>(
 );
 
 const socialLinks = [
-  { icon: Facebook, href: 'https://facebook.com/Voyance', label: 'Facebook' },
+  { icon: Facebook, href: 'https://facebook.com/Voyancetravel', label: 'Facebook' },
   { icon: Instagram, href: 'https://instagram.com/Voyancetravel', label: 'Instagram' },
   { icon: XIcon, href: 'https://x.com/Voyancetravel', label: 'X' },
-  { icon: PinterestIcon, href: 'https://pinterest.com/Voyance', label: 'Pinterest' },
+  { icon: PinterestIcon, href: 'https://pinterest.com/Voyancetravel', label: 'Pinterest' },
 ];
 
 export default function Footer() {
