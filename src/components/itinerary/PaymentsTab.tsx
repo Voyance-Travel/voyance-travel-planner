@@ -503,7 +503,10 @@ export function PaymentsTab({
 
   // Handle adding manual expense
   const handleAddExpense = async () => {
-    if (!newExpenseName.trim() || !newExpenseAmount) return;
+    if (!newExpenseName.trim() || !newExpenseAmount || parseFloat(newExpenseAmount) <= 0) {
+      toast.error('Please enter a name and an amount greater than $0');
+      return;
+    }
     setSavingExpense(true);
 
     try {
@@ -1692,7 +1695,7 @@ export function PaymentsTab({
             </Button>
             <Button 
               onClick={handleAddExpense} 
-              disabled={savingExpense || !newExpenseName.trim() || !newExpenseAmount}
+              disabled={savingExpense || !newExpenseName.trim() || !newExpenseAmount || parseFloat(newExpenseAmount) <= 0}
             >
               {savingExpense ? 'Saving...' : 'Add Expense'}
             </Button>
