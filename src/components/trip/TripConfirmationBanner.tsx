@@ -363,7 +363,10 @@ export function TripConfirmationBanner({
               <Button
                 variant="outline"
                 className="flex-1"
-                onClick={() => confirmUpcoming()}
+                onClick={() => {
+                  setShowLogisticsDialog(false);
+                  setDismissed(true);
+                }}
               >
                 Skip for now
               </Button>
