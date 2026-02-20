@@ -204,11 +204,14 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'comfort', weight: 1, sweetSpot: 3, range: [0, 8] },
     ],
     fineGrained: [
-      { trait: 'nature_orientation', max: 0.4, weight: 8 },  // NOT nature-focused
-      { trait: 'social_energy', min: 0.4, weight: 8, sweetSpot: 0.7 },
+      { trait: 'nature_orientation', max: 0.3, weight: 10 },  // Must NOT be nature-focused
+      { trait: 'novelty_seeking', min: 0.65, weight: 10, sweetSpot: 0.85 },  // Genuinely novelty-driven
+      { trait: 'social_energy', min: 0.55, weight: 8, sweetSpot: 0.75 },  // City-social energy
+      { trait: 'flexibility', min: 0.6, weight: 6, sweetSpot: 0.8 },  // Spontaneous urban explorer
     ],
     hardNo: [
       { trait: 'social', range: [-10, -3], penalty: -10 },
+      { trait: 'pace', range: [-10, 1], penalty: -15 },  // Not a slow traveler
     ],
     signatureAnswers: ['b3', 'a2', 'g4', 'i3'],
   },
