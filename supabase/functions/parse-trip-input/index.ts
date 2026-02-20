@@ -90,6 +90,9 @@ const EXTRACT_TOOL = {
 
 const SYSTEM_PROMPT = `You are a travel itinerary parser. Your job is to extract structured trip data from user-pasted text, which may come from ChatGPT, Claude, blogs, notes, or other sources.
 
+## CURRENT DATE
+Today's date is ${new Date().toISOString().split('T')[0]}. When resolving relative date references (like "next weekend", "this March", "in April"), always use this as the reference point. All resolved dates MUST be in the future relative to today. Never output dates in the past.
+
 ## CRITICAL PARSING RULES
 
 ### 1. Time Headers Are NOT Activities
@@ -468,7 +471,42 @@ serve(async (req) => {
       }
     }
 
-    // --- Destination-aware currency normalization ---
+    // --- Past-date safety net ---
+    // If the AI resolved dates to the past, bump them forward by 1 year
+    if (parsed.dates?.start) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const startParts = parsed.dates.start.split('-').map(Number);
+      const startCheck = new Date(startParts[0], startParts[1] - 1, startParts[2]);
+      
+      if (startCheck < today) {
+        // Calculate how many years to add
+        const yearsToAdd = Math.ceil((today.getTime() - startCheck.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+        const newStartYear = startParts[0] + yearsToAdd;
+        parsed.dates.start = `${newStartYear}-${String(startParts[1]).padStart(2, '0')}-${String(startParts[2]).padStart(2, '0')}`;
+        
+        if (parsed.dates.end) {
+          const endParts = parsed.dates.end.split('-').map(Number);
+          const newEndYear = endParts[0] + yearsToAdd;
+          parsed.dates.end = `${newEndYear}-${String(endParts[1]).padStart(2, '0')}-${String(endParts[2]).padStart(2, '0')}`;
+        }
+        
+        // Also fix individual day dates
+        if (parsed.days) {
+          for (const day of parsed.days) {
+            if (day.date) {
+              const dayParts = day.date.split('-').map(Number);
+              if (dayParts.length === 3) {
+                day.date = `${dayParts[0] + yearsToAdd}-${String(dayParts[1]).padStart(2, '0')}-${String(dayParts[2]).padStart(2, '0')}`;
+              }
+            }
+          }
+        }
+        
+        console.log(`[parse-trip-input] Bumped past dates forward by ${yearsToAdd} year(s): ${startParts[0]} → ${newStartYear}`);
+      }
+    }
+
     // Detect the canonical currency for the destination so that trips to
     // e.g. Austin, Texas are always USD even if the source material used € signs.
     const destinationCurrency = inferDestinationCurrency(parsed.destination || '');
