@@ -1,32 +1,90 @@
 
 
-# Fix: Profiles HEAD 503 Error in Unit Economics Dashboard
+# Validation and Zod Audit
 
-## Problem
-The dashboard fires a HEAD request to `profiles?select=id` with `count: 'exact'` (line 225), which intermittently returns a 503 error. This is redundant because line 226 already fetches `profiles` with `id, display_name` successfully.
+## Current State
 
-## Root Cause
-PostgREST HEAD requests with `count: 'exact'` can time out or fail under load, especially on tables with many policies. Since the dashboard already fetches all profile rows on line 226, the HEAD-only count query is unnecessary overhead.
+**Already using Zod + react-hook-form (6 forms):**
+- ProfileEditForm -- name, email, handle, homeAirport
+- Contact page -- name, email, subject, message
+- ForgotPasswordForm -- email
+- ResetPassword -- password, confirmPassword
+- ClientIntakeForm (agent) -- traveler intake fields
+- TravelerInfoModal (booking) -- traveler passport/details
 
-## Fix (1 file)
+**Using manual/ad-hoc validation (no Zod):**
+Everything else below.
 
-**File:** `src/hooks/useUnitEconomicsData.ts`
+---
 
-1. Remove the HEAD count query on line 225 (`supabase.from('profiles').select('id', { count: 'exact', head: true })`)
-2. Update the destructuring to remove `profileResult` from the Promise.all array
-3. Change line 496 from `profileResult.count || 0` to `profileNamesResult.data?.length || 0`
+## Forms That Need Zod Validation
 
-This eliminates the 503-producing request entirely while preserving the same `totalUsers` metric from data already being fetched.
+### 1. SignUpForm (`src/components/auth/SignUpForm.tsx`)
+- **Current**: Manual if-checks for empty fields and password length
+- **Missing**: No email format validation, no inline field-level errors (just a single error banner)
+- **Fix**: Add Zod schema for firstName, lastName, email, password with react-hook-form. Show per-field error messages instead of a single banner.
 
-## Technical Detail
+### 2. SignInForm (`src/components/auth/SignInForm.tsx`)
+- **Current**: Manual checks for empty email/password
+- **Missing**: No email format validation
+- **Fix**: Add Zod schema for email (`.email()`) and password (`.min(1)`). Show inline errors.
 
-Current (8 parallel queries):
-```text
-profiles?select=id (HEAD, count:exact)   -- 503 error, redundant
-profiles?select=id,display_name          -- works fine, returns all rows
-```
+### 3. ManualBookingModal (`src/components/planner/ManualBookingModal.tsx`)
+- **Current**: Only checks if `flightData.airline` or `hotelData.name` is truthy -- submits empty/partial data silently
+- **Missing**: No validation on airport codes, dates, times, or required fields
+- **Fix**: Add Zod schemas for flight data (airline required, airport codes 3-letter, dates required) and hotel data (name required). Show toast or inline errors on submit.
 
-After fix (7 parallel queries):
-```text
-profiles?select=id,display_name          -- kept, .length used for count
-```
+### 4. QuoteModal (`src/components/agent/QuoteModal.tsx`)
+- **Current**: Uses react-hook-form but NO Zod resolver -- no validation at all
+- **Missing**: Quote name, line item descriptions, prices could all be empty
+- **Fix**: Add Zod schema requiring quote name, at least one line item with description and positive price. Wire up zodResolver.
+
+### 5. InvoiceBuilderModal (`src/components/agent/InvoiceBuilderModal.tsx`)
+- **Current**: No form library, pure useState -- no validation
+- **Missing**: Can create invoice with zero line items, no due date validation
+- **Fix**: Add validation that at least one line item exists with a positive amount before submission. Toast error if not met.
+
+### 6. QuickConfirmationCapture (`src/components/agent/QuickConfirmationCapture.tsx`)
+- **Current**: Only checks `!formData.vendor_name` via disabled button
+- **Missing**: No feedback if user clicks submit somehow, cost fields accept any string
+- **Fix**: Add toast validation for vendor_name on submit. Validate cost fields are valid numbers.
+
+### 7. Trip Planner final submit (`src/pages/Start.tsx` -- the "Plan my trip" button)
+- **Current**: The "Continue" button now has validation (just fixed), but the final "Plan my trip" `onSubmit` may also need checks
+- **Likely OK**: Depends on whether the multi-step flow guarantees earlier validation. Worth verifying.
+
+### 8. ReviewCapturePopup (`src/components/reviews/ReviewCapturePopup.tsx`)
+- **Current**: Checks `rating === 0` with toast -- adequate for its simplicity
+- **Status**: OK as-is (only required field is rating, button is disabled)
+
+### 9. DaySummaryPrompt (`src/components/feedback/DaySummaryPrompt.tsx`)
+- **Current**: No validation at all -- submits with all optional fields
+- **Status**: OK as-is (all fields are genuinely optional)
+
+---
+
+## Recommended Priority Order
+
+| Priority | Form | Reason |
+|----------|------|--------|
+| High | SignUpForm | User-facing auth, no email validation |
+| High | SignInForm | User-facing auth, no email format check |
+| High | ManualBookingModal | Accepts garbage data silently |
+| Medium | QuoteModal | Has react-hook-form but no schema |
+| Medium | InvoiceBuilderModal | Can create empty invoices |
+| Medium | QuickConfirmationCapture | Cost fields unvalidated |
+| Low | Start.tsx final submit | Likely guarded by step flow |
+
+---
+
+## Technical Approach
+
+For each form that gets Zod:
+
+1. Define a `z.object({...})` schema at the top of the file
+2. Wire it into `useForm` with `resolver: zodResolver(schema)`
+3. Replace manual `useState` fields with `register()` where possible
+4. Display `errors.fieldName?.message` inline below each input
+5. Remove manual if-check validation in `handleSubmit`
+
+For simpler forms (InvoiceBuilder, QuickConfirmationCapture) where full react-hook-form refactoring is heavy, add targeted `toast.error()` checks in the submit handler instead -- matching the pattern already established for expenses and activities.
