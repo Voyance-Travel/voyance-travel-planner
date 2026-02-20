@@ -12,9 +12,9 @@ export default function ProfileEdit() {
   const { user, updateUser } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = async (data: { name: string; email: string; handle?: string; homeAirport?: string }) => {
+  const handleSubmit = async (data: { name: string; handle?: string; homeAirport?: string }) => {
     await new Promise(resolve => setTimeout(resolve, 500));
-    updateUser({ name: data.name, email: data.email });
+    updateUser({ name: data.name });
     navigate(ROUTES.PROFILE.VIEW);
   };
 
