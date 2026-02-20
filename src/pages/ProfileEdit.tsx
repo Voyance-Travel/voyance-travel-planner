@@ -1,36 +1,21 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { User, Mail, Camera, ArrowLeft, Save } from 'lucide-react';
+import { User, ArrowLeft, Camera } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
-import toast from '@/utils/simpleToast';
+import ProfileEditForm from '@/components/profile/ProfileEditForm';
 
 export default function ProfileEdit() {
   const { user, updateUser } = useAuth();
   const navigate = useNavigate();
-  
-  const [name, setName] = useState(user?.name || '');
-  const [email, setEmail] = useState(user?.email || '');
-  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = async () => {
-    setIsSaving(true);
-    
-    try {
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate API call
-      updateUser({ name, email });
-      toast.success('Profile updated successfully');
-      navigate(ROUTES.PROFILE.VIEW);
-    } catch (error) {
-      toast.error('Failed to update profile');
-    } finally {
-      setIsSaving(false);
-    }
+  const handleSubmit = async (data: { name: string; email: string; handle?: string; homeAirport?: string }) => {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    updateUser({ name: data.name, email: data.email });
+    navigate(ROUTES.PROFILE.VIEW);
   };
 
   return (
@@ -76,57 +61,15 @@ export default function ProfileEdit() {
               </div>
             </div>
             
-            {/* Form */}
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="pl-10"
-                    placeholder="Enter your name"
-                  />
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10"
-                    placeholder="Enter your email"
-                  />
-                </div>
-              </div>
-              
-              <div className="flex gap-3 pt-4">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => navigate(ROUTES.PROFILE.VIEW)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  className="flex-1 gap-2"
-                  onClick={handleSave}
-                  disabled={isSaving}
-                >
-                  <Save className="h-4 w-4" />
-                  {isSaving ? 'Saving...' : 'Save Changes'}
-                </Button>
-              </div>
-            </div>
+            {/* Form with validation */}
+            <ProfileEditForm
+              defaultValues={{
+                name: user?.name || '',
+                email: user?.email || '',
+              }}
+              onSubmit={handleSubmit}
+              onCancel={() => navigate(ROUTES.PROFILE.VIEW)}
+            />
           </motion.div>
         </div>
       </section>
