@@ -22,14 +22,21 @@ interface TripSetupProps {
 export default function TripSetup({ formData, updateFormData, onContinue }: TripSetupProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const today = new Date().toISOString().split('T')[0];
+
   const validate = () => {
     const newErrors: Record<string, string> = {};
     
     if (!formData.destination) newErrors.destination = 'Please enter a destination';
     if (!formData.departureCity) newErrors.departureCity = 'Please enter a departure city';
-    if (!formData.startDate) newErrors.startDate = 'Please select a start date';
-    if (!formData.endDate) newErrors.endDate = 'Please select an end date';
-    if (formData.startDate && formData.endDate && formData.startDate > formData.endDate) {
+    if (!formData.startDate) {
+      newErrors.startDate = 'Please select a start date';
+    } else if (formData.startDate < today) {
+      newErrors.startDate = 'Start date cannot be in the past';
+    }
+    if (!formData.endDate) {
+      newErrors.endDate = 'Please select an end date';
+    } else if (formData.startDate && formData.endDate && formData.endDate < formData.startDate) {
       newErrors.endDate = 'End date must be after start date';
     }
     
@@ -126,6 +133,7 @@ export default function TripSetup({ formData, updateFormData, onContinue }: Trip
               <Input
                 id="startDate"
                 type="date"
+                min={today}
                 value={formData.startDate}
                 onChange={(e) => {
                   const newStart = e.target.value;
@@ -152,6 +160,7 @@ export default function TripSetup({ formData, updateFormData, onContinue }: Trip
               <Input
                 id="endDate"
                 type="date"
+                min={formData.startDate || today}
                 value={formData.endDate}
                 onChange={(e) => updateFormData({ endDate: e.target.value })}
                 className={`pl-10 h-12 ${errors.endDate ? 'border-destructive' : ''}`}
