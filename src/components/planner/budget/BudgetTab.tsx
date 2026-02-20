@@ -313,7 +313,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <TrendingUp className="h-4 w-4" />
-              Committed
+              Spent
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -322,7 +322,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                 "text-2xl font-bold",
                 isOverBudget ? "text-destructive" : "text-foreground"
               )}>
-                {formatCurrency(summary?.totalCommittedCents || 0)}
+                {formatCurrency((summary?.totalCommittedCents || 0) + (summary?.plannedTotalCents || 0))}
               </span>
               <span className="text-xs text-muted-foreground">
                 ({Math.round(summary?.usedPercent || 0)}%)
