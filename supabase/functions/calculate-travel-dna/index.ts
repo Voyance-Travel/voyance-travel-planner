@@ -171,11 +171,14 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'EXPLORER',
     tagline: "You don't just visit places, you become them.",
     primaryTraits: [
-      { trait: 'authenticity', weight: 3, sweetSpot: 8, range: [5, 10] },
-      { trait: 'transformation', weight: 2, sweetSpot: 6, range: [3, 10] },
+      // Widened authenticity range from [5,10] to [3,10] — the V3→V2 conversion
+      // maps cultural_depth + learning_focus into authenticity, but the scaling
+      // can produce values in the 3-5 range for strong cultural signals
+      { trait: 'authenticity', weight: 3, sweetSpot: 7, range: [3, 10] },
+      { trait: 'transformation', weight: 2, sweetSpot: 5, range: [2, 10] },
     ],
     hardNo: [
-      { trait: 'authenticity', range: [-10, 0], penalty: -20 },
+      { trait: 'authenticity', range: [-10, -1], penalty: -20 },
     ],
     signatureAnswers: ['cd1', 'b1', 'g2', 'sm4', 'sm5'],  // culture_depth: immersion + history + culture activities
   },
