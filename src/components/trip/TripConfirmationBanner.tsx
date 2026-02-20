@@ -312,6 +312,14 @@ export function TripConfirmationBanner({
           </DialogHeader>
 
           <div className="space-y-5 pt-2 max-h-[70vh] overflow-y-auto">
+            {!hasFlightSelection && (
+              <TransportModeSelector
+                form={form.transport}
+                onChange={(transport) => setForm(prev => ({ ...prev, transport }))}
+                destination={destination}
+              />
+            )}
+
             {!hasHotelSelection && (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium">
@@ -319,24 +327,8 @@ export function TripConfirmationBanner({
                   Where are you staying?
                 </div>
 
-                {/* DNA Recommendations */}
-                {(dnaRecs.isLoading || dnaRecs.recommendations.length > 0) && (
-                  <DNAHotelPicks
-                    profile={dnaRecs.profile}
-                    recommendations={dnaRecs.recommendations}
-                    topPick={dnaRecs.topPick}
-                    isLoading={dnaRecs.isHotelsLoading}
-                    isProfileLoading={dnaRecs.isProfileLoading}
-                    onSelectHotel={handleSelectDNAHotel}
-                    compact
-                  />
-                )}
-
                 {/* Manual input (pre-filled if DNA hotel selected) */}
                 <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">
-                    {dnaRecs.recommendations.length > 0 ? 'Or enter your own hotel:' : ''}
-                  </p>
                   <Input
                     placeholder="Hotel name (e.g., The Ritz Carlton)"
                     value={form.hotelName}
@@ -348,15 +340,25 @@ export function TripConfirmationBanner({
                     onChange={(e) => setForm(prev => ({ ...prev, hotelNeighborhood: e.target.value }))}
                   />
                 </div>
-              </div>
-            )}
 
-            {!hasFlightSelection && (
-              <TransportModeSelector
-                form={form.transport}
-                onChange={(transport) => setForm(prev => ({ ...prev, transport }))}
-                destination={destination}
-              />
+                {/* DNA Recommendations (loads async, placed below inputs to prevent layout shift) */}
+                {(dnaRecs.isLoading || dnaRecs.recommendations.length > 0) && (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      {dnaRecs.recommendations.length > 0 ? 'Or pick a recommendation:' : ''}
+                    </p>
+                    <DNAHotelPicks
+                      profile={dnaRecs.profile}
+                      recommendations={dnaRecs.recommendations}
+                      topPick={dnaRecs.topPick}
+                      isLoading={dnaRecs.isHotelsLoading}
+                      isProfileLoading={dnaRecs.isProfileLoading}
+                      onSelectHotel={handleSelectDNAHotel}
+                      compact
+                    />
+                  </>
+                )}
+              </div>
             )}
 
             <div className="flex gap-2 pt-2">
