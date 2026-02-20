@@ -1710,6 +1710,17 @@ export default function Start() {
                         const chatBudget = details.budgetAmount || budgetAmount;
                         const chatTripType = details.tripType || tripType;
                         const chatTravelers = details.travelers || travelers;
+
+                        // Sync extracted details back to form state so widgets reflect chat intent
+                        if (details.travelers && details.travelers !== travelers) {
+                          setTravelers(details.travelers);
+                        }
+                        if (details.tripType && details.tripType !== tripType) {
+                          setTripType(details.tripType);
+                        }
+                        if (details.budgetAmount && details.budgetAmount !== budgetAmount) {
+                          setBudgetAmount(details.budgetAmount);
+                        }
                         const hotelSelection = details.hotelName ? [{
                           name: details.hotelName,
                           address: details.hotelAddress || '',
