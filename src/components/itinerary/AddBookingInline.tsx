@@ -135,12 +135,16 @@ export function AddFlightInline({
 
   // Removed: Browse & Book flights - we're a "bring your own flight" platform
 
+  const [arrivalTimeError, setArrivalTimeError] = useState(false);
+
   const handleSaveManualFlight = async () => {
     // Only require arrival time for itinerary planning
     if (!outboundFlight.arrivalTime) {
+      setArrivalTimeError(true);
       toast.error('Please enter your arrival time so we can plan Day 1');
       return;
     }
+    setArrivalTimeError(false);
 
     setIsSaving(true);
     try {
@@ -308,8 +312,11 @@ export function AddFlightInline({
                   <Input
                     type="time"
                     value={outboundFlight.arrivalTime}
-                    onChange={(e) => setOutboundFlight(prev => ({ ...prev, arrivalTime: e.target.value }))}
-                    className="text-sm"
+                    onChange={(e) => {
+                      setOutboundFlight(prev => ({ ...prev, arrivalTime: e.target.value }));
+                      if (e.target.value) setArrivalTimeError(false);
+                    }}
+                    className={cn("text-sm", arrivalTimeError && "border-destructive ring-1 ring-destructive")}
                     required
                   />
                   <p className="text-[10px] text-muted-foreground mt-0.5">

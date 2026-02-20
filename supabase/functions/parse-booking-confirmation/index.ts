@@ -70,6 +70,8 @@ Return a JSON object with these fields (only include fields you can extract with
 - segment_count: total number of flight segments in this booking
 - notes: any other relevant details like special requests, seat assignments, etc.
 
+IMPORTANT: Do NOT invent or estimate any field values. If a price, cost, or fare is not explicitly stated in the text, do NOT include a price field. Only extract information that is clearly present in the confirmation text. Never hallucinate or guess values.
+
 Only return valid JSON, no markdown or explanations.
 
 Confirmation text:
