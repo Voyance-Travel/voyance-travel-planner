@@ -40,9 +40,27 @@ const PIN_COLORS = [
 
 const LABEL_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
+// Keywords/categories that should never appear as map waypoints
+const NON_ROUTABLE_KEYWORDS = [
+  'free time', 'downtime', 'leisure time', 'at leisure', 'rest', 'sleep',
+  'check-in', 'check-out', 'checkin', 'checkout', 'check in', 'check out',
+  'packing', 'arrival at', 'departure from',
+];
+const NON_ROUTABLE_CATEGORIES = ['downtime', 'free_time', 'transportation', 'transport'];
+
+function isRoutableActivity(activity: DayRouteMapProps['activities'][number]): boolean {
+  const title = activity.title?.toLowerCase() || '';
+  if (NON_ROUTABLE_KEYWORDS.some(kw => title.includes(kw))) return false;
+  // Check category if present on the activity object
+  const cat = (activity as any).category?.toLowerCase() || (activity as any).timeBlockType?.toLowerCase() || '';
+  if (NON_ROUTABLE_CATEGORIES.includes(cat)) return false;
+  return true;
+}
+
 export function DayRouteMap({ activities, className }: DayRouteMapProps) {
   const pins: ActivityPin[] = useMemo(() => {
     return activities
+      .filter(isRoutableActivity)
       .map((a, i) => {
         // Support both location.lat/lng and location.coordinates.lat/lng
         const lat = a.location?.lat ?? a.location?.coordinates?.lat;
