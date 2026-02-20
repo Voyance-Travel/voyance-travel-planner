@@ -75,7 +75,7 @@ export default function ProfileEditForm({
             {...register('name')}
             id="name"
             type="text"
-            className="pl-10"
+            className={`pl-10 ${errors.name ? 'border-destructive' : ''}`}
             placeholder="John Doe"
           />
           <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -93,7 +93,7 @@ export default function ProfileEditForm({
             {...register('email')}
             id="email"
             type="email"
-            className="pl-10"
+            className={`pl-10 ${errors.email ? 'border-destructive' : ''}`}
             placeholder="john@example.com"
           />
           <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -114,7 +114,7 @@ export default function ProfileEditForm({
             {...register('handle')}
             id="handle"
             type="text"
-            className="pl-10"
+            className={`pl-10 ${errors.handle ? 'border-destructive' : ''}`}
             placeholder="johndoe123"
           />
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">@</span>
@@ -135,7 +135,7 @@ export default function ProfileEditForm({
             {...register('homeAirport')}
             id="homeAirport"
             type="text"
-            className="pl-10 uppercase"
+            className={`pl-10 uppercase ${errors.homeAirport ? 'border-destructive' : ''}`}
             placeholder="LAX"
             maxLength={3}
           />
