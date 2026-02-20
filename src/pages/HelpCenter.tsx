@@ -117,6 +117,19 @@ export default function HelpCenter() {
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const navigate = useNavigate();
 
+  const q = searchQuery.toLowerCase().trim();
+
+  const filteredCategories = q
+    ? helpCategories.map(cat => ({
+        ...cat,
+        articles: cat.articles.filter(a => a.title.toLowerCase().includes(q)),
+      })).filter(cat => cat.articles.length > 0 || cat.title.toLowerCase().includes(q) || cat.description.toLowerCase().includes(q))
+    : helpCategories;
+
+  const filteredFaqs = q
+    ? quickAnswers.filter(f => f.question.toLowerCase().includes(q) || f.answer.toLowerCase().includes(q))
+    : quickAnswers;
+
   const handleArticleClick = (slug: string) => {
     const route = articleRoutes[slug];
     if (route) {
@@ -197,7 +210,7 @@ export default function HelpCenter() {
       <section className="py-16 -mt-8">
         <div className="max-w-6xl mx-auto px-4">
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {helpCategories.map((category, index) => {
+            {filteredCategories.map((category, index) => {
               const Icon = category.icon;
               return (
                 <motion.div
@@ -236,10 +249,18 @@ export default function HelpCenter() {
               );
             })}
           </div>
+          {q && filteredCategories.length === 0 && filteredFaqs.length === 0 && (
+            <div className="text-center py-12">
+              <Search className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+              <p className="text-lg font-medium text-muted-foreground">No results for "{searchQuery}"</p>
+              <p className="text-sm text-muted-foreground mt-1">Try different keywords or <Link to="/contact" className="text-primary hover:underline">contact us</Link></p>
+            </div>
+          )}
         </div>
       </section>
 
       {/* Quick Answers */}
+      {filteredFaqs.length > 0 && (
       <section className="py-16 bg-muted/30">
         <div className="max-w-3xl mx-auto px-4">
           <div className="flex items-center justify-center gap-2 mb-8">
@@ -248,7 +269,7 @@ export default function HelpCenter() {
           </div>
           
           <div className="space-y-3">
-            {quickAnswers.map((faq, index) => (
+            {filteredFaqs.map((faq, index) => (
               <motion.div
                 key={index}
                 initial={{ opacity: 0 }}
@@ -277,6 +298,7 @@ export default function HelpCenter() {
           </div>
         </div>
       </section>
+      )}
 
       {/* Contact CTA */}
       <section className="py-16">
