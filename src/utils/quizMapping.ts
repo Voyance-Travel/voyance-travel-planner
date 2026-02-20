@@ -408,6 +408,45 @@ export async function saveUserPreferences(
  * Convert V3 25-trait (0-1) scores to V2 8-trait (-10/+10) scores
  * so the edge function can process V3 quiz answers correctly.
  */
+/**
+ * Extract fine-grained V3 trait scores (0-1 scale) for supplementary archetype matching.
+ * These are passed alongside the 8 V2 traits to give the edge function
+ * the granularity it needs to distinguish between similar archetypes.
+ */
+function extractFineGrainedTraits(v3: Record<string, number | string>): Record<string, number> {
+  const get = (key: string, def: number = 0): number => {
+    const val = v3[key];
+    return typeof val === 'number' ? val : def;
+  };
+  return {
+    nature_orientation: get('nature_orientation', 0.5),
+    cultural_depth: get('cultural_depth', 0.5),
+    social_energy: get('social_energy', 0.5),
+    flexibility: get('flexibility', 0.5),
+    restoration_need: get('restoration_need', 0.5),
+    food_focus: get('food_focus', 0.3),
+    art_focus: get('art_focus', 0.2),
+    photo_focus: get('photo_focus', 0.2),
+    niche_interest: get('niche_interest', 0.2),
+    romance_focus: get('romance_focus', 0),
+    family_focus: get('family_focus', 0),
+    ethics_focus: get('ethics_focus', 0.3),
+    bucket_list: get('bucket_list', 0.3),
+    quality_intrinsic: get('quality_intrinsic', 0.5),
+    status_seeking: get('status_seeking', 0.3),
+    spirituality: get('spirituality', 0.2),
+    learning_focus: get('learning_focus', 0.3),
+    healing_focus: get('healing_focus', 0),
+    novelty_seeking: get('novelty_seeking', 0.5),
+    adventure: get('adventure', 0.5),
+    group_size_pref: get('group_size_pref', 0.5),
+    morning_energy: get('morning_energy', 0.5),
+    budget_tier: get('budget_tier', 0.5),
+    pace: get('pace', 0.5),
+    planning: get('planning', 0.5),
+  };
+}
+
 function convertV3ToV2Traits(v3: Record<string, number | string>): Record<string, number> {
   const get = (key: string, def: number = 0.5): number => {
     const val = v3[key];
@@ -420,12 +459,9 @@ function convertV3ToV2Traits(v3: Record<string, number | string>): Record<string
     social: Math.max(-10, Math.min(10, scale(get('social_energy'), 0.5, 14) + scale(get('group_size_pref'), 0.5, 6))),
     comfort: Math.max(-10, Math.min(10, scale(get('quality_intrinsic'), 0.5, 10) + scale(get('budget_tier'), 0.5, 6) + scale(get('status_seeking', 0.3), 0.3, 4))),
     adventure: Math.max(-10, Math.min(10, scale(get('adventure'), 0.5, 12) + scale(get('novelty_seeking'), 0.5, 8))),
-    // Include learning_focus in authenticity — Cultural Anthropologist's core signal is
-    // cultural_depth + learning_focus, not just cultural_depth + food/art
     authenticity: Math.max(-10, Math.min(10, scale(get('cultural_depth'), 0.5, 12) + scale(get('learning_focus', 0.3), 0.3, 6) + scale(get('food_focus', 0.3), 0.3, 4) + scale(get('art_focus', 0.2), 0.2, 3))),
     planning: Math.max(-10, Math.min(10, scale(get('planning'), 0.5, 14) - scale(get('flexibility'), 0.5, 6))),
     budget: Math.max(-10, Math.min(10, -scale(get('budget_tier'), 0.5, 14) - scale(get('status_seeking', 0.3), 0.3, 6))),
-    // Reduce learning_focus weight in transformation since it now also feeds authenticity
     transformation: Math.max(-10, Math.min(10, scale(get('spirituality', 0.2), 0.2, 8) + scale(get('healing_focus', 0), 0, 6) + scale(get('learning_focus', 0.3), 0.3, 4))),
   };
 }
@@ -438,6 +474,7 @@ export async function calculateTravelDNAAdvanced(
   try {
     // Pre-compute V2 traits from V3 quiz answers so edge function gets valid trait data
     let precomputedTraits: Record<string, number> | null = null;
+    let fineGrainedTraits: Record<string, number> | null = null;
     try {
       // Dynamic import to avoid circular dependencies
       const { calculateTraitScores } = await import('@/services/engines/travelDNA/archetype-matcher');
@@ -452,7 +489,10 @@ export async function calculateTravelDNAAdvanced(
       const hasSignal = Object.values(converted).some(v => Math.abs(v) >= 1.0);
       if (hasSignal) {
         precomputedTraits = converted;
+        // Also extract fine-grained traits for supplementary archetype matching
+        fineGrainedTraits = extractFineGrainedTraits(scores as unknown as Record<string, number | string>);
         console.log('[TravelDNA] Pre-computed V2 traits:', JSON.stringify(precomputedTraits));
+        console.log('[TravelDNA] Fine-grained V3 traits:', JSON.stringify(fineGrainedTraits));
       } else {
         console.log('[TravelDNA] Pre-computed traits are all near-zero (legacy answers?) — skipping, edge function will use legacy parsing');
       }
@@ -473,6 +513,7 @@ export async function calculateTravelDNAAdvanced(
           userId,
           existingOverrides: existingOverrides || null,
           precomputedTraits,
+          fineGrainedTraits,
         }),
       }
     );

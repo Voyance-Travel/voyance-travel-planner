@@ -151,6 +151,15 @@ interface ArchetypeHardNo {
   penalty: number;
 }
 
+// Fine-grained trait requirement (0-1 scale from V3 quiz)
+interface FineGrainedReq {
+  trait: string;         // e.g. 'nature_orientation', 'cultural_depth'
+  min?: number;          // minimum value (0-1)
+  max?: number;          // maximum value (0-1)
+  weight: number;        // bonus/penalty multiplier
+  sweetSpot?: number;    // ideal value (0-1)
+}
+
 interface ArchetypeV2 {
   id: string;
   name: string;
@@ -159,6 +168,7 @@ interface ArchetypeV2 {
   primaryTraits: ArchetypeTraitDef[];
   hardNo?: ArchetypeHardNo[];
   signatureAnswers?: string[];  // Answer IDs that strongly correlate
+  fineGrained?: FineGrainedReq[];  // NEW: Fine-grained V3 trait requirements
 }
 
 const ARCHETYPES_V2: ArchetypeV2[] = [
@@ -171,11 +181,12 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'EXPLORER',
     tagline: "You don't just visit places, you become them.",
     primaryTraits: [
-      // Widened authenticity range from [5,10] to [3,10] — the V3→V2 conversion
-      // maps cultural_depth + learning_focus into authenticity, but the scaling
-      // can produce values in the 3-5 range for strong cultural signals
       { trait: 'authenticity', weight: 3, sweetSpot: 7, range: [3, 10] },
       { trait: 'transformation', weight: 2, sweetSpot: 5, range: [2, 10] },
+    ],
+    fineGrained: [
+      { trait: 'cultural_depth', min: 0.6, weight: 15, sweetSpot: 0.85 },
+      { trait: 'learning_focus', min: 0.4, weight: 10, sweetSpot: 0.7 },
     ],
     hardNo: [
       { trait: 'authenticity', range: [-10, -1], penalty: -20 },
@@ -188,16 +199,18 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'EXPLORER',
     tagline: 'Cities speak to you in neon and noise.',
     primaryTraits: [
-      // Tightened: Urban Nomad needs moderate-to-high pace + positive social + positive comfort
-      // (cities = social, comfortable infrastructure) to differentiate from Wilderness Pioneer
       { trait: 'pace', weight: 2, sweetSpot: 5, range: [2, 8] },
       { trait: 'social', weight: 2, sweetSpot: 4, range: [1, 8] },
       { trait: 'comfort', weight: 1, sweetSpot: 3, range: [0, 8] },
     ],
+    fineGrained: [
+      { trait: 'nature_orientation', max: 0.4, weight: 8 },  // NOT nature-focused
+      { trait: 'social_energy', min: 0.4, weight: 8, sweetSpot: 0.7 },
+    ],
     hardNo: [
       { trait: 'social', range: [-10, -3], penalty: -10 },
     ],
-    signatureAnswers: ['b3', 'a2', 'g4', 'i3'],  // city + exploring + nightlife
+    signatureAnswers: ['b3', 'a2', 'g4', 'i3'],
   },
   {
     id: 'wilderness_pioneer',
@@ -205,17 +218,18 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     category: 'EXPLORER',
     tagline: 'WiFi is optional, wilderness is essential.',
     primaryTraits: [
-      // Core signal: high adventure + low comfort + low social (wilderness = rugged + solitary)
-      // Removed authenticity requirement — nature lovers don't necessarily score high on cultural depth
       { trait: 'adventure', weight: 3, sweetSpot: 7, range: [3, 10] },
       { trait: 'comfort', weight: 3, sweetSpot: -4, range: [-10, 2] },
       { trait: 'social', weight: 1, sweetSpot: -3, range: [-10, 3] },
+    ],
+    fineGrained: [
+      { trait: 'nature_orientation', min: 0.6, weight: 15, sweetSpot: 0.9 },  // CORE differentiator
     ],
     hardNo: [
       { trait: 'comfort', range: [6, 10], penalty: -20 },
       { trait: 'adventure', range: [-10, 0], penalty: -15 },
     ],
-    signatureAnswers: ['ad1', 'b2', 'g1', 'sm5', 'i2'],  // adventure_driver: frontier + nature + solo
+    signatureAnswers: ['ad1', 'b2', 'g1', 'sm5', 'i2'],
   },
   {
     id: 'digital_explorer',
@@ -226,7 +240,11 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'planning', weight: 2, sweetSpot: -2, range: [-6, 4] },
       { trait: 'authenticity', weight: 2, sweetSpot: 5, range: [2, 8] },
     ],
-    signatureAnswers: ['a3', 'e2', 'e4', 'h3', 'sm5'],  // flexible planning + rental + solo
+    fineGrained: [
+      { trait: 'photo_focus', min: 0.4, weight: 8, sweetSpot: 0.7 },
+      { trait: 'flexibility', min: 0.5, weight: 6 },
+    ],
+    signatureAnswers: ['a3', 'e2', 'e4', 'h3', 'sm5'],
   },
   
   // ═══════════════════════════════════════
@@ -241,10 +259,14 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'social', weight: 4, sweetSpot: 8, range: [5, 10] },
       { trait: 'pace', weight: 2, sweetSpot: 5, range: [2, 8] },
     ],
+    fineGrained: [
+      { trait: 'social_energy', min: 0.7, weight: 12, sweetSpot: 0.9 },
+      { trait: 'group_size_pref', min: 0.6, weight: 8 },
+    ],
     hardNo: [
       { trait: 'social', range: [-10, 0], penalty: -25 },
     ],
-    signatureAnswers: ['sm1', 'a4', 'g4', 'f3'],  // social_mode: group_social + group morning + nightlife
+    signatureAnswers: ['sm1', 'a4', 'g4', 'f3'],
   },
   {
     id: 'family_architect',
@@ -256,7 +278,10 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'planning', weight: 3, sweetSpot: 6, range: [3, 10] },
       { trait: 'comfort', weight: 2, sweetSpot: 4, range: [1, 7] },
     ],
-    signatureAnswers: ['sm2', 'f4', 'e1', 'e2', 'h4'],  // social_mode: family + family companions + planning
+    fineGrained: [
+      { trait: 'family_focus', min: 0.4, weight: 15, sweetSpot: 0.8 },
+    ],
+    signatureAnswers: ['sm2', 'f4', 'e1', 'e2', 'h4'],
   },
   {
     id: 'romantic_curator',
@@ -267,10 +292,13 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'social', weight: 2, sweetSpot: 1, range: [-3, 4] },
       { trait: 'comfort', weight: 3, sweetSpot: 6, range: [3, 10] },
     ],
+    fineGrained: [
+      { trait: 'romance_focus', min: 0.4, weight: 15, sweetSpot: 0.8 },
+    ],
     hardNo: [
       { trait: 'social', range: [6, 10], penalty: -15 },
     ],
-    signatureAnswers: ['sm3', 'f2', 'h1', 'h2', 'b4'],  // social_mode: partner + romance + boutique/luxury
+    signatureAnswers: ['sm3', 'f2', 'h1', 'h2', 'b4'],
   },
   {
     id: 'community_builder',
@@ -282,7 +310,10 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'transformation', weight: 3, sweetSpot: 7, range: [4, 10] },
       { trait: 'social', weight: 2, sweetSpot: 4, range: [0, 7] },
     ],
-    signatureAnswers: ['sm4', 'cd1', 'tt3', 'tt4'],  // social_mode: community + immersion + learning/healing
+    fineGrained: [
+      { trait: 'ethics_focus', min: 0.5, weight: 12, sweetSpot: 0.8 },
+    ],
+    signatureAnswers: ['sm4', 'cd1', 'tt3', 'tt4'],
   },
   {
     id: 'story_seeker',
@@ -309,10 +340,13 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'pace', weight: 3, sweetSpot: 6, range: [3, 10] },
       { trait: 'planning', weight: 2, sweetSpot: 5, range: [2, 8] },
     ],
+    fineGrained: [
+      { trait: 'bucket_list', min: 0.5, weight: 12, sweetSpot: 0.8 },
+    ],
     hardNo: [
       { trait: 'pace', range: [-10, -2], penalty: -15 },
     ],
-    signatureAnswers: ['cd3', 'd2', 'e1', 'e2', 'tt5'],  // culture_depth: highlights + active + planning + fulfillment
+    signatureAnswers: ['cd3', 'd2', 'e1', 'e2', 'tt5'],
   },
   {
     id: 'adrenaline_architect',
@@ -337,7 +371,10 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'planning', weight: 3, sweetSpot: 7, range: [4, 10] },
       { trait: 'authenticity', weight: 2, sweetSpot: 5, range: [2, 8] },
     ],
-    signatureAnswers: ['e1', 'cd1', 'cd2', 'tt3'],  // detailed planning + immersion/aesthetic + learning
+    fineGrained: [
+      { trait: 'niche_interest', min: 0.4, weight: 10, sweetSpot: 0.7 },
+    ],
+    signatureAnswers: ['e1', 'cd1', 'cd2', 'tt3'],
   },
   {
     id: 'status_seeker',
@@ -349,10 +386,13 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'budget', weight: 3, sweetSpot: -7, range: [-10, -3] },
       { trait: 'social', weight: 2, sweetSpot: 4, range: [0, 7] },
     ],
+    fineGrained: [
+      { trait: 'status_seeking', min: 0.5, weight: 12, sweetSpot: 0.8 },
+    ],
     hardNo: [
       { trait: 'budget', range: [4, 10], penalty: -20 },
     ],
-    signatureAnswers: ['ld1', 'c4', 'h2', 'b4'],  // luxury_driver: prestige + luxury budget + luxury resort
+    signatureAnswers: ['ld1', 'c4', 'h2', 'b4'],
   },
   
   // ═══════════════════════════════════════
@@ -368,10 +408,14 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'transformation', weight: 2, sweetSpot: 6, range: [3, 10] },
       { trait: 'social', weight: 2, sweetSpot: -4, range: [-10, 0] },
     ],
+    fineGrained: [
+      { trait: 'spirituality', min: 0.4, weight: 12, sweetSpot: 0.7 },
+      { trait: 'restoration_need', min: 0.5, weight: 8 },
+    ],
     hardNo: [
       { trait: 'pace', range: [5, 10], penalty: -20 },
     ],
-    signatureAnswers: ['rm1', 'a1', 'g5', 'd1'],  // restoration_mode: stillness + quiet morning + wellness
+    signatureAnswers: ['rm1', 'a1', 'g5', 'd1'],
   },
   {
     id: 'retreat_regular',
@@ -382,7 +426,11 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'transformation', weight: 3, sweetSpot: 7, range: [4, 10] },
       { trait: 'planning', weight: 2, sweetSpot: 5, range: [2, 8] },
     ],
-    signatureAnswers: ['rm4', 'g5', 'e2', 'tt3'],  // restoration_mode: program + wellness + structured + learning
+    fineGrained: [
+      { trait: 'restoration_need', min: 0.5, weight: 10, sweetSpot: 0.8 },
+    ],
+    signatureAnswers: ['rm4', 'g5', 'e2', 'tt3'],
+  },
   },
   {
     id: 'beach_therapist',
@@ -393,10 +441,15 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
       { trait: 'pace', weight: 3, sweetSpot: -4, range: [-10, 0] },
       { trait: 'comfort', weight: 2, sweetSpot: 4, range: [0, 7] },
     ],
+    fineGrained: [
+      { trait: 'nature_orientation', min: 0.4, weight: 8 },
+      { trait: 'restoration_need', min: 0.5, weight: 8 },
+    ],
     hardNo: [
       { trait: 'pace', range: [6, 10], penalty: -15 },
     ],
-    signatureAnswers: ['rm2', 'i1', 'd1', 'd4', 'a1'],  // restoration_mode: ocean + tropical + slow/relaxed
+    signatureAnswers: ['rm2', 'i1', 'd1', 'd4', 'a1'],
+  },
   },
   {
     id: 'slow_traveler',
