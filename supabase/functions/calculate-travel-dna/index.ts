@@ -349,18 +349,22 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     signatureAnswers: ['cd3', 'd2', 'e1', 'e2', 'tt5'],
   },
   {
-    id: 'adrenaline_architect',
+     id: 'adrenaline_architect',
     name: 'The Adrenaline Architect',
     category: 'ACHIEVER',
     tagline: 'Normal is just a setting on the washing machine.',
     primaryTraits: [
-      { trait: 'adventure', weight: 4, sweetSpot: 9, range: [6, 10] },
-      { trait: 'pace', weight: 2, sweetSpot: 7, range: [4, 10] },
+      { trait: 'adventure', weight: 4, sweetSpot: 9, range: [7, 10] },
+      { trait: 'pace', weight: 3, sweetSpot: 8, range: [5, 10] },
+    ],
+    fineGrained: [
+      { trait: 'physical_intensity', min: 0.5, weight: 10, sweetSpot: 0.8 },
     ],
     hardNo: [
-      { trait: 'adventure', range: [-10, 2], penalty: -25 },
+      { trait: 'adventure', range: [-10, 4], penalty: -25 },
+      { trait: 'pace', range: [-10, 2], penalty: -15 },
     ],
-    signatureAnswers: ['ad2', 'g1', 'd2', 'b2'],  // adventure_driver: intensity + outdoor + active
+    signatureAnswers: ['ad2', 'g1', 'd2', 'b2'],
   },
   {
     id: 'collection_curator',
