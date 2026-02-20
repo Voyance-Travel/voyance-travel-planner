@@ -752,7 +752,19 @@ function TripDetailsStep({
       {/* Navigation — only in form mode */}
       {planMode !== 'chat' && planMode !== 'manual' && (
         <div className="flex justify-end pt-6 max-w-md mx-auto">
-          <Button onClick={onContinue} disabled={!isValid} className="gap-2">
+          <Button 
+            onClick={() => {
+              if (!isValid) {
+                const missing: string[] = [];
+                if (isMultiCity ? destinations.length < 2 : !destinationSelection.cityName) missing.push('destination');
+                if (!startDate || !endDate) missing.push('travel dates');
+                toast.error(`Please fill in: ${missing.join(' and ')}`);
+                return;
+              }
+              onContinue();
+            }} 
+            className="gap-2"
+          >
             Continue
             <ArrowRight className="w-4 h-4" />
           </Button>
