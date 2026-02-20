@@ -27,6 +27,36 @@ import { formatCredits } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 
+/** Fire-and-forget refund with retries — works even if component unmounts */
+async function issueRefund(
+  tripId: string,
+  creditsAmount: number,
+  reason: string,
+  errorMessage?: string,
+) {
+  const maxRetries = 3;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const { error } = await supabase.functions.invoke('spend-credits', {
+        body: {
+          action: 'REFUND',
+          tripId,
+          creditsAmount,
+          metadata: { originalAction: 'trip_generation', reason, errorMessage },
+        },
+      });
+      if (error) throw error;
+      console.log(`[Refund] Success on attempt ${attempt}: +${creditsAmount} credits for ${reason}`);
+      return true;
+    } catch (err) {
+      console.error(`[Refund] Attempt ${attempt}/${maxRetries} failed:`, err);
+      if (attempt < maxRetries) await new Promise(r => setTimeout(r, 2000 * attempt));
+    }
+  }
+  console.error(`[Refund] All ${maxRetries} attempts failed for trip ${tripId}`);
+  return false;
+}
+
 interface ItineraryGeneratorProps {
   tripId: string;
   destination: string;
@@ -168,25 +198,14 @@ export function ItineraryGenerator({
       // Auto-refund on timeout if credits were charged
       const gr = gateResultRef.current;
       if (gr && gr.creditsCharged > 0) {
-        try {
-          await supabase.functions.invoke('spend-credits', {
-            body: {
-              action: 'REFUND',
-              tripId,
-              creditsAmount: gr.creditsCharged,
-              metadata: {
-                originalAction: 'trip_generation',
-                reason: 'generation_timeout',
-              },
-            },
-          });
+        const ok = await issueRefund(tripId, gr.creditsCharged, 'generation_timeout');
+        if (ok) {
           toast.info(`Generation timed out — ${gr.creditsCharged} credits have been refunded.`, { duration: 6000 });
           if (userId) {
             queryClient.invalidateQueries({ queryKey: ['credits', userId] });
             queryClient.invalidateQueries({ queryKey: ['entitlements', userId] });
           }
-        } catch (refundErr) {
-          console.error('[ItineraryGenerator] Timeout auto-refund failed:', refundErr);
+        } else {
           toast.error('Generation timed out. Automatic refund failed — please contact support.', { duration: 8000 });
         }
       } else {
@@ -304,27 +323,15 @@ export function ItineraryGenerator({
       // AUTO-REFUND: If credits were charged but generation failed, refund them
       if (gateResult.creditsCharged > 0) {
         console.log(`[ItineraryGenerator] Refunding ${gateResult.creditsCharged} credits for failed generation`);
-        try {
-          await supabase.functions.invoke('spend-credits', {
-            body: {
-              action: 'REFUND',
-              tripId,
-              creditsAmount: gateResult.creditsCharged,
-              metadata: {
-                originalAction: 'trip_generation',
-                reason: 'generation_failed',
-                errorMessage: err instanceof Error ? err.message : 'Unknown error',
-              },
-            },
-          });
+        const errMsg = err instanceof Error ? err.message : 'Unknown error';
+        const ok = await issueRefund(tripId, gateResult.creditsCharged, 'generation_failed', errMsg);
+        if (ok) {
           toast.info(`Generation failed — ${gateResult.creditsCharged} credits have been refunded.`, { duration: 6000 });
-          // Refresh credit balance in UI
           if (userId) {
             queryClient.invalidateQueries({ queryKey: ['credits', userId] });
             queryClient.invalidateQueries({ queryKey: ['entitlements', userId] });
           }
-        } catch (refundErr) {
-          console.error('[ItineraryGenerator] Auto-refund failed:', refundErr);
+        } else {
           toast.error('Generation failed and automatic refund could not be processed. Please contact support.', { duration: 8000 });
         }
       } else {
