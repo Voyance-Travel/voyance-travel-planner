@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { MapPin, Calendar, Users, Plane } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -39,6 +40,8 @@ export default function TripSetup({ formData, updateFormData, onContinue }: Trip
   const handleContinue = () => {
     if (validate()) {
       onContinue();
+    } else {
+      toast.error('Please fill in all required fields');
     }
   };
 
@@ -84,7 +87,7 @@ export default function TripSetup({ formData, updateFormData, onContinue }: Trip
               placeholder="Paris, France"
               value={formData.destination}
               onChange={(e) => updateFormData({ destination: e.target.value })}
-              className="pl-10 h-12"
+              className={`pl-10 h-12 ${errors.destination ? 'border-destructive' : ''}`}
             />
           </div>
           {errors.destination && (
@@ -104,7 +107,7 @@ export default function TripSetup({ formData, updateFormData, onContinue }: Trip
               placeholder="New York, NY"
               value={formData.departureCity}
               onChange={(e) => updateFormData({ departureCity: e.target.value })}
-              className="pl-10 h-12"
+              className={`pl-10 h-12 ${errors.departureCity ? 'border-destructive' : ''}`}
             />
           </div>
           {errors.departureCity && (
@@ -132,7 +135,7 @@ export default function TripSetup({ formData, updateFormData, onContinue }: Trip
                     updateFormData({ startDate: newStart });
                   }
                 }}
-                className="pl-10 h-12"
+                className={`pl-10 h-12 ${errors.startDate ? 'border-destructive' : ''}`}
               />
             </div>
             {errors.startDate && (
@@ -151,7 +154,7 @@ export default function TripSetup({ formData, updateFormData, onContinue }: Trip
                 type="date"
                 value={formData.endDate}
                 onChange={(e) => updateFormData({ endDate: e.target.value })}
-                className="pl-10 h-12"
+                className={`pl-10 h-12 ${errors.endDate ? 'border-destructive' : ''}`}
               />
             </div>
             {errors.endDate && (
