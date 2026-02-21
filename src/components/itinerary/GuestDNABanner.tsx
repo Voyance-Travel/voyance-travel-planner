@@ -27,6 +27,7 @@ export function GuestDNABanner({ tripId, onRequestRegenerate, className }: Guest
   const { user } = useAuth();
   const navigate = useNavigate();
   const [hasDNA, setHasDNA] = useState<boolean | null>(null);
+  const [isOwner, setIsOwner] = useState<boolean | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
@@ -39,8 +40,21 @@ export function GuestDNABanner({ tripId, onRequestRegenerate, className }: Guest
       return;
     }
 
-    // Check if user has Travel DNA
-    async function checkDNA() {
+    async function checkContext() {
+      // Direct ownership check — don't rely solely on RPC cache
+      const { data: trip } = await supabase
+        .from('trips')
+        .select('user_id')
+        .eq('id', tripId)
+        .maybeSingle();
+
+      if (trip?.user_id === user!.id) {
+        setIsOwner(true);
+        return; // Owner — no need to check DNA
+      }
+      setIsOwner(false);
+
+      // Check if user has Travel DNA
       const { data } = await supabase
         .from('travel_dna_profiles')
         .select('trait_scores')
@@ -50,7 +64,7 @@ export function GuestDNABanner({ tripId, onRequestRegenerate, className }: Guest
       setHasDNA(!!data?.trait_scores);
     }
 
-    checkDNA();
+    checkContext();
   }, [user?.id, tripId]);
 
   const handleDismiss = () => {
@@ -66,7 +80,8 @@ export function GuestDNABanner({ tripId, onRequestRegenerate, className }: Guest
     navigate(ROUTES.QUIZ);
   };
 
-  if (dismissed || hasDNA === null) return null;
+  // Don't show if: dismissed, owner, or still loading
+  if (dismissed || isOwner === null || isOwner || hasDNA === null) return null;
 
   return (
     <AnimatePresence>

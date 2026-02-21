@@ -7,6 +7,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 import type { Profile } from '@/services/supabase/profiles';
 
 // ============================================================================
@@ -302,10 +303,13 @@ export async function getCollaboratorPreferences(tripId: string): Promise<any[]>
 // ============================================================================
 
 export function useTripPermission(tripId: string | undefined) {
+  const { user } = useAuth();
   return useQuery({
-    queryKey: ['trip-permission', tripId],
+    // Include user.id in key so it refetches when auth state changes
+    queryKey: ['trip-permission', tripId, user?.id],
     queryFn: () => getTripPermission(tripId!),
-    enabled: !!tripId,
+    // Only run when we have both a tripId AND an authenticated user
+    enabled: !!tripId && !!user?.id,
     staleTime: 30_000,
   });
 }
