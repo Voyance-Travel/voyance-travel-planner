@@ -428,7 +428,7 @@ function TripDetailsStep({
     }
   }, [startDate, endDate, setEndDate]);
 
-  // Auto-calculate end date for multi-city mode
+  // Auto-calculate end date for multi-city mode (forward sync: destinations → endDate)
   useEffect(() => {
     if (isMultiCity && startDate && destinations.length > 0) {
       const totalNights = calculateTotalNights(destinations);
@@ -437,6 +437,35 @@ function TripDetailsStep({
       }
     }
   }, [isMultiCity, startDate, destinations, setEndDate]);
+
+  // Reverse sync: when user manually changes endDate in multi-city mode,
+  // adjust the last city's nights to match the new total trip length
+  const prevEndDateRef = React.useRef<Date | undefined>(endDate);
+  useEffect(() => {
+    if (!isMultiCity || !startDate || !endDate || destinations.length === 0) {
+      prevEndDateRef.current = endDate;
+      return;
+    }
+    const prevEnd = prevEndDateRef.current;
+    prevEndDateRef.current = endDate;
+
+    // Only act when endDate actually changed (not from our own forward sync)
+    const totalNightsFromDates = differenceInDays(endDate, startDate);
+    const currentNightsSum = calculateTotalNights(destinations);
+    const delta = totalNightsFromDates - currentNightsSum;
+
+    if (delta === 0 || totalNightsFromDates < destinations.length) return; // can't go below 1/city
+
+    const lastCity = destinations[destinations.length - 1];
+    const newNights = Math.max(1, Math.min(14, lastCity.nights + delta));
+    if (newNights === lastCity.nights) return;
+
+    const updated = destinations.map((d, i) =>
+      i === destinations.length - 1 ? { ...d, nights: newNights } : d
+    );
+    setDestinations(updated);
+    toast.info(`${delta > 0 ? 'Added' : 'Removed'} ${Math.abs(delta)} night${Math.abs(delta) !== 1 ? 's' : ''} ${delta > 0 ? 'to' : 'from'} ${lastCity.city}`);
+  }, [endDate]);
 
   // When switching to multi-city, seed first destination from current selection
   const handleToggleMultiCity = (multi: boolean) => {
