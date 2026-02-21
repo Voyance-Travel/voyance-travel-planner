@@ -8035,6 +8035,42 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
         }
       }
 
+      // Load mustDoActivities from trip metadata (user research notes / paste field)
+      let mustDoPrompt = '';
+      if (tripId) {
+        const { data: tripMeta } = await supabase
+          .from('trips')
+          .select('metadata, creation_source')
+          .eq('id', tripId)
+          .single();
+        const metadata = tripMeta?.metadata as Record<string, unknown> | null;
+        const mustDoActivities = (metadata?.mustDoActivities as string) || '';
+        const isSmartFinish = metadata?.smartFinishSource === 'manual_builder' || tripMeta?.creation_source === 'smart_finish';
+        if (mustDoActivities.trim()) {
+          const forceAllMust = !!isSmartFinish;
+          const mustDoAnalysis = parseMustDoInput(mustDoActivities, destination, forceAllMust);
+          if (mustDoAnalysis.length > 0) {
+            const scheduled = scheduleMustDos(mustDoAnalysis, totalDays);
+            // Only include items relevant to this day
+            const dayItems = scheduled.scheduled.filter(s => s.suggestedDay === dayNumber);
+            if (dayItems.length > 0) {
+              mustDoPrompt = `\n## 🚨 USER'S MUST-DO VENUES FOR DAY ${dayNumber} (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED these venues. You MUST include them:\n${dayItems.map(item => `- ${item.item.name} (${item.item.priority})`).join('\n')}\n\nRULES:\n- Include ALL listed venues by name in this day's itinerary\n- Only add AI recommendations to fill remaining slots\n`;
+            } else {
+              // No items specifically for this day, but include unscheduled ones as suggestions
+              const unscheduled = scheduled.unscheduled;
+              if (unscheduled.length > 0) {
+                mustDoPrompt = `\n## User's Researched Venues (try to include if appropriate)\n${unscheduled.map(u => `- ${u.name} (${u.priority})`).join('\n')}\n`;
+              }
+            }
+            console.log(`[generate-day] Must-do activities parsed: ${mustDoAnalysis.length} items, ${dayItems.length} for day ${dayNumber}`);
+          } else {
+            // Raw text fallback
+            mustDoPrompt = `\n## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)\n\nThe traveler has researched these specific venues. Include as many as possible in the itinerary:\n"${mustDoActivities.trim()}"\n`;
+            console.log(`[generate-day] Must-do raw text injected (${mustDoActivities.length} chars)`);
+          }
+        }
+      }
+
       // CRITICAL: Fetch flight/hotel context for Day 1 and last day timing
       let flightContext = tripId ? await getFlightHotelContext(supabase, tripId) : { context: '' };
       const isFirstDay = dayNumber === 1;
@@ -8865,6 +8901,7 @@ ${preferences?.pace ? `Pace: ${preferences.pace}` : ''}
 ${preferences?.dayFocus ? `Day focus: ${preferences.dayFocus}` : ''}
 ${preferenceContext}
 ${tripIntentsContext}
+${mustDoPrompt}
 ${previousDayActivities?.length ? `\nAvoid repeating these specific venues/activities (be creative and pick DIFFERENT ones): ${previousDayActivities.join(', ')}` : ''}
 
 CRITICAL REMINDERS:
