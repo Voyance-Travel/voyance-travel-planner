@@ -205,7 +205,7 @@ export function ItineraryGenerator({
 
     const handleStallTimeout = async () => {
       if (stallCheckRef.current) clearInterval(stallCheckRef.current);
-      console.error('[ItineraryGenerator] Generation stalled — no progress for 120s');
+      console.error('[ItineraryGenerator] Generation stalled — no progress for 600s');
       setPrePhase(null);
       reset();
       setHasStarted(false);
@@ -245,7 +245,7 @@ export function ItineraryGenerator({
 
     stallCheckRef.current = setInterval(() => {
       const elapsed = Date.now() - lastProgressTimeRef.current;
-      if (elapsed > 120_000) {
+      if (elapsed > 600_000) {
         handleStallTimeout();
       }
     }, 10_000);
