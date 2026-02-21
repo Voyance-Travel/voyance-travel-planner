@@ -179,6 +179,8 @@ export interface FlightSegment {
 export interface FlightInfo {
   outbound: FlightSegment;
   return: FlightSegment;
+  /** All legs for multi-city trips — preferred over outbound/return when present */
+  legs?: FlightSegment[];
 }
 
 export interface HotelReview {
