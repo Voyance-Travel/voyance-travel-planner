@@ -9,7 +9,11 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 
 const profileSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(100, 'Name is too long'),
+  name: z.string()
+    .trim()
+    .min(1, 'Name is required')
+    .max(100, 'Name is too long')
+    .refine((val) => val.trim().length > 0, 'Name cannot be only whitespace'),
   handle: z.string()
     .min(3, 'Handle must be at least 3 characters')
     .max(30, 'Handle is too long')

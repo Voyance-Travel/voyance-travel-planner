@@ -1548,8 +1548,21 @@ export default function Start() {
       ? (multiCityDestinations[0]?.city || '')
       : destinationSelection.cityName;
 
-    if (!primaryDestination || !startDate || !endDate) {
-      toast.error('Please fill in all required fields');
+    // Validate all required fields with specific feedback
+    const missing: string[] = [];
+    if (!primaryDestination) missing.push('destination');
+    if (!startDate) missing.push('start date');
+    if (!endDate) missing.push('end date');
+
+    if (missing.length > 0) {
+      toast.error(`Please fill in: ${missing.join(', ')}`, {
+        description: 'All highlighted fields are required to create a trip.',
+      });
+      return;
+    }
+
+    if (startDate && endDate && isBefore(endDate, startDate)) {
+      toast.error('End date must be after start date');
       return;
     }
 
