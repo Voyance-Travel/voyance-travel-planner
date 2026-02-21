@@ -320,13 +320,15 @@ export function useItineraryGeneration() {
     const previousActivities: string[] = [];
 
     try {
-      const MAX_RETRIES = 2;
+      const MAX_RETRIES = 4; // More retries per day to handle provider timeouts
+      const BACKOFF_DELAYS = [3000, 6000, 10000, 15000]; // Exponential backoff
 
       for (let dayNum = 1; dayNum <= totalDays; dayNum++) {
         setState(prev => ({
           ...prev,
           currentDay: dayNum,
           progress: Math.round(((dayNum - 1) / totalDays) * 100),
+          status: 'generating',
         }));
 
         const dayDate = new Date(trip.startDate);
@@ -335,11 +337,10 @@ export function useItineraryGeneration() {
 
         const cityInfo = dayCityMap?.[dayNum - 1];
 
-        // Retry loop for transient failures
+        // Retry loop — never give up on transient failures, just backoff and retry
         let lastError: Error | null = null;
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
           try {
-            // Wrap in a timeout to prevent hanging on infrastructure-level failures
             const invokePromise = supabase.functions.invoke('generate-itinerary', {
               body: {
                 action: 'generate-day',
@@ -362,27 +363,23 @@ export function useItineraryGeneration() {
               },
             });
 
-            // 90-second timeout per day to catch infrastructure hangs (reduced from 180s)
+            // 90-second timeout per day
             const timeoutPromise = new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('Generation timed out — the server took too long to respond. Your saved days are preserved — try resuming generation.')), 90_000)
+              setTimeout(() => reject(new Error('__TIMEOUT__')), 90_000)
             );
 
             const { data, error } = await Promise.race([invokePromise, timeoutPromise]);
 
             if (error) {
-              // Detect CORS / network errors from infrastructure-level 500s
               const errMsg = error.message || String(error);
-              if (errMsg.includes('CORS') || errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError') || errMsg.includes('ERR_FAILED')) {
-                throw new Error(
-                  `Server error generating day ${dayNum}. This usually means the server was overloaded. ` +
-                  `${generatedDays.length > 0 ? `Days 1-${generatedDays.length} have been saved.` : ''} Please try again in a moment.`
-                );
+              // Rate limit & credits: don't retry
+              if (errMsg.includes('Rate limit') || errMsg.includes('credits') || errMsg.includes('Credits')) {
+                throw new Error(errMsg);
               }
-              throw new Error(error.message || `Failed to generate day ${dayNum}`);
+              throw new Error(errMsg);
             }
 
             if (data?.error) {
-              // Rate limit and credits errors: don't retry
               if (data.error.includes('Rate limit') || data.error.includes('credits') || data.error.includes('Credits')) {
                 throw new Error(data.error);
               }
@@ -407,7 +404,7 @@ export function useItineraryGeneration() {
               progress: Math.round((dayNum / totalDays) * 100),
             }));
 
-            // Auto-save partial progress after each successful day
+            // Auto-save after each successful day
             try {
               await saveItinerary(trip.tripId, generatedDays);
             } catch (saveErr) {
@@ -415,35 +412,62 @@ export function useItineraryGeneration() {
             }
 
             lastError = null;
-            break; // Success — exit retry loop
+            break; // Success
           } catch (dayErr) {
             lastError = dayErr instanceof Error ? dayErr : new Error(String(dayErr));
             const msg = lastError.message;
 
-            // Non-retryable errors: throw immediately
-            if (msg.includes('Rate limit') || msg.includes('credits') || msg.includes('Credits') ||
-                msg.includes('timed out') || msg.includes('CORS') || msg.includes('Failed to fetch')) {
+            // Non-retryable: credits/rate limit
+            if (msg.includes('Rate limit') || msg.includes('credits') || msg.includes('Credits')) {
               throw lastError;
             }
 
+            // Retryable: timeout, CORS, network errors, provider errors
             if (attempt < MAX_RETRIES) {
-              console.warn(`[useItineraryGeneration] Day ${dayNum} attempt ${attempt + 1} failed, retrying in 3s:`, msg);
-              await new Promise(resolve => setTimeout(resolve, 3000));
+              const delay = BACKOFF_DELAYS[attempt] || 15000;
+              const isTimeout = msg === '__TIMEOUT__' || msg.includes('timed out');
+              const reason = isTimeout ? 'timeout' : 
+                (msg.includes('CORS') || msg.includes('Failed to fetch')) ? 'network error' : 'server error';
+              
+              console.warn(`[useItineraryGeneration] Day ${dayNum} attempt ${attempt + 1} failed (${reason}), retrying in ${delay / 1000}s`);
+              
+              setState(prev => ({
+                ...prev,
+                status: 'generating',
+                error: null,
+                progress: Math.round(((dayNum - 1) / totalDays) * 100),
+              }));
+
+              // Show brief toast so user knows it's still working
+              if (attempt >= 1) {
+                toast.info(`Day ${dayNum} is taking longer than usual — retrying automatically...`, { duration: 3000 });
+              }
+
+              await new Promise(resolve => setTimeout(resolve, delay));
             }
           }
         }
 
         if (lastError) {
-          throw new Error(`Day ${dayNum} failed after ${MAX_RETRIES + 1} attempts: ${lastError.message}. Days 1-${dayNum - 1} have been saved.`);
+          // Even after all retries, save what we have and provide clear feedback
+          if (generatedDays.length > 0) {
+            try {
+              await saveItinerary(trip.tripId, generatedDays);
+            } catch {}
+          }
+          const savedMsg = generatedDays.length > 0 
+            ? ` Days 1-${generatedDays.length} have been saved — you can resume generation.`
+            : '';
+          throw new Error(`Day ${dayNum} couldn't be generated after ${MAX_RETRIES + 1} attempts.${savedMsg}`);
         }
 
-        // Small delay between days to avoid rate limiting
+        // Brief pause between days to avoid overwhelming the service
         if (dayNum < totalDays) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 800));
         }
       }
 
-      // Final save (ensures complete status)
+      // Final save
       await saveItinerary(trip.tripId, generatedDays);
 
       setState(prev => ({
