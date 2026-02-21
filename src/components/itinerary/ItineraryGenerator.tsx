@@ -197,7 +197,7 @@ export function ItineraryGenerator({
     setShowCostConfirm(false);
 
     // Stall detector: instead of a fixed timeout, check every 10s if progress
-    // has stalled for >120s. This allows long trips to complete while still
+    // has stalled for >600s. This allows long trips to complete while still
     // catching genuine stalls quickly.
     if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
     if (stallCheckRef.current) clearInterval(stallCheckRef.current);

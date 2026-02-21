@@ -320,8 +320,8 @@ export function useItineraryGeneration() {
     const previousActivities: string[] = [];
 
     try {
-      const MAX_RETRIES = 4; // More retries per day to handle provider timeouts
-      const BACKOFF_DELAYS = [3000, 6000, 10000, 15000]; // Exponential backoff
+      const MAX_RETRIES = 6; // More retries per day to handle provider timeouts
+      const BACKOFF_DELAYS = [5000, 10000, 20000, 30000, 45000, 60000]; // Generous backoff for large trips
 
       for (let dayNum = 1; dayNum <= totalDays; dayNum++) {
         setState(prev => ({
@@ -363,9 +363,9 @@ export function useItineraryGeneration() {
               },
             });
 
-            // 90-second timeout per day
+            // 180-second timeout per day (complex destinations need more time)
             const timeoutPromise = new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('__TIMEOUT__')), 90_000)
+              setTimeout(() => reject(new Error('__TIMEOUT__')), 180_000)
             );
 
             const { data, error } = await Promise.race([invokePromise, timeoutPromise]);
