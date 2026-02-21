@@ -315,6 +315,8 @@ export function useItineraryGeneration() {
     const previousActivities: string[] = [];
 
     try {
+      const MAX_RETRIES = 2;
+
       for (let dayNum = 1; dayNum <= totalDays; dayNum++) {
         setState(prev => ({
           ...prev,
@@ -328,62 +330,90 @@ export function useItineraryGeneration() {
 
         const cityInfo = dayCityMap?.[dayNum - 1];
 
-        const { data, error } = await supabase.functions.invoke('generate-itinerary', {
-          body: {
-            action: 'generate-day',
-            tripId: trip.tripId,
-            dayNumber: dayNum,
-            totalDays,
-            destination: cityInfo?.cityName || trip.destination,
-            destinationCountry: cityInfo?.country || trip.destinationCountry,
-            date: formattedDate,
-            travelers: trip.travelers,
-            tripType: trip.tripType,
-            budgetTier: trip.budgetTier,
-            userId: trip.userId,
-            previousDayActivities: previousActivities,
-            isMultiCity: trip.isMultiCity || false,
-            isTransitionDay: cityInfo?.isTransitionDay || false,
-            transitionFrom: cityInfo?.transitionFrom,
-            transitionTo: cityInfo?.transitionTo,
-            transitionMode: cityInfo?.transportType,
-          },
-        });
+        // Retry loop for transient failures
+        let lastError: Error | null = null;
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            const { data, error } = await supabase.functions.invoke('generate-itinerary', {
+              body: {
+                action: 'generate-day',
+                tripId: trip.tripId,
+                dayNumber: dayNum,
+                totalDays,
+                destination: cityInfo?.cityName || trip.destination,
+                destinationCountry: cityInfo?.country || trip.destinationCountry,
+                date: formattedDate,
+                travelers: trip.travelers,
+                tripType: trip.tripType,
+                budgetTier: trip.budgetTier,
+                userId: trip.userId,
+                previousDayActivities: previousActivities,
+                isMultiCity: trip.isMultiCity || false,
+                isTransitionDay: cityInfo?.isTransitionDay || false,
+                transitionFrom: cityInfo?.transitionFrom,
+                transitionTo: cityInfo?.transitionTo,
+                transitionMode: cityInfo?.transportType,
+              },
+            });
 
-        if (error) {
-          console.error(`[useItineraryGeneration] Day ${dayNum} error:`, error);
-          throw new Error(error.message || `Failed to generate day ${dayNum}`);
-        }
+            if (error) {
+              throw new Error(error.message || `Failed to generate day ${dayNum}`);
+            }
 
-        if (data?.error) {
-          if (data.error.includes('Rate limit')) {
-            toast.error('Rate limit exceeded. Please wait a moment and try again.');
-            throw new Error(data.error);
+            if (data?.error) {
+              // Rate limit and credits errors: don't retry
+              if (data.error.includes('Rate limit') || data.error.includes('credits') || data.error.includes('Credits')) {
+                throw new Error(data.error);
+              }
+              throw new Error(data.error);
+            }
+
+            if (!data?.day) {
+              throw new Error(`No itinerary data returned for day ${dayNum}`);
+            }
+
+            const generatedDay: GeneratedDay = data.day;
+            generatedDays.push(generatedDay);
+
+            // Track activities for context in subsequent days
+            generatedDay.activities.forEach(act => {
+              previousActivities.push(act.title || act.name || '');
+            });
+
+            setState(prev => ({
+              ...prev,
+              days: [...prev.days, generatedDay],
+              progress: Math.round((dayNum / totalDays) * 100),
+            }));
+
+            // Auto-save partial progress after each successful day
+            try {
+              await saveItinerary(trip.tripId, generatedDays);
+            } catch (saveErr) {
+              console.warn(`[useItineraryGeneration] Partial save after day ${dayNum} failed (non-blocking):`, saveErr);
+            }
+
+            lastError = null;
+            break; // Success — exit retry loop
+          } catch (dayErr) {
+            lastError = dayErr instanceof Error ? dayErr : new Error(String(dayErr));
+            const msg = lastError.message;
+
+            // Non-retryable errors: throw immediately
+            if (msg.includes('Rate limit') || msg.includes('credits') || msg.includes('Credits')) {
+              throw lastError;
+            }
+
+            if (attempt < MAX_RETRIES) {
+              console.warn(`[useItineraryGeneration] Day ${dayNum} attempt ${attempt + 1} failed, retrying in 2s:`, msg);
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
           }
-          if (data.error.includes('credits') || data.error.includes('Credits')) {
-            toast.error('AI credits exhausted. Please add credits to continue.');
-            throw new Error(data.error);
-          }
-          throw new Error(data.error);
         }
 
-        if (!data?.day) {
-          throw new Error(`No itinerary data returned for day ${dayNum}`);
+        if (lastError) {
+          throw new Error(`Day ${dayNum} failed after ${MAX_RETRIES + 1} attempts: ${lastError.message}. Days 1-${dayNum - 1} have been saved.`);
         }
-
-        const generatedDay: GeneratedDay = data.day;
-        generatedDays.push(generatedDay);
-
-        // Track activities for context in subsequent days
-        generatedDay.activities.forEach(act => {
-          previousActivities.push(act.title || act.name || '');
-        });
-
-        setState(prev => ({
-          ...prev,
-          days: [...prev.days, generatedDay],
-          progress: Math.round((dayNum / totalDays) * 100),
-        }));
 
         // Small delay between days to avoid rate limiting
         if (dayNum < totalDays) {
@@ -391,7 +421,7 @@ export function useItineraryGeneration() {
         }
       }
 
-      // Save the complete itinerary
+      // Final save (ensures complete status)
       await saveItinerary(trip.tripId, generatedDays);
 
       setState(prev => ({
@@ -420,19 +450,10 @@ export function useItineraryGeneration() {
    * Falls back to progressive if full fails
    */
   const generateItinerary = useCallback(async (trip: TripDetails): Promise<GeneratedDay[]> => {
-    // UX-first: progressive generation streams days into the UI as they're produced.
-    // If it fails for a non-quota reason, fall back to the full pipeline.
-    try {
-      return await generateItineraryProgressive(trip);
-    } catch (error) {
-      console.warn('[useItineraryGeneration] Progressive generation failed, trying full:', error);
-      const message = error instanceof Error ? error.message : '';
-      if (message.includes('Rate limit') || message.includes('credits') || message.includes('Credits')) {
-        throw error;
-      }
-      return await generateFullItinerary(trip);
-    }
-  }, [generateItineraryProgressive, generateFullItinerary]);
+    // Progressive generation with per-day retries and auto-save.
+    // No monolithic fallback — that path times out for 8+ day trips.
+    return await generateItineraryProgressive(trip);
+  }, [generateItineraryProgressive]);
 
   const saveItinerary = useCallback(async (tripId: string, days: GeneratedDay[]): Promise<boolean> => {
     try {
