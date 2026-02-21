@@ -194,6 +194,11 @@ export function useItineraryGeneration() {
 
       if (error) {
         console.error('[useItineraryGeneration] Edge function error:', error);
+        const errMsg = error.message || String(error);
+        // Detect CORS/network errors from infrastructure-level timeouts
+        if (errMsg.includes('CORS') || errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError') || errMsg.includes('ERR_FAILED')) {
+          throw new Error('The server took too long to respond. This can happen with longer trips. Please try again — your trip data has been saved.');
+        }
         throw new Error(error.message || 'Failed to generate itinerary');
       }
 
@@ -334,7 +339,8 @@ export function useItineraryGeneration() {
         let lastError: Error | null = null;
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
           try {
-            const { data, error } = await supabase.functions.invoke('generate-itinerary', {
+            // Wrap in a timeout to prevent hanging on infrastructure-level failures
+            const invokePromise = supabase.functions.invoke('generate-itinerary', {
               body: {
                 action: 'generate-day',
                 tripId: trip.tripId,
@@ -356,7 +362,22 @@ export function useItineraryGeneration() {
               },
             });
 
+            // 3-minute timeout per day to catch infrastructure hangs
+            const timeoutPromise = new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Generation timed out — the server took too long to respond. Please try again.')), 180_000)
+            );
+
+            const { data, error } = await Promise.race([invokePromise, timeoutPromise]);
+
             if (error) {
+              // Detect CORS / network errors from infrastructure-level 500s
+              const errMsg = error.message || String(error);
+              if (errMsg.includes('CORS') || errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError') || errMsg.includes('ERR_FAILED')) {
+                throw new Error(
+                  `Server error generating day ${dayNum}. This usually means the server was overloaded. ` +
+                  `${generatedDays.length > 0 ? `Days 1-${generatedDays.length} have been saved.` : ''} Please try again in a moment.`
+                );
+              }
               throw new Error(error.message || `Failed to generate day ${dayNum}`);
             }
 
@@ -400,13 +421,14 @@ export function useItineraryGeneration() {
             const msg = lastError.message;
 
             // Non-retryable errors: throw immediately
-            if (msg.includes('Rate limit') || msg.includes('credits') || msg.includes('Credits')) {
+            if (msg.includes('Rate limit') || msg.includes('credits') || msg.includes('Credits') ||
+                msg.includes('timed out') || msg.includes('CORS') || msg.includes('Failed to fetch')) {
               throw lastError;
             }
 
             if (attempt < MAX_RETRIES) {
-              console.warn(`[useItineraryGeneration] Day ${dayNum} attempt ${attempt + 1} failed, retrying in 2s:`, msg);
-              await new Promise(resolve => setTimeout(resolve, 2000));
+              console.warn(`[useItineraryGeneration] Day ${dayNum} attempt ${attempt + 1} failed, retrying in 3s:`, msg);
+              await new Promise(resolve => setTimeout(resolve, 3000));
             }
           }
         }
