@@ -429,8 +429,15 @@ function TripDetailsStep({
     }
   }, [startDate, endDate, setEndDate]);
 
+  // Guard: skip forward sync when reverse sync just updated destinations
+  const reverseSyncRef = React.useRef(false);
+
   // Auto-calculate end date for multi-city mode (forward sync: destinations → endDate)
   useEffect(() => {
+    if (reverseSyncRef.current) {
+      reverseSyncRef.current = false;
+      return;
+    }
     if (isMultiCity && startDate && destinations.length > 0) {
       const totalNights = calculateTotalNights(destinations);
       if (totalNights > 0) {
@@ -464,6 +471,7 @@ function TripDetailsStep({
     const updated = destinations.map((d, i) =>
       i === destinations.length - 1 ? { ...d, nights: newNights } : d
     );
+    reverseSyncRef.current = true; // prevent forward sync from overwriting endDate
     setDestinations(updated);
     toast.info(`${delta > 0 ? 'Added' : 'Removed'} ${Math.abs(delta)} night${Math.abs(delta) !== 1 ? 's' : ''} ${delta > 0 ? 'to' : 'from'} ${lastCity.city}`);
   }, [endDate]);
