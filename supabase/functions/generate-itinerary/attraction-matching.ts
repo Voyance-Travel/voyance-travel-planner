@@ -96,7 +96,6 @@ export async function getMatchingAttractions(
       budget_level,
       physical_intensity,
       crowd_level,
-      is_must_see,
       average_rating
     `)
     .eq('destination_id', query.destinationId)
@@ -126,9 +125,7 @@ export async function getMatchingAttractions(
       
       // Calculate priority score
       let priority = 4; // Default: no match
-      if (a.is_must_see) {
-        priority = 0; // Must-see always top priority
-      } else if (categories.some((c: string) => affinity.high.includes(c))) {
+      if (categories.some((c: string) => affinity.high.includes(c))) {
         priority = 1; // High affinity match
       } else if (categories.some((c: string) => affinity.medium.includes(c))) {
         priority = 2; // Medium affinity match
@@ -344,8 +341,7 @@ export function buildMatchedAttractionsPrompt(
     return '';
   }
 
-  const mustSee = attractions.filter(a => a.is_must_see);
-  const highMatch = attractions.filter(a => a.priority_score === 1);
+  const highMatch = attractions.filter(a => a.priority_score <= 1);
   const mediumMatch = attractions.filter(a => a.priority_score === 2);
 
   let prompt = `
@@ -353,14 +349,11 @@ export function buildMatchedAttractionsPrompt(
 
 `;
 
-  if (mustSee.length > 0) {
-    prompt += `DESTINATION ESSENTIALS (must include at least one):
-${mustSee.map(a => `★ ${a.name} - ${a.description?.substring(0, 80) || a.category || ''}`).join('\n')}
+  if (highMatch.length > 0) {
+    prompt += `TOP MATCHES (strongly recommended):
+${highMatch.map(a => `★ ${a.name} - ${a.description?.substring(0, 80) || a.category || ''}`).join('\n')}
 
 `;
-  }
-
-  if (highMatch.length > 0) {
     prompt += `PERFECT FOR THIS TRAVELER (high priority):
 ${highMatch.slice(0, 10).map(a => `✓ ${a.name} [${(a.experience_categories || []).slice(0, 2).join(', ')}]`).join('\n')}
 
