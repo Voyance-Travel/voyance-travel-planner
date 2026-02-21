@@ -35,6 +35,7 @@ import { initiateBooking } from '@/services/tripPaymentsAPI';
 import { toast } from 'sonner';
 import { normalizeLegacyHotelSelection, type HotelBooking } from '@/utils/hotelValidation';
 import { parseEditorialDays, parseAssistantDays } from '@/utils/itineraryParser';
+import { normalizeFlightSelection } from '@/utils/normalizeFlightSelection';
 import { cn } from '@/lib/utils';
 
 type Trip = Tables<'trips'>;
@@ -1018,54 +1019,71 @@ export default function TripDetail() {
               // Use centralized safe parser for editorial days
               const editorDays: EditorialDay[] = parseEditorialDays(trip.itinerary_data, trip.start_date) as EditorialDay[];
 
-              // Normalize flight_selection: TripPlannerContext saves with 'departure' key, 
-              // but EditorialItinerary expects 'outbound' key
+              // Normalize flight_selection using the unified normalizer
+              // Supports legs[], {departure, return}, and flat formats
               const rawFlight = trip.flight_selection as Record<string, unknown> | null;
               
-              // Helper to safely extract nested properties with multiple format support
-              const getFlightLeg = (source: Record<string, unknown> | undefined) => {
-                if (!source) return undefined;
-                
-                // Handle nested format: { departure: { time, airport }, arrival: { time, airport } }
-                const nestedDep = source.departure as Record<string, unknown> | undefined;
-                const nestedArr = source.arrival as Record<string, unknown> | undefined;
-                
-                // Handle flat format: { departureTime, arrivalTime } (from TripPlannerContext)
-                const flatDepartureTime = source.departureTime as string | undefined;
-                const flatArrivalTime = source.arrivalTime as string | undefined;
-                
-                return {
-                  airline: source.airline as string | undefined,
-                  airlineCode: source.airline as string | undefined,
-                  flightNumber: source.flightNumber as string | undefined,
+              const normalizedFlight = rawFlight ? (() => {
+                const normalized = normalizeFlightSelection(rawFlight);
+                if (!normalized || normalized.legs.length === 0) {
+                  // Fall back to legacy outbound/return extraction
+                  const getFlightLeg = (source: Record<string, unknown> | undefined) => {
+                    if (!source) return undefined;
+                    const nestedDep = source.departure as Record<string, unknown> | undefined;
+                    const nestedArr = source.arrival as Record<string, unknown> | undefined;
+                    const flatDepartureTime = source.departureTime as string | undefined;
+                    const flatArrivalTime = source.arrivalTime as string | undefined;
+                    return {
+                      airline: source.airline as string | undefined,
+                      airlineCode: source.airline as string | undefined,
+                      flightNumber: source.flightNumber as string | undefined,
+                      departure: {
+                        time: (nestedDep?.time as string) || flatDepartureTime || undefined,
+                        airport: (nestedDep?.airport as string) || undefined,
+                        date: undefined as string | undefined,
+                      },
+                      arrival: {
+                        time: flatArrivalTime || (nestedArr?.time as string) || undefined,
+                        airport: (nestedArr?.airport as string) || undefined,
+                      },
+                      price: source.price as number | undefined,
+                      cabinClass: source.cabin as string | undefined,
+                    };
+                  };
+                  const outboundSource = (rawFlight.outbound || rawFlight.departure) as Record<string, unknown> | undefined;
+                  const returnSource = rawFlight.return as Record<string, unknown> | undefined;
+                  const outbound = getFlightLeg(outboundSource);
+                  const returnLeg = getFlightLeg(returnSource);
+                  if (outbound) outbound.departure.date = trip.start_date;
+                  if (returnLeg) returnLeg.departure.date = trip.end_date;
+                  return {
+                    outbound: outboundSource ? outbound : undefined,
+                    return: returnSource ? returnLeg : undefined,
+                  };
+                }
+
+                // Convert normalized legs to the FlightSelection display format
+                const legs = normalized.legs.map((leg, idx) => ({
+                  airline: leg.airline || undefined,
+                  airlineCode: leg.airline || undefined,
+                  flightNumber: leg.flightNumber || undefined,
                   departure: {
-                    time: (nestedDep?.time as string) || flatDepartureTime || undefined,
-                    airport: (nestedDep?.airport as string) || undefined,
-                    date: undefined as string | undefined,
+                    time: leg.departure.time || undefined,
+                    airport: leg.departure.airport || undefined,
+                    date: leg.departure.date || (idx === 0 ? trip.start_date : undefined),
                   },
                   arrival: {
-                    // CRITICAL: Check flat format first since that's what TripPlannerContext uses
-                    time: flatArrivalTime || (nestedArr?.time as string) || undefined,
-                    airport: (nestedArr?.airport as string) || undefined,
+                    time: leg.arrival.time || undefined,
+                    airport: leg.arrival.airport || undefined,
                   },
-                  price: source.price as number | undefined,
-                  cabinClass: source.cabin as string | undefined,
-                };
-              };
+                  price: leg.price || undefined,
+                  cabinClass: leg.cabin || undefined,
+                }));
 
-              const normalizedFlight = rawFlight ? (() => {
-                const outboundSource = (rawFlight.outbound || rawFlight.departure) as Record<string, unknown> | undefined;
-                const returnSource = rawFlight.return as Record<string, unknown> | undefined;
-                
-                const outbound = getFlightLeg(outboundSource);
-                const returnLeg = getFlightLeg(returnSource);
-                
-                if (outbound) outbound.departure.date = trip.start_date;
-                if (returnLeg) returnLeg.departure.date = trip.end_date;
-                
                 return {
-                  outbound: outboundSource ? outbound : undefined,
-                  return: returnSource ? returnLeg : undefined,
+                  outbound: legs[0],
+                  return: legs.length >= 2 ? legs[legs.length - 1] : undefined,
+                  legs, // Pass all legs for multi-city display
                 };
               })() : null;
 

@@ -32,21 +32,18 @@ import type { GeneratedDay, GeneratedActivity, TripOverview } from '@/hooks/useI
 type ActivityType = 'sightseeing' | 'dining' | 'cultural' | 'shopping' | 'relaxation' | 'transport' | 'accommodation' | 'activity';
 type WeatherCondition = 'sunny' | 'partly-cloudy' | 'cloudy' | 'rainy' | 'snowy';
 
+interface FlightLegData {
+  airline?: string;
+  flightNumber?: string;
+  departure?: { time?: string; airport?: string; date?: string };
+  arrival?: { time?: string; airport?: string };
+  price?: number;
+}
+
 interface FlightSelection {
-  outbound?: {
-    airline?: string;
-    flightNumber?: string;
-    departure?: { time?: string; airport?: string };
-    arrival?: { time?: string; airport?: string };
-    price?: number;
-  };
-  return?: {
-    airline?: string;
-    flightNumber?: string;
-    departure?: { time?: string; airport?: string };
-    arrival?: { time?: string; airport?: string };
-    price?: number;
-  };
+  outbound?: FlightLegData;
+  return?: FlightLegData;
+  legs?: FlightLegData[];
 }
 
 interface HotelSelection {
@@ -528,20 +525,24 @@ export function ItineraryEditor({
                 <Plane className="h-5 w-5 text-primary" />
                 <h3 className="font-semibold">Flight Details</h3>
               </div>
-              {flightSelection?.outbound ? (
+              {(() => {
+                const legs = flightSelection?.legs && flightSelection.legs.length > 0
+                  ? flightSelection.legs
+                  : [flightSelection?.outbound, flightSelection?.return].filter(Boolean);
+                return legs.length > 0 ? (
                 <div className="space-y-4">
-                  <FlightSegment segment={flightSelection.outbound} label="Outbound" />
-                  {flightSelection.return && (
-                    <FlightSegment segment={flightSelection.return} label="Return" />
-                  )}
+                  {legs.map((leg, idx) => (
+                    <FlightSegment key={idx} segment={leg!} label={legs.length <= 2 ? (idx === 0 ? 'Outbound' : 'Return') : `Leg ${idx + 1}`} />
+                  ))}
                   <div className="pt-4 border-t flex justify-between">
                     <span className="font-medium">Flight Total</span>
                     <span className="text-lg font-bold">{formatCurrency(flightCost)}</span>
                   </div>
                 </div>
-              ) : (
-                <p className="text-muted-foreground">No flight selected</p>
-              )}
+                ) : (
+                  <p className="text-muted-foreground">No flight selected</p>
+                );
+              })()}
             </CardContent>
           </Card>
 

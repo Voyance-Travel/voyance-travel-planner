@@ -211,27 +211,23 @@ export interface EditorialDay {
   };
 }
 
+export interface FlightLegDisplay {
+  airline?: string;
+  airlineCode?: string;
+  flightNumber?: string;
+  departure?: { time?: string; airport?: string; date?: string };
+  arrival?: { time?: string; airport?: string };
+  price?: number;
+  cabinClass?: string;
+  seat?: string;
+  duration?: string;
+}
+
 export interface FlightSelection {
-  outbound?: {
-    airline?: string;
-    airlineCode?: string;
-    flightNumber?: string;
-    departure?: { time?: string; airport?: string; date?: string };
-    arrival?: { time?: string; airport?: string };
-    price?: number;
-    cabinClass?: string;
-    seat?: string;
-  };
-  return?: {
-    airline?: string;
-    airlineCode?: string;
-    flightNumber?: string;
-    departure?: { time?: string; airport?: string; date?: string };
-    arrival?: { time?: string; airport?: string };
-    price?: number;
-    cabinClass?: string;
-    seat?: string;
-  };
+  outbound?: FlightLegDisplay;
+  return?: FlightLegDisplay;
+  /** All legs for multi-city trips — preferred over outbound/return when present */
+  legs?: FlightLegDisplay[];
 }
 
 export interface HotelSelection {
@@ -1517,19 +1513,31 @@ export function EditorialItinerary({
 
   // Preload airport codes for display (City + Code format)
   const [airportCacheReady, setAirportCacheReady] = useState(false);
+  // Derive a flat list of all flight legs (prefer legs[], fall back to outbound/return)
+  const allFlightLegs: FlightLegDisplay[] = useMemo(() => {
+    if (!flightSelection) return [];
+    if (flightSelection.legs && flightSelection.legs.length > 0) return flightSelection.legs;
+    const result: FlightLegDisplay[] = [];
+    if (flightSelection.outbound) result.push(flightSelection.outbound);
+    if (flightSelection.return) result.push(flightSelection.return);
+    return result;
+  }, [flightSelection]);
+
+  const hasFlightData = allFlightLegs.length > 0;
+
   useEffect(() => {
     const codes: string[] = [];
-    if (flightSelection?.outbound?.departure?.airport) codes.push(flightSelection.outbound.departure.airport);
-    if (flightSelection?.outbound?.arrival?.airport) codes.push(flightSelection.outbound.arrival.airport);
-    if (flightSelection?.return?.departure?.airport) codes.push(flightSelection.return.departure.airport);
-    if (flightSelection?.return?.arrival?.airport) codes.push(flightSelection.return.arrival.airport);
+    allFlightLegs.forEach(leg => {
+      if (leg.departure?.airport) codes.push(leg.departure.airport);
+      if (leg.arrival?.airport) codes.push(leg.arrival.airport);
+    });
     
     if (codes.length > 0) {
       preloadAirportCodes(codes).then(() => setAirportCacheReady(true));
     } else {
       setAirportCacheReady(true);
     }
-  }, [flightSelection]);
+  }, [allFlightLegs]);
 
   // Helper to find payment for an item
   const getPaymentForItem = useCallback((itemType: 'flight' | 'hotel' | 'activity', itemId: string): TripPayment | undefined => {
@@ -1546,7 +1554,7 @@ export function EditorialItinerary({
 
   // Calculate totals with smart estimation using destination-aware pricing
   const totalActivityCost = days.reduce((sum, day) => sum + getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry), 0);
-  const flightCost = (flightSelection?.outbound?.price || 0) + (flightSelection?.return?.price || 0);
+  const flightCost = allFlightLegs.reduce((sum, leg) => sum + (leg.price || 0), 0);
   const hotelCost = (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || days.length);
   const totalCost = totalActivityCost + flightCost + hotelCost;
   
@@ -2941,12 +2949,12 @@ export function EditorialItinerary({
                     travelers,
                     days,
                     unlockedDayNumbers,
-                    flight: flightSelection?.outbound ? {
-                      airline: flightSelection.outbound.airline || '',
-                      departure: flightSelection.outbound.departure?.time || '',
-                      arrival: flightSelection.outbound.arrival?.time || '',
-                      departureAirport: flightSelection.outbound.departure?.airport || '',
-                      arrivalAirport: flightSelection.outbound.arrival?.airport || '',
+                    flight: allFlightLegs[0] ? {
+                      airline: allFlightLegs[0].airline || '',
+                      departure: allFlightLegs[0].departure?.time || '',
+                      arrival: allFlightLegs[0].arrival?.time || '',
+                      departureAirport: allFlightLegs[0].departure?.airport || '',
+                      arrivalAirport: allFlightLegs[0].arrival?.airport || '',
                     } : undefined,
                     hotel: hotelSelection ? {
                       name: hotelSelection.name || '',
@@ -3001,9 +3009,9 @@ export function EditorialItinerary({
             )}
 
             {/* Flight Sync Warning - Show if flight times don't match Day 1 */}
-            {flightSelection?.outbound?.arrival?.time && days[0]?.activities?.[0] && (
+            {allFlightLegs[0]?.arrival?.time && days[0]?.activities?.[0] && (
               <FlightSyncWarning
-                flightArrivalTime={flightSelection.outbound.arrival.time}
+                flightArrivalTime={allFlightLegs[0].arrival.time}
                 day1FirstActivity={days[0].activities[0]}
                 onSyncDay1={() => handleDayRegenerate(0)}
                 isRegenerating={regeneratingDay === days[0]?.dayNumber}
@@ -3289,7 +3297,7 @@ export function EditorialItinerary({
             totalDays={days.length}
             itineraryDays={days}
             hasHotel={!!(hotelSelection?.pricePerNight || hotelSelection?.name)}
-            hasFlight={!!(flightSelection?.outbound)}
+            hasFlight={hasFlightData}
             onActivityRemove={(activityId) => {
               // Remove the activity from itinerary days when deleted from budget
               setDays(prev => prev.map(day => ({
@@ -3345,12 +3353,12 @@ export function EditorialItinerary({
                   <div>
                     <h3 className="font-serif text-lg font-semibold text-foreground">Flights</h3>
                     <p className="text-xs text-muted-foreground">
-                      {flightSelection?.outbound ? 'Your booked flights' : 'Add your flight details'}
+                      {hasFlightData ? `${allFlightLegs.length} flight${allFlightLegs.length > 1 ? 's' : ''} added` : 'Add your flight details'}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  {flightSelection?.outbound && (
+                  {hasFlightData && (
                     <Button 
                       variant="ghost" 
                       size="sm" 
@@ -3370,147 +3378,95 @@ export function EditorialItinerary({
                 </div>
               </div>
               
-              {flightSelection?.outbound ? (
+              {hasFlightData ? (
                 <div className="space-y-3">
-                  {/* Outbound Flight */}
-                  <div className="group rounded-xl border border-border bg-card overflow-hidden hover:shadow-soft transition-shadow">
-                    <div className="flex items-stretch">
-                      {/* Left accent */}
-                      <div className="w-1.5 bg-gradient-to-b from-primary to-primary/50 shrink-0" />
-                      
-                      <div className="flex-1 p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="secondary" className="text-xs font-medium">
-                              Outbound
-                            </Badge>
-                            <span className="text-xs text-muted-foreground">
-                              {flightSelection.outbound.departure?.date || startDate}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <AirlineLogo 
-                              code={flightSelection.outbound.airlineCode || flightSelection.outbound.airline?.substring(0, 2) || ''} 
-                              name={flightSelection.outbound.airline}
-                              size="sm"
-                            />
-                            <span className="text-sm font-medium">{flightSelection.outbound.airline}</span>
-                            <span className="text-xs text-muted-foreground">{flightSelection.outbound.flightNumber}</span>
-                          </div>
-                        </div>
-                        
-                        {/* Route */}
-                        <div className="flex items-center gap-4">
-                          <div className="text-center min-w-[60px]">
-                            <p className="text-xl font-semibold tracking-tight">{flightSelection.outbound.departure?.time || '--:--'}</p>
-                            <p className="text-xs font-medium text-primary">{getAirportDisplaySync(flightSelection.outbound.departure?.airport || '')}</p>
-                          </div>
-                          
-                          <div className="flex-1 flex items-center gap-2">
-                            <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-                            <div className="flex-1 relative">
-                              <div className="h-px bg-gradient-to-r from-primary/60 via-border to-primary/60" />
-                              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2">
-                                {(flightSelection.outbound as Record<string, unknown>).duration ? (
-                                  <span className="text-[10px] text-muted-foreground">{(flightSelection.outbound as Record<string, unknown>).duration as string}</span>
-                                ) : (
-                                  <Plane className="h-3 w-3 text-muted-foreground" />
-                                )}
-                              </div>
-                            </div>
-                            <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-                          </div>
-                          
-                          <div className="text-center min-w-[60px]">
-                            <p className="text-xl font-semibold tracking-tight">{flightSelection.outbound.arrival?.time || '--:--'}</p>
-                            <p className="text-xs font-medium text-primary">{getAirportDisplaySync(flightSelection.outbound.arrival?.airport || '')}</p>
-                          </div>
-                        </div>
-                        
-                        {(flightSelection.outbound.cabinClass || flightSelection.outbound.seat) && (
-                          <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/50">
-                            {flightSelection.outbound.cabinClass && (
-                              <span className="text-xs px-2 py-0.5 rounded bg-secondary text-muted-foreground">{flightSelection.outbound.cabinClass}</span>
-                            )}
-                            {flightSelection.outbound.seat && (
-                              <span className="text-xs text-muted-foreground">Seat {flightSelection.outbound.seat}</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Return Flight */}
-                  {flightSelection.return && (
-                    <div className="group rounded-xl border border-border bg-card overflow-hidden hover:shadow-soft transition-shadow">
-                      <div className="flex items-stretch">
-                        {/* Left accent */}
-                        <div className="w-1.5 bg-gradient-to-b from-accent to-accent/50 shrink-0" />
-                        
-                        <div className="flex-1 p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="text-xs font-medium border-accent/30 text-accent">
-                                Return
-                              </Badge>
-                              <span className="text-xs text-muted-foreground">
-                                {flightSelection.return.departure?.date || endDate}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <AirlineLogo 
-                                code={flightSelection.return.airlineCode || flightSelection.return.airline?.substring(0, 2) || ''} 
-                                name={flightSelection.return.airline}
-                                size="sm"
-                              />
-                              <span className="text-sm font-medium">{flightSelection.return.airline}</span>
-                              <span className="text-xs text-muted-foreground">{flightSelection.return.flightNumber}</span>
-                            </div>
-                          </div>
-                          
-                          {/* Route */}
-                          <div className="flex items-center gap-4">
-                            <div className="text-center min-w-[60px]">
-                              <p className="text-xl font-semibold tracking-tight">{flightSelection.return.departure?.time || '--:--'}</p>
-                              <p className="text-xs font-medium text-accent">{getAirportDisplaySync(flightSelection.return.departure?.airport || '')}</p>
-                            </div>
-                            
-                            <div className="flex-1 flex items-center gap-2">
-                              <div className="h-1.5 w-1.5 rounded-full bg-accent" />
-                              <div className="flex-1 relative">
-                                <div className="h-px bg-gradient-to-r from-accent/60 via-border to-accent/60" />
-                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2">
-                                  {(flightSelection.return as Record<string, unknown>).duration ? (
-                                    <span className="text-[10px] text-muted-foreground">{(flightSelection.return as Record<string, unknown>).duration as string}</span>
-                                  ) : (
-                                    <Plane className="h-3 w-3 text-muted-foreground rotate-180" />
-                                  )}
-                                </div>
-                              </div>
-                              <div className="h-1.5 w-1.5 rounded-full bg-accent" />
-                            </div>
-                            
-                            <div className="text-center min-w-[60px]">
-                              <p className="text-xl font-semibold tracking-tight">{flightSelection.return.arrival?.time || '--:--'}</p>
-                              <p className="text-xs font-medium text-accent">{getAirportDisplaySync(flightSelection.return.arrival?.airport || '')}</p>
-                            </div>
-                          </div>
-                          
-                          {(flightSelection.return.cabinClass || flightSelection.return.seat) && (
-                            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/50">
-                              {flightSelection.return.cabinClass && (
-                                <span className="text-xs px-2 py-0.5 rounded bg-secondary text-muted-foreground">{flightSelection.return.cabinClass}</span>
-                              )}
-                              {flightSelection.return.seat && (
-                                <span className="text-xs text-muted-foreground">Seat {flightSelection.return.seat}</span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                  {/* Route chain for multi-city */}
+                  {allFlightLegs.length > 2 && (
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-primary bg-primary/5 rounded-lg px-3 py-2 overflow-x-auto">
+                      <Plane className="h-3.5 w-3.5 shrink-0" />
+                      <span className="whitespace-nowrap">
+                        {[allFlightLegs[0]?.departure?.airport || '?', ...allFlightLegs.map(l => l.arrival?.airport || '?')].join(' → ')}
+                      </span>
                     </div>
                   )}
+
+                  {allFlightLegs.map((leg, idx) => {
+                    const isFirst = idx === 0;
+                    const isLast = idx === allFlightLegs.length - 1;
+                    const legLabel = allFlightLegs.length <= 2
+                      ? (isFirst ? 'Outbound' : 'Return')
+                      : `Leg ${idx + 1}`;
+                    const accentColor = isLast && allFlightLegs.length > 1 ? 'accent' : 'primary';
+                    const defaultDate = isFirst ? startDate : isLast ? endDate : undefined;
+
+                    return (
+                      <div key={idx} className="group rounded-xl border border-border bg-card overflow-hidden hover:shadow-soft transition-shadow">
+                        <div className="flex items-stretch">
+                          <div className={`w-1.5 bg-gradient-to-b from-${accentColor} to-${accentColor}/50 shrink-0`} />
+                          
+                          <div className="flex-1 p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <Badge variant={isFirst ? 'secondary' : 'outline'} className={cn("text-xs font-medium", !isFirst && `border-${accentColor}/30 text-${accentColor}`)}>
+                                  {legLabel}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  {leg.departure?.date || defaultDate}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <AirlineLogo 
+                                  code={leg.airlineCode || leg.airline?.substring(0, 2) || ''} 
+                                  name={leg.airline}
+                                  size="sm"
+                                />
+                                <span className="text-sm font-medium">{leg.airline}</span>
+                                <span className="text-xs text-muted-foreground">{leg.flightNumber}</span>
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-4">
+                              <div className="text-center min-w-[60px]">
+                                <p className="text-xl font-semibold tracking-tight">{leg.departure?.time || '--:--'}</p>
+                                <p className={`text-xs font-medium text-${accentColor}`}>{getAirportDisplaySync(leg.departure?.airport || '')}</p>
+                              </div>
+                              
+                              <div className="flex-1 flex items-center gap-2">
+                                <div className={`h-1.5 w-1.5 rounded-full bg-${accentColor}`} />
+                                <div className="flex-1 relative">
+                                  <div className={`h-px bg-gradient-to-r from-${accentColor}/60 via-border to-${accentColor}/60`} />
+                                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2">
+                                    {leg.duration ? (
+                                      <span className="text-[10px] text-muted-foreground">{leg.duration}</span>
+                                    ) : (
+                                      <Plane className={cn("h-3 w-3 text-muted-foreground", isLast && allFlightLegs.length > 1 && "rotate-180")} />
+                                    )}
+                                  </div>
+                                </div>
+                                <div className={`h-1.5 w-1.5 rounded-full bg-${accentColor}`} />
+                              </div>
+                              
+                              <div className="text-center min-w-[60px]">
+                                <p className="text-xl font-semibold tracking-tight">{leg.arrival?.time || '--:--'}</p>
+                                <p className={`text-xs font-medium text-${accentColor}`}>{getAirportDisplaySync(leg.arrival?.airport || '')}</p>
+                              </div>
+                            </div>
+                            
+                            {(leg.cabinClass || leg.seat) && (
+                              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/50">
+                                {leg.cabinClass && (
+                                  <span className="text-xs px-2 py-0.5 rounded bg-secondary text-muted-foreground">{leg.cabinClass}</span>
+                                )}
+                                {leg.seat && (
+                                  <span className="text-xs text-muted-foreground">Seat {leg.seat}</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 /* Empty State - Add Flight CTA */
