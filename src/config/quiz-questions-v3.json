@@ -1478,7 +1478,8 @@
       "boosters": {
         "adventure": 1.5,
         "pace": 1.0,
-        "nature_orientation": 0.6
+        "nature_orientation": 0.6,
+        "morning_energy": 0.6
       },
       "penalties": {
         "restoration_need": { "above": 0.6, "weight": -1.0 },
@@ -1587,9 +1588,10 @@
         "flexibility": { "min": 0.5 }
       },
       "boosters": {
-        "cultural_depth": 1.0,
+        "cultural_depth": 1.2,
         "flexibility": 0.8,
-        "food_focus": 0.6
+        "food_focus": 0.6,
+        "restoration_need": 0.6
       },
       "penalties": {
         "pace": { "above": 0.5, "weight": -1.5 },
@@ -1709,11 +1711,12 @@
       "category": "TRANSFORMER",
       "required": {
         "learning_focus": { "min": 0.7 },
-        "cultural_depth": { "min": 0.5 }
+        "cultural_depth": { "min": 0.5 },
+        "planning": { "min": 0.4 }
       },
       "boosters": {
         "learning_focus": 1.5,
-        "cultural_depth": 1.2,
+        "cultural_depth": 1.5,
         "planning": 0.5
       },
       "penalties": {
@@ -1748,7 +1751,9 @@
       },
       "boosters": {
         "bucket_list": 1.0,
-        "quality_intrinsic": 0.8
+        "quality_intrinsic": 0.8,
+        "restoration_need": 0.6,
+        "planning": 0.4
       },
       "penalties": {
         "adventure": { "above": 0.8, "weight": -0.5 },
