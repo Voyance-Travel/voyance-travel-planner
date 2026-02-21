@@ -42,6 +42,7 @@ import MemoryLane from '@/components/profile/MemoryLane';
 import EditorialPreferencesView from '@/components/profile/EditorialPreferencesView';
 import ClientAgentPortal from '@/components/profile/ClientAgentPortal';
 import CreditBalanceCard from '@/components/profile/CreditBalanceCard';
+import ProfileHotelSearchModal from '@/components/profile/ProfileHotelSearchModal';
 import CreditPacksGrid from '@/components/profile/CreditPacksGrid';
 import { CreditEarningChecklist } from '@/components/common/CreditEarningChecklist';
 import { useCredits, useRefreshCredits } from '@/hooks/useCredits';
@@ -180,6 +181,7 @@ export default function Profile() {
   const [isLoadingTrips, setIsLoadingTrips] = useState(true);
   const { data: creditData, refetch: refetchCredits } = useCredits();
   const [tripStats, setTripStats] = useState<TripStats | null>(null);
+  const [hotelModalOpen, setHotelModalOpen] = useState(false);
   // Redirect if not authenticated (only after auth loading completes)
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -566,11 +568,12 @@ export default function Profile() {
                   <p className="text-sm text-muted-foreground mb-4">
                     We'll find the perfect accommodation and build your itinerary around it.
                   </p>
-                  <Button asChild className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700">
-                    <Link to="/start">
-                      <Building2 className="h-4 w-4 mr-2" />
-                      Search Hotels
-                    </Link>
+                  <Button 
+                    onClick={() => setHotelModalOpen(true)}
+                    className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700"
+                  >
+                    <Building2 className="h-4 w-4 mr-2" />
+                    Search Hotels
                   </Button>
                 </div>
               </div>
@@ -984,6 +987,8 @@ export default function Profile() {
       </main>
 
       <Footer />
+
+      <ProfileHotelSearchModal open={hotelModalOpen} onOpenChange={setHotelModalOpen} />
     </div>
   );
 }

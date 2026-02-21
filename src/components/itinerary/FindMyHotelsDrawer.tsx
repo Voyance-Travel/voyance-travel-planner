@@ -6,7 +6,8 @@
  * sorted by match score with external booking links.
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Sparkles, Star, MapPin, Heart, ExternalLink, Loader2, Dna, 
   Hotel, CreditCard, X, ChevronRight, Check
@@ -56,7 +57,10 @@ export function FindMyHotelsDrawer({
   const { user } = useAuth();
   const { mutateAsync: spendCredits } = useSpendCredits();
 
-  // Only fetch recommendations after user pays credits
+  // Auto-open support (used after handleOpenAndPay is defined)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const autoOpenTriggered = useRef(false);
+
   const {
     profile,
     recommendations,
@@ -120,6 +124,16 @@ export function FindMyHotelsDrawer({
       globalSpendLock = false;
     }
   }, [hasPaid, spendCredits, tripId, destination, creditCost, idempotencyKey]);
+
+  // Auto-open when navigated from profile with ?openHotelSearch=true
+  useEffect(() => {
+    if (searchParams.get('openHotelSearch') === 'true' && !autoOpenTriggered.current && !hasPaid) {
+      autoOpenTriggered.current = true;
+      searchParams.delete('openHotelSearch');
+      setSearchParams(searchParams, { replace: true });
+      handleOpenAndPay();
+    }
+  }, [searchParams, handleOpenAndPay, hasPaid, setSearchParams]);
 
   const handleSelectHotel = useCallback(async (hotel: DNARecommendedHotel) => {
     if (isSavingHotel) return;
