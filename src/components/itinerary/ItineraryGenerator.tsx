@@ -135,6 +135,8 @@ export function ItineraryGenerator({
   const [prePhase, setPrePhase] = useState<Extract<GenerationStep, 'gathering-dna' | 'personalizing' | 'preparing'> | null>(null);
   const autoStartTriggered = useRef(false);
   const generationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stallCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastProgressTimeRef = useRef<number>(Date.now());
   const gateResultRef = useRef<GateResult | null>(null);
 
   // Generation gate — pre-authorizes credits before generation
@@ -155,6 +157,14 @@ export function ItineraryGenerator({
     const cities = isMultiCity ? [] : [destination];
     return calculateTripCredits({ days: totalDaysEstimate, cities });
   }, [totalDaysEstimate, destination, isMultiCity]);
+
+  // Reset stall detector whenever a new day completes
+  useEffect(() => {
+    if (days.length > 0 && hasStarted) {
+      lastProgressTimeRef.current = Date.now();
+      console.log(`[ItineraryGenerator] Progress: day ${days.length} complete, stall detector reset`);
+    }
+  }, [days.length, hasStarted]);
 
   // Keep the pre-generation experience on screen until the first day is ready,
   // so we don't flash back to the generic spinner state.
@@ -186,32 +196,59 @@ export function ItineraryGenerator({
     setShowGenericWarning(false);
     setShowCostConfirm(false);
 
-    // Safety timeout: if generation hasn't completed in 180s, show error
-    // First-time 5-day trips with full Places enrichment can take 120s+
+    // Stall detector: instead of a fixed timeout, check every 10s if progress
+    // has stalled for >120s. This allows long trips to complete while still
+    // catching genuine stalls quickly.
     if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
-    generationTimeoutRef.current = setTimeout(async () => {
-      console.error('[ItineraryGenerator] Generation timed out after 180s');
+    if (stallCheckRef.current) clearInterval(stallCheckRef.current);
+    lastProgressTimeRef.current = Date.now();
+
+    const handleStallTimeout = async () => {
+      if (stallCheckRef.current) clearInterval(stallCheckRef.current);
+      console.error('[ItineraryGenerator] Generation stalled — no progress for 120s');
       setPrePhase(null);
       reset();
       setHasStarted(false);
 
-      // Auto-refund on timeout if credits were charged
+      // Partial refund: only refund credits for ungenerated days
       const gr = gateResultRef.current;
       if (gr && gr.creditsCharged > 0) {
-        const ok = await issueRefund(tripId, gr.creditsCharged, 'generation_timeout');
-        if (ok) {
-          toast.info(`Generation timed out — ${gr.creditsCharged} credits have been refunded.`, { duration: 6000 });
-          if (userId) {
-            queryClient.invalidateQueries({ queryKey: ['credits', userId] });
-            queryClient.invalidateQueries({ queryKey: ['entitlements', userId] });
+        const daysCompleted = days.length;
+        const totalTrip = gr.requestedDays || totalDaysEstimate;
+        const creditsPerDay = Math.round(gr.creditsCharged / totalTrip);
+        const ungenerated = Math.max(0, totalTrip - daysCompleted);
+        const refundAmount = creditsPerDay * ungenerated;
+
+        if (refundAmount > 0) {
+          const ok = await issueRefund(tripId, refundAmount, 'generation_stall_partial', `${daysCompleted}/${totalTrip} days completed`);
+          if (ok) {
+            toast.info(
+              daysCompleted > 0
+                ? `Generation stalled after ${daysCompleted}/${totalTrip} days — ${refundAmount} credits refunded for remaining days.`
+                : `Generation timed out — ${refundAmount} credits have been refunded.`,
+              { duration: 6000 }
+            );
+            if (userId) {
+              queryClient.invalidateQueries({ queryKey: ['credits', userId] });
+              queryClient.invalidateQueries({ queryKey: ['entitlements', userId] });
+            }
+          } else {
+            toast.error('Generation stalled. Automatic refund failed — please contact support.', { duration: 8000 });
           }
         } else {
-          toast.error('Generation timed out. Automatic refund failed — please contact support.', { duration: 8000 });
+          toast.info('Generation stalled but all days were completed. No refund needed.');
         }
       } else {
-        toast.error('Generation timed out. Please try again.');
+        toast.error('Generation stalled. Please try again.');
       }
-    }, 180_000);
+    };
+
+    stallCheckRef.current = setInterval(() => {
+      const elapsed = Date.now() - lastProgressTimeRef.current;
+      if (elapsed > 120_000) {
+        handleStallTimeout();
+      }
+    }, 10_000);
 
     // Pre-generation phases (matches the newer streaming UX)
     setPrePhase('gathering-dna');
@@ -283,6 +320,7 @@ export function ItineraryGenerator({
         setPrePhase(null);
         await new Promise(resolve => setTimeout(resolve, 900));
         if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
+        if (stallCheckRef.current) clearInterval(stallCheckRef.current);
 
         // Show credit summary toast after generation
         if (gateResult.creditsCharged > 0) {
@@ -313,10 +351,12 @@ export function ItineraryGenerator({
 
         // Pass locked placeholders to onComplete so the trip structure exists
         if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
+        if (stallCheckRef.current) clearInterval(stallCheckRef.current);
         onComplete(lockedDays, undefined, false);
       }
     } catch (err) {
       if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
+      if (stallCheckRef.current) clearInterval(stallCheckRef.current);
       console.error('[ItineraryGenerator] Generation failed:', err);
       setPrePhase(null);
 

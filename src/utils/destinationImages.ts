@@ -385,7 +385,7 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=1200',
   ],
   'petra': [
-    'https://images.unsplash.com/photo-1563177978-4f4a11e3f462?w=1200', // The Treasury at Petra
+    'https://images.unsplash.com/photo-1579606032821-4e6161c81571?w=1200', // The Treasury at Petra
     'https://images.unsplash.com/photo-1548786811-dd6e453ccca7?w=1200', // Petra ruins
     'https://images.unsplash.com/photo-1553856622-d1b352e9a211?w=1200', // Petra canyon
   ],
