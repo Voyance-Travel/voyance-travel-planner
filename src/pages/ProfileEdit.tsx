@@ -7,14 +7,28 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import ProfileEditForm from '@/components/profile/ProfileEditForm';
+import { updateProfile } from '@/services/supabase/profiles';
 
 export default function ProfileEdit() {
   const { user, updateUser } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (data: { name: string; handle?: string; homeAirport?: string }) => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    updateUser({ name: data.name });
+    // Build display name and split into first/last for the profiles table
+    const nameParts = data.name.trim().split(/\s+/);
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+
+    await updateProfile({
+      first_name: firstName,
+      last_name: lastName,
+      display_name: data.name.trim(),
+      handle: data.handle || undefined,
+      home_airport: data.homeAirport || undefined,
+    });
+
+    // Sync local auth context
+    updateUser({ name: data.name.trim() });
     navigate(ROUTES.PROFILE.VIEW);
   };
 
