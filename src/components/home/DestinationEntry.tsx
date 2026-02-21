@@ -47,8 +47,19 @@ export default function DestinationEntry() {
   const navigate = useNavigate();
 
   const handleSubmit = async (dest?: string) => {
-    const targetDest = dest || destination;
-    if (!targetDest.trim()) return;
+    const targetDest = (dest || destination).trim();
+    if (!targetDest) return;
+
+    // Detect vague/ambiguous queries before hitting the edge function
+    const vaguePatterns = /^(somewhere|anywhere|a place|find me|i want|show me|looking for|help me|suggest|recommend)/i;
+    const vagueKeywords = ['warm', 'cold', 'cheap', 'exotic', 'relaxing', 'adventure', 'beach', 'for a week', 'for a weekend', 'near me', 'tropical'];
+    const looksVague = vaguePatterns.test(targetDest) || 
+      (vagueKeywords.some(k => targetDest.toLowerCase().includes(k)) && targetDest.split(/\s+/).length > 3 && !/[A-Z][a-z]{2,}/.test(targetDest.replace(/^[A-Z]/, '')));
+    
+    if (looksVague) {
+      setErrorMessage("Try entering a specific city or country — like \"Barcelona\", \"Tokyo\", or \"Costa Rica\" — and we'll build a preview for you.");
+      return;
+    }
 
     setIsGenerating(true);
     setErrorMessage(null);
@@ -85,7 +96,7 @@ export default function DestinationEntry() {
           return;
         }
 
-        setErrorMessage("Something went wrong. Please try again.");
+        setErrorMessage("We couldn't generate a preview for that. Try a specific city or country like \"Paris\" or \"Japan\".");
         return;
       }
 
@@ -107,7 +118,7 @@ export default function DestinationEntry() {
       });
     } catch (err) {
       console.error('Preview error:', err);
-      setErrorMessage("Something went wrong. Please try again.");
+      setErrorMessage("We couldn't generate a preview for that. Try a specific city or country like \"Paris\" or \"Japan\".");
     } finally {
       setIsGenerating(false);
     }
