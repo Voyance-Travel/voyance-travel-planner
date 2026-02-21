@@ -50,8 +50,19 @@ function isBrowser(): boolean {
   return typeof window !== 'undefined' && typeof Image !== 'undefined';
 }
 
+// Known-broken Unsplash photo IDs that return 404
+const BLOCKED_IMAGE_IDS = new Set([
+  'photo-1563177978-4f4a11e3f462',
+]);
+
+function isBlockedUrl(url: string): boolean {
+  if (!url) return false;
+  return [...BLOCKED_IMAGE_IDS].some(id => url.includes(id));
+}
+
 async function isUrlLoadable(url: string, timeoutMs: number = 4500): Promise<boolean> {
   if (!url) return false;
+  if (isBlockedUrl(url)) return false;
   if (url.startsWith('data:')) return true;
   if (!isBrowser()) return true;
 
