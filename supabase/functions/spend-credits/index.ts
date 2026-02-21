@@ -26,7 +26,12 @@ const FIXED_COSTS: Record<string, number> = {
   mystery_getaway: 15,
   mystery_logistics: 5,
   transport_mode_change: 5,
+  route_optimization: 20,
 };
+
+// Route optimization sliding discount schedules
+const ROUTE_OPT_STANDARD_SCHEDULE = [20, 15, 10, 5];
+const ROUTE_OPT_CLUB_SCHEDULE = [10, 8, 6, 3];
 
 // Tier-based free action caps
 const TIER_CAPS: Record<string, Record<string, number>> = {
@@ -502,6 +507,46 @@ serve(async (req) => {
         }
       }
       cost = creditsAmount;
+    } else if (action === 'route_optimization') {
+      // Sliding discount based on per-trip optimization count + tier
+      let optCount = 0;
+      if (tripId) {
+        const { data: optUsage } = await supabaseAdmin
+          .from('trip_action_usage')
+          .select('usage_count')
+          .eq('user_id', user.id)
+          .eq('trip_id', tripId)
+          .eq('action_type', 'route_optimization')
+          .maybeSingle();
+        optCount = optUsage?.usage_count ?? 0;
+      }
+
+      // Check user tier for Club discount
+      const { data: tierRow } = await supabaseAdmin
+        .from('user_tiers')
+        .select('tier')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      const uTier = tierRow?.tier || 'free';
+      const isClubMember = ['voyager', 'explorer', 'adventurer'].includes(uTier);
+      const schedule = isClubMember ? ROUTE_OPT_CLUB_SCHEDULE : ROUTE_OPT_STANDARD_SCHEDULE;
+      const floor = schedule[schedule.length - 1];
+      cost = optCount >= schedule.length ? floor : schedule[optCount];
+
+      console.log(`[spend-credits] route_optimization: tier=${uTier}, optCount=${optCount}, cost=${cost}`);
+
+      // Increment usage count after cost calculation
+      if (tripId) {
+        await supabaseAdmin
+          .from('trip_action_usage')
+          .upsert({
+            user_id: user.id,
+            trip_id: tripId,
+            action_type: 'route_optimization',
+            usage_count: optCount + 1,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id,trip_id,action_type' });
+      }
     } else if (action in FIXED_COSTS) {
       cost = FIXED_COSTS[action];
     } else {
