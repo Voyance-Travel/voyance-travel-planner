@@ -1148,9 +1148,11 @@
         },
         {
           "id": "q19e",
-          "label": "This doesn't really apply to me.",
+          "label": "Somewhere in between — I don't fit neatly into one stage.",
           "traits": {
-            "life_stage": "na"
+            "life_stage": "mixed",
+            "quality_intrinsic": 0.4,
+            "flexibility": 0.5
           }
         }
       ]
@@ -1705,7 +1707,8 @@
         "bucket_list": { "above": 0.6, "weight": -0.8 }
       },
       "lifeStageBonus": {
-        "established": 0.5
+        "established": 0.5,
+        "mixed": 0.3
       }
     },
     "sabbatical_scholar": {
