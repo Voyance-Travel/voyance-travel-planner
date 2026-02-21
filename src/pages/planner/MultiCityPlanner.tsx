@@ -4,10 +4,10 @@
  * Dedicated page for planning trips that span multiple cities
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { format, addDays, isBefore, startOfToday } from 'date-fns';
+import { format, addDays, isBefore, startOfToday, differenceInDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { MapPin, Calendar as CalendarIcon, Users, Plane, ArrowRight, Sparkles, ArrowLeft } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
