@@ -1,107 +1,156 @@
 
 
-# Route Optimization Credit Gate
+# Smart Trip Status Banner
 
 ## Summary
-Monetize route optimization with a 20-credit base charge (10 for Club members), a per-trip sliding re-optimization discount, and first-trip exemption. This involves changes across pricing config, the flow controller, the optimize-itinerary edge function, the spend-credits edge function, the frontend dialog, and the optimize button UI.
+Replace the large "Is this trip happening?" banner with smart, date-aware logic and a compact inline UI. Past trips auto-resolve (no banner), confirmed trips stay dismissed, and future draft trips within 14 days get a small inline prompt instead of a full-width card.
 
-## Changes Overview
+## What Changes for Users
 
-### 1. Pricing Config (`src/config/pricing.ts`)
-- Change `ROUTE_OPTIMIZATION: 0` to `ROUTE_OPTIMIZATION: 20`
-- Add new constants for the re-optimization discount schedule:
-  - `ROUTE_OPT_STANDARD_SCHEDULE: [20, 15, 10, 5]` (4th+ stays at 5)
-  - `ROUTE_OPT_CLUB_SCHEDULE: [10, 8, 6, 3]` (4th+ stays at 3)
+**Past trips** (end date already passed): No banner. Badge shows "Past" instead of "Draft".
 
-### 2. Flow Controller (`src/lib/voyanceFlowController.ts`)
-- Add `ROUTE_OPTIMIZATION` to the `ACTION_MAP` in `useSpendCredits.ts`
-- Add a new exported function `getRouteOptimizationCost(optimizeCount, tier)` that returns the correct cost from the schedule based on how many times the trip has been optimized and whether the user is a Club member
-- Re-export the new schedule constants
+**Confirmed trips** (user already clicked "It's Happening!"): No banner. Badge shows "Booked" (already works).
 
-### 3. Spend Credits Edge Function (`supabase/functions/spend-credits/index.ts`)
-- Add `route_optimization` to `FIXED_COSTS` with base cost 20
-- Add special handling for `route_optimization` action:
-  - Query `trip_action_usage` for current `route_optimization` count on the trip
-  - Query `user_tiers` for the user's tier to determine standard vs. Club pricing
-  - Calculate the sliding cost from the schedule
-  - Override `FIXED_COSTS` with the computed discount price
-- Increment `trip_action_usage` for `route_optimization` after successful deduction
+**Future draft trips within 14 days of departure**: Small inline confirm/dismiss buttons next to the status badge -- no full-width card.
 
-### 4. Optimize Itinerary Edge Function (`supabase/functions/optimize-itinerary/index.ts`)
-- No credit logic here -- credits are spent client-side before invoking this function (consistent with the existing client-side credit gating architecture)
+**Future draft trips more than 14 days out**: No banner shown at all (too early to nag).
 
-### 5. Frontend: `useSpendCredits.ts` Hook
-- Add `ROUTE_OPTIMIZATION: 'route_optimization'` to the `ACTION_MAP`
+## Technical Changes
 
-### 6. Frontend: New Hook `useRouteOptCost.ts`
-- Create a small hook that queries `trip_action_usage` for `route_optimization` count on the current trip
-- Combines with the user's tier (from entitlements) to call `getRouteOptimizationCost()` and return the current cost
-- Used by both the OptimizePreferencesDialog and the header Optimize button
+### 1. TripConfirmationBanner.tsx -- Replace full-width card with inline element
 
-### 7. Frontend: `OptimizePreferencesDialog.tsx`
-- Accept new props: `creditCost`, `isFirstTrip`, `userBalance`, `isSpending`
-- Update the "Optimize Routes" button text to show credit cost: "Optimize Routes . 20 credits" (with a Coins icon), matching the hotel search pattern
-- If `isFirstTrip`, show no credit badge (free)
-- If insufficient credits, disable the button and show inline message: "You need X more credits to optimize routes" with a link to the credits/pricing page
-- If optimization would drop balance below 50, show a soft warning
+- Add date-awareness: accept `startDate` and `endDate` (already passed), check if trip is past (`endDate < today`) -- if so, return `null`
+- Add 14-day proximity check: only render if departure is within 14 days
+- Replace the large `rounded-xl border` card with a compact inline `flex items-center gap-2` row containing:
+  - A small "Confirm" button (checkmark icon + text)
+  - A small "Dismiss" button (X icon)
+- Keep the logistics dialog and swap review dialog untouched -- they still open when user clicks confirm
+- Persist dismissal in `localStorage` keyed by trip ID so it survives page refreshes within the session
 
-### 8. Frontend: `EditorialItinerary.tsx`
-- Import `useRouteOptCost` and `useSpendCredits`
-- Before calling `handleOptimize`, spend credits via `useSpendCredits.mutateAsync({ action: 'ROUTE_OPTIMIZATION', tripId })`
-- If first trip (from entitlements), skip credit spending
-- Pass `creditCost`, `isFirstTrip`, `userBalance` to `OptimizePreferencesDialog`
-- On the header Optimize button, add a small credit badge showing the cost (or nothing if first trip)
-- After successful optimization, invalidate credit queries so balance updates
+### 2. TripDetail.tsx -- Smart badge and conditional rendering
 
-### 9. Database: `trip_action_usage` Table
-- No schema change needed -- the existing table already supports arbitrary `action_type` strings and `usage_count` tracking per user/trip. The `route_optimization` action type will be inserted/incremented by the `spend-credits` edge function.
+- Update the status badge section (lines 870-888):
+  - If `endDate < today` AND status is "draft": show badge as "Past" with `secondary` variant
+  - If status is "booked": show "Confirmed" (or keep "booked")
+  - If status is "draft" AND future: show "Draft" as-is
+- Move the `TripConfirmationBanner` rendering from below the badge section to **inline within** the badge row, so the confirm/dismiss buttons appear next to the badge and date, not as a separate block
+- Add the date check guard: only render banner component if trip end date is in the future
 
-## Technical Details
+### 3. Profile.tsx -- Already handles past trip classification
 
-### Re-optimization Discount Logic
+The `transformTrip` function (line 145-153) already classifies trips with `endDate < now` as "completed" and filters them into the completed section. The Upcoming count already excludes them. No changes needed here -- the existing logic is correct.
 
-```text
-function getRouteOptimizationCost(optimizeCount: number, tier: UserTier): number {
-  const isClub = ['voyager', 'explorer', 'adventurer'].includes(tier);
-  const schedule = isClub ? [10, 8, 6, 3] : [20, 15, 10, 5];
-  const floor = schedule[schedule.length - 1];
-  if (optimizeCount >= schedule.length) return floor;
-  return schedule[optimizeCount];
-}
+### 4. No database changes needed
+
+- The `status` field on trips already supports 'draft', 'booked', 'completed'
+- Dismissal state is session-local (localStorage) -- no need to persist to DB
+- The banner component already checks `currentStatus !== 'draft'` to hide itself
+
+## Detailed File Changes
+
+### `src/components/trip/TripConfirmationBanner.tsx`
+
+**Smart visibility logic** (replacing line 86):
+```typescript
+// Auto-hide for past trips
+const today = new Date();
+const tripEnd = parseLocalDate(endDate);
+const tripStart = parseLocalDate(startDate);
+const isPastTrip = tripEnd < today;
+const daysUntilDeparture = differenceInDays(tripStart, today);
+const isWithin14Days = daysUntilDeparture <= 14 && daysUntilDeparture >= 0;
+
+// Check localStorage for persistent dismissal
+const dismissKey = `trip-confirm-dismissed-${tripId}`;
+const [dismissed, setDismissed] = useState(() => {
+  return localStorage.getItem(dismissKey) === 'true';
+});
+
+// Don't show for non-draft, past trips, dismissed, or too far out
+if (currentStatus !== 'draft' || dismissed || isPastTrip || !isWithin14Days) return null;
 ```
 
-`optimizeCount` is the number of *completed* optimizations for this trip (0 = first time).
-
-### Credit Flow Sequence
-
-```text
-User clicks "Optimize Routes . 20cr"
-  -> OptimizePreferencesDialog confirms preferences
-  -> EditorialItinerary calls spendCredits({ action: 'ROUTE_OPTIMIZATION', tripId })
-  -> spend-credits edge function:
-       1. Looks up trip_action_usage for route_optimization count
-       2. Looks up user tier
-       3. Calculates sliding cost
-       4. Deducts via FIFO
-       5. Increments trip_action_usage
-       6. Returns { success, spent, newBalance }
-  -> On success, calls optimize-itinerary edge function
-  -> On failure (insufficient credits), OutOfCreditsModal triggers
+**Compact inline UI** (replacing the full-width card):
+```tsx
+<div className={cn("flex items-center gap-2", className)}>
+  <Button variant="ghost" size="sm" onClick={handleDrafting} className="gap-1 h-7 text-xs px-2">
+    <PenLine className="h-3 w-3" />
+    Just Drafting
+  </Button>
+  <Button size="sm" onClick={handleUpcoming} className="gap-1 h-7 text-xs px-2">
+    <CheckCircle2 className="h-3 w-3" />
+    {hasFlightSelection && hasHotelSelection ? 'Confirm' : "It's Happening!"}
+  </Button>
+</div>
 ```
 
-### First-Trip Exemption
-- Checked via `entitlements.is_first_trip` (already available from `get-entitlements`)
-- When true, skip the `spendCredits` call entirely and invoke `optimize-itinerary` directly
-- The button shows no credit badge for first-trip users
+**Persist dismissal** in handleDrafting:
+```typescript
+const handleDrafting = () => {
+  localStorage.setItem(dismissKey, 'true');
+  setDismissed(true);
+};
+```
+
+### `src/pages/TripDetail.tsx`
+
+**Smart badge** (lines 870-888):
+```tsx
+{!isLiveTrip && (
+  <div className="flex flex-wrap items-center gap-3 mb-8">
+    <Badge variant={
+      trip.status === 'completed' ? 'secondary' :
+      trip.status === 'booked' ? 'default' :
+      isPastTrip ? 'secondary' : 'outline'
+    } className="capitalize">
+      {isPastTrip && trip.status === 'draft' ? 'Past' : trip.status}
+    </Badge>
+
+    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <Calendar className="w-4 h-4" />
+      {format(parseLocalDate(trip.start_date), 'MMM d')} - {format(parseLocalDate(effectiveEndDate), 'MMM d, yyyy')}
+    </div>
+
+    {/* Inline confirmation buttons (only shows for draft trips within 14 days) */}
+    {hasItinerary && (
+      <TripConfirmationBanner
+        tripId={trip.id}
+        destination={trip.destination}
+        startDate={trip.start_date}
+        endDate={effectiveEndDate}
+        currentStatus={trip.status}
+        hasFlightSelection={!!trip.flight_selection}
+        hasHotelSelection={!!trip.hotel_selection}
+        itineraryDays={itineraryDays}
+        onStatusUpdate={(status) => setTrip(prev => prev ? { ...prev, status } : null)}
+        onTripDataUpdate={(data) => setTrip(prev => prev ? { ...prev, ...data } : null)}
+        onApplySwaps={handleApplySwaps}
+        onRegenerateTrip={handleRegenerateTrip}
+      />
+    )}
+  </div>
+)}
+```
+
+The standalone `TripConfirmationBanner` block below (lines 891-908) gets removed since it's now inline in the badge row.
+
+**Add `isPastTrip` computation** near the existing date logic:
+```typescript
+const isPastTrip = isAfter(new Date(), parseLocalDate(effectiveEndDate));
+```
 
 ### Files Modified
+
 | File | Change |
 |------|--------|
-| `src/config/pricing.ts` | Update `ROUTE_OPTIMIZATION` cost, add discount schedules |
-| `src/lib/voyanceFlowController.ts` | Add `getRouteOptimizationCost()` function |
-| `src/hooks/useSpendCredits.ts` | Add `ROUTE_OPTIMIZATION` to ACTION_MAP |
-| `src/hooks/useRouteOptCost.ts` | **New file** -- hook for per-trip optimization cost |
-| `src/components/itinerary/OptimizePreferencesDialog.tsx` | Add credit display, insufficient-credits state |
-| `src/components/itinerary/EditorialItinerary.tsx` | Integrate credit spending before optimization |
-| `supabase/functions/spend-credits/index.ts` | Add `route_optimization` with sliding discount logic |
+| `src/components/trip/TripConfirmationBanner.tsx` | Add date-awareness, 14-day check, localStorage dismiss, compact inline UI |
+| `src/pages/TripDetail.tsx` | Smart badge text ("Past" for expired drafts), move banner inline, remove standalone block |
+
+### No changes needed
+
+| File | Reason |
+|------|--------|
+| `src/pages/Profile.tsx` | Already classifies past trips as "completed" in `transformTrip` |
+| Database schema | Existing `status` field is sufficient; dismissal is client-side |
+| Edge functions | No backend logic changes needed |
 
