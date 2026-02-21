@@ -932,7 +932,27 @@ export function EditorialItinerary({
   initialItineraryData,
 }: EditorialItineraryProps) {
   const queryClient = useQueryClient();
-  const [days, setDays] = useState<EditorialDay[]>(initialDays);
+  const [rawDays, setRawDays] = useState<EditorialDay[]>(initialDays);
+
+  // Sanitize wrapper: ensures every activity has a valid title and filters out
+  // completely empty/null activity objects that slip through from edge functions.
+  const setDays: typeof setRawDays = useCallback((update) => {
+    setRawDays(prev => {
+      const next = typeof update === 'function' ? update(prev) : update;
+      return next.map(day => ({
+        ...day,
+        activities: (day.activities || [])
+          .filter(a => a != null)
+          .map(a => {
+            const raw = a as any;
+            const safeTitle = a.title || raw.name || raw.venue || 'Untitled Activity';
+            return { ...a, title: safeTitle };
+          }),
+      }));
+    });
+  }, []);
+
+  const days = rawDays;
   const [expandedDays, setExpandedDays] = useState<number[]>(initialDays.map(d => d.dayNumber));
   // Persisted option group selections (key = optionGroup id, value = selected activity id)
   const [optionSelections, setOptionSelections] = useState<Record<string, string>>(
