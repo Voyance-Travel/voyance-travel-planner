@@ -40,7 +40,7 @@ export interface TraitScores {
   healing_focus: number;
   learning_focus: number;
   ethics_focus: number;
-  life_stage: 'early' | 'building' | 'established' | 'free' | 'na';
+  life_stage: 'early' | 'building' | 'established' | 'free' | 'mixed' | 'na';
   [key: string]: number | string;
 }
 
