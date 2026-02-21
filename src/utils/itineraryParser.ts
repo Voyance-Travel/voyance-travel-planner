@@ -391,7 +391,7 @@ function parseSingleDay(
   const rawActivities = Array.isArray(d.activities) ? d.activities : [];
   
   // Filter null/undefined activities BEFORE mapping
-  const activities = rawActivities
+  const parsedActivities = rawActivities
     .filter((a): a is NonNullable<typeof a> => {
       if (a === null || a === undefined) {
         console.warn(`[itineraryParser] Day ${dayNumber}: Skipping null/undefined activity`);
@@ -400,6 +400,18 @@ function parseSingleDay(
       return true;
     })
     .map((a, actIdx) => parseSingleActivity(a, dayIndex, actIdx));
+
+  // Deduplicate activities by title+startTime within the same day
+  const seen = new Set<string>();
+  const activities = parsedActivities.filter(act => {
+    const key = `${(act.title || '').toLowerCase().trim()}|${(act.startTime || '').trim()}`;
+    if (seen.has(key)) {
+      console.warn(`[itineraryParser] Day ${dayNumber}: Removing duplicate activity "${act.title}"`);
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
   
   return {
     // Spread raw day fields first to preserve unknown/editorial-specific fields
