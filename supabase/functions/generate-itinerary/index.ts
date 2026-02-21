@@ -3654,13 +3654,13 @@ Make it conversational and actionable, not a bullet list. The AI reading this sh
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "google/gemini-2.5-flash-lite",
         messages: [
           { role: "system", content: "You are a travel personalization expert. Create rich, detailed traveler profiles that help AI itinerary generators deeply understand each traveler." },
           { role: "user", content: prompt }
         ],
         temperature: 0.7,
-        max_tokens: 1000,
+        max_tokens: 800,
       }),
     });
 
@@ -4269,7 +4269,7 @@ async function generateSingleDayWithRetry(
   LOVABLE_API_KEY: string,
   supabaseClient: any, // For DB-driven destination essentials
   perplexityApiKey?: string,
-  maxRetries: number = 3
+  maxRetries: number = 2
 ): Promise<StrictDay> {
   const isFirstDay = dayNumber === 1;
   const isLastDay = dayNumber === context.totalDays;
@@ -5065,7 +5065,7 @@ async function generateItineraryAI(
   console.log(`[Stage 2] Starting batch generation for ${context.totalDays} days`);
 
   const days: StrictDay[] = [];
-  const BATCH_SIZE = 2; // Generate 2 days at a time for quality control
+  const BATCH_SIZE = 3; // Generate 3 days at a time for speed (parallel)
 
   // Process days in batches
   for (let batchStart = 0; batchStart < context.totalDays; batchStart += BATCH_SIZE) {
@@ -5098,7 +5098,7 @@ async function generateItineraryAI(
 
     // Small delay between batches to avoid rate limiting
     if (batchEnd < context.totalDays) {
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 200));
     }
   }
 
