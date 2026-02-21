@@ -8976,7 +8976,13 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
       try {
         let data: any = null;
-        for (let attempt = 1; attempt <= 3; attempt++) {
+        const maxAttempts = 5;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          // Fall back to a faster model after 3 failed attempts to reduce provider timeouts
+          const model = attempt <= 3 ? "google/gemini-3-flash-preview" : "google/gemini-2.5-flash";
+          if (attempt > 3) {
+            console.log(`[generate-day] Falling back to ${model} after ${attempt - 1} failures`);
+          }
           const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
             method: "POST",
             headers: {
@@ -8984,7 +8990,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              model: "google/gemini-3-flash-preview",
+              model,
               messages: [
                 { role: "system", content: systemPrompt },
                 { role: "user", content: userPrompt }
@@ -9079,9 +9085,11 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             const errorText = await response.text();
             console.error(`[generate-day] AI gateway error (attempt ${attempt}): ${status}`, errorText);
 
-            // Retry transient 5xx
-            if (attempt < 3 && status >= 500) {
-              await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+            // Retry transient 5xx (including 524 provider timeout)
+            if (attempt < maxAttempts && status >= 500) {
+              const backoff = Math.min(2000 * attempt, 8000);
+              console.log(`[generate-day] Retrying in ${backoff}ms (attempt ${attempt}/${maxAttempts})...`);
+              await new Promise((resolve) => setTimeout(resolve, backoff));
               continue;
             }
 
@@ -9094,14 +9102,18 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           if ((data as any)?.error) {
             console.error(`[generate-day] AI Gateway error payload (attempt ${attempt}):`, (data as any).error);
             const raw = (data as any).error?.message || 'Internal Server Error';
-            const isTransient = raw === 'Internal Server Error' || (data as any).error?.code === 500;
-            if (attempt < 3 && isTransient) {
-              await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+            const errorCode = (data as any).error?.code;
+            // Treat 500, 524 (provider timeout), and generic errors as transient
+            const isTransient = raw === 'Internal Server Error' || raw === 'Provider returned error' || errorCode === 500 || errorCode === 524;
+            if (attempt < maxAttempts && isTransient) {
+              const backoff = Math.min(2000 * attempt, 8000);
+              console.log(`[generate-day] Provider error (code ${errorCode}), retrying in ${backoff}ms (attempt ${attempt}/${maxAttempts})...`);
+              await new Promise((resolve) => setTimeout(resolve, backoff));
               data = null;
               continue;
             }
 
-            const msg = raw === 'Internal Server Error'
+            const msg = raw === 'Internal Server Error' || raw === 'Provider returned error'
               ? 'AI service temporarily unavailable. Please try again in a moment.'
               : raw;
             throw new Error(`AI service error: ${msg}`);
