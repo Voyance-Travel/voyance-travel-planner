@@ -14,7 +14,7 @@ import { formatEnumDisplay, formatWeatherCondition } from '@/utils/textFormattin
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import type { 
   DayItinerary, TripSummary, DestinationInfo, 
-  FlightInfo, HotelInfo, ItineraryActivity, ActivityType, WeatherCondition 
+  FlightInfo, FlightSegment, HotelInfo, ItineraryActivity, ActivityType, WeatherCondition 
 } from '@/types/itinerary';
 
 interface FullItineraryProps {
@@ -190,30 +190,52 @@ export default function FullItinerary({
         /* Flight & Hotel Details */
         <div className="space-y-6">
           {/* Flight Info */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-card rounded-xl border border-border overflow-hidden"
-          >
-            <div className="bg-primary/10 px-6 py-4 border-b border-border">
-              <h3 className="font-semibold flex items-center gap-2">
-                <Plane className="h-5 w-5" />
-                Flight Details
-              </h3>
-            </div>
-            <div className="p-6 space-y-6">
-              {(flightInfo as any).legs ? (
-                ((flightInfo as any).legs as any[]).map((leg: any, idx: number) => (
-                  <FlightSegmentCard key={idx} segment={leg} label={`Leg ${idx + 1}`} />
-                ))
-              ) : (
-                <>
-                  <FlightSegmentCard segment={flightInfo.outbound} label="Outbound" />
-                  <FlightSegmentCard segment={flightInfo.return} label="Return" />
-                </>
-              )}
-            </div>
-          </motion.div>
+          {(() => {
+            const allLegs = flightInfo.legs && flightInfo.legs.length > 0
+              ? flightInfo.legs
+              : [flightInfo.outbound, flightInfo.return].filter(Boolean);
+            const isMultiCity = allLegs.length > 2;
+
+            return (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-card rounded-xl border border-border overflow-hidden"
+              >
+                <div className="bg-primary/10 px-6 py-4 border-b border-border">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <Plane className="h-5 w-5" />
+                    Flight Details
+                    {allLegs.length > 0 && (
+                      <Badge variant="secondary" className="ml-2 text-xs">
+                        {allLegs.length} flight{allLegs.length !== 1 ? 's' : ''}
+                      </Badge>
+                    )}
+                  </h3>
+                </div>
+                <div className="p-6 space-y-4">
+                  {/* Route chain summary for multi-city */}
+                  {isMultiCity && (
+                    <div className="flex items-center gap-1.5 text-sm font-medium text-primary bg-primary/5 rounded-lg px-4 py-2.5 overflow-x-auto">
+                      <Plane className="h-4 w-4 shrink-0" />
+                      <span className="whitespace-nowrap">
+                        {[allLegs[0]?.departure?.airport || allLegs[0]?.departure?.city || '?',
+                          ...allLegs.map(l => l?.arrival?.airport || l?.arrival?.city || '?')
+                        ].join(' → ')}
+                      </span>
+                    </div>
+                  )}
+
+                  {allLegs.map((leg, idx) => {
+                    const label = isMultiCity
+                      ? `Leg ${idx + 1}`
+                      : (idx === 0 ? 'Outbound' : 'Return');
+                    return <FlightSegmentCard key={idx} segment={leg} label={label} />;
+                  })}
+                </div>
+              </motion.div>
+            );
+          })()}
 
           {/* Hotel Info */}
           <motion.div
@@ -582,32 +604,29 @@ function ActivityCard({
 // ============================================================================
 
 interface FlightSegmentCardProps {
-  segment: {
-    airline: string;
-    flightNumber: string;
-    departure: { airport: string; city: string; time: string; date: string; terminal: string };
-    arrival: { airport: string; city: string; time: string; date: string; terminal: string };
-    duration: string;
-    stops: string;
-    seats: string[];
-    class: string;
-  };
+  segment: Partial<FlightSegment>;
   label: string;
 }
 
 function FlightSegmentCard({ segment, label }: FlightSegmentCardProps) {
+  if (!segment) return null;
+  const dep = segment.departure;
+  const arr = segment.arrival;
+
   return (
     <div className="bg-secondary/30 rounded-lg p-4">
       <div className="flex items-center justify-between mb-3">
         <Badge variant="outline">{label}</Badge>
-        <span className="text-sm text-muted-foreground">{segment.airline} {segment.flightNumber}</span>
+        <span className="text-sm text-muted-foreground">
+          {[segment.airline, segment.flightNumber].filter(Boolean).join(' ')}
+        </span>
       </div>
       <div className="flex items-center justify-between">
         <div className="text-center">
-          <p className="text-2xl font-bold">{segment.departure.airport}</p>
-          <p className="text-sm text-muted-foreground">{segment.departure.city}</p>
-          <p className="text-sm font-medium">{segment.departure.time}</p>
-          <p className="text-xs text-muted-foreground">{segment.departure.date}</p>
+          <p className="text-2xl font-bold">{dep?.airport || '—'}</p>
+          {dep?.city && <p className="text-sm text-muted-foreground">{dep.city}</p>}
+          {dep?.time && <p className="text-sm font-medium">{dep.time}</p>}
+          {dep?.date && <p className="text-xs text-muted-foreground">{dep.date}</p>}
         </div>
         <div className="flex-1 px-4">
           <div className="flex items-center justify-center gap-2">
@@ -615,20 +634,22 @@ function FlightSegmentCard({ segment, label }: FlightSegmentCardProps) {
             <Plane className="h-4 w-4 text-muted-foreground" />
             <div className="h-px flex-1 bg-border" />
           </div>
-          <p className="text-center text-xs text-muted-foreground mt-1">{segment.duration}</p>
-          <p className="text-center text-xs text-muted-foreground">{segment.stops}</p>
+          {segment.duration && <p className="text-center text-xs text-muted-foreground mt-1">{segment.duration}</p>}
+          {segment.stops && <p className="text-center text-xs text-muted-foreground">{segment.stops}</p>}
         </div>
         <div className="text-center">
-          <p className="text-2xl font-bold">{segment.arrival.airport}</p>
-          <p className="text-sm text-muted-foreground">{segment.arrival.city}</p>
-          <p className="text-sm font-medium">{segment.arrival.time}</p>
-          <p className="text-xs text-muted-foreground">{segment.arrival.date}</p>
+          <p className="text-2xl font-bold">{arr?.airport || '—'}</p>
+          {arr?.city && <p className="text-sm text-muted-foreground">{arr.city}</p>}
+          {arr?.time && <p className="text-sm font-medium">{arr.time}</p>}
+          {arr?.date && <p className="text-xs text-muted-foreground">{arr.date}</p>}
         </div>
       </div>
-      <div className="flex justify-between mt-3 text-xs text-muted-foreground">
-        <span>Class: {segment.class}</span>
-        <span>Seats: {segment.seats.join(', ')}</span>
-      </div>
+      {(segment.class || (segment.seats && segment.seats.length > 0)) && (
+        <div className="flex justify-between mt-3 text-xs text-muted-foreground">
+          {segment.class && <span>Class: {segment.class}</span>}
+          {segment.seats && segment.seats.length > 0 && <span>Seats: {segment.seats.join(', ')}</span>}
+        </div>
+      )}
     </div>
   );
 }
