@@ -608,9 +608,9 @@ export const destinations: Destination[] = [
     description: 'An ancient Nabataean city revealed through a narrow canyon. Petra offers the Treasury at sunrise, desert stargazing, Bedouin hospitality, and a scale that photographs can never quite capture.',
     timezone: 'Asia/Amman',
     currency: 'JOD',
-    imageUrl: 'https://images.unsplash.com/photo-1579606032821-4e6161c81571?w=1200&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1501232060322-aa87215ab531?w=1200&q=80',
     images: [
-      'https://images.unsplash.com/photo-1579606032821-4e6161c81571?w=1200&q=80',
+      'https://images.unsplash.com/photo-1501232060322-aa87215ab531?w=1200&q=80',
       'https://images.unsplash.com/photo-1548786811-dd6e453ccca7?w=1200&q=80',
       'https://images.unsplash.com/photo-1553856622-d1b352e9a211?w=1200&q=80',
     ],

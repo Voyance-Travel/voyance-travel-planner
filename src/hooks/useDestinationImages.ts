@@ -53,6 +53,7 @@ function isBrowser(): boolean {
 // Known-broken Unsplash photo IDs that return 404
 const BLOCKED_IMAGE_IDS = new Set([
   'photo-1563177978-4f4a11e3f462',
+  'photo-1579606032821-4e6161c81571',
 ]);
 
 function isBlockedUrl(url: string): boolean {
