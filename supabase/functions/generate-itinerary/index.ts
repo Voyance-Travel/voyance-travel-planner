@@ -4565,20 +4565,12 @@ For EVERY activity you generate, you MUST include ALL of these intelligence fiel
 DO NOT leave these fields empty or omit them. They are the core intelligence layer.
 
 ${'='.repeat(70)}
-🔀 CHOICE PAIRS — MANDATORY FOR DINING AND KEY ACTIVITIES
+🎯 CURATED PICKS — ONE BEST CHOICE PER SLOT
 ${'='.repeat(70)}
-For EVERY dining slot (breakfast, lunch, dinner) and at least 1-2 non-dining activity slots per day, generate TWO alternatives as separate activities with:
-- isOption: true
-- optionGroup: a shared ID like "breakfast-d{dayNumber}", "lunch-d{dayNumber}", "dinner-d{dayNumber}", "activity-d{dayNumber}-afternoon"
-- Both alternatives share the SAME startTime and endTime
-- Both should be high-quality, genuinely different options (not the same type of cuisine or experience)
-
-Example for a dinner slot:
-  { title: "Lardo", category: "dining", startTime: "19:00", endTime: "20:30", isOption: true, optionGroup: "dinner-d1", ... }
-  { title: "Canard", category: "dining", startTime: "19:00", endTime: "20:30", isOption: true, optionGroup: "dinner-d1", ... }
-
-For non-dining activities, pair different experiences (e.g. a museum vs a walking tour, a park vs a market).
-Transport, accommodation, and check-in/out activities do NOT need alternatives.
+For EVERY time slot (dining, activity, etc.), select the SINGLE BEST option based on the traveler's archetype, preferences, and trip context.
+Do NOT generate multiple alternatives or choice pairs. Do NOT use isOption or optionGroup fields.
+The traveler is paying for an AI-curated plan — deliver ONE confident recommendation per slot.
+If the traveler wants to swap an activity later, they can use the swap feature.
 
 ${'='.repeat(70)}
 📋 ACCOMMODATION NOTES & PRACTICAL TIPS — REQUIRED (Day 1 only)
@@ -8922,11 +8914,9 @@ ${lockedActivities.length > 0 ? '- DO NOT generate activities for locked time sl
 ${collaboratorAttributionPrompt}
 ${voyancePicksPrompt}
 
-CHOICE PAIRS — MANDATORY:
-For EVERY dining slot and at least 1-2 non-dining activity slots, generate TWO alternatives with:
-- isOption: true, optionGroup: shared ID like "dinner-d${dayNumber}", "lunch-d${dayNumber}", "activity-d${dayNumber}-afternoon"
-- Both share the SAME startTime/endTime but are genuinely different options
-- Transport/accommodation/check-in do NOT need alternatives
+CURATED PICKS — ONE BEST CHOICE PER SLOT:
+For each time slot, select the SINGLE BEST option based on the traveler's archetype and preferences.
+Do NOT generate multiple alternatives or use isOption/optionGroup. Deliver ONE confident pick per slot.
 Also include "accommodationNotes" (2-3 tips) and "practicalTips" (3-4 tips) arrays in the response.
 `;
 
