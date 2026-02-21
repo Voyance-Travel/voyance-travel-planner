@@ -3837,7 +3837,9 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     const travelers = context.travelers || 1;
     const days = context.totalDays || 1;
     // Subtract committed costs (flight + hotel) to get activity-only budget
-    const flightCents = trip.flight_selection?.outbound?.price ? Math.round((trip.flight_selection.outbound.price + (trip.flight_selection.return?.price || 0)) * 100) : 0;
+    const flightCents = trip.flight_selection?.legs
+      ? (trip.flight_selection.legs as any[]).reduce((sum: number, leg: any) => sum + (leg.price || 0), 0) * 100
+      : trip.flight_selection?.outbound?.price ? Math.round((trip.flight_selection.outbound.price + (trip.flight_selection.return?.price || 0)) * 100) : 0;
     const hotelCents = trip.hotel_selection?.pricePerNight ? Math.round(trip.hotel_selection.pricePerNight * days * 100) : 0;
     const activityBudgetCents = Math.max(0, budgetTotalCents - flightCents - hotelCents);
     const actualDailyPerPerson = Math.round(activityBudgetCents / days / travelers) / 100; // convert to dollars
@@ -8769,7 +8771,9 @@ FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
           if (tripBudgetData?.budget_total_cents && tripBudgetData.budget_total_cents > 0) {
             const trav = travelers || 1;
             const days = totalDays || 1;
-            const flightCents = tripBudgetData.flight_selection?.outbound?.price ? Math.round((tripBudgetData.flight_selection.outbound.price + (tripBudgetData.flight_selection.return?.price || 0)) * 100) : 0;
+            const flightCents = tripBudgetData.flight_selection?.legs
+              ? (tripBudgetData.flight_selection.legs as any[]).reduce((sum: number, leg: any) => sum + (leg.price || 0), 0) * 100
+              : tripBudgetData.flight_selection?.outbound?.price ? Math.round((tripBudgetData.flight_selection.outbound.price + (tripBudgetData.flight_selection.return?.price || 0)) * 100) : 0;
             const hotelCents = tripBudgetData.hotel_selection?.pricePerNight ? Math.round(tripBudgetData.hotel_selection.pricePerNight * days * 100) : 0;
             const activityBudgetCents = Math.max(0, tripBudgetData.budget_total_cents - flightCents - hotelCents);
             actualDailyBudgetPerPerson = Math.round(activityBudgetCents / days / trav) / 100;
