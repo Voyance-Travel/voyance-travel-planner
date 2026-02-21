@@ -1,26 +1,32 @@
 
+# Fix: Broken Petra Image + Stall Detector Not Taking Effect
 
-# Fix: Increase Stall Timeout to 600s and Kill Broken Image
+## What's Happening
+
+Two separate issues:
+
+1. **Broken Petra image** (`photo-1579606032821-4e6161c81571`) -- This is the image we swapped IN as a "fix" for the previous broken image. It's also dead now, returning 404. It appears in `src/utils/destinationImages.ts` and `src/lib/destinations.ts` for Petra/Jordan.
+
+2. **"120s" in the error log** -- The 600s stall detector IS in the code, but your browser is still running a cached older build. Once these changes deploy and you hard-refresh, you'll see the 600s threshold.
 
 ## Changes
 
-### 1. Increase stall detector threshold from 120s to 600s
-**File:** `src/components/itinerary/ItineraryGenerator.tsx`
+### 1. Add broken image to blocklist
+**File:** `src/hooks/useDestinationImages.ts`
 
-- Line 248: Change `120_000` to `600_000`
-- Line 208: Update log message to say "600s" instead of "120s"
+Add `photo-1579606032821-4e6161c81571` to the `BLOCKED_IMAGE_IDS` set so it's caught immediately even if served from the backend API.
 
-This gives each day up to 10 minutes of silence before the stall detector fires. Since each day already has its own 90s timeout with 4 retries in `useItineraryGeneration.ts`, the stall detector is purely a last-resort safety net for truly dead connections. 600 seconds is generous enough for any trip size.
+### 2. Replace Petra image in curated lists
+**File:** `src/utils/destinationImages.ts`
 
-### 2. Add global image error handler for the broken Unsplash photo
-**File:** `src/hooks/useDestinationImages.ts` (or wherever destination images are resolved)
+Replace `photo-1579606032821-4e6161c81571` with a verified working Unsplash photo of Petra's Treasury.
 
-Add a blocklist of known-broken Unsplash photo IDs. If the URL contains a blocked ID, replace it with a CSS gradient fallback before it reaches the UI. The ID `photo-1563177978-4f4a11e3f462` goes in this blocklist.
+### 3. Replace Petra image in destinations config
+**File:** `src/lib/destinations.ts`
 
-If the image is coming from the database rather than code, we will also run a one-time SQL update to remove/replace any rows containing this broken URL.
+Same replacement for the `imageUrl` and `images` array for the Petra destination.
 
-### Summary
-- **2 lines changed** in `ItineraryGenerator.tsx` (threshold + log message)
-- **Small addition** to image resolution logic (blocklist)
-- **Optional DB cleanup** if the broken URL is stored in a table
-- No edge function changes, no credit/billing changes
+## Summary
+- 3 files edited, ~6 lines changed total
+- No edge function changes
+- No timeout logic changes (the 600s fix is already in place -- just needs a fresh browser load)
