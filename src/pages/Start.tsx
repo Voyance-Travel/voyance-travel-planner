@@ -244,6 +244,115 @@ function MotivationSidebar() {
   );
 }
 
+// Date range picker — single calendar, two-click flow
+function DateRangePicker({
+  startDate, endDate, setStartDate, setEndDate,
+  calendarMonth, setCalendarMonth, today,
+}: {
+  startDate: Date | undefined;
+  endDate: Date | undefined;
+  setStartDate: (d: Date | undefined) => void;
+  setEndDate: (d: Date | undefined) => void;
+  calendarMonth: Date;
+  setCalendarMonth: (d: Date) => void;
+  today: Date;
+}) {
+  const [open, setOpen] = useState(false);
+  // 'start' = next click sets arrival; 'end' = next click sets departure
+  const [picking, setPicking] = useState<'start' | 'end'>('start');
+
+  const handleSelect = (date: Date | undefined) => {
+    if (!date) return;
+    if (picking === 'start') {
+      setStartDate(date);
+      // If new start is after current end, clear end
+      if (endDate && isBefore(endDate, date)) {
+        setEndDate(undefined);
+      }
+      setPicking('end');
+    } else {
+      // If picked date is before start, treat it as new start
+      if (startDate && isBefore(date, startDate)) {
+        setStartDate(date);
+        setEndDate(undefined);
+        setPicking('end');
+        return;
+      }
+      setEndDate(date);
+      setPicking('start');
+      setOpen(false);
+    }
+  };
+
+  const handleOpen = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (isOpen) {
+      // If both dates set, clicking opens in "start" mode to re-pick
+      setPicking(startDate && !endDate ? 'end' : 'start');
+      if (startDate) setCalendarMonth(startOfMonth(startDate));
+    }
+  };
+
+  const nightCount = startDate && endDate ? differenceInDays(endDate, startDate) : null;
+
+  return (
+    <div className="space-y-1.5 sm:space-y-2">
+      <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
+        Dates
+      </label>
+      <Popover open={open} onOpenChange={handleOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className={cn(
+              'w-full h-11 sm:h-12 justify-between text-left font-normal text-sm',
+              !startDate && !endDate && 'text-muted-foreground'
+            )}
+          >
+            <span className="flex items-center gap-1.5">
+              <CalendarIcon className="h-4 w-4 opacity-50" />
+              {startDate && endDate
+                ? `${format(startDate, 'MMM d')} → ${format(endDate, 'MMM d')}${nightCount ? ` (${nightCount} nights)` : ''}`
+                : startDate
+                  ? `${format(startDate, 'MMM d')} → select end`
+                  : 'Select dates'}
+            </span>
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <div className="px-3 pt-3 pb-1">
+            <p className="text-xs text-muted-foreground text-center">
+              {picking === 'start' ? 'Pick your arrival date' : 'Now pick your departure date'}
+            </p>
+          </div>
+          <Calendar
+            mode="single"
+            selected={picking === 'start' ? startDate : endDate}
+            month={calendarMonth}
+            onMonthChange={setCalendarMonth}
+            onSelect={handleSelect}
+            disabled={(date) => isBefore(date, today)}
+            initialFocus
+            className="p-3 pointer-events-auto"
+            modifiers={{
+              range_start: startDate ? [startDate] : [],
+              range_end: endDate ? [endDate] : [],
+              range_middle: startDate && endDate
+                ? { after: startDate, before: endDate }
+                : [],
+            }}
+            modifiersClassNames={{
+              range_start: 'bg-primary text-primary-foreground rounded-l-md',
+              range_end: 'bg-primary text-primary-foreground rounded-r-md',
+              range_middle: 'bg-accent text-accent-foreground',
+            }}
+          />
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 // Step 1: Trip Details with inline budget section
 function TripDetailsStep({
   destinationSelection,
@@ -440,73 +549,17 @@ function TripDetailsStep({
           </div>
         )}
 
-        {/* Dates - mobile optimized */}
+        {/* Dates - single range picker */}
         {planMode !== 'chat' && planMode !== 'manual' && (
-        <div className="grid grid-cols-2 gap-3 sm:gap-4">
-          <div className="space-y-1.5 sm:space-y-2">
-            <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
-              Arriving
-            </label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    'w-full h-11 sm:h-12 justify-between text-left font-normal text-sm',
-                    !startDate && 'text-muted-foreground'
-                  )}
-                >
-                  {startDate ? format(startDate, 'MMM d') : 'Select'}
-                  <CalendarIcon className="h-4 w-4 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={startDate}
-                  month={calendarMonth}
-                  onMonthChange={setCalendarMonth}
-                  onSelect={setStartDate}
-                  disabled={(date) => isBefore(date, today)}
-                  initialFocus
-                  className="p-3 pointer-events-auto"
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
-
-          <div className="space-y-1.5 sm:space-y-2">
-            <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
-              Leaving
-            </label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    'w-full h-11 sm:h-12 justify-between text-left font-normal text-sm',
-                    !endDate && 'text-muted-foreground'
-                  )}
-                >
-                  {endDate ? format(endDate, 'MMM d') : 'Select'}
-                  <CalendarIcon className="h-4 w-4 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={endDate}
-                  month={calendarMonth}
-                  onMonthChange={setCalendarMonth}
-                  onSelect={setEndDate}
-                  disabled={(date) => (startDate ? isBefore(date, startDate) : isBefore(date, today))}
-                  initialFocus
-                  className="p-3 pointer-events-auto"
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
-        </div>
+        <DateRangePicker
+          startDate={startDate}
+          endDate={endDate}
+          setStartDate={setStartDate}
+          setEndDate={setEndDate}
+          calendarMonth={calendarMonth}
+          setCalendarMonth={setCalendarMonth}
+          today={today}
+        />
         )}
 
         {/* Travelers - mobile optimized touch targets */}
