@@ -6115,11 +6115,24 @@ async function finalSaveItinerary(
       enrichmentMetadata: enrichedData.enrichmentMetadata
     };
 
+    // Build DNA snapshot from unified profile for audit trail
+    const dnaSnapshot = unifiedProfile ? {
+      archetype: unifiedProfile.archetype,
+      secondaryArchetype: unifiedProfile.secondaryArchetype,
+      archetypeSource: unifiedProfile.archetypeSource,
+      traitScores: unifiedProfile.traitScores,
+      budgetTier: unifiedProfile.budgetTier,
+      dataCompleteness: unifiedProfile.dataCompleteness,
+      isFallback: unifiedProfile.isFallback,
+      snapshotAt: new Date().toISOString(),
+    } : null;
+
     const { error } = await supabase
       .from('trips')
       .update({
         itinerary_data: frontendReadyData,
         itinerary_status: 'ready',
+        dna_snapshot: dnaSnapshot,
         updated_at: new Date().toISOString()
       })
       .eq('id', tripId);
@@ -9449,6 +9462,18 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         // Save version to itinerary_versions table for undo functionality
         if (tripId) {
           try {
+            // Build DNA snapshot for this generation version
+            const versionDnaSnapshot = profile ? {
+              archetype: profile.archetype,
+              secondaryArchetype: profile.secondaryArchetype,
+              archetypeSource: profile.archetypeSource,
+              traitScores: profile.traitScores,
+              budgetTier: profile.budgetTier,
+              dataCompleteness: profile.dataCompleteness,
+              isFallback: profile.isFallback,
+              snapshotAt: new Date().toISOString(),
+            } : null;
+
             const { error: versionError } = await supabase
               .from('itinerary_versions')
               .insert({
@@ -9461,6 +9486,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                   narrative: generatedDay.narrative,
                 },
                 created_by_action: action === 'regenerate-day' ? 'regenerate' : 'generate',
+                dna_snapshot: versionDnaSnapshot,
               });
             
             if (versionError) {
