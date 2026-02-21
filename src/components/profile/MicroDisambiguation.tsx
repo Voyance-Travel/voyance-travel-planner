@@ -160,10 +160,13 @@ export default function MicroDisambiguation({
 }: MicroDisambiguationProps) {
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isResolved, setIsResolved] = useState(false);
+  const dismissKey = `dna-disambig-resolved-${userId}`;
+  const [isResolved, setIsResolved] = useState(() => {
+    return localStorage.getItem(dismissKey) === 'true';
+  });
 
-  // Don't show if confidence is high enough
-  if (confidence >= 60) {
+  // Don't show if confidence is high enough or already resolved
+  if (confidence >= 60 || isResolved) {
     return null;
   }
 
@@ -221,6 +224,7 @@ export default function MicroDisambiguation({
       // Full recalculation — updates archetypes, tone tags, everything
       await recalculateDNAFromPreferences(userId);
 
+      localStorage.setItem(dismissKey, 'true');
       setIsResolved(true);
       toast.success('Thanks! Your profile has been refined.');
       onResolved?.();
