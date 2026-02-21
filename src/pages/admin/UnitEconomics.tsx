@@ -340,6 +340,7 @@ const ACTION_COSTS: Record<string, number> = {
   mystery_getaway: 0.025, // AI destination suggestions
   mystery_logistics: 0.015, // Flight + hotel estimates
   transport_mode_change: 0.005, // Route recalculation
+  route_optimization: 0.015,  // Google Routes + AI reordering per day
 };
 
 // Column definitions with tooltips for per-trip scaling table
