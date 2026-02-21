@@ -202,8 +202,16 @@ export default function FullItinerary({
               </h3>
             </div>
             <div className="p-6 space-y-6">
-              <FlightSegmentCard segment={flightInfo.outbound} label="Outbound" />
-              <FlightSegmentCard segment={flightInfo.return} label="Return" />
+              {(flightInfo as any).legs ? (
+                ((flightInfo as any).legs as any[]).map((leg: any, idx: number) => (
+                  <FlightSegmentCard key={idx} segment={leg} label={`Leg ${idx + 1}`} />
+                ))
+              ) : (
+                <>
+                  <FlightSegmentCard segment={flightInfo.outbound} label="Outbound" />
+                  <FlightSegmentCard segment={flightInfo.return} label="Return" />
+                </>
+              )}
             </div>
           </motion.div>
 

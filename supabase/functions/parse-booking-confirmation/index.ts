@@ -1,14 +1,30 @@
-// Parse booking confirmation using AI
+// Parse booking confirmation using AI — extracts ALL flight segments
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+interface ParsedSegment {
+  vendor_name?: string;
+  flight_number?: string;
+  origin?: string;
+  origin_code?: string;
+  destination?: string;
+  destination_code?: string;
+  start_date?: string;
+  start_time?: string;
+  end_date?: string;
+  end_time?: string;
+  cabin_class?: string;
+  net_cost_cents?: number;
+}
+
 interface ParsedBooking {
   segment_type: 'flight' | 'hotel' | 'car_rental' | 'rail' | 'tour' | 'cruise' | 'transfer' | 'insurance' | 'other';
   vendor_name?: string;
   confirmation_number?: string;
+  // Legacy single-segment fields (populated from first segment for backward compat)
   start_date?: string;
   start_time?: string;
   end_date?: string;
@@ -25,6 +41,8 @@ interface ParsedBooking {
   net_cost_cents?: number;
   is_multi_segment?: boolean;
   segment_count?: number;
+  // NEW: all segments
+  segments?: ParsedSegment[];
 }
 
 Deno.serve(async (req) => {
@@ -42,7 +60,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Use Lovable AI to parse the confirmation
     const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
     if (!lovableApiKey) {
       throw new Error('LOVABLE_API_KEY not configured');
@@ -50,27 +67,34 @@ Deno.serve(async (req) => {
 
     const prompt = `You are a travel booking parser. Extract booking details from the following confirmation email or text.
 
-IMPORTANT: If this confirmation contains MULTIPLE flights (multi-city, connections, or round-trip with multiple segments), set is_multi_segment to true and segment_count to the number of flights. For multi-segment bookings, extract ONLY the FIRST outbound flight segment details.
+IMPORTANT: Extract ALL flight segments from this booking. If this is a multi-city or round-trip booking with multiple flights, extract EVERY segment.
 
-Return a JSON object with these fields (only include fields you can extract with confidence):
+Return a JSON object with these fields:
 - segment_type: one of "flight", "hotel", "car_rental", "rail", "tour", "cruise", "transfer", "insurance", "other"
 - vendor_name: airline name, hotel name, or company name
 - confirmation_number: booking reference or confirmation code
-- start_date: in YYYY-MM-DD format (for the FIRST flight segment only)
-- start_time: in HH:MM format (24-hour, for the FIRST flight segment only)
-- end_date: in YYYY-MM-DD format (arrival date of FIRST flight segment)
-- end_time: in HH:MM format (24-hour, arrival time of FIRST flight segment)
-- origin: departure city/airport for first flight
-- origin_code: airport code like "JFK" or "LAX" for first flight
-- destination: arrival city/airport for first flight
-- destination_code: airport code for first flight arrival
-- flight_number: like "UA 123" or "DL456" for the first flight
-- cabin_class: "economy", "premium_economy", "business", or "first"
-- is_multi_segment: true if there are multiple flights in this booking
-- segment_count: total number of flight segments in this booking
-- notes: any other relevant details like special requests, seat assignments, etc.
+- is_multi_segment: true if there are multiple flights
+- segment_count: total number of flight segments
 
-IMPORTANT: Do NOT invent or estimate any field values. If a price, cost, or fare is not explicitly stated in the text, do NOT include a price field. Only extract information that is clearly present in the confirmation text. Never hallucinate or guess values.
+- segments: an ARRAY of flight segment objects, each with:
+  - vendor_name: airline for this segment (if different from overall)
+  - flight_number: like "UA 123" or "DL456"
+  - origin: departure city/airport name
+  - origin_code: 3-letter airport code like "JFK"
+  - destination: arrival city/airport name
+  - destination_code: 3-letter airport code
+  - start_date: departure date in YYYY-MM-DD format
+  - start_time: departure time in HH:MM 24-hour format
+  - end_date: arrival date in YYYY-MM-DD format
+  - end_time: arrival time in HH:MM 24-hour format
+  - cabin_class: "economy", "premium_economy", "business", or "first"
+
+Also include these top-level fields from the FIRST segment for backward compatibility:
+- start_date, start_time, end_date, end_time, origin, origin_code, destination, destination_code, flight_number, cabin_class
+
+- notes: any other relevant details like seat assignments, etc.
+
+IMPORTANT: Do NOT invent or estimate any field values. If a value is not explicitly stated in the text, do NOT include it. Never hallucinate or guess values. If a price or fare is not explicitly stated, do NOT include a price/cost field.
 
 Only return valid JSON, no markdown or explanations.
 
@@ -101,10 +125,8 @@ ${confirmationText}`;
     const aiResponse = await response.json();
     const content = aiResponse.choices?.[0]?.message?.content || '';
 
-    // Parse the JSON from the AI response
     let parsedBooking: ParsedBooking;
     try {
-      // Clean the response - remove markdown code blocks if present
       let cleanedContent = content.trim();
       if (cleanedContent.startsWith('```json')) {
         cleanedContent = cleanedContent.slice(7);
@@ -132,6 +154,31 @@ ${confirmationText}`;
     const validTypes = ['flight', 'hotel', 'car_rental', 'rail', 'tour', 'cruise', 'transfer', 'insurance', 'other'];
     if (!parsedBooking.segment_type || !validTypes.includes(parsedBooking.segment_type)) {
       parsedBooking.segment_type = 'other';
+    }
+
+    // Ensure segments array exists (backward compat: build from top-level fields if AI didn't return segments)
+    if (!parsedBooking.segments || !Array.isArray(parsedBooking.segments) || parsedBooking.segments.length === 0) {
+      if (parsedBooking.segment_type === 'flight') {
+        parsedBooking.segments = [{
+          vendor_name: parsedBooking.vendor_name,
+          flight_number: parsedBooking.flight_number,
+          origin: parsedBooking.origin,
+          origin_code: parsedBooking.origin_code,
+          destination: parsedBooking.destination,
+          destination_code: parsedBooking.destination_code,
+          start_date: parsedBooking.start_date,
+          start_time: parsedBooking.start_time,
+          end_date: parsedBooking.end_date,
+          end_time: parsedBooking.end_time,
+          cabin_class: parsedBooking.cabin_class,
+        }];
+      }
+    }
+
+    // Update segment_count and is_multi_segment based on actual segments
+    if (parsedBooking.segments) {
+      parsedBooking.segment_count = parsedBooking.segments.length;
+      parsedBooking.is_multi_segment = parsedBooking.segments.length > 1;
     }
 
     return new Response(

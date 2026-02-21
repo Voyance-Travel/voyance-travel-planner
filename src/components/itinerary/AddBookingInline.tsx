@@ -4,6 +4,7 @@
  * Inline UI for adding flight/hotel details to an itinerary.
  * Flights: Customers book their own flights elsewhere and add details here.
  * Hotels: Can browse & book through platform or manually enter details.
+ * Supports multi-leg flights (multi-city, round-trip, one-way).
  */
 
 import { useState } from 'react';
@@ -148,23 +149,35 @@ export function AddFlightInline({
 
     setIsSaving(true);
     try {
-      const flightSelection = {
+      // Build legs array
+      const legs: Array<{
+        legOrder: number;
+        airline: string;
+        flightNumber: string;
+        departure: { airport: string; time: string; date: string };
+        arrival: { airport: string; time: string };
+        price: number;
+        cabin: string;
+      }> = [{
+        legOrder: 1,
+        airline: outboundFlight.airline || 'Unknown',
+        flightNumber: outboundFlight.flightNumber || '',
         departure: {
-          airline: outboundFlight.airline || 'Unknown',
-          flightNumber: outboundFlight.flightNumber || '',
-          departure: {
-            airport: outboundFlight.departureAirport,
-            time: outboundFlight.departureTime,
-            date: outboundFlight.departureDate,
-          },
-          arrival: {
-            airport: outboundFlight.arrivalAirport,
-            time: outboundFlight.arrivalTime,
-          },
-          price: outboundFlight.price || 0,
-          cabin: 'economy',
+          airport: outboundFlight.departureAirport,
+          time: outboundFlight.departureTime,
+          date: outboundFlight.departureDate,
         },
-        return: (showReturnFlight && returnFlight.departureTime) ? {
+        arrival: {
+          airport: outboundFlight.arrivalAirport,
+          time: outboundFlight.arrivalTime,
+        },
+        price: outboundFlight.price || 0,
+        cabin: 'economy',
+      }];
+
+      if (showReturnFlight && returnFlight.departureTime) {
+        legs.push({
+          legOrder: 2,
           airline: returnFlight.airline || 'Unknown',
           flightNumber: returnFlight.flightNumber || '',
           departure: {
@@ -178,13 +191,39 @@ export function AddFlightInline({
           },
           price: returnFlight.price || 0,
           cabin: 'economy',
-        } : undefined,
+        });
+      }
+
+      // Build flight_selection with legs[] + backward-compat departure/return
+      const flightSelection: Record<string, unknown> = {
+        legs,
         isManualEntry: true,
+        // Backward compat: departure = first leg
+        departure: {
+          airline: legs[0].airline,
+          flightNumber: legs[0].flightNumber,
+          departure: legs[0].departure,
+          arrival: legs[0].arrival,
+          price: legs[0].price,
+          cabin: legs[0].cabin,
+        },
       };
+
+      if (legs.length >= 2) {
+        const last = legs[legs.length - 1];
+        flightSelection.return = {
+          airline: last.airline,
+          flightNumber: last.flightNumber,
+          departure: last.departure,
+          arrival: last.arrival,
+          price: last.price,
+          cabin: last.cabin,
+        };
+      }
 
       const { error } = await supabase
         .from('trips')
-        .update({ flight_selection: flightSelection })
+        .update({ flight_selection: flightSelection as any })
         .eq('id', tripId);
 
       if (error) throw error;
@@ -200,7 +239,7 @@ export function AddFlightInline({
     }
   };
 
-  // Handle import from modal
+  // Handle import from modal (legacy: outbound + return)
   const handleImportFlight = (outbound: ManualFlightEntry, returnFlightData?: ManualFlightEntry) => {
     setOutboundFlight(outbound);
     if (returnFlightData) {
@@ -210,6 +249,84 @@ export function AddFlightInline({
     // Show the manual entry dialog so user can review/edit
     setShowManualEntry(true);
     setShowMoreOutbound(true); // Expand to show all imported fields
+  };
+
+  // Handle multi-leg import
+  const handleImportLegs = async (legs: ManualFlightEntry[]) => {
+    if (legs.length === 0) return;
+
+    // Set the first as outbound
+    setOutboundFlight(legs[0]);
+    
+    // Set last as return if there are 2+ legs
+    if (legs.length >= 2) {
+      setReturnFlight(legs[legs.length - 1]);
+      setShowReturnFlight(true);
+    }
+
+    // For 3+ legs, save directly with legs[] format (manual entry dialog can't show N legs)
+    if (legs.length > 2) {
+      setIsSaving(true);
+      try {
+        const legObjs = legs.map((leg, i) => ({
+          legOrder: i + 1,
+          airline: leg.airline || 'Unknown',
+          flightNumber: leg.flightNumber || '',
+          departure: {
+            airport: leg.departureAirport,
+            time: leg.departureTime,
+            date: leg.departureDate,
+          },
+          arrival: {
+            airport: leg.arrivalAirport,
+            time: leg.arrivalTime,
+          },
+          price: leg.price || 0,
+          cabin: 'economy',
+        }));
+
+        const flightSelection: Record<string, unknown> = {
+          legs: legObjs,
+          isManualEntry: true,
+          departure: {
+            airline: legObjs[0].airline,
+            flightNumber: legObjs[0].flightNumber,
+            departure: legObjs[0].departure,
+            arrival: legObjs[0].arrival,
+            price: legObjs[0].price,
+            cabin: legObjs[0].cabin,
+          },
+          return: {
+            airline: legObjs[legObjs.length - 1].airline,
+            flightNumber: legObjs[legObjs.length - 1].flightNumber,
+            departure: legObjs[legObjs.length - 1].departure,
+            arrival: legObjs[legObjs.length - 1].arrival,
+            price: legObjs[legObjs.length - 1].price,
+            cabin: legObjs[legObjs.length - 1].cabin,
+          },
+        };
+
+        const { error } = await supabase
+          .from('trips')
+          .update({ flight_selection: flightSelection as any })
+          .eq('id', tripId);
+
+        if (error) throw error;
+
+        toast.success(`${legs.length} flight legs saved!`);
+        onFlightAdded?.();
+      } catch (err) {
+        console.error('Failed to save flights:', err);
+        toast.error('Failed to save flight details');
+      } finally {
+        setIsSaving(false);
+      }
+      return;
+    }
+
+    // For 1-2 legs, show manual entry dialog for review
+    setShowManualEntry(true);
+    setShowMoreOutbound(true);
   };
 
   return (
@@ -233,6 +350,7 @@ export function AddFlightInline({
         open={showImportModal}
         onOpenChange={setShowImportModal}
         onImport={handleImportFlight}
+        onImportLegs={handleImportLegs}
         tripStartDate={startDate}
         tripEndDate={endDate}
       />
