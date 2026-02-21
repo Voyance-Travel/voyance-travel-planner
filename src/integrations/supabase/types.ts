@@ -3953,6 +3953,7 @@ export type Database = {
           created_by_action: string | null
           day_metadata: Json | null
           day_number: number
+          dna_snapshot: Json | null
           id: string
           is_current: boolean | null
           trip_id: string
@@ -3964,6 +3965,7 @@ export type Database = {
           created_by_action?: string | null
           day_metadata?: Json | null
           day_number: number
+          dna_snapshot?: Json | null
           id?: string
           is_current?: boolean | null
           trip_id: string
@@ -3975,6 +3977,7 @@ export type Database = {
           created_by_action?: string | null
           day_metadata?: Json | null
           day_number?: number
+          dna_snapshot?: Json | null
           id?: string
           is_current?: boolean | null
           trip_id?: string
@@ -6693,6 +6696,7 @@ export type Database = {
           destination: string
           destination_country: string | null
           destinations: Json | null
+          dna_snapshot: Json | null
           end_date: string
           flight_selection: Json | null
           gap_analysis_result: Json | null
@@ -6742,6 +6746,7 @@ export type Database = {
           destination: string
           destination_country?: string | null
           destinations?: Json | null
+          dna_snapshot?: Json | null
           end_date: string
           flight_selection?: Json | null
           gap_analysis_result?: Json | null
@@ -6791,6 +6796,7 @@ export type Database = {
           destination?: string
           destination_country?: string | null
           destinations?: Json | null
+          dna_snapshot?: Json | null
           end_date?: string
           flight_selection?: Json | null
           gap_analysis_result?: Json | null
