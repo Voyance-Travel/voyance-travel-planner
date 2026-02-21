@@ -159,12 +159,27 @@ function ArchetypeHeroCard({
           <span className="text-background/15">|</span>
           <span className="text-xs text-background/35">{rarity}</span>
 
-          {confidence !== null && (
-            <>
-              <span className="text-background/15">|</span>
-              <span className="text-xs text-background/35">{confidence}% match</span>
-            </>
-          )}
+          {(() => {
+            const FALLBACK_IDS = ['balanced_story_collector', 'explorer', 'flexible_wanderer'];
+            const isFallback = FALLBACK_IDS.includes(narrative.id || '');
+            if (isFallback) {
+              return (
+                <>
+                  <span className="text-background/15">|</span>
+                  <span className="text-xs text-background/35">Broad match</span>
+                </>
+              );
+            }
+            if (confidence !== null) {
+              return (
+                <>
+                  <span className="text-background/15">|</span>
+                  <span className="text-xs text-background/35">{confidence}% match</span>
+                </>
+              );
+            }
+            return null;
+          })()}
 
           {secondaryNarrative && SecondaryIcon && (
             <>
