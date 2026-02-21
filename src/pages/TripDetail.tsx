@@ -867,45 +867,47 @@ export default function TripDetail() {
       
       <section className="pb-16 pt-6 relative z-10">
         <div className="max-w-4xl mx-auto px-4">
-          {/* Status Badge and Actions for non-active trips */}
-          {!isLiveTrip && (
-            <div className="flex flex-wrap items-center gap-3 mb-8">
-              <Badge 
-                variant={
-                  trip.status === 'completed' ? 'secondary' : 
-                  trip.status === 'booked' ? 'default' : 
-                  'outline'
-                }
-                className="capitalize"
-              >
-                {trip.status}
-              </Badge>
-              
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Calendar className="w-4 h-4" />
-                {format(parseLocalDate(trip.start_date), 'MMM d')} - {format(parseLocalDate(effectiveEndDate), 'MMM d, yyyy')}
-              </div>
-            </div>
-          )}
+          {/* Status Badge, Date, and Inline Confirmation */}
+          {!isLiveTrip && (() => {
+            const isPastTrip = isAfter(new Date(), parseLocalDate(effectiveEndDate));
+            return (
+              <div className="flex flex-wrap items-center gap-3 mb-8">
+                <Badge 
+                  variant={
+                    trip.status === 'completed' ? 'secondary' : 
+                    trip.status === 'booked' ? 'default' : 
+                    isPastTrip ? 'secondary' : 'outline'
+                  }
+                  className="capitalize"
+                >
+                  {isPastTrip && trip.status === 'draft' ? 'Past' : trip.status}
+                </Badge>
+                
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Calendar className="w-4 h-4" />
+                  {format(parseLocalDate(trip.start_date), 'MMM d')} - {format(parseLocalDate(effectiveEndDate), 'MMM d, yyyy')}
+                </div>
 
-          {/* Trip Confirmation Banner - ask if draft trip is real */}
-          {hasItinerary && (
-            <TripConfirmationBanner
-              tripId={trip.id}
-              destination={trip.destination}
-              startDate={trip.start_date}
-              endDate={effectiveEndDate}
-              currentStatus={trip.status as string}
-              hasFlightSelection={!!trip.flight_selection}
-              hasHotelSelection={!!trip.hotel_selection}
-              itineraryDays={itineraryDays}
-              onStatusUpdate={(status) => setTrip(prev => prev ? { ...prev, status } as any : null)}
-              onTripDataUpdate={(data) => setTrip(prev => prev ? { ...prev, ...data } as any : null)}
-              onApplySwaps={handleApplySwaps}
-              onRegenerateTrip={handleRegenerateTrip}
-              className="mb-6"
-            />
-          )}
+                {/* Inline confirmation buttons (only shows for draft trips within 14 days) */}
+                {hasItinerary && (
+                  <TripConfirmationBanner
+                    tripId={trip.id}
+                    destination={trip.destination}
+                    startDate={trip.start_date}
+                    endDate={effectiveEndDate}
+                    currentStatus={trip.status as string}
+                    hasFlightSelection={!!trip.flight_selection}
+                    hasHotelSelection={!!trip.hotel_selection}
+                    itineraryDays={itineraryDays}
+                    onStatusUpdate={(status) => setTrip(prev => prev ? { ...prev, status } as any : null)}
+                    onTripDataUpdate={(data) => setTrip(prev => prev ? { ...prev, ...data } as any : null)}
+                    onApplySwaps={handleApplySwaps}
+                    onRegenerateTrip={handleRegenerateTrip}
+                  />
+                )}
+              </div>
+            );
+          })()}
 
           {/* Live Itinerary View for active trips */}
           {isLiveTrip ? (

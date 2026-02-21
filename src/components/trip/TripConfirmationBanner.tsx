@@ -12,6 +12,8 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { SwapReviewDialog, type SwapSuggestion } from './SwapReviewDialog';
 import { useSpendCredits } from '@/hooks/useSpendCredits';
+import { parseLocalDate } from '@/utils/dateUtils';
+import { differenceInDays } from 'date-fns';
 
 interface TripConfirmationBannerProps {
   tripId: string;
@@ -21,7 +23,7 @@ interface TripConfirmationBannerProps {
   currentStatus: string;
   hasFlightSelection: boolean;
   hasHotelSelection: boolean;
-  itineraryDays: any[]; // EditorialDay[] - current itinerary for swap analysis
+  itineraryDays: any[];
   onStatusUpdate: (status: string) => void;
   onTripDataUpdate: (data: { flight_selection?: any; hotel_selection?: any }) => void;
   onApplySwaps: (swaps: SwapSuggestion[]) => void;
@@ -50,7 +52,19 @@ export function TripConfirmationBanner({
   onRegenerateTrip,
   className,
 }: TripConfirmationBannerProps) {
-  const [dismissed, setDismissed] = useState(false);
+  // Smart visibility: check dates and localStorage dismissal
+  const today = new Date();
+  const tripEnd = parseLocalDate(endDate);
+  const tripStart = parseLocalDate(startDate);
+  const isPastTrip = tripEnd < today;
+  const daysUntilDeparture = differenceInDays(tripStart, today);
+  const isWithin14Days = daysUntilDeparture <= 14 && daysUntilDeparture >= 0;
+
+  const dismissKey = `trip-confirm-dismissed-${tripId}`;
+  const [dismissed, setDismissed] = useState(() => {
+    return localStorage.getItem(dismissKey) === 'true';
+  });
+
   const [showLogisticsDialog, setShowLogisticsDialog] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingSwaps, setIsLoadingSwaps] = useState(false);
@@ -82,10 +96,11 @@ export function TripConfirmationBanner({
     }));
   }, []);
 
-  // Don't show for non-draft trips or dismissed
-  if (currentStatus !== 'draft' || dismissed) return null;
+  // Don't show for non-draft, past trips, dismissed, or too far out
+  if (currentStatus !== 'draft' || dismissed || isPastTrip || !isWithin14Days) return null;
 
   const handleDrafting = () => {
+    localStorage.setItem(dismissKey, 'true');
     setDismissed(true);
   };
 
@@ -124,7 +139,6 @@ export function TripConfirmationBanner({
         onTripDataUpdate(logistics);
       }
 
-      // If hotel was added, fetch swap suggestions instead of auto-regenerating
       if (logistics?.hotel_selection && itineraryDays.length > 0) {
         setShowLogisticsDialog(false);
         await fetchSwapSuggestions(logistics.hotel_selection);
@@ -144,7 +158,6 @@ export function TripConfirmationBanner({
   const fetchSwapSuggestions = async (hotelSelection: { name: string; neighborhood?: string }) => {
     setIsLoadingSwaps(true);
     try {
-      // Build simplified day data for the AI
       const simplifiedDays = itineraryDays.map((day: any) => ({
         dayNumber: day.dayNumber,
         activities: (day.activities || []).map((a: any) => ({
@@ -195,7 +208,6 @@ export function TripConfirmationBanner({
   const handleApplySwaps = async (approvedSwaps: SwapSuggestion[]) => {
     setIsApplyingSwaps(true);
     try {
-      // Charge credits
       await spendCredits.mutateAsync({
         action: 'HOTEL_OPTIMIZATION',
         tripId,
@@ -206,7 +218,6 @@ export function TripConfirmationBanner({
       setShowSwapReview(false);
       setDismissed(true);
     } catch (err: any) {
-      // If it's a credit error, the modal handles it
       if (!err?.message?.startsWith('Not enough credits')) {
         toast.error('Failed to apply optimizations');
       }
@@ -248,55 +259,17 @@ export function TripConfirmationBanner({
         </div>
       )}
 
-      <AnimatePresence>
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          className={cn(
-            'relative rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 via-background to-accent/5 p-5 md:p-6',
-            className
-          )}
-        >
-          <button 
-            onClick={() => setDismissed(true)}
-            className="absolute top-3 right-3 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </button>
-
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <div className="flex-1">
-              <h3 className="text-base font-semibold flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" />
-                {hasFlightSelection && hasHotelSelection
-                  ? 'Ready to confirm this trip?'
-                  : 'Is this trip happening?'}
-              </h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                {hasFlightSelection && hasHotelSelection
-                  ? 'Your flight and hotel are set. Confirm to lock everything in.'
-                  : !hasFlightSelection && !hasHotelSelection
-                    ? 'Add your flight and hotel details so we can optimize your itinerary.'
-                    : !hasHotelSelection
-                      ? 'Add your hotel so we can optimize activities around your neighborhood.'
-                      : 'Add your flight details so we can plan around your arrival and departure.'}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <Button variant="outline" size="sm" onClick={handleDrafting} className="gap-1.5">
-                <PenLine className="h-3.5 w-3.5" />
-                Just Drafting
-              </Button>
-              <Button size="sm" onClick={handleUpcoming} className="gap-1.5">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                {hasFlightSelection && hasHotelSelection ? 'Confirm Trip' : "It's Happening!"}
-              </Button>
-            </div>
-          </div>
-        </motion.div>
-      </AnimatePresence>
+      {/* Compact inline confirm/dismiss buttons */}
+      <div className={cn("flex items-center gap-2", className)}>
+        <Button variant="ghost" size="sm" onClick={handleDrafting} className="gap-1 h-7 text-xs px-2">
+          <PenLine className="h-3 w-3" />
+          Just Drafting
+        </Button>
+        <Button size="sm" onClick={handleUpcoming} className="gap-1 h-7 text-xs px-2">
+          <CheckCircle2 className="h-3 w-3" />
+          {hasFlightSelection && hasHotelSelection ? 'Confirm' : "It's Happening!"}
+        </Button>
+      </div>
 
       {/* Logistics Collection Dialog */}
       <Dialog open={showLogisticsDialog} onOpenChange={setShowLogisticsDialog}>
@@ -327,7 +300,6 @@ export function TripConfirmationBanner({
                   Where are you staying?
                 </div>
 
-                {/* Manual input (pre-filled if DNA hotel selected) */}
                 <div className="space-y-2">
                   <Input
                     placeholder="Hotel name (e.g., The Ritz Carlton)"
@@ -341,7 +313,6 @@ export function TripConfirmationBanner({
                   />
                 </div>
 
-                {/* DNA Recommendations (loads async, placed below inputs to prevent layout shift) */}
                 {(dnaRecs.isLoading || dnaRecs.recommendations.length > 0) && (
                   <>
                     <p className="text-xs text-muted-foreground">
@@ -367,6 +338,7 @@ export function TripConfirmationBanner({
                 className="flex-1"
                 onClick={() => {
                   setShowLogisticsDialog(false);
+                  localStorage.setItem(dismissKey, 'true');
                   setDismissed(true);
                 }}
               >
