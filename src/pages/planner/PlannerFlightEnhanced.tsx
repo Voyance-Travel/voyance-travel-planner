@@ -236,10 +236,10 @@ export default function PlannerFlightEnhanced() {
 
   const createHold = useCreateFlightHold();
 
-  const destination = searchParams.get('destination') || plannerState.basics.destination || 'Paris';
-  const origin = searchParams.get('origin') || plannerState.basics.originCity || 'JFK';
-  const startDate = searchParams.get('startDate') || plannerState.basics.startDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const endDate = searchParams.get('endDate') || plannerState.basics.endDate || new Date(Date.now() + 37 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const destination = plannerState.basics.destination || searchParams.get('destination') || 'Paris';
+  const origin = plannerState.basics.originCity || searchParams.get('origin') || 'JFK';
+  const startDate = plannerState.basics.startDate || searchParams.get('startDate') || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const endDate = plannerState.basics.endDate || searchParams.get('endDate') || new Date(Date.now() + 37 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const travelers = Number(searchParams.get('travelers') || plannerState.basics.travelers || 1);
   const tripBudget = Number(searchParams.get('budget')) || plannerState.basics.budgetAmount;
   

@@ -39,6 +39,7 @@ import { AirlineAutocomplete } from '@/components/common/AirlineAutocomplete';
 import { HotelAutocomplete } from '@/components/common/HotelAutocomplete';
 import { FlightImportModal } from '@/components/itinerary/FlightImportModal';
 import type { ManualFlightEntry } from '@/components/itinerary/AddBookingInline';
+import { buildFlightSelectionFromLegs, type FlightLeg } from '@/utils/normalizeFlightSelection';
 import GuestLinkModal, { type LinkedGuest } from '@/components/planner/GuestLinkModal';
 import { TripChatPlanner } from '@/components/planner/TripChatPlanner';
 import { ManualTripPasteEntry } from '@/components/planner/ManualTripPasteEntry';
@@ -868,6 +869,8 @@ function FlightHotelStep({
   setReturnFlight,
   showReturnFlight,
   setShowReturnFlight,
+  additionalLegs,
+  setAdditionalLegs,
   hotelChoice,
   setHotelChoice,
   manualHotel,
@@ -890,6 +893,8 @@ function FlightHotelStep({
   setReturnFlight: (f: ManualFlightEntry) => void;
   showReturnFlight: boolean;
   setShowReturnFlight: (s: boolean) => void;
+  additionalLegs: ManualFlightEntry[];
+  setAdditionalLegs: (legs: ManualFlightEntry[]) => void;
   hotelChoice: 'skip' | 'own';
   setHotelChoice: (c: 'skip' | 'own') => void;
   manualHotel: ManualHotelEntry;
@@ -916,6 +921,30 @@ function FlightHotelStep({
     }
     setShowFlightSection(true);
     setShowFlightDetails(true);
+  };
+
+  const handleImportAllLegs = (legs: ManualFlightEntry[]) => {
+    if (legs.length === 0) return;
+    // First leg = outbound
+    setOutboundFlight(legs[0]);
+    // Last leg = return (if more than 1)
+    if (legs.length >= 2) {
+      setReturnFlight(legs[legs.length - 1]);
+      setShowReturnFlight(true);
+    }
+    // Middle legs stored separately
+    if (legs.length > 2) {
+      setAdditionalLegs(legs.slice(1, -1));
+    } else {
+      setAdditionalLegs([]);
+    }
+    setShowFlightSection(true);
+    setShowFlightDetails(true);
+    if (legs.length > 2) {
+      toast.success(`Imported ${legs.length} flight segments`, {
+        description: `Route: ${legs.map(l => l.departureAirport).concat(legs[legs.length - 1].arrivalAirport).filter(Boolean).join(' → ')}`,
+      });
+    }
   };
 
 
@@ -1318,6 +1347,7 @@ Example: "We love local food markets, sunset viewpoints, and avoiding tourist cr
         open={showImportModal}
         onOpenChange={setShowImportModal}
         onImport={handleImportFlight}
+        onImportLegs={handleImportAllLegs}
         tripStartDate={startDate}
         tripEndDate={endDate}
       />
@@ -1508,6 +1538,7 @@ export default function Start() {
     departureDate: '',
   });
   const [showReturnFlight, setShowReturnFlight] = useState(false);
+  const [additionalLegs, setAdditionalLegs] = useState<ManualFlightEntry[]>([]);
 
   // Hotel state
   const [hotelChoice, setHotelChoice] = useState<'skip' | 'own'>('skip');
@@ -1600,23 +1631,34 @@ export default function Start() {
     try {
       // DNA check now happens at Step 1→2 transition, not here
 
-      // Build flight selection data
-      const flightSelection = outboundFlight.arrivalTime ? {
-        departure: {
-          airline: outboundFlight.airline,
-          flightNumber: outboundFlight.flightNumber,
-          departure: { airport: outboundFlight.departureAirport, time: outboundFlight.departureTime },
-          arrival: { airport: outboundFlight.arrivalAirport, time: outboundFlight.arrivalTime },
-          departureDate: outboundFlight.departureDate,
-        },
-        return: showReturnFlight && returnFlight.departureTime ? {
-          airline: returnFlight.airline,
-          flightNumber: returnFlight.flightNumber,
-          departure: { airport: returnFlight.departureAirport, time: returnFlight.departureTime },
-          arrival: { airport: returnFlight.arrivalAirport, time: returnFlight.arrivalTime },
-          departureDate: returnFlight.departureDate,
-        } : null,
-      } : null;
+      // Build flight selection data — use legs[] format for multi-city support
+      let flightSelection: Record<string, unknown> | null = null;
+      if (outboundFlight.arrivalTime) {
+        const allLegs: ManualFlightEntry[] = [outboundFlight];
+        if (additionalLegs.length > 0) {
+          allLegs.push(...additionalLegs);
+        }
+        if (showReturnFlight && returnFlight.departureTime) {
+          allLegs.push(returnFlight);
+        }
+        const flightLegs: FlightLeg[] = allLegs.map((leg, i) => ({
+          legOrder: i + 1,
+          airline: leg.airline || '',
+          flightNumber: leg.flightNumber || '',
+          departure: {
+            airport: leg.departureAirport || '',
+            time: leg.departureTime || '',
+            date: leg.departureDate || '',
+          },
+          arrival: {
+            airport: leg.arrivalAirport || '',
+            time: leg.arrivalTime || '',
+          },
+          price: leg.price || 0,
+          cabin: 'economy',
+        }));
+        flightSelection = buildFlightSelectionFromLegs(flightLegs, true);
+      }
 
       // Build hotel selection data
       const hotelSelection = hotelChoice === 'own' && manualHotel.name ? [{
@@ -1649,7 +1691,7 @@ export default function Start() {
           trip_type: tripType,
           budget_tier: budgetAmount ? (budgetAmount < 750 ? 'budget' : budgetAmount < 2000 ? 'moderate' : budgetAmount < 4000 ? 'premium' : 'luxury') : 'moderate',
           budget_total_cents: budgetAmount ? budgetAmount * 100 : null,
-          flight_selection: flightSelection,
+          flight_selection: flightSelection as any,
           hotel_selection: hotelSelection,
           budget_include_hotel: includeHotelInBudget || false,
           is_multi_city: isMultiCity || null,
@@ -1896,6 +1938,8 @@ export default function Start() {
                     setReturnFlight={setReturnFlight}
                     showReturnFlight={showReturnFlight}
                     setShowReturnFlight={setShowReturnFlight}
+                    additionalLegs={additionalLegs}
+                    setAdditionalLegs={setAdditionalLegs}
                     hotelChoice={hotelChoice}
                     setHotelChoice={setHotelChoice}
                     manualHotel={manualHotel}
