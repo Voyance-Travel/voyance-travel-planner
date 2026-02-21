@@ -443,7 +443,7 @@ export default function Profile() {
       <TopNav />
 
       {/* Hero Header */}
-      <section className="relative pt-20">
+      <section className="relative">
         {/* Rotating Cover Photo */}
         <RotatingCoverPhoto userId={user?.id} />
 
