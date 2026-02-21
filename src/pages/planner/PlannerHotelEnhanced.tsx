@@ -158,16 +158,16 @@ export default function PlannerHotelEnhanced() {
 
   const createHold = useCreateHotelHold();
 
-  const destination = searchParams.get('destination') || plannerState.basics.destination || 'Paris';
+  const destination = plannerState.basics.destination || searchParams.get('destination') || 'Paris';
   const startDate =
-    searchParams.get('startDate') ||
     plannerState.basics.startDate ||
+    searchParams.get('startDate') ||
     new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const endDate =
-    searchParams.get('endDate') ||
     plannerState.basics.endDate ||
+    searchParams.get('endDate') ||
     new Date(Date.now() + 37 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const travelers = Number(searchParams.get('travelers') || plannerState.basics.travelers || 2);
+  const travelers = Number(plannerState.basics.travelers || searchParams.get('travelers') || 2);
   const origin = searchParams.get('origin') || plannerState.basics.originCity || 'JFK';
   const tripBudget = Number(searchParams.get('budget')) || plannerState.basics.budgetAmount;
   
