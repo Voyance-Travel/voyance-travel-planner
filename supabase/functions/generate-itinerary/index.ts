@@ -6127,14 +6127,40 @@ async function finalSaveItinerary(
       snapshotAt: new Date().toISOString(),
     } : null;
 
+    // Compute correct end_date from the actual generated days
+    let computedEndDate: string | undefined;
+    try {
+      const daysArray = frontendReadyData?.days;
+      if (Array.isArray(daysArray) && daysArray.length > 0 && tripId) {
+        // Fetch the trip start_date to compute end
+        const { data: tripRow } = await supabase
+          .from('trips')
+          .select('start_date')
+          .eq('id', tripId)
+          .single();
+        if (tripRow?.start_date) {
+          const [y, m, d] = tripRow.start_date.split('-').map(Number);
+          const endD = new Date(y, m - 1, d + daysArray.length - 1);
+          computedEndDate = endD.toISOString().split('T')[0];
+        }
+      }
+    } catch (e) {
+      console.warn('[Stage 6] Could not compute end_date:', e);
+    }
+
+    const updatePayload: Record<string, unknown> = {
+      itinerary_data: frontendReadyData,
+      itinerary_status: 'ready',
+      dna_snapshot: dnaSnapshot,
+      updated_at: new Date().toISOString(),
+    };
+    if (computedEndDate) {
+      updatePayload.end_date = computedEndDate;
+    }
+
     const { error } = await supabase
       .from('trips')
-      .update({
-        itinerary_data: frontendReadyData,
-        itinerary_status: 'ready',
-        dna_snapshot: dnaSnapshot,
-        updated_at: new Date().toISOString()
-      })
+      .update(updatePayload)
       .eq('id', tripId);
 
     if (error) {
