@@ -2941,7 +2941,6 @@ async function getUserPreferences(supabase: any, userId: string) {
         emotional_drivers,
         food_likes,
         food_dislikes,
-        recovery_style,
         active_hours_per_day,
         allergies
       `)
@@ -7092,7 +7091,7 @@ RULES FOR VOYANCE PICKS:
         traitScores,
         unifiedProfile.mobilityNeeds || prefs?.mobility_needs,
         {
-          recoveryStyle: prefs?.recovery_style as string[] | undefined,
+          recoveryStyle: (prefs as any)?.recovery_style as string[] | undefined,
           activeHoursPerDay: prefs?.active_hours_per_day as 'light' | 'moderate' | 'full' | undefined,
         }
       );
@@ -8093,14 +8092,14 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
           if (mustDoAnalysis.length > 0) {
             const scheduled = scheduleMustDos(mustDoAnalysis, totalDays);
             // Only include items relevant to this day
-            const dayItems = scheduled.scheduled.filter(s => s.suggestedDay === dayNumber);
+            const dayItems = scheduled.scheduled.filter(s => s.assignedDay === dayNumber);
             if (dayItems.length > 0) {
-              mustDoPrompt = `\n## 🚨 USER'S MUST-DO VENUES FOR DAY ${dayNumber} (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED these venues. You MUST include them:\n${dayItems.map(item => `- ${item.item.name} (${item.item.priority})`).join('\n')}\n\nRULES:\n- Include ALL listed venues by name in this day's itinerary\n- Only add AI recommendations to fill remaining slots\n`;
+              mustDoPrompt = `\n## 🚨 USER'S MUST-DO VENUES FOR DAY ${dayNumber} (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED these venues. You MUST include them:\n${dayItems.map(item => `- ${item.priority.name} (${item.priority.priority})`).join('\n')}\n\nRULES:\n- Include ALL listed venues by name in this day's itinerary\n- Only add AI recommendations to fill remaining slots\n`;
             } else {
-              // No items specifically for this day, but include unscheduled ones as suggestions
-              const unscheduled = scheduled.unscheduled;
-              if (unscheduled.length > 0) {
-                mustDoPrompt = `\n## User's Researched Venues (try to include if appropriate)\n${unscheduled.map(u => `- ${u.name} (${u.priority})`).join('\n')}\n`;
+              // No items specifically for this day, but include unschedulable ones as suggestions
+              const unscheduledItems = scheduled.unschedulable || [];
+              if (unscheduledItems.length > 0) {
+                mustDoPrompt = `\n## User's Researched Venues (try to include if appropriate)\n${unscheduledItems.map(u => `- ${u.priority.name} (${u.priority.priority})`).join('\n')}\n`;
               }
             }
             console.log(`[generate-day] Must-do activities parsed: ${mustDoAnalysis.length} items, ${dayItems.length} for day ${dayNumber}`);
