@@ -821,6 +821,20 @@ export default function TripDetail() {
   const isLiveTrip = trip.status === 'active';
   const itineraryDays = transformToItineraryDays();
 
+  // Compute effective end date: if itinerary has more days than start_date→end_date suggests,
+  // derive end_date from start_date + (numDays - 1) to fix stale/incorrect end_date values
+  const effectiveEndDate = (() => {
+    const storedDayCount = differenceInDays(parseLocalDate(trip.end_date), parseLocalDate(trip.start_date)) + 1;
+    const itineraryDayCount = itineraryDays.length;
+    if (itineraryDayCount > 1 && itineraryDayCount > storedDayCount) {
+      const start = parseLocalDate(trip.start_date);
+      const corrected = new Date(start);
+      corrected.setDate(corrected.getDate() + itineraryDayCount - 1);
+      return format(corrected, 'yyyy-MM-dd');
+    }
+    return trip.end_date;
+  })();
+
   return (
     <MainLayout>
       <Head title={`${trip.name} | Voyance`} />
@@ -830,7 +844,7 @@ export default function TripDetail() {
         <DynamicDestinationPhotos
           destination={trip.destination}
           startDate={trip.start_date}
-          endDate={trip.end_date}
+          endDate={effectiveEndDate}
           travelers={trip.travelers || 1}
           variant="hero"
           hideOverlayText
@@ -869,7 +883,7 @@ export default function TripDetail() {
               
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Calendar className="w-4 h-4" />
-                {format(parseLocalDate(trip.start_date), 'MMM d')} - {format(parseLocalDate(trip.end_date), 'MMM d, yyyy')}
+                {format(parseLocalDate(trip.start_date), 'MMM d')} - {format(parseLocalDate(effectiveEndDate), 'MMM d, yyyy')}
               </div>
             </div>
           )}
@@ -880,7 +894,7 @@ export default function TripDetail() {
               tripId={trip.id}
               destination={trip.destination}
               startDate={trip.start_date}
-              endDate={trip.end_date}
+              endDate={effectiveEndDate}
               currentStatus={trip.status as string}
               hasFlightSelection={!!trip.flight_selection}
               hasHotelSelection={!!trip.hotel_selection}
@@ -900,7 +914,7 @@ export default function TripDetail() {
               tripName={trip.name}
               destination={trip.destination}
               startDate={trip.start_date}
-              endDate={trip.end_date}
+              endDate={effectiveEndDate}
               days={itineraryDays}
               onActivityComplete={handleActivityComplete}
               onActivitySkip={handleActivitySkip}
@@ -912,7 +926,7 @@ export default function TripDetail() {
               destination={trip.destination}
               destinationCountry={trip.destination_country || undefined}
               startDate={trip.start_date}
-              endDate={trip.end_date}
+              endDate={effectiveEndDate}
               travelers={trip.travelers || 1}
               tripType={trip.trip_type || undefined}
               budgetTier={trip.budget_tier || undefined}
@@ -958,7 +972,7 @@ export default function TripDetail() {
                     </h2>
                     
                     <p className="text-muted-foreground mb-6">
-                      Let our AI create a personalized {differenceInDays(parseLocalDate(trip.end_date), parseLocalDate(trip.start_date)) + 1}-day itinerary 
+                      Let our AI create a personalized {differenceInDays(parseLocalDate(effectiveEndDate), parseLocalDate(trip.start_date)) + 1}-day itinerary 
                       for {trip.destination} based on your preferences.
                     </p>
                     
@@ -1077,7 +1091,7 @@ export default function TripDetail() {
                     undefined
                   }
                   startDate={trip.start_date}
-                  endDate={trip.end_date}
+                  endDate={effectiveEndDate}
                   travelers={trip.travelers || 1}
                   budgetTier={trip.budget_tier || undefined}
                   tripType={trip.trip_type || undefined}
@@ -1198,7 +1212,7 @@ export default function TripDetail() {
           tripId={trip.id}
           destination={trip.destination}
           startDate={trip.start_date}
-          endDate={trip.end_date}
+          endDate={effectiveEndDate}
           isLocalTrip={trip.user_id === 'local'}
           days={parseAssistantDays(trip.itinerary_data, trip.start_date)}
           onItineraryUpdate={(updatedDays) => {
