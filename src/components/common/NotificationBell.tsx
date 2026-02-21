@@ -216,9 +216,9 @@ export function NotificationBell() {
     
     // Navigate to trip
     if (notification.type === 'feedback_prompt' && notification.activityId) {
-      navigate(`/trips/${notification.tripId}?activity=${notification.activityId}`);
+      navigate(`/trip/${notification.tripId}?activity=${notification.activityId}`);
     } else {
-      navigate(`/trips/${notification.tripId}`);
+      navigate(`/trip/${notification.tripId}`);
     }
     setOpen(false);
   };
