@@ -87,6 +87,7 @@ import TripSuggestions from '@/components/suggestions/TripSuggestions';
 import { ProposeReplacementDialog } from '@/components/suggestions/ProposeReplacementDialog';
 import type { BookingItemState, TravelerInfo } from '@/services/bookingStateMachine';
 import OptimizePreferencesDialog, { type OptimizePreferences } from './OptimizePreferencesDialog';
+import { useRouteOptCost } from '@/hooks/useRouteOptCost';
 import ReviewsDrawer from '@/components/reviews/ReviewsDrawer';
 import RestaurantSearchDrawer from '@/components/restaurants/RestaurantSearchDrawer';
 import { ItineraryOnboardingTour } from './ItineraryOnboardingTour';
@@ -1094,6 +1095,7 @@ export function EditorialItinerary({
   const { data: creditData } = useCredits();
   const spendCredits = useSpendCredits();
   const totalCredits = creditData?.totalCredits ?? 0;
+  const routeOptCost = useRouteOptCost(tripId);
   
   // Per-day unlock for preview itineraries
   const { unlockDay, isUnlocking: isUnlockingDay, unlockingDayNumber } = useUnlockDay();
@@ -1949,6 +1951,16 @@ export function EditorialItinerary({
     setShowOptimizeDialog(false);
     setIsOptimizing(true);
     try {
+      // Spend credits first (skip for first-trip users)
+      if (!routeOptCost.isFirstTrip && routeOptCost.cost > 0) {
+        await spendCredits.mutateAsync({
+          action: 'ROUTE_OPTIMIZATION',
+          tripId,
+          creditsAmount: routeOptCost.cost,
+          metadata: { optimizeCount: routeOptCost.optimizeCount },
+        });
+      }
+
       toast.info('Optimizing routes and fetching real costs...', { duration: 3000 });
       
       const { data, error } = await supabase.functions.invoke('optimize-itinerary', {
@@ -2721,10 +2733,19 @@ export function EditorialItinerary({
                       {isOptimizing ? <RefreshCw className="h-3 sm:h-3.5 w-3 sm:w-3.5 animate-spin" /> : <Route className="h-3 sm:h-3.5 w-3 sm:w-3.5" />}
                       <span className="hidden sm:inline">{isOptimizing ? 'Optimizing...' : 'Optimize'}</span>
                       {!entitlements?.can_optimize_routes && <Lock className="h-3 w-3 ml-0.5 opacity-60" />}
+                      {entitlements?.can_optimize_routes && !routeOptCost.isFirstTrip && routeOptCost.cost > 0 && (
+                        <span className="hidden sm:inline-flex items-center gap-0.5 text-[10px] opacity-60 ml-0.5">
+                          <Coins className="h-2.5 w-2.5" />{routeOptCost.cost}
+                        </span>
+                      )}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Reorders activities to minimize transit time (saves ~30 mins)</p>
+                    <p>
+                      Reorders activities to minimize transit time
+                      {!routeOptCost.isFirstTrip && routeOptCost.cost > 0 && ` · ${routeOptCost.cost} credits`}
+                      {routeOptCost.isFirstTrip && ' · Free on first trip'}
+                    </p>
                   </TooltipContent>
                 </Tooltip>
                 <Button 
@@ -4096,6 +4117,10 @@ export function EditorialItinerary({
         onOpenChange={setShowOptimizeDialog}
         onConfirm={handleOptimize}
         isOptimizing={isOptimizing}
+        creditCost={routeOptCost.cost}
+        isFirstTrip={routeOptCost.isFirstTrip}
+        userBalance={totalCredits}
+        isSpending={spendCredits.isPending}
       />
 
       {/* Route Optimization Upgrade Prompt */}

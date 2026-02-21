@@ -27,6 +27,7 @@ const ACTION_MAP: Record<string, string> = {
   MYSTERY_GETAWAY: 'mystery_getaway',
   MYSTERY_LOGISTICS: 'mystery_logistics',
   TRANSPORT_MODE_CHANGE: 'transport_mode_change',
+  ROUTE_OPTIMIZATION: 'route_optimization',
 };
 
 interface SpendCreditsParams {

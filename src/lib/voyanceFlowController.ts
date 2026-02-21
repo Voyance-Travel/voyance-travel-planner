@@ -21,6 +21,8 @@ export {
   FREE_ACTION_CAPS,
   FLEX_CAPS_BY_DAYS,
   SIGNUP_CREDITS,
+  ROUTE_OPT_STANDARD_SCHEDULE,
+  ROUTE_OPT_CLUB_SCHEDULE,
   type UserTier,
   type TierCaps,
 } from '@/config/pricing';
@@ -30,7 +32,7 @@ export {
   calculateTripCredits,
 } from '@/lib/tripCostCalculator';
 
-import { CREDIT_COSTS, TIER_FREE_CAPS, FLEX_CAPS_BY_DAYS, type UserTier, type TierCaps } from '@/config/pricing';
+import { CREDIT_COSTS, TIER_FREE_CAPS, FLEX_CAPS_BY_DAYS, ROUTE_OPT_STANDARD_SCHEDULE, ROUTE_OPT_CLUB_SCHEDULE, type UserTier, type TierCaps } from '@/config/pricing';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -248,4 +250,23 @@ export function getSmartFinishComparison(params: {
     savings,
     smartFinishIsCheaper: savings > 0,
   };
+}
+
+// ── Section: Route Optimization Cost ────────────────────────────────────────
+
+/**
+ * Returns the credit cost for route optimization based on how many times
+ * this trip has already been optimized and the user's tier.
+ *
+ * Standard: [20, 15, 10, 5 (floor)]
+ * Club:     [10, 8, 6, 3 (floor)]
+ *
+ * optimizeCount = number of *completed* optimizations for this trip (0 = first time).
+ */
+export function getRouteOptimizationCost(optimizeCount: number, tier: UserTier = 'free'): number {
+  const isClub = ['voyager', 'explorer', 'adventurer'].includes(tier);
+  const schedule = isClub ? ROUTE_OPT_CLUB_SCHEDULE : ROUTE_OPT_STANDARD_SCHEDULE;
+  const floor = schedule[schedule.length - 1];
+  if (optimizeCount >= schedule.length) return floor;
+  return schedule[optimizeCount];
 }

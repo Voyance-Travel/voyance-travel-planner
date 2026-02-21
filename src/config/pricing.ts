@@ -23,14 +23,19 @@ export const CREDIT_COSTS = {
   MYSTERY_LOGISTICS: 5,       // Flight estimate + hotel suggestions for mystery trip
   TRANSPORT_MODE_CHANGE: 5,   // Change transport mode for a route segment
 
-  // Free actions (unlimited, no cap)
-  ROUTE_OPTIMIZATION: 0,
+  // Route optimization (credit-gated with re-optimization discount)
+  ROUTE_OPTIMIZATION: 20,
   NEARBY_SUGGESTIONS: 0,
   LOCAL_EVENTS: 0,
   PDF_EXPORT: 0,
   SHARING: 0,
   REAL_TIME_MODE: 0,
 } as const;
+
+// Route optimization re-optimization discount schedules (per-trip sliding scale)
+// Index = number of completed optimizations on this trip (0 = first time)
+export const ROUTE_OPT_STANDARD_SCHEDULE = [20, 15, 10, 5] as const;
+export const ROUTE_OPT_CLUB_SCHEDULE = [10, 8, 6, 3] as const;
 
 // Tier-based free action caps per trip
 export type UserTier = 'free' | 'flex' | 'voyager' | 'explorer' | 'adventurer';
