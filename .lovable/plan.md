@@ -1,61 +1,73 @@
 
-# Fix: Itinerary Generator Timeout on Long Trips (8+ Days)
+
+# Fix: Large Trip Generation Timeout
 
 ## Problem
-When generating itineraries for trips longer than ~7-8 days, the generation either times out, throws 500/504 errors, or crashes the page. Users see no itinerary and no clear error message.
+A 16-day trip generation gets killed by a **fixed 180-second safety timeout** in `ItineraryGenerator.tsx` (line 192-214). Each day takes ~20-40 seconds to generate (AI call + venue verification + image enrichment), so 16 days needs ~320-640 seconds total. The 180s timeout fires, cancels everything, refunds 960 credits, and shows an error -- even though days were being generated successfully.
 
-## Current Architecture (Already Partially Correct)
-The codebase already has the right approach in place: `useItineraryGeneration.ts` calls `generateItineraryProgressive` (day-by-day) first, then falls back to `generateFullItinerary` (monolithic) if it fails. The problem is:
+The progressive day-by-day loop in `useItineraryGeneration.ts` already has its own per-day 90s timeout with retries. The outer 180s timeout is redundant and harmful for long trips.
 
-1. The progressive method has **no retry logic** -- if a single day fails, the entire generation fails
-2. The fallback is `generateFullItinerary`, which makes one huge API call that times out for 8+ day trips
-3. When progressive fails for a non-quota reason, it silently falls into the monolithic path, which then also fails
+## Root Cause
+`ItineraryGenerator.tsx` line 192:
+```
+generationTimeoutRef.current = setTimeout(async () => {
+  // fires after 180s regardless of progress
+  // kills everything and refunds ALL credits
+}, 180_000);
+```
 
-## Plan
+This was added as a safety net for when the old monolithic generation would hang. But now that generation is progressive (day-by-day with auto-save), this outer timeout is counterproductive.
 
-### 1. Add per-day retry logic to `generateItineraryProgressive`
-**File:** `src/hooks/useItineraryGeneration.ts`
+## Solution
 
-Wrap the `generate-day` call (lines 331-351) in a retry loop with up to 2 retries per day. Add a short delay (2 seconds) between retries. This means a transient failure on Day 6 doesn't throw away Days 1-5.
+### 1. Replace fixed 180s timeout with dynamic per-trip timeout
+**File:** `src/components/itinerary/ItineraryGenerator.tsx`
 
-### 2. Remove the monolithic fallback
-**File:** `src/hooks/useItineraryGeneration.ts`
+Calculate the timeout based on trip length: `totalDays * 60_000` (60 seconds per day) with a minimum of 180s and a maximum of 20 minutes. For a 16-day trip, this gives 960s (16 minutes) instead of 180s (3 minutes).
 
-In `generateItinerary` (lines 422-435), remove the fallback to `generateFullItinerary`. If progressive fails after retries, surface a clear error to the user explaining which day failed and that previous days were saved.
+### 2. Add a "stall detector" instead of a hard timeout
+Rather than a single countdown timer, implement a **stall detector** that resets every time a new day completes. If no progress is made for 120 seconds (2 minutes), THEN trigger the timeout/refund. This means:
+- A 16-day trip that's steadily generating 1 day every 30s will never trigger the timeout
+- A trip that genuinely stalls (edge function down, network issue) will be caught within 2 minutes of the stall
 
-### 3. Auto-save partial progress
-**File:** `src/hooks/useItineraryGeneration.ts`
+### 3. Partial refund instead of full refund on timeout
+When the stall detector fires mid-generation, only refund credits for the **ungenerated** days, not the entire trip. Days 1-5 were already generated and saved -- those credits were earned.
 
-After each successfully generated day, save it to the database immediately (call `saveItinerary` with accumulated days). This way, if the user refreshes or the page crashes on Day 9, Days 1-8 are already persisted.
-
-### 4. Increase rate limit for day generation
-**File:** `supabase/functions/generate-itinerary/index.ts`
-
-Change the `generate-day` rate limit from 10 per minute to 20 per minute. A 15-day trip needs 15 sequential calls, and with retries could need up to 45 calls within a few minutes.
+### 4. Fix the Unsplash 404
+The image `photo-1563177978-4f4a11e3f462` is still 404ing. Replace with a reliably hosted fallback or remove the hardcoded Unsplash URL entirely.
 
 ## Technical Details
 
-### Retry Logic (Step 1)
+### Stall Detector (replaces fixed timeout)
+```text
+on generation start:
+  lastProgressTime = now()
+  stallCheckInterval = setInterval(every 10s):
+    if (now - lastProgressTime > 120_000):
+      // No day completed in 2 minutes -- stalled
+      trigger timeout handler
+      
+on each day complete (from useItineraryGeneration progress):
+  lastProgressTime = now()  // reset stall detector
+
+on generation complete or error:
+  clear stallCheckInterval
 ```
-for each day 1..totalDays:
-  attempts = 0
-  maxRetries = 2
-  while attempts <= maxRetries:
-    try generate-day(dayNum)
-    on success: break
-    on rate-limit/credits error: throw immediately (no retry)
-    on other error:
-      attempts++
-      if attempts > maxRetries: throw with "Day N failed after retries"
-      wait 2 seconds, then retry
+
+### Partial Refund Calculation
+```text
+creditsPerDay = gateResult.tripCost / totalDays
+daysCompleted = state.days.length  (from useItineraryGeneration)
+ungenerated = totalDays - daysCompleted
+refundAmount = creditsPerDay * ungenerated
 ```
 
 ### Files Modified
-- `src/hooks/useItineraryGeneration.ts` -- retry logic, remove monolithic fallback, auto-save
-- `supabase/functions/generate-itinerary/index.ts` -- rate limit adjustment (line ~2061)
+- `src/components/itinerary/ItineraryGenerator.tsx` -- replace 180s timeout with stall detector, partial refund logic
+- `src/utils/destinationImages.ts` -- fix remaining Unsplash 404 URL
 
 ### What This Does NOT Change
-- No changes to the edge function's day generation logic
-- No changes to the AI prompt or model
-- No changes to the UI components
-- The `generateFullItinerary` method remains available for other callers but is no longer the fallback
+- No edge function changes needed
+- No changes to the progressive day-by-day generation loop
+- No changes to the credit billing/gating system
+- The per-day 90s timeout + retry logic in `useItineraryGeneration.ts` stays as-is
