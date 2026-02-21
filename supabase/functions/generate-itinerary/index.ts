@@ -2058,7 +2058,7 @@ function buildNormalizedPromptContext(
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMITS = {
   'generate-full': { maxRequests: 3, windowMs: 300000 }, // 3 full generations per 5 min
-  'generate-day': { maxRequests: 10, windowMs: 60000 },   // 10 day regenerations per min
+  'generate-day': { maxRequests: 20, windowMs: 60000 },   // 20 day generations per min (supports 15+ day trips with retries)
   default: { maxRequests: 20, windowMs: 60000 }           // 20 requests per min for other actions
 };
 
