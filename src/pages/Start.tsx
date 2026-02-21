@@ -1554,13 +1554,15 @@ export default function Start() {
   const [isFirstTimeVisitor, setIsFirstTimeVisitor] = useState(true);
   const [mustDoActivities, setMustDoActivities] = useState('');
 
-  // Update flight dates when trip dates change
+  // Always sync flight dates from trip dates — ensures Step 2 fields reflect Step 1 selections
   useEffect(() => {
-    if (startDate && !outboundFlight.departureDate) {
-      setOutboundFlight(prev => ({ ...prev, departureDate: format(startDate, 'yyyy-MM-dd') }));
+    if (startDate) {
+      const formatted = format(startDate, 'yyyy-MM-dd');
+      setOutboundFlight(prev => prev.departureDate === formatted ? prev : { ...prev, departureDate: formatted });
     }
-    if (endDate && !returnFlight.departureDate) {
-      setReturnFlight(prev => ({ ...prev, departureDate: format(endDate, 'yyyy-MM-dd') }));
+    if (endDate) {
+      const formatted = format(endDate, 'yyyy-MM-dd');
+      setReturnFlight(prev => prev.departureDate === formatted ? prev : { ...prev, departureDate: formatted });
     }
   }, [startDate, endDate]);
 
