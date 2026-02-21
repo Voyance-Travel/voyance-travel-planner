@@ -362,9 +362,9 @@ export function useItineraryGeneration() {
               },
             });
 
-            // 3-minute timeout per day to catch infrastructure hangs
+            // 90-second timeout per day to catch infrastructure hangs (reduced from 180s)
             const timeoutPromise = new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('Generation timed out — the server took too long to respond. Please try again.')), 180_000)
+              setTimeout(() => reject(new Error('Generation timed out — the server took too long to respond. Your saved days are preserved — try resuming generation.')), 90_000)
             );
 
             const { data, error } = await Promise.race([invokePromise, timeoutPromise]);

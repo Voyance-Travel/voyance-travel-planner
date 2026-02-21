@@ -295,7 +295,40 @@ export function useLovableItinerary(tripId: string | null) {
       const generatedDays: GeneratedDay[] = [];
       const previousActivities: string[] = [];
 
-      for (let dayNum = 1; dayNum <= daysToGenerate; dayNum++) {
+      // Check for partially saved itinerary to resume from
+      let startFromDay = 1;
+      try {
+        const { data: tripData } = await supabase
+          .from('trips')
+          .select('itinerary_data')
+          .eq('id', tripId)
+          .single();
+
+        const existingDays = (tripData?.itinerary_data as any)?.days;
+        if (existingDays?.length > 0 && existingDays.length < totalDays) {
+          // We have a partial itinerary — resume from where we left off
+          startFromDay = existingDays.length + 1;
+          for (const d of existingDays) {
+            generatedDays.push(d);
+            (d.activities || []).forEach((a: any) => previousActivities.push(a.name || a.title || ''));
+          }
+          // Show existing days in UI immediately
+          const convertedExisting = existingDays.map((d: any) => convertBackendDay(d));
+          if (isMounted.current) {
+            setState(prev => ({
+              ...prev,
+              days: convertedExisting,
+              progress: 5 + ((startFromDay - 1) / totalDays) * 75,
+              message: `Resuming from Day ${startFromDay} of ${totalDays}...`,
+            }));
+          }
+          console.log(`[useLovableItinerary] Resuming generation from day ${startFromDay} (${existingDays.length} days already saved)`);
+        }
+      } catch (e) {
+        console.warn('[useLovableItinerary] Could not check for partial itinerary:', e);
+      }
+
+      for (let dayNum = startFromDay; dayNum <= daysToGenerate; dayNum++) {
         if (!isMounted.current || abortController.current?.signal.aborted) break;
 
         const dayProgress = 5 + ((dayNum - 1) / daysToGenerate) * 75;
@@ -391,6 +424,21 @@ export function useLovableItinerary(tripId: string | null) {
             days: [...prev.days, frontendDay],
             progress: 5 + (dayNum / totalDays) * 75,
           }));
+        }
+
+        // Auto-save after each day so progress isn't lost on timeout
+        try {
+          const partialItinerary = {
+            days: generatedDays.map(convertGeneratedToBackendDay),
+            generatedAt: new Date().toISOString(),
+            destination: tripDetails.destination,
+            partial: dayNum < daysToGenerate,
+          };
+          await supabase.functions.invoke('generate-itinerary', {
+            body: { action: 'save-itinerary', tripId, itinerary: partialItinerary },
+          });
+        } catch (saveErr) {
+          console.warn(`[useLovableItinerary] Partial save after day ${dayNum} failed (non-blocking):`, saveErr);
         }
       }
 
@@ -495,16 +543,30 @@ export function useLovableItinerary(tripId: string | null) {
     } catch (error) {
       console.error('[useLovableItinerary] Generation failed:', error);
       if (isMounted.current) {
+        const savedDaysCount = state.days.length;
+        const resumeMsg = savedDaysCount > 0
+          ? ` Days 1-${savedDaysCount} have been saved. You can resume generation to continue where you left off.`
+          : '';
         setState(prev => ({
           ...prev,
           loading: false,
           currentStep: 'error',
           error: error instanceof Error ? error : new Error('Generation failed'),
-          message: error instanceof Error ? error.message : 'Something went wrong. Please try again.',
+          message: (error instanceof Error ? error.message : 'Something went wrong. Please try again.') + resumeMsg,
         }));
       }
     }
   }, [tripId]);
+
+  // Resume generation from where it left off (uses saved partial itinerary)
+  const resume = useCallback(async (preferences?: GenerationPreferences & { maxDays?: number }) => {
+    setState(prev => ({
+      ...prev,
+      error: null,
+      currentStep: 'idle',
+    }));
+    await generateItinerary(preferences);
+  }, [generateItinerary]);
 
   // Regenerate from scratch
   const regenerate = useCallback(async (preferences?: GenerationPreferences) => {
@@ -539,6 +601,7 @@ export function useLovableItinerary(tripId: string | null) {
     ...state,
     checkExisting,
     generateItinerary,
+    resume,
     regenerate,
     cancel,
     clearError,
