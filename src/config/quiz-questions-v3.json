@@ -1571,7 +1571,7 @@
         "pace": { "max": 0.4 }
       },
       "boosters": {
-        "restoration_need": 1.2,
+        "restoration_need": 1.4,
         "flexibility": 0.8
       },
       "penalties": {
@@ -1701,7 +1701,9 @@
         "cultural_depth": 0.8,
         "flexibility": 0.6
       },
-      "penalties": {},
+      "penalties": {
+        "bucket_list": { "above": 0.6, "weight": -0.8 }
+      },
       "lifeStageBonus": {
         "established": 0.5
       }
