@@ -1,32 +1,46 @@
 
-# Fix: Broken Petra Image + Stall Detector Not Taking Effect
 
-## What's Happening
+# Fix: Relax All Generation Timeouts for Large Trips
 
-Two separate issues:
-
-1. **Broken Petra image** (`photo-1579606032821-4e6161c81571`) -- This is the image we swapped IN as a "fix" for the previous broken image. It's also dead now, returning 404. It appears in `src/utils/destinationImages.ts` and `src/lib/destinations.ts` for Petra/Jordan.
-
-2. **"120s" in the error log** -- The 600s stall detector IS in the code, but your browser is still running a cached older build. Once these changes deploy and you hard-refresh, you'll see the 600s threshold.
+## Problem
+The per-day generation timeout (90 seconds) and retry delays (3s/6s/10s/15s) are too aggressive for complex multi-day itineraries. Day 6 hit a slow AI response, timed out at 90s, retried with short delays, but the retries also hit infrastructure that hadn't recovered yet. After exhausting retries, the stall detector (still showing "120s" from cached build) killed the whole process.
 
 ## Changes
 
-### 1. Add broken image to blocklist
-**File:** `src/hooks/useDestinationImages.ts`
+### 1. Increase per-day timeout from 90s to 180s
+**File:** `src/hooks/useItineraryGeneration.ts` (line 368)
 
-Add `photo-1579606032821-4e6161c81571` to the `BLOCKED_IMAGE_IDS` set so it's caught immediately even if served from the backend API.
+Change `90_000` to `180_000`. Each day involves AI generation + venue verification + image enrichment. For complex destinations, 90s is simply not enough.
 
-### 2. Replace Petra image in curated lists
-**File:** `src/utils/destinationImages.ts`
+### 2. Increase retry count from 4 to 6
+**File:** `src/hooks/useItineraryGeneration.ts` (line 323)
 
-Replace `photo-1579606032821-4e6161c81571` with a verified working Unsplash photo of Petra's Treasury.
+Change `MAX_RETRIES = 4` to `MAX_RETRIES = 6`. More chances to recover from transient infrastructure timeouts.
 
-### 3. Replace Petra image in destinations config
-**File:** `src/lib/destinations.ts`
+### 3. Increase backoff delays significantly
+**File:** `src/hooks/useItineraryGeneration.ts` (line 324)
 
-Same replacement for the `imageUrl` and `images` array for the Petra destination.
+Change from `[3000, 6000, 10000, 15000]` to `[5000, 10000, 20000, 30000, 45000, 60000]`. Give the backend time to recover between retries instead of hammering it immediately.
+
+### 4. Fix misleading comment in stall detector
+**File:** `src/components/itinerary/ItineraryGenerator.tsx` (line 200)
+
+Update the comment from "120s" to "600s" to match the actual threshold, so future debugging isn't confusing.
 
 ## Summary
-- 3 files edited, ~6 lines changed total
-- No edge function changes
-- No timeout logic changes (the 600s fix is already in place -- just needs a fresh browser load)
+
+| Setting | Before | After |
+|---|---|---|
+| Per-day timeout | 90 seconds | 180 seconds |
+| Max retries per day | 4 | 6 |
+| Backoff delays | 3s, 6s, 10s, 15s | 5s, 10s, 20s, 30s, 45s, 60s |
+| Stall detector | 600s (correct) | 600s (unchanged) |
+| Comment accuracy | Says "120s" | Fixed to "600s" |
+
+### Files Modified
+- `src/hooks/useItineraryGeneration.ts` -- per-day timeout, retry count, backoff delays
+- `src/components/itinerary/ItineraryGenerator.tsx` -- fix misleading comment
+
+### What This Means in Practice
+A 16-day trip where each day takes up to 180s with retries now has a theoretical max runtime of ~48 minutes (worst case: every day needs all 6 retries with full 60s backoff). The 600s stall detector will only fire if NO day completes for 10 straight minutes -- a true dead connection.
+
