@@ -275,10 +275,10 @@ export async function estimateCost(params: EstimateParams): Promise<CostEstimate
   } else {
     baseField = CATEGORY_TO_BASE_FIELD[normalizedCategory] || 'activity_base_usd';
   }
-  const basePrice = costIndex[baseField] as number;
+  const basePrice = (costIndex[baseField] as number) || DEFAULT_BASE_PRICES.activity_base_usd;
   
   const budgetMult = BUDGET_MULTIPLIERS[budgetTier] || 1.0;
-  const perPerson = Math.round(basePrice * budgetMult * costIndex.cost_multiplier);
+  const perPerson = Math.max(5, Math.round(basePrice * budgetMult * costIndex.cost_multiplier));
   
   // Determine if this is a per-person category (dining) or flat fee (museum entry)
   const isPerPerson = ['breakfast', 'brunch', 'lunch', 'dinner', 'dining', 'restaurant', 'coffee', 'cafe'].includes(normalizedCategory);
@@ -287,7 +287,7 @@ export async function estimateCost(params: EstimateParams): Promise<CostEstimate
   // Apply tax/tip buffer for dining
   const isDining = ['breakfast', 'brunch', 'lunch', 'dinner', 'dining', 'restaurant'].includes(normalizedCategory);
   const taxMultiplier = isDining ? (1 + costIndex.tax_tip_buffer) : 1.0;
-  const total = Math.round((subtotal * taxMultiplier) / 5) * 5;
+  const total = Math.max(5, Math.round((subtotal * taxMultiplier) / 5) * 5);
   
   // Confidence based on destination data quality
   const confidence: 'high' | 'medium' | 'low' = 
@@ -395,17 +395,17 @@ export function estimateCostSync(params: EstimateParams): CostEstimateResult {
   } else {
     baseField = CATEGORY_TO_BASE_FIELD[normalizedCategory] || 'activity_base_usd';
   }
-  const basePrice = costIndex[baseField] as number;
+  const basePrice = (costIndex[baseField] as number) || DEFAULT_BASE_PRICES.activity_base_usd;
   
   const budgetMult = BUDGET_MULTIPLIERS[budgetTier] || 1.0;
-  const perPerson = Math.round(basePrice * budgetMult * costIndex.cost_multiplier);
+  const perPerson = Math.max(5, Math.round(basePrice * budgetMult * costIndex.cost_multiplier));
   
   const isPerPerson = ['breakfast', 'brunch', 'lunch', 'dinner', 'dining', 'restaurant', 'coffee', 'cafe'].includes(normalizedCategory);
   const subtotal = isPerPerson ? perPerson * travelers : perPerson;
   
   const isDining = ['breakfast', 'brunch', 'lunch', 'dinner', 'dining', 'restaurant'].includes(normalizedCategory);
   const taxMultiplier = isDining ? (1 + costIndex.tax_tip_buffer) : 1.0;
-  const total = Math.round((subtotal * taxMultiplier) / 5) * 5;
+  const total = Math.max(5, Math.round((subtotal * taxMultiplier) / 5) * 5);
   
   const confidence: 'high' | 'medium' | 'low' = 
     costIndex.confidence_score >= 0.8 ? 'high' :

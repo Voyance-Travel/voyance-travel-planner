@@ -776,7 +776,11 @@ const NEVER_FREE_CATEGORIES = [
   'cruise', 'boat', 'tour', 'activity', 'experience', 'spa', 'massage', 'show',
   'performance', 'concert', 'theater', 'theatre', 'nightlife', 'bar', 'club',
   // Transport categories - airport transfers, taxis, etc. are never free
-  'transfer', 'transport', 'transportation', 'airport', 'taxi', 'uber', 'rideshare'
+  'transfer', 'transport', 'transportation', 'airport', 'taxi', 'uber', 'rideshare',
+  // Additional categories that should always have a cost
+  'shopping', 'entertainment', 'cultural', 'attraction', 'museum', 'gallery',
+  'sightseeing', 'market', 'cooking_class', 'workshop', 'adventure', 'excursion',
+  'wine', 'tasting', 'snorkeling', 'diving', 'surfing', 'hiking_tour',
 ];
 
 function isNeverFreeCategory(category: string, title: string): boolean {
@@ -810,24 +814,33 @@ function getActivityCostInfo(
   const title = activity.title || '';
   const shouldNeverBeFree = isNeverFreeCategory(category, title);
   
+  // Safely parse cost amount - handle null, NaN, undefined
+  const rawCostAmount = activity.cost?.amount;
+  const costAmount = (rawCostAmount !== null && rawCostAmount !== undefined && !isNaN(rawCostAmount))
+    ? rawCostAmount : undefined;
+  
   // Check cost.amount first - this is explicit pricing from venue data
   // BUT if it's 0 and the category should never be free, fall through to estimation
-  if (activity.cost?.amount !== undefined && activity.cost.amount > 0) {
-    return { amount: activity.cost.amount, isEstimated: false, confidence: 'high' };
+  if (costAmount !== undefined && costAmount > 0) {
+    return { amount: costAmount, isEstimated: false, confidence: 'high' };
   }
   
   // If cost is explicitly 0 but category should never be free, skip to estimation
-  if (activity.cost?.amount === 0 && shouldNeverBeFree) {
+  if (costAmount === 0 && shouldNeverBeFree) {
     // Fall through to estimation engine below
-  } else if (activity.cost?.amount === 0) {
+  } else if (costAmount === 0) {
     // Truly free activity (parks, viewpoints, walking tours, etc.)
     return { amount: 0, isEstimated: false, confidence: 'high' };
   }
   
   // Check estimatedCost - AI-provided estimate during generation
-  if (activity.estimatedCost?.amount !== undefined && activity.estimatedCost.amount > 0) {
+  const rawEstAmount = activity.estimatedCost?.amount;
+  const estAmount = (rawEstAmount !== null && rawEstAmount !== undefined && !isNaN(rawEstAmount))
+    ? rawEstAmount : undefined;
+    
+  if (estAmount !== undefined && estAmount > 0) {
     return { 
-      amount: activity.estimatedCost.amount, 
+      amount: estAmount, 
       isEstimated: true,
       estimateReason: 'AI-estimated based on venue type',
       confidence: 'medium'
@@ -835,9 +848,9 @@ function getActivityCostInfo(
   }
   
   // If estimatedCost is 0 but should never be free, fall through
-  if (activity.estimatedCost?.amount === 0 && shouldNeverBeFree) {
+  if (estAmount === 0 && shouldNeverBeFree) {
     // Fall through to estimation engine below
-  } else if (activity.estimatedCost?.amount === 0) {
+  } else if (estAmount === 0) {
     return { amount: 0, isEstimated: true, estimateReason: 'No cost expected', confidence: 'medium' };
   }
   
@@ -854,10 +867,13 @@ function getActivityCostInfo(
     priceLevel: priceLevel ? Number(priceLevel) : undefined,
   });
   
+  // Safety net: if estimation returned 0 for a never-free category, use minimum fallback
+  const amount = (result.amount === 0 && shouldNeverBeFree) ? Math.max(10, travelers * 5) : result.amount;
+  
   return { 
-    amount: result.amount, 
+    amount, 
     isEstimated: result.isEstimated,
-    estimateReason: result.reason,
+    estimateReason: result.reason || `Estimated for ${category} in ${destinationCity || 'this area'}`,
     confidence: result.confidence
   };
 }
@@ -5735,11 +5751,9 @@ function DayCard({
                   Planned
                 </Badge>
               )}
-            {totalCost > 0 && (
-              <Badge variant="outline" className="text-xs sm:text-sm font-semibold border-primary/30 bg-primary/5 text-primary shrink-0">
-                {formatCurrency(displayCost(totalCost), tripCurrency)}
-              </Badge>
-            )}
+            <Badge variant="outline" className="text-xs sm:text-sm font-semibold border-primary/30 bg-primary/5 text-primary shrink-0">
+              {totalCost > 0 ? formatCurrency(displayCost(totalCost), tripCurrency) : 'Free'}
+            </Badge>
             {day.weather && (
               <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full bg-secondary/50 text-xs sm:text-sm shrink-0">
                 {weatherIcons[day.weather.condition?.toLowerCase() || 'sunny']}
@@ -6551,7 +6565,9 @@ function ActivityRow({
             {!canViewPremium ? (
               /* Preview: show blurred cost */
               <div className="blur-sm pointer-events-none select-none">
-                {costInfo.isEstimated ? (
+                {cost === 0 ? (
+                  <span className="font-medium text-muted-foreground text-xs">Free</span>
+                ) : costInfo.isEstimated ? (
                   <span className="font-medium">~{formatCurrency(displayCost(cost), tripCurrency)}</span>
                 ) : (
                   <span className="font-medium">{formatCurrency(displayCost(cost), tripCurrency)}</span>
@@ -6559,7 +6575,9 @@ function ActivityRow({
               </div>
             ) : (
               <>
-                {costInfo.isEstimated ? (
+                {cost === 0 ? (
+                  <span className="font-medium text-muted-foreground text-xs">Free</span>
+                ) : costInfo.isEstimated ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="font-medium cursor-help border-b border-dashed border-muted-foreground/40">
