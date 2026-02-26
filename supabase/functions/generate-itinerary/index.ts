@@ -221,6 +221,49 @@ const corsHeaders = {
 };
 
 // =============================================================================
+// DATE SANITIZATION — Strip non-ASCII chars that leak from CJK locale prompts
+// =============================================================================
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Sanitize a single date string: extract the YYYY-MM-DD portion and discard
+ * any trailing garbage (e.g. Chinese characters like "控制").
+ * Returns the cleaned date or the provided fallback.
+ */
+function sanitizeDateString(raw: unknown, fallback?: string): string {
+  if (typeof raw !== 'string') return fallback || '';
+  // Try to extract a valid YYYY-MM-DD from anywhere in the string
+  const match = raw.match(/\d{4}-\d{2}-\d{2}/);
+  if (match && DATE_REGEX.test(match[0])) return match[0];
+  if (fallback && DATE_REGEX.test(fallback)) return fallback;
+  console.warn(`[sanitizeDateString] Could not extract valid date from: "${raw}"`);
+  return fallback || '';
+}
+
+/**
+ * Recursively walk a parsed AI response object and sanitize any field whose
+ * key contains "date" (case-insensitive) so it strictly matches YYYY-MM-DD.
+ */
+function sanitizeDateFields(obj: any): any {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) return obj.map(sanitizeDateFields);
+  if (typeof obj === 'object') {
+    for (const key of Object.keys(obj)) {
+      if (typeof obj[key] === 'string' && /date/i.test(key)) {
+        const cleaned = sanitizeDateString(obj[key]);
+        if (cleaned !== obj[key]) {
+          console.warn(`[sanitizeDateFields] Cleaned "${key}": "${obj[key]}" → "${cleaned}"`);
+          obj[key] = cleaned;
+        }
+      } else if (typeof obj[key] === 'object') {
+        obj[key] = sanitizeDateFields(obj[key]);
+      }
+    }
+  }
+  return obj;
+}
+
+// =============================================================================
 // TYPES & INTERFACES
 // =============================================================================
 
@@ -4803,7 +4846,7 @@ Generate activities for this day following ALL constraints above.`;
       let generatedDay: StrictDay;
       if (toolCall?.function?.arguments) {
         // Standard tool call response
-        generatedDay = JSON.parse(toolCall.function.arguments) as StrictDay;
+        generatedDay = sanitizeDateFields(JSON.parse(toolCall.function.arguments)) as StrictDay;
       } else if (message?.content) {
         // Fallback: AI returned content instead of tool call
         console.log("[Stage 2] AI returned content instead of tool_call, attempting to parse...");
@@ -4811,7 +4854,7 @@ Generate activities for this day following ALL constraints above.`;
           const contentStr = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
           const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
-            generatedDay = JSON.parse(jsonMatch[0]) as StrictDay;
+            generatedDay = sanitizeDateFields(JSON.parse(jsonMatch[0])) as StrictDay;
           } else {
             console.error("[Stage 2] No JSON found in content:", contentStr.substring(0, 500));
             throw new Error("Invalid AI response format - no JSON in content");
@@ -9122,7 +9165,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         let generatedDay;
         if (toolCall?.function?.arguments) {
           // Standard tool call response
-          generatedDay = JSON.parse(toolCall.function.arguments);
+          generatedDay = sanitizeDateFields(JSON.parse(toolCall.function.arguments));
         } else if (message?.content) {
           // Fallback: AI returned content instead of tool call
           console.log("[generate-day] AI returned content instead of tool_call, attempting to parse...");
@@ -9131,7 +9174,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             const contentStr = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
             const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
-              generatedDay = JSON.parse(jsonMatch[0]);
+              generatedDay = sanitizeDateFields(JSON.parse(jsonMatch[0]));
             } else {
               console.error("[generate-day] No JSON found in content:", contentStr.substring(0, 500));
               throw new Error("Invalid AI response format - no JSON in content");
