@@ -8779,7 +8779,64 @@ ${dayConstraints}
 
 FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
       } else {
-        timingInstructions = '- Start around 9:00 AM, end by 9:00-10:00 PM';
+        // ===== FULL EXPLORATION DAY: Comprehensive hour-by-hour plan =====
+        // This is where most days land — the detailed structure prompt
+        const hotelNameForDay = flightContext.hotelName || '';
+        const hotelNeighborhood = flightContext.hotelAddress || '';
+        
+        timingInstructions = `
+FULL EXPLORATION DAY — HOUR-BY-HOUR TRAVEL PLAN (NOT a suggestion list):
+
+This day must be a COMPLETE itinerary from morning to night. Every hour accounted for.
+
+REQUIRED DAY STRUCTURE:
+1. BREAKFAST (category: "dining") — Near hotel, real restaurant name, ~price, walking distance
+2. TRANSIT between every pair of consecutive activities (category: "transport")
+   - Include mode (walk/taxi/metro/bus), duration, cost, route details
+   - 10+ minute walks or any paid transit = separate activity entry
+3. MORNING ACTIVITIES — At least 1 paid + 1 free activity
+4. LUNCH (category: "dining") — Restaurant near previous location, ~price, 1 alternative in tips
+5. AFTERNOON ACTIVITIES — At least 1-2 paid + 1 free activity  
+6. HOTEL RETURN (if dinner venue is far) — "Freshen up" with category "accommodation"
+7. DINNER (category: "dining") — Restaurant, price range, dress code, reservation needed?, 1 alternative in tips
+8. EVENING/NIGHTLIFE — Bar, jazz club, night market, show, rooftop, dessert spot (at least 1 suggestion)
+9. RETURN TO HOTEL — With transport mode and time
+10. NEXT MORNING PREVIEW — In the tips of the LAST activity: "Tomorrow: Wake [time]. Breakfast at [place] ([distance], ~[price])."
+
+MEAL RULES:
+- 3 meals per full day (breakfast, lunch, dinner) — NO EXCEPTIONS
+- Each meal = real restaurant name + approximate price + distance from previous stop
+- Each lunch and dinner must include 1 alternative option in the "tips" field
+
+TRANSIT RULES:
+- Between EVERY pair of consecutive stops, include transit info
+- For walks >10 min: create a separate transport activity entry
+- For walks <5 min: note in the tips of the preceding activity
+- Always include: mode, duration, cost (free for walking), and route/line for public transit
+
+ACTIVITY MIX:
+- Minimum 3 PAID activities (museums, tours, attractions with ticket prices)
+- Minimum 2 FREE activities (parks, viewpoints, walks, markets, street art)
+- Place free activities between paid ones to prevent fatigue
+- Include at least 1 coffee/snack opportunity between long gaps
+
+EVENING REQUIREMENT:
+- The day does NOT end at dinner. Include at least 1 post-dinner suggestion:
+  Jazz, rooftop bar, night market, show, river cruise, neighborhood walk, live music, dessert
+- Mark as optional in description if appropriate
+
+PRICES ON EVERYTHING:
+- Every meal: approximate price per person
+- Every attraction: entry/ticket fee
+- Every transit: fare (walking = free)
+- estimatedCost.amount = 0 for genuinely free activities
+- Approximate is acceptable. MISSING is not.
+
+PRACTICAL TIPS (in "tips" field of each activity):
+- Booking requirements, queue advice, dress codes, closure days
+- "Book online to skip the line" / "Closed Mondays" / "Best photos at sunset"
+${hotelNameForDay ? `\nHOTEL: ${hotelNameForDay}${hotelNeighborhood ? ` (${hotelNeighborhood})` : ''}` : ''}
+Start and end the day near the hotel when practical.`;
       }
 
       // ==========================================================================
@@ -8948,7 +9005,7 @@ Rules:
         }
       }
 
-      const systemPrompt = `You are an expert travel planner. Generate a single day's detailed itinerary.
+      const systemPrompt = `You are an expert travel planner creating a COMPLETE hour-by-hour travel plan — not a suggestion list.
 
 ${generationHierarchy}
 
@@ -8957,16 +9014,23 @@ ${tripTypePrompt}
 ${timingInstructions}
 ${lockedSlotsInstruction}
 
+CORE PRINCIPLE: A Voyance itinerary plans the traveler's ENTIRE day, hour by hour, from waking up to going to sleep. It handles logistics, meals, transit, and the little decisions that stress people out when traveling.
+
 General Requirements:
 - Include FULL street addresses for all locations
-- Provide realistic cost estimates in local currency
+- Provide realistic cost estimates in local currency — prices on EVERYTHING (meals, tickets, transit)
 - Account for REALISTIC travel time between activities — if two places are in different neighborhoods, leave 30-60 min gap (not 15 min). Only use 15 min gaps for locations within walking distance. Travel time and rest buffers are SEPARATE.
-- Include meals (breakfast, lunch, dinner as appropriate for the time of day)
+- Include TRANSIT between every pair of consecutive activities as separate entries with category "transport" (mode, duration, cost, route/line info). Walks under 5 min can be noted in tips instead.
+- Include 3 MEALS per full day: breakfast, lunch, dinner — each a real named restaurant with price
+- Each lunch and dinner recommendation should include 1 ALTERNATIVE option in its "tips" field
 - ONLY recommend restaurants and dining spots with 4+ star ratings - no low-quality or poorly-reviewed venues
 - Every activity MUST have a "title" field (the display name)
 - All times MUST be in 24-hour HH:MM format
-- ACTIVITY COUNT: ${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} scheduled activities (HARD LIMITS — going under ${minActivitiesFromArchetype} OR over ${maxActivitiesFromArchetype} = FAILURE)
-- Fill the day from morning through evening: include 2-3 dining slots, 2-3 exploration activities, and evening activities where appropriate
+- ACTIVITY COUNT: This includes meals, transit, and evening activities. Fill the day completely.
+- Include at least 1 EVENING/NIGHTLIFE activity after dinner (bar, show, night market, jazz, rooftop, dessert spot)
+- Include PRACTICAL TIPS inline: booking requirements, queue advice, dress codes, closure days, best times
+- The LAST activity's tips field must include a NEXT MORNING PREVIEW: "Tomorrow: Wake [time]. Breakfast at [place] ([distance], ~[price])."
+- For full exploration days: minimum 3 paid activities + 2 free activities + 3 meals + evening option
 ${lockedActivities.length > 0 ? '- DO NOT generate activities for locked time slots listed above' : ''}
 ${collaboratorAttributionPrompt}
 ${voyancePicksPrompt}
@@ -8977,6 +9041,7 @@ Do NOT generate multiple alternatives or use isOption/optionGroup. Deliver ONE c
 Also include "accommodationNotes" (2-3 tips) and "practicalTips" (3-4 tips) arrays in the response.
 `;
 
+      const isFullDay = !isFirstDay && !isLastDay;
       const userPrompt = `Generate Day ${dayNumber} of ${totalDays} in ${destination}${destinationCountry ? `, ${destinationCountry}` : ''}.
 
 Date: ${date}
@@ -8985,7 +9050,7 @@ Budget: ${effectiveBudgetTier}${actualDailyBudgetPerPerson != null ? ` (~$${actu
 ⚠️ HARD BUDGET CAP: The user has set a real budget of ~$${Math.round(actualDailyBudgetPerPerson * (travelers || 1))}/day total ($${actualDailyBudgetPerPerson}/person) for activities.
 ${actualDailyBudgetPerPerson < 10 ? `🚨 EXTREMELY TIGHT BUDGET: Do your best — prioritize FREE activities (parks, temples, markets, viewpoints, walking tours). For meals, suggest cheapest realistic options (street food, convenience stores). Do NOT invent fake low prices — use real local costs. Include a "budget_note" field with an honest 1-sentence note about budget feasibility.` : actualDailyBudgetPerPerson < 30 ? `⚡ TIGHT BUDGET: Lean heavily on free attractions, street food, self-guided exploration. Limit paid activities to 1-2/day. Use realistic local prices.` : `Stay within this cap. Balance expensive activities with free alternatives.`}` : ''}
 ARCHETYPE: ${primaryArchetype}
-ACTIVITY COUNT: ${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} per day (HARD LIMITS — going under OR over = FAILURE)
+${isFullDay ? `DAY TYPE: Full exploration day — generate a COMPLETE hour-by-hour plan with 3 meals, transit between every stop, evening activity, and next-morning preview.` : `SIGHTSEEING ACTIVITY COUNT: ${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} (adjust for arrival/departure constraints)`}
 ${preferences?.pace ? `Pace: ${preferences.pace}` : ''}
 ${preferences?.dayFocus ? `Day focus: ${preferences.dayFocus}` : ''}
 ${preferenceContext}
@@ -8994,16 +9059,18 @@ ${mustDoPrompt}
 ${previousDayActivities?.length ? `\nAvoid repeating these specific venues/activities (be creative and pick DIFFERENT ones): ${previousDayActivities.join(', ')}` : ''}
 
 CRITICAL REMINDERS:
-1. ${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} scheduled activities required. Going under ${minActivitiesFromArchetype} OR over ${maxActivitiesFromArchetype} = FAILURE.
+1. ${isFullDay ? 'This is a FULL DAY: breakfast + 3 paid activities + 2 free activities + lunch + dinner + transit between all stops + evening activity + next morning preview. Fill EVERY hour.' : `${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} scheduled sightseeing activities for this ${isFirstDay ? 'arrival' : 'departure'} day.`}
 2. Check the archetype's avoid list. If it says "no spa", there are ZERO spa activities.
 3. Check the budget constraints. If value-focused, no €100+ experiences.
 4. ${primaryArchetype === 'flexible_wanderer' || primaryArchetype === 'slow_traveler' || (traitScores.pace || 0) <= -3 ? 'Include at least one 2+ hour UNSCHEDULED block labeled "Free time to explore [neighborhood]"' : 'Follow the pacing guidelines for this archetype'}
+5. ${isFullDay ? 'TRANSIT: Include a transport entry (category: "transport") between EVERY pair of consecutive activities. Include mode, duration, cost.' : ''}
+6. ${isFullDay ? 'PRICES: Every meal, every ticket, every taxi must have a price. estimatedCost.amount = 0 for free activities. No blanks.' : ''}
 
 ${'='.repeat(70)}
 🧠 VOYANCE INTELLIGENCE FIELDS — MANDATORY FOR EVERY ACTIVITY
 ${'='.repeat(70)}
 For EVERY activity, you MUST include ALL of these intelligence fields:
-1. "tips" (string, 30+ chars): Specific, actionable insider tip. NOT generic.
+1. "tips" (string, 30+ chars): Specific, actionable insider tip. NOT generic.${isFullDay ? ' For lunch/dinner: include 1 alternative restaurant. For last activity: include next morning preview.' : ''}
 2. "crowdLevel": "low", "moderate", or "high" at the SCHEDULED time
 3. "isHiddenGem" (boolean): true for genuine discoveries (not mainstream). At least 1-2 per day.
 4. "hasTimingHack" (boolean): true if this time slot gives an advantage. At least 2-3 per day.

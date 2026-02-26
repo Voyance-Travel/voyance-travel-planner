@@ -1207,41 +1207,135 @@ export function buildRegularDayPrompt(
   if (dna.sleepSchedule === 'needs_rest') earliestStart = '09:30';
   
   // End time based on DNA
-  let latestEnd = '21:00';
-  if (dna.sleepSchedule === 'early_bird') latestEnd = '20:00';
+  let latestEnd = '22:30';
+  if (dna.sleepSchedule === 'early_bird') latestEnd = '21:00';
   if (dna.sleepSchedule === 'night_owl') latestEnd = '23:30';
-  if (dna.traits.pace <= -5) latestEnd = '20:30'; // Relaxed = earlier end
+  if (dna.traits.pace <= -5) latestEnd = '21:30';
   
   const lines: string[] = [];
   lines.push(`${'='.repeat(60)}`);
-  lines.push(`📅 DAY ${dayNumber} - FULL EXPLORATION DAY`);
+  lines.push(`📅 DAY ${dayNumber} - FULL EXPLORATION DAY (HOUR-BY-HOUR)`);
   lines.push(`${'='.repeat(60)}`);
   lines.push('');
   
   lines.push(`⏰ TIMING`);
   lines.push(`${'─'.repeat(40)}`);
   lines.push(`   Day starts: ${earliestStart} (based on ${dna.sleepSchedule || 'balanced'} schedule)`);
-  lines.push(`   Day ends: ${latestEnd}`);
+  lines.push(`   Day ends: ${latestEnd} (including nightlife/evening activity)`);
+  lines.push('');
+
+  // =========================================================================
+  // FULL DAY STRUCTURE — HOUR-BY-HOUR TRAVEL PLAN (NOT just a list of activities)
+  // =========================================================================
+  lines.push(`🗓️ REQUIRED FULL-DAY STRUCTURE`);
+  lines.push(`${'─'.repeat(40)}`);
+  lines.push(`   This is NOT a suggestion list. It is a COMPLETE hour-by-hour travel plan.`);
+  lines.push(`   Every hour from ${earliestStart} to ${latestEnd} must be accounted for.`);
   lines.push('');
   
+  lines.push(`   MANDATORY ELEMENTS FOR EVERY FULL DAY:`);
+  lines.push(`   ┌──────────────────────────────────────────────────────────────┐`);
+  lines.push(`   │ 🍳 BREAKFAST — Near hotel. Restaurant name, ~price, walk time  │`);
+  lines.push(`   │ 🚶 TRANSIT — Mode, duration, cost between EVERY pair of stops  │`);
+  lines.push(`   │ 🎯 MORNING ACTIVITY 1 — Paid attraction/museum/tour            │`);
+  lines.push(`   │ 🚶 TRANSIT                                                      │`);
+  lines.push(`   │ 🌿 MORNING ACTIVITY 2 — Free activity (park, walk, viewpoint)  │`);
+  lines.push(`   │ 🚶 TRANSIT                                                      │`);
+  lines.push(`   │ 🍽️ LUNCH — Restaurant with price, distance from prev location  │`);
+  lines.push(`   │ 🚶 TRANSIT                                                      │`);
+  lines.push(`   │ 🎯 AFTERNOON ACTIVITY 1 — Paid attraction/experience           │`);
+  lines.push(`   │ 🚶 TRANSIT                                                      │`);
+  lines.push(`   │ 🌿 AFTERNOON ACTIVITY 2 — Free activity or coffee/snack break  │`);
+  lines.push(`   │ 🏨 HOTEL RETURN — Freshen up before dinner (if appropriate)     │`);
+  lines.push(`   │ 🍷 DINNER — Restaurant with price, cuisine, dress code if any  │`);
+  lines.push(`   │ 🌙 EVENING/NIGHTLIFE — Bar, jazz club, night market, show      │`);
+  lines.push(`   │ 🏨 RETURN TO HOTEL                                               │`);
+  lines.push(`   │ 🌅 NEXT MORNING PREVIEW — "Tomorrow: wake at X, breakfast at Y"│`);
+  lines.push(`   └──────────────────────────────────────────────────────────────┘`);
+  lines.push('');
+
+  lines.push(`   MEAL REQUIREMENTS (3 per full day):`);
+  lines.push(`   - BREAKFAST: Real restaurant/café name, walk time from hotel, ~price`);
+  lines.push(`   - LUNCH: Restaurant near previous activity, ~price, 1 alternative option in tips`);
+  lines.push(`   - DINNER: Restaurant with price range, cuisine type, reservation needed?`);
+  lines.push(`     Include dress code if relevant. Add 1 alternative in tips field.`);
+  lines.push('');
+
+  lines.push(`   TRANSIT REQUIREMENTS (between EVERY consecutive activity):`);
+  lines.push(`   - Include as category: "transport" activities between stops`);
+  lines.push(`   - Mode: walk, taxi, metro/tube/subway, bus, tram, rideshare`);
+  lines.push(`   - Duration: realistic travel time (not just distance)`);
+  lines.push(`   - Cost: fare/price for paid transit (walking = free)`);
+  lines.push(`   - In the description, include WHICH line/route for public transit`);
+  lines.push(`   - Short walks (under 5 min) can be noted in the tips of the previous activity`);
+  lines.push(`     instead of a separate transport entry, but 10+ min walks MUST be explicit`);
+  lines.push('');
+
+  lines.push(`   ACTIVITY MIX REQUIREMENTS:`);
+  lines.push(`   - Minimum 3 PAID activities (museums, tours, attractions, experiences)`);
+  lines.push(`   - Minimum 2 FREE activities (parks, viewpoints, neighborhood walks, markets, street art)`);
+  lines.push(`   - Free activities placed BETWEEN paid ones to break up the day`);
+  lines.push(`   - At least 1 coffee/snack stop for long gaps (note in tips or as separate entry)`);
+  lines.push('');
+
+  lines.push(`   EVENING/NIGHTLIFE (mandatory — not every day ends at dinner):`);
+  lines.push(`   - After dinner, include at least 1 evening suggestion:`);
+  lines.push(`     Jazz clubs, rooftop bars, night markets, shows, river cruises,`);
+  lines.push(`     neighborhood walks at night, dessert spots, live music`);
+  lines.push(`   - Can be optional/skippable — note "optional" in description if so`);
+  lines.push('');
+
+  lines.push(`   HOTEL BOOKENDS:`);
+  if (hotel.hasHotel) {
+    lines.push(`   - Start day near hotel (breakfast within walking distance)`);
+    lines.push(`   - If dinner location is far, include "Return to hotel to freshen up" activity`);
+    lines.push(`   - End day with "Return to hotel" noting transport mode + time`);
+    if (hotel.hotelName) {
+      lines.push(`   - Hotel: ${hotel.hotelName}`);
+    }
+    if (hotel.hotelNeighborhood) {
+      lines.push(`   - Neighborhood: ${hotel.hotelNeighborhood}`);
+    }
+  } else {
+    lines.push(`   - Start day with breakfast in a central/convenient area`);
+    lines.push(`   - Include evening return transport`);
+  }
+  lines.push('');
+
+  lines.push(`   PRACTICAL TIPS (inline on activities):`);
+  lines.push(`   - "Book tickets online in advance to skip queue"`);
+  lines.push(`   - "Closed on Mondays" / "Free entry first Sunday of month"`);
+  lines.push(`   - "Queue shorter before 10am" / "Go at sunset for best photos"`);
+  lines.push(`   - "Smart casual dress code" / "No shorts allowed"`);
+  lines.push(`   - These go in the "tips" field of each activity`);
+  lines.push('');
+
+  lines.push(`   NEXT MORNING PREVIEW:`);
+  lines.push(`   - The LAST activity of the day should include in its tips field:`);
+  lines.push(`     "Tomorrow: Wake up [time]. Breakfast at [restaurant] ([walk time] from hotel, ~[price])."`);
+  lines.push('');
+
+  lines.push(`   PRICES ON EVERYTHING (no exceptions):`);
+  lines.push(`   - Every meal: approximate price per person`);
+  lines.push(`   - Every ticket: entry fee`);
+  lines.push(`   - Every taxi/transit: fare`);
+  lines.push(`   - Free activities: estimatedCost.amount = 0`);
+  lines.push(`   - Approximate is fine. Missing is NOT.`);
+  lines.push('');
+
   lines.push(`⚡ ACTIVITY DENSITY`);
   lines.push(`${'─'.repeat(40)}`);
-  lines.push(`   Max activities: ${maxActivities}`);
-  lines.push(`   Min downtime: ${minDowntime} minutes between activities`);
+  lines.push(`   Max activities: ${maxActivities} (including meals, transit, and evening)`);
+  lines.push(`   Min downtime: ${minDowntime} minutes between major activities`);
   lines.push(`   Energy level: ${energyLevel.toUpperCase()}`);
   lines.push(`   (${densityReasoning})`);
   lines.push('');
-  
-  if (hotel.hasHotel && hotel.hotelNeighborhood) {
-    lines.push(`🏨 BASE: ${hotel.hotelNeighborhood}`);
-    lines.push(`   Start and end day near hotel when practical`);
-    lines.push('');
-  }
   
   // DNA-specific guidance
   if (dna.sleepSchedule === 'needs_rest') {
     lines.push(`😴 SIESTA REQUIRED`);
     lines.push(`   Include 2+ hour rest block (2:00-4:00 PM)`);
+    lines.push(`   Label as "Rest & Recharge at Hotel" with category "relaxation"`);
     lines.push('');
   }
   
@@ -1249,6 +1343,22 @@ export function buildRegularDayPrompt(
     lines.push(`🎯 LOCAL-FOCUSED DAY`);
     lines.push(`   Prioritize off-guidebook spots`);
     lines.push(`   Avoid obvious tourist areas`);
+    lines.push('');
+  }
+
+  if (dna.traits.pace <= -5) {
+    lines.push(`🧘 RELAXED PACE`);
+    lines.push(`   Fewer activities but more depth per stop`);
+    lines.push(`   Longer café sits, unstructured wandering blocks`);
+    lines.push(`   Replace 1 paid activity with extended free time`);
+    lines.push('');
+  }
+
+  if (dna.traits.pace >= 5) {
+    lines.push(`⚡ PACKED PACE`);
+    lines.push(`   Maximize activities — add extra sightseeing in gaps`);
+    lines.push(`   Shorter meals, tighter transit windows`);
+    lines.push(`   Include additional paid experiences beyond the minimum`);
     lines.push('');
   }
   
