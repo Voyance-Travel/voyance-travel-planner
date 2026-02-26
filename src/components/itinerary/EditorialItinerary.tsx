@@ -254,6 +254,17 @@ export interface HotelSelection {
   googleMapsUrl?: string;
 }
 
+/** Per-city hotel info for multi-city trips */
+export interface CityHotelInfo {
+  cityName: string;
+  cityOrder: number;
+  checkInDate?: string;
+  checkOutDate?: string;
+  nights?: number;
+  hotel?: HotelSelection | null;
+  cityId?: string; // trip_cities row id for hotel search targeting
+}
+
 export interface EditorialItineraryProps {
   tripId: string;
   destination: string;
@@ -269,6 +280,8 @@ export interface EditorialItineraryProps {
   days: EditorialDay[];
   flightSelection?: FlightSelection | null;
   hotelSelection?: HotelSelection | null;
+  /** Per-city hotels for multi-city trips */
+  allHotels?: CityHotelInfo[];
   destinationInfo?: {
     overview?: string;
     culturalNotes?: string;
@@ -913,6 +926,7 @@ export function EditorialItinerary({
   days: initialDays,
   flightSelection,
   hotelSelection,
+  allHotels,
   destinationInfo,
   heroImageUrl,
   isEditable = true,
@@ -3175,6 +3189,51 @@ export function EditorialItinerary({
                     onNavigateToBookings={() => setActiveTab('details')}
                   />
                 )}
+
+                {/* Hotel Check-in / Check-out Events for multi-city */}
+                {allHotels && allHotels.length > 0 && (() => {
+                  const selectedDay = days[selectedDayIndex];
+                  const dayDate = selectedDay?.date;
+                  if (!dayDate) return null;
+
+                  const events: React.ReactNode[] = [];
+                  allHotels.forEach((ch) => {
+                    if (!ch.hotel?.name) return;
+                    const checkInTime = ch.hotel.checkIn || '3:00 PM';
+                    const checkOutTime = ch.hotel.checkOut || '11:00 AM';
+
+                    // Check-out: departure day from a city
+                    if (ch.checkOutDate && dayDate === ch.checkOutDate) {
+                      events.push(
+                        <div key={`checkout-${ch.cityOrder}`} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-secondary/30">
+                          <div className="h-8 w-8 rounded-full bg-destructive/10 flex items-center justify-center shrink-0">
+                            <ArrowRightLeft className="h-4 w-4 text-destructive" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-foreground">Check out · {ch.hotel!.name}</p>
+                            <p className="text-xs text-muted-foreground">{checkOutTime} · {ch.cityName}</p>
+                          </div>
+                        </div>
+                      );
+                    }
+                    // Check-in: arrival day in a city
+                    if (ch.checkInDate && dayDate === ch.checkInDate) {
+                      events.push(
+                        <div key={`checkin-${ch.cityOrder}`} className="flex items-center gap-3 p-3 rounded-lg border border-primary/20 bg-primary/5">
+                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                            <Hotel className="h-4 w-4 text-primary" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-foreground">Check in · {ch.hotel!.name}</p>
+                            <p className="text-xs text-muted-foreground">{checkInTime} · {ch.cityName}</p>
+                          </div>
+                        </div>
+                      );
+                    }
+                  });
+
+                  return events.length > 0 ? <div className="space-y-2">{events}</div> : null;
+                })()}
                 
                 {/* Check if this day is locked (placeholder with no content) */}
                 {(() => {
@@ -3545,7 +3604,7 @@ export function EditorialItinerary({
               )}
             </section>
 
-            {/* HOTEL SECTION - Editorial Style */}
+            {/* HOTEL SECTION - Editorial Style (Multi-hotel aware) */}
             <section className="space-y-5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -3555,12 +3614,14 @@ export function EditorialItinerary({
                   <div>
                     <h3 className="font-serif text-lg font-semibold text-foreground">Accommodation</h3>
                     <p className="text-xs text-muted-foreground">
-                      {hotelSelection?.name ? `${hotelSelection.nights || days.length} nights` : 'Where you\'ll stay'}
+                      {allHotels && allHotels.length > 0
+                        ? `${allHotels.length} ${allHotels.length === 1 ? 'city' : 'cities'}`
+                        : hotelSelection?.name ? `${hotelSelection.nights || days.length} nights` : 'Where you\'ll stay'}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  {hotelSelection?.name && (
+                  {!allHotels?.length && hotelSelection?.name && (
                     <Button 
                       variant="ghost" 
                       size="sm" 
@@ -3571,7 +3632,7 @@ export function EditorialItinerary({
                       Edit
                     </Button>
                   )}
-                  {hotelCost > 0 && (
+                  {hotelCost > 0 && !allHotels?.length && (
                     <div className="text-right">
                       <p className="text-xs text-muted-foreground">Total</p>
                       <p className="font-serif text-xl font-semibold text-foreground">{formatCurrency(displayCost(hotelCost), tripCurrency)}</p>
@@ -3580,7 +3641,101 @@ export function EditorialItinerary({
                 </div>
               </div>
               
-              {hotelSelection?.name ? (
+              {/* Multi-city hotels */}
+              {allHotels && allHotels.length > 0 ? (
+                <div className="space-y-3">
+                  {allHotels.map((cityHotel, idx) => (
+                    <div key={idx} className="rounded-xl border border-border bg-card overflow-hidden">
+                      {/* City header */}
+                      <div className="flex items-center justify-between px-4 py-3 bg-secondary/30 border-b border-border">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-4 w-4 text-primary" />
+                          <span className="font-medium text-sm text-foreground">{cityHotel.cityName}</span>
+                          {cityHotel.checkInDate && cityHotel.checkOutDate && (
+                            <span className="text-xs text-muted-foreground">
+                              {safeFormatDate(cityHotel.checkInDate, 'MMM d')} → {safeFormatDate(cityHotel.checkOutDate, 'MMM d')}
+                              {cityHotel.nights ? ` · ${cityHotel.nights} nights` : ''}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {cityHotel.hotel?.name ? (
+                        <div className="p-4 space-y-3">
+                          <div className="flex items-start gap-3">
+                            {/* Hotel image thumbnail */}
+                            <div className="h-16 w-16 rounded-lg bg-muted/30 overflow-hidden shrink-0">
+                              {cityHotel.hotel.imageUrl ? (
+                                <img
+                                  src={cityHotel.hotel.imageUrl}
+                                  alt={cityHotel.hotel.name}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <Hotel className="h-6 w-6 text-muted-foreground/30" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-medium text-foreground truncate">{cityHotel.hotel.name}</h4>
+                              {cityHotel.hotel.rating && (
+                                <div className="flex items-center gap-1 mt-0.5">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <Star key={star} className={cn("h-3 w-3", star <= Math.floor(cityHotel.hotel!.rating || 0) ? "text-amber-400 fill-amber-400" : "text-muted-foreground/30")} />
+                                  ))}
+                                </div>
+                              )}
+                              {cityHotel.hotel.address && (
+                                <p className="text-xs text-muted-foreground mt-1 truncate">{cityHotel.hotel.address}</p>
+                              )}
+                            </div>
+                            {cityHotel.hotel.pricePerNight && (
+                              <div className="text-right shrink-0">
+                                <p className="text-xs text-muted-foreground">per night</p>
+                                <p className="font-medium text-primary text-sm">${cityHotel.hotel.pricePerNight}</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Check-in/out times */}
+                          <div className="flex gap-2">
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary/50 text-xs">
+                              <span className="text-muted-foreground">In:</span>
+                              <span className="font-medium">{cityHotel.hotel.checkIn || '3:00 PM'}</span>
+                            </div>
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary/50 text-xs">
+                              <span className="text-muted-foreground">Out:</span>
+                              <span className="font-medium">{cityHotel.hotel.checkOut || '11:00 AM'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        /* No hotel for this city */
+                        <div className="p-4">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                              <Search className="h-4 w-4 text-primary" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm text-muted-foreground">No hotel selected for {cityHotel.cityName}</p>
+                            </div>
+                            <AddHotelInline
+                              tripId={tripId}
+                              destination={cityHotel.cityName}
+                              startDate={cityHotel.checkInDate || startDate}
+                              endDate={cityHotel.checkOutDate || endDate}
+                              travelers={travelers}
+                              onHotelAdded={onBookingAdded}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : hotelSelection?.name ? (
                 <div className="rounded-xl border border-border bg-card overflow-hidden group">
                   {/* Hotel Image Header */}
                   <div 
@@ -3597,24 +3752,17 @@ export function EditorialItinerary({
                         alt={hotelSelection.name || 'Hotel'}
                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                         onError={(e) => { 
-                          // source.unsplash.com is discontinued — fall back to gradient
                           e.currentTarget.style.display = 'none';
                         }}
                       />
-                    ) : hotelSelection?.name ? (
-                      <div className="w-full h-full flex items-center justify-center bg-secondary/50">
-                        <Hotel className="h-12 w-12 text-muted-foreground/30" />
-                      </div>
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-secondary/50">
                         <Hotel className="h-12 w-12 text-muted-foreground/30" />
                       </div>
                     )}
                     
-                    {/* Gradient Overlay */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
                     
-                    {/* Photo count */}
                     {hotelSelection?.images && hotelSelection.images.length > 1 && (
                       <button
                         onClick={(e) => {
@@ -3628,22 +3776,13 @@ export function EditorialItinerary({
                       </button>
                     )}
                     
-                    {/* Hotel Name Overlay */}
                     <div className="absolute bottom-0 left-0 right-0 p-4">
                       <h4 className="font-serif text-xl font-semibold text-white mb-1">{hotelSelection.name}</h4>
                       {hotelSelection.rating && (
                         <div className="flex items-center gap-1.5">
                           <div className="flex items-center">
                             {[1, 2, 3, 4, 5].map((star) => (
-                              <Star 
-                                key={star} 
-                                className={cn(
-                                  "h-3.5 w-3.5",
-                                  star <= Math.floor(hotelSelection.rating || 0) 
-                                    ? "text-amber-400 fill-amber-400" 
-                                    : "text-white/30"
-                                )} 
-                              />
+                              <Star key={star} className={cn("h-3.5 w-3.5", star <= Math.floor(hotelSelection.rating || 0) ? "text-amber-400 fill-amber-400" : "text-white/30")} />
                             ))}
                           </div>
                           <span className="text-white/80 text-xs">{hotelSelection.rating}</span>
@@ -3652,9 +3791,7 @@ export function EditorialItinerary({
                     </div>
                   </div>
                   
-                  {/* Hotel Details */}
                   <div className="p-4 space-y-4">
-                    {/* Quick Info */}
                     <div className="flex flex-wrap gap-2">
                       <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/50 text-sm">
                         <span className="text-muted-foreground">Check-in:</span>
@@ -3671,7 +3808,6 @@ export function EditorialItinerary({
                       )}
                     </div>
                     
-                    {/* Address */}
                     {hotelSelection.address && (
                       <div className="flex items-start gap-2 text-sm">
                         <MapPin className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
@@ -3679,7 +3815,6 @@ export function EditorialItinerary({
                       </div>
                     )}
                     
-                    {/* Amenities */}
                     {hotelSelection.amenities && hotelSelection.amenities.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
                         {hotelSelection.amenities.slice(0, 6).map((amenity, idx) => (
@@ -3695,7 +3830,6 @@ export function EditorialItinerary({
                       </div>
                     )}
                     
-                    {/* Actions */}
                     {(hotelSelection.website || hotelSelection.googleMapsUrl || hotelCost > 0) && (
                       <div className="flex items-center gap-2 pt-3 border-t border-border">
                         {(hotelSelection.website || hotelSelection.googleMapsUrl) && (
