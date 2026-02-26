@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import { supabase } from '@/integrations/supabase/client';
+import { sanitizeAIOutput } from '@/utils/textSanitizer';
 import { TripConfirmCard } from './TripConfirmCard';
 
 export interface ChatTripCity {
@@ -145,14 +146,15 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
             const content = choice?.delta?.content;
             if (content) {
               assistantContent += content;
+              const sanitized = sanitizeAIOutput(assistantContent);
               setMessages(prev => {
                 const last = prev[prev.length - 1];
                 if (last?.role === 'assistant' && prev.length > updatedMessages.length) {
                   return prev.map((m, i) =>
-                    i === prev.length - 1 ? { ...m, content: assistantContent } : m
+                    i === prev.length - 1 ? { ...m, content: sanitized } : m
                   );
                 }
-                return [...prev, { role: 'assistant', content: assistantContent }];
+                return [...prev, { role: 'assistant', content: sanitized }];
               });
             }
           } catch {
