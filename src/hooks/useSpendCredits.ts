@@ -20,6 +20,7 @@ const ACTION_MAP: Record<string, string> = {
   UNLOCK_DAY: 'unlock_day',
   SMART_FINISH: 'smart_finish',
   SWAP_ACTIVITY: 'swap_activity',
+  ADD_ACTIVITY: 'add_activity',
   REGENERATE_DAY: 'regenerate_day',
   RESTAURANT_REC: 'restaurant_rec',
   AI_MESSAGE: 'ai_message',

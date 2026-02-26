@@ -20,6 +20,7 @@ const FIXED_COSTS: Record<string, number> = {
   smart_finish: 50,
   regenerate_day: 10,
   swap_activity: 5,
+  add_activity: 5,
   restaurant_rec: 5,
   ai_message: 5,
   hotel_optimization: 100,
@@ -35,19 +36,19 @@ const ROUTE_OPT_CLUB_SCHEDULE = [10, 8, 6, 3];
 
 // Tier-based free action caps
 const TIER_CAPS: Record<string, Record<string, number>> = {
-  free:       { swap_activity: 3,  regenerate_day: 1, ai_message: 5,  restaurant_rec: 1 },
-  flex:       { swap_activity: 3,  regenerate_day: 1, ai_message: 5,  restaurant_rec: 1 },
-  voyager:    { swap_activity: 6,  regenerate_day: 2, ai_message: 10, restaurant_rec: 2 },
-  explorer:   { swap_activity: 9,  regenerate_day: 3, ai_message: 15, restaurant_rec: 3 },
-  adventurer: { swap_activity: 15, regenerate_day: 5, ai_message: 25, restaurant_rec: 5 },
+  free:       { swap_activity: 3,  add_activity: 2, regenerate_day: 1, ai_message: 5,  restaurant_rec: 1 },
+  flex:       { swap_activity: 3,  add_activity: 2, regenerate_day: 1, ai_message: 5,  restaurant_rec: 1 },
+  voyager:    { swap_activity: 6,  add_activity: 4, regenerate_day: 2, ai_message: 10, restaurant_rec: 2 },
+  explorer:   { swap_activity: 9,  add_activity: 6, regenerate_day: 3, ai_message: 15, restaurant_rec: 3 },
+  adventurer: { swap_activity: 15, add_activity: 10, regenerate_day: 5, ai_message: 25, restaurant_rec: 5 },
 };
 
 // Trip length scaling for Free/Flex only
 const FLEX_CAPS_BY_DAYS: Record<number, Record<string, number>> = {
-  2:  { swap_activity: 3,  regenerate_day: 1, ai_message: 5,  restaurant_rec: 1 },
-  4:  { swap_activity: 5,  regenerate_day: 2, ai_message: 10, restaurant_rec: 2 },
-  6:  { swap_activity: 7,  regenerate_day: 3, ai_message: 15, restaurant_rec: 3 },
-  8:  { swap_activity: 10, regenerate_day: 4, ai_message: 20, restaurant_rec: 4 },
+  2:  { swap_activity: 3,  add_activity: 2, regenerate_day: 1, ai_message: 5,  restaurant_rec: 1 },
+  4:  { swap_activity: 5,  add_activity: 3, regenerate_day: 2, ai_message: 10, restaurant_rec: 2 },
+  6:  { swap_activity: 7,  add_activity: 4, regenerate_day: 3, ai_message: 15, restaurant_rec: 3 },
+  8:  { swap_activity: 10, add_activity: 6, regenerate_day: 4, ai_message: 20, restaurant_rec: 4 },
 };
 
 function getScaledCaps(unlockedDays: number): Record<string, number> {
@@ -63,7 +64,7 @@ const HOTEL_SEARCH_PER_CITY = 40;
 const BASE_RATE_PER_DAY = 60;
 
 // Actions eligible for group cap
-const GROUP_CAP_ACTIONS = ['swap_activity', 'regenerate_day', 'ai_message', 'restaurant_rec'];
+const GROUP_CAP_ACTIONS = ['swap_activity', 'add_activity', 'regenerate_day', 'ai_message', 'restaurant_rec'];
 
 interface SpendRequest {
   action: string;

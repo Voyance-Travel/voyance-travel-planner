@@ -2422,7 +2422,26 @@ export function EditorialItinerary({
     setHasChanges(true);
   }, []);
 
-  const handleAddActivity = useCallback((dayIndex: number, activity: Partial<EditorialActivity>) => {
+  const handleAddActivity = useCallback(async (dayIndex: number, activity: Partial<EditorialActivity>) => {
+    // Spend credits for adding an activity (server handles free caps)
+    try {
+      const addCreditResult = await spendCredits.mutateAsync({
+        action: 'ADD_ACTIVITY',
+        tripId,
+        dayIndex,
+        metadata: {
+          activity_title: activity.title || 'New Activity',
+          day_number: days[dayIndex]?.dayNumber || dayIndex + 1,
+        },
+      });
+      console.log('[AddActivity] Credit spend result:', addCreditResult);
+    } catch (err) {
+      console.error('[AddActivity] Credit spend failed:', err);
+      setCreditNudge({ action: 'ADD_ACTIVITY' });
+      setAddActivityModal(null);
+      return;
+    }
+
     const newActivity: EditorialActivity = {
       id: `manual-${Date.now()}`,
       title: activity.title || 'New Activity',
@@ -2444,7 +2463,7 @@ export function EditorialItinerary({
     setHasChanges(true);
     setAddActivityModal(null);
     toast.success('Activity added!');
-  }, [tripCurrency]);
+  }, [tripCurrency, spendCredits, tripId, days]);
 
   const handleImportActivities = useCallback((dayIndex: number, activities: Array<Partial<EditorialActivity>>, mode: ImportMode = 'merge') => {
     const newActivities = activities.map((activity, i) => ({
