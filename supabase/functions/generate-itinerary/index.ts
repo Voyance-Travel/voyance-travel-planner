@@ -7825,6 +7825,20 @@ ${'='.repeat(60)}
         }
       }
 
+      // =======================================================================
+      // STAGE 4.9: Auto Route Optimization — reorder flexible activities
+      // by geographic proximity. No API calls, no credits — quality feature.
+      // =======================================================================
+      try {
+        const { autoOptimizeDayRoute } = await import('./auto-route-optimizer.ts');
+        for (const day of enrichedDays) {
+          day.activities = autoOptimizeDayRoute(day.activities as any[]) as typeof day.activities;
+        }
+        console.log(`[Stage 4.9] ✓ Auto route optimization applied to ${enrichedDays.length} days`);
+      } catch (routeErr) {
+        console.warn('[Stage 4.9] Auto route optimization failed (non-blocking):', routeErr);
+      }
+
       // STAGE 5: Trip Overview (with enriched data from Stage 1.9)
       const overview = generateTripOverview(enrichedDays, context, {
         travelAdvisory: fetchedTravelAdvisory,
@@ -9368,6 +9382,17 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
               (act as any).closedRiskReason = result.reason;
             }
           }
+        }
+
+        // =======================================================================
+        // AUTO ROUTE OPTIMIZATION: Reorder flexible activities by proximity
+        // No API calls, no credit charge — uses coordinates from enrichment
+        // =======================================================================
+        try {
+          const { autoOptimizeDayRoute } = await import('./auto-route-optimizer.ts');
+          normalizedActivities = autoOptimizeDayRoute(normalizedActivities);
+        } catch (routeErr) {
+          console.warn(`[generate-day] Auto route optimization failed (non-blocking):`, routeErr);
         }
 
         generatedDay.activities = normalizedActivities;
