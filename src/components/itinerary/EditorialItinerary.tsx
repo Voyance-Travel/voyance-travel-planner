@@ -102,6 +102,7 @@ import { calculateItineraryValueStats } from '@/utils/intelligenceAnalytics';
 import { useSkipList } from '@/hooks/useSkipList';
 import { validateItinerary, matchesSkipList, type ValidationIssue } from '@/utils/itineraryValidator';
 import { VoyanceInsight } from './VoyanceInsight';
+import { ContextualTipsPopover, type ContextualTip } from './ContextualTipsPopover';
 import { VoyancePickCallout } from './VoyancePickCallout';
 import { TransitBadge } from './TransitBadge';
 import { TransitGapIndicator, computeGapMinutes } from './TransitGapIndicator';
@@ -183,6 +184,7 @@ export interface EditorialActivity {
   bestTime?: string;
   crowdLevel?: string;
   voyanceInsight?: string;
+  contextualTips?: ContextualTip[];
   personalization?: {
     whyThisFits?: string;
     tags?: string[];
@@ -6462,6 +6464,10 @@ function ActivityRow({
                 <Badge variant="outline" className="text-xs border-accent/50 text-accent">
                   Booking Required
                 </Badge>
+              )}
+              {/* Contextual Tips Popover — non-intrusive, behind a tap */}
+              {activity.contextualTips && activity.contextualTips.length > 0 && !isDowntime && !isTransport && !isCheckIn && canViewPremium && !compact && (
+                <ContextualTipsPopover tips={activity.contextualTips} />
               )}
             </div>
             {(() => {

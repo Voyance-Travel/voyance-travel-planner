@@ -2215,6 +2215,20 @@ const STRICT_ITINERARY_TOOL = {
                       required: ["method", "duration", "estimatedCost", "instructions"]
                     },
                     tips: { type: "string", description: "Insider tip or recommendation" },
+                    contextualTips: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          type: { type: "string", enum: ["timing", "booking", "money_saving", "transit", "cultural", "safety", "hidden_gem", "weather", "general"] },
+                          text: { type: "string", description: "Specific, actionable tip (30+ chars)" }
+                        },
+                        required: ["type", "text"]
+                      },
+                      minItems: 1,
+                      maxItems: 4,
+                      description: "1-4 typed contextual tips for this activity (timing, booking, money-saving, transit, cultural, safety, hidden gem, weather)"
+                    },
                     rating: {
                       type: "object",
                       properties: {
@@ -4604,6 +4618,16 @@ For EVERY activity you generate, you MUST include ALL of these intelligence fiel
 5. "bestTime" (string): If hasTimingHack=true, explain WHY (e.g., "Arrives before the 10am tour bus rush")
 6. "voyanceInsight" (string): One unique fact most travelers don't know. Example: "The second floor has a hidden terrace that's not on any map"
 7. "personalization.whyThisFits" (string): MUST reference specific traveler traits/preferences. NOT generic.
+8. "contextualTips" (array of objects): 1-4 TYPED tips per activity. Each tip has a "type" and "text":
+   - "timing": Queue/crowd advice for this specific time. E.g., "Crown Jewels queue is shortest before 10am"
+   - "booking": Reservation/ticket advice. E.g., "Books up 3 weeks in advance — reserve now"
+   - "money_saving": Ways to save. E.g., "London Pass covers this + 2 other stops on your trip, saving £15"
+   - "transit": Getting there tips. E.g., "Oyster card is cheaper than individual tickets"
+   - "cultural": Etiquette/context. E.g., "Tipping 10-15% at restaurants; service charge often included"
+   - "safety": Practical warnings. E.g., "Cash only at this market" or "No shorts allowed in this church"
+   - "hidden_gem": Nearby discovery. E.g., "2 min away: The Lamb pub (est. 1729) — great mid-afternoon pint"
+   - "weather": Weather-specific advice. E.g., "March averages 8°C — pack layers and a rain jacket"
+   Every paid activity should have at least 1 contextual tip. Dining should include booking or cultural tips.
 
 DO NOT leave these fields empty or omit them. They are the core intelligence layer.
 
@@ -4752,6 +4776,18 @@ Generate activities for this day following ALL constraints above.`;
                             }
                           },
                           tips: { type: "string", description: "Insider tip for this activity (must be specific, actionable, 30+ chars)" },
+                          contextualTips: {
+                            type: "array",
+                            items: {
+                              type: "object",
+                              properties: {
+                                type: { type: "string", enum: ["timing", "booking", "money_saving", "transit", "cultural", "safety", "hidden_gem", "weather", "general"] },
+                                text: { type: "string" }
+                              },
+                              required: ["type", "text"]
+                            },
+                            description: "1-4 typed contextual tips"
+                          },
                           rating: {
                             type: "object",
                             properties: { value: { type: "number" }, totalReviews: { type: "number" } }
