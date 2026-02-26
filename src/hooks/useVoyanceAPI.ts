@@ -43,7 +43,7 @@ export interface CreateTripRequest {
   travelers?: number;
   originCity?: string;
   budgetTier?: string;
-  creationSource?: 'single_city' | 'multi_city' | 'chat' | 'manual_paste';
+  creationSource?: 'single_city' | 'multi_city' | 'chat' | 'manual_paste' | 'mystery_getaway';
 }
 
 export interface UpdateTripRequest {
@@ -196,6 +196,7 @@ export function useCreateTrip() {
           budget_tier: input.budgetTier,
           owner_plan_tier: ownerPlanTier,
           creation_source: input.creationSource || 'single_city',
+          is_multi_city: false,
           status: 'draft',
         })
         .select()
@@ -204,9 +205,31 @@ export function useCreateTrip() {
       if (error) throw error;
       return data;
     },
-    onSuccess: async (data) => {
+    onSuccess: async (data, input) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.trips.all });
       toast.success('Trip created!');
+
+      // Insert single trip_cities row for unified schema (single-city trips)
+      // Multi-city flows handle their own trip_cities insertion separately
+      if (!input.creationSource || input.creationSource !== 'multi_city') {
+        try {
+          const startMs = new Date(input.startDate).getTime();
+          const endMs = new Date(input.endDate).getTime();
+          const nights = Math.max(1, Math.ceil((endMs - startMs) / (1000 * 60 * 60 * 24)));
+          await supabase.from('trip_cities').insert({
+            trip_id: data.id,
+            city_order: 0,
+            city_name: input.destination,
+            arrival_date: input.startDate,
+            departure_date: input.endDate,
+            nights,
+            generation_status: 'pending',
+            days_total: nights,
+          } as any);
+        } catch (e) {
+          console.error('[useCreateTrip] trip_cities insert failed:', e);
+        }
+      }
 
       // Grant second_itinerary bonus if this is the user's 2nd trip
       try {

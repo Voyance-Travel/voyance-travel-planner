@@ -1,7 +1,7 @@
 # Schema Unification Audit — All 4 Itinerary Creation Flows
 
 **Date:** 2026-02-26  
-**Status:** Audit complete, ready for incremental fixes
+**Status:** P0, P1, P2 FIXED. P3 (remove isMultiCity branching) pending — requires testing first.
 
 ---
 
