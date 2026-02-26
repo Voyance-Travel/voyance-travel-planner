@@ -277,6 +277,64 @@ export function buildFullPromptGuidance(
   const context = getFullArchetypeContext(archetype, destination, budgetTier, traitScores);
   
   const sections = [
+    // Trait moderation — MUST come first so all subsequent rules are interpreted through this lens
+    `
+${'='.repeat(70)}
+🎯 TRAIT MODERATION — THE MOST IMPORTANT RULE IN THIS ENTIRE PROMPT
+${'='.repeat(70)}
+
+Archetype traits are SEASONING, not the entire meal.
+
+A traveler's archetype tells you their PREFERENCES. It does NOT mean they want that preference to consume every minute of every day. People are multidimensional. Plan like a smart friend who knows the traveler — not like an algorithm that saw one keyword and went all-in.
+
+THE 30-40% RULE:
+- The dominant archetype trait should influence ~30-40% of activities
+- The remaining 60-70% should be well-rounded travel anyone would enjoy
+- Every day MUST feel different — mix high and low, active and restful, trait-aligned and universal
+
+WHAT EACH ARCHETYPE ACTUALLY MEANS IN PRACTICE:
+
+| Archetype | Does NOT mean | DOES mean |
+|-----------|--------------|-----------|
+| Luxury Seeker / Luxury Luminary | Helicopters, $500 dinners, VIP everything | Nice hotel, 1-2 fine dining meals per trip, quality experiences, mix of upscale and local |
+| Adrenaline Architect / Adventurous | Extreme sports every single day | 1 big adventure activity per trip, most days are active but normal (walking tours, bike rides, kayaking) |
+| Cultural Anthropologist / Scholar | Museums and libraries all day every day | 1 cultural site per day (2-3 hours), rest is neighborhoods, markets, restaurants, parks |
+| Culinary Cartographer / Foodie | 6 restaurant meals per day, food tours nonstop | 3 well-chosen meals with 1 standout per day, 1 dedicated food experience per trip |
+| Zen Seeker / Wellness | Spa treatments morning, noon, and night | 1 spa day in a 15-day trip, mostly leisurely pace with late mornings and easy walks |
+| Beach Therapist | Only beach, nothing else | Beach time mixed with coastal walks, seafood dining, local exploration |
+| Wilderness Pioneer | Only hiking, no culture at all | Outdoor-focused but includes a local café, a sunset viewpoint, a market visit |
+| Budget / Backpacker | Only free activities | Hostels, street food, free attractions, but still a real itinerary with quality affordable experiences |
+
+PER-ARCHETYPE DAILY BUDGET CEILINGS (per person, in USD):
+- Budget / Backpacker: ~$15-20/day (hostels, street food, free attractions)
+- Economy: ~$30-45/day (guesthouses, local restaurants, some paid attractions)
+- Standard / Moderate: ~$50-80/day (mid-range hotels, local restaurants, mix of free/paid)
+- Comfort: ~$100-150/day (4-star hotels, quality restaurants, good experiences)
+- Premium: ~$150-250/day (upscale hotels, fine dining 1-2x per trip, private tours occasionally)
+- Luxury: ~$250-400/day (luxury hotels, fine dining, exclusive access — but NOT helicopters or $36K trips)
+
+CRITICAL: The AI should optimize DOWNWARD within each tier. A "Luxury" trip for 15 days should be ~$4,000-$6,000 total, NOT $36,000. Luxury means quality and taste, not unlimited spending.
+
+FREE ACTIVITIES ARE VALID FOR ALL ARCHETYPES:
+- A sunset walk is luxury
+- A park is adventurous
+- A market is cultural
+- A beach is wellness
+- People-watching at a café is social
+
+ANTI-CARICATURE RULES:
+- Do NOT max out any single trait
+- Do NOT schedule the same type of activity more than 2x in any day
+- Do NOT skip universal pleasures (a nice meal, a scenic walk, a local market)
+- Every archetype eats street food sometimes
+- Every archetype has a lazy morning sometimes
+- Every archetype takes a scenic walk that has nothing to do with their "type"
+
+If the user specified a custom budget, that OVERRIDES the archetype ceiling above.
+If no custom budget, use the archetype ceiling as a target, not a floor.
+
+${'='.repeat(70)}
+`,
     // Generation hierarchy
     `
 ${'='.repeat(70)}
@@ -291,11 +349,12 @@ When rules conflict, follow this priority order (1 = highest):
 
 2. ARCHETYPE IDENTITY (critical - defines WHO the traveler is)
    → The archetype's meaning, avoid list, and day structure are LAW
-   → If an activity violates the archetype's avoid list, DO NOT INCLUDE IT
+   → BUT: interpreted through the TRAIT MODERATION rules above (30-40%, not 100%)
 
 3. EXPERIENCE AFFINITY (what TO prioritize - the "pull" side)
    → Each archetype has HIGH/MEDIUM/LOW/NEVER experience categories
-   → PRIORITIZE experiences from HIGH categories
+   → PRIORITIZE experiences from HIGH categories for 30-40% of slots
+   → Fill remaining 60-70% with varied, well-rounded experiences
    → AVOID experiences from NEVER categories (hard block)
 
 4. DESTINATION-SPECIFIC GUIDE (city × archetype recommendations)
@@ -303,6 +362,7 @@ When rules conflict, follow this priority order (1 = highest):
 
 5. BUDGET CONSTRAINTS
    → Budget tier + budget trait score determine price limits
+   → Use per-archetype daily budget ceilings from TRAIT MODERATION above
 
 6. PACING CONSTRAINTS
    → Pace trait determines activity density and timing

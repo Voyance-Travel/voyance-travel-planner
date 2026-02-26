@@ -4497,6 +4497,19 @@ async function generateSingleDayWithRetry(
       
       const generationHierarchy = `
 ${'='.repeat(70)}
+🎯 TRAIT MODERATION — THE MOST IMPORTANT RULE
+${'='.repeat(70)}
+
+Archetype traits are SEASONING, not the entire meal. The dominant archetype trait should influence ~30-40% of activities. The remaining 60-70% should be well-rounded travel anyone would enjoy. Do NOT max out any single trait. Every day should feel different.
+
+FREE ACTIVITIES ARE VALID FOR ALL ARCHETYPES. A sunset walk is luxury, a park is adventurous, a market is cultural.
+
+PER-ARCHETYPE DAILY BUDGET CEILINGS (per person, USD):
+- Budget: ~$15-20/day | Economy: ~$30-45/day | Standard: ~$50-80/day
+- Comfort: ~$100-150/day | Premium: ~$150-250/day | Luxury: ~$250-400/day
+Optimize DOWNWARD within each tier. Luxury ≠ unlimited. A 15-day luxury trip should be ~$4,000-$6,000 total, NOT $36,000.
+
+${'='.repeat(70)}
 ⚖️ GENERATION HIERARCHY — CONFLICT RESOLUTION RULES
 ${'='.repeat(70)}
 
@@ -4513,32 +4526,19 @@ When rules conflict, follow this priority order (1 = highest):
 
 3. ARCHETYPE NARRATIVE TONE (defines HOW activities are described, NOT what activities to include)
    → The archetype determines writing style, pacing feel, and descriptive tone
-   → "Beach Therapist" = use relaxed, restorative language. Does NOT mean only beach activities.
-   → "Flexible Wanderer" = emphasize spontaneity in descriptions. Does NOT mean skip user's interests.
-   → The archetype is the FLAVOR of the writing, not the MENU of activities.
-   → Archetype "avoid" list applies ONLY when it doesn't conflict with the user's explicit interests.
+   → Interpreted through TRAIT MODERATION: 30-40% trait-aligned, 60-70% varied
+   → Archetype "avoid" list applies ONLY when it doesn't conflict with the user's explicit interests
 
 4. EXPERIENCE AFFINITY (secondary guidance)
-   → Each archetype has HIGH/MEDIUM/LOW/NEVER experience categories
-   → Use these to fill REMAINING slots after user interests and research are placed
-   → NEVER categories still apply unless user explicitly selected that interest
+   → Use these to fill REMAINING slots after user interests and essentials are placed
 
 5. BUDGET CONSTRAINTS
    → Budget tier + budget trait score determine price limits
-   → Value-focused travelers: NO Michelin, NO hotel bars, NO €100+ experiences
-   → When archetype conflicts with budget, budget wins on COST, archetype wins on STYLE
+   → Use per-archetype daily budget ceilings above
 
-6. PACING CONSTRAINTS
-   → Pace trait determines activity density and timing
-   → These are HARD LIMITS, not suggestions
-
-7. VARIETY RULES
-   → Max 1 spa per trip (unless Retreat Regular or Luxury Luminary)
-   → Max 1 Michelin per trip (unless Luxury Luminary or Culinary Cartographer)
-   → No same-category activities back-to-back
-
+6. PACING CONSTRAINTS → HARD LIMITS on activity density
+7. VARIETY RULES → Max 1 spa per trip, Max 1 Michelin per trip (unless specific archetypes)
 8. TRAIT MODIFIERS (lowest priority — fine-tuning only)
-   → Traits adjust timing and intensity within the above constraints
 
 CRITICAL: User's explicit profile interests and pasted research ALWAYS outrank archetype defaults.
 The archetype shapes the narrative VOICE, not the activity SELECTION.
