@@ -1904,14 +1904,34 @@ Price IS a feature. Highlight good value.
     return `
 === BUDGET: LUXURY (tier: ${tier}, score: ${budgetScore}) ===
 
-Premium experiences expected:
-- Michelin dining appropriate
-- Spa and wellness expected
-- VIP access and skip-the-line preferred
-- Private tours acceptable
-- Price is not a concern
+Luxury means QUALITY and TASTE, not unlimited spending or absurd opulence.
 
-Ensure quality matches the tier.
+WHAT LUXURY LOOKS LIKE:
+- 4-5 star boutique hotels (not the most expensive option, the BEST option)
+- 1-2 Michelin or fine dining meals PER TRIP (not every meal)
+- Skip-the-line tickets and private guides WHERE IT ADDS VALUE
+- Private transfers for long distances (taxis are fine for short trips)
+- Quality over quantity in every choice
+
+WHAT LUXURY DOES NOT MEAN:
+- Helicopters to dinner
+- $500+ meals every night
+- VIP everything
+- Gold-plated experiences
+- Spending for the sake of spending
+- Total trip costs over $6,000 for 15 days
+
+DAILY TARGET: ~$250-400/person/day (including accommodation)
+TOTAL TRIP TARGET (15 days): ~$4,000-$6,000/person
+
+MIX HIGH AND LOW:
+- Michelin lunch → street food snack later
+- Private museum tour → public park walk
+- Luxury hotel → local neighborhood café for breakfast
+- Fine wine bar → sunset from a free viewpoint
+
+Luxury travelers still appreciate authentic local experiences.
+A $5 gelato from the best shop in town IS a luxury experience.
 `;
   }
   
