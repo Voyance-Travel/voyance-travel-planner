@@ -19,14 +19,14 @@ export interface TravelerDNA {
   
   // Trait scores (-10 to +10)
   traits: {
-    pace: number;           // -10 = very relaxed, +10 = packed
-    social: number;         // -10 = solo/introvert, +10 = group/social
-    adventure: number;      // -10 = safe/comfortable, +10 = thrill-seeker
-    authenticity: number;   // -10 = tourist-friendly, +10 = local-only
-    comfort: number;        // -10 = budget-conscious, +10 = luxury-seeking
-    planning: number;       // -10 = spontaneous, +10 = detailed planner
-    transformation: number; // -10 = pure leisure, +10 = growth-focused
-    budget: number;         // -10 = splurge-forward, +10 = value-focused
+    pace: number;
+    social: number;
+    adventure: number;
+    authenticity: number;
+    comfort: number;
+    planning: number;
+    transformation: number;
+    budget: number;
   };
   
   // Sleep/timing preferences
@@ -51,6 +51,28 @@ export interface TravelerDNA {
   // Companions
   companions?: 'solo' | 'couple' | 'family' | 'friends' | 'group';
   childrenCount?: number;
+  
+  // NEW: Flight & hotel brand preferences
+  preferredAirlines?: string[];
+  preferredCabinClass?: string;
+  seatPreference?: string;
+  hotelBrandPreference?: string;
+  accommodationStyle?: string;
+  
+  // NEW: Budget tier
+  budgetTier?: string;
+  
+  // NEW: Occasion / trip type
+  tripType?: string;
+  
+  // NEW: Past trip history (for personalization context)
+  pastTrips?: Array<{
+    destination: string;
+    tripType?: string;
+    highlights?: string[];
+    painPoints?: string[];
+    lessonsLearned?: string;
+  }>;
 }
 
 export interface DNAFetchResult {
@@ -176,7 +198,7 @@ export async function fetchTravelerDNA(
       // Sleep schedule
       dna.sleepSchedule = prefs.sleep_schedule;
       
-      // Energy peak - critical for activity scheduling
+      // Energy peak
       if (prefs.daytime_bias) {
         dna.energyPeak = prefs.daytime_bias as 'morning' | 'afternoon' | 'evening';
         dataPoints += 1;
@@ -194,7 +216,57 @@ export async function fetchTravelerDNA(
         dna.traits.comfort = comfortMap[prefs.budget_tier] ?? 0;
       }
       
+      // NEW: Flight preferences
+      if (Array.isArray(prefs.preferred_airlines) && prefs.preferred_airlines.length > 0) {
+        dna.preferredAirlines = prefs.preferred_airlines;
+        dataPoints += 1;
+      }
+      if (prefs.preferred_cabin_class) {
+        dna.preferredCabinClass = prefs.preferred_cabin_class;
+        dataPoints += 1;
+      }
+      if (prefs.seat_preference) {
+        dna.seatPreference = prefs.seat_preference;
+      }
+      
+      // NEW: Hotel/accommodation preferences
+      if (prefs.hotel_style) {
+        dna.hotelBrandPreference = prefs.hotel_style;
+        dataPoints += 1;
+      }
+      if (prefs.accommodation_style) {
+        dna.accommodationStyle = prefs.accommodation_style;
+      }
+      
+      // NEW: Budget tier
+      if (prefs.budget_tier) {
+        dna.budgetTier = prefs.budget_tier;
+      }
+      
       dataPoints += 4;
+    }
+
+    // NEW: Fetch past trip history for personalization
+    try {
+      const { data: pastTrips } = await supabase
+        .from('trip_learnings')
+        .select('destination, highlights, pain_points, lessons_summary, pacing_feedback, discovered_likes, discovered_dislikes')
+        .eq('user_id', userId)
+        .not('lessons_summary', 'is', null)
+        .order('completed_at', { ascending: false })
+        .limit(3);
+      
+      if (pastTrips && pastTrips.length > 0) {
+        dna.pastTrips = pastTrips.map((t: any) => ({
+          destination: t.destination || 'Unknown',
+          highlights: (t.highlights as any[])?.slice(0, 2)?.map((h: any) => h.activity || '') || [],
+          painPoints: (t.pain_points as any[])?.slice(0, 2)?.map((p: any) => p.issue || '') || [],
+          lessonsLearned: t.lessons_summary || undefined,
+        }));
+        dataPoints += 3;
+      }
+    } catch (err) {
+      console.warn('[fetchTravelerDNA] Failed to fetch past trips:', err);
     }
 
     // Calculate confidence based on data completeness
@@ -356,9 +428,85 @@ export function buildPersonaManuscript(dna: TravelerDNA, destination?: string): 
     }
   }
   
+  // NEW: Flight & hotel brand preferences
+  if (dna.preferredAirlines?.length || dna.preferredCabinClass || dna.hotelBrandPreference || dna.accommodationStyle) {
+    lines.push('');
+    lines.push(`✈️🏨 TRAVEL STYLE PREFERENCES`);
+    lines.push(`${'─'.repeat(40)}`);
+    if (dna.preferredAirlines?.length) {
+      lines.push(`   Preferred airlines: ${dna.preferredAirlines.join(', ')}`);
+    }
+    if (dna.preferredCabinClass) {
+      lines.push(`   Cabin class: ${dna.preferredCabinClass}`);
+    }
+    if (dna.hotelBrandPreference) {
+      lines.push(`   Hotel style preference: ${dna.hotelBrandPreference}`);
+    }
+    if (dna.accommodationStyle) {
+      lines.push(`   Accommodation: ${dna.accommodationStyle}`);
+    }
+    if (dna.budgetTier) {
+      lines.push(`   Budget tier: ${dna.budgetTier}`);
+    }
+  }
+  
+  // NEW: Occasion / trip type
+  if (dna.tripType) {
+    lines.push('');
+    lines.push(`🎉 TRIP OCCASION: ${dna.tripType.toUpperCase()}`);
+    const occasionGuidance: Record<string, string> = {
+      'honeymoon': 'Plan romantic, intimate experiences. Sunset dinners, couples spa, private moments.',
+      'anniversary': 'Celebration-worthy experiences. Special dinner, meaningful activities.',
+      'birthday': 'Include a celebration moment. Special restaurant, surprise-worthy activity.',
+      'graduation': 'Achievement celebration. Celebratory dinner, memorable experiences.',
+      'bachelor': 'High-energy group activities. Nightlife, adventure, bonding experiences.',
+      'bachelorette': 'Fun group activities. Spa day, nightlife, Instagram-worthy spots.',
+      'family': 'Balance kid-friendly and adult-enjoyable. Include rest periods.',
+      'business': 'Efficient scheduling. Working-friendly cafes, professional dining spots.',
+      'solo': 'Independent exploration. Opportunities to meet locals, personal discovery.',
+      'reunion': 'Group-friendly venues. Shareable meals, activities for all fitness levels.',
+      'retirement': 'Celebratory and leisurely. Bucket-list experiences, premium dining.',
+    };
+    if (occasionGuidance[dna.tripType.toLowerCase()]) {
+      lines.push(`   ${occasionGuidance[dna.tripType.toLowerCase()]}`);
+    }
+  }
+  
+  // NEW: Past trip history for context
+  if (dna.pastTrips && dna.pastTrips.length > 0) {
+    lines.push('');
+    lines.push(`📜 PAST TRIP HISTORY (use for personalization)`);
+    lines.push(`${'─'.repeat(40)}`);
+    for (const trip of dna.pastTrips) {
+      lines.push(`   • ${trip.destination}`);
+      if (trip.highlights?.length) {
+        lines.push(`     Loved: ${trip.highlights.join(', ')}`);
+      }
+      if (trip.painPoints?.length) {
+        lines.push(`     Avoid: ${trip.painPoints.join(', ')}`);
+      }
+      if (trip.lessonsLearned) {
+        lines.push(`     Lesson: ${trip.lessonsLearned}`);
+      }
+    }
+    lines.push(`   → Reference past experiences when relevant: "Since you loved X in Y..."`)
+  }
+  
   lines.push('');
   lines.push(`${'='.repeat(60)}`);
-  lines.push(`CRITICAL: Customize ALL suggestions to match this profile.`);
+  lines.push(`🎯 PERSONALIZATION QUALITY BAR (MANDATORY)`);
+  lines.push(`${'='.repeat(60)}`);
+  lines.push(`Every recommendation MUST pass this test:`);
+  lines.push(`"Could the user have gotten this same advice from a Google search?" If YES → it's NOT good enough.`);
+  lines.push('');
+  lines.push(`RULES:`);
+  lines.push(`1. Be OPINIONATED: "This restaurant because of your love of X" — not "this restaurant is popular"`);
+  lines.push(`2. Be SPECIFIC: "Arrive before 10am to beat the school groups" — not "visit early"`);
+  lines.push(`3. Be PERSONAL: Reference their traits, past trips, or preferences in justifications`);
+  lines.push(`4. Be TIMELY: Mention seasonal relevance, current events, recent openings when known`);
+  lines.push(`5. NEVER give generic tourist advice. Every tip should feel like it came from a friend who knows them.`);
+  lines.push(`6. If suggesting a restaurant, explain WHY it fits THIS person (cuisine match, vibe match, budget match)`);
+  lines.push(`7. If suggesting an activity, connect it to their interests, emotional drivers, or past trip patterns`);
   lines.push(`${'='.repeat(60)}`);
   
   return lines.join('\n');

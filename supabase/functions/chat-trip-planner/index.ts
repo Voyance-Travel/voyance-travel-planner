@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchTravelerDNA, buildCompactDNASummary } from "../_shared/traveler-dna.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -26,6 +27,12 @@ Guidelines:
 - Don't ask for all details at once — guide naturally. One or two questions at a time.
 - Never mention AI, ChatGPT, or any specific AI tool. You are Voyance.
 - If they seem ready, don't over-ask — just extract and go.
+
+PERSONALIZATION:
+- If you know the traveler's preferences (provided below), use them to make suggestions OPINIONATED and SPECIFIC.
+- "Since you're a foodie who loves omakase, Tokyo in October is *chef's kiss* — Michelin season just kicked off." Not: "Tokyo has great food."
+- Reference their travel style naturally: "With your relaxed pace, I'd suggest at least 5 nights so you're not rushing."
+- If they mention a destination, proactively surface relevant info: seasonal events, weather, things that match their interests.
 
 CRITICAL RULES FOR CALLING THE TOOL:
 - You MUST have destination, start date, end date, AND number of travelers before calling extract_trip_details.
@@ -69,6 +76,37 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
+    // Fetch traveler DNA for personalized chat
+    let personalizationContext = '';
+    try {
+      const userId = claimsData.claims.sub as string;
+      if (userId) {
+        const dnaResult = await fetchTravelerDNA(supabase, userId);
+        if (dnaResult.hasData) {
+          const summary = buildCompactDNASummary(dnaResult.dna);
+          const details: string[] = [];
+          if (dnaResult.dna.preferredAirlines?.length) {
+            details.push(`Preferred airlines: ${dnaResult.dna.preferredAirlines.join(', ')}`);
+          }
+          if (dnaResult.dna.preferredCabinClass) {
+            details.push(`Cabin class: ${dnaResult.dna.preferredCabinClass}`);
+          }
+          if (dnaResult.dna.hotelBrandPreference) {
+            details.push(`Hotel style: ${dnaResult.dna.hotelBrandPreference}`);
+          }
+          if (dnaResult.dna.budgetTier) {
+            details.push(`Budget: ${dnaResult.dna.budgetTier}`);
+          }
+          if (dnaResult.dna.pastTrips?.length) {
+            details.push(`Recent trips: ${dnaResult.dna.pastTrips.map(t => t.destination).join(', ')}`);
+          }
+          personalizationContext = `\n\n## TRAVELER PROFILE (use to personalize your responses)\n${summary}\n${details.join('\n')}\nUse this to make suggestions specific and opinionated. Reference their past trips and preferences naturally.`;
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch traveler DNA:", err);
+    }
+
     const response = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
       {
@@ -80,7 +118,7 @@ serve(async (req) => {
         body: JSON.stringify({
           model: "google/gemini-3-flash-preview",
           messages: [
-            { role: "system", content: SYSTEM_PROMPT },
+            { role: "system", content: SYSTEM_PROMPT + personalizationContext },
             ...messages,
           ],
           tools: [
