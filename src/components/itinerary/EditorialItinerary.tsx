@@ -949,6 +949,27 @@ export function EditorialItinerary({
     });
   }, []);
 
+  // Re-sync budget ledger from current days state (fire-and-forget)
+  const syncBudgetFromDays = useCallback((currentDays: EditorialDay[]) => {
+    const daysForSync = currentDays.map(day => ({
+      dayNumber: day.dayNumber,
+      date: day.date || '',
+      activities: day.activities.map(act => ({
+        id: act.id,
+        title: act.title || 'Activity',
+        category: act.category || act.type || 'activities',
+        cost: act.cost ? (typeof act.cost === 'number' ? { amount: act.cost, currency: 'USD' } : act.cost) : undefined,
+      })),
+    }));
+    syncItineraryToBudget(tripId, daysForSync)
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
+        queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
+        queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
+      })
+      .catch(err => console.error('[EditorialItinerary] Budget sync failed:', err));
+  }, [tripId, queryClient]);
+
   const days = rawDays;
   const [expandedDays, setExpandedDays] = useState<number[]>(initialDays.map(d => d.dayNumber));
   // Persisted option group selections (key = optionGroup id, value = selected activity id)
@@ -1757,7 +1778,8 @@ export function EditorialItinerary({
         return { ...day, activities: updatedActivities };
       });
       
-      // Updated days with swapped activity
+      // Sync budget with updated days
+      syncBudgetFromDays(updatedDays);
       return updatedDays;
     });
 
@@ -1771,7 +1793,7 @@ export function EditorialItinerary({
     } else {
       toast.success(`Swapped activity (${swapCreditResult?.spent ?? CREDIT_COSTS.SWAP_ACTIVITY} credits used)`);
     }
-  }, [swapTarget, tripCurrency, isPaid, spendCredits, tripId, days]);
+  }, [swapTarget, tripCurrency, isPaid, spendCredits, tripId, days, syncBudgetFromDays]);
 
   // Supports both database trips and localStorage demo trips
   useEffect(() => {
@@ -1919,24 +1941,7 @@ export function EditorialItinerary({
         toast.success('Itinerary saved!');
         
         // Re-sync budget ledger with updated itinerary
-        try {
-          const daysForSync = days.map(day => ({
-            dayNumber: day.dayNumber,
-            date: day.date || '',
-            activities: day.activities.map(act => ({
-              id: act.id,
-              title: act.title || 'Activity',
-              category: act.category || act.type || 'activities',
-              cost: act.cost ? (typeof act.cost === 'number' ? { amount: act.cost, currency: 'USD' } : act.cost) : undefined,
-            })),
-          }));
-          await syncItineraryToBudget(tripId, daysForSync);
-          queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
-          queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
-          queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
-        } catch (syncErr) {
-          console.error('[EditorialItinerary] Budget sync after save failed:', syncErr);
-        }
+        syncBudgetFromDays(days);
       } else {
         toast.error('Could not find trip to save');
       }
@@ -2234,13 +2239,18 @@ export function EditorialItinerary({
   }, []);
 
   const handleActivityRemove = useCallback((dayIndex: number, activityId: string) => {
-    setDays(prev => prev.map((day, idx) => {
-      if (idx !== dayIndex) return day;
-      return { ...day, activities: day.activities.filter(act => act.id !== activityId) };
-    }));
+    setDays(prev => {
+      const updated = prev.map((day, idx) => {
+        if (idx !== dayIndex) return day;
+        return { ...day, activities: day.activities.filter(act => act.id !== activityId) };
+      });
+      // Sync budget with updated days
+      syncBudgetFromDays(updated);
+      return updated;
+    });
     setHasChanges(true);
     toast.success('Activity removed');
-  }, []);
+  }, [syncBudgetFromDays]);
 
   // Check if user can regenerate (has enough credits)
   const canRegenerate = useCallback(() => {
@@ -2456,14 +2466,19 @@ export function EditorialItinerary({
       isLocked: false,
     };
 
-    setDays(prev => prev.map((day, idx) => {
-      if (idx !== dayIndex) return day;
-      return { ...day, activities: [...day.activities, newActivity] };
-    }));
+    setDays(prev => {
+      const updated = prev.map((day, idx) => {
+        if (idx !== dayIndex) return day;
+        return { ...day, activities: [...day.activities, newActivity] };
+      });
+      // Sync budget with updated days
+      syncBudgetFromDays(updated);
+      return updated;
+    });
     setHasChanges(true);
     setAddActivityModal(null);
     toast.success('Activity added!');
-  }, [tripCurrency, spendCredits, tripId, days]);
+  }, [tripCurrency, spendCredits, tripId, days, syncBudgetFromDays]);
 
   const handleImportActivities = useCallback((dayIndex: number, activities: Array<Partial<EditorialActivity>>, mode: ImportMode = 'merge') => {
     const newActivities = activities.map((activity, i) => ({
@@ -3319,10 +3334,14 @@ export function EditorialItinerary({
             hasFlight={hasFlightData}
             onActivityRemove={(activityId) => {
               // Remove the activity from itinerary days when deleted from budget
-              setDays(prev => prev.map(day => ({
-                ...day,
-                activities: day.activities.filter(act => act.id !== activityId),
-              })));
+              setDays(prev => {
+                const updated = prev.map(day => ({
+                  ...day,
+                  activities: day.activities.filter(act => act.id !== activityId),
+                }));
+                syncBudgetFromDays(updated);
+                return updated;
+              });
               setHasChanges(true);
               toast.success('Activity removed from itinerary');
             }}
