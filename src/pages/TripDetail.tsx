@@ -1088,12 +1088,44 @@ export default function TripDetail() {
               })() : null;
 
               // hotel_selection can be an array (multi-hotel) or a legacy single object.
-              // The editorial itinerary expects a single primary hotel object.
-              const primaryHotelSelection = normalizeLegacyHotelSelection(
+              const allNormalizedHotels = normalizeLegacyHotelSelection(
                 trip.hotel_selection as unknown,
                 trip.start_date,
                 trip.end_date
-              )[0] || null;
+              );
+              const primaryHotelSelection = allNormalizedHotels[0] || null;
+
+              // Build per-city hotel info for multi-city trips
+              const isMultiCity = !!(trip as any).is_multi_city;
+              const cityHotels: import('@/components/itinerary/EditorialItinerary').CityHotelInfo[] = (() => {
+                if (!isMultiCity) return [];
+                // Multi-city: derive city hotels from the hotel array + destination string
+                const cities = (trip.destination || '').split(/\s*[→→,]\s*/).filter(Boolean);
+                return cities.map((cityName, idx) => {
+                  const hotel = allNormalizedHotels[idx];
+                  return {
+                    cityName: cityName.trim(),
+                    cityOrder: idx,
+                    checkInDate: hotel?.checkInDate,
+                    checkOutDate: hotel?.checkOutDate,
+                    nights: hotel ? (hotel.checkInDate && hotel.checkOutDate ? 
+                      Math.max(1, Math.ceil((new Date(hotel.checkOutDate).getTime() - new Date(hotel.checkInDate).getTime()) / (1000 * 60 * 60 * 24))) : undefined) : undefined,
+                    hotel: hotel ? {
+                      name: hotel.name,
+                      address: hotel.address,
+                      rating: hotel.rating,
+                      imageUrl: hotel.imageUrl,
+                      images: hotel.images,
+                      website: hotel.website,
+                      googleMapsUrl: hotel.googleMapsUrl,
+                      checkIn: hotel.checkInTime || '3:00 PM',
+                      checkOut: hotel.checkOutTime || '11:00 AM',
+                      pricePerNight: (hotel as any)?.pricePerNight,
+                      amenities: (hotel as any)?.amenities,
+                    } as any : null,
+                  };
+                });
+              })();
 
               return (
                 <>
@@ -1118,6 +1150,7 @@ export default function TripDetail() {
                   days={editorDays}
                   flightSelection={normalizedFlight}
                   hotelSelection={primaryHotelSelection as any}
+                  allHotels={cityHotels.length > 0 ? cityHotels : undefined}
                   destinationInfo={
                     destinationMeta
                       ? {
