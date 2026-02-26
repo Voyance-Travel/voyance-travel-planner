@@ -20,6 +20,7 @@ interface CreditNudgeProps {
 
 const ACTION_LABELS: Partial<Record<keyof typeof CREDIT_COSTS, string>> = {
   SWAP_ACTIVITY: 'swap this activity',
+  ADD_ACTIVITY: 'add this activity',
   REGENERATE_DAY: 'regenerate this day',
   AI_MESSAGE: 'send a message',
   RESTAURANT_REC: 'get restaurant picks',

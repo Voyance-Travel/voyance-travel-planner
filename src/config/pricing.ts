@@ -16,6 +16,7 @@ export const CREDIT_COSTS = {
   SMART_FINISH: 50,           // Smart Finish for manual/imported trips
   REGENERATE_DAY: 10,         // Regenerate a day (after 5 free/trip)
   SWAP_ACTIVITY: 5,           // Swap an activity (after 10 free/trip)
+  ADD_ACTIVITY: 5,            // Add a new activity to a day
   RESTAURANT_REC: 5,          // Restaurant recommendation (after 5 free/trip)
   AI_MESSAGE: 5,              // AI companion message (after 20 free/trip)
   HOTEL_OPTIMIZATION: 100,    // Approve hotel-based itinerary swaps
@@ -42,6 +43,7 @@ export type UserTier = 'free' | 'flex' | 'voyager' | 'explorer' | 'adventurer';
 
 export interface TierCaps {
   swaps: number;
+  adds: number;
   regenerates: number;
   ai_messages: number;
   restaurant_recs: number;
@@ -49,19 +51,19 @@ export interface TierCaps {
 }
 
 export const TIER_FREE_CAPS: Record<UserTier, TierCaps> = {
-  free:       { swaps: 3,  regenerates: 1, ai_messages: 5,  restaurant_recs: 1, total: 10 },
-  flex:       { swaps: 3,  regenerates: 1, ai_messages: 5,  restaurant_recs: 1, total: 10 },
-  voyager:    { swaps: 6,  regenerates: 2, ai_messages: 10, restaurant_recs: 2, total: 20 },
-  explorer:   { swaps: 9,  regenerates: 3, ai_messages: 15, restaurant_recs: 3, total: 30 },
-  adventurer: { swaps: 15, regenerates: 5, ai_messages: 25, restaurant_recs: 5, total: 50 },
+  free:       { swaps: 3,  adds: 2, regenerates: 1, ai_messages: 5,  restaurant_recs: 1, total: 12 },
+  flex:       { swaps: 3,  adds: 2, regenerates: 1, ai_messages: 5,  restaurant_recs: 1, total: 12 },
+  voyager:    { swaps: 6,  adds: 4, regenerates: 2, ai_messages: 10, restaurant_recs: 2, total: 24 },
+  explorer:   { swaps: 9,  adds: 6, regenerates: 3, ai_messages: 15, restaurant_recs: 3, total: 36 },
+  adventurer: { swaps: 15, adds: 10, regenerates: 5, ai_messages: 25, restaurant_recs: 5, total: 60 },
 };
 
 // Trip length scaling for Free/Flex users only
 export const FLEX_CAPS_BY_DAYS: Record<number, TierCaps> = {
-  2:  { swaps: 3,  regenerates: 1, ai_messages: 5,  restaurant_recs: 1, total: 10 },
-  4:  { swaps: 5,  regenerates: 2, ai_messages: 10, restaurant_recs: 2, total: 19 },
-  6:  { swaps: 7,  regenerates: 3, ai_messages: 15, restaurant_recs: 3, total: 28 },
-  8:  { swaps: 10, regenerates: 4, ai_messages: 20, restaurant_recs: 4, total: 38 },
+  2:  { swaps: 3,  adds: 2, regenerates: 1, ai_messages: 5,  restaurant_recs: 1, total: 12 },
+  4:  { swaps: 5,  adds: 3, regenerates: 2, ai_messages: 10, restaurant_recs: 2, total: 22 },
+  6:  { swaps: 7,  adds: 4, regenerates: 3, ai_messages: 15, restaurant_recs: 3, total: 32 },
+  8:  { swaps: 10, adds: 6, regenerates: 4, ai_messages: 20, restaurant_recs: 4, total: 44 },
 };
 
 // Group unlock credit costs
@@ -83,6 +85,7 @@ export const GROUP_FREE_CAPS = {
 // Legacy flat caps (backward compat)
 export const FREE_ACTION_CAPS: Record<string, number> = {
   swap_activity: 3,
+  add_activity: 2,
   regenerate_day: 1,
   ai_message: 5,
   restaurant_rec: 1,
