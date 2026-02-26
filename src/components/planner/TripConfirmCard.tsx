@@ -3,22 +3,10 @@
  */
 
 import { motion } from 'framer-motion';
-import { MapPin, Calendar, Users, DollarSign, Hotel, Sparkles, CheckCircle2, Pencil } from 'lucide-react';
+import { MapPin, Calendar, Users, DollarSign, Hotel, Sparkles, CheckCircle2, Pencil, Route } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { format, parseISO } from 'date-fns';
-
-interface TripDetails {
-  destination?: string;
-  startDate?: string;
-  endDate?: string;
-  travelers?: number;
-  tripType?: string;
-  budgetAmount?: number;
-  hotelName?: string;
-  hotelAddress?: string;
-  mustDoActivities?: string;
-  additionalNotes?: string;
-}
+import type { TripDetails } from './TripChatPlanner';
 
 interface TripConfirmCardProps {
   details: TripDetails;
@@ -37,10 +25,15 @@ function formatDate(dateStr?: string): string {
 }
 
 export function TripConfirmCard({ details, onConfirm, onEdit, isGenerating }: TripConfirmCardProps) {
+  const isMultiCity = details.cities && details.cities.length > 1;
   const rows: { icon: React.ReactNode; label: string; value: string }[] = [];
 
   if (details.destination) {
-    rows.push({ icon: <MapPin className="h-3.5 w-3.5" />, label: 'Destination', value: details.destination });
+    rows.push({
+      icon: <MapPin className="h-3.5 w-3.5" />,
+      label: isMultiCity ? 'Route' : 'Destination',
+      value: details.destination,
+    });
   }
   if (details.startDate || details.endDate) {
     rows.push({
@@ -87,6 +80,24 @@ export function TripConfirmCard({ details, onConfirm, onEdit, isGenerating }: Tr
           </div>
         ))}
       </div>
+
+      {/* Multi-city route breakdown */}
+      {isMultiCity && details.cities && (
+        <div className="rounded-lg bg-muted/50 p-2 space-y-1">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+            <Route className="h-3 w-3" />
+            City breakdown
+          </p>
+          {details.cities.map((city, i) => (
+            <div key={i} className="flex items-center gap-1.5 text-xs">
+              <span className="text-muted-foreground">{i + 1}.</span>
+              <span className="text-foreground font-medium">{city.name}</span>
+              {city.country && <span className="text-muted-foreground">({city.country})</span>}
+              <span className="text-muted-foreground ml-auto">{city.nights} night{city.nights !== 1 ? 's' : ''}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {details.mustDoActivities && (
         <div className="text-xs">
