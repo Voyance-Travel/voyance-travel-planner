@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { reportConnectionFailure, resetConnectionFailures } from '@/components/common/ConnectionRecoveryBanner';
 import { getTripCities } from '@/services/tripCitiesService';
 
 // =============================================================================
@@ -253,6 +254,25 @@ export function useItineraryGeneration() {
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate itinerary';
       console.error('[useItineraryGeneration] Error:', errorMessage);
       
+      // Detect network/timeout errors that may corrupt Supabase client state
+      const isConnectionError = errorMessage.includes('Failed to fetch') ||
+        errorMessage.includes('CORS') || errorMessage.includes('NetworkError') ||
+        errorMessage.includes('timed out') || errorMessage.includes('__TIMEOUT__');
+      
+      if (isConnectionError) {
+        // Proactively clean up Supabase channels to prevent cascade
+        try {
+          supabase.removeAllChannels();
+          await supabase.auth.refreshSession();
+          resetConnectionFailures();
+        } catch (cleanupErr) {
+          console.warn('[useItineraryGeneration] Post-failure cleanup failed:', cleanupErr);
+          reportConnectionFailure();
+          reportConnectionFailure();
+          reportConnectionFailure(); // Trigger banner immediately
+        }
+      }
+      
       setState(prev => ({
         ...prev,
         isGenerating: false,
@@ -481,6 +501,25 @@ export function useItineraryGeneration() {
       return generatedDays;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate itinerary';
+      
+      // Detect connection-level errors and proactively recover
+      const isConnectionError = errorMessage.includes('Failed to fetch') ||
+        errorMessage.includes('CORS') || errorMessage.includes('NetworkError') ||
+        errorMessage.includes('timed out') || errorMessage.includes('__TIMEOUT__');
+      
+      if (isConnectionError) {
+        try {
+          supabase.removeAllChannels();
+          await supabase.auth.refreshSession();
+          resetConnectionFailures();
+        } catch (cleanupErr) {
+          console.warn('[useItineraryGeneration] Post-failure cleanup failed:', cleanupErr);
+          reportConnectionFailure();
+          reportConnectionFailure();
+          reportConnectionFailure();
+        }
+      }
+
       setState(prev => ({
         ...prev,
         isGenerating: false,

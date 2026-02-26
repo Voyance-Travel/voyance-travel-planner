@@ -59,7 +59,15 @@ async function fetchCredits(userId: string | undefined): Promise<Omit<CreditData
       .eq('user_id', userId).gt('remaining', 0).order('expires_at', { ascending: true, nullsFirst: false }),
   ]);
 
-  if (balanceRes.error) { console.error('[useCredits] Error:', balanceRes.error); throw balanceRes.error; }
+  if (balanceRes.error) {
+    console.error('[useCredits] Error:', balanceRes.error);
+    // Report connection failure so the recovery banner can detect cascade
+    try {
+      const { reportConnectionFailure } = await import('@/components/common/ConnectionRecoveryBanner');
+      reportConnectionFailure();
+    } catch {}
+    throw balanceRes.error;
+  }
 
   const data = balanceRes.data;
   const now = new Date();

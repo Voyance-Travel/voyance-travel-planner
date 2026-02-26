@@ -209,8 +209,12 @@ export function useEntitlements(tripId?: string) {
       
       if (error) {
         const errorBody = error.message || '';
-        // Only warn, don't error-spam on transient failures
         console.warn('[Entitlements] Fetch issue, using defaults:', errorBody);
+        // Report to connection recovery system for cascade detection
+        try {
+          const { reportConnectionFailure } = await import('@/components/common/ConnectionRecoveryBanner');
+          reportConnectionFailure();
+        } catch {}
         return getDefaultEntitlements(user?.id || '');
       }
       return data;
