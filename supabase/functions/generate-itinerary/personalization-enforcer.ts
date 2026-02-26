@@ -1310,12 +1310,33 @@ export function buildScheduleConstraintsPrompt(constraints: ScheduleConstraints)
 These constraints are derived from the traveler's traits. VIOLATIONS WILL CAUSE REJECTION.
 
 - Activities per day: ${constraints.minActivitiesPerDay}-${constraints.maxActivitiesPerDay} (excluding transport/accommodation)
-- Buffer between activities: minimum ${constraints.bufferMinutesBetweenActivities} minutes
+- Buffer between activities: minimum ${constraints.bufferMinutesBetweenActivities} minutes (see transition rules below)
 - Day timing: ${constraints.earliestStartTime} earliest start, ${constraints.latestEndTime} latest end
 - Walking: maximum ${constraints.maxWalkingDistanceMeters}m or ${constraints.maxWalkingTimeMinutes} min between venues
 - Required meals: ${constraints.requiredMealSlots.join(', ')}
 
-If transit time between venues exceeds walking limit, include explicit transport activity.`;
+If transit time between venues exceeds walking limit, include explicit transport activity.
+
+## 🚦 REALISTIC TRANSITION BUFFER RULES — MANDATORY
+NEVER schedule back-to-back activities with zero gap. Every transition requires buffer time ON TOP of travel time.
+The next activity's startTime must be: previous endTime + travel duration + buffer.
+
+Minimum buffers BY TRANSITION TYPE (apply the relevant one):
+- Walking to next activity: +5 min (check map, cross streets, find entrance)
+- Taxi/rideshare pickup: +10 min (request ride, wait for arrival, load in)
+- Taxi/rideshare dropoff → indoor venue: +5 min (pay, walk to entrance, orient)
+- Arriving at a restaurant: +10 min (check in with host, get seated, order drinks)
+- Hotel check-in: +15 min (front desk queue, elevator, settle into room)
+- Leaving hotel (freshen up/change): +10 min (get ready, gather belongings, reach lobby)
+- Museum/attraction entry: +10 min (ticket queue, bag check, orientation)
+- Airport arrival → through security: +45 min domestic, +60 min international (longer lines, passport control)
+- Between ANY two activities at DIFFERENT locations: never less than 10 min total gap
+
+EXAMPLE — WRONG vs RIGHT:
+❌ WRONG: Taxi ends 6:30 PM → Hotel refresh starts 6:30 PM → ends 7:30 PM → Taxi starts 7:30 PM
+✅ RIGHT: Taxi ends 6:30 PM → Hotel check-in + freshen up 6:45 PM → ready 7:30 PM → Taxi pickup 7:40 PM → Restaurant arrival 8:00 PM (seated by 8:10 PM)
+
+Show the buffer naturally in descriptions: "Arrive at hotel ~6:30 PM. Check in and freshen up. Ready by 7:30 PM."`;
 }
 
 /**
