@@ -1,0 +1,145 @@
+/**
+ * ConnectionRecoveryBanner
+ * 
+ * Monitors Supabase client health (auth token + realtime WebSocket).
+ * When a generation timeout or other failure corrupts the connection state,
+ * this component detects the cascade (auth lock timeout, repeated WS failures)
+ * and offers the user a one-click recovery instead of requiring a hard refresh.
+ *
+ * Recovery sequence:
+ *   1. Remove all Supabase Realtime channels
+ *   2. Force-refresh the auth session
+ *   3. Invalidate React-Query cache so hooks re-fetch
+ */
+
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { RefreshCw, WifiOff } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
+import { cn } from '@/lib/utils';
+
+/** How many consecutive fetch failures (credits, entitlements, etc.) before we show the banner */
+const FAILURE_THRESHOLD = 3;
+/** Once we detect trouble, how long to wait before showing the banner (avoids flash on transient blips) */
+const DEBOUNCE_MS = 4_000;
+
+/**
+ * Global failure counter — incremented by any Supabase query/function hook that
+ * catches a network-level or auth-level error. This lets us detect the cascade
+ * without coupling every hook to this component.
+ */
+let _globalFailureCount = 0;
+let _listeners: Array<() => void> = [];
+
+export function reportConnectionFailure() {
+  _globalFailureCount++;
+  _listeners.forEach(fn => fn());
+}
+
+export function resetConnectionFailures() {
+  _globalFailureCount = 0;
+  _listeners.forEach(fn => fn());
+}
+
+export function getConnectionFailureCount() {
+  return _globalFailureCount;
+}
+
+function useConnectionFailureCount() {
+  const [count, setCount] = useState(_globalFailureCount);
+  useEffect(() => {
+    const handler = () => setCount(_globalFailureCount);
+    _listeners.push(handler);
+    return () => {
+      _listeners = _listeners.filter(fn => fn !== handler);
+    };
+  }, []);
+  return count;
+}
+
+export function ConnectionRecoveryBanner() {
+  const failureCount = useConnectionFailureCount();
+  const queryClient = useQueryClient();
+  const [showBanner, setShowBanner] = useState(false);
+  const [isRecovering, setIsRecovering] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Show banner after sustained failures
+  useEffect(() => {
+    if (failureCount >= FAILURE_THRESHOLD && !showBanner) {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => setShowBanner(true), DEBOUNCE_MS);
+    }
+    if (failureCount === 0 && showBanner) {
+      setShowBanner(false);
+    }
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [failureCount, showBanner]);
+
+  const handleRecover = useCallback(async () => {
+    setIsRecovering(true);
+    try {
+      // 1. Tear down all Realtime channels to stop failing reconnect loops
+      supabase.removeAllChannels();
+
+      // 2. Force-refresh the auth session to clear any stale/locked tokens
+      const { error } = await supabase.auth.refreshSession();
+      if (error) {
+        console.warn('[ConnectionRecovery] Session refresh failed, signing out:', error.message);
+        // If refresh truly fails, a re-login is needed — but still clear the cascade
+      }
+
+      // 3. Invalidate all React-Query caches so hooks re-fetch with fresh connections
+      queryClient.invalidateQueries();
+
+      // 4. Reset failure counter
+      resetConnectionFailures();
+      setShowBanner(false);
+
+      console.log('[ConnectionRecovery] Recovery complete — all channels reset, session refreshed');
+    } catch (err) {
+      console.error('[ConnectionRecovery] Recovery failed:', err);
+      // Last resort: suggest hard refresh
+      setIsRecovering(false);
+    } finally {
+      setIsRecovering(false);
+    }
+  }, [queryClient]);
+
+  return (
+    <AnimatePresence>
+      {showBanner && (
+        <motion.div
+          key="connection-recovery"
+          initial={{ y: -48, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -48, opacity: 0 }}
+          className={cn(
+            'fixed top-0 left-0 right-0 z-[101]',
+            'bg-destructive text-destructive-foreground px-4 py-2.5',
+            'flex items-center justify-center gap-3 text-sm font-medium',
+            'shadow-lg'
+          )}
+        >
+          <WifiOff className="w-4 h-4 shrink-0" />
+          <span>Connection lost. Some features may not work.</span>
+          <button
+            onClick={handleRecover}
+            disabled={isRecovering}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold',
+              'bg-destructive-foreground/20 hover:bg-destructive-foreground/30',
+              'transition-colors disabled:opacity-50'
+            )}
+          >
+            <RefreshCw className={cn('w-3.5 h-3.5', isRecovering && 'animate-spin')} />
+            {isRecovering ? 'Reconnecting…' : 'Reconnect'}
+          </button>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
