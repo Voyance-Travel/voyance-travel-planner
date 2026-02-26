@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { reportConnectionFailure, resetConnectionFailures } from '@/components/common/ConnectionRecoveryBanner';
@@ -128,6 +128,11 @@ export function useItineraryGeneration() {
     error: null,
     status: 'idle',
   });
+
+  // Abort flag: when set to true, the progressive loop stops dispatching new days
+  const cancelledRef = useRef(false);
+  // Track calls made after a failure for monitoring
+  const postFailureCallsRef = useRef(0);
 
   /**
    * Generate complete itinerary using the new 7-stage pipeline
@@ -293,6 +298,10 @@ export function useItineraryGeneration() {
     const endDate = new Date(trip.endDate);
     const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
+    // Reset cancellation flag at the start of a new generation
+    cancelledRef.current = false;
+    postFailureCallsRef.current = 0;
+
     setState({
       isGenerating: true,
       currentDay: 0,
@@ -344,6 +353,11 @@ export function useItineraryGeneration() {
       const BACKOFF_DELAYS = [5000, 10000, 20000, 30000, 45000, 60000]; // Generous backoff for large trips
 
       for (let dayNum = 1; dayNum <= totalDays; dayNum++) {
+        // ABORT CHECK: Stop dispatching new days if cancelled/failed
+        if (cancelledRef.current) {
+          console.warn(`[useItineraryGeneration] Abort: skipping day ${dayNum}+ (cancelled)`);
+          break;
+        }
         setState(prev => ({
           ...prev,
           currentDay: dayNum,
@@ -360,6 +374,11 @@ export function useItineraryGeneration() {
         // Retry loop — never give up on transient failures, just backoff and retry
         let lastError: Error | null = null;
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          // Check abort between retry attempts
+          if (cancelledRef.current) {
+            console.warn(`[useItineraryGeneration] Abort: stopping retries for day ${dayNum}`);
+            break;
+          }
           try {
             const invokePromise = supabase.functions.invoke('generate-itinerary', {
               body: {
@@ -487,6 +506,18 @@ export function useItineraryGeneration() {
         }
       }
 
+      // If cancelled mid-loop, save what we have and throw so the caller can refund
+      if (cancelledRef.current && generatedDays.length < totalDays) {
+        if (generatedDays.length > 0) {
+          try { await saveItinerary(trip.tripId, generatedDays); } catch {}
+        }
+        throw new Error(
+          generatedDays.length > 0
+            ? `Generation cancelled after ${generatedDays.length}/${totalDays} days. Progress has been saved.`
+            : 'Generation cancelled.'
+        );
+      }
+
       // Final save
       await saveItinerary(trip.tripId, generatedDays);
 
@@ -500,7 +531,11 @@ export function useItineraryGeneration() {
       toast.success(`Itinerary complete! ${totalDays} days of adventure await.`);
       return generatedDays;
     } catch (err) {
+      // CRITICAL: Set cancellation flag so any pending loop iteration stops
+      cancelledRef.current = true;
+      
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate itinerary';
+      console.error(`[useItineraryGeneration] Generation failed, abort flag set. Post-failure calls so far: ${postFailureCallsRef.current}`);
       
       // Detect connection-level errors and proactively recover
       const isConnectionError = errorMessage.includes('Failed to fetch') ||
@@ -565,7 +600,14 @@ export function useItineraryGeneration() {
     }
   }, []);
 
+  /** Cancel any in-progress generation — stops the day loop immediately */
+  const cancel = useCallback(() => {
+    cancelledRef.current = true;
+    console.log('[useItineraryGeneration] Generation cancelled by caller');
+  }, []);
+
   const reset = useCallback(() => {
+    cancelledRef.current = true; // Also cancel on reset
     setState({
       isGenerating: false,
       currentDay: 0,
@@ -585,5 +627,6 @@ export function useItineraryGeneration() {
     generateItineraryProgressive,
     saveItinerary,
     reset,
+    cancel,
   };
 }

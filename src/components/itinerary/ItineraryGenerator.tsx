@@ -110,6 +110,7 @@ export function ItineraryGenerator({
     status,
     generateItinerary,
     reset,
+    cancel,
   } = useItineraryGeneration();
 
   // Get entitlements
@@ -206,6 +207,7 @@ export function ItineraryGenerator({
     const handleStallTimeout = async () => {
       if (stallCheckRef.current) clearInterval(stallCheckRef.current);
       console.error('[ItineraryGenerator] Generation stalled — no progress for 600s');
+      cancel(); // Stop the day-by-day loop from dispatching more calls
       setPrePhase(null);
       reset();
       setHasStarted(false);
