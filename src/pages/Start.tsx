@@ -1900,6 +1900,8 @@ export default function Start() {
                         const chatBudget = details.budgetAmount || budgetAmount;
                         const chatTripType = details.tripType || tripType;
                         const chatTravelers = details.travelers || travelers;
+                        const chatCities = details.cities && details.cities.length > 1 ? details.cities : null;
+                        const isChatMultiCity = !!chatCities;
 
                         // Sync extracted details back to form state so widgets reflect chat intent
                         if (details.travelers && details.travelers !== travelers) {
@@ -1921,8 +1923,8 @@ export default function Start() {
                           .from('trips')
                           .insert({
                             user_id: user.id,
-                            name: `Trip to ${dest}`,
-                            destination: dest,
+                            name: isChatMultiCity ? `Trip: ${dest}` : `Trip to ${dest}`,
+                            destination: isChatMultiCity ? chatCities[0].name : dest,
                             start_date: format(chatStartDate, 'yyyy-MM-dd'),
                             end_date: format(chatEndDate, 'yyyy-MM-dd'),
                             travelers: chatTravelers,
@@ -1930,8 +1932,15 @@ export default function Start() {
                             budget_tier: chatBudget ? (chatBudget < 750 ? 'budget' : chatBudget < 2000 ? 'moderate' : chatBudget < 4000 ? 'premium' : 'luxury') : (dnaBudgetTier || 'moderate'),
                             budget_total_cents: chatBudget ? chatBudget * 100 : null,
                             hotel_selection: hotelSelection,
-                            creation_source: 'chat',
+                            creation_source: isChatMultiCity ? 'multi_city' : 'chat',
                             status: 'draft',
+                            is_multi_city: isChatMultiCity || null,
+                            destinations: isChatMultiCity ? chatCities.map((c, i) => ({
+                              city: c.name,
+                              country: c.country || '',
+                              nights: c.nights,
+                              order: i + 1,
+                            })) as any : null,
                             metadata: {
                               mustDoActivities: details.mustDoActivities || null,
                               additionalNotes: details.additionalNotes || null,
@@ -1943,6 +1952,47 @@ export default function Start() {
                           .single();
 
                         if (error) throw error;
+
+                        // Insert trip_cities rows
+                        if (isChatMultiCity && chatCities) {
+                          let currentDate = new Date(chatStartDate);
+                          const cityRows = chatCities.map((city, idx) => {
+                            const arrivalDate = format(currentDate, 'yyyy-MM-dd');
+                            currentDate = new Date(currentDate.getTime() + city.nights * 86400000);
+                            const departureDate = format(currentDate, 'yyyy-MM-dd');
+                            return {
+                              trip_id: trip.id,
+                              city_order: idx,
+                              city_name: city.name,
+                              country: city.country || null,
+                              arrival_date: arrivalDate,
+                              departure_date: departureDate,
+                              nights: city.nights,
+                              generation_status: 'pending',
+                              days_generated: 0,
+                              days_total: city.nights,
+                            };
+                          });
+                          const { error: citiesErr } = await supabase.from('trip_cities').insert(cityRows as any[]);
+                          if (citiesErr) console.error('[Start] chat multi-city trip_cities insert failed:', citiesErr);
+                        } else {
+                          // Single-city: insert one trip_cities row for unified schema
+                          const startMs = chatStartDate.getTime();
+                          const endMs = chatEndDate.getTime();
+                          const nights = Math.max(1, Math.ceil((endMs - startMs) / (1000 * 60 * 60 * 24)));
+                          await supabase.from('trip_cities').insert({
+                            trip_id: trip.id,
+                            city_order: 0,
+                            city_name: dest,
+                            arrival_date: format(chatStartDate, 'yyyy-MM-dd'),
+                            departure_date: format(chatEndDate, 'yyyy-MM-dd'),
+                            nights,
+                            generation_status: 'pending',
+                            days_generated: 0,
+                            days_total: nights,
+                          } as any);
+                        }
+
                         navigate(`/trip/${trip.id}?generate=true`);
                       } catch (err) {
                         console.error('Error creating chat trip:', err);

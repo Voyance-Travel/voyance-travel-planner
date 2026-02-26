@@ -14,7 +14,13 @@ import ReactMarkdown from 'react-markdown';
 import { supabase } from '@/integrations/supabase/client';
 import { TripConfirmCard } from './TripConfirmCard';
 
-interface TripDetails {
+export interface ChatTripCity {
+  name: string;
+  country?: string;
+  nights: number;
+}
+
+export interface TripDetails {
   destination?: string;
   startDate?: string;
   endDate?: string;
@@ -25,6 +31,7 @@ interface TripDetails {
   hotelAddress?: string;
   mustDoActivities?: string;
   additionalNotes?: string;
+  cities?: ChatTripCity[];
 }
 
 interface ChatMessage {

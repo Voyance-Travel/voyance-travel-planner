@@ -40,7 +40,12 @@ CRITICAL RULES FOR CALLING THE TOOL:
 - NEVER say "I have everything I need" or "generating your trip now" unless you are simultaneously calling the tool with all required fields filled.
 - If dates are missing, ask for them conversationally — don't pretend you have them.
 - All dates MUST be in YYYY-MM-DD format. Use the current year or next year as appropriate.
-- For multi-city trips (e.g. "Beijing then Tokyo"), put the primary/first destination in the destination field and mention the full route in additionalNotes.`;
+MULTI-CITY DETECTION:
+- If the user mentions visiting multiple cities (e.g. "Hong Kong then Shanghai then Beijing then Tokyo", "I want to visit Rome, Barcelona, and Paris", "flying into London, out of Edinburgh"), this is a multi-city trip.
+- For multi-city trips, you MUST populate the "cities" array with each city in order, estimating nights per city based on the total trip duration. The "destination" field should be a summary like "Hong Kong, Shanghai, Beijing & Tokyo".
+- If the user doesn't specify how many nights per city, distribute roughly evenly based on total trip days minus travel days (1 travel day between each pair of cities).
+- Always ask about the order if it's ambiguous.
+- Single-city trips should leave the "cities" array empty or omit it.`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -189,6 +194,29 @@ serve(async (req) => {
                       type: "string",
                       description:
                         "Any other relevant details the user shared",
+                    },
+                    cities: {
+                      type: "array",
+                      description:
+                        "For multi-city trips: ordered list of cities with nights per city. Leave empty for single-city trips.",
+                      items: {
+                        type: "object",
+                        properties: {
+                          name: {
+                            type: "string",
+                            description: "City name",
+                          },
+                          country: {
+                            type: "string",
+                            description: "Country name",
+                          },
+                          nights: {
+                            type: "number",
+                            description: "Number of nights in this city",
+                          },
+                        },
+                        required: ["name", "nights"],
+                      },
                     },
                   },
                   required: ["destination", "startDate", "endDate", "travelers"],
