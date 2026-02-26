@@ -47,6 +47,69 @@ interface TripChatPlannerProps {
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-trip-planner`;
 
+/**
+ * Fallback parser: extracts multi-city routes from destination or additionalNotes
+ * when the AI fails to populate the cities[] array.
+ */
+function parseMultiCityFallback(
+  destination: string,
+  additionalNotes?: string,
+  startDate?: string,
+  endDate?: string
+): ChatTripCity[] | null {
+  // Look for route patterns in destination or notes
+  const routePatterns = [
+    /Route:\s*(.+)/i,
+    /(.+?)\s*(?:→|->|–>|then|,)\s*(.+)/,
+  ];
+
+  let routeStr = '';
+
+  // Check if destination itself contains multiple cities
+  const separators = /\s*(?:→|->|–>|,\s*(?:then\s+)?|then\s+|&\s+|and\s+)\s*/i;
+  const destParts = destination.split(separators).map(s => s.trim()).filter(Boolean);
+  if (destParts.length > 1) {
+    routeStr = destination;
+  }
+
+  // If not found in destination, check additionalNotes
+  if (!routeStr && additionalNotes) {
+    for (const pattern of routePatterns) {
+      const match = additionalNotes.match(pattern);
+      if (match) {
+        routeStr = match[1] || match[0];
+        break;
+      }
+    }
+  }
+
+  if (!routeStr) return null;
+
+  const cities = routeStr
+    .split(separators)
+    .map(s => s.trim().replace(/\.+$/, ''))
+    .filter(s => s.length > 1 && s.length < 50);
+
+  if (cities.length <= 1) return null;
+
+  // Distribute nights evenly, accounting for travel days
+  let totalDays = 14; // default
+  if (startDate && endDate) {
+    const ms = new Date(endDate).getTime() - new Date(startDate).getTime();
+    totalDays = Math.max(cities.length, Math.ceil(ms / 86400000));
+  }
+  const travelDays = cities.length - 1;
+  const availableNights = Math.max(cities.length, totalDays - travelDays);
+  const baseNights = Math.floor(availableNights / cities.length);
+  let remainder = availableNights - baseNights * cities.length;
+
+  return cities.map(name => {
+    const nights = baseNights + (remainder > 0 ? 1 : 0);
+    if (remainder > 0) remainder--;
+    return { name, nights };
+  });
+}
+
 export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlannerProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -167,6 +230,18 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
       if (isToolCall && toolCallArgs) {
         try {
           const details = JSON.parse(toolCallArgs) as TripDetails;
+
+          // Fallback: parse multi-city from destination/additionalNotes if cities[] is empty
+          if ((!details.cities || details.cities.length <= 1) && details.destination) {
+            const parsedCities = parseMultiCityFallback(details.destination, details.additionalNotes, details.startDate, details.endDate);
+            if (parsedCities && parsedCities.length > 1) {
+              details.cities = parsedCities;
+              // Update destination to summary if it was just the first city
+              if (!details.destination.includes(',') && !details.destination.includes('&')) {
+                details.destination = parsedCities.map(c => c.name).join(', ');
+              }
+            }
+          }
 
           // Validate required fields before triggering generation
           const hasDest = !!details.destination?.trim();

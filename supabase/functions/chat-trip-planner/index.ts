@@ -47,12 +47,16 @@ CRITICAL RULES FOR CALLING THE TOOL:
 - NEVER say "I have everything I need" or "generating your trip now" unless you are simultaneously calling the tool with all required fields filled.
 - If dates are missing, ask for them conversationally — don't pretend you have them.
 - All dates MUST be in YYYY-MM-DD format. Use the current year or next year as appropriate.
-MULTI-CITY DETECTION:
+MULTI-CITY DETECTION — CRITICAL:
 - If the user mentions visiting multiple cities (e.g. "Hong Kong then Shanghai then Beijing then Tokyo", "I want to visit Rome, Barcelona, and Paris", "flying into London, out of Edinburgh"), this is a multi-city trip.
 - For multi-city trips, you MUST populate the "cities" array with each city in order, estimating nights per city based on the total trip duration. The "destination" field should be a summary like "Hong Kong, Shanghai, Beijing & Tokyo".
+- NEVER put the route only in additionalNotes — the "cities" array is REQUIRED for multi-city trips. Without it, only the first city will be planned.
 - If the user doesn't specify how many nights per city, distribute roughly evenly based on total trip days minus travel days (1 travel day between each pair of cities).
 - Always ask about the order if it's ambiguous.
-- Single-city trips should leave the "cities" array empty or omit it.`;
+- Single-city trips should leave the "cities" array empty or omit it.
+- When calling extract_trip_details for a multi-city trip, ALWAYS include both the "destination" summary AND a populated "cities" array. Example:
+  destination: "Hong Kong, Shanghai, Beijing & Tokyo"
+  cities: [{name: "Hong Kong", country: "China", nights: 4}, {name: "Shanghai", country: "China", nights: 3}, ...]`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
