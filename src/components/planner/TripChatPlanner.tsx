@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import { supabase } from '@/integrations/supabase/client';
+import { TripConfirmCard } from './TripConfirmCard';
 
 interface TripDetails {
   destination?: string;
@@ -47,6 +48,8 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
   ]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
+  const [extractedDetails, setExtractedDetails] = useState<TripDetails | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -162,7 +165,6 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
           const hasTravelers = !!details.travelers;
 
           if (!hasDest || !hasDates || !hasTravelers) {
-            // AI called tool prematurely — ask for missing fields
             const missing: string[] = [];
             if (!hasDest) missing.push('destination');
             if (!hasDates) missing.push('travel dates');
@@ -170,21 +172,18 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
 
             const followUp = `I still need your ${missing.join(' and ')} to build your trip. What are you thinking?`;
             setMessages(prev => {
-              // Remove any premature "generating" message
               const filtered = prev.filter(m => 
                 !(m.role === 'assistant' && m.content.includes('generating'))
               );
               return [...filtered, { role: 'assistant', content: followUp }];
             });
           } else {
-            // All required fields present — show confirmation and trigger
+            // All required fields present — show summary for confirmation
             if (!assistantContent) {
-              assistantContent = `Perfect! I've got your trip to **${details.destination}** locked in — generating your itinerary now! 🎉`;
+              assistantContent = `Here's what I've captured for your trip to **${details.destination}** — review and confirm when you're ready! 🎉`;
               setMessages(prev => [...prev, { role: 'assistant', content: assistantContent }]);
             }
-
-            // Small delay so the user sees the confirmation before redirect
-            setTimeout(() => onDetailsExtracted(details), 800);
+            setExtractedDetails(details);
           }
         } catch (e) {
           console.error('Failed to parse tool call args:', e);
@@ -271,6 +270,24 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
               </motion.div>
             ))}
           </AnimatePresence>
+
+          {extractedDetails && (
+            <TripConfirmCard
+              details={extractedDetails}
+              isGenerating={isGenerating}
+              onConfirm={() => {
+                setIsGenerating(true);
+                onDetailsExtracted(extractedDetails);
+              }}
+              onEdit={() => {
+                setExtractedDetails(null);
+                setMessages(prev => [
+                  ...prev,
+                  { role: 'assistant', content: "No problem — what would you like to change?" },
+                ]);
+              }}
+            />
+          )}
 
           {isStreaming && messages[messages.length - 1]?.role !== 'assistant' && (
             <div className="flex gap-2">
