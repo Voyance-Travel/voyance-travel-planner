@@ -379,28 +379,33 @@ If you cannot confidently recommend a specific venue (confidence < 0.5):
 
 DO NOT hallucinate specific venues. Vague but honest > specific but wrong.
 
-## OPENING HOURS AWARENESS - CRITICAL
-NEVER schedule a venue on a day/time when it is likely CLOSED. Common closures:
-- Many museums close on Mondays (e.g., Louvre, Prado, Uffizi, most European museums)
-- Some restaurants close on Sundays or specific weekdays
-- Markets often close early or have specific operating days
-- Religious sites may restrict access during services
-- Government buildings/banks close on weekends
+## OPERATING HOURS — HARD CONSTRAINT (NOT OPTIONAL)
+You MUST respect venue operating hours. Scheduling an activity outside operating hours is a GENERATION FAILURE.
 
-For EACH activity, you MUST consider:
-1. The DAY OF WEEK the activity is scheduled for (provided in day context)
-2. Whether the venue is known to close on that day
-3. Whether the scheduled TIME falls within typical operating hours
+RULES:
+1. The DATE and DAY OF WEEK for each day is provided in the user prompt. CHECK IT.
+2. If a venue closes on that day of the week, DO NOT schedule it. Pick an alternative.
+3. The activity startTime MUST be AFTER the venue opens (with buffer for entry/queue).
+4. The activity endTime MUST be BEFORE the venue closes (allow 30 min before closing).
+5. Restaurant scheduling: lunch service is typically 12:00-14:30, dinner service 18:30-22:00. Do NOT schedule a sit-down dinner at 15:00 or lunch at 17:00.
 
-If you know or strongly suspect a venue is closed on the scheduled day:
-- DO NOT include it. Choose an alternative that IS open on that day.
-- If you include it anyway, set \`closedRisk: true\` in the activity metadata.
+COMMON CLOSURE PATTERNS TO KNOW:
+- Most European museums close MONDAYS (Louvre, Prado, Uffizi, Rijksmuseum, etc.)
+- Turkish museums/palaces close MONDAYS or TUESDAYS
+- Japanese shrines/gardens: generally open daily, but some close early
+- Markets: many close Sundays and/or Mondays
+- Religious sites: limited access during services (especially Sunday mornings)
+- Restaurant "dead zone": most close between 14:30-18:00 for prep
+
+If you are NOT CERTAIN a venue is open on the scheduled day/time:
+- Set \`closedRisk: true\` in the activity metadata
+- Provide a backup venue in \`closedRiskAlternative\` field (name + address of a nearby alternative that IS open)
 
 EXAMPLES OF WHAT TO AVOID:
-- Scheduling a museum visit on Monday in Europe (most are closed)
-- Scheduling a market visit on Sunday in many countries
-- Scheduling a restaurant for 3 PM (most close between lunch and dinner, ~2-5 PM)
-- Scheduling a church/cathedral during Sunday morning services for sightseeing`;
+- Scheduling the Louvre on Monday (closed)
+- Scheduling a restaurant visit at 15:00 (between lunch and dinner service)
+- Scheduling a museum visit starting at 09:00 when it opens at 10:00
+- Scheduling a park visit ending at 20:00 when the park closes at 18:00 in winter`;
 }
 
 // =============================================================================

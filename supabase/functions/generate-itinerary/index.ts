@@ -4676,9 +4676,14 @@ These help the traveler prepare for their trip.
         }
       }
 
+      // Calculate day-of-week for operating hours awareness
+      const dateObj = new Date(date);
+      const DAY_NAMES_GEN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const dayOfWeekName = DAY_NAMES_GEN[dateObj.getDay()];
+      
       const userPrompt = `Generate Day ${dayNumber} of ${context.totalDays} for ${dayDestination}${dayCountry ? `, ${dayCountry}` : ''}.
 
-DATE: ${date}
+DATE: ${date} (${dayOfWeekName})
 TRAVELERS: ${context.travelers}
 BUDGET: ${context.budgetTier || 'standard'} (~$${context.dailyBudget}/day per person)${context.actualDailyBudgetPerPerson != null ? `
 ⚠️ HARD BUDGET CAP: The user has set a real budget of ~$${Math.round(context.actualDailyBudgetPerPerson * context.travelers)}/day total ($${context.actualDailyBudgetPerPerson}/person) for activities.
@@ -4704,6 +4709,14 @@ CRITICAL REMINDERS:
 3. Check the budget constraints. If value-focused, no €100+ experiences.
 4. ${context.travelerDNA?.primaryArchetype === 'flexible_wanderer' || context.travelerDNA?.primaryArchetype === 'slow_traveler' || (context.travelerDNA?.traits?.pace || 0) <= -3 ? 'Include at least one 2+ hour UNSCHEDULED block labeled "Free time to explore [neighborhood]"' : 'Follow the pacing guidelines for this archetype'}
 ${context.isMultiCity ? `5. ALL activities MUST be in ${dayDestination}. Do NOT include activities from other cities.` : ''}
+
+⏰ OPERATING HOURS — HARD RULE (THIS DAY IS ${dayOfWeekName.toUpperCase()}):
+- NEVER schedule an activity before the venue opens or after it closes.
+- If a museum/attraction opens at 10:00, the EARLIEST you can schedule a visit is 10:00 (plus buffer time for arrival/entry).
+- Many European museums close on MONDAYS. If today is Monday, do NOT schedule museum visits — use an alternative.
+- Restaurants: do NOT schedule lunch at a place that opens for dinner only, or dinner at a lunch-only spot.
+- Markets often have specific operating days — verify the market is open on ${dayOfWeekName} before including it.
+- If you are unsure whether a venue is open on ${dayOfWeekName}, set closedRisk: true and suggest an alternative.
 
 Generate activities for this day following ALL constraints above.`;
 
@@ -7785,26 +7798,85 @@ ${'='.repeat(60)}
       }
 
       // =======================================================================
-      // STAGE 4.5: Opening Hours Validation
-      // Flag activities scheduled when venues are known to be closed
+      // STAGE 4.5: Opening Hours Validation & Auto-Fix
+      // Detect activities scheduled outside operating hours and attempt to fix
       // =======================================================================
       if (context.startDate) {
         const hoursViolations = validateOpeningHours(enrichedDays, context.startDate);
         if (hoursViolations.length > 0) {
-          console.warn(`[Stage 4.5] ⚠️ ${hoursViolations.length} opening hours conflict(s) detected:`);
-          hoursViolations.forEach(v => {
-            console.warn(`  - Day ${v.dayNumber}: "${v.activityTitle}" (${v.category}) — ${v.reason}`);
-          });
+          console.warn(`[Stage 4.5] ⚠️ ${hoursViolations.length} opening hours conflict(s) detected — attempting auto-fix:`);
           
-          // Tag activities with closedRisk so frontend can display warnings
+          let fixedCount = 0;
+          
           for (const violation of hoursViolations) {
             const day = enrichedDays[violation.dayNumber - 1];
             if (!day) continue;
             const activity = day.activities.find((a: StrictActivity) => a.id === violation.activityId);
-            if (activity) {
-              (activity as any).closedRisk = true;
-              (activity as any).closedRiskReason = violation.reason;
+            if (!activity) continue;
+            
+            // Try to auto-fix: adjust startTime to venue opening time
+            const openingHours = (activity as any).openingHours as string[] | undefined;
+            if (openingHours && activity.startTime) {
+              const startDate = new Date(context.startDate);
+              startDate.setDate(startDate.getDate() + (violation.dayNumber - 1));
+              const dayOfWeek = startDate.getDay();
+              
+              const DAY_NAMES_FIX = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+              const dayName = DAY_NAMES_FIX[dayOfWeek];
+              const dayEntry = openingHours.find(h => h.toLowerCase().startsWith(dayName.toLowerCase()));
+              
+              if (dayEntry) {
+                const entryLower = dayEntry.toLowerCase();
+                // If venue is CLOSED on this day, we can't fix — mark as closedRisk
+                if (entryLower.includes('closed') || entryLower.includes('fermé') || entryLower.includes('cerrado') || entryLower.includes('chiuso')) {
+                  (activity as any).closedRisk = true;
+                  (activity as any).closedRiskReason = `${dayName}: Venue is closed. Consider visiting on another day.`;
+                  console.warn(`  - Day ${violation.dayNumber}: "${violation.activityTitle}" — CLOSED on ${dayName}, cannot auto-fix`);
+                  continue;
+                }
+                
+                // Try to extract opening time and shift the activity
+                const timeMatch = entryLower.match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+                if (timeMatch) {
+                  let openHour = parseInt(timeMatch[1]);
+                  const openMin = parseInt(timeMatch[2]);
+                  const period = timeMatch[3]?.toUpperCase();
+                  if (period === 'PM' && openHour !== 12) openHour += 12;
+                  if (period === 'AM' && openHour === 12) openHour = 0;
+                  
+                  // Add 10 min buffer for entry/queuing
+                  const openMins = openHour * 60 + openMin + 10;
+                  const newStartTime = `${Math.floor(openMins / 60).toString().padStart(2, '0')}:${(openMins % 60).toString().padStart(2, '0')}`;
+                  
+                  const oldStartTime = activity.startTime;
+                  
+                  // Only fix if the new time is after current (i.e., venue opens later than scheduled)
+                  const oldMins = parseInt(oldStartTime.split(':')[0]) * 60 + parseInt(oldStartTime.split(':')[1]);
+                  if (openMins > oldMins) {
+                    // Calculate duration to preserve it
+                    if (activity.endTime) {
+                      const endMins = parseInt(activity.endTime.split(':')[0]) * 60 + parseInt(activity.endTime.split(':')[1]);
+                      const duration = endMins - oldMins;
+                      const newEndMins = openMins + duration;
+                      activity.endTime = `${Math.floor(newEndMins / 60).toString().padStart(2, '0')}:${(newEndMins % 60).toString().padStart(2, '0')}`;
+                    }
+                    activity.startTime = newStartTime;
+                    fixedCount++;
+                    console.log(`  ✓ Day ${violation.dayNumber}: "${violation.activityTitle}" shifted ${oldStartTime} → ${newStartTime} (venue opens at ${openHour.toString().padStart(2, '0')}:${openMin.toString().padStart(2, '0')})`);
+                    continue;
+                  }
+                }
+              }
             }
+            
+            // Couldn't auto-fix — tag with warning
+            (activity as any).closedRisk = true;
+            (activity as any).closedRiskReason = violation.reason;
+            console.warn(`  - Day ${violation.dayNumber}: "${violation.activityTitle}" — ${violation.reason} (could not auto-fix)`);
+          }
+          
+          if (fixedCount > 0) {
+            console.log(`[Stage 4.5] ✓ Auto-fixed ${fixedCount}/${hoursViolations.length} operating hours conflicts`);
           }
         } else {
           console.log("[Stage 4.5] ✓ No opening hours conflicts detected");
