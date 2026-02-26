@@ -53,12 +53,14 @@ async function uploadMemory(input: UploadMemoryInput): Promise<TripMemory> {
 
   if (uploadError) throw uploadError;
 
-  // Get public URL
-  const { data: { publicUrl } } = supabase.storage
+  // Generate signed URL (valid for 1 hour)
+  const { data: signedUrlData, error: signedUrlError } = await supabase.storage
     .from('trip-memories')
-    .getPublicUrl(fileName);
+    .createSignedUrl(fileName, 3600);
 
-  // Insert metadata record
+  if (signedUrlError || !signedUrlData?.signedUrl) throw signedUrlError || new Error('Failed to create signed URL');
+
+  // Insert metadata record — store the storage path, not the URL
   const { data, error } = await supabase
     .from('trip_memories')
     .insert({
@@ -66,7 +68,7 @@ async function uploadMemory(input: UploadMemoryInput): Promise<TripMemory> {
       trip_id: input.tripId,
       activity_id: input.activityId || null,
       activity_name: input.activityName || null,
-      image_url: publicUrl,
+      image_url: fileName,  // Store storage path, not public URL
       caption: input.caption || null,
       location_name: input.locationName || null,
       day_number: input.dayNumber || null,
@@ -86,7 +88,32 @@ async function fetchTripMemories(tripId: string): Promise<TripMemory[]> {
     .order('taken_at', { ascending: false });
 
   if (error) throw error;
-  return (data || []) as TripMemory[];
+
+  // Resolve signed URLs for each memory
+  const memories = (data || []) as TripMemory[];
+  const resolved = await Promise.all(
+    memories.map(async (memory) => {
+      // If image_url is a storage path (not a full URL), generate a signed URL
+      if (memory.image_url && !memory.image_url.startsWith('http')) {
+        const { data: signedData } = await supabase.storage
+          .from('trip-memories')
+          .createSignedUrl(memory.image_url, 3600);
+        return { ...memory, image_url: signedData?.signedUrl || memory.image_url };
+      }
+      // Legacy: if it's already a full URL (old public URL), generate signed URL from path
+      if (memory.image_url && memory.image_url.includes('/storage/v1/object/public/trip-memories/')) {
+        const pathParts = memory.image_url.split('/storage/v1/object/public/trip-memories/');
+        if (pathParts[1]) {
+          const { data: signedData } = await supabase.storage
+            .from('trip-memories')
+            .createSignedUrl(decodeURIComponent(pathParts[1]), 3600);
+          return { ...memory, image_url: signedData?.signedUrl || memory.image_url };
+        }
+      }
+      return memory;
+    })
+  );
+  return resolved;
 }
 
 async function deleteMemory(memoryId: string): Promise<void> {
@@ -99,12 +126,16 @@ async function deleteMemory(memoryId: string): Promise<void> {
 
   if (fetchError) throw fetchError;
 
-  // Extract storage path from URL
+  // Delete from storage — image_url may be a path or a legacy full URL
   if (memory?.image_url) {
-    const url = new URL(memory.image_url);
-    const pathParts = url.pathname.split('/storage/v1/object/public/trip-memories/');
-    if (pathParts[1]) {
-      await supabase.storage.from('trip-memories').remove([pathParts[1]]);
+    let storagePath = memory.image_url;
+    if (storagePath.startsWith('http')) {
+      // Legacy: extract path from full URL
+      const pathParts = storagePath.split('/storage/v1/object/public/trip-memories/');
+      storagePath = pathParts[1] ? decodeURIComponent(pathParts[1]) : '';
+    }
+    if (storagePath) {
+      await supabase.storage.from('trip-memories').remove([storagePath]);
     }
   }
 
