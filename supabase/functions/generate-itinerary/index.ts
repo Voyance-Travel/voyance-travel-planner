@@ -9060,6 +9060,17 @@ CORE PRINCIPLE: A Voyance itinerary plans the traveler's ENTIRE day, hour by hou
 General Requirements:
 - Include FULL street addresses for all locations
 - Provide realistic cost estimates in local currency — prices on EVERYTHING (meals, tickets, transit)
+- PRICE CONTEXT IS MANDATORY: Every estimatedCost MUST include a "basis" field indicating what the price covers:
+  • Attraction tickets: basis = "per_person" (tickets are individually priced). amount = price for ONE person.
+  • Restaurant meals (à la carte): basis = "per_person" (average spend per diner). amount = per-person estimate.
+  • Restaurant meals (set/tasting menu): basis = "per_person". amount = the set menu price per head.
+  • Taxi/rideshare fares: basis = "flat" (shared ride). amount = total fare for the vehicle.
+  • Public transit: basis = "per_person" (individual fare). amount = single fare.
+  • Private tours: basis = "flat" (flat rate for the group). amount = total tour price.
+  • Group tours: basis = "per_person". amount = per-person ticket.
+  • Hotel/accommodation: basis = "per_room" (per room per night). amount = nightly rate.
+  • Free activities: basis = "flat", amount = 0.
+  This ensures the UI can calculate accurate group totals: per_person costs × travelers, flat costs as-is.
 - Account for REALISTIC travel time between activities — if two places are in different neighborhoods, leave 30-60 min gap (not 15 min). Only use 15 min gaps for locations within walking distance. Travel time and rest/settling buffers are SEPARATE — add both.
 - NEVER schedule zero-gap transitions. Every activity needs settling/buffer time ON TOP of travel: +5 min after walking, +10 min for taxi pickup/dropoff, +10 min for restaurant seating, +15 min for hotel check-in, +10 min for museum entry (ticket queue, bag check). Show this naturally: "Arrive ~6:30 PM. Check in, freshen up. Ready by 7:30 PM."
 - Include TRANSIT between every pair of consecutive activities as separate entries with category "transport" (mode, duration, cost, route/line info). Walks under 5 min can be noted in tips instead.
@@ -9183,8 +9194,8 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                                 address: { type: "string" }
                               }
                             },
-                            estimatedCost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" } } },
-                            cost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" } } },
+                            estimatedCost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" }, basis: { type: "string", enum: ["per_person", "flat", "per_room"], description: "per_person = price per traveler, flat = total price for the group/vehicle, per_room = per room per night" } } },
+                            cost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" }, basis: { type: "string", enum: ["per_person", "flat", "per_room"] } } },
                             bookingRequired: { type: "boolean" },
                             tips: { type: "string", description: "Insider tip for this activity (must be specific, actionable, 30+ chars)" },
                             coordinates: { type: "object", properties: { lat: { type: "number" }, lng: { type: "number" } } },
@@ -9322,8 +9333,8 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           startTime?: string; 
           endTime?: string; 
           category?: string;
-          estimatedCost?: { amount: number; currency: string };
-          cost?: { amount: number; currency: string };
+          estimatedCost?: { amount: number; currency: string; basis?: string };
+          cost?: { amount: number; currency: string; basis?: string };
           location?: string | { name?: string; address?: string };
         }, idx: number) => {
           // Normalize title: use title, fallback to name
@@ -9333,6 +9344,8 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           // AI may return costs in local currency (e.g., JPY 6000 for Japan)
           const rawCost = act.cost || act.estimatedCost || { amount: 0, currency: 'USD' };
           const normalizedCost = normalizeCostToUSD(rawCost);
+          // Preserve cost basis (per_person, flat, per_room) from AI response
+          const costBasis = (act.cost as any)?.basis || (act.estimatedCost as any)?.basis || 'per_person';
           
           // Normalize location: convert string to object if needed
           let normalizedLocation = act.location;
@@ -9346,6 +9359,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             title: normalizedTitle,
             name: normalizedTitle, // Keep both for compatibility
             cost: normalizedCost,
+            costBasis: costBasis, // per_person | flat | per_room
             location: normalizedLocation,
             durationMinutes: act.startTime && act.endTime ? calculateDuration(act.startTime, act.endTime) : 60,
             categoryIcon: getCategoryIcon(act.category || 'activity'),

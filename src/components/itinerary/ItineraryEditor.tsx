@@ -170,6 +170,31 @@ function getActivityCost(activity: GeneratedActivity): number | null {
   return null;
 }
 
+function getActivityCostBasis(activity: GeneratedActivity): 'per_person' | 'flat' | 'per_room' {
+  const basis = (activity as any).costBasis || (activity as any).cost?.basis || (activity as any).estimatedCost?.basis;
+  if (basis === 'flat' || basis === 'per_room') return basis;
+  // Default: transport is flat, everything else is per_person
+  const cat = (activity as any).category || '';
+  if (cat === 'transport' || cat === 'logistics') return 'flat';
+  return 'per_person';
+}
+
+function formatCostWithBasis(amount: number | null | undefined, basis: 'per_person' | 'flat' | 'per_room', travelers: number): string {
+  if (amount === null || amount === undefined) return 'Estimate needed';
+  if (amount === 0) return 'Included';
+  const formatted = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
+  if (travelers <= 1) return formatted;
+  if (basis === 'per_person') return `${formatted}/pp`;
+  if (basis === 'per_room') return `${formatted}/room`;
+  return formatted; // flat — no suffix needed
+}
+
+/** Calculate the actual group total for one activity given traveler count */
+function getGroupCost(amount: number | null, basis: 'per_person' | 'flat' | 'per_room', travelers: number): number {
+  if (!amount) return 0;
+  return basis === 'per_person' ? amount * travelers : amount;
+}
+
 function getActivityLocation(activity: GeneratedActivity): { name?: string; address?: string } {
   if (typeof activity.location === 'object' && activity.location !== null) {
     return activity.location;
@@ -206,11 +231,12 @@ export function ItineraryEditor({
   const [addActivityModal, setAddActivityModal] = useState<{ dayIndex: number } | null>(null);
   const [editActivityModal, setEditActivityModal] = useState<{ dayIndex: number; activityId: string } | null>(null);
 
-  // Calculate totals - handle null costs from free activities
+  // Calculate totals - use group costs (per_person × travelers, flat as-is)
   const totalActivityCost = days.reduce((sum, day) => 
     sum + day.activities.reduce((daySum, act) => {
       const cost = getActivityCost(act);
-      return daySum + (cost ?? 0);
+      const basis = getActivityCostBasis(act);
+      return daySum + getGroupCost(cost, basis, travelers);
     }, 0), 0
   );
   const flightCost = (flightSelection as any)?.legs
@@ -218,6 +244,7 @@ export function ItineraryEditor({
     : ((flightSelection as any)?.outbound?.price || (flightSelection as any)?.departure?.price || 0) + ((flightSelection as any)?.return?.price || 0);
   const hotelCost = (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || days.length);
   const totalCost = totalActivityCost + flightCost + hotelCost;
+  const perPersonCost = travelers > 1 ? Math.round(totalCost / travelers) : totalCost;
 
   const toggleDay = (dayNumber: number) => {
     setExpandedDays(prev =>
@@ -457,6 +484,9 @@ export function ItineraryEditor({
               <div>
                 <span className="text-slate-400 text-sm">Total Estimate</span>
                 <p className="text-xl font-bold">{formatCurrency(totalCost)}</p>
+                {travelers > 1 && (
+                  <p className="text-xs text-slate-400">{formatCurrency(perPersonCost)}/person</p>
+                )}
               </div>
             </div>
 
@@ -505,6 +535,7 @@ export function ItineraryEditor({
               key={day.dayNumber}
               day={day}
               dayIndex={dayIndex}
+              travelers={travelers}
               isExpanded={expandedDays.includes(day.dayNumber)}
               isRegenerating={regeneratingDay === day.dayNumber}
               onToggle={() => toggleDay(day.dayNumber)}
@@ -644,6 +675,7 @@ export function ItineraryEditor({
 interface DayCardProps {
   day: GeneratedDay;
   dayIndex: number;
+  travelers: number;
   isExpanded: boolean;
   isRegenerating: boolean;
   onToggle: () => void;
@@ -657,6 +689,7 @@ interface DayCardProps {
 function DayCard({
   day,
   dayIndex,
+  travelers,
   isExpanded,
   isRegenerating,
   onToggle,
@@ -666,11 +699,13 @@ function DayCard({
   onDayRegenerate,
   onAddActivity,
 }: DayCardProps) {
-  // Calculate total cost, filtering out null values (free activities)
+  // Calculate total cost using group costs (per_person × travelers)
   const totalCost = day.activities.reduce((sum, act) => {
     const cost = getActivityCost(act);
-    return sum + (cost ?? 0);
+    const basis = getActivityCostBasis(act);
+    return sum + getGroupCost(cost, basis, travelers);
   }, 0);
+  const perPersonCost = travelers > 1 ? Math.round(totalCost / travelers) : 0;
   const lockedCount = day.activities.filter(a => (a as { isLocked?: boolean }).isLocked).length;
 
   return (
@@ -703,9 +738,16 @@ function DayCard({
           <p className="font-medium">{day.title || day.theme}</p>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-sm font-medium">
-            {formatCurrency(totalCost > 0 ? totalCost : null)}
-          </span>
+          <div className="text-right">
+            <span className="text-sm font-medium">
+              {formatCurrency(totalCost > 0 ? totalCost : null)}
+            </span>
+            {travelers > 1 && perPersonCost > 0 && (
+              <span className="block text-xs text-muted-foreground">
+                {formatCurrency(perPersonCost)}/pp
+              </span>
+            )}
+          </div>
           {isExpanded ? (
             <ChevronUp className="h-5 w-5 text-muted-foreground" />
           ) : (
@@ -731,6 +773,7 @@ function DayCard({
                     dayIndex={dayIndex}
                     activityIndex={activityIndex}
                     totalActivities={day.activities.length}
+                    travelers={travelers}
                     onLock={onActivityLock}
                     onMove={onActivityMove}
                     onRemove={onActivityRemove}
@@ -787,6 +830,7 @@ interface ActivityCardProps {
   dayIndex: number;
   activityIndex: number;
   totalActivities: number;
+  travelers: number;
   onLock: (dayIndex: number, activityId: string) => void;
   onMove: (dayIndex: number, activityId: string, direction: 'up' | 'down') => void;
   onRemove: (dayIndex: number, activityId: string) => void;
@@ -808,6 +852,7 @@ function ActivityCard({
   dayIndex,
   activityIndex,
   totalActivities,
+  travelers,
   onLock,
   onMove,
   onRemove,
@@ -903,10 +948,15 @@ function ActivityCard({
               )}
             </div>
             <div className="text-right shrink-0">
-              {/* Cost Display - Show "Estimate needed" for null */}
+              {/* Cost Display with per-person/flat context */}
               <span className={getActivityCost(activity) !== null ? "font-medium" : "text-xs text-muted-foreground italic"}>
-                {formatCurrency(getActivityCost(activity))}
+                {formatCostWithBasis(getActivityCost(activity), getActivityCostBasis(activity), travelers)}
               </span>
+              {travelers > 1 && getActivityCost(activity) !== null && getActivityCostBasis(activity) === 'per_person' && (
+                <span className="block text-xs text-muted-foreground">
+                  {formatCurrency(getActivityCost(activity)! * travelers)} total
+                </span>
+              )}
               
               {/* Expand Button */}
               <CollapsibleTrigger asChild>
