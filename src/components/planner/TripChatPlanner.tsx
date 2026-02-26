@@ -151,20 +151,41 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
         }
       }
 
-      // Handle tool call result — extract details silently and trigger generation
+      // Handle tool call result — extract details and trigger generation
       if (isToolCall && toolCallArgs) {
         try {
           const details = JSON.parse(toolCallArgs) as TripDetails;
 
-          // If the AI didn't produce a text response alongside the tool call,
-          // add a friendly confirmation message
-          if (!assistantContent) {
-            assistantContent = "Got it! I have everything I need - generating your trip now! 🎉";
-            setMessages(prev => [...prev, { role: 'assistant', content: assistantContent }]);
-          }
+          // Validate required fields before triggering generation
+          const hasDest = !!details.destination?.trim();
+          const hasDates = !!details.startDate && !!details.endDate;
+          const hasTravelers = !!details.travelers;
 
-          // Small delay so the user sees the confirmation before redirect
-          setTimeout(() => onDetailsExtracted(details), 800);
+          if (!hasDest || !hasDates || !hasTravelers) {
+            // AI called tool prematurely — ask for missing fields
+            const missing: string[] = [];
+            if (!hasDest) missing.push('destination');
+            if (!hasDates) missing.push('travel dates');
+            if (!hasTravelers) missing.push('number of travelers');
+
+            const followUp = `I still need your ${missing.join(' and ')} to build your trip. What are you thinking?`;
+            setMessages(prev => {
+              // Remove any premature "generating" message
+              const filtered = prev.filter(m => 
+                !(m.role === 'assistant' && m.content.includes('generating'))
+              );
+              return [...filtered, { role: 'assistant', content: followUp }];
+            });
+          } else {
+            // All required fields present — show confirmation and trigger
+            if (!assistantContent) {
+              assistantContent = `Perfect! I've got your trip to **${details.destination}** locked in — generating your itinerary now! 🎉`;
+              setMessages(prev => [...prev, { role: 'assistant', content: assistantContent }]);
+            }
+
+            // Small delay so the user sees the confirmation before redirect
+            setTimeout(() => onDetailsExtracted(details), 800);
+          }
         } catch (e) {
           console.error('Failed to parse tool call args:', e);
         }
