@@ -136,9 +136,9 @@ export function ActivityMediaCapture({
 
       if (uploadError) throw uploadError;
 
-      const { data: urlData } = supabase.storage
+      const { data: urlData } = await supabase.storage
         .from('trip-photos')
-        .getPublicUrl(filePath);
+        .createSignedUrl(filePath, 3600);
 
       // Save reference in activity_feedback as metadata
       const { error: fbError } = await supabase

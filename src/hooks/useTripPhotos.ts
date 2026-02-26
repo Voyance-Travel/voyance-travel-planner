@@ -51,9 +51,15 @@ export function useTripPhotos(tripId: string | null): UseTripPhotosReturn {
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
 
-  const getPublicUrl = (storagePath: string): string => {
-    const { data } = supabase.storage.from('trip-photos').getPublicUrl(storagePath);
-    return data.publicUrl;
+  const getSignedUrl = async (storagePath: string): Promise<string> => {
+    const { data, error } = await supabase.storage
+      .from('trip-photos')
+      .createSignedUrl(storagePath, 3600);
+    if (error || !data?.signedUrl) {
+      console.error('Failed to create signed URL:', error);
+      return '';
+    }
+    return data.signedUrl;
   };
 
   const fetchPhotos = useCallback(async () => {
@@ -75,24 +81,26 @@ export function useTripPhotos(tripId: string | null): UseTripPhotosReturn {
 
       if (fetchError) throw fetchError;
 
-      const mappedPhotos: TripPhoto[] = (data || []).map(row => ({
-        id: row.id,
-        tripId: row.trip_id,
-        userId: row.user_id,
-        storagePath: row.storage_path,
-        fileName: row.file_name,
-        fileSizeBytes: row.file_size_bytes,
-        mimeType: row.mime_type,
-        caption: row.caption,
-        takenAt: row.taken_at,
-        dayNumber: row.day_number,
-        activityId: row.activity_id,
-        location: row.location as TripPhoto['location'],
-        isFavorite: row.is_favorite || false,
-        isCover: row.is_cover || false,
-        createdAt: row.created_at,
-        publicUrl: getPublicUrl(row.storage_path),
-      }));
+      const mappedPhotos: TripPhoto[] = await Promise.all(
+        (data || []).map(async (row) => ({
+          id: row.id,
+          tripId: row.trip_id,
+          userId: row.user_id,
+          storagePath: row.storage_path,
+          fileName: row.file_name,
+          fileSizeBytes: row.file_size_bytes,
+          mimeType: row.mime_type,
+          caption: row.caption,
+          takenAt: row.taken_at,
+          dayNumber: row.day_number,
+          activityId: row.activity_id,
+          location: row.location as TripPhoto['location'],
+          isFavorite: row.is_favorite || false,
+          isCover: row.is_cover || false,
+          createdAt: row.created_at,
+          publicUrl: await getSignedUrl(row.storage_path),
+        }))
+      );
 
       setPhotos(mappedPhotos);
     } catch (err: any) {
@@ -165,7 +173,7 @@ export function useTripPhotos(tripId: string | null): UseTripPhotosReturn {
         isFavorite: photoData.is_favorite || false,
         isCover: photoData.is_cover || false,
         createdAt: photoData.created_at,
-        publicUrl: getPublicUrl(photoData.storage_path),
+        publicUrl: await getSignedUrl(photoData.storage_path),
       };
 
       setPhotos(prev => [newPhoto, ...prev]);
