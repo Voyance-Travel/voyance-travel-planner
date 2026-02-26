@@ -882,6 +882,33 @@ export function buildPersonaManuscript(dna: TravelerDNA, tripContext: TripContex
   }
   // 'full' = default behavior (detailed plan), no extra prompt needed
   
+  // ============================================================================
+  // PERSONALIZATION QUALITY BAR (MANDATORY FOR ALL AI OUTPUTS)
+  // ============================================================================
+  lines.push('');
+  lines.push(`${'='.repeat(70)}`);
+  lines.push(`🎯 PERSONALIZATION QUALITY BAR (MANDATORY — HIGHEST PRIORITY)`);
+  lines.push(`${'='.repeat(70)}`);
+  lines.push(`Every recommendation MUST pass this test:`);
+  lines.push(`"Could the user have gotten this same advice from a Google search?" If YES → it's NOT good enough.`);
+  lines.push('');
+  lines.push(`RULES FOR EVERY ACTIVITY, RESTAURANT, AND TIP:`);
+  lines.push(`1. Be OPINIONATED: "This restaurant because of your love of omakase and your comfort budget" — NOT "this restaurant is popular"`);
+  lines.push(`2. Be SPECIFIC: "Arrive before 10am to beat the school groups — the Crown Jewels queue is shortest at opening" — NOT "visit early"`);
+  lines.push(`3. Be PERSONAL: Reference their archetype, traits, past trips, or preferences in the "whyThisFits" field`);
+  lines.push(`4. Be TIMELY: Mention seasonal specifics, current exhibitions, recent openings, or events happening during their dates`);
+  lines.push(`5. NEVER give generic tourist advice. Every tip should feel like it came from a well-traveled friend who has read their diary.`);
+  lines.push(`6. For restaurants: explain WHY it fits THIS person's cuisine preferences, budget, and dining style`);
+  lines.push(`7. For activities: connect to their interests, emotional drivers, or patterns from past trips`);
+  lines.push(`8. For "whyThisFits": MUST reference at least ONE specific trait/preference (e.g., "Your authenticity score of +7 means you'll prefer this local market over the tourist-facing food hall")`);
+  lines.push(`9. For "tips": Must be insider-level. "The gift shop has a back entrance that skips the main queue" — NOT "buy tickets online"`);
+  lines.push(`10. If the traveler has past trips, reference them: "Since you loved the street food scene in Bangkok, you'll enjoy this hawker-style market"`);
+  lines.push('');
+  lines.push(`ANTI-GENERIC EXAMPLES:`);
+  lines.push(`❌ "Visit the British Museum (free)" → Generic, zero personalization`);
+  lines.push(`✅ "The British Museum's new Silk Road exhibition runs through March — given your interest in Asian culture from your Tokyo trip, it's worth 2 hours. Arrive before 10am to beat school groups."`);
+  lines.push(`❌ "Try local food" → Meaningless`);
+  lines.push(`✅ "Myojaku in Nishiazabu just earned its 3rd Michelin star — with your omakase obsession and luxury budget, this is your signature meal of the trip. Book 3 weeks out."`);
   lines.push(`${'='.repeat(70)}`);
   lines.push(`END OF TRAVELER DNA PROFILE`);
   lines.push(`${'='.repeat(70)}`);

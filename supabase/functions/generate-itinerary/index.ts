@@ -4617,7 +4617,12 @@ For EVERY activity you generate, you MUST include ALL of these intelligence fiel
 4. "hasTimingHack" (boolean): true if THIS specific time slot gives an advantage (crowd avoidance, golden hour, special access). At least 2-3 per day should be true.
 5. "bestTime" (string): If hasTimingHack=true, explain WHY (e.g., "Arrives before the 10am tour bus rush")
 6. "voyanceInsight" (string): One unique fact most travelers don't know. Example: "The second floor has a hidden terrace that's not on any map"
-7. "personalization.whyThisFits" (string): MUST reference specific traveler traits/preferences. NOT generic.
+7. "personalization.whyThisFits" (string): MUST reference at LEAST ONE specific traveler trait, preference, past trip, or interest by name. 
+   ❌ BAD: "This fits your travel style" (too generic)
+   ❌ BAD: "Popular with tourists" (not personalized)
+   ✅ GOOD: "Your authenticity score of +7 means you'll prefer this local izakaya over the tourist-facing ramen chain"
+   ✅ GOOD: "Since you loved the street food in Bangkok, this hawker-style market will feel familiar"
+   ✅ GOOD: "With your luxury budget tier and love of omakase, this 8-seat counter is your signature meal"
 8. "contextualTips" (array of objects): 1-4 TYPED tips per activity. Each tip has a "type" and "text":
    - "timing": Queue/crowd advice for this specific time. E.g., "Crown Jewels queue is shortest before 10am"
    - "booking": Reservation/ticket advice. E.g., "Books up 3 weeks in advance — reserve now"

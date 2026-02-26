@@ -367,12 +367,25 @@ serve(async (req) => {
 
     // Fetch and inject Traveler DNA for personalized responses
     let personaPrompt = '';
+    let tripType = '';
     if (userId) {
       try {
         const dnaResult = await fetchTravelerDNA(supabase, userId);
         if (dnaResult.hasData) {
+          // Enrich with trip type if available
+          if (itineraryContext.tripId) {
+            const { data: tripData } = await supabase
+              .from('trips')
+              .select('trip_type')
+              .eq('id', itineraryContext.tripId)
+              .maybeSingle();
+            if (tripData?.trip_type) {
+              dnaResult.dna.tripType = tripData.trip_type;
+              tripType = tripData.trip_type;
+            }
+          }
           personaPrompt = buildPersonaManuscript(dnaResult.dna, itineraryContext.destination);
-          log("DNA injected", { confidence: dnaResult.confidence, archetype: dnaResult.dna.primaryArchetype });
+          log("DNA injected", { confidence: dnaResult.confidence, archetype: dnaResult.dna.primaryArchetype, tripType });
         }
       } catch (dnaError) {
         log("DNA fetch failed, continuing without", { error: String(dnaError) });
@@ -391,6 +404,7 @@ serve(async (req) => {
 Trip to ${itineraryContext.destination}
 Dates: ${itineraryContext.startDate} to ${itineraryContext.endDate}
 Total days: ${itineraryContext.days.length}
+${tripType ? `Trip occasion: ${tripType}` : ''}
 
 ${itineraryDescription}
 
@@ -402,7 +416,7 @@ ${itineraryDescription}
 - Filter application: 5 credits per affected activity`;
 
     const fullSystemPrompt = personaPrompt 
-      ? `${SYSTEM_PROMPT}\n\n## TRAVELER PROFILE\n${personaPrompt}\n\nIMPORTANT: All suggestions, swaps, and recommendations MUST align with this traveler's DNA profile above.`
+      ? `${SYSTEM_PROMPT}\n\n## TRAVELER PROFILE\n${personaPrompt}\n\nIMPORTANT: All suggestions, swaps, and recommendations MUST align with this traveler's DNA profile above. Be OPINIONATED — justify every suggestion by referencing their specific preferences, past trips, or traits. Never give generic advice.`
       : SYSTEM_PROMPT;
 
     const apiMessages = [
