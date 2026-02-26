@@ -95,6 +95,8 @@ export function InlineModifier({
           : `Adding more activities to Day ${action.params.target_day}`;
       case 'regenerate_day':
         return `Regenerating Day ${action.params.target_day}${action.params.new_focus ? ` with focus on ${action.params.new_focus}` : ''}`;
+      case 'rewrite_day':
+        return `Rewriting Day ${action.params.target_day}: ${action.params.reason || action.params.instructions || 'based on your instructions'}`;
       case 'apply_filter':
         return `Applying ${action.params.filter_type} filter: ${action.params.filter_value}`;
       default:
@@ -160,28 +162,30 @@ export function InlineModifier({
     setIsApplying(true);
 
     try {
-      // Spend credits for swap actions BEFORE executing
-      if (pendingChange.action.type === 'suggest_activity_swap') {
-        console.log('[ActionExecutor] Spending credits for swap_activity');
+      // Spend credits for credit-costing actions BEFORE executing
+      const creditAction = pendingChange.action.type === 'suggest_activity_swap' ? 'SWAP_ACTIVITY'
+        : pendingChange.action.type === 'rewrite_day' ? 'REGENERATE_DAY'
+        : pendingChange.action.type === 'regenerate_day' ? 'REGENERATE_DAY'
+        : null;
+
+      if (creditAction) {
         const creditResult = await spendCredits.mutateAsync({
-          action: 'SWAP_ACTIVITY',
+          action: creditAction,
           tripId,
           metadata: {
             source: 'inline_modifier',
             target_day: pendingChange.action.params.target_day,
-            target_activity: pendingChange.action.params.target_activity_title,
+            action_type: pendingChange.action.type,
           },
         });
-        console.log('[ActionExecutor] Credit spend result:', creditResult);
         if (!creditResult.success) {
-          console.log('[ActionExecutor] Credit spend FAILED — aborting swap');
-          throw new Error('Insufficient credits for swap');
+          throw new Error('Insufficient credits');
         }
       }
 
       const result: ActionExecutionResult = await executeAction(
         {
-          type: pendingChange.action.type as 'suggest_activity_swap' | 'adjust_day_pacing' | 'apply_filter' | 'regenerate_day',
+          type: pendingChange.action.type as 'suggest_activity_swap' | 'adjust_day_pacing' | 'apply_filter' | 'regenerate_day' | 'rewrite_day',
           params: pendingChange.action.params,
           status: 'pending',
         },
