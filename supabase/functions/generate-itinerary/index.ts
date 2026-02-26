@@ -4718,6 +4718,12 @@ ${context.isMultiCity ? `5. ALL activities MUST be in ${dayDestination}. Do NOT 
 - Markets often have specific operating days — verify the market is open on ${dayOfWeekName} before including it.
 - If you are unsure whether a venue is open on ${dayOfWeekName}, set closedRisk: true and suggest an alternative.
 
+🌐 LANGUAGE — HARD RULE:
+- ALL text output (titles, descriptions, tips, addresses) MUST be in clean, correctly spelled English.
+- For non-Latin-script destinations, use standard English transliterations or well-known English names.
+- NEVER output Chinese characters (汉字), Japanese (漢字/かな), Korean (한글), Arabic, Cyrillic, or Thai script.
+- NEVER produce garbled, corrupted, or nonsensical text fragments.
+
 Generate activities for this day following ALL constraints above.`;
 
       let data: any = null;

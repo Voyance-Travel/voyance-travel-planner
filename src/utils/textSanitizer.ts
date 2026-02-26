@@ -1,7 +1,13 @@
 /**
- * Text sanitizer - removes em dashes and other unwanted characters
+ * Text sanitizer - removes em dashes, garbled text, and non-Latin script
  * from user-facing text content.
  */
+
+// Regex to detect non-Latin script blocks (Chinese, Japanese, Korean, Arabic, Cyrillic, Thai)
+const NON_LATIN_SCRIPT = /[\u4E00-\u9FFF\u3400-\u4DBF\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF\u0600-\u06FF\u0400-\u04FF\u0E00-\u0E7F]+/g;
+
+// Regex to detect garbled/corrupted text patterns (nonsensical fragments)
+const GARBLED_PATTERN = /(?:[bcdfghjklmnpqrstvwxz]{5,}|[A-Z][a-z]{0,2}[A-Z][a-z]{0,2}[A-Z])/g;
 
 /**
  * Replace em dashes (—) with standard dashes ( - ) in any text.
@@ -12,6 +18,44 @@ export function sanitizeText(text: string | undefined | null): string {
   return text
     .replace(/—/g, ' - ')
     .replace(/–/g, '-');
+}
+
+/**
+ * Clean AI-generated text by removing non-Latin scripts and garbled fragments.
+ * Use this on conversational AI output before rendering.
+ */
+export function sanitizeAIOutput(text: string | undefined | null): string {
+  if (!text) return '';
+  let cleaned = text;
+  
+  // Remove non-Latin script characters (replace with empty or space)
+  cleaned = cleaned.replace(NON_LATIN_SCRIPT, '');
+  
+  // Clean up artifacts: double spaces, trailing fragments
+  cleaned = cleaned
+    .replace(/\s{2,}/g, ' ')
+    .replace(/—/g, ' - ')
+    .replace(/–/g, '-')
+    .trim();
+  
+  return cleaned;
+}
+
+/**
+ * Detect if a text string contains potentially garbled or corrupted content.
+ * Returns true if suspicious patterns are found.
+ */
+export function hasGarbledContent(text: string): boolean {
+  if (!text) return false;
+  
+  // Check for non-Latin script in what should be English output
+  if (NON_LATIN_SCRIPT.test(text)) return true;
+  
+  // Check for high density of garbled consonant clusters
+  const garbledMatches = text.match(GARBLED_PATTERN);
+  if (garbledMatches && garbledMatches.length > 2) return true;
+  
+  return false;
 }
 
 /**
