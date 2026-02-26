@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { format, isAfter, isBefore, differenceInDays } from 'date-fns';
+import { format, isAfter, isBefore, differenceInDays, addDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { Loader2, Calendar, MapPin, ArrowLeft, Edit, Sparkles } from 'lucide-react';
+import { TripDateEditor, type DateChangeResult } from '@/components/trip/TripDateEditor';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
@@ -706,6 +707,90 @@ export default function TripDetail() {
     handleShowGenerator(true);
   }, []);
 
+  // Handle trip date changes — shift/extend/shorten itinerary
+  const handleDateChange = useCallback(async (result: DateChangeResult) => {
+    if (!trip || !tripId) return;
+
+    const { newStartDate, newEndDate, daysAdded, isShiftOnly } = result;
+    const metadata = trip.itinerary_data as Record<string, unknown> | null;
+    let days = [...((metadata?.days as any[]) || [])];
+
+    if (isShiftOnly) {
+      // Shift all day dates without changing structure
+      const newStart = parseLocalDate(newStartDate);
+      days = days.map((day: any, idx: number) => ({
+        ...day,
+        date: format(addDays(newStart, idx), 'yyyy-MM-dd'),
+      }));
+    } else if (daysAdded > 0) {
+      // Extend — add blank days at end
+      const lastDayNum = days.length;
+      const newStart = parseLocalDate(newStartDate);
+      // Re-date existing days
+      days = days.map((day: any, idx: number) => ({
+        ...day,
+        date: format(addDays(newStart, idx), 'yyyy-MM-dd'),
+      }));
+      // Add new blank days
+      for (let i = 0; i < daysAdded; i++) {
+        const dayNum = lastDayNum + i + 1;
+        days.push({
+          dayNumber: dayNum,
+          date: format(addDays(newStart, lastDayNum + i), 'yyyy-MM-dd'),
+          theme: 'Free Day',
+          description: 'Open for planning',
+          activities: [],
+        });
+      }
+    } else if (daysAdded < 0) {
+      // Shorten — remove days from the end
+      const newStart = parseLocalDate(newStartDate);
+      const newDayCount = days.length + daysAdded; // daysAdded is negative
+      days = days.slice(0, Math.max(1, newDayCount)).map((day: any, idx: number) => ({
+        ...day,
+        dayNumber: idx + 1,
+        date: format(addDays(newStart, idx), 'yyyy-MM-dd'),
+      }));
+    }
+
+    const updatedItinerary = { ...(metadata || {}), days };
+
+    // Update local state
+    setTrip(prev => prev ? {
+      ...prev,
+      start_date: newStartDate,
+      end_date: newEndDate,
+      itinerary_data: updatedItinerary as any,
+    } : null);
+
+    // Persist to backend
+    try {
+      const { error } = await supabase
+        .from('trips')
+        .update({
+          start_date: newStartDate,
+          end_date: newEndDate,
+          itinerary_data: updatedItinerary as any,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', tripId);
+
+      if (error) {
+        console.error('[TripDetail] Failed to save date change:', error);
+        toast.error('Failed to save date changes');
+      } else {
+        toast.success(
+          isShiftOnly ? 'Trip dates shifted' :
+          daysAdded > 0 ? `${daysAdded} day${daysAdded > 1 ? 's' : ''} added` :
+          `${Math.abs(daysAdded)} day${Math.abs(daysAdded) > 1 ? 's' : ''} removed`
+        );
+      }
+    } catch (err) {
+      console.error('[TripDetail] Date change error:', err);
+      toast.error('Failed to update dates');
+    }
+  }, [trip, tripId]);
+
   // Handle applying hotel-based swap suggestions to itinerary
   const handleApplySwaps = useCallback((swaps: SwapSuggestion[]) => {
     if (!trip) return;
@@ -884,10 +969,13 @@ export default function TripDetail() {
                   {isPastTrip && trip.status === 'draft' ? 'Past' : trip.status}
                 </Badge>
                 
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Calendar className="w-4 h-4" />
-                  {format(parseLocalDate(trip.start_date), 'MMM d')} - {format(parseLocalDate(effectiveEndDate), 'MMM d, yyyy')}
-                </div>
+                <TripDateEditor
+                  startDate={trip.start_date}
+                  endDate={effectiveEndDate}
+                  hasItinerary={hasItinerary}
+                  flightSelection={trip.flight_selection as Record<string, unknown> | null}
+                  onDateChange={handleDateChange}
+                />
 
                 {/* Inline confirmation buttons (only shows for draft trips within 14 days) */}
                 {hasItinerary && (
