@@ -302,6 +302,8 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
         travelers: 1,
         originCity: departureCity || undefined,
         budgetTier: 'moderate',
+        tripType: 'leisure',
+        creationSource: 'mystery_getaway',
       });
 
       // If hotel was selected, save it to the trip

@@ -1777,6 +1777,24 @@ export default function Start() {
         } else {
           console.log(`[Start] Persisted ${cityRows.length} trip_cities for trip ${trip.id}`);
         }
+      } else {
+        // Single-city trip: also insert one trip_cities row for unified schema
+        const nights = differenceInDays(endDate, startDate);
+        const singleCityRow = {
+          trip_id: trip.id,
+          city_order: 0,
+          city_name: primaryDestination,
+          country: null,
+          arrival_date: format(startDate, 'yyyy-MM-dd'),
+          departure_date: format(endDate, 'yyyy-MM-dd'),
+          nights: nights > 0 ? nights : 1,
+          generation_status: 'pending' as const,
+          days_total: nights > 0 ? nights : 1,
+        };
+        const { error: singleCityError } = await supabase.from('trip_cities').insert(singleCityRow as any);
+        if (singleCityError) {
+          console.error('[Start] Failed to persist single trip_cities row:', singleCityError);
+        }
       }
 
       // Insert linked guests as trip collaborators

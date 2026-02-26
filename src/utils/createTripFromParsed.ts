@@ -9,21 +9,20 @@ import type { ParsedTripInput, ParsedActivity, ParsedDay } from '@/types/parsedT
 
 interface ItineraryActivity {
   id: string;
-  title: string;
+  name: string;
+  title?: string;
   description?: string;
   startTime?: string;
-  time?: string;
   duration?: string;
   category?: string;
   type?: string;
-  cost?: { amount: number; currency: string };
+  estimatedCost?: { amount: number; currency: string };
   location?: { name?: string; address?: string };
+  coordinates?: null;
+  venue?: null;
   tags?: string[];
   bookingRequired?: boolean;
   tips?: string;
-  isOption?: boolean;
-  optionGroup?: string;
-  alternativeOptions?: Array<{ name: string; notes?: string }>;
   source: string;
 }
 
@@ -60,22 +59,21 @@ function activityToItinerary(activity: ParsedActivity, isSelected: boolean): Iti
 
   return {
     id,
-    title: activity.name,
+    name: activity.name,
+    title: activity.name, // keep for backward compat
     description: combinedDescription,
     startTime: activity.time || undefined,
-    time: activity.time || undefined,
     category: mapCategory(activity.category),
     type: mapCategory(activity.category) as any,
-    cost: activity.cost !== undefined
+    estimatedCost: activity.cost !== undefined
       ? { amount: activity.cost, currency: activity.currency || 'USD' }
       : undefined,
     location: activity.location
       ? { name: activity.location, address: activity.location }
       : { name: '', address: '' },
+    coordinates: null,
+    venue: null,
     bookingRequired: activity.bookingRequired || false,
-    // Do NOT set tips — that renders "Voyance Insight" badges meant for AI content
-    // Do NOT set isOption/optionGroup — that renders "choose one" UI blocks
-    // User's raw research should just be a flat list; Smart Finish (generate-itinerary) will curate
     source: 'parsed',
   };
 }
@@ -190,6 +188,13 @@ export async function createTripFromParsed(
       endDate = computedStr;
     }
 
+    // Get user's current plan tier for ownership tracking (same as voyanceAPI.createTrip)
+    let ownerPlanTier = 'free';
+    try {
+      const { data: entitlements } = await supabase.functions.invoke('get-entitlements');
+      ownerPlanTier = entitlements?.plans?.[0] || 'free';
+    } catch { /* fallback to free */ }
+
     const { data: trip, error } = await supabase
       .from('trips')
       .insert({
@@ -203,6 +208,8 @@ export async function createTripFromParsed(
         budget_tier: budgetTier,
         status: 'draft',
         creation_source: 'manual_paste',
+        is_multi_city: false,
+        owner_plan_tier: ownerPlanTier,
         itinerary_data: itineraryData as any,
         // Manual trips: unlock ALL days — user's own content is free
         unlocked_day_count: parsed.days.length,
@@ -219,6 +226,21 @@ export async function createTripFromParsed(
       console.error('[createTripFromParsed] Insert failed:', error);
       return { error: error.message };
     }
+
+    // Insert single trip_cities row for unified schema
+    const numDaysComputed = parsed.days?.length || 1;
+    await supabase.from('trip_cities').insert({
+      trip_id: trip.id,
+      city_order: 0,
+      city_name: destination,
+      arrival_date: startDate,
+      departure_date: endDate,
+      nights: numDaysComputed,
+      generation_status: 'pending',
+      days_total: numDaysComputed,
+    } as any).then(({ error: cityErr }) => {
+      if (cityErr) console.error('[createTripFromParsed] trip_cities insert failed:', cityErr);
+    });
 
     // Enable manual builder mode
     useManualBuilderStore.getState().enableManualBuilder(trip.id);
