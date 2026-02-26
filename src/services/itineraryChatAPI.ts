@@ -18,7 +18,7 @@ export interface ChatMessage {
 }
 
 export interface ItineraryAction {
-  type: 'suggest_activity_swap' | 'adjust_day_pacing' | 'apply_filter' | 'regenerate_day';
+  type: 'suggest_activity_swap' | 'adjust_day_pacing' | 'apply_filter' | 'regenerate_day' | 'rewrite_day';
   params: Record<string, unknown>;
   status: 'pending' | 'applied' | 'declined';
 }
@@ -97,14 +97,23 @@ export function generateConversationId(): string {
 export function getActionDisplayInfo(action: { type: string; params: Record<string, unknown> }): {
   title: string;
   description: string;
-  icon: 'swap' | 'pace' | 'filter' | 'refresh';
+  icon: 'swap' | 'pace' | 'filter' | 'refresh' | 'rewrite';
+  creditCost: number;
 } {
   switch (action.type) {
+    case 'rewrite_day':
+      return {
+        title: `Rewrite Day ${action.params.target_day}`,
+        description: action.params.reason as string || 'Rewrite this day based on your instructions',
+        icon: 'rewrite',
+        creditCost: 10,
+      };
     case 'suggest_activity_swap':
       return {
         title: `Swap activity on Day ${action.params.target_day}`,
         description: action.params.reason as string || `Find alternatives for "${action.params.target_activity_title}"`,
         icon: 'swap',
+        creditCost: 5,
       };
     case 'adjust_day_pacing':
       const adjustment = action.params.adjustment as string;
@@ -114,26 +123,40 @@ export function getActionDisplayInfo(action: { type: string; params: Record<stri
           ? 'Make the day more relaxed with fewer activities'
           : 'Pack in more activities for an action-filled day',
         icon: 'pace',
+        creditCost: 5,
       };
     case 'apply_filter':
       return {
         title: `Apply ${action.params.filter_type} filter`,
         description: `Filter for: ${action.params.filter_value}`,
         icon: 'filter',
+        creditCost: 5,
       };
     case 'regenerate_day':
       return {
         title: `Regenerate Day ${action.params.target_day}`,
         description: action.params.new_focus as string || 'Create a new itinerary for this day',
         icon: 'refresh',
+        creditCost: 10,
       };
     default:
       return {
         title: 'Unknown action',
         description: '',
         icon: 'swap',
+        creditCost: 5,
       };
   }
+}
+
+/**
+ * Calculate total credit cost for a set of actions
+ */
+export function calculateActionsCreditCost(actions: Array<{ type: string; params: Record<string, unknown> }>): number {
+  return actions.reduce((total, action) => {
+    const info = getActionDisplayInfo(action);
+    return total + info.creditCost;
+  }, 0);
 }
 
 export default {

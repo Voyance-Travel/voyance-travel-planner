@@ -9,7 +9,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { MessageCircle, X, Send, Loader2, ArrowLeftRight, Gauge, Filter, RefreshCw, Check, ThumbsDown, Settings2, Coins } from 'lucide-react';
+import { MessageCircle, X, Send, Loader2, ArrowLeftRight, Gauge, Filter, RefreshCw, Check, ThumbsDown, Settings2, Coins, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -24,6 +24,7 @@ import {
   sendChatMessage, 
   generateConversationId, 
   getActionDisplayInfo,
+  calculateActionsCreditCost,
   type ChatMessage,
   type ItineraryAction,
   type ItineraryContext,
@@ -122,7 +123,7 @@ export function ItineraryAssistant({
       setMessages([{
         id: 'welcome',
         role: 'assistant',
-        content: `Hi! I'm here to help you customize your ${destination} itinerary. You can ask me to:\n\n• Swap activities for something different\n• Adjust the pacing of any day\n• Filter for dietary needs or accessibility\n• Find budget-friendly alternatives\n\nWhat would you like to change?`,
+        content: `Hi! I'm here to help you customize your ${destination} itinerary. You can tell me things like:\n\n• "Make Day 3 more relaxed"\n• "I'm a foodie — more eating options on Day 2"\n• "Replace the museum with something outdoors"\n• "Move dinner earlier and add a jazz club"\n• "Days 4 and 5 feel similar — make them different"\n\nI'll handle all the changes — meals, transit, timing — in one go. What would you like?`,
         timestamp: new Date(),
       }]);
     }
@@ -196,14 +197,16 @@ export function ItineraryAssistant({
 
       setMessages(prev => [...prev, assistantMessage]);
 
-      // If not in approval mode and there are actions, auto-apply the first one
+      // If not in approval mode and there are actions, auto-apply ALL sequentially
       if (!approvalMode && response.actions?.length > 0) {
-        const action = response.actions[0];
-        handleActionApply(assistantMessage.id, 0, {
-          type: action.type as ItineraryAction['type'],
-          params: action.params,
-          status: 'pending',
-        });
+        for (let i = 0; i < response.actions.length; i++) {
+          const action = response.actions[i];
+          await handleActionApply(assistantMessage.id, i, {
+            type: action.type as ItineraryAction['type'],
+            params: action.params,
+            status: 'pending',
+          });
+        }
       }
 
       // Show toast ONLY for profile-level preferences (not trip-specific ones)
@@ -246,22 +249,27 @@ export function ItineraryAssistant({
     toast.loading('Applying changes...', { id: actionId, description: 'This may take a few seconds' });
     
     try {
-      // Spend credits for swap actions BEFORE executing
-      if (action.type === 'suggest_activity_swap') {
-        console.log('[ActionExecutor] Spending credits for swap_activity');
+      // Spend credits for actions that cost credits BEFORE executing
+      const creditAction = action.type === 'suggest_activity_swap' ? 'SWAP_ACTIVITY'
+        : action.type === 'rewrite_day' ? 'REGENERATE_DAY'
+        : action.type === 'regenerate_day' ? 'REGENERATE_DAY'
+        : null;
+
+      if (creditAction) {
+        console.log(`[ActionExecutor] Spending credits for ${creditAction}`);
         const creditResult = await spendCredits.mutateAsync({
-          action: 'SWAP_ACTIVITY',
+          action: creditAction,
           tripId,
           metadata: {
             source: 'itinerary_assistant',
             target_day: action.params.target_day,
-            target_activity: action.params.target_activity_title,
+            action_type: action.type,
           },
         });
         console.log('[ActionExecutor] Credit spend result:', creditResult);
         if (!creditResult.success) {
-          console.log('[ActionExecutor] Credit spend FAILED — aborting swap');
-          throw new Error('Insufficient credits for swap');
+          console.log('[ActionExecutor] Credit spend FAILED — aborting');
+          throw new Error('Insufficient credits');
         }
       }
 
@@ -357,12 +365,13 @@ export function ItineraryAssistant({
     }));
   };
 
-  const getActionIcon = (iconType: 'swap' | 'pace' | 'filter' | 'refresh') => {
+  const getActionIcon = (iconType: 'swap' | 'pace' | 'filter' | 'refresh' | 'rewrite') => {
     switch (iconType) {
       case 'swap': return <ArrowLeftRight className="h-4 w-4" />;
       case 'pace': return <Gauge className="h-4 w-4" />;
       case 'filter': return <Filter className="h-4 w-4" />;
       case 'refresh': return <RefreshCw className="h-4 w-4" />;
+      case 'rewrite': return <Pencil className="h-4 w-4" />;
     }
   };
 

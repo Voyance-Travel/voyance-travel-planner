@@ -143,6 +143,9 @@ export async function executeAction(
     case 'suggest_activity_swap':
       return executeSwapAction(action, tripId, currentDays, destination);
     
+    case 'rewrite_day':
+      return executeRewriteDayAction(action, tripId, currentDays, destination);
+    
     case 'regenerate_day':
       return executeRegenerateAction(action, tripId, currentDays, destination);
     
@@ -159,6 +162,82 @@ export async function executeAction(
         error: `Action type "${action.type}" is not supported`,
       };
   }
+}
+
+/**
+ * Execute a rewrite_day action — sends detailed natural language instructions
+ * to generate-itinerary to rewrite an entire day while preserving locked items.
+ */
+async function executeRewriteDayAction(
+  action: ItineraryAction,
+  tripId: string,
+  currentDays: ItineraryDay[],
+  destination: string
+): Promise<ActionExecutionResult> {
+  const { target_day, instructions, preserve_locked = true, reason } = action.params as {
+    target_day: number;
+    instructions: string;
+    preserve_locked?: boolean;
+    reason?: string;
+  };
+
+  const dayIndex = currentDays.findIndex(d => d.dayNumber === target_day);
+  if (dayIndex === -1) {
+    return {
+      success: false,
+      message: `Day ${target_day} not found`,
+      error: 'Day not found',
+    };
+  }
+
+  const day = currentDays[dayIndex];
+
+  // Determine which activities to preserve
+  const keepActivities = preserve_locked
+    ? day.activities
+        .filter(a => a.isLocked || isProtectedActivity(a))
+        .map(a => a.id)
+        .filter(Boolean)
+    : [];
+
+  // Call generate-itinerary with the rewrite instructions
+  const { data, error } = await supabase.functions.invoke('generate-itinerary', {
+    body: {
+      action: 'regenerate-day',
+      tripId,
+      dayNumber: target_day,
+      destination,
+      keepActivities,
+      currentActivities: day.activities,
+      preferences: {
+        dayFocus: instructions,
+        rewriteInstructions: instructions,
+      },
+    },
+  });
+
+  if (error || !data?.day) {
+    return {
+      success: false,
+      message: 'Failed to rewrite day',
+      error: error?.message || data?.error || 'Unknown error',
+    };
+  }
+
+  const updatedDays = [...currentDays];
+  updatedDays[dayIndex] = {
+    ...day,
+    ...data.day,
+    activities: data.day.activities || day.activities,
+  };
+
+  await updateTripItinerary(tripId, updatedDays);
+
+  return {
+    success: true,
+    message: reason || `Rewrote Day ${target_day} based on your instructions`,
+    updatedDays,
+  };
 }
 
 /**
