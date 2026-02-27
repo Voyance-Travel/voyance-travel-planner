@@ -17,3 +17,4 @@ export { DNAQuizPrompt } from './DNAQuizPrompt';
 export { MapNavigationButton, TransitNavigation } from './MapNavigationButton';
 export type { EditorialDay, EditorialActivity, EditorialItineraryProps, TransportOption } from './EditorialItinerary';
 export { TransportComparisonCard } from './TransportComparisonCard';
+export { DayActionToolbar } from './DayActionToolbar';
