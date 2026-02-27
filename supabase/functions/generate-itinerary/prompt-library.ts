@@ -1710,3 +1710,137 @@ function parseTimeToMins(timeHHMM: string): number | undefined {
   if (!match) return undefined;
   return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
 }
+
+// =============================================================================
+// TRANSITION DAY PROMPT BUILDER
+// =============================================================================
+
+export interface TransitionDayParams {
+  transitionFrom: string;
+  transitionFromCountry?: string;
+  transitionTo: string;
+  transitionToCountry?: string;
+  transportType?: string; // user-selected or default
+  travelers: number;
+  budgetTier?: string;
+  primaryArchetype?: string;
+  currency?: string;
+}
+
+/**
+ * Build a mandatory structured prompt for inter-city transition days.
+ * Forces a strict day structure: checkout → transfer → travel → arrival → check-in → evening.
+ * Also instructs the AI to return a transportComparison array with 3+ options.
+ */
+export function buildTransitionDayPrompt(params: TransitionDayParams): string {
+  const {
+    transitionFrom, transitionFromCountry,
+    transitionTo, transitionToCountry,
+    transportType, travelers, budgetTier,
+    primaryArchetype, currency,
+  } = params;
+
+  const fromLabel = transitionFromCountry ? `${transitionFrom}, ${transitionFromCountry}` : transitionFrom;
+  const toLabel = transitionToCountry ? `${transitionTo}, ${transitionToCountry}` : transitionTo;
+  const isSameCountry = transitionFromCountry && transitionToCountry && transitionFromCountry === transitionToCountry;
+  const defaultMode = transportType || (isSameCountry ? 'train' : 'flight');
+
+  // Archetype-aware recommendation guidance
+  let recommendationGuidance = '';
+  const arch = (primaryArchetype || '').toLowerCase();
+  if (arch.includes('luxury') || arch.includes('comfort')) {
+    recommendationGuidance = 'Recommend the MOST COMFORTABLE option: city-center-to-city-center, premium seating, minimal transfers. Comfort > cost.';
+  } else if (arch.includes('budget') || arch.includes('backpack') || arch.includes('value')) {
+    recommendationGuidance = 'Recommend the CHEAPEST total door-to-door option. Include all hidden costs (baggage fees, airport transfers, parking). Cost > comfort.';
+  } else if (arch.includes('adventure') || arch.includes('explorer')) {
+    recommendationGuidance = 'Recommend the option with the BEST SCENIC/EXPERIENCE value. Highlight stopover opportunities, scenic routes, and unique experiences en route.';
+  } else {
+    recommendationGuidance = 'Recommend the best BALANCED option considering door-to-door time, total cost, and comfort.';
+  }
+
+  return `
+${'='.repeat(70)}
+🚆 MANDATORY TRANSITION DAY: ${fromLabel} → ${toLabel}
+${'='.repeat(70)}
+
+This is a TRAVEL DAY. The traveler is moving between cities. NO TELEPORTING.
+You MUST generate activities following this EXACT mandatory structure:
+
+1. MORNING — Hotel Checkout in ${transitionFrom}
+   - Category: "accommodation"
+   - Title: "Hotel Checkout – ${transitionFrom}"
+   - Time: 08:00–09:00 (adjust if flight/train requires earlier)
+   - Cost: { amount: 0, currency: "USD" }
+   - bookingRequired: false
+
+2. TRANSFER to departure point
+   - Category: "transport"
+   - Title: "Transfer to [Station/Airport Name]"
+   - Include realistic transfer time, method, and cost
+   - The departure point MUST be a real station/airport in ${transitionFrom}
+
+3. INTER-CITY TRAVEL: ${transitionFrom} → ${transitionTo}
+   - Category: "transport"
+   - Title: "[Mode] – ${transitionFrom} to ${transitionTo}"
+   - Use transport mode: "${defaultMode}" (or the AI recommended mode)
+   - Include realistic duration, operator name, departure/arrival points
+   - Cost MUST reflect real-world pricing for ${travelers} traveler(s)
+
+4. TRANSFER from arrival point to hotel in ${transitionTo}
+   - Category: "transport"
+   - Title: "Transfer to Hotel – ${transitionTo}"
+   - Include realistic transfer time from arrival station/airport to city center
+
+5. HOTEL CHECK-IN in ${transitionTo}
+   - Category: "accommodation"
+   - Title: "Hotel Check-in – ${transitionTo}"
+   - Time: Calculated from arrival + transfer duration
+   - Cost: { amount: 0, currency: "USD" }
+   - bookingRequired: false
+
+6. EVENING — Light exploration + dinner near hotel in ${transitionTo}
+   - 1-2 low-key activities: neighborhood walk, local restaurant, sunset viewpoint
+   - All activities MUST be in ${transitionTo}
+   - Keep it light — the traveler just traveled
+
+${'='.repeat(70)}
+🔄 TRANSPORT COMPARISON MODULE — REQUIRED
+${'='.repeat(70)}
+
+You MUST also return a "transportComparison" array with AT LEAST 3 viable transport options
+for getting from ${transitionFrom} to ${transitionTo}.
+
+For EACH option, provide:
+- id: unique string (e.g., "train_fast", "flight_budget", "bus_economy")
+- mode: "train" | "flight" | "bus" | "car" | "ferry"
+- operator: Real operator name (e.g., "Eurostar", "EasyJet", "FlixBus")
+- inTransitDuration: Just the travel time (e.g., "2h 15m")
+- doorToDoorDuration: TOTAL time including transfers, check-in, security, boarding (e.g., "4h 30m")
+- cost: { perPerson: number, total: number (for ${travelers} travelers), currency: "${currency || 'USD'}", includesTransfers: boolean }
+  - INCLUDE ALL hidden costs: baggage fees, airport transfers, parking, tolls, fuel
+  - Total must be the REAL door-to-door expense, not just the ticket price
+- departure: { point: "Real station/airport name", neighborhood: "Area of city it's in" }
+- arrival: { point: "Real station/airport name", neighborhood: "Area of city it's in" }
+- pros: string[] (2-4 genuine advantages)
+- cons: string[] (2-3 genuine disadvantages)
+- bookingTip: string (actionable tip, e.g., "Book 6+ weeks out for £39 fares on Eurostar")
+- scenicOpportunities: string[] (what you'll see en route, stopover options)
+- isRecommended: boolean (true for exactly ONE option)
+- recommendationReason: string (1-2 sentences explaining why, referencing the traveler's profile)
+
+RECOMMENDATION GUIDANCE: ${recommendationGuidance}
+
+Also return: "selectedTransportId": string — set to the id of the recommended option.
+
+${'='.repeat(70)}
+⚠️ CRITICAL RULES FOR TRANSITION DAYS
+${'='.repeat(70)}
+- The inter-city travel activity is MANDATORY. Do NOT skip it.
+- ALL costs must be realistic for the ${fromLabel} → ${toLabel} route.
+- Door-to-door time MUST include getting to/from stations/airports. A 1h15m flight is 4-5h door-to-door.
+- Evening activities MUST be in ${transitionTo}, NOT ${transitionFrom}.
+- Do NOT include tourist attractions requiring extended visits. Keep evening activities casual.
+- The transportComparison array is REQUIRED. Do not omit it.
+- Activity count for transition days: exactly 6-8 activities (the 6 mandatory + 1-2 evening).
+`;
+}

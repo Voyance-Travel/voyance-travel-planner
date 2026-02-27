@@ -194,6 +194,28 @@ export interface EditorialActivity {
   };
 }
 
+export interface TransportOption {
+  id: string;
+  mode: 'train' | 'flight' | 'bus' | 'car' | 'ferry';
+  operator: string;
+  inTransitDuration: string;
+  doorToDoorDuration: string;
+  cost: {
+    perPerson: number;
+    total: number;
+    currency: string;
+    includesTransfers?: boolean;
+  };
+  departure: { point: string; neighborhood?: string };
+  arrival: { point: string; neighborhood?: string };
+  pros: string[];
+  cons: string[];
+  bookingTip?: string;
+  scenicOpportunities?: string[];
+  isRecommended: boolean;
+  recommendationReason?: string;
+}
+
 export interface EditorialDay {
   dayNumber: number;
   date?: string;
@@ -213,6 +235,14 @@ export interface EditorialDay {
     isLocked?: boolean;
     [key: string]: unknown;
   };
+  // Multi-city / transition day fields
+  city?: string;
+  country?: string;
+  isTransitionDay?: boolean;
+  transitionFrom?: string;
+  transitionTo?: string;
+  transportComparison?: TransportOption[];
+  selectedTransportId?: string;
 }
 
 export interface FlightLegDisplay {
