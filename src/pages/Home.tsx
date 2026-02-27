@@ -20,12 +20,10 @@ import { OnboardingRedirect } from '@/components/auth/OnboardingRedirect';
 import { OrganizationSchema, WebSiteSchema, TravelAgencySchema } from '@/components/seo/StructuredData';
 import { scrollToTop } from '@/utils/scrollUtils';
 
-const SECTIONS = [
-  { key: 'problem', title: 'The Planning Problem', teaser: 'Why travel planning feels broken for everyone' },
-  { key: 'personalization', title: 'Same City, Different Journey', teaser: 'See how 3 travelers get unique Tokyo itineraries' },
-  { key: 'insight', title: 'Your Travel Identity', teaser: 'You\'re not generic. Your trip shouldn\'t be either' },
+// Sections that collapse into accordions on mobile (detail/reference content)
+const COLLAPSIBLE_SECTIONS = [
+  { key: 'insight', title: 'Your Travel Identity', teaser: "You're not generic. Your trip shouldn't be either" },
   { key: 'archetypes', title: 'Your Travel DNA', teaser: 'Explore 29 unique traveler archetypes' },
-  { key: 'customization', title: 'Full Control, Your Way', teaser: 'Swap, chat, budget. Make it yours after generation' },
   { key: 'itineraries', title: 'Sample Itineraries', teaser: 'Real trip plans with intelligence metrics' },
   { key: 'social', title: 'What Travelers Say', teaser: 'Beta tester quotes and platform intelligence' },
   { key: 'pricing', title: 'Pricing & Credits', teaser: '150 free credits monthly. No credit card required' },
@@ -52,8 +50,8 @@ export default function Home() {
     setOpenSection(prev => (prev === key ? null : key));
   };
 
-  const renderSection = (key: string, children: React.ReactNode) => {
-    const section = SECTIONS.find(s => s.key === key)!;
+  const renderCollapsible = (key: string, children: React.ReactNode) => {
+    const section = COLLAPSIBLE_SECTIONS.find(s => s.key === key)!;
     return (
       <MobileAccordionSection
         key={key}
@@ -82,17 +80,39 @@ export default function Home() {
       <TopNav />
       
       <div className="bg-background overflow-hidden">
-        {/* Hero — mobile-constrained via CSS */}
+        {/* Hero — big, beautiful, immersive */}
         <ValueFirstHero onScrollToDemo={handleScrollToDemo} />
         
-        {/* All content sections — accordion on mobile, normal on desktop */}
-        {renderSection('problem', <TheProblemSection />)}
-        {renderSection('personalization', <PersonalizationProof />)}
-        {renderSection('insight', <TheInsightSection />)}
-        {renderSection('archetypes', <SampleArchetype />)}
-        {renderSection('customization', <CustomizationShowcase />)}
+        {/* ═══ OPEN SECTIONS: Always visible on mobile ═══ */}
         
-        {renderSection('itineraries',
+        {/* Section 1: The Planning Problem — emotional hook */}
+        <div className="py-8 md:py-0">
+          <TheProblemSection />
+        </div>
+        
+        {/* Divider */}
+        <div className="h-px bg-border/50 mx-6 md:hidden" />
+        
+        {/* Section 2: Same City, Different Journey — proof point */}
+        <div className="py-8 md:py-0">
+          <PersonalizationProof />
+        </div>
+        
+        {/* Divider */}
+        <div className="h-px bg-border/50 mx-6 md:hidden" />
+        
+        {/* Section 3: Full Control, Your Way — reassurance */}
+        <div className="py-8 md:py-0">
+          <CustomizationShowcase />
+        </div>
+        
+        {/* ═══ COLLAPSIBLE SECTIONS: Accordions on mobile ═══ */}
+        <div className="md:hidden h-8" /> {/* Spacer before accordions */}
+        
+        {renderCollapsible('insight', <TheInsightSection />)}
+        {renderCollapsible('archetypes', <SampleArchetype />)}
+        
+        {renderCollapsible('itineraries',
           <ScrollTarget id="demo-section" className="scroll-mt-16">
             <div ref={demoRef}>
               <ItineraryShowcase />
@@ -100,10 +120,10 @@ export default function Home() {
           </ScrollTarget>
         )}
         
-        {renderSection('social', <SocialProofSection />)}
-        {renderSection('pricing', <FreeTierSection />)}
+        {renderCollapsible('social', <SocialProofSection />)}
+        {renderCollapsible('pricing', <FreeTierSection />)}
         
-        {/* Final CTA — always visible, not in accordion */}
+        {/* Final CTA — always visible */}
         <ScrollTarget id="cta-section" className="scroll-mt-16">
           <FinalCTA />
         </ScrollTarget>
