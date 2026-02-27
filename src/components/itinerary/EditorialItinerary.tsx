@@ -22,7 +22,7 @@ import {
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
-  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2, ClipboardPaste
+  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2, ClipboardPaste, Compass
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
@@ -111,6 +111,7 @@ import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { useActionCap } from '@/hooks/useActionCap';
 import { AddActivityModal } from './AddActivityModal';
 import { EditActivityModal } from './EditActivityModal';
+import { DiscoverDrawer } from './DiscoverDrawer';
 import { ImportActivitiesModal, type ImportMode } from './ImportActivitiesModal';
 import { SmartFinishBanner } from './SmartFinishBanner';
 import { OptionGroupBlock } from './OptionGroupBlock';
@@ -1060,6 +1061,7 @@ export function EditorialItinerary({
   const [importModal, setImportModal] = useState<{ dayIndex: number } | null>(null);
   const [editActivityModal, setEditActivityModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
   const [timeEditModal, setTimeEditModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
+  const [discoverDrawerOpen, setDiscoverDrawerOpen] = useState(false);
   const [hotelGalleryOpen, setHotelGalleryOpen] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [payments, setPayments] = useState<TripPayment[]>([]);
@@ -3348,6 +3350,7 @@ export function EditorialItinerary({
                           onDayLock={handleDayLock}
                           onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
                           onAddActivity={() => setAddActivityModal({ dayIndex: selectedDayIndex })}
+                          onDiscover={() => setDiscoverDrawerOpen(true)}
                           onImportActivities={creationSource === 'manual_paste' ? () => setImportModal({ dayIndex: selectedDayIndex }) : undefined}
                           onTimeEdit={(dIdx, aIdx, activity) => setTimeEditModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
                           onActivityEdit={(dIdx, aIdx, activity) => setEditActivityModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
@@ -3985,6 +3988,21 @@ export function EditorialItinerary({
           }
         }}
         currency={tripCurrency}
+      />
+
+      {/* Discover Nearby Drawer */}
+      <DiscoverDrawer
+        isOpen={discoverDrawerOpen}
+        onClose={() => setDiscoverDrawerOpen(false)}
+        destination={destination}
+        destinationCountry={destinationCountry}
+        archetype={style}
+        tripCurrency={tripCurrency}
+        onAddActivity={(activity) => {
+          if (selectedDayIndex >= 0) {
+            handleAddActivity(selectedDayIndex, activity);
+          }
+        }}
       />
 
       {/* Import Activities Modal */}
@@ -5635,6 +5653,7 @@ interface DayCardProps {
   onDayLock: (dayIndex: number) => void;
   onDayRegenerate: () => void;
   onAddActivity: () => void;
+  onDiscover?: () => void;
   onImportActivities?: () => void;
   onTimeEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
   onActivityEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
@@ -5688,6 +5707,7 @@ function DayCard({
   onDayLock,
   onDayRegenerate,
   onAddActivity,
+  onDiscover,
   onImportActivities,
   onTimeEdit,
   onActivityEdit,
@@ -6035,6 +6055,12 @@ function DayCard({
                           <Plus className="h-4 w-4" />
                           Add
                         </Button>
+                        {onDiscover && (
+                          <Button variant="outline" size="sm" onClick={onDiscover} className="gap-1 bg-background hover:bg-accent/10 hover:border-accent/30">
+                            <Compass className="h-4 w-4" />
+                            Discover
+                          </Button>
+                        )}
                         {onImportActivities && (
                           <Button variant="outline" size="sm" onClick={onImportActivities} className="gap-1 bg-background hover:bg-primary/5 hover:border-primary/30">
                             <ClipboardPaste className="h-4 w-4" />
