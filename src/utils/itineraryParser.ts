@@ -459,11 +459,17 @@ function parseSingleDay(
     return true;
   });
   
+  // CRITICAL: Always use calculated date from tripStartDate + dayIndex when available.
+  // This acts as a post-generation sanitizer — the AI sometimes returns wrong dates
+  // (e.g., wrong month boundaries, gaps, duplicates). Calculated dates are authoritative.
+  const calculatedDate = calculateDayDate(tripStartDate, dayIndex);
+  const aiDate = extractString(dayData, ['date']);
+  
   return {
     // Spread sanitized day fields first to preserve unknown/editorial-specific fields
     ...dayData,
     dayNumber,
-    date: extractString(dayData, ['date']) || calculateDayDate(tripStartDate, dayIndex),
+    date: calculatedDate || aiDate || '',
     title: extractString(dayData, ['title', 'theme']),
     theme: extractString(dayData, ['theme', 'title']),
     description: extractString(dayData, ['description']),
