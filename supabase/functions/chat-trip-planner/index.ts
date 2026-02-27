@@ -62,7 +62,15 @@ MULTI-CITY DETECTION — CRITICAL (FAILURE TO FOLLOW = BROKEN TRIP):
 - Single-city trips: set cities to an empty array [].
 - ALWAYS include BOTH the "destination" summary AND the "cities" array. Example for "London and Paris, 10 days":
   destination: "London, Paris"
-  cities: [{name: "London", country: "United Kingdom", nights: 4}, {name: "Paris", country: "France", nights: 5}]`;
+  cities: [{name: "London", country: "United Kingdom", nights: 4}, {name: "Paris", country: "France", nights: 5}]
+
+SELF-CHECK BEFORE CALLING THE TOOL:
+Before you call extract_trip_details, run this mental checklist:
+1. Did the user mention 2 or more city/destination names at ANY point in the conversation?
+2. If YES → the "cities" array MUST contain ALL of them with nights. If you leave cities empty, those cities are LOST FOREVER.
+3. Does "destination" contain ALL city names comma-separated? "London, Paris" not just "London".
+4. Do the nights in cities[] sum to approximately the total trip duration?
+If any check fails, fix it before calling the tool.`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -236,7 +244,7 @@ serve(async (req) => {
                       },
                     },
                   },
-                  required: ["destination", "startDate", "endDate", "travelers"],
+                  required: ["destination", "startDate", "endDate", "travelers", "cities"],
                 },
               },
             },
