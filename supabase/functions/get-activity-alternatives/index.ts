@@ -302,7 +302,9 @@ Be specific with real place names when possible.`;
                       location: { type: "string", description: "Specific location or area name" },
                       rating: { type: "number", description: "Rating from 4.0 to 5.0" },
                       matchScore: { type: "number", description: "How well it matches the request, 70-99" },
-                      whyRecommended: { type: "string", description: "One sentence explaining why this is recommended" }
+                      whyRecommended: { type: "string", description: "One sentence explaining why this is recommended" },
+                      distanceFromOriginal: { type: "string", description: "Estimated distance from the original activity, e.g. '0.8 km away' or '2.5 km away'" },
+                      walkTimeFromOriginal: { type: "string", description: "Estimated walking time from the original activity, e.g. '10 min walk' or '30 min by transit'" }
                     },
                     required: ["name", "description", "category", "estimatedDuration", "estimatedCost", "location", "rating", "matchScore", "whyRecommended"],
                     additionalProperties: false
