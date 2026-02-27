@@ -2,17 +2,31 @@
  * TripConfirmCard — Displays extracted trip details for user review before generation.
  */
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar, Users, DollarSign, Hotel, Sparkles, CheckCircle2, Pencil, Route } from 'lucide-react';
+import { MapPin, Calendar, Users, DollarSign, Hotel, Sparkles, CheckCircle2, Pencil, Route, TrainFront, Plane, Bus, Car, Ship, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import type { TripDetails } from './TripChatPlanner';
+
+export type InterCityTransportMode = 'flight' | 'train' | 'bus' | 'car' | 'ferry';
+
+const TRANSPORT_OPTIONS: { value: InterCityTransportMode; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { value: 'flight', label: 'Flight', icon: Plane },
+  { value: 'train', label: 'Train', icon: TrainFront },
+  { value: 'bus', label: 'Bus', icon: Bus },
+  { value: 'car', label: 'Car', icon: Car },
+  { value: 'ferry', label: 'Ferry', icon: Ship },
+];
 
 interface TripConfirmCardProps {
   details: TripDetails;
   onConfirm: () => void;
   onEdit: () => void;
   isGenerating?: boolean;
+  transports?: InterCityTransportMode[];
+  onTransportChange?: (index: number, mode: InterCityTransportMode) => void;
 }
 
 function formatDate(dateStr?: string): string {
@@ -24,7 +38,7 @@ function formatDate(dateStr?: string): string {
   }
 }
 
-export function TripConfirmCard({ details, onConfirm, onEdit, isGenerating }: TripConfirmCardProps) {
+export function TripConfirmCard({ details, onConfirm, onEdit, isGenerating, transports, onTransportChange }: TripConfirmCardProps) {
   const isMultiCity = details.cities && details.cities.length > 1;
   const rows: { icon: React.ReactNode; label: string; value: string }[] = [];
 
@@ -83,17 +97,28 @@ export function TripConfirmCard({ details, onConfirm, onEdit, isGenerating }: Tr
 
       {/* Multi-city route breakdown */}
       {isMultiCity && details.cities && (
-        <div className="rounded-lg bg-muted/50 p-2 space-y-1">
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+        <div className="rounded-lg bg-muted/50 p-2 space-y-0">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1 mb-1">
             <Route className="h-3 w-3" />
             City breakdown
           </p>
           {details.cities.map((city, i) => (
-            <div key={i} className="flex items-center gap-1.5 text-xs">
-              <span className="text-muted-foreground">{i + 1}.</span>
-              <span className="text-foreground font-medium">{city.name}</span>
-              {city.country && <span className="text-muted-foreground">({city.country})</span>}
-              <span className="text-muted-foreground ml-auto">{city.nights} night{city.nights !== 1 ? 's' : ''}</span>
+            <div key={i}>
+              <div className="flex items-center gap-1.5 text-xs py-0.5">
+                <span className="text-muted-foreground">{i + 1}.</span>
+                <span className="text-foreground font-medium">{city.name}</span>
+                {city.country && <span className="text-muted-foreground">({city.country})</span>}
+                <span className="text-muted-foreground ml-auto">{city.nights} night{city.nights !== 1 ? 's' : ''}</span>
+              </div>
+              {/* Transport selector between consecutive cities */}
+              {i < details.cities!.length - 1 && (
+                <TransportLegSelector
+                  fromCity={city.name}
+                  toCity={details.cities![i + 1].name}
+                  value={transports?.[i] || 'flight'}
+                  onChange={(mode) => onTransportChange?.(i, mode)}
+                />
+              )}
             </div>
           ))}
         </div>
@@ -140,5 +165,61 @@ export function TripConfirmCard({ details, onConfirm, onEdit, isGenerating }: Tr
         </Button>
       </div>
     </motion.div>
+  );
+}
+
+/** Inline transport mode picker between two cities */
+function TransportLegSelector({
+  fromCity,
+  toCity,
+  value,
+  onChange,
+}: {
+  fromCity: string;
+  toCity: string;
+  value: InterCityTransportMode;
+  onChange: (mode: InterCityTransportMode) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = TRANSPORT_OPTIONS.find(o => o.value === value) || TRANSPORT_OPTIONS[0];
+  const Icon = selected.icon;
+
+  return (
+    <div className="relative pl-4 py-1">
+      <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+        <div className="w-px h-3 bg-border mr-1" />
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border bg-background hover:bg-muted transition-colors text-foreground text-[11px] font-medium"
+        >
+          <Icon className="h-3 w-3" />
+          {selected.label}
+          <ChevronDown className="h-2.5 w-2.5 text-muted-foreground" />
+        </button>
+        <span>to {toCity}</span>
+      </div>
+      {open && (
+        <div className="absolute left-8 top-full z-10 mt-0.5 bg-popover border border-border rounded-md shadow-md py-0.5 min-w-[120px]">
+          {TRANSPORT_OPTIONS.map((opt) => {
+            const OptIcon = opt.icon;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => { onChange(opt.value); setOpen(false); }}
+                className={cn(
+                  'w-full flex items-center gap-1.5 px-2 py-1 text-[11px] hover:bg-muted transition-colors',
+                  opt.value === value ? 'text-primary font-medium' : 'text-foreground'
+                )}
+              >
+                <OptIcon className="h-3 w-3" />
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

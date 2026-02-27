@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import { supabase } from '@/integrations/supabase/client';
 import { sanitizeAIOutput } from '@/utils/textSanitizer';
-import { TripConfirmCard } from './TripConfirmCard';
+import { TripConfirmCard, type InterCityTransportMode } from './TripConfirmCard';
 import { resolveCities, type NormalizedCity } from '@/utils/cityNormalization';
 
 export interface ChatTripCity {
@@ -34,6 +34,8 @@ export interface TripDetails {
   mustDoActivities?: string;
   additionalNotes?: string;
   cities?: ChatTripCity[];
+  /** Inter-city transport modes for each leg (length = cities.length - 1) */
+  cityTransports?: InterCityTransportMode[];
 }
 
 interface ChatMessage {
@@ -80,6 +82,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
   const [isStreaming, setIsStreaming] = useState(false);
   const [extractedDetails, setExtractedDetails] = useState<TripDetails | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [cityTransports, setCityTransports] = useState<InterCityTransportMode[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -218,6 +221,10 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
               setMessages(prev => [...prev, { role: 'assistant', content: assistantContent }]);
             }
             setExtractedDetails(details);
+            // Initialize transport defaults (one per city gap)
+            if (details.cities && details.cities.length > 1) {
+              setCityTransports(new Array(details.cities.length - 1).fill('flight'));
+            }
           }
         } catch (e) {
           console.error('Failed to parse tool call args:', e);
@@ -309,12 +316,21 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
             <TripConfirmCard
               details={extractedDetails}
               isGenerating={isGenerating}
+              transports={cityTransports}
+              onTransportChange={(index, mode) => {
+                setCityTransports(prev => {
+                  const next = [...prev];
+                  next[index] = mode;
+                  return next;
+                });
+              }}
               onConfirm={() => {
                 setIsGenerating(true);
-                onDetailsExtracted(extractedDetails);
+                onDetailsExtracted({ ...extractedDetails, cityTransports });
               }}
               onEdit={() => {
                 setExtractedDetails(null);
+                setCityTransports([]);
                 setMessages(prev => [
                   ...prev,
                   { role: 'assistant', content: "No problem — what would you like to change?" },
