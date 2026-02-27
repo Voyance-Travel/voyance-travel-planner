@@ -2618,6 +2618,39 @@ export type Database = {
         }
         Relationships: []
       }
+      destination_image_cache: {
+        Row: {
+          created_at: string
+          destination_slug: string
+          expires_at: string
+          id: string
+          image_type: string
+          original_url: string
+          storage_path: string
+          storage_url: string
+        }
+        Insert: {
+          created_at?: string
+          destination_slug: string
+          expires_at?: string
+          id?: string
+          image_type?: string
+          original_url: string
+          storage_path: string
+          storage_url: string
+        }
+        Update: {
+          created_at?: string
+          destination_slug?: string
+          expires_at?: string
+          id?: string
+          image_type?: string
+          original_url?: string
+          storage_path?: string
+          storage_url?: string
+        }
+        Relationships: []
+      }
       destinations: {
         Row: {
           airport_codes: Json | null
