@@ -57,7 +57,7 @@ export default function DestinationEntry() {
       (vagueKeywords.some(k => targetDest.toLowerCase().includes(k)) && targetDest.split(/\s+/).length > 3 && !/[A-Z][a-z]{2,}/.test(targetDest.replace(/^[A-Z]/, '')));
     
     if (looksVague) {
-      setErrorMessage("Try entering a specific city or country — like \"Barcelona\", \"Tokyo\", or \"Costa Rica\" — and we'll build a preview for you.");
+      setErrorMessage("Try entering a specific city or country, like \"Barcelona\", \"Tokyo\", or \"Costa Rica\", and we'll build a preview for you.");
       return;
     }
 

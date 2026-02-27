@@ -13,7 +13,7 @@ const STEPS = [
   },
   {
     title: "You start your way.",
-    description: "Pick a city, plan multi-city, chat your dream trip, or paste an existing itinerary — four ways to begin.",
+    description: "Pick a city, plan multi-city, chat your dream trip, or paste an existing itinerary. Four ways to begin.",
     image: step2Image
   },
   {
