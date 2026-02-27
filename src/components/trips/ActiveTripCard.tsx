@@ -207,13 +207,15 @@ export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
 
       {/* Content Section */}
       <div className="p-6 space-y-5">
-        {/* Trip Progress */}
+        {/* Trip Timeline */}
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Trip progress</span>
             <span className="font-medium text-foreground">
+              Day {currentDay} of {totalDays}
+            </span>
+            <span className="text-muted-foreground">
               {daysRemaining === 0 
-                ? 'Last day!' 
+                ? '🎉 Last day!' 
                 : `${daysRemaining} day${daysRemaining > 1 ? 's' : ''} remaining`}
             </span>
           </div>
@@ -280,9 +282,18 @@ export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
           </div>
         </motion.div>
 
-        {/* Quick Rating */}
-        <div className="flex items-center justify-between py-2 border-t border-border/50">
-          <span className="text-sm text-muted-foreground">Rate today</span>
+        {/* Daily Experience Rating */}
+        <div className="py-3 border-t border-border/50 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-sm font-medium text-foreground">How was today?</span>
+              <p className="text-xs text-muted-foreground">
+                {userRating > 0 
+                  ? `You rated today ${userRating}/5 — this helps personalize future trips`
+                  : 'Tap a star to rate your experience today'}
+              </p>
+            </div>
+          </div>
           <div className="flex gap-1">
             {[1, 2, 3, 4, 5].map((rating) => (
               <button

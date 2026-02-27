@@ -221,16 +221,16 @@ export function LiveItineraryView({
           </div>
         </div>
         
-        {/* Trip Progress */}
+        {/* Activities Reviewed */}
         <Card className="w-48">
           <CardContent className="p-3">
             <div className="flex items-center gap-2 mb-2">
               <TrendingUp className="w-4 h-4 text-primary" />
-              <span className="text-xs font-medium">Trip Progress</span>
+              <span className="text-xs font-medium">Activities Reviewed</span>
             </div>
             <Progress value={progressPercent} className="h-2" />
             <p className="text-xs text-muted-foreground mt-1">
-              {feedbackCount} of {totalActivities} reviewed
+              {feedbackCount} of {totalActivities} rated
             </p>
           </CardContent>
         </Card>
