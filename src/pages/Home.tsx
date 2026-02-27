@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
 import Head from '@/components/common/Head';
@@ -14,12 +14,26 @@ import ItineraryShowcase from '@/components/home/ItineraryShowcase';
 import SocialProofSection from '@/components/home/SocialProofSection';
 import FinalCTA from '@/components/home/FinalCTA';
 import FreeTierSection from '@/components/home/FreeTierSection';
+import MobileAccordionSection from '@/components/home/MobileAccordionSection';
+import StickyMobileCTA from '@/components/home/StickyMobileCTA';
 import { OnboardingRedirect } from '@/components/auth/OnboardingRedirect';
 import { OrganizationSchema, WebSiteSchema, TravelAgencySchema } from '@/components/seo/StructuredData';
 import { scrollToTop } from '@/utils/scrollUtils';
 
+const SECTIONS = [
+  { key: 'problem', title: 'The Planning Problem', teaser: 'Why travel planning feels broken for everyone' },
+  { key: 'personalization', title: 'Same City, Different Journey', teaser: 'See how 3 travelers get unique Tokyo itineraries' },
+  { key: 'insight', title: 'Your Travel Identity', teaser: 'You\'re not generic — your trip shouldn\'t be either' },
+  { key: 'archetypes', title: 'Your Travel DNA', teaser: 'Explore 29 unique traveler archetypes' },
+  { key: 'customization', title: 'Full Control, Your Way', teaser: 'Swap, chat, budget — make it yours after generation' },
+  { key: 'itineraries', title: 'Sample Itineraries', teaser: 'Real trip plans with intelligence metrics' },
+  { key: 'social', title: 'What Travelers Say', teaser: 'Beta tester quotes and platform intelligence' },
+  { key: 'pricing', title: 'Pricing & Credits', teaser: '150 free credits monthly — no credit card required' },
+] as const;
+
 export default function Home() {
   const demoRef = useRef<HTMLDivElement>(null);
+  const [openSection, setOpenSection] = useState<string | null>(null);
 
   useEffect(() => {
     scrollToTop();
@@ -32,6 +46,26 @@ export default function Home() {
 
   const handleScrollToDemo = () => {
     demoRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleToggle = (key: string) => {
+    setOpenSection(prev => (prev === key ? null : key));
+  };
+
+  const renderSection = (key: string, children: React.ReactNode) => {
+    const section = SECTIONS.find(s => s.key === key)!;
+    return (
+      <MobileAccordionSection
+        key={key}
+        id={`section-${key}`}
+        title={section.title}
+        teaser={section.teaser}
+        isOpen={openSection === key}
+        onToggle={() => handleToggle(key)}
+      >
+        {children}
+      </MobileAccordionSection>
+    );
   };
 
   return (
@@ -48,38 +82,35 @@ export default function Home() {
       <TopNav />
       
       <div className="bg-background overflow-hidden">
-        {/* Hero - Destination Search + Demo CTA */}
+        {/* Hero — mobile-constrained via CSS */}
         <ValueFirstHero onScrollToDemo={handleScrollToDemo} />
         
+        {/* All content sections — accordion on mobile, normal on desktop */}
+        {renderSection('problem', <TheProblemSection />)}
+        {renderSection('personalization', <PersonalizationProof />)}
+        {renderSection('insight', <TheInsightSection />)}
+        {renderSection('archetypes', <SampleArchetype />)}
+        {renderSection('customization', <CustomizationShowcase />)}
         
+        {renderSection('itineraries',
+          <ScrollTarget id="demo-section" className="scroll-mt-16">
+            <div ref={demoRef}>
+              <ItineraryShowcase />
+            </div>
+          </ScrollTarget>
+        )}
         
-        {/* The Problem - Emotional resonance */}
-        <TheProblemSection />
+        {renderSection('social', <SocialProofSection />)}
+        {renderSection('pricing', <FreeTierSection />)}
         
-        {/* Personalization Proof - Same city, different journeys */}
-        <PersonalizationProof />
-        
-        {/* Sample Archetype - Travel DNA proof */}
-        <SampleArchetype />
-        
-        {/* Customization Showcase - Post-generation power */}
-        <CustomizationShowcase />
-        
-        {/* Featured Journeys - Sample itineraries */}
-        <ScrollTarget id="demo-section" className="scroll-mt-16">
-          <div ref={demoRef}>
-            <ItineraryShowcase />
-          </div>
-        </ScrollTarget>
-        
-        {/* Social Proof - Honest trust signals */}
-        <SocialProofSection />
-        
-        {/* Final CTA - Still scrolling? */}
+        {/* Final CTA — always visible, not in accordion */}
         <ScrollTarget id="cta-section" className="scroll-mt-16">
           <FinalCTA />
         </ScrollTarget>
       </div>
+
+      {/* Sticky bottom CTA on mobile */}
+      <StickyMobileCTA />
       
       <Footer />
     </main>

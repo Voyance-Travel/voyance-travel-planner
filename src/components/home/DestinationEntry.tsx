@@ -243,7 +243,7 @@ export default function DestinationEntry() {
         </motion.p>
       )}
 
-      {/* Side-by-side CTAs: Preview + Find Your Style */}
+      {/* CTAs: Primary "Start Planning" on mobile, both on desktop */}
       {!isGenerating && !destination && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -253,20 +253,20 @@ export default function DestinationEntry() {
         >
           <Button
             size="lg"
-            onClick={() => {
-              const input = document.querySelector<HTMLInputElement>('input[placeholder*="Preview"]');
-              input?.focus();
-            }}
+            asChild
             className="rounded-full bg-white text-primary hover:bg-white/90 font-semibold px-8 min-h-[48px] shadow-lg"
           >
-            Preview a Trip
-            <ArrowRight className="ml-2 h-4 w-4" />
+            <a href="/start">
+              Start Planning
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </a>
           </Button>
+          {/* Secondary CTA hidden on mobile, shown on desktop */}
           <Button
             size="lg"
             variant="outline"
             onClick={() => navigate(ROUTES.QUIZ)}
-            className="rounded-full border-white/40 text-white hover:bg-white/20 font-semibold px-8 min-h-[48px] backdrop-blur-sm"
+            className="hidden sm:inline-flex rounded-full border-white/40 text-white hover:bg-white/20 font-semibold px-8 min-h-[48px] backdrop-blur-sm"
           >
             <Sparkles className="mr-2 h-4 w-4" />
             Find Your Style
