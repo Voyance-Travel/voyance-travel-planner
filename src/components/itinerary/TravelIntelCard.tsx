@@ -2,9 +2,10 @@
  * TravelIntelCard — Dynamic, date-specific destination intelligence
  * 
  * Shows timely, curated intel: events during trip dates, transport advice,
- * booking urgency, weather/packing, insider tips, spending guide.
+ * booking urgency, weather/packing, insider tips, spending guide,
+ * local customs/etiquette, and neighborhood guide.
  * Completely distinct from Need to Know (which covers static basics like
- * visa, adapters, emergency numbers, phrases).
+ * visa, adapters, emergency numbers, language phrases).
  */
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -14,7 +15,8 @@ import {
   AlertTriangle, ShoppingBag, Utensils, Ban, CheckCircle2,
   PiggyBank, EyeOff, GraduationCap, CreditCard, Brain,
   Thermometer, CloudRain, Check, X, Zap, Music, Palette,
-  Trophy, Theater, Gift, Pin,
+  Trophy, Theater, Gift, Pin, Coins, HandCoins,
+  ThumbsUp, ThumbsDown, Building2, Coffee, Navigation,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -41,6 +43,8 @@ interface TravelIntelTransport {
 
 interface TravelIntelMoney {
   paymentTip: string;
+  currencyInfo?: string;
+  tippingCustom?: string;
   mealCosts: { budget: string; midRange: string; fineDining: string };
   moneyTrap: string;
   savingHack: string;
@@ -65,12 +69,28 @@ interface InsiderTip {
   category: string;
 }
 
+interface CustomsItem {
+  do: string;
+  dont: string;
+  context: string;
+}
+
+interface NeighborhoodGuide {
+  stayingNear: string;
+  vibe: string;
+  walkingDistance: string[];
+  localGem: string;
+  avoidNearby?: string | null;
+}
+
 export interface TravelIntelData {
   eventsAndHappenings: TravelIntelEvent[];
   gettingAround: TravelIntelTransport;
   moneyAndSpending: TravelIntelMoney;
   bookNowVsWalkUp: { bookNow: BookingItem[]; walkUpFine: BookingItem[] };
   weatherAndPacking: TravelIntelWeather;
+  localCustomsAndEtiquette?: CustomsItem[];
+  neighborhoodGuide?: NeighborhoodGuide;
   insiderTips: InsiderTip[];
   archetypeAdvice?: string;
 }
@@ -83,6 +103,7 @@ interface TravelIntelCardProps {
   travelers?: number;
   archetype?: string;
   interests?: string[];
+  hotelArea?: string;
   className?: string;
   defaultExpanded?: boolean;
 }
@@ -109,6 +130,7 @@ export default function TravelIntelCard({
   travelers,
   archetype,
   interests,
+  hotelArea,
   className,
   defaultExpanded = false,
 }: TravelIntelCardProps) {
@@ -127,7 +149,7 @@ export default function TravelIntelCard({
 
       try {
         const { data, error: fnError } = await supabase.functions.invoke('generate-travel-intel', {
-          body: { destination: city, country, startDate, endDate, travelers, archetype, interests },
+          body: { destination: city, country, startDate, endDate, travelers, archetype, interests, hotelArea },
         });
 
         if (fnError) throw fnError;
@@ -147,7 +169,7 @@ export default function TravelIntelCard({
     };
 
     fetchIntel();
-  }, [city, country, startDate, endDate, travelers, archetype, interests]);
+  }, [city, country, startDate, endDate, travelers, archetype, interests, hotelArea]);
 
   // ── Loading / Error states ──
   if (isLoading) {
@@ -253,11 +275,17 @@ export default function TravelIntelCard({
                 </Section>
               )}
 
-              {/* ── Money & Spending ── */}
+              {/* ── Money & Spending (now includes currency + tipping) ── */}
               {intel.moneyAndSpending && (
                 <Section icon={Wallet} title="Money & Spending" iconColor="text-emerald-500">
                   <div className="space-y-2">
+                    {intel.moneyAndSpending.currencyInfo && (
+                      <TipLine icon={Coins} label={intel.moneyAndSpending.currencyInfo} iconColor="text-amber-500" />
+                    )}
                     <TipLine icon={CreditCard} label={intel.moneyAndSpending.paymentTip} iconColor="text-blue-500" />
+                    {intel.moneyAndSpending.tippingCustom && (
+                      <TipLine icon={HandCoins} label={intel.moneyAndSpending.tippingCustom} iconColor="text-emerald-600" />
+                    )}
                     <div className="grid grid-cols-3 gap-2 py-1">
                       <MealCostPill label="Budget" cost={intel.moneyAndSpending.mealCosts.budget} />
                       <MealCostPill label="Mid-range" cost={intel.moneyAndSpending.mealCosts.midRange} />
@@ -321,6 +349,63 @@ export default function TravelIntelCard({
                       <p className="text-[11px] text-muted-foreground mt-1">
                         <X className="w-3 h-3 inline-block mr-0.5 -mt-0.5 text-destructive" />Leave at home: {intel.weatherAndPacking.dontPack}
                       </p>
+                    )}
+                  </div>
+                </Section>
+              )}
+
+              {/* ── Local Customs & Etiquette ── */}
+              {intel.localCustomsAndEtiquette && intel.localCustomsAndEtiquette.length > 0 && (
+                <Section icon={GraduationCap} title="Local Customs & Etiquette" iconColor="text-violet-500">
+                  <div className="space-y-2.5">
+                    {intel.localCustomsAndEtiquette.map((item, i) => (
+                      <div key={i} className="space-y-1 p-2.5 rounded-lg bg-secondary/30 border border-border/30">
+                        <div className="flex items-start gap-2 text-xs">
+                          <ThumbsUp className="w-3 h-3 text-green-600 shrink-0 mt-0.5" />
+                          <span className="text-foreground font-medium">{item.do}</span>
+                        </div>
+                        <div className="flex items-start gap-2 text-xs">
+                          <ThumbsDown className="w-3 h-3 text-destructive shrink-0 mt-0.5" />
+                          <span className="text-muted-foreground">{item.dont}</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground pl-5 italic">{item.context}</p>
+                      </div>
+                    ))}
+                  </div>
+                </Section>
+              )}
+
+              {/* ── Neighborhood Guide ── */}
+              {intel.neighborhoodGuide && (
+                <Section icon={Building2} title={`Your Area: ${intel.neighborhoodGuide.stayingNear}`} iconColor="text-teal-500">
+                  <div className="space-y-2">
+                    <p className="text-xs text-foreground italic">{intel.neighborhoodGuide.vibe}</p>
+                    
+                    {intel.neighborhoodGuide.walkingDistance?.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+                          <Navigation className="w-3 h-3" /> Walking distance
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {intel.neighborhoodGuide.walkingDistance.map((place, i) => (
+                            <Badge key={i} variant="secondary" className="text-[10px] font-normal">{place}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {intel.neighborhoodGuide.localGem && (
+                      <div className="flex items-start gap-2 text-xs mt-1">
+                        <Coffee className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                        <span className="text-foreground"><span className="font-medium">Local gem:</span> {intel.neighborhoodGuide.localGem}</span>
+                      </div>
+                    )}
+
+                    {intel.neighborhoodGuide.avoidNearby && (
+                      <div className="flex items-start gap-2 text-xs mt-1">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                        <span className="text-muted-foreground">{intel.neighborhoodGuide.avoidNearby}</span>
+                      </div>
                     )}
                   </div>
                 </Section>
