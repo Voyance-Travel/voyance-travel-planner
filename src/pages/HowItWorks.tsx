@@ -228,7 +228,7 @@ export default function HowItWorks() {
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
-            className="grid grid-cols-[1fr_1fr] md:grid-cols-2 gap-4 md:gap-16 items-center mb-12 md:mb-32"
+            className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 items-center mb-16 md:mb-32"
           >
             <div>
               <span className="text-4xl md:text-8xl font-serif font-bold text-primary/10">01</span>
@@ -263,7 +263,7 @@ export default function HowItWorks() {
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
-            className="grid grid-cols-[1fr_1fr] md:grid-cols-2 gap-4 md:gap-16 items-start mb-12 md:mb-32"
+            className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 items-start mb-16 md:mb-32"
           >
             <div className="relative md:order-1 order-2">
               <div className="absolute -inset-2 md:-inset-4 bg-gradient-to-br from-accent/20 to-primary/20 rounded-2xl md:rounded-3xl blur-xl md:blur-2xl" />
@@ -311,7 +311,7 @@ export default function HowItWorks() {
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
-            className="grid grid-cols-[1fr_1fr] md:grid-cols-2 gap-4 md:gap-16 items-center"
+            className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 items-center"
           >
             <div>
               <span className="text-4xl md:text-8xl font-serif font-bold text-primary/10">03</span>
