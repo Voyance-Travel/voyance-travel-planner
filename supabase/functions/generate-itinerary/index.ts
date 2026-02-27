@@ -245,6 +245,43 @@ function sanitizeDateString(raw: unknown, fallback?: string): string {
  * Recursively walk a parsed AI response object and sanitize any field whose
  * key contains "date" (case-insensitive) so it strictly matches YYYY-MM-DD.
  */
+/**
+ * Strip isOption/optionGroup fields from AI response and deduplicate
+ * activities that share an optionGroup (keep only the first per group).
+ * This is a safety net — the prompt and schema already forbid these fields,
+ * but if the AI leaks them we strip them here before DB save or render.
+ */
+function sanitizeOptionFields(obj: any): any {
+  if (!obj || typeof obj !== 'object') return obj;
+
+  // Handle the top-level day object with an activities array
+  if (Array.isArray(obj.activities)) {
+    const seenGroups = new Set<string>();
+    obj.activities = obj.activities.filter((act: any) => {
+      if (act && typeof act === 'object') {
+        // If it has an optionGroup, keep only the first in each group
+        if (act.optionGroup) {
+          if (seenGroups.has(act.optionGroup)) return false;
+          seenGroups.add(act.optionGroup);
+        }
+        // Strip the fields
+        delete act.isOption;
+        delete act.optionGroup;
+      }
+      return true;
+    });
+  }
+
+  // Also handle arrays of days (full itinerary responses)
+  if (Array.isArray(obj.days)) {
+    for (const day of obj.days) {
+      sanitizeOptionFields(day);
+    }
+  }
+
+  return obj;
+}
+
 function sanitizeDateFields(obj: any): any {
   if (obj === null || obj === undefined) return obj;
   if (Array.isArray(obj)) return obj.map(sanitizeDateFields);
@@ -4665,12 +4702,52 @@ For EVERY activity you generate, you MUST include ALL of these intelligence fiel
 DO NOT leave these fields empty or omit them. They are the core intelligence layer.
 
 ${'='.repeat(70)}
-🎯 CURATED PICKS — ONE BEST CHOICE PER SLOT
+🎯 CURATED PICKS — ONE BEST CHOICE PER SLOT (CRITICAL)
 ${'='.repeat(70)}
-For EVERY time slot (dining, activity, etc.), select the SINGLE BEST option based on the traveler's archetype, preferences, and trip context.
-Do NOT generate multiple alternatives or choice pairs. Do NOT use isOption or optionGroup fields.
-The traveler is paying for an AI-curated plan — deliver ONE confident recommendation per slot.
+CRITICAL: Generate exactly ONE activity or restaurant per time slot. Do NOT generate multiple options, alternatives, or choices for any slot. Do NOT include isOption, optionGroup, or any selection/choice mechanism in the output. Every slot must have a single, definitive, curated recommendation based on the traveler's DNA. You are a personal travel curator delivering a finished plan — not a quiz with multiple choice answers.
 If the traveler wants to swap an activity later, they can use the swap feature.
+
+${'='.repeat(70)}
+⏱️ BUFFER TIME — MANDATORY REALISTIC GAPS (CRITICAL)
+${'='.repeat(70)}
+REQUIRED — BUFFER TIME: Include realistic travel and transition time between every activity. NEVER schedule activities back-to-back with zero gap. Minimum gaps:
+- 5 minutes between activities at the same venue/location
+- 10-15 minutes between nearby activities within walking distance
+- 15-20 minutes for restaurant arrivals (be seated, review menu, order)
+- 20-30 minutes for hotel check-in or check-out
+- 30-60 minutes for airport-related activities (security, customs, boarding)
+- Include actual transit time between locations not within walking distance
+Example: If an activity ends at 14:00 and the next location is a 20-minute taxi ride away, schedule the next activity at 14:30 (20 min transit + 10 min buffer), NOT at 14:00 or 14:20.
+
+${'='.repeat(70)}
+🏛️ OPERATING HOURS — HARD CONSTRAINT
+${'='.repeat(70)}
+REQUIRED — OPERATING HOURS: Never schedule an activity before its opening time or after its closing time. If a museum opens at 10:00, the earliest arrival is 10:00 — not 09:45, not 09:30. If a restaurant's last seating is 21:00, do not schedule a 20:45 dinner that would run past closing. When exact hours are unknown, use conservative defaults: most attractions 09:30-17:00, restaurants lunch 11:30-14:00 and dinner 18:00-21:30, outdoor activities sunrise to sunset.
+
+${'='.repeat(70)}
+🏷️ ARCHETYPE NAMING — EXACT MATCH ONLY
+${'='.repeat(70)}
+IMPORTANT — ARCHETYPE NAMES: When referring to the traveler's archetype or style, use ONLY the exact archetype name from their Travel DNA profile. Do not invent, modify, or embellish archetype names. If the profile says 'Luxury Seeker', write 'Luxury Seeker' — never 'Luxury Luminary', 'Luxury Connoisseur', 'Luxury Maven', or any creative variation. The archetype name must match exactly what exists in the system.
+
+${'='.repeat(70)}
+⚖️ ARCHETYPE BALANCE — SEASONING NOT THE MEAL
+${'='.repeat(70)}
+IMPORTANT — ARCHETYPE BALANCE: The traveler's archetype influences 30-40% of the itinerary. It is seasoning, NOT the entire meal. Every day must include a MIX of archetype-aligned and universally enjoyable activities.
+
+Rules:
+- Luxury Seeker: Quality experiences, but NOT helicopters, limos, VIP everything, or $500 dinners at every meal. A nice hotel, a great restaurant for dinner, and then they walk through a market, visit a free park, grab street food for lunch. Total trip budget ceiling: ~$4,000 for 15 days.
+- Adventure Enthusiast: One adventurous activity per day MAX. They also eat at cafés, visit museums, and relax. Not skydiving → bungee jumping → white water rafting in one day.
+- Culture Scholar: One cultural deep-dive per day, not four back-to-back museums. They also eat local food, explore neighborhoods, shop.
+- Budget Traveler: $200-300 total trip budget. Street food, hostels, free attractions, public transit. Never suggest expensive restaurants or paid experiences unless free alternatives don't exist.
+- Mid-Range: ~$1,000 total. Mix of affordable and moderate. 3-star hotels, some paid attractions, mostly casual dining with one nice dinner.
+- Foodie: Food-focused doesn't mean every activity is eating. One signature food experience per day + regular sightseeing.
+
+The goal: if you removed the archetype label, the itinerary should still read like a great, varied trip that anyone would enjoy.
+
+${'='.repeat(70)}
+✍️ OUTPUT QUALITY — CLEAN TEXT (CRITICAL)
+${'='.repeat(70)}
+OUTPUT QUALITY: All text must be clean, professional, correctly spelled English. Double-check every word. No garbled characters, no corrupted fragments, no mixed languages (unless providing a local place name in parentheses). No Chinese, Japanese, or other non-Latin characters in date fields or English text sections. No leaked schema field names (e.g., "duration:4" or "practicalTips;|") in user-facing text.
 
 ${'='.repeat(70)}
 📋 ACCOMMODATION NOTES & PRACTICAL TIPS — REQUIRED (Day 1 only)
@@ -4864,8 +4941,6 @@ Generate activities for this day following ALL constraints above.`;
                           bestTime: { type: "string", description: "If hasTimingHack=true, explain why this time slot is optimal (e.g. '9am avoids the 11am-3pm crowds')" },
                           crowdLevel: { type: "string", enum: ["low", "moderate", "high"], description: "Expected crowd level at the scheduled time" },
                           voyanceInsight: { type: "string", description: "A unique Voyance-only insight about this place that typical travel guides miss" },
-                          isOption: { type: "boolean", description: "true if this is one of multiple either/or choices for a time slot" },
-                          optionGroup: { type: "string", description: "Shared ID for either/or options at the same time slot, e.g. 'dinner-d1', 'lunch-d2'" },
                           personalization: {
                             type: "object",
                             properties: {
@@ -4993,7 +5068,7 @@ Generate activities for this day following ALL constraints above.`;
       let generatedDay: StrictDay;
       if (toolCall?.function?.arguments) {
         // Standard tool call response
-        generatedDay = sanitizeDateFields(JSON.parse(toolCall.function.arguments)) as StrictDay;
+        generatedDay = sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))) as StrictDay;
       } else if (message?.content) {
         // Fallback: AI returned content instead of tool call
         console.log("[Stage 2] AI returned content instead of tool_call, attempting to parse...");
@@ -5001,7 +5076,7 @@ Generate activities for this day following ALL constraints above.`;
           const contentStr = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
           const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
-            generatedDay = sanitizeDateFields(JSON.parse(jsonMatch[0])) as StrictDay;
+            generatedDay = sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))) as StrictDay;
           } else {
             console.error("[Stage 2] No JSON found in content:", contentStr.substring(0, 500));
             throw new Error("Invalid AI response format - no JSON in content");
@@ -9303,10 +9378,23 @@ ${lockedActivities.length > 0 ? '- DO NOT generate activities for locked time sl
 ${collaboratorAttributionPrompt}
 ${voyancePicksPrompt}
 
-CURATED PICKS — ONE BEST CHOICE PER SLOT:
-For each time slot, select the SINGLE BEST option based on the traveler's archetype and preferences.
-Do NOT generate multiple alternatives or use isOption/optionGroup. Deliver ONE confident pick per slot.
-Also include "accommodationNotes" (2-3 tips) and "practicalTips" (3-4 tips) arrays in the response.
+CURATED PICKS — ONE BEST CHOICE PER SLOT (CRITICAL):
+CRITICAL: Generate exactly ONE activity or restaurant per time slot. Do NOT generate multiple options, alternatives, or choices for any slot. Do NOT include isOption, optionGroup, or any selection/choice mechanism in the output. Every slot must have a single, definitive, curated recommendation. You are delivering a finished plan — not a quiz.
+
+BUFFER TIME — MANDATORY:
+Include realistic travel and transition time between every activity. NEVER schedule back-to-back with zero gap. Minimum gaps: 5 min same venue, 10-15 min walking distance, 15-20 min restaurant arrival, 20-30 min hotel check-in/out, 30-60 min airport. Include actual transit time for non-walking distances.
+
+OPERATING HOURS — HARD CONSTRAINT:
+Never schedule an activity before its opening time or after its closing time. Use conservative defaults when unknown: attractions 09:30-17:00, restaurants lunch 11:30-14:00 and dinner 18:00-21:30, outdoor activities sunrise to sunset.
+
+ARCHETYPE NAMES — EXACT MATCH ONLY:
+Use ONLY the exact archetype name from the traveler's DNA profile. Never invent variations like 'Luxury Luminary' or 'Culture Connoisseur'.
+
+ARCHETYPE BALANCE:
+Archetype influences 30-40% of activities. The rest must be universally enjoyable. Luxury ≠ $500 everything. Adventure ≠ 3 extreme sports per day. Food ≠ eating all day.
+
+OUTPUT QUALITY:
+All text must be clean, correctly spelled English. No garbled characters, no non-Latin script, no leaked schema field names.
 `;
 
       const isFullDay = !isFirstDay && !isLastDay;
@@ -9421,8 +9509,6 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                             bestTime: { type: "string", description: "If hasTimingHack=true, explain why this time is optimal" },
                             crowdLevel: { type: "string", enum: ["low", "moderate", "high"], description: "Expected crowd level at the scheduled time" },
                             voyanceInsight: { type: "string", description: "A unique Voyance-only insight about this place" },
-                            isOption: { type: "boolean", description: "true if this is one of multiple either/or choices for a time slot" },
-                            optionGroup: { type: "string", description: "Shared ID for either/or options at the same time slot, e.g. 'dinner-d1', 'lunch-d2'" },
                             personalization: {
                               type: "object",
                               properties: {
@@ -9514,7 +9600,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         let generatedDay;
         if (toolCall?.function?.arguments) {
           // Standard tool call response
-          generatedDay = sanitizeDateFields(JSON.parse(toolCall.function.arguments));
+          generatedDay = sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments)));
         } else if (message?.content) {
           // Fallback: AI returned content instead of tool call
           console.log("[generate-day] AI returned content instead of tool_call, attempting to parse...");
@@ -9523,7 +9609,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             const contentStr = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
             const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
-              generatedDay = sanitizeDateFields(JSON.parse(jsonMatch[0]));
+              generatedDay = sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0])));
             } else {
               console.error("[generate-day] No JSON found in content:", contentStr.substring(0, 500));
               throw new Error("Invalid AI response format - no JSON in content");
