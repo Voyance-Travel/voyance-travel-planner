@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { addDays as addDaysUtil } from 'date-fns';
 import MultiCitySelector from '@/components/planner/MultiCitySelector';
+import { InterCityTransportComparison, type CityTransition } from '@/components/planner/InterCityTransportComparison';
+import type { TransportOption } from '@/components/itinerary/EditorialItinerary';
 import { TripDestination, InterCityTransport, calculateTotalNights, generateDestinationDates } from '@/types/multiCity';
 import { format, addDays, isBefore, startOfToday, startOfMonth, differenceInDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
@@ -901,6 +903,10 @@ function FlightHotelStep({
   onSubmit,
   onBack,
   isSubmitting,
+  isMultiCity,
+  multiCityDestinations,
+  transportSelections,
+  onTransportSelect,
 }: {
   destination: string;
   startDate: string;
@@ -925,6 +931,10 @@ function FlightHotelStep({
   onSubmit: () => void;
   onBack: () => void;
   isSubmitting: boolean;
+  isMultiCity?: boolean;
+  multiCityDestinations?: TripDestination[];
+  transportSelections?: Record<number, { optionId: string; option: TransportOption }>;
+  onTransportSelect?: (transitionIndex: number, option: TransportOption) => void;
 }) {
   const navigate = useNavigate();
   const [showFlightSection, setShowFlightSection] = useState(false);
@@ -1279,6 +1289,27 @@ function FlightHotelStep({
           )}
         </div>
 
+        {/* Inter-City Transport Comparison — only for multi-city trips */}
+        {isMultiCity && multiCityDestinations && multiCityDestinations.length >= 2 && (
+          <div className="space-y-4 pt-4 border-t border-border">
+            <InterCityTransportComparison
+              transitions={multiCityDestinations.slice(0, -1).map((dest, i) => ({
+                fromCity: dest.city,
+                fromCountry: dest.country,
+                toCity: multiCityDestinations[i + 1].city,
+                toCountry: multiCityDestinations[i + 1].country,
+                index: i,
+              }))}
+              travelers={travelers}
+              travelDate={startDate}
+              onSelect={(idx, option) => onTransportSelect?.(idx, option)}
+              selections={Object.fromEntries(
+                Object.entries(transportSelections || {}).map(([k, v]) => [k, v.optionId])
+              )}
+            />
+          </div>
+        )}
+
         {/* Personalization Section */}
         <div className="space-y-4 pt-4 border-t border-border">
           <div className="flex items-center gap-2">
@@ -1536,6 +1567,12 @@ export default function Start() {
   const [multiCityTransports, setMultiCityTransports] = useState<InterCityTransport[]>(
     plannerState.basics.interCityTransports || []
   );
+  const [transportSelections, setTransportSelections] = useState<Record<number, { optionId: string; option: TransportOption }>>({});
+  const handleTransportSelect = (idx: number, option: TransportOption) => {
+    setTransportSelections(prev => ({ ...prev, [idx]: { optionId: option.id, option } }));
+    // Also update the transport type in multiCityTransports for persistence
+    setMultiCityTransports(prev => prev.map((t, i) => i === idx ? { ...t, type: option.mode as InterCityTransport['type'], estimatedPrice: option.cost.total, currency: option.cost.currency } : t));
+  };
   
   // Flight state
   const [outboundFlight, setOutboundFlight] = useState<ManualFlightEntry>({
@@ -1772,8 +1809,28 @@ export default function Start() {
             ? multiCityTransports[i - 1].type
             : null,
           transport_details: i > 0 && multiCityTransports[i - 1]
-            ? { fromCity: multiCityTransports[i - 1].fromCity, toCity: multiCityTransports[i - 1].toCity }
+            ? {
+                fromCity: multiCityTransports[i - 1].fromCity,
+                toCity: multiCityTransports[i - 1].toCity,
+                ...(transportSelections[i - 1]?.option ? {
+                  operator: transportSelections[i - 1].option.operator,
+                  mode: transportSelections[i - 1].option.mode,
+                  inTransitDuration: transportSelections[i - 1].option.inTransitDuration,
+                  doorToDoorDuration: transportSelections[i - 1].option.doorToDoorDuration,
+                  departureStation: transportSelections[i - 1].option.departure?.point,
+                  arrivalStation: transportSelections[i - 1].option.arrival?.point,
+                  costPerPerson: transportSelections[i - 1].option.cost?.perPerson,
+                  totalCost: transportSelections[i - 1].option.cost?.total,
+                  currency: transportSelections[i - 1].option.cost?.currency,
+                } : {}),
+              }
             : null,
+          transport_cost_cents: i > 0 && transportSelections[i - 1]?.option
+            ? Math.round((transportSelections[i - 1].option.cost?.total || 0) * 100)
+            : 0,
+          transport_currency: i > 0 && transportSelections[i - 1]?.option?.cost?.currency
+            ? transportSelections[i - 1].option.cost.currency
+            : 'USD',
           transition_day_mode: i > 0 && multiCityTransports[i - 1]
             ? multiCityTransports[i - 1].transitionDay || 'half_and_half'
             : null,
@@ -2093,6 +2150,10 @@ export default function Start() {
                     onSubmit={handleSubmit}
                     onBack={() => setCurrentStep(1)}
                     isSubmitting={isSubmitting}
+                    isMultiCity={isMultiCity}
+                    multiCityDestinations={multiCityDestinations}
+                    transportSelections={transportSelections}
+                    onTransportSelect={handleTransportSelect}
                   />
                 )}
               </AnimatePresence>
