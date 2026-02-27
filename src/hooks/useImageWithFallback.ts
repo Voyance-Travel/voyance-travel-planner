@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
-import { normalizeUnsplashUrl, PLACEHOLDER_TRAVEL_SRC } from '@/utils/unsplash';
+import { normalizeUnsplashUrl, PLACEHOLDER_TRAVEL_SRC, toSiteImageUrlFromPhotoId } from '@/utils/unsplash';
 
 // Generic fallback images for when all else fails
 const GENERIC_FALLBACKS = [
-  'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1200&h=800&fit=crop&auto=format&q=80', // Travel bags
-  'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1200&h=800&fit=crop&auto=format&q=80', // Lake mountains
-  'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200&h=800&fit=crop&auto=format&q=80', // Beach
-  'https://images.unsplash.com/photo-1530789253388-582c481c54b0?w=1200&h=800&fit=crop&auto=format&q=80', // Travel map
-  'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200&h=800&fit=crop&auto=format&q=80', // Mountain valley
+  toSiteImageUrlFromPhotoId('photo-1488646953014-85cb44e25828'), // Travel bags
+  toSiteImageUrlFromPhotoId('photo-1476514525535-07fb3b4ae5f1'), // Lake mountains
+  toSiteImageUrlFromPhotoId('photo-1507525428034-b723cf961d3e'), // Beach
+  toSiteImageUrlFromPhotoId('photo-1530789253388-582c481c54b0'), // Travel map
+  toSiteImageUrlFromPhotoId('photo-1469474968028-56623f02e42e'), // Mountain valley
 ];
 
 // Local storage key for tracking failed images

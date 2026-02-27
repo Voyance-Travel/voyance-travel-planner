@@ -1,7 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
-import { isUnsplashUrl, normalizeUnsplashUrl, PLACEHOLDER_TRAVEL_SRC } from "./utils/unsplash";
+import { normalizeUnsplashUrl, PLACEHOLDER_TRAVEL_SRC } from "./utils/unsplash";
 
 function installUnsplashSrcNormalizer() {
   const descriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src");
@@ -22,7 +22,7 @@ function installGlobalUnsplashGuard() {
   const patchImage = (img: HTMLImageElement) => {
     const originalSrc = img.getAttribute("src");
 
-    if (originalSrc && isUnsplashUrl(originalSrc)) {
+    if (originalSrc) {
       const normalized = normalizeUnsplashUrl(originalSrc);
       if (normalized !== originalSrc) {
         img.setAttribute("src", normalized);
@@ -33,8 +33,7 @@ function installGlobalUnsplashGuard() {
     img.dataset.safeImageBound = "true";
 
     img.addEventListener("error", () => {
-      const current = img.currentSrc || img.src;
-      if (!isUnsplashUrl(current) || img.dataset.fallbackApplied === "true") return;
+      if (img.dataset.fallbackApplied === "true") return;
       img.dataset.fallbackApplied = "true";
       img.src = PLACEHOLDER_TRAVEL_SRC;
     });
