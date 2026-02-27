@@ -1111,7 +1111,7 @@ export function EditorialItinerary({
     }
   }, [daysFingerprint, days, onDaysChange]);
 
-  const [addActivityModal, setAddActivityModal] = useState<{ dayIndex: number } | null>(null);
+  const [addActivityModal, setAddActivityModal] = useState<{ dayIndex: number; afterIndex?: number } | null>(null);
   const [importModal, setImportModal] = useState<{ dayIndex: number } | null>(null);
   const [editActivityModal, setEditActivityModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
   const [timeEditModal, setTimeEditModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
@@ -3507,7 +3507,7 @@ export function EditorialItinerary({
                           onActivityRemove={handleActivityRemove}
                           onDayLock={handleDayLock}
                           onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
-                          onAddActivity={() => setAddActivityModal({ dayIndex: selectedDayIndex })}
+                          onAddActivity={(afterIndex?: number) => setAddActivityModal({ dayIndex: selectedDayIndex, afterIndex })}
                           onDiscover={() => setDiscoverDrawerOpen(true)}
                           onImportActivities={creationSource === 'manual_paste' ? () => setImportModal({ dayIndex: selectedDayIndex }) : undefined}
                           onTimeEdit={(dIdx, aIdx, activity) => setTimeEditModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
@@ -4196,6 +4196,24 @@ export function EditorialItinerary({
         onAdd={(activity) => addActivityModal && handleAddActivity(addActivityModal.dayIndex, activity)}
         currency={tripCurrency}
         destination={destination}
+        prevActivity={(() => {
+          if (!addActivityModal) return null;
+          const dayActivities = days[addActivityModal.dayIndex]?.activities;
+          if (!dayActivities) return null;
+          const insertIdx = addActivityModal.afterIndex ?? dayActivities.length - 1;
+          const prev = dayActivities[insertIdx];
+          if (!prev) return null;
+          return { title: prev.title || '', startTime: prev.startTime || prev.time, endTime: prev.endTime, duration: prev.duration, location: prev.location };
+        })()}
+        nextActivity={(() => {
+          if (!addActivityModal) return null;
+          const dayActivities = days[addActivityModal.dayIndex]?.activities;
+          if (!dayActivities) return null;
+          const insertIdx = addActivityModal.afterIndex ?? dayActivities.length - 1;
+          const next = dayActivities[insertIdx + 1];
+          if (!next) return null;
+          return { title: next.title || '', startTime: next.startTime || next.time, endTime: next.endTime, duration: next.duration, location: next.location };
+        })()}
       />
 
       {/* Edit Activity Modal */}
@@ -5848,7 +5866,7 @@ interface DayCardProps {
   onActivityReorder?: (activities: EditorialActivity[]) => void; // Drag-and-drop reorder
   onDayLock: (dayIndex: number) => void;
   onDayRegenerate: () => void;
-  onAddActivity: () => void;
+  onAddActivity: (afterIndex?: number) => void;
   onDiscover?: () => void;
   onImportActivities?: () => void;
   onTimeEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
@@ -6220,7 +6238,7 @@ function DayCard({
                     {isEditable && !isLastActivity && (
                       <div className="flex justify-center py-1 opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity">
                         <button
-                          onClick={() => onAddActivity()}
+                          onClick={() => onAddActivity(activityIndex)}
                           className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors px-3 py-1 rounded-full border border-dashed border-border hover:border-primary/40 bg-background"
                         >
                           <Plus className="h-3 w-3" />
@@ -6282,7 +6300,7 @@ function DayCard({
                   <div className="flex items-center gap-4">
                     {isEditable && (
                       <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={onAddActivity} className="gap-1 bg-background hover:bg-primary/5 hover:border-primary/30">
+                        <Button variant="outline" size="sm" onClick={() => onAddActivity()} className="gap-1 bg-background hover:bg-primary/5 hover:border-primary/30">
                           <Plus className="h-4 w-4" />
                           Add
                         </Button>

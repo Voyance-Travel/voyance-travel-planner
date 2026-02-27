@@ -1,6 +1,7 @@
 /**
  * AddActivityModal — Enhanced with hybrid address search
- * Nominatim (free) first, Google Places fallback
+ * Nominatim (free) first, Google Places fallback.
+ * Shows transit estimates from/to surrounding activities.
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
@@ -11,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Search, MapPin, Loader2, Globe } from 'lucide-react';
 import { useAddressSearch, type AddressResult } from '@/hooks/useAddressSearch';
+import { TransitPreview } from './TransitPreview';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -26,15 +28,27 @@ interface EditorialActivity {
   [key: string]: any;
 }
 
+interface SurroundingActivity {
+  title: string;
+  startTime?: string;
+  endTime?: string;
+  duration?: string;
+  location?: { lat?: number; lng?: number; address?: string; name?: string };
+}
+
 interface AddActivityModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAdd: (activity: Partial<EditorialActivity>) => void;
   currency?: string;
   destination?: string;
+  /** Activity before insertion point */
+  prevActivity?: SurroundingActivity | null;
+  /** Activity after insertion point */
+  nextActivity?: SurroundingActivity | null;
 }
 
-export function AddActivityModal({ isOpen, onClose, onAdd, currency = 'USD', destination }: AddActivityModalProps) {
+export function AddActivityModal({ isOpen, onClose, onAdd, currency = 'USD', destination, prevActivity, nextActivity }: AddActivityModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<string>('activity');
@@ -126,6 +140,15 @@ export function AddActivityModal({ isOpen, onClose, onAdd, currency = 'USD', des
     clearResults();
   };
 
+  // Build the current location for transit preview
+  const newLocation = locationCoords.lat
+    ? { lat: locationCoords.lat, lng: locationCoords.lng, address: locationAddress, name: locationName }
+    : locationAddress
+      ? { address: locationAddress, name: locationName }
+      : locationName
+        ? { name: locationName }
+        : undefined;
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-lg">
@@ -215,6 +238,17 @@ export function AddActivityModal({ isOpen, onClose, onAdd, currency = 'USD', des
               </>
             )}
           </div>
+
+          {/* Transit Preview — shown after a place is selected */}
+          {newLocation && (prevActivity || nextActivity) && (
+            <TransitPreview
+              newLocation={newLocation}
+              newStartTime={startTime}
+              newEndTime={endTime}
+              prevActivity={prevActivity}
+              nextActivity={nextActivity}
+            />
+          )}
 
           {/* Title */}
           <div>
