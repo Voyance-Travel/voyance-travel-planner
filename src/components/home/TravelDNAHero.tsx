@@ -20,6 +20,7 @@ export default function TravelDNAHero() {
           src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=1920&q=80"
           alt="Scenic mountain road at sunset"
           className="w-full h-full object-cover"
+          onError={(e) => { const t = e.currentTarget; if (!t.dataset.fallbackApplied) { t.dataset.fallbackApplied = 'true'; t.style.display = 'none'; } }}
         />
         {/* Editorial gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/35 to-black/60" />

@@ -1,26 +1,30 @@
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { handleImageError } from '@/utils/imageFallback';
+import step1Image from '@/assets/howitworks-quiz.jpg';
+import step2Image from '@/assets/howitworks-step2.jpg';
+import step3Image from '@/assets/howitworks-step3.jpg';
 
 const STEPS = [
   {
     title: "You take a smart quiz.",
     description: "We learn your travel preferences in 60 seconds.",
-    image: "/images/howitworks-step-1.jpg"
+    image: step1Image
   },
   {
     title: "You start your way.",
     description: "Pick a city, plan multi-city, chat your dream trip, or paste an existing itinerary — four ways to begin.",
-    image: "/images/howitworks-step-2.jpg"
+    image: step2Image
   },
   {
     title: "We build the ideal trip.",
     description: "Flights, stays, and activities pre-selected to match your vibe and budget.",
-    image: "/images/howitworks-step-3.jpg"
+    image: step3Image
   },
   {
     title: "You book and go.",
     description: "Or tweak. Or save. It's all up to you.",
-    image: "/images/howitworks-step-3.jpg"
+    image: step3Image
   }
 ];
 
@@ -92,6 +96,7 @@ export default function HowItWorks() {
               src={image}
               alt={`Step ${index + 1}: ${title}`}
               className="w-full h-[320px] rounded-xl shadow-xl object-cover hover:shadow-2xl transition-shadow duration-300"
+              onError={handleImageError}
             />
           </motion.div>
         </motion.div>
@@ -110,6 +115,7 @@ export default function HowItWorks() {
             src={finalStep.image}
             alt={`Step ${STEPS.length}: ${finalStep.title}`}
             className="w-full h-[450px] object-cover"
+            onError={handleImageError}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent flex flex-col justify-end p-10 md:p-16 text-white">
             <div className="flex items-center mb-6">
