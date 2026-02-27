@@ -253,6 +253,26 @@ async function executeRewriteDayAction(
   }
 
   const newActivities = data.day.activities || day.activities;
+
+  // Budget-down guard: if instructions asked for cheaper, cap costs at original levels
+  const budgetDownKeywords = /cheap|budget|afford|save money|less expensive|lower cost|reduce.*cost|cut.*spending|frugal/i;
+  if (budgetDownKeywords.test(instructions || '')) {
+    for (const newAct of newActivities) {
+      const origMatch = day.activities.find((a: any) => 
+        a.startTime === newAct.startTime || a.title === newAct.title
+      );
+      if (origMatch) {
+        const origCost = Number(origMatch.cost?.amount ?? origMatch.estimatedCost ?? 0);
+        const newCost = Number(newAct.cost?.amount ?? newAct.estimatedCost ?? 0);
+        // If the AI returned a MORE expensive option, cap it at the original cost
+        if (newCost > origCost && origCost > 0) {
+          if (newAct.cost) newAct.cost.amount = Math.max(0, origCost - 5);
+          if (newAct.estimatedCost !== undefined) newAct.estimatedCost = Math.max(0, origCost - 5);
+        }
+      }
+    }
+  }
+
   const diff = computeDayDiff(target_day, day.activities, newActivities);
   const costBefore = computeDayCost(day.activities);
   const costAfter = computeDayCost(newActivities);
