@@ -3910,7 +3910,7 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     celebrationDay: trip.metadata?.celebrationDay,
     // User research notes / must-do activities from Page 2 paste field
     mustDoActivities: trip.metadata?.mustDoActivities || undefined,
-    isSmartFinish: trip.metadata?.smartFinishSource === 'manual_builder',
+    isSmartFinish: trip.metadata?.smartFinishMode === true || (trip.metadata?.smartFinishSource || '').toString().includes('manual_builder'),
     smartFinishRequested: !!trip.metadata?.smartFinishRequestedAt,
     tripVibe: trip.metadata?.tripVibe || undefined,
     tripPriorities: trip.metadata?.tripPriorities || undefined,
@@ -5349,8 +5349,11 @@ Generate activities for this day following ALL constraints above.`;
         console.log(`[Stage 2] Day ${dayNumber} validation warnings:`, validation.warnings);
       }
 
-      // If valid or on last retry, return the day
-      if (validation.isValid || attempt === maxRetries) {
+      // If valid, return the day. On last retry, return only if NOT Smart Finish with hard errors.
+      const hasHardErrors = validation.errors.length > 0;
+      const isLastAttempt = attempt === maxRetries;
+      const smartFinishBlocksReturn = context.isSmartFinish && hasHardErrors;
+      if (validation.isValid || (isLastAttempt && !smartFinishBlocksReturn)) {
         // Tag day with multi-city info
         if (context.isMultiCity && dayCity) {
           generatedDay.city = dayCity.cityName;
@@ -6424,6 +6427,31 @@ async function finalSaveItinerary(
   console.log(`[Stage 6] Final save for trip ${tripId}`);
 
   try {
+    // Canonical format: top-level `days` array so frontend parsers (parseItineraryDays)
+    // read it directly via data.days. We also keep `itinerary.days` for backward compat.
+    const generatedAccommodationNotes = enrichedData.days.flatMap(d => d.accommodationNotes || []).filter(Boolean).slice(0, 5);
+    const generatedPracticalTips = enrichedData.days.flatMap(d => d.practicalTips || []).filter(Boolean).slice(0, 6);
+
+    // For Smart Finish, preserve user-imported notes if generation didn't produce any
+    let finalAccommodationNotes = generatedAccommodationNotes;
+    let finalPracticalTips = generatedPracticalTips;
+    if (context.isSmartFinish) {
+      try {
+        const { data: tripMeta } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
+        const meta = tripMeta?.metadata || {};
+        if (finalAccommodationNotes.length === 0 && Array.isArray(meta.accommodationNotes) && meta.accommodationNotes.length > 0) {
+          finalAccommodationNotes = meta.accommodationNotes;
+          console.log('[Stage 6] Preserving user-imported accommodationNotes from metadata');
+        }
+        if (finalPracticalTips.length === 0 && Array.isArray(meta.practicalTips) && meta.practicalTips.length > 0) {
+          finalPracticalTips = meta.practicalTips;
+          console.log('[Stage 6] Preserving user-imported practicalTips from metadata');
+        }
+      } catch (e) {
+        console.warn('[Stage 6] Could not fetch metadata for note preservation:', e);
+      }
+    }
+
     const frontendReadyData = {
       success: true,
       status: 'ready',
@@ -6431,6 +6459,9 @@ async function finalSaveItinerary(
       title: `${context.destination} - ${context.totalDays} Days`,
       tripId: context.tripId,
       totalDays: context.totalDays,
+      // CANONICAL: top-level days array — this is what parseItineraryDays reads
+      days: enrichedData.days,
+      // Backward compat: keep nested itinerary.days for historical readers
       itinerary: {
         days: enrichedData.days,
         generatedAt: new Date().toISOString(),
@@ -6445,9 +6476,8 @@ async function finalSaveItinerary(
           version: '2.0'
         }
       },
-      // Extract accommodationNotes and practicalTips from generated days (typically on Day 1)
-      accommodationNotes: enrichedData.days.flatMap(d => d.accommodationNotes || []).filter(Boolean).slice(0, 5),
-      practicalTips: enrichedData.days.flatMap(d => d.practicalTips || []).filter(Boolean).slice(0, 6),
+      accommodationNotes: finalAccommodationNotes,
+      practicalTips: finalPracticalTips,
       overview: enrichedData.overview,
       enrichmentMetadata: enrichedData.enrichmentMetadata
     };
@@ -6464,7 +6494,7 @@ async function finalSaveItinerary(
     // Compute correct end_date from the actual generated days
     let computedEndDate: string | undefined;
     try {
-      const daysArray = frontendReadyData?.days;
+      const daysArray = frontendReadyData?.days || frontendReadyData?.itinerary?.days;
       if (Array.isArray(daysArray) && daysArray.length > 0 && tripId) {
         // Fetch the trip start_date to compute end
         const { data: tripRow } = await supabase

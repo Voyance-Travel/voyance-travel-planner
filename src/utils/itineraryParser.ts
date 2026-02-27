@@ -513,7 +513,18 @@ export function parseItineraryDays(
   }
   
   const data = rawData as Record<string, unknown>;
-  const rawDays = data.days;
+  
+  // Canonical path: top-level `days` array
+  let rawDays = data.days;
+  
+  // Compat fallback: nested `itinerary.days` from older saves
+  if (!Array.isArray(rawDays)) {
+    const nested = data.itinerary as Record<string, unknown> | undefined;
+    if (nested && Array.isArray(nested.days)) {
+      rawDays = nested.days;
+      console.log('[itineraryParser] Using fallback: itinerary.days');
+    }
+  }
   
   if (!Array.isArray(rawDays)) {
     if (rawDays !== null && rawDays !== undefined) {
@@ -634,7 +645,8 @@ export function parseAssistantDays(
 export function hasValidItinerary(rawData: unknown): boolean {
   if (!rawData || typeof rawData !== 'object') return false;
   const data = rawData as Record<string, unknown>;
-  const rawDays = data.days;
+  // Check canonical top-level days, then nested itinerary.days fallback
+  const rawDays = data.days || (data.itinerary as Record<string, unknown> | undefined)?.days;
   return Array.isArray(rawDays) && rawDays.length > 0;
 }
 
@@ -646,5 +658,6 @@ export function isValidItineraryData(
 ): rawData is { days: unknown[] } {
   if (!rawData || typeof rawData !== 'object') return false;
   const data = rawData as Record<string, unknown>;
-  return Array.isArray(data.days);
+  const rawDays = data.days || (data.itinerary as Record<string, unknown> | undefined)?.days;
+  return Array.isArray(rawDays);
 }
