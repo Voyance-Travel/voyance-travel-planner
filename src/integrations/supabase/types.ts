@@ -4999,6 +4999,7 @@ export type Database = {
         Row: {
           activity_cost_cents: number | null
           arrival_date: string | null
+          arrival_transfer: Json | null
           city_name: string
           city_order: number
           country: string | null
@@ -5006,6 +5007,7 @@ export type Database = {
           days_generated: number | null
           days_total: number | null
           departure_date: string | null
+          departure_transfer: Json | null
           destination_id: string | null
           dining_cost_cents: number | null
           generation_status: string
@@ -5028,6 +5030,7 @@ export type Database = {
         Insert: {
           activity_cost_cents?: number | null
           arrival_date?: string | null
+          arrival_transfer?: Json | null
           city_name: string
           city_order?: number
           country?: string | null
@@ -5035,6 +5038,7 @@ export type Database = {
           days_generated?: number | null
           days_total?: number | null
           departure_date?: string | null
+          departure_transfer?: Json | null
           destination_id?: string | null
           dining_cost_cents?: number | null
           generation_status?: string
@@ -5057,6 +5061,7 @@ export type Database = {
         Update: {
           activity_cost_cents?: number | null
           arrival_date?: string | null
+          arrival_transfer?: Json | null
           city_name?: string
           city_order?: number
           country?: string | null
@@ -5064,6 +5069,7 @@ export type Database = {
           days_generated?: number | null
           days_total?: number | null
           departure_date?: string | null
+          departure_transfer?: Json | null
           destination_id?: string | null
           dining_cost_cents?: number | null
           generation_status?: string
@@ -6680,6 +6686,7 @@ export type Database = {
         Row: {
           abandoned_at: string | null
           agent_notes: string | null
+          arrival_transfer: Json | null
           budget_allocations: Json | null
           budget_currency: string | null
           budget_include_flight: boolean | null
@@ -6693,6 +6700,7 @@ export type Database = {
           client_id: string | null
           created_at: string
           creation_source: string | null
+          departure_transfer: Json | null
           destination: string
           destination_country: string | null
           destinations: Json | null
@@ -6730,6 +6738,7 @@ export type Database = {
         Insert: {
           abandoned_at?: string | null
           agent_notes?: string | null
+          arrival_transfer?: Json | null
           budget_allocations?: Json | null
           budget_currency?: string | null
           budget_include_flight?: boolean | null
@@ -6743,6 +6752,7 @@ export type Database = {
           client_id?: string | null
           created_at?: string
           creation_source?: string | null
+          departure_transfer?: Json | null
           destination: string
           destination_country?: string | null
           destinations?: Json | null
@@ -6780,6 +6790,7 @@ export type Database = {
         Update: {
           abandoned_at?: string | null
           agent_notes?: string | null
+          arrival_transfer?: Json | null
           budget_allocations?: Json | null
           budget_currency?: string | null
           budget_include_flight?: boolean | null
@@ -6793,6 +6804,7 @@ export type Database = {
           client_id?: string | null
           created_at?: string
           creation_source?: string | null
+          departure_transfer?: Json | null
           destination?: string
           destination_country?: string | null
           destinations?: Json | null

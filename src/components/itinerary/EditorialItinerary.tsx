@@ -37,6 +37,7 @@ import { useBulkUnlock } from '@/hooks/useBulkUnlock';
 import { HotelGalleryModal } from './HotelGalleryModal';
 import { DraggableActivityList } from './DraggableActivityList';
 import { TransportComparisonCard } from './TransportComparisonCard';
+import { AirportHotelTransfer, SelectedTransfer } from './AirportHotelTransfer';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -4163,6 +4164,22 @@ export function EditorialItinerary({
                                   <span className="font-medium">{cityHotel.hotel.checkOut || '11:00 AM'}</span>
                                 </div>
                               </div>
+
+                              {/* Airport-to-Hotel Transfer */}
+                              {cityHotel.hotel?.name && (
+                                <AirportHotelTransfer
+                                  tripId={tripId}
+                                  cityId={cityHotel.cityId}
+                                  origin={idx === 0 ? (flightSelection?.outbound?.arrival?.airport || '') : ''}
+                                  destination={cityHotel.hotel.address || `${cityHotel.hotel.name}, ${cityHotel.cityName}`}
+                                  city={cityHotel.cityName}
+                                  airportCode={idx === 0 ? (flightSelection?.outbound?.arrival?.airport || undefined) : undefined}
+                                  hotelName={cityHotel.hotel.name}
+                                  travelers={travelers}
+                                  existingSelection={(cityHotel as any).arrival_transfer || null}
+                                  onTransferSelected={() => onBookingAdded?.()}
+                                />
+                              )}
                             </div>
                           ) : (
                             /* No hotel for this city */
@@ -6059,41 +6076,19 @@ function AirportGamePlan({ flightSelection, hotelSelection, allHotels, destinati
               </div>
             </div>
 
-            {/* Transfer Options Block */}
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
-                <Car className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="font-medium text-sm">Getting There</p>
-                  {isLoadingTransfer && (
-                    <span className="text-xs text-muted-foreground animate-pulse">Loading live data...</span>
-                  )}
-                  {transferData && !isLoadingTransfer && (
-                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-green-500/10 text-green-600 border-green-500/20">
-                      Live
-                    </Badge>
-                  )}
-                </div>
-                {/* Always show transfer options when hotel exists (use static fallback if no live data) */}
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
-                    <span className="font-medium">🚕 Taxi/Uber</span>
-                    <p className="text-muted-foreground">{transfer.taxi.duration} • {transfer.taxi.cost}</p>
-                  </div>
-                  <div className="text-xs p-2 bg-secondary/50 rounded border border-border">
-                    <span className="font-medium">🚆 Train/Metro</span>
-                    <p className="text-muted-foreground">{transfer.train.duration} • {transfer.train.cost}</p>
-                  </div>
-                </div>
-                {!hasFlight && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Add your flight to get personalized arrival day timing
-                  </p>
-                )}
-              </div>
-            </div>
+            {/* Transfer Options - Rich comparison */}
+            <AirportHotelTransfer
+              tripId=""
+              origin={arrivalAirport || `${destination} Airport`}
+              destination={effectiveHotelSelection?.address || `${effectiveHotelSelection?.name}, ${destination}`}
+              city={destination}
+              airportCode={arrivalAirport || undefined}
+              hotelName={effectiveHotelSelection?.name || undefined}
+              arrivalTime={arrivalTime || undefined}
+              travelers={1}
+              compact={true}
+              onTransferSelected={() => {}}
+            />
           </>
         ) : (
           <div className="flex items-center justify-between gap-3 p-3 bg-secondary/30 rounded-lg border border-border">
