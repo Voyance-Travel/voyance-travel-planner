@@ -1,6 +1,6 @@
 /**
  * useRefreshDay — Triggers lightweight validation of a single itinerary day.
- * Calls the refresh-day edge function and returns issues + transit estimates.
+ * Calls the refresh-day edge function and returns issues, proposed changes & transit estimates.
  */
 
 import { useState, useCallback } from 'react';
@@ -24,8 +24,21 @@ export interface RefreshTransitEstimate {
   recommended?: boolean;
 }
 
+export interface ProposedChange {
+  id: string;
+  type: 'time_shift' | 'replacement' | 'buffer_added' | 'reorder' | 'no_change';
+  activityId: string;
+  activityTitle: string;
+  icon: string;
+  description: string;
+  oldValue?: string;
+  newValue?: string;
+  patch?: Record<string, unknown>;
+}
+
 export interface RefreshResult {
   issues: RefreshIssue[];
+  proposedChanges: ProposedChange[];
   transitEstimates: RefreshTransitEstimate[];
   totalCost: number;
   activitiesValidated: number;
@@ -66,6 +79,10 @@ export function useRefreshDay() {
       if (fnError) throw fnError;
 
       const refreshResult = data as RefreshResult;
+      // Ensure proposedChanges array exists for backward compat
+      if (!refreshResult.proposedChanges) {
+        refreshResult.proposedChanges = [];
+      }
       setResult(refreshResult);
       return refreshResult;
     } catch (err) {
