@@ -64,7 +64,7 @@ function ChaosMockup() {
         </div>
         
         {/* Content area - real website feel */}
-        <div className="bg-white min-h-[300px] relative overflow-hidden">
+        <div className="bg-white min-h-[200px] md:min-h-[300px] relative overflow-hidden">
           {/* Google Flights mockup */}
           <div className="p-4">
             {/* Search bar */}
@@ -111,7 +111,7 @@ function ChaosMockup() {
           
           {/* Overlapping browser windows - generic */}
           <motion.div 
-            className="absolute top-4 right-2 w-48 bg-white rounded-lg shadow-xl border border-[#e5e5e5] overflow-hidden rotate-[3deg] opacity-95"
+            className="absolute top-4 right-2 w-24 md:w-48 bg-white rounded-lg shadow-xl border border-[#e5e5e5] overflow-hidden rotate-[3deg] opacity-95 hidden md:block"
             animate={{ rotate: [3, 4, 3] }}
             transition={{ duration: 3, repeat: Infinity }}
           >
@@ -124,7 +124,7 @@ function ChaosMockup() {
           </motion.div>
           
           <motion.div 
-            className="absolute bottom-8 right-8 w-44 bg-white rounded-lg shadow-xl border border-[#e5e5e5] overflow-hidden rotate-[-2deg] opacity-95"
+            className="absolute bottom-8 right-8 w-44 bg-white rounded-lg shadow-xl border border-[#e5e5e5] overflow-hidden rotate-[-2deg] opacity-95 hidden md:block"
             animate={{ rotate: [-2, -3, -2] }}
             transition={{ duration: 2.5, repeat: Infinity }}
           >
@@ -138,7 +138,7 @@ function ChaosMockup() {
           
           {/* Sticky notes overlaid */}
           <motion.div 
-            className="absolute bottom-16 left-4 w-24 h-20 bg-[#fff475] rounded shadow-lg p-2 text-[8px] text-[#3c4043] rotate-[-4deg]"
+            className="absolute bottom-16 left-4 w-24 h-20 bg-[#fff475] rounded shadow-lg p-2 text-[8px] text-[#3c4043] rotate-[-4deg] hidden md:block"
             animate={{ rotate: [-4, -3, -4] }}
             transition={{ duration: 2, repeat: Infinity }}
           >
@@ -200,7 +200,7 @@ function VoyanceMockup() {
         </div>
         
         {/* Clean Voyance interface */}
-        <div className="p-6 bg-background min-h-[320px] relative">
+        <div className="p-2 md:p-6 bg-background min-h-[200px] md:min-h-[320px] relative overflow-hidden">
           {/* Decorative gradient */}
           <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-primary/10 to-transparent rounded-bl-full" />
           
@@ -211,27 +211,27 @@ function VoyanceMockup() {
                 <Sparkles className="w-3 h-3" />
                 Your Curated Itinerary
               </div>
-              <h3 className="text-2xl font-serif font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">5 Days in Paris</h3>
+              <h3 className="text-lg md:text-2xl font-serif font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">5 Days in Paris</h3>
               <p className="text-xs text-muted-foreground mt-1">May 15-20, 2025 • 2 travelers • Premium Experience</p>
             </div>
           </div>
           
           {/* Quick summary cards - Premium style */}
-          <div className="grid grid-cols-3 gap-3 mb-5">
-            <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-xl p-3 text-center border border-primary/20">
-              <div className="text-lg font-bold text-foreground">$2,840</div>
-              <div className="text-[10px] text-muted-foreground">All-inclusive</div>
+          <div className="grid grid-cols-3 gap-1.5 md:gap-3 mb-3 md:mb-5">
+            <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg md:rounded-xl p-1.5 md:p-3 text-center border border-primary/20">
+              <div className="text-xs md:text-lg font-bold text-foreground">$2,840</div>
+              <div className="text-[8px] md:text-[10px] text-muted-foreground">All-inclusive</div>
             </div>
-            <div className="bg-gradient-to-br from-accent/50 to-accent/30 rounded-xl p-3 text-center border border-accent/30">
-              <div className="text-lg font-bold text-foreground">12</div>
-              <div className="text-[10px] text-muted-foreground">Hand-picked activities</div>
+            <div className="bg-gradient-to-br from-accent/50 to-accent/30 rounded-lg md:rounded-xl p-1.5 md:p-3 text-center border border-accent/30">
+              <div className="text-xs md:text-lg font-bold text-foreground">12</div>
+              <div className="text-[8px] md:text-[10px] text-muted-foreground">Activities</div>
             </div>
-            <div className="bg-gradient-to-br from-secondary to-secondary/50 rounded-xl p-3 text-center border border-secondary/30">
-              <div className="flex items-center justify-center gap-0.5 text-lg font-bold text-foreground">
-                <Star className="w-3 h-3 fill-primary text-primary" />
+            <div className="bg-gradient-to-br from-secondary to-secondary/50 rounded-lg md:rounded-xl p-1.5 md:p-3 text-center border border-secondary/30">
+              <div className="flex items-center justify-center gap-0.5 text-xs md:text-lg font-bold text-foreground">
+                <Star className="w-2 h-2 md:w-3 md:h-3 fill-primary text-primary" />
                 4.8
               </div>
-              <div className="text-[10px] text-muted-foreground">Boutique Hotel</div>
+              <div className="text-[8px] md:text-[10px] text-muted-foreground">Hotel</div>
             </div>
           </div>
           
@@ -292,12 +292,12 @@ export default function About() {
       />
       
       {/* Hero Section - Your Vision */}
-      <section className="relative pt-32 pb-24 overflow-hidden">
+      <section className="relative pt-20 pb-12 md:pt-32 md:pb-24 overflow-hidden">
         {/* Background gradient */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-accent/5" />
         <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-primary/10 to-transparent" />
         
-        <div className="container mx-auto px-6 relative z-10">
+        <div className="container mx-auto px-4 md:px-6 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -307,21 +307,21 @@ export default function About() {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2 }}
-              className="inline-block text-primary text-sm font-medium uppercase tracking-[0.2em] mb-6"
+              className="inline-block text-primary text-xs md:text-sm font-medium uppercase tracking-[0.2em] mb-4 md:mb-6"
             >
               Why We Exist
             </motion.span>
-            <h1 className="font-serif text-5xl md:text-6xl lg:text-7xl font-bold mb-8 leading-[1.1]">
+            <h1 className="font-serif text-3xl md:text-6xl lg:text-7xl font-bold mb-4 md:mb-8 leading-[1.1]">
               Travel{' '}
               <span className="text-primary italic">designed</span>,
               <br />
               not consumed.
             </h1>
-            <p className="text-xl text-muted-foreground leading-relaxed max-w-2xl">
+            <p className="text-base md:text-xl text-muted-foreground leading-relaxed max-w-2xl">
               Voyance started because travel planning online isn't planning. It's being marketed to. 
               Endless lists. Sponsored content. 40 tabs of noise.
             </p>
-            <p className="text-xl text-foreground font-medium mt-6 max-w-2xl">
+            <p className="text-base md:text-xl text-foreground font-medium mt-4 md:mt-6 max-w-2xl">
               We built the opposite: research-backed itineraries designed around you, not trends.
             </p>
           </motion.div>
@@ -329,30 +329,30 @@ export default function About() {
       </section>
 
       {/* Before/After Visual Comparison */}
-      <section className="py-24 bg-gradient-to-b from-muted/50 to-muted/20 relative overflow-hidden">
+      <section className="py-12 md:py-24 bg-gradient-to-b from-muted/50 to-muted/20 relative overflow-hidden">
         {/* Background decorations */}
         <div className="absolute top-0 left-0 w-64 h-64 bg-destructive/5 rounded-full blur-3xl" />
         <div className="absolute bottom-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl" />
         
-        <div className="container mx-auto px-6 relative z-10">
+        <div className="container mx-auto px-4 md:px-6 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-center mb-16"
+            className="text-center mb-8 md:mb-16"
           >
-            <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">The Problem</span>
-            <h2 className="font-serif text-4xl md:text-5xl font-bold mt-4 mb-6">
+            <span className="text-primary text-xs md:text-sm font-medium uppercase tracking-[0.2em]">The Problem</span>
+            <h2 className="font-serif text-2xl md:text-5xl font-bold mt-3 md:mt-4 mb-3 md:mb-6">
               Clarity instead of chaos
             </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-sm md:text-lg text-muted-foreground max-w-2xl mx-auto">
               People spend money, waste time in lines, do what everyone else did, 
               and still feel like something was missing. We built the opposite.
             </p>
           </motion.div>
 
           {/* Visual Before/After with VS indicator */}
-          <div className="grid lg:grid-cols-2 gap-8 lg:gap-16 max-w-6xl mx-auto relative">
+          <div className="grid grid-cols-2 lg:grid-cols-2 gap-3 md:gap-16 max-w-6xl mx-auto relative">
             <ChaosMockup />
             
             {/* VS indicator between mockups */}
@@ -374,28 +374,26 @@ export default function About() {
       </section>
 
       {/* Why Voyance Exists */}
-      <section className="py-24 bg-background relative overflow-hidden">
+      <section className="py-12 md:py-24 bg-background relative overflow-hidden">
         <div className="absolute top-20 left-10 w-32 h-32 bg-primary/5 rounded-full blur-2xl" />
         
-        <div className="container mx-auto px-6 relative z-10">
+        <div className="container mx-auto px-4 md:px-6 relative z-10">
           <div className="max-w-3xl mx-auto">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
             >
-              <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">Why Voyance Exists</span>
-              <div className="mt-8 space-y-6 text-lg leading-relaxed">
-                <p className="text-foreground font-medium text-xl">
+              <span className="text-primary text-xs md:text-sm font-medium uppercase tracking-[0.2em]">Why Voyance Exists</span>
+              <div className="mt-4 md:mt-8 space-y-4 md:space-y-6 text-base md:text-lg leading-relaxed">
+                <p className="text-foreground font-medium text-lg md:text-xl">
                   Voyance started because I kept having the same experience.
                 </p>
-                <p className="text-muted-foreground">
+                <p className="text-muted-foreground text-sm md:text-lg">
                   I'd spend hours planning a trip, make thoughtful choices, and still end up wasting time and 
-                  money in ways that didn't feel obvious until I was already there. The day gets eaten by long 
-                  waits, awkward logistics, and "this is fine, I guess" moments that don't match what you hoped 
-                  the trip would feel like.
+                  money in ways that didn't feel obvious until I was already there.
                 </p>
-                <p className="text-foreground font-medium">
+                <p className="text-foreground font-medium text-sm md:text-lg">
                   I wanted a better way to plan, one that protects your vacation time, respects your budget, 
                   and actually reflects you.
                 </p>
@@ -406,40 +404,40 @@ export default function About() {
       </section>
 
       {/* What We're Building */}
-      <section className="py-24 bg-muted/20 relative overflow-hidden">
+      <section className="py-12 md:py-24 bg-muted/20 relative overflow-hidden">
         <div className="absolute bottom-10 right-10 w-40 h-40 bg-accent/5 rounded-full blur-3xl" />
         
-        <div className="container mx-auto px-6 relative z-10">
+        <div className="container mx-auto px-4 md:px-6 relative z-10">
           <div className="max-w-3xl mx-auto">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
             >
-              <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">What We're Building</span>
-              <div className="mt-8 space-y-6 text-lg leading-relaxed">
-                <p className="text-foreground font-medium text-xl">
+              <span className="text-primary text-xs md:text-sm font-medium uppercase tracking-[0.2em]">What We're Building</span>
+              <div className="mt-4 md:mt-8 space-y-4 md:space-y-6 text-base md:text-lg leading-relaxed">
+                <p className="text-foreground font-medium text-lg md:text-xl">
                   Voyance is a travel design platform.
                 </p>
-                <p className="text-muted-foreground">
+                <p className="text-muted-foreground text-sm md:text-lg">
                   It helps you turn preferences into a trip that makes sense in real life:
                 </p>
-                <ul className="space-y-3 text-muted-foreground">
-                  <li className="flex items-start gap-3">
-                    <Check className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+                <ul className="space-y-2 md:space-y-3 text-muted-foreground text-sm md:text-base">
+                  <li className="flex items-start gap-2 md:gap-3">
+                    <Check className="w-4 h-4 md:w-5 md:h-5 text-primary mt-0.5 shrink-0" />
                     <span><strong className="text-foreground">Smart timing</strong> so you're not accidentally choosing the busiest, most expensive windows</span>
                   </li>
-                  <li className="flex items-start gap-3">
-                    <Check className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+                  <li className="flex items-start gap-2 md:gap-3">
+                    <Check className="w-4 h-4 md:w-5 md:h-5 text-primary mt-0.5 shrink-0" />
                     <span><strong className="text-foreground">Geographically coherent plans</strong> so you're not zig-zagging across a city</span>
                   </li>
-                  <li className="flex items-start gap-3">
-                    <Check className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+                  <li className="flex items-start gap-2 md:gap-3">
+                    <Check className="w-4 h-4 md:w-5 md:h-5 text-primary mt-0.5 shrink-0" />
                     <span><strong className="text-foreground">Budget applied across the whole trip</strong>, with day-by-day balance</span>
                   </li>
-                  <li className="flex items-start gap-3">
-                    <Check className="w-5 h-5 text-primary mt-0.5 shrink-0" />
-                    <span><strong className="text-foreground">Clear reasoning</strong> behind recommendations, so you can trust the plan, not just follow it</span>
+                  <li className="flex items-start gap-2 md:gap-3">
+                    <Check className="w-4 h-4 md:w-5 md:h-5 text-primary mt-0.5 shrink-0" />
+                    <span><strong className="text-foreground">Clear reasoning</strong> behind recommendations, so you can trust the plan</span>
                   </li>
                 </ul>
               </div>
@@ -449,25 +447,21 @@ export default function About() {
       </section>
 
       {/* Who's Behind It */}
-      <section className="py-24 bg-background relative overflow-hidden">
+      <section className="py-12 md:py-24 bg-background relative overflow-hidden">
         <div className="absolute top-1/2 left-1/4 w-64 h-64 bg-primary/3 rounded-full blur-3xl" />
         
-        <div className="container mx-auto px-6 relative z-10">
+        <div className="container mx-auto px-4 md:px-6 relative z-10">
           <div className="max-w-3xl mx-auto">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
             >
-              <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">Who's Behind It</span>
-              <div className="mt-8 space-y-6 text-lg leading-relaxed">
+              <span className="text-primary text-xs md:text-sm font-medium uppercase tracking-[0.2em]">Who's Behind It</span>
+              <div className="mt-4 md:mt-8 space-y-4 md:space-y-6 text-sm md:text-lg leading-relaxed">
                 <p className="text-muted-foreground">
                   Voyance is being built by a small team across engineering, AI, and design, focused on accuracy, 
-                  performance, and a premium experience that feels calm and intentional.
-                </p>
-                <p className="text-muted-foreground">
-                  We're also early. We won't pretend we're bigger than we are. We're building this carefully, 
-                  and we want early users who care about doing travel smarter, not louder.
+                  performance, and a premium experience.
                 </p>
                 <p className="text-foreground font-medium">
                   If you're joining now, you're joining at the ground floor. Your feedback will shape 
@@ -476,8 +470,8 @@ export default function About() {
               </div>
               
               {/* Signature */}
-              <div className="mt-12 pt-8 border-t border-border/50">
-                <p className="text-foreground font-serif text-xl">The Voyance Team</p>
+              <div className="mt-8 md:mt-12 pt-6 md:pt-8 border-t border-border/50">
+                <p className="text-foreground font-serif text-lg md:text-xl">The Voyance Team</p>
               </div>
             </motion.div>
           </div>
@@ -485,35 +479,35 @@ export default function About() {
       </section>
 
       {/* Company Credibility Block */}
-      <section className="py-16 bg-muted/30 border-y border-border/50">
-        <div className="container mx-auto px-6">
+      <section className="py-10 md:py-16 bg-muted/30 border-y border-border/50">
+        <div className="container mx-auto px-4 md:px-6">
           <div className="max-w-4xl mx-auto">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center"
+              className="grid grid-cols-3 gap-4 md:gap-8 text-center"
             >
               <div>
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                  <Shield className="w-6 h-6 text-primary" />
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-2 md:mb-4">
+                  <Shield className="w-5 h-5 md:w-6 md:h-6 text-primary" />
                 </div>
-                <h4 className="font-medium text-foreground mb-1">Voyance Travel, LLC</h4>
-                <p className="text-sm text-muted-foreground">Registered US company</p>
+                <h4 className="font-medium text-foreground text-xs md:text-base mb-0.5 md:mb-1">Voyance Travel, LLC</h4>
+                <p className="text-[10px] md:text-sm text-muted-foreground">Registered US company</p>
               </div>
               <div>
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                  <Globe className="w-6 h-6 text-primary" />
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-2 md:mb-4">
+                  <Globe className="w-5 h-5 md:w-6 md:h-6 text-primary" />
                 </div>
-                <h4 className="font-medium text-foreground mb-1">Voyance™</h4>
-                <p className="text-sm text-muted-foreground">Registered trademark</p>
+                <h4 className="font-medium text-foreground text-xs md:text-base mb-0.5 md:mb-1">Voyance™</h4>
+                <p className="text-[10px] md:text-sm text-muted-foreground">Registered trademark</p>
               </div>
               <div>
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                  <Sparkles className="w-6 h-6 text-primary" />
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-2 md:mb-4">
+                  <Sparkles className="w-5 h-5 md:w-6 md:h-6 text-primary" />
                 </div>
-                <h4 className="font-medium text-foreground mb-1">Patent Pending</h4>
-                <p className="text-sm text-muted-foreground">Travel DNA personalization technology</p>
+                <h4 className="font-medium text-foreground text-xs md:text-base mb-0.5 md:mb-1">Patent Pending</h4>
+                <p className="text-[10px] md:text-sm text-muted-foreground">Travel DNA technology</p>
               </div>
             </motion.div>
           </div>
@@ -521,21 +515,21 @@ export default function About() {
       </section>
 
       {/* Product Capabilities Table */}
-      <section className="py-24 bg-background relative overflow-hidden">
-        <div className="container mx-auto px-6">
+      <section className="py-12 md:py-24 bg-background relative overflow-hidden">
+        <div className="container mx-auto px-4 md:px-6">
           <div className="max-w-4xl mx-auto">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className="text-center mb-12"
+              className="text-center mb-8 md:mb-12"
             >
-              <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">Transparency</span>
-              <h2 className="font-serif text-3xl md:text-4xl font-bold mt-4">
+              <span className="text-primary text-xs md:text-sm font-medium uppercase tracking-[0.2em]">Transparency</span>
+              <h2 className="font-serif text-2xl md:text-4xl font-bold mt-3 md:mt-4">
                 What works today
               </h2>
-              <p className="text-muted-foreground mt-4 max-w-lg mx-auto">
-                We believe in being upfront about our capabilities. Here's what you can expect right now.
+              <p className="text-muted-foreground mt-2 md:mt-4 max-w-lg mx-auto text-sm md:text-base">
+                We believe in being upfront about our capabilities.
               </p>
             </motion.div>
 
@@ -543,13 +537,13 @@ export default function About() {
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className="rounded-2xl border border-border overflow-hidden"
+              className="rounded-xl md:rounded-2xl border border-border overflow-hidden"
             >
               <table className="w-full">
                 <thead>
                   <tr className="bg-muted/50">
-                    <th className="text-left p-4 font-medium text-foreground">Feature</th>
-                    <th className="text-center p-4 font-medium text-foreground w-24">Status</th>
+                    <th className="text-left p-3 md:p-4 font-medium text-foreground text-xs md:text-base">Feature</th>
+                    <th className="text-center p-3 md:p-4 font-medium text-foreground w-16 md:w-24 text-xs md:text-base">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -557,36 +551,30 @@ export default function About() {
                     { feature: 'Travel DNA Quiz (27 unique types)', status: 'live' },
                     { feature: 'AI-generated personalized itineraries', status: 'live' },
                     { feature: 'Real-time activity swapping', status: 'live' },
-                    { feature: 'Multi-source review aggregation (Google, TripAdvisor, Foursquare)', status: 'live' },
+                    { feature: 'Multi-source review aggregation', status: 'live' },
                     { feature: 'Group travel preference blending', status: 'live' },
                     { feature: 'Budget tracking & expense management', status: 'live' },
                     { feature: 'Weather-aware scheduling', status: 'live' },
                     { feature: 'Direct booking via Viator', status: 'live' },
-                    { feature: 'Flight tracking & sync', status: 'coming', note: 'Coming soon' },
-                    { feature: 'Mobile app', status: 'coming', note: 'Coming 2026' },
-                    { feature: 'Offline access', status: 'coming', note: 'Coming 2026' },
+                    { feature: 'Flight tracking & sync', status: 'coming', note: 'Soon' },
+                    { feature: 'Mobile app', status: 'coming', note: '2026' },
+                    { feature: 'Offline access', status: 'coming', note: '2026' },
                   ].map((item, idx) => (
                     <tr key={idx} className="hover:bg-muted/20 transition-colors">
-                      <td className="p-4 text-foreground">
+                      <td className="p-3 md:p-4 text-foreground text-xs md:text-base">
                         {item.feature}
-                        {item.note && <span className="text-muted-foreground text-sm ml-2">({item.note})</span>}
+                        {item.note && <span className="text-muted-foreground text-[10px] md:text-sm ml-1">({item.note})</span>}
                       </td>
-                      <td className="p-4 text-center">
+                      <td className="p-3 md:p-4 text-center">
                         {item.status === 'live' && (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-600 text-xs font-medium">
-                            <Check className="w-3 h-3" />
+                          <span className="inline-flex items-center gap-0.5 md:gap-1 px-1.5 md:px-2 py-0.5 md:py-1 rounded-full bg-emerald-500/10 text-emerald-600 text-[10px] md:text-xs font-medium">
+                            <Check className="w-2.5 h-2.5 md:w-3 md:h-3" />
                             Live
                           </span>
                         )}
-                        {item.status === 'external' && (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-500/10 text-blue-600 text-xs font-medium">
-                            <Globe className="w-3 h-3" />
-                            External
-                          </span>
-                        )}
                         {item.status === 'coming' && (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-500/10 text-amber-600 text-xs font-medium">
-                            <Clock className="w-3 h-3" />
+                          <span className="inline-flex items-center gap-0.5 md:gap-1 px-1.5 md:px-2 py-0.5 md:py-1 rounded-full bg-amber-500/10 text-amber-600 text-[10px] md:text-xs font-medium">
+                            <Clock className="w-2.5 h-2.5 md:w-3 md:h-3" />
                             Soon
                           </span>
                         )}
@@ -601,40 +589,39 @@ export default function About() {
       </section>
 
       {/* Core Principles - Your Killer Lines */}
-      <section className="py-24 bg-gradient-to-b from-muted/30 to-background relative overflow-hidden">
+      <section className="py-12 md:py-24 bg-gradient-to-b from-muted/30 to-background relative overflow-hidden">
         <div className="absolute bottom-20 right-10 w-48 h-48 bg-accent/10 rounded-full blur-3xl" />
         
-        <div className="container mx-auto px-6 relative z-10">
+        <div className="container mx-auto px-4 md:px-6 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-center mb-16"
+            className="text-center mb-8 md:mb-16"
           >
-            <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">Our Standards</span>
-            <h2 className="font-serif text-4xl md:text-5xl font-bold mt-4">
+            <span className="text-primary text-xs md:text-sm font-medium uppercase tracking-[0.2em]">Our Standards</span>
+            <h2 className="font-serif text-2xl md:text-5xl font-bold mt-3 md:mt-4">
               Nothing exists without a reason
             </h2>
           </motion.div>
 
-          {/* Killer Lines Grid */}
-          <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* We design your time */}
+          {/* Killer Lines Grid - side by side on mobile */}
+          <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-2 gap-3 md:gap-6">
+            {/* We design your time - spans full width on mobile */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className="md:row-span-2 relative group"
+              className="col-span-2 md:row-span-2 relative group"
             >
-              <div className="h-full bg-gradient-to-br from-primary/10 via-primary/5 to-transparent rounded-3xl border border-primary/20 p-8 md:p-10 transition-all duration-300 hover:border-primary/40 hover:shadow-2xl hover:shadow-primary/10">
-                <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center mb-8">
-                  <Clock className="w-8 h-8 text-primary" />
+              <div className="h-full bg-gradient-to-br from-primary/10 via-primary/5 to-transparent rounded-xl md:rounded-3xl border border-primary/20 p-5 md:p-10 transition-all duration-300 hover:border-primary/40 hover:shadow-2xl hover:shadow-primary/10">
+                <div className="w-10 h-10 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-primary/20 flex items-center justify-center mb-4 md:mb-8">
+                  <Clock className="w-5 h-5 md:w-8 md:h-8 text-primary" />
                 </div>
-                <h3 className="font-serif text-2xl md:text-3xl font-bold mb-4">We design your time</h3>
-                <p className="text-muted-foreground leading-relaxed text-lg">
-                  Not just destinations. Not just bookings. We craft how you spend your hours abroad:
-                  the flow between moments, the rhythm of your days.
-                  <span className="block mt-4 text-foreground font-medium">That's the difference.</span>
+                <h3 className="font-serif text-lg md:text-3xl font-bold mb-2 md:mb-4">We design your time</h3>
+                <p className="text-muted-foreground leading-relaxed text-sm md:text-lg">
+                  Not just destinations. Not just bookings. We craft how you spend your hours abroad.
+                  <span className="block mt-2 md:mt-4 text-foreground font-medium">That's the difference.</span>
                 </p>
               </div>
             </motion.div>
@@ -647,13 +634,12 @@ export default function About() {
               transition={{ delay: 0.1 }}
               className="relative group"
             >
-              <div className="h-full bg-gradient-to-br from-accent/20 via-accent/10 to-transparent rounded-3xl border border-accent/30 p-8 transition-all duration-300 hover:border-accent/50 hover:shadow-xl">
-                <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center mb-4">
-                  <Shield className="w-6 h-6 text-foreground" />
+              <div className="h-full bg-gradient-to-br from-accent/20 via-accent/10 to-transparent rounded-xl md:rounded-3xl border border-accent/30 p-4 md:p-8 transition-all duration-300 hover:border-accent/50 hover:shadow-xl">
+                <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-accent/20 flex items-center justify-center mb-3 md:mb-4">
+                  <Shield className="w-4 h-4 md:w-6 md:h-6 text-foreground" />
                 </div>
-                <h3 className="font-serif text-xl font-bold mb-2">No fake trust</h3>
-                <p className="text-muted-foreground text-sm">
-                  If we don't earn trust at the beginning, we'll never deserve it later. 
+                <h3 className="font-serif text-base md:text-xl font-bold mb-1 md:mb-2">No fake trust</h3>
+                <p className="text-muted-foreground text-xs md:text-sm">
                   Honesty isn't a marketing angle. It's how we operate.
                 </p>
               </div>
@@ -667,13 +653,13 @@ export default function About() {
               transition={{ delay: 0.2 }}
               className="relative group"
             >
-              <div className="h-full bg-gradient-to-br from-secondary via-secondary/80 to-secondary/50 rounded-3xl border border-border/50 p-8 transition-all duration-300 hover:shadow-xl">
-                <div className="w-12 h-12 rounded-xl bg-background/50 backdrop-blur flex items-center justify-center mb-4">
-                  <Heart className="w-6 h-6 text-foreground" />
+              <div className="h-full bg-gradient-to-br from-secondary via-secondary/80 to-secondary/50 rounded-xl md:rounded-3xl border border-border/50 p-4 md:p-8 transition-all duration-300 hover:shadow-xl">
+                <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-background/50 backdrop-blur flex items-center justify-center mb-3 md:mb-4">
+                  <Heart className="w-4 h-4 md:w-6 md:h-6 text-foreground" />
                 </div>
-                <h3 className="font-serif text-xl font-bold mb-2">Taste instead of trends</h3>
-                <p className="text-muted-foreground text-sm">
-                  We recommend what fits you, not what's viral. Real curation over algorithmic hype.
+                <h3 className="font-serif text-base md:text-xl font-bold mb-1 md:mb-2">Taste over trends</h3>
+                <p className="text-muted-foreground text-xs md:text-sm">
+                  We recommend what fits you, not what's viral.
                 </p>
               </div>
             </motion.div>
@@ -682,91 +668,76 @@ export default function About() {
       </section>
 
       {/* How It Works - Interactive Timeline */}
-      <section className="py-24 bg-gradient-to-b from-muted/40 via-background to-background relative overflow-hidden">
-        <div className="container mx-auto px-6 relative z-10">
+      <section className="py-12 md:py-24 bg-gradient-to-b from-muted/40 via-background to-background relative overflow-hidden">
+        <div className="container mx-auto px-4 md:px-6 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-center mb-20"
+            className="text-center mb-10 md:mb-20"
           >
-            <span className="text-primary text-sm font-medium uppercase tracking-[0.2em]">The Process</span>
-            <h2 className="font-serif text-4xl md:text-5xl font-bold mt-4">
+            <span className="text-primary text-xs md:text-sm font-medium uppercase tracking-[0.2em]">The Process</span>
+            <h2 className="font-serif text-2xl md:text-5xl font-bold mt-3 md:mt-4">
               How Voyance works
             </h2>
           </motion.div>
 
-          {/* Visual Timeline */}
-          <div className="max-w-4xl mx-auto relative">
-            {/* Animated connecting line */}
-            <div className="absolute left-8 md:left-1/2 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary via-primary/50 to-primary/20 hidden md:block" />
-            
+          {/* Timeline as 2-col grid on mobile */}
+          <div className="max-w-4xl mx-auto grid grid-cols-2 gap-3 md:gap-8">
             {[
               {
                 step: '01',
                 title: 'Discover Your Travel DNA',
-                description: 'Our comprehensive quiz understands your preferences, pace, budget, and style, far beyond basic filters.',
-                icon: <Search className="w-6 h-6" />,
+                description: 'Our quiz understands your preferences, pace, budget, and style.',
+                icon: <Search className="w-4 h-4 md:w-6 md:h-6" />,
                 image: 'https://images.unsplash.com/photo-1501555088652-021faa106b9b?w=400&q=80',
               },
               {
                 step: '02',
-                title: 'AI-Curated Recommendations',
-                description: 'We analyze thousands of options and surface only what matches your unique profile. No generic suggestions.',
-                icon: <Sparkles className="w-6 h-6" />,
+                title: 'AI-Curated Picks',
+                description: 'We surface only what matches your unique profile. No generic suggestions.',
+                icon: <Sparkles className="w-4 h-4 md:w-6 md:h-6" />,
                 image: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=400&q=80',
               },
               {
                 step: '03',
-                title: 'Plan, Customize, Perfect',
-                description: 'Get a complete itinerary with hotels and activities. Add your flights and we sync everything to your arrival.',
-                icon: <Calendar className="w-6 h-6" />,
+                title: 'Customize & Perfect',
+                description: 'Get a complete itinerary. Add flights and we sync everything.',
+                icon: <Calendar className="w-4 h-4 md:w-6 md:h-6" />,
                 image: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=400&q=80',
               },
               {
                 step: '04',
                 title: 'Book with Confidence',
-                description: 'Transparent pricing, verified options, and support when you need it. No surprises, just great trips.',
-                icon: <CreditCard className="w-6 h-6" />,
+                description: 'Transparent pricing, verified options. No surprises.',
+                icon: <CreditCard className="w-4 h-4 md:w-6 md:h-6" />,
                 image: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=400&q=80',
               },
             ].map((item, idx) => (
               <motion.div
                 key={item.step}
-                initial={{ opacity: 0, y: 40 }}
+                initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-50px" }}
+                viewport={{ once: true }}
                 transition={{ delay: idx * 0.1 }}
-                className={`relative grid md:grid-cols-2 gap-8 mb-16 last:mb-0 items-center ${
-                  idx % 2 === 1 ? 'md:direction-rtl' : ''
-                }`}
+                className="relative"
               >
-                {/* Timeline node */}
-                <div className="absolute left-8 md:left-1/2 top-0 w-4 h-4 rounded-full bg-primary ring-4 ring-background transform -translate-x-1/2 hidden md:block" />
-                
-                {/* Content */}
-                <div className={`${idx % 2 === 1 ? 'md:order-2 md:text-right' : ''}`}>
-                  <div className={`inline-flex items-center gap-3 mb-4 ${idx % 2 === 1 ? 'md:flex-row-reverse' : ''}`}>
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center text-primary shadow-lg shadow-primary/10">
-                      {item.icon}
-                    </div>
-                    <span className="text-sm font-bold text-primary tracking-wider bg-primary/10 px-3 py-1 rounded-full">{item.step}</span>
-                  </div>
-                  <h3 className="font-serif text-2xl font-bold mb-3">{item.title}</h3>
-                  <p className="text-muted-foreground leading-relaxed">{item.description}</p>
+                <div className="aspect-[4/3] rounded-lg md:rounded-2xl overflow-hidden shadow-md md:shadow-xl mb-2 md:mb-4">
+                  <img 
+                    src={item.image} 
+                    alt={item.title}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
                 </div>
-
-                {/* Image */}
-                <div className={`${idx % 2 === 1 ? 'md:order-1' : ''} relative`}>
-                  <div className="aspect-[4/3] rounded-2xl overflow-hidden shadow-xl">
-                    <img 
-                      src={item.image} 
-                      alt={item.title}
-                      className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
-                    />
+                <div className="flex items-center gap-1.5 md:gap-3 mb-1 md:mb-2">
+                  <div className="w-7 h-7 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                    {item.icon}
                   </div>
-                  <div className="absolute -bottom-3 -right-3 w-20 h-20 bg-primary/10 rounded-2xl -z-10" />
+                  <span className="text-[10px] md:text-sm font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">{item.step}</span>
                 </div>
+                <h3 className="font-serif text-sm md:text-xl font-bold mb-1">{item.title}</h3>
+                <p className="text-muted-foreground text-xs md:text-sm leading-relaxed">{item.description}</p>
               </motion.div>
             ))}
           </div>
@@ -774,33 +745,31 @@ export default function About() {
       </section>
 
       {/* Who We Serve */}
-      <section className="py-24 bg-gradient-to-br from-background via-background to-accent/5 relative overflow-hidden">
-        {/* Background decoration */}
+      <section className="py-12 md:py-24 bg-gradient-to-br from-background via-background to-accent/5 relative overflow-hidden">
         <div className="absolute top-1/2 right-0 w-96 h-96 bg-primary/5 rounded-full blur-3xl -translate-y-1/2" />
         
-        <div className="container mx-auto px-6 relative z-10">
-          <div className="grid lg:grid-cols-2 gap-16 items-center max-w-6xl mx-auto">
+        <div className="container mx-auto px-4 md:px-6 relative z-10">
+          <div className="grid grid-cols-[1fr_1fr] lg:grid-cols-2 gap-4 md:gap-16 items-start max-w-6xl mx-auto">
             <motion.div
               initial={{ opacity: 0, x: -30 }}
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
             >
-              <span className="inline-flex items-center gap-2 text-primary text-sm font-medium uppercase tracking-[0.2em] mb-4 bg-primary/10 px-4 py-2 rounded-full">
-                <Users className="w-4 h-4" />
+              <span className="inline-flex items-center gap-1.5 md:gap-2 text-primary text-[10px] md:text-sm font-medium uppercase tracking-[0.2em] mb-3 md:mb-4 bg-primary/10 px-2 md:px-4 py-1 md:py-2 rounded-full">
+                <Users className="w-3 h-3 md:w-4 md:h-4" />
                 Built For You
               </span>
-              <h2 className="font-serif text-4xl md:text-5xl font-bold mt-4 mb-8 leading-tight">
+              <h2 className="font-serif text-xl md:text-5xl font-bold mt-2 md:mt-4 mb-3 md:mb-8 leading-tight">
                 Thoughtful travelers deserve{' '}
                 <span className="text-primary">better tools</span>
               </h2>
-              <p className="text-lg text-muted-foreground mb-8">
-                We built Voyance for people who value their time as much as their experiences. 
-                For those who want meaningful trips, not just destinations.
+              <p className="text-xs md:text-lg text-muted-foreground mb-4 md:mb-8">
+                We built Voyance for people who value their time as much as their experiences.
               </p>
               <Link to="/quiz">
-                <Button size="lg" className="gap-2 shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-shadow">
+                <Button size="sm" className="gap-1.5 md:gap-2 text-xs md:text-base shadow-lg shadow-primary/20">
                   Discover Your Travel DNA
-                  <ArrowRight className="w-4 h-4" />
+                  <ArrowRight className="w-3 h-3 md:w-4 md:h-4" />
                 </Button>
               </Link>
             </motion.div>
@@ -809,25 +778,25 @@ export default function About() {
               initial={{ opacity: 0, x: 30 }}
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
-              className="space-y-4"
+              className="space-y-2 md:space-y-4"
             >
               {[
                 {
                   title: 'Experience Seekers',
-                  desc: 'Those who travel for moments, not just photos. You want authentic experiences that stay with you.',
-                  icon: <Sparkles className="w-5 h-5" />,
+                  desc: 'You travel for moments, not just photos.',
+                  icon: <Sparkles className="w-4 h-4 md:w-5 md:h-5" />,
                   gradient: 'from-primary/20 to-primary/5',
                 },
                 {
                   title: 'Busy Professionals',
-                  desc: 'Time is your scarcest resource. You want amazing trips without the research rabbit holes.',
-                  icon: <Clock className="w-5 h-5" />,
+                  desc: 'Amazing trips without research rabbit holes.',
+                  icon: <Clock className="w-4 h-4 md:w-5 md:h-5" />,
                   gradient: 'from-accent/30 to-accent/10',
                 },
                 {
                   title: 'Group Travelers',
-                  desc: 'Coordinating friends and family is hard. You need tools that make everyone happy.',
-                  icon: <Users className="w-5 h-5" />,
+                  desc: 'Tools that make everyone happy.',
+                  icon: <Users className="w-4 h-4 md:w-5 md:h-5" />,
                   gradient: 'from-secondary to-secondary/50',
                 },
               ].map((persona, idx) => (
@@ -837,16 +806,15 @@ export default function About() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: idx * 0.1 }}
-                  className="group"
                 >
-                  <div className={`bg-gradient-to-br ${persona.gradient} rounded-2xl border border-border/50 p-6 hover:border-primary/30 transition-all hover:shadow-lg hover:-translate-y-0.5`}>
-                    <div className="flex gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-background/80 backdrop-blur flex items-center justify-center shrink-0 shadow-sm group-hover:shadow-md transition-shadow">
+                  <div className={`bg-gradient-to-br ${persona.gradient} rounded-lg md:rounded-2xl border border-border/50 p-3 md:p-6`}>
+                    <div className="flex gap-2 md:gap-4">
+                      <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-background/80 backdrop-blur flex items-center justify-center shrink-0">
                         <div className="text-primary">{persona.icon}</div>
                       </div>
                       <div>
-                        <h4 className="font-serif text-lg font-bold mb-1">{persona.title}</h4>
-                        <p className="text-sm text-muted-foreground">{persona.desc}</p>
+                        <h4 className="font-serif text-sm md:text-lg font-bold mb-0.5">{persona.title}</h4>
+                        <p className="text-[10px] md:text-sm text-muted-foreground">{persona.desc}</p>
                       </div>
                     </div>
                   </div>
@@ -858,49 +826,42 @@ export default function About() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-32 relative overflow-hidden">
+      <section className="py-16 md:py-32 relative overflow-hidden">
         {/* Rich gradient background */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-accent/10" />
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
         <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-accent/10 rounded-full blur-3xl" />
         
-        <div className="container mx-auto px-6 text-center relative z-10">
+        <div className="container mx-auto px-4 md:px-6 text-center relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             className="max-w-2xl mx-auto"
           >
-            <motion.div
-              animate={{ rotate: [0, 5, -5, 0] }}
-              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-              className="inline-block"
-            >
-              <Compass className="w-16 h-16 text-primary mx-auto mb-6" />
-            </motion.div>
-            <h2 className="font-serif text-4xl md:text-6xl font-bold mb-6 leading-tight">
+            <Compass className="w-10 h-10 md:w-16 md:h-16 text-primary mx-auto mb-4 md:mb-6" />
+            <h2 className="font-serif text-2xl md:text-6xl font-bold mb-4 md:mb-6 leading-tight">
               Travel should be{' '}
               <span className="text-primary italic">designed</span>
             </h2>
-            <p className="text-xl text-muted-foreground mb-6">
+            <p className="text-base md:text-xl text-muted-foreground mb-4 md:mb-6">
               Not consumed. Not endured. Designed.
             </p>
             
-            {/* Trust Signal */}
-            <p className="text-sm text-muted-foreground mb-10 max-w-md mx-auto bg-muted/50 rounded-lg px-4 py-3 border border-border/50">
+            <p className="text-xs md:text-sm text-muted-foreground mb-6 md:mb-10 max-w-md mx-auto bg-muted/50 rounded-lg px-3 md:px-4 py-2 md:py-3 border border-border/50">
               We're early. We don't have thousands of users yet. 
               But we're building something we'd actually use ourselves.
             </p>
             
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <div className="flex flex-col sm:flex-row gap-3 md:gap-4 justify-center">
               <Link to="/quiz">
-                <Button size="lg" className="gap-2 w-full sm:w-auto text-lg px-8 py-6 shadow-xl shadow-primary/25 hover:shadow-primary/35 transition-shadow">
+                <Button size="lg" className="gap-2 w-full sm:w-auto md:text-lg md:px-8 md:py-6 shadow-xl shadow-primary/25">
                   Take the Quiz
-                  <ArrowRight className="h-5 w-5" />
+                  <ArrowRight className="h-4 w-4 md:h-5 md:w-5" />
                 </Button>
               </Link>
               <Link to="/explore">
-                <Button size="lg" variant="outline" className="w-full sm:w-auto text-lg px-8 py-6 border-2">
+                <Button size="lg" variant="outline" className="w-full sm:w-auto md:text-lg md:px-8 md:py-6 border-2">
                   Explore Destinations
                 </Button>
               </Link>
