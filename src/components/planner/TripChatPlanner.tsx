@@ -193,6 +193,16 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
         try {
           let details = JSON.parse(toolCallArgs) as TripDetails;
 
+          // Safety net: if AI didn't populate cities[] but destination has multiple cities,
+          // try to extract from the conversation history as well
+          if ((!details.cities || details.cities.length <= 1) && details.destination) {
+            // Check if destination contains separators hinting at multi-city
+            const multiCityHint = /[,&]|\band\b|\bthen\b|→|->/.test(details.destination);
+            if (multiCityHint) {
+              console.warn('[TripChatPlanner] AI returned destination with multi-city hint but empty cities[]. Relying on resolveCities fallback.');
+            }
+          }
+
           // Normalize multi-city using shared utility (single source of truth)
           details = normalizeMultiCity(details);
 
@@ -217,7 +227,10 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
           } else {
             // All required fields present — show summary for confirmation
             if (!assistantContent) {
-              assistantContent = `Here's what I've captured for your trip to **${details.destination}** - review and confirm when you're ready! 🎉`;
+              const cityList = details.cities && details.cities.length > 1
+                ? details.cities.map(c => `${c.name} (${c.nights} nights)`).join(' → ')
+                : details.destination;
+              assistantContent = `Here's what I've captured for your trip to **${cityList}** - review and confirm when you're ready! 🎉`;
               setMessages(prev => [...prev, { role: 'assistant', content: assistantContent }]);
             }
             setExtractedDetails(details);

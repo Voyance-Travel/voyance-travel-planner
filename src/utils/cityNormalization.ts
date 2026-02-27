@@ -121,21 +121,35 @@ export function resolveCities(
 
   const candidates: string[] = [];
 
-  // Try destination first
-  if (SEPARATOR_PATTERN.test(destination) || WEAK_SEPARATOR_PATTERN.test(destination)) {
-    const parts = destination
-      .split(WEAK_SEPARATOR_PATTERN)
-      .map(cleanCandidate)
-      .filter((p) => p.length > 1 && p.length < 50 && !/^\d+$/.test(p));
+  // Try destination first — split on any separator
+  if (destination) {
+    // First try strong separators (→, then, ->)
+    if (SEPARATOR_PATTERN.test(destination)) {
+      const parts = destination
+        .split(SEPARATOR_PATTERN)
+        .map(cleanCandidate)
+        .filter((p) => p.length > 1 && p.length < 50 && !/^\d+$/.test(p));
+      if (parts.length > 1) candidates.push(...parts);
+    }
+    
+    // Then try weak separators (comma, "and", &)
+    if (candidates.length <= 1) {
+      const weakParts = destination
+        .split(WEAK_SEPARATOR_PATTERN)
+        .map(cleanCandidate)
+        .filter((p) => p.length > 1 && p.length < 50 && !/^\d+$/.test(p));
 
-    if (parts.length > 2 || SEPARATOR_PATTERN.test(destination)) {
-      // Strong signal or 3+ parts — accept
-      candidates.push(...parts);
-    } else if (parts.length === 2) {
-      // Two parts from weak separator — guard against "City, Country"
-      const second = parts[1].toLowerCase();
-      if (!COUNTRY_HINTS.has(second)) {
-        candidates.push(...parts);
+      if (weakParts.length > 2) {
+        // 3+ parts — very likely multi-city even with weak separators
+        candidates.length = 0;
+        candidates.push(...weakParts);
+      } else if (weakParts.length === 2) {
+        // Two parts — guard against "City, Country"
+        const second = weakParts[1].toLowerCase();
+        if (!COUNTRY_HINTS.has(second)) {
+          candidates.length = 0;
+          candidates.push(...weakParts);
+        }
       }
     }
   }
