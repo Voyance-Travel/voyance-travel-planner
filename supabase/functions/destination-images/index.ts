@@ -886,37 +886,33 @@ function inferCategoryFromTitle(title: string): string {
   return 'sightseeing'; // Default fallback
 }
 
-// High-quality category fallback images (curated Unsplash photos)
-const CATEGORY_FALLBACKS: Record<string, string> = {
-  dining: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&q=80", // Elegant restaurant
-  restaurant: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&q=80",
-  breakfast: "https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=1200&q=80", // Breakfast
-  lunch: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=1200&q=80", // Lunch
-  dinner: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1200&q=80", // Dinner
-  cafe: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=1200&q=80", // Cafe
-  coffee: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=1200&q=80", // Coffee
-  food: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200&q=80", // Food plate
-  sightseeing: "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200&q=80", // Scenic view
-  cultural: "https://images.unsplash.com/photo-1518998053901-5348d3961a04?w=1200&q=80", // Museum interior
-  museum: "https://images.unsplash.com/photo-1518998053901-5348d3961a04?w=1200&q=80",
-  shopping: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1200&q=80", // Shopping street
-  relaxation: "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=1200&q=80", // Spa face mask
-  recharge: "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=1200&q=80", // Spa face mask
-  spa: "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=1200&q=80", // Spa face mask
-  accommodation: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1200&q=80", // Hotel room
-  hotel: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1200&q=80",
-  transport: "https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?w=1200&q=80", // Travel transport
-  activity: "https://images.unsplash.com/photo-1530789253388-582c481c54b0?w=1200&q=80", // Adventure activity
-  beach: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200&q=80", // Beach sunset
-  nature: "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200&q=80", // Nature landscape
-  nightlife: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=1200&q=80", // Night scene
-  entertainment: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=1200&q=80", // Concert/show
-  default: "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1200&q=80", // Travel general
-};
+function generateCategoryFallbackDataUrl(category: string, venueName: string): string {
+  const seed = `${category || 'default'}-${venueName || 'activity'}`.toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+  }
+
+  const hue1 = Math.abs(hash % 360);
+  const hue2 = (hue1 + 42) % 360;
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800">
+    <defs>
+      <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:hsl(${hue1},58%,42%)"/>
+        <stop offset="100%" style="stop-color:hsl(${hue2},62%,30%)"/>
+      </linearGradient>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#g)"/>
+    <text x="50%" y="50%" font-family="system-ui" font-size="44" fill="white" fill-opacity="0.28" text-anchor="middle" dy=".35em">${venueName || category || 'Activity'}</text>
+  </svg>`;
+
+  return `data:image/svg+xml;base64,${btoa(svg)}`;
+}
 
 function getCategoryFallbackImage(category: string, venueName: string): DestinationImage {
   const normalizedCategory = (category || 'default').toLowerCase();
-  const fallbackUrl = CATEGORY_FALLBACKS[normalizedCategory] || CATEGORY_FALLBACKS.default;
+  const fallbackUrl = generateCategoryFallbackDataUrl(normalizedCategory, venueName);
   
   return {
     id: `fallback-${normalizedCategory}-${Date.now()}`,
@@ -926,7 +922,7 @@ function getCategoryFallbackImage(category: string, venueName: string): Destinat
     source: "fallback",
     width: 1200,
     height: 800,
-    attribution: "Unsplash",
+    attribution: "Generated placeholder",
   };
 }
 
