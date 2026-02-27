@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
+import SafeImage from '@/components/SafeImage';
 
 interface HeroImageWithFallbackProps {
   src: string;
@@ -80,7 +81,7 @@ export default function HeroImageWithFallback({
 
   return (
     <>
-      <img
+      <SafeImage
         src={allSources[currentIndex]}
         alt={alt}
         onError={handleImageError}
