@@ -3579,16 +3579,53 @@ export function EditorialItinerary({
             {/* Show only selected day */}
             {days[selectedDayIndex] && (
               <div className="space-y-6">
-                {/* Airport Game Plan - Show only on Day 1 */}
-                {selectedDayIndex === 0 && (
-                  <AirportGamePlan 
-                    flightSelection={flightSelection} 
-                    hotelSelection={hotelSelection}
-                    allHotels={allHotels}
-                    destination={destination}
-                    onNavigateToBookings={() => setActiveTab('details')}
-                  />
-                )}
+                {/* Arrival Game Plan - Show on every city arrival day */}
+                {(() => {
+                  const selectedDay = days[selectedDayIndex];
+                  const dayDate = selectedDay?.date;
+                  
+                  // Day 1 always gets a game plan (original behavior)
+                  if (selectedDayIndex === 0) {
+                    return (
+                      <ArrivalGamePlan
+                        flightSelection={flightSelection}
+                        hotelSelection={hotelSelection}
+                        allHotels={allHotels}
+                        destination={destination}
+                        onNavigateToBookings={() => setActiveTab('details')}
+                      />
+                    );
+                  }
+                  
+                  // For multi-city: show game plan on each city's check-in day
+                  if (allHotels && allHotels.length > 1 && dayDate) {
+                    const arrivingCity = allHotels.find((ch, idx) => 
+                      idx > 0 && ch.checkInDate && dayDate === ch.checkInDate
+                    );
+                    if (arrivingCity) {
+                      // Find the flight leg arriving at this city, if any
+                      const legs = flightSelection?.legs;
+                      const arrivalLeg = legs?.find(l => {
+                        const arrAirport = (l.arrival?.airport || '').toLowerCase();
+                        const cityName = arrivingCity.cityName.toLowerCase();
+                        return arrAirport.includes(cityName) || cityName.includes(arrAirport);
+                      });
+                      
+                      return (
+                        <ArrivalGamePlan
+                          flightSelection={arrivalLeg ? { outbound: arrivalLeg } : undefined}
+                          hotelSelection={arrivingCity.hotel}
+                          allHotels={allHotels}
+                          destination={arrivingCity.cityName}
+                          onNavigateToBookings={() => setActiveTab('details')}
+                          arrivalCityInfo={arrivingCity}
+                          dayNumber={selectedDayIndex + 1}
+                        />
+                      );
+                    }
+                  }
+                  return null;
+                })()}
 
                 {/* Hotel Check-in / Check-out Events for multi-city */}
                 {allHotels && allHotels.length > 0 && (() => {
@@ -5886,15 +5923,19 @@ interface TransferData {
   train: { duration: string; cost: string };
 }
 
-interface AirportGamePlanProps {
+interface ArrivalGamePlanProps {
   flightSelection?: FlightSelection | null;
   hotelSelection?: HotelSelection | null;
   allHotels?: CityHotelInfo[];
   destination: string;
   onNavigateToBookings?: () => void;
+  /** For multi-city arrivals: the city being arrived at */
+  arrivalCityInfo?: CityHotelInfo;
+  /** Day number (1-indexed), defaults to 1 */
+  dayNumber?: number;
 }
 
-function AirportGamePlan({ flightSelection, hotelSelection, allHotels, destination, onNavigateToBookings }: AirportGamePlanProps) {
+function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destination, onNavigateToBookings, arrivalCityInfo, dayNumber = 1 }: ArrivalGamePlanProps) {
   const outbound = flightSelection?.outbound;
   const fallbackCityHotel = allHotels?.find(h => !!h.hotel?.name)?.hotel || null;
   const effectiveHotelSelection = hotelSelection?.name ? hotelSelection : fallbackCityHotel;
@@ -5902,10 +5943,17 @@ function AirportGamePlan({ flightSelection, hotelSelection, allHotels, destinati
   const [transferData, setTransferData] = useState<TransferData | null>(null);
   const [isLoadingTransfer, setIsLoadingTransfer] = useState(false);
   
+  // Multi-city: check if arriving by train/bus (not flight)
+  const isTrainBusArrival = arrivalCityInfo?.transportType && ['train', 'bus', 'ferry', 'car'].includes(arrivalCityInfo.transportType);
+  const transportDetails = arrivalCityInfo?.transportDetails;
+  
   // Determine flight completeness: need arrival time for game plan to be useful
   const hasAnyFlightData = !!outbound;
   const hasCompleteFlightData = !!(outbound?.arrival?.time || outbound?.departure?.time);
+  // For train/bus arrivals, we have arrival data from transportDetails
+  const hasTransportArrival = isTrainBusArrival && !!(transportDetails?.arrivalTime as string);
   const hasFlight = hasCompleteFlightData; // Only show game plan if we have times
+  const hasAnyArrivalData = hasFlight || hasTransportArrival;
   
   // Fetch dynamic transfer data from Google Maps Distance Matrix API
   // Runs when hotel exists (flight optional - uses destination airport as fallback)
@@ -6009,8 +6057,15 @@ function AirportGamePlan({ flightSelection, hotelSelection, allHotels, destinati
 
   // Post-landing advice based on arrival time - aware of hotel availability
   const getPostLandingAdvice = (): { action: string; reason: string; isMissing?: boolean } => {
-    if (!hasFlight) {
-      return { action: 'Add flight for arrival tips', reason: 'We\'ll plan your arrival day activities', isMissing: true };
+    // For train/bus arrivals, use transport arrival time
+    if (isTrainBusArrival && hasTransportArrival) {
+      if (!hasHotel) {
+        return { action: 'Add hotel for personalized tips', reason: 'We\'ll calculate transfer times from the station', isMissing: true };
+      }
+      return { action: 'Head to your hotel', reason: 'No customs or security — you can go straight to check-in' };
+    }
+    if (!hasFlight && !hasTransportArrival) {
+      return { action: 'Add travel details for arrival tips', reason: 'We\'ll plan your arrival day activities', isMissing: true };
     }
     
     if (!arrivalTime) {
@@ -6065,24 +6120,63 @@ function AirportGamePlan({ flightSelection, hotelSelection, allHotels, destinati
   const postLanding = getPostLandingAdvice();
   const transfer = transferData || getStaticTransferEstimate();
 
+  // Build context strings for train/bus arrivals
+  const transportArrivalTime = isTrainBusArrival ? (transportDetails?.arrivalTime as string) || '' : '';
+  const transportArrivalStation = isTrainBusArrival && transportDetails
+    ? ((transportDetails as Record<string, unknown>).arrivalStation as string || (transportDetails as Record<string, unknown>).arrivalPoint as string || '')
+    : '';
+  const transportCarrier = isTrainBusArrival && transportDetails 
+    ? ((transportDetails as Record<string, unknown>).carrier as string || '') 
+    : '';
+
+  // Subtitle: adapt per context
+  const headerIcon = isTrainBusArrival ? <Train className="h-5 w-5 text-primary" /> : <Plane className="h-5 w-5 text-primary" />;
+  const headerTitle = dayNumber === 1 
+    ? 'Your Arrival Game Plan'
+    : `Arriving in ${destination}`;
+  const headerSubtitle = isTrainBusArrival
+    ? `${arrivalCityInfo?.transportType === 'train' ? 'Train' : arrivalCityInfo?.transportType === 'bus' ? 'Bus' : arrivalCityInfo?.transportType === 'ferry' ? 'Ferry' : 'Drive'} arrival — Day ${dayNumber}`
+    : dayNumber === 1 
+      ? 'Everything you need for Day 1'
+      : `Flight arrival — Day ${dayNumber}`;
+
   return (
     <div className="border border-border bg-card rounded-lg overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-border bg-secondary/30">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-primary/10 rounded-full">
-            <Plane className="h-5 w-5 text-primary" />
+            {headerIcon}
           </div>
           <div>
-            <h3 className="font-serif text-lg font-medium">Your Arrival Game Plan</h3>
-            <p className="text-sm text-muted-foreground">Everything you need for Day 1</p>
+            <h3 className="font-serif text-lg font-medium">{headerTitle}</h3>
+            <p className="text-sm text-muted-foreground">{headerSubtitle}</p>
           </div>
         </div>
       </div>
 
       <div className="p-4 space-y-4">
-        {/* Flight Section - First */}
-        {hasFlight ? (
+        {/* Train/Bus Arrival Section */}
+        {isTrainBusArrival && hasTransportArrival ? (
+          <>
+            {/* Arrival info */}
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <MapPin className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <p className="font-medium text-sm">
+                  Arriving at {transportArrivalTime}
+                  {transportArrivalStation ? ` (${transportArrivalStation})` : ''}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {transportCarrier ? `${transportCarrier} · ` : ''}
+                  No airport security — head straight to your hotel after arrival
+                </p>
+              </div>
+            </div>
+          </>
+        ) : hasFlight ? (
           <>
             {/* Recommended Airport Arrival */}
             {recommendedArrival && (
@@ -6193,12 +6287,14 @@ function AirportGamePlan({ flightSelection, hotelSelection, allHotels, destinati
             {/* Transfer Options - Rich comparison */}
             <AirportHotelTransfer
               tripId=""
-              origin={arrivalAirport || `${destination} Airport`}
+              origin={isTrainBusArrival && transportArrivalStation 
+                ? `${transportArrivalStation}, ${destination}` 
+                : (arrivalAirport || `${destination} Airport`)}
               destination={effectiveHotelSelection?.address || `${effectiveHotelSelection?.name}, ${destination}`}
               city={destination}
-              airportCode={arrivalAirport || undefined}
+              airportCode={isTrainBusArrival ? undefined : (arrivalAirport || undefined)}
               hotelName={effectiveHotelSelection?.name || undefined}
-              arrivalTime={arrivalTime || undefined}
+              arrivalTime={isTrainBusArrival ? transportArrivalTime : (arrivalTime || undefined)}
               travelers={1}
               compact={true}
               onTransferSelected={() => {}}
