@@ -69,6 +69,10 @@ interface AddFlightInlineProps {
   editMode?: boolean;
   existingOutbound?: ManualFlightEntry;
   existingReturn?: ManualFlightEntry;
+  /** All existing legs for multi-leg editing */
+  existingLegs?: ManualFlightEntry[];
+  /** Multi-city route for auto-generating leg slots: [{from: 'Atlanta', to: 'London'}, {from: 'London', to: 'Paris'}, {from: 'Paris', to: 'Atlanta'}] */
+  multiCityRoute?: Array<{ from: string; to: string; date?: string }>;
 }
 
 interface AddHotelInlineProps {
@@ -99,17 +103,41 @@ export function AddFlightInline({
   onFlightAdded,
   editMode = false,
   existingOutbound,
-  existingReturn
+  existingReturn,
+  existingLegs,
+  multiCityRoute,
 }: AddFlightInlineProps) {
   const navigate = useNavigate();
   const [showManualEntry, setShowManualEntry] = useState(editMode);
   const [showImportModal, setShowImportModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [showMoreOutbound, setShowMoreOutbound] = useState(false);
-  const [showReturnFlight, setShowReturnFlight] = useState(!!existingReturn?.airline);
-  
-  const [outboundFlight, setOutboundFlight] = useState<ManualFlightEntry>(
-    existingOutbound || {
+
+  // Build initial legs from existing data
+  const buildInitialLegs = (): ManualFlightEntry[] => {
+    // Priority 1: explicit existingLegs
+    if (existingLegs && existingLegs.length > 0) return existingLegs;
+
+    // Priority 2: legacy outbound/return
+    const legs: ManualFlightEntry[] = [];
+    if (existingOutbound) legs.push(existingOutbound);
+    if (existingReturn) legs.push(existingReturn);
+    if (legs.length > 0) return legs;
+
+    // Priority 3: auto-generate from multi-city route
+    if (multiCityRoute && multiCityRoute.length > 0) {
+      return multiCityRoute.map((r, i) => ({
+        airline: '',
+        flightNumber: '',
+        departureAirport: '',
+        arrivalAirport: '',
+        departureTime: '',
+        arrivalTime: '',
+        departureDate: r.date || (i === 0 ? startDate : ''),
+      }));
+    }
+
+    // Default: single outbound leg
+    return [{
       airline: '',
       flightNumber: '',
       departureAirport: origin || '',
@@ -117,100 +145,81 @@ export function AddFlightInline({
       departureTime: '',
       arrivalTime: '',
       departureDate: startDate,
-      price: undefined,
-    }
-  );
-  
-  const [returnFlight, setReturnFlight] = useState<ManualFlightEntry>(
-    existingReturn || {
-      airline: '',
-      flightNumber: '',
-      departureAirport: '',
-      arrivalAirport: origin || '',
-      departureTime: '',
-      arrivalTime: '',
-      departureDate: endDate,
-      price: undefined,
-    }
-  );
+    }];
+  };
 
-  // Removed: Browse & Book flights - we're a "bring your own flight" platform
-
+  const [legs, setLegs] = useState<ManualFlightEntry[]>(buildInitialLegs);
+  const [expandedLeg, setExpandedLeg] = useState<number | null>(null);
   const [arrivalTimeError, setArrivalTimeError] = useState(false);
 
-  const handleSaveManualFlight = async () => {
-    // Only require arrival time for itinerary planning
-    if (!outboundFlight.arrivalTime) {
+  const updateLeg = (index: number, patch: Partial<ManualFlightEntry>) => {
+    setLegs(prev => prev.map((leg, i) => i === index ? { ...leg, ...patch } : leg));
+  };
+
+  const addLeg = () => {
+    const lastLeg = legs[legs.length - 1];
+    setLegs(prev => [...prev, {
+      airline: '',
+      flightNumber: '',
+      departureAirport: lastLeg?.arrivalAirport || '',
+      arrivalAirport: '',
+      departureTime: '',
+      arrivalTime: '',
+      departureDate: '',
+    }]);
+    setExpandedLeg(legs.length);
+  };
+
+  const removeLeg = (index: number) => {
+    if (legs.length <= 1) return;
+    setLegs(prev => prev.filter((_, i) => i !== index));
+    if (expandedLeg === index) setExpandedLeg(null);
+  };
+
+  const handleSave = async () => {
+    // Require at least leg 1 arrival time
+    if (!legs[0]?.arrivalTime) {
       setArrivalTimeError(true);
       toast.error('Please enter your arrival time so we can plan Day 1');
       return;
     }
     setArrivalTimeError(false);
-
     setIsSaving(true);
+
     try {
-      // Build legs array
-      const legs: Array<{
-        legOrder: number;
-        airline: string;
-        flightNumber: string;
-        departure: { airport: string; time: string; date: string };
-        arrival: { airport: string; time: string };
-        price: number;
-        cabin: string;
-      }> = [{
-        legOrder: 1,
-        airline: outboundFlight.airline || 'Unknown',
-        flightNumber: outboundFlight.flightNumber || '',
+      const legObjs = legs.map((leg, i) => ({
+        legOrder: i + 1,
+        airline: leg.airline || 'Unknown',
+        flightNumber: leg.flightNumber || '',
         departure: {
-          airport: outboundFlight.departureAirport,
-          time: outboundFlight.departureTime,
-          date: outboundFlight.departureDate,
+          airport: leg.departureAirport,
+          time: leg.departureTime,
+          date: leg.departureDate,
         },
         arrival: {
-          airport: outboundFlight.arrivalAirport,
-          time: outboundFlight.arrivalTime,
+          airport: leg.arrivalAirport,
+          time: leg.arrivalTime,
         },
-        price: outboundFlight.price || 0,
+        price: leg.price || 0,
         cabin: 'economy',
-      }];
+      }));
 
-      if (showReturnFlight && returnFlight.departureTime) {
-        legs.push({
-          legOrder: 2,
-          airline: returnFlight.airline || 'Unknown',
-          flightNumber: returnFlight.flightNumber || '',
-          departure: {
-            airport: returnFlight.departureAirport,
-            time: returnFlight.departureTime,
-            date: returnFlight.departureDate,
-          },
-          arrival: {
-            airport: returnFlight.arrivalAirport,
-            time: returnFlight.arrivalTime,
-          },
-          price: returnFlight.price || 0,
-          cabin: 'economy',
-        });
-      }
-
-      // Build flight_selection with legs[] + backward-compat departure/return
       const flightSelection: Record<string, unknown> = {
-        legs,
+        legs: legObjs,
         isManualEntry: true,
-        // Backward compat: departure = first leg
+        // Backward compat
         departure: {
-          airline: legs[0].airline,
-          flightNumber: legs[0].flightNumber,
-          departure: legs[0].departure,
-          arrival: legs[0].arrival,
-          price: legs[0].price,
-          cabin: legs[0].cabin,
+          airline: legObjs[0].airline,
+          flightNumber: legObjs[0].flightNumber,
+          departure: legObjs[0].departure,
+          arrival: legObjs[0].arrival,
+          price: legObjs[0].price,
+          cabin: legObjs[0].cabin,
         },
       };
 
-      if (legs.length >= 2) {
-        const last = legs[legs.length - 1];
+      if (legObjs.length >= 2) {
+        const last = legObjs[legObjs.length - 1];
         flightSelection.return = {
           airline: last.airline,
           flightNumber: last.flightNumber,
@@ -228,7 +237,7 @@ export function AddFlightInline({
 
       if (error) throw error;
 
-      toast.success('Flight details saved!');
+      toast.success(legObjs.length > 1 ? `${legObjs.length} flight legs saved!` : 'Flight details saved!');
       setShowManualEntry(false);
       onFlightAdded?.();
     } catch (err) {
@@ -241,92 +250,27 @@ export function AddFlightInline({
 
   // Handle import from modal (legacy: outbound + return)
   const handleImportFlight = (outbound: ManualFlightEntry, returnFlightData?: ManualFlightEntry) => {
-    setOutboundFlight(outbound);
-    if (returnFlightData) {
-      setReturnFlight(returnFlightData);
-      setShowReturnFlight(true);
-    }
-    // Show the manual entry dialog so user can review/edit
+    const imported = [outbound];
+    if (returnFlightData) imported.push(returnFlightData);
+    setLegs(imported);
     setShowManualEntry(true);
-    setShowMoreOutbound(true); // Expand to show all imported fields
   };
 
   // Handle multi-leg import
-  const handleImportLegs = async (legs: ManualFlightEntry[]) => {
-    if (legs.length === 0) return;
-
-    // Set the first as outbound
-    setOutboundFlight(legs[0]);
-    
-    // Set last as return if there are 2+ legs
-    if (legs.length >= 2) {
-      setReturnFlight(legs[legs.length - 1]);
-      setShowReturnFlight(true);
-    }
-
-    // For 3+ legs, save directly with legs[] format (manual entry dialog can't show N legs)
-    if (legs.length > 2) {
-      setIsSaving(true);
-      try {
-        const legObjs = legs.map((leg, i) => ({
-          legOrder: i + 1,
-          airline: leg.airline || 'Unknown',
-          flightNumber: leg.flightNumber || '',
-          departure: {
-            airport: leg.departureAirport,
-            time: leg.departureTime,
-            date: leg.departureDate,
-          },
-          arrival: {
-            airport: leg.arrivalAirport,
-            time: leg.arrivalTime,
-          },
-          price: leg.price || 0,
-          cabin: 'economy',
-        }));
-
-        const flightSelection: Record<string, unknown> = {
-          legs: legObjs,
-          isManualEntry: true,
-          departure: {
-            airline: legObjs[0].airline,
-            flightNumber: legObjs[0].flightNumber,
-            departure: legObjs[0].departure,
-            arrival: legObjs[0].arrival,
-            price: legObjs[0].price,
-            cabin: legObjs[0].cabin,
-          },
-          return: {
-            airline: legObjs[legObjs.length - 1].airline,
-            flightNumber: legObjs[legObjs.length - 1].flightNumber,
-            departure: legObjs[legObjs.length - 1].departure,
-            arrival: legObjs[legObjs.length - 1].arrival,
-            price: legObjs[legObjs.length - 1].price,
-            cabin: legObjs[legObjs.length - 1].cabin,
-          },
-        };
-
-        const { error } = await supabase
-          .from('trips')
-          .update({ flight_selection: flightSelection as any })
-          .eq('id', tripId);
-
-        if (error) throw error;
-
-        toast.success(`${legs.length} flight legs saved!`);
-        onFlightAdded?.();
-      } catch (err) {
-        console.error('Failed to save flights:', err);
-        toast.error('Failed to save flight details');
-      } finally {
-        setIsSaving(false);
-      }
-      return;
-    }
-
-    // For 1-2 legs, show manual entry dialog for review
+  const handleImportLegs = async (importedLegs: ManualFlightEntry[]) => {
+    if (importedLegs.length === 0) return;
+    setLegs(importedLegs);
     setShowManualEntry(true);
-    setShowMoreOutbound(true);
+  };
+
+  // Route label for a leg
+  const legLabel = (index: number): string => {
+    if (multiCityRoute && multiCityRoute[index]) {
+      return `${multiCityRoute[index].from} → ${multiCityRoute[index].to}`;
+    }
+    if (index === 0) return 'Outbound';
+    if (index === legs.length - 1 && legs.length > 1) return 'Return';
+    return `Leg ${index + 1}`;
   };
 
   return (
@@ -355,16 +299,18 @@ export function AddFlightInline({
         tripEndDate={endDate}
       />
 
-      {/* Manual Entry Dialog - Simplified */}
+      {/* Multi-leg Entry Dialog */}
       <Dialog open={showManualEntry} onOpenChange={setShowManualEntry}>
-        <DialogContent className="sm:max-w-[420px]">
+        <DialogContent className="sm:max-w-[480px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Plane className="h-5 w-5 text-primary" />
-              Add Your Flight Times
+              {legs.length > 1 ? `Flight Legs (${legs.length})` : 'Add Your Flight Times'}
             </DialogTitle>
             <DialogDescription>
-              We'll use this to plan activities around your arrival
+              {legs.length > 1
+                ? 'Enter details for each flight leg'
+                : "We'll use this to plan activities around your arrival"}
             </DialogDescription>
           </DialogHeader>
 
@@ -384,183 +330,161 @@ export function AddFlightInline({
             </Button>
           </div>
 
-          <div className="space-y-5 py-4">
-            {/* Outbound Flight - Essential fields only */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h4 className="font-medium text-sm flex items-center gap-2">
-                  <ArrowRight className="h-4 w-4" />
-                  Outbound Flight
-                </h4>
-              </div>
-              
-              {/* Essential: Route */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground">From</Label>
-                  <AirportAutocomplete
-                    value={outboundFlight.departureAirport}
-                    onChange={(code) => setOutboundFlight(prev => ({ ...prev, departureAirport: code }))}
-                    placeholder="ATL"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">To</Label>
-                  <AirportAutocomplete
-                    value={outboundFlight.arrivalAirport}
-                    onChange={(code) => setOutboundFlight(prev => ({ ...prev, arrivalAirport: code }))}
-                    placeholder="LIS"
-                  />
-                </div>
-              </div>
+          <div className="space-y-3 py-2">
+            {legs.map((leg, idx) => (
+              <div key={idx} className="border rounded-lg overflow-hidden">
+                {/* Leg header */}
+                <button
+                  type="button"
+                  onClick={() => setExpandedLeg(expandedLeg === idx ? null : idx)}
+                  className="w-full flex items-center justify-between px-3 py-2.5 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">
+                      {idx + 1}
+                    </div>
+                    <span className="text-sm font-medium">{legLabel(idx)}</span>
+                    {leg.departureAirport && leg.arrivalAirport && (
+                      <span className="text-xs text-muted-foreground">
+                        {leg.departureAirport} → {leg.arrivalAirport}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {legs.length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => { e.stopPropagation(); removeLeg(idx); }}
+                      >
+                        ×
+                      </Button>
+                    )}
+                    {expandedLeg === idx ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+                  </div>
+                </button>
 
-              {/* Essential: Dates and Times */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground">Departure Date</Label>
-                  <Input
-                    type="date"
-                    value={outboundFlight.departureDate}
-                    onChange={(e) => setOutboundFlight(prev => ({ ...prev, departureDate: e.target.value }))}
-                    className="text-sm"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Arrival Time *</Label>
-                  <Input
-                    type="time"
-                    value={outboundFlight.arrivalTime}
-                    onChange={(e) => {
-                      setOutboundFlight(prev => ({ ...prev, arrivalTime: e.target.value }));
-                      if (e.target.value) setArrivalTimeError(false);
-                    }}
-                    className={cn("text-sm", arrivalTimeError && "border-destructive ring-1 ring-destructive")}
-                    required
-                  />
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    Plans Day 1 activities
-                  </p>
-                </div>
-              </div>
+                {/* Leg fields - always show route + arrival time, expand for more */}
+                {(expandedLeg === idx || legs.length === 1) && (
+                  <div className="p-3 space-y-3">
+                    {/* Route */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">From</Label>
+                        <AirportAutocomplete
+                          value={leg.departureAirport}
+                          onChange={(code) => updateLeg(idx, { departureAirport: code })}
+                          placeholder="ATL"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">To</Label>
+                        <AirportAutocomplete
+                          value={leg.arrivalAirport}
+                          onChange={(code) => updateLeg(idx, { arrivalAirport: code })}
+                          placeholder="LHR"
+                        />
+                      </div>
+                    </div>
 
-              {/* Optional: More details */}
-              <Collapsible open={showMoreOutbound} onOpenChange={setShowMoreOutbound}>
-                <CollapsibleTrigger asChild>
-                  <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground w-full justify-start px-0">
-                    {showMoreOutbound ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
-                    {showMoreOutbound ? 'Less details' : 'Add more details (optional)'}
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="space-y-3 pt-2">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Airline</Label>
-                      <Input
-                        placeholder="e.g. Delta"
-                        value={outboundFlight.airline}
-                        onChange={(e) => setOutboundFlight(prev => ({ ...prev, airline: e.target.value }))}
-                        className="text-sm"
-                      />
+                    {/* Date + Arrival Time */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Departure Date</Label>
+                        <Input
+                          type="date"
+                          value={leg.departureDate}
+                          onChange={(e) => updateLeg(idx, { departureDate: e.target.value })}
+                          className="text-sm"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">
+                          Arrival Time {idx === 0 && '*'}
+                        </Label>
+                        <Input
+                          type="time"
+                          value={leg.arrivalTime}
+                          onChange={(e) => {
+                            updateLeg(idx, { arrivalTime: e.target.value });
+                            if (idx === 0 && e.target.value) setArrivalTimeError(false);
+                          }}
+                          className={cn("text-sm", idx === 0 && arrivalTimeError && "border-destructive ring-1 ring-destructive")}
+                        />
+                        {idx === 0 && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            Plans Day 1 activities
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Flight #</Label>
-                      <Input
-                        placeholder="e.g. DL123"
-                        value={outboundFlight.flightNumber}
-                        onChange={(e) => setOutboundFlight(prev => ({ ...prev, flightNumber: e.target.value }))}
-                        className="text-sm"
-                      />
+
+                    {/* More details */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Airline</Label>
+                        <Input
+                          placeholder="e.g. Delta"
+                          value={leg.airline}
+                          onChange={(e) => updateLeg(idx, { airline: e.target.value })}
+                          className="text-sm"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Flight #</Label>
+                        <Input
+                          placeholder="e.g. DL123"
+                          value={leg.flightNumber}
+                          onChange={(e) => updateLeg(idx, { flightNumber: e.target.value })}
+                          className="text-sm"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Departure Time</Label>
-                      <Input
-                        type="time"
-                        value={outboundFlight.departureTime}
-                        onChange={(e) => setOutboundFlight(prev => ({ ...prev, departureTime: e.target.value }))}
-                        className="text-sm"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Price ($)</Label>
-                      <Input
-                        type="number"
-                        placeholder="450"
-                        value={outboundFlight.price || ''}
-                        onChange={(e) => setOutboundFlight(prev => ({ ...prev, price: e.target.value ? Number(e.target.value) : undefined }))}
-                        className="text-sm"
-                      />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Departure Time</Label>
+                        <Input
+                          type="time"
+                          value={leg.departureTime}
+                          onChange={(e) => updateLeg(idx, { departureTime: e.target.value })}
+                          className="text-sm"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Price ($)</Label>
+                        <Input
+                          type="number"
+                          placeholder="450"
+                          value={leg.price || ''}
+                          onChange={(e) => updateLeg(idx, { price: e.target.value ? Number(e.target.value) : undefined })}
+                          className="text-sm"
+                        />
+                      </div>
                     </div>
                   </div>
-                </CollapsibleContent>
-              </Collapsible>
-            </div>
+                )}
+              </div>
+            ))}
 
-            {/* Return Flight - Collapsed by default */}
-            <div className="border-t pt-4">
-              <Collapsible open={showReturnFlight} onOpenChange={setShowReturnFlight}>
-                <CollapsibleTrigger asChild>
-                  <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground w-full justify-start px-0">
-                    {showReturnFlight ? <ChevronUp className="h-4 w-4 mr-2" /> : <ChevronDown className="h-4 w-4 mr-2" />}
-                    <ArrowRight className="h-4 w-4 rotate-180 mr-2" />
-                    {showReturnFlight ? 'Return Flight' : 'Add return flight (optional)'}
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="space-y-4 pt-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Departure Date</Label>
-                      <Input
-                        type="date"
-                        value={returnFlight.departureDate}
-                        onChange={(e) => setReturnFlight(prev => ({ ...prev, departureDate: e.target.value }))}
-                        className="text-sm"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Departure Time</Label>
-                      <Input
-                        type="time"
-                        value={returnFlight.departureTime}
-                        onChange={(e) => setReturnFlight(prev => ({ ...prev, departureTime: e.target.value }))}
-                        className="text-sm"
-                      />
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                        Plans last day activities
-                      </p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Airline</Label>
-                      <Input
-                        placeholder="e.g. Delta"
-                        value={returnFlight.airline}
-                        onChange={(e) => setReturnFlight(prev => ({ ...prev, airline: e.target.value }))}
-                        className="text-sm"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Price ($)</Label>
-                      <Input
-                        type="number"
-                        placeholder="450"
-                        value={returnFlight.price || ''}
-                        onChange={(e) => setReturnFlight(prev => ({ ...prev, price: e.target.value ? Number(e.target.value) : undefined }))}
-                        className="text-sm"
-                      />
-                    </div>
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-            </div>
+            {/* Add another leg */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full text-xs"
+              onClick={addLeg}
+            >
+              <Plus className="h-3 w-3 mr-1.5" />
+              Add another flight leg
+            </Button>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowManualEntry(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSaveManualFlight} disabled={isSaving}>
-              {isSaving ? 'Saving...' : 'Save Flight'}
+            <Button onClick={handleSave} disabled={isSaving}>
+              {isSaving ? 'Saving...' : legs.length > 1 ? `Save ${legs.length} Legs` : 'Save Flight'}
             </Button>
           </DialogFooter>
         </DialogContent>
