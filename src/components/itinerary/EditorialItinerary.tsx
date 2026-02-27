@@ -828,11 +828,14 @@ function estimateCostByCategory(
   return Math.round(total / 5) * 5;
 }
 
+type CostBasis = 'per_person' | 'flat';
+
 interface CostInfo {
   amount: number;
   isEstimated: boolean;
   estimateReason?: string;
   confidence?: 'high' | 'medium' | 'low';
+  basis: CostBasis;
 }
 
 /**
@@ -872,6 +875,21 @@ function isNeverFreeCategory(category: string, title: string): boolean {
   return false;
 }
 
+/** Flat-rate categories: cost covers the whole group, not per-person */
+const FLAT_RATE_KEYWORDS = [
+  'transfer', 'taxi', 'uber', 'rideshare', 'private car', 'shuttle',
+  'car rental', 'rental car', 'private tour', 'private guide',
+  'accommodation', 'hotel', 'check-in', 'check-out', 'checkout',
+];
+
+function inferCostBasis(category: string, title: string): CostBasis {
+  const cat = category.toLowerCase();
+  const t = title.toLowerCase();
+  // Explicit basis from backend
+  if (FLAT_RATE_KEYWORDS.some(kw => cat.includes(kw) || t.includes(kw))) return 'flat';
+  return 'per_person';
+}
+
 function getActivityCostInfo(
   activity: EditorialActivity,
   travelers: number = 1,
@@ -882,6 +900,8 @@ function getActivityCostInfo(
   const category = activity.category || activity.type || 'activity';
   const title = activity.title || '';
   const shouldNeverBeFree = isNeverFreeCategory(category, title);
+  // Use explicit basis from backend if available, otherwise infer
+  const basis: CostBasis = (activity as any).costBasis || (activity as any).cost?.basis || inferCostBasis(category, title);
   
   // Safely parse cost amount - handle null, NaN, undefined
   const rawCostAmount = activity.cost?.amount;
@@ -891,7 +911,7 @@ function getActivityCostInfo(
   // Check cost.amount first - this is explicit pricing from venue data
   // BUT if it's 0 and the category should never be free, fall through to estimation
   if (costAmount !== undefined && costAmount > 0) {
-    return { amount: costAmount, isEstimated: false, confidence: 'high' };
+    return { amount: costAmount, isEstimated: false, confidence: 'high', basis };
   }
   
   // If cost is explicitly 0 but category should never be free, skip to estimation
@@ -899,7 +919,7 @@ function getActivityCostInfo(
     // Fall through to estimation engine below
   } else if (costAmount === 0) {
     // Truly free activity (parks, viewpoints, walking tours, etc.)
-    return { amount: 0, isEstimated: false, confidence: 'high' };
+    return { amount: 0, isEstimated: false, confidence: 'high', basis };
   }
   
   // Check estimatedCost - AI-provided estimate during generation
@@ -912,7 +932,8 @@ function getActivityCostInfo(
       amount: estAmount, 
       isEstimated: true,
       estimateReason: 'AI-estimated based on venue type',
-      confidence: 'medium'
+      confidence: 'medium',
+      basis,
     };
   }
   
@@ -920,7 +941,7 @@ function getActivityCostInfo(
   if (estAmount === 0 && shouldNeverBeFree) {
     // Fall through to estimation engine below
   } else if (estAmount === 0) {
-    return { amount: 0, isEstimated: true, estimateReason: 'No cost expected', confidence: 'medium' };
+    return { amount: 0, isEstimated: true, estimateReason: 'No cost expected', confidence: 'medium', basis };
   }
   
   // Use defensible cost estimation engine
@@ -943,8 +964,15 @@ function getActivityCostInfo(
     amount, 
     isEstimated: result.isEstimated,
     estimateReason: result.reason || `Estimated for ${category} in ${destinationCity || 'this area'}`,
-    confidence: result.confidence
+    confidence: result.confidence,
+    basis,
   };
+}
+
+/** Short label for cost basis — "/pp" for per-person, nothing for flat (group/total) */
+function basisLabel(basis: CostBasis, travelers: number): string {
+  if (travelers <= 1) return '';
+  return basis === 'per_person' ? '/pp' : '';
 }
 
 function getActivityCost(
@@ -4866,7 +4894,7 @@ export function EditorialItinerary({
             onImport={() => setImportModal({ dayIndex: selectedDayIndex })}
             onRefreshDay={() => handleRefreshDay(selectedDayIndex)}
             isRefreshing={refreshingDayNumber === selectedDay.dayNumber}
-            dayTotal={`Day Total: ${formatCurrency(displayCost(dayTotalCost), tripCurrency)}`}
+            dayTotal={`Day Total: ${formatCurrency(displayCost(dayTotalCost), tripCurrency)}${travelers > 1 ? '/pp' : ''}`}
             isEditable={effectiveIsEditable}
           />
         );
@@ -6349,7 +6377,7 @@ function DayCard({
                 </Badge>
               )}
             <Badge variant="outline" className="text-xs sm:text-sm font-semibold border-primary/30 bg-primary/5 text-primary shrink-0">
-              {totalCost > 0 ? formatCurrency(displayCost(totalCost), tripCurrency) : 'Free'}
+              {totalCost > 0 ? `${formatCurrency(displayCost(totalCost), tripCurrency)}${travelers > 1 ? '/pp' : ''}` : 'Free'}
             </Badge>
             {day.weather && (
               <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full bg-secondary/50 text-xs sm:text-sm shrink-0">
@@ -6611,7 +6639,7 @@ function DayCard({
                   </div>
                   {/* Day total inline badge — toolbar actions moved to fixed bottom DayActionToolbar */}
                   <span className="font-medium text-foreground px-3 py-1 rounded-full bg-primary/10 text-primary">
-                    Day Total: {formatCurrency(displayCost(totalCost), tripCurrency)}
+                    Day Total: {formatCurrency(displayCost(totalCost), tripCurrency)}{travelers > 1 ? '/pp' : ''}
                   </span>
                 </div>
               )}
@@ -7176,9 +7204,9 @@ function ActivityRow({
                 {cost === 0 ? (
                   <span className="font-medium text-muted-foreground text-xs">Free</span>
                 ) : costInfo.isEstimated ? (
-                  <span className="font-medium">~{formatCurrency(displayCost(cost), tripCurrency)}</span>
+                  <span className="font-medium">~{formatCurrency(displayCost(cost), tripCurrency)}{basisLabel(costInfo.basis, travelers)}</span>
                 ) : (
-                  <span className="font-medium">{formatCurrency(displayCost(cost), tripCurrency)}</span>
+                  <span className="font-medium">{formatCurrency(displayCost(cost), tripCurrency)}{basisLabel(costInfo.basis, travelers)}</span>
                 )}
               </div>
             ) : (
@@ -7189,15 +7217,20 @@ function ActivityRow({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="font-medium cursor-help border-b border-dashed border-muted-foreground/40">
-                        ~{formatCurrency(displayCost(cost), tripCurrency)}
+                        ~{formatCurrency(displayCost(cost), tripCurrency)}<span className="text-xs text-muted-foreground">{basisLabel(costInfo.basis, travelers)}</span>
                       </span>
                     </TooltipTrigger>
                     <TooltipContent side="left" className="max-w-[200px] text-xs">
                       <p>{costInfo.estimateReason}</p>
+                      {costInfo.basis === 'per_person' && travelers > 1 && (
+                        <p className="mt-1 font-medium">Group total: {formatCurrency(displayCost(cost * travelers), tripCurrency)}</p>
+                      )}
                     </TooltipContent>
                   </Tooltip>
                 ) : (
-                  <span className="font-medium">{formatCurrency(displayCost(cost), tripCurrency)}</span>
+                  <span className="font-medium">
+                    {formatCurrency(displayCost(cost), tripCurrency)}<span className="text-xs text-muted-foreground">{basisLabel(costInfo.basis, travelers)}</span>
+                  </span>
                 )}
                 {/* Booking state actions - replaces static vendor links */}
                 <InlineBookingActions
