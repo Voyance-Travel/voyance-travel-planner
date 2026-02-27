@@ -4372,6 +4372,15 @@ export function EditorialItinerary({
         destinationCountry={destinationCountry}
         archetype={style}
         tripCurrency={tripCurrency}
+        currentDay={selectedDayIndex >= 0 && days[selectedDayIndex] ? {
+          dayNumber: days[selectedDayIndex].dayNumber,
+          activities: (days[selectedDayIndex].activities || []).map(a => ({
+            title: a.title || '',
+            category: a.category || '',
+            time: a.startTime || a.time || '',
+            location: typeof a.location === 'string' ? a.location : a.location?.name || '',
+          })),
+        } : undefined}
         onAddActivity={(activity) => {
           if (selectedDayIndex >= 0) {
             handleAddActivity(selectedDayIndex, activity);
