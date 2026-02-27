@@ -1602,6 +1602,7 @@ serve(async (req) => {
     } = body;
 
     if (!tripId || !destination || !days || !Array.isArray(days) || days.length === 0) {
+      console.error(`[optimize-itinerary] 400: Missing fields - tripId=${!!tripId}, destination=${!!destination}, days=${Array.isArray(days) ? days.length : typeof days}`);
       return new Response(JSON.stringify({ success: false, error: 'Missing required fields: tripId, destination, and days array' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
