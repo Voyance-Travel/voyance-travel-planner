@@ -58,19 +58,15 @@ const socialLinks = [
 export default function Footer() {
   return (
     <footer className="bg-muted/30 border-t border-border">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 lg:gap-12">
-          {/* Brand Column */}
-          <div className="col-span-2 md:col-span-1">
-            <Link to={ROUTES.HOME} className="flex items-center mb-4">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-16">
+        {/* Mobile: compact layout */}
+        <div className="md:hidden space-y-6">
+          {/* Brand + Social */}
+          <div className="flex items-center justify-between">
+            <Link to={ROUTES.HOME}>
               <VoyanceWordmark size="md" />
             </Link>
-            <p className="text-sm text-muted-foreground mb-6 max-w-xs">
-              Personalized travel experiences powered by AI
-            </p>
-            
-            {/* Social Links */}
-            <div className="flex gap-4">
+            <div className="flex gap-3">
               {socialLinks.map((social) => {
                 const IconComponent = social.icon;
                 return (
@@ -79,80 +75,122 @@ export default function Footer() {
                     href={social.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-muted-foreground hover:text-foreground transition-colors p-3 sm:p-0 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+                    className="text-muted-foreground hover:text-foreground transition-colors p-2 min-h-[44px] min-w-[44px] flex items-center justify-center"
                     aria-label={social.label}
                   >
-                    <IconComponent className="h-5 w-5" />
+                    <IconComponent className="h-4 w-4" />
                   </a>
                 );
               })}
             </div>
           </div>
 
-          {/* Company Links */}
-          <div>
-            <ul className="space-y-3">
-              {footerLinks.company.map((link) => (
-                <li key={link.label}>
-                  <Link
-                    to={link.href}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors min-h-[44px] sm:min-h-0 flex items-center"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+          {/* Links in 3-column grid */}
+          <div className="grid grid-cols-3 gap-x-4 gap-y-2">
+            {[...footerLinks.company, ...footerLinks.explore, ...footerLinks.support].map((link) => (
+              <Link
+                key={link.label}
+                to={link.href}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+              >
+                {link.label}
+              </Link>
+            ))}
           </div>
 
-          {/* Explore Links */}
-          <div>
-            <ul className="space-y-3">
-              {footerLinks.explore.map((link) => (
-                <li key={link.label}>
-                  <Link
-                    to={link.href}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors min-h-[44px] sm:min-h-0 flex items-center"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Support Links */}
-          <div>
-            <ul className="space-y-3">
-              {footerLinks.support.map((link) => (
-                <li key={link.label}>
-                  <Link
-                    to={link.href}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors min-h-[44px] sm:min-h-0 flex items-center"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+          {/* Bottom */}
+          <div className="pt-4 border-t border-border flex flex-col items-center gap-2 text-center">
+            <p className="text-xs text-muted-foreground">
+              © 2025 Voyance LLC · Trademark Pending · Patents Pending
+            </p>
+            <div className="flex gap-4">
+              <Link to={ROUTES.PRIVACY} className="text-xs text-muted-foreground hover:text-foreground transition-colors">Privacy</Link>
+              <Link to={ROUTES.TERMS} className="text-xs text-muted-foreground hover:text-foreground transition-colors">Terms</Link>
+              <Link to={ROUTES.PRIVACY} className="text-xs text-muted-foreground hover:text-foreground transition-colors">Cookies</Link>
+            </div>
           </div>
         </div>
 
-        {/* Bottom Bar */}
-        <div className="mt-12 pt-8 border-t border-border flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-sm text-muted-foreground">
-            © 2025 Voyance LLC · Trademark Pending · Patents Pending
-          </p>
-          <div className="flex gap-6">
-            <Link to={ROUTES.PRIVACY} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              Privacy
-            </Link>
-            <Link to={ROUTES.TERMS} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              Terms
-            </Link>
-            <Link to={ROUTES.PRIVACY} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              Cookies
-            </Link>
+        {/* Desktop: original layout */}
+        <div className="hidden md:block">
+          <div className="grid grid-cols-4 gap-12">
+            {/* Brand Column */}
+            <div>
+              <Link to={ROUTES.HOME} className="flex items-center mb-4">
+                <VoyanceWordmark size="md" />
+              </Link>
+              <p className="text-sm text-muted-foreground mb-6 max-w-xs">
+                Personalized travel experiences powered by AI
+              </p>
+              <div className="flex gap-4">
+                {socialLinks.map((social) => {
+                  const IconComponent = social.icon;
+                  return (
+                    <a
+                      key={social.label}
+                      href={social.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label={social.label}
+                    >
+                      <IconComponent className="h-5 w-5" />
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Company Links */}
+            <div>
+              <ul className="space-y-3">
+                {footerLinks.company.map((link) => (
+                  <li key={link.label}>
+                    <Link to={link.href} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Explore Links */}
+            <div>
+              <ul className="space-y-3">
+                {footerLinks.explore.map((link) => (
+                  <li key={link.label}>
+                    <Link to={link.href} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Support Links */}
+            <div>
+              <ul className="space-y-3">
+                {footerLinks.support.map((link) => (
+                  <li key={link.label}>
+                    <Link to={link.href} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {/* Bottom Bar */}
+          <div className="mt-12 pt-8 border-t border-border flex justify-between items-center">
+            <p className="text-sm text-muted-foreground">
+              © 2025 Voyance LLC · Trademark Pending · Patents Pending
+            </p>
+            <div className="flex gap-6">
+              <Link to={ROUTES.PRIVACY} className="text-sm text-muted-foreground hover:text-foreground transition-colors">Privacy</Link>
+              <Link to={ROUTES.TERMS} className="text-sm text-muted-foreground hover:text-foreground transition-colors">Terms</Link>
+              <Link to={ROUTES.PRIVACY} className="text-sm text-muted-foreground hover:text-foreground transition-colors">Cookies</Link>
+            </div>
           </div>
         </div>
       </div>
