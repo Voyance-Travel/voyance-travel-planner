@@ -412,10 +412,30 @@ FAILURE TO INCLUDE ANY OF THESE IS A HARD FAILURE.
 5. NEVER replace a user-specified venue with an AI alternative, even if "similar"
 6. Only use AI recommendations to fill REMAINING empty slots after ALL user venues are placed
 7. If you cannot fit all user venues, ADD more activity slots — do NOT drop user venues
+
+### 🧭 SMART FINISH ENRICHMENT — EXPAND & ADD VALUE
+The user's list is a STARTING POINT, not the final itinerary. You MUST add significant value:
+
+8. **FILL GAPS**: Add breakfast, lunch, dinner, coffee stops, and transit between every user venue
+9. **ADD LOGISTICS**: For EVERY activity (user-specified AND AI-added), provide:
+   - Exact street address (real, verifiable)
+   - Opening hours and best arrival time
+   - Realistic transit instructions FROM the previous activity (walk 10 min, taxi 15 min, metro Line 2)
+   - Estimated cost per person in local currency AND USD
+   - Booking URL or official website link
+10. **EXPAND WITH DNA-MATCHED ACTIVITIES**: Between user venues, add 2-4 additional activities per day that match the traveler's DNA archetype — hidden gems, local favorites, scenic walks, cultural stops
+11. **ADD PRACTICAL TIPS**: For each user-specified venue, add an insider tip (best entrance, skip-the-line strategy, what to order, photo spot)
+12. **TIME EVERYTHING**: Every activity needs a specific start time (e.g., "09:30") and duration — create a minute-by-minute schedule
+
+### 🚩 DNA MISMATCH FLAGGING
+13. If ANY user-specified activity does NOT align with the traveler's DNA profile (e.g., a budget hostel for a Luxury Seeker, or a museum for an Adrenaline Architect), include a "dnaFlag" field on that activity:
+    - "dnaFlag": "This doesn't match your usual style — but you chose it, so we've kept it! Consider [DNA-aligned alternative] nearby if you change your mind."
+14. DNA-flagged activities stay in the itinerary — they are NOT removed. The flag is informational only.
 `;
 
   return prompt;
 }
+
 
 // =============================================================================
 // VALIDATION
