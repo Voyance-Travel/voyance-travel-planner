@@ -53,26 +53,51 @@ function buildResearchContext(itinerary: any): string {
     lines.push(`TRIP PRIORITIES: ${itinerary.tripPriorities.join(", ")}`);
   }
 
-  lines.push("USER'S RESEARCHED PLACES & ACTIVITIES (incorporate these into the itinerary where they fit the traveler's DNA):");
+  lines.push("");
+  lines.push("═══════════════════════════════════════════════════════════════");
+  lines.push("SMART FINISH ENRICHMENT INSTRUCTIONS");
+  lines.push("═══════════════════════════════════════════════════════════════");
+  lines.push("The user pasted or built a rough itinerary. Your job is to TRANSFORM it into a premium, fully-planned trip.");
+  lines.push("Use their items as ANCHORS, then ADD everything missing:");
+  lines.push("  • Exact addresses and opening hours for every venue");
+  lines.push("  • Transit directions between activities (walk, metro, taxi with duration & cost)");
+  lines.push("  • Booking URLs and official website links");
+  lines.push("  • Meals they didn't plan (breakfast, lunch, dinner, coffee)");
+  lines.push("  • DNA-matched activities to fill gaps between their picks");
+  lines.push("  • Insider tips for every user-specified venue");
+  lines.push("  • Cost estimates in local currency and USD");
+  lines.push("  • Flag any activity that doesn't match their Travel DNA");
+  lines.push("═══════════════════════════════════════════════════════════════");
+  lines.push("");
+
+  lines.push("USER'S RESEARCHED PLACES & ACTIVITIES (incorporate ALL of these, then EXPAND with additional DNA-matched activities):");
 
   // Deduplicate activities
   const seen = new Set<string>();
   for (const day of itinerary.days) {
+    const dayNum = day.dayNumber || day.day;
+    if (dayNum) lines.push(`\n  Day ${dayNum}:`);
     const dayActivities = day.activities || [];
     for (const activity of dayActivities) {
       const name = activity.title || activity.name || "";
       if (!name || seen.has(name.toLowerCase())) continue;
       seen.add(name.toLowerCase());
 
-      const parts: string[] = [`- ${name}`];
+      const parts: string[] = [`  - ${name}`];
       if (activity.category) parts.push(`(${activity.category})`);
-      if (activity.location?.name || activity.location?.address) {
-        const loc = activity.location?.name || activity.location?.address;
-        parts.push(`at ${loc}`);
+      if (activity.startTime || activity.start_time) {
+        parts.push(`at ${activity.startTime || activity.start_time}`);
+      }
+      if (activity.location?.name || activity.location?.address || activity.address) {
+        const loc = activity.location?.name || activity.location?.address || activity.address;
+        parts.push(`@ ${loc}`);
       }
       if (activity.notes || activity.description) {
         const note = activity.notes || activity.description;
         if (note.length < 200) parts.push(`— ${note}`);
+      }
+      if (activity.bookingUrl || activity.booking_url) {
+        parts.push(`[link: ${activity.bookingUrl || activity.booking_url}]`);
       }
       lines.push(parts.join(" "));
     }
@@ -81,6 +106,12 @@ function buildResearchContext(itinerary: any): string {
   // Add practical tips if present
   if (itinerary.practicalTips?.length) {
     lines.push(`\nPRACTICAL TIPS FROM USER'S RESEARCH:\n${itinerary.practicalTips.slice(0, 5).map((t: string) => `- ${t}`).join("\n")}`);
+  }
+
+  // Add accommodation notes
+  if (itinerary.accommodationNotes?.length || itinerary.metadata?.accommodationNotes?.length) {
+    const notes = itinerary.accommodationNotes || itinerary.metadata?.accommodationNotes;
+    lines.push(`\nACCOMMODATION NOTES:\n${notes.slice(0, 5).map((n: string) => `- ${n}`).join("\n")}`);
   }
 
   return lines.join("\n");
