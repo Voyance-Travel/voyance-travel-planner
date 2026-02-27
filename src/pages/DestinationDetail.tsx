@@ -37,6 +37,7 @@ import { getAttractionsByDestination } from '@/services/supabase/attractions';
 import { getActivitiesByDestination as getDbActivities } from '@/services/supabase/activities';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatEnumDisplay } from '@/utils/textFormatting';
+import { handleImageError } from '@/utils/imageFallback';
 
 export default function DestinationDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -284,6 +285,7 @@ export default function DestinationDetail() {
             src={destination.imageUrl} 
             alt={destination.city}
             className="w-full h-full object-cover"
+            onError={handleImageError}
           />
         </motion.div>
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
@@ -373,6 +375,7 @@ export default function DestinationDetail() {
                   src={image} 
                   alt={`${destination.city} ${index + 1}`}
                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                  onError={handleImageError}
                 />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
                 {index === 3 && destination.images.length > 4 && (
@@ -699,6 +702,7 @@ export default function DestinationDetail() {
               src={destination.images[lightboxIndex]}
               alt={`${destination.city} ${lightboxIndex + 1}`}
               className="max-w-[90vw] max-h-[85vh] object-contain"
+              onError={handleImageError}
               onClick={(e) => e.stopPropagation()}
             />
             
