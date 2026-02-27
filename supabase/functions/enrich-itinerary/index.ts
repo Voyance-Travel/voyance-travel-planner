@@ -78,15 +78,27 @@ function calculateWalkingDistance(
   return { distance, time };
 }
 
-// Get destination photos (simulated - in production, use Unsplash/Pexels API)
+// Get destination photos
 function getDestinationPhotos(destination: string): string[] {
-  // Return placeholder Unsplash URLs based on destination
-  const destinationSlug = destination.toLowerCase().replace(/\s+/g, '-');
-  return [
-    `https://source.unsplash.com/800x600/?${destinationSlug},travel`,
-    `https://source.unsplash.com/800x600/?${destinationSlug},landmark`,
-    `https://source.unsplash.com/800x600/?${destinationSlug},city`,
+  const fallbackPhotoIds = [
+    'photo-1488646953014-85cb44e25828',
+    'photo-1476514525535-07fb3b4ae5f1',
+    'photo-1507525428034-b723cf961d3e',
+    'photo-1469474968028-56623f02e42e',
+    'photo-1530789253388-582c481c54b0',
   ];
+
+  let hash = 0;
+  for (let i = 0; i < destination.length; i++) {
+    hash = (hash * 31 + destination.charCodeAt(i)) | 0;
+  }
+
+  const startIndex = Math.abs(hash) % fallbackPhotoIds.length;
+
+  return Array.from({ length: 3 }).map((_, i) => {
+    const photoId = fallbackPhotoIds[(startIndex + i) % fallbackPhotoIds.length];
+    return `https://images.unsplash.com/${photoId}?w=800&h=600&fit=crop&auto=format&q=80`;
+  });
 }
 
 serve(async (req) => {

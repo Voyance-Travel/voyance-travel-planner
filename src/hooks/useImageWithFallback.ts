@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
+import { normalizeUnsplashUrl, PLACEHOLDER_TRAVEL_SRC } from '@/utils/unsplash';
 
 // Generic fallback images for when all else fails
 const GENERIC_FALLBACKS = [
-  'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1200', // Travel bags
-  'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=1200', // Road trip
-  'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1200', // Lake mountains
-  'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200', // Beach
-  'https://images.unsplash.com/photo-1530789253388-582c481c54b0?w=1200', // Travel map
+  'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1200&h=800&fit=crop&auto=format&q=80', // Travel bags
+  'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1200&h=800&fit=crop&auto=format&q=80', // Lake mountains
+  'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200&h=800&fit=crop&auto=format&q=80', // Beach
+  'https://images.unsplash.com/photo-1530789253388-582c481c54b0?w=1200&h=800&fit=crop&auto=format&q=80', // Travel map
+  'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200&h=800&fit=crop&auto=format&q=80', // Mountain valley
 ];
 
 // Local storage key for tracking failed images
@@ -62,8 +63,8 @@ function preloadImage(url: string): Promise<boolean> {
     const img = new Image();
     img.onload = () => resolve(true);
     img.onerror = () => resolve(false);
-    img.src = url;
-    
+    img.src = normalizeUnsplashUrl(url);
+
     // Timeout after 5 seconds
     setTimeout(() => resolve(false), 5000);
   });
@@ -72,7 +73,7 @@ function preloadImage(url: string): Promise<boolean> {
 // Get a deterministic fallback based on destination name
 function getFallbackForDestination(destination: string): string {
   const hash = destination.toLowerCase().split('').reduce((a, b) => a + b.charCodeAt(0), 0);
-  return GENERIC_FALLBACKS[hash % GENERIC_FALLBACKS.length];
+  return normalizeUnsplashUrl(GENERIC_FALLBACKS[hash % GENERIC_FALLBACKS.length] || PLACEHOLDER_TRAVEL_SRC);
 }
 
 interface UseImageWithFallbackOptions {
@@ -174,9 +175,9 @@ export function handleImageError(
   
   // Set fallback
   if (fallbackUrl && !isImageKnownBroken(fallbackUrl)) {
-    img.src = fallbackUrl;
+    img.src = normalizeUnsplashUrl(fallbackUrl);
   } else {
-    img.src = getFallbackForDestination(destination || 'travel');
+    img.src = normalizeUnsplashUrl(getFallbackForDestination(destination || 'travel'));
   }
 }
 
