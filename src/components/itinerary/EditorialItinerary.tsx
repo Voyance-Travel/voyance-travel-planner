@@ -1061,44 +1061,97 @@ export function EditorialItinerary({
       .catch(err => console.error('[EditorialItinerary] Budget sync failed:', err));
   }, [tripId, queryClient]);
 
-  // Inject a synthetic "Travel" activity card at the top of transition days
-  // so inter-city transport appears as a real activity in the itinerary
+  // Inject synthetic travel activity cards on transition days:
+  // Check-out → Head to transport → Transport (seat/ticket) → Arrival → Check-in
   const days = useMemo(() => rawDays.map(day => {
     const d = day as any;
     if (!d.isTransitionDay || !d.transitionFrom || !d.transitionTo) return day;
-    // Check if a travel activity was already injected (avoid duplicates)
+    // Avoid duplicates if already injected
     if (day.activities.some(a => (a as any).__syntheticTravel)) return day;
 
-    // Build a synthetic travel activity from the transition day metadata
-    const transportLabel = (() => {
-      const sel = d.transportComparison?.find((o: any) => o.id === d.selectedTransportId) || d.transportComparison?.[0];
-      if (sel) return sel;
-      return null;
-    })();
+    const from = d.transitionFrom as string;
+    const to = d.transitionTo as string;
+    const dn = day.dayNumber;
 
-    const travelActivity: EditorialActivity = {
-      id: `travel-${d.transitionFrom}-${d.transitionTo}-${day.dayNumber}`,
-      title: `Travel: ${d.transitionFrom} → ${d.transitionTo}`,
-      name: `Travel: ${d.transitionFrom} → ${d.transitionTo}`,
-      type: 'transit',
-      category: 'transit',
-      startTime: transportLabel?.departureTime || d.transportDetails?.departureTime || '',
-      endTime: transportLabel?.arrivalTime || d.transportDetails?.arrivalTime || '',
-      duration: transportLabel?.duration || d.transportDetails?.duration || '',
-      description: transportLabel
-        ? `${transportLabel.mode || transportLabel.type || 'Transfer'} — ${transportLabel.carrier || ''} ${transportLabel.flightNumber || ''}`.trim()
-        : `${d.transitionFrom} to ${d.transitionTo}`,
-      location: undefined,
-      cost: transportLabel?.price != null
-        ? { amount: transportLabel.price, currency: transportLabel.currency || 'USD' }
-        : undefined,
-      isLocked: true,
-      __syntheticTravel: true,
-    } as any;
+    // Resolve transport details from comparison selection or raw metadata
+    const sel = d.transportComparison?.find((o: any) => o.id === d.selectedTransportId) || d.transportComparison?.[0];
+    const tType = sel?.mode || sel?.type || d.transportType || 'transfer';
+    const carrier = sel?.carrier || d.transportDetails?.carrier || '';
+    const flightNum = sel?.flightNumber || d.transportDetails?.flightNumber || '';
+    const depTime = sel?.departureTime || d.transportDetails?.departureTime || '';
+    const arrTime = sel?.arrivalTime || d.transportDetails?.arrivalTime || '';
+    const dur = sel?.duration || d.transportDetails?.duration || '';
+    const seatInfo = d.transportDetails?.seatClass || d.transportDetails?.seat || '';
+    const bookingRef = d.transportDetails?.bookingRef || d.transportDetails?.confirmationNumber || '';
+    const price = sel?.price ?? d.transportCostCents ? (d.transportCostCents / 100) : undefined;
+    const currency = sel?.currency || d.transportCurrency || 'USD';
+
+    const hubLabel = tType === 'flight' ? 'airport' : tType === 'train' ? 'train station' : tType === 'ferry' ? 'ferry terminal' : 'station';
+    const transportName = tType.charAt(0).toUpperCase() + tType.slice(1);
+
+    const mkActivity = (id: string, title: string, overrides: Partial<EditorialActivity> & { __syntheticTravel: true }): EditorialActivity =>
+      ({
+        id,
+        title,
+        name: title,
+        type: 'transit',
+        category: 'transit',
+        isLocked: true,
+        location: undefined,
+        ...overrides,
+      }) as any;
+
+    const travelCards: EditorialActivity[] = [
+      // 1 — Check-out
+      mkActivity(`travel-checkout-${dn}`, `Check out — ${from}`, {
+        __syntheticTravel: true,
+        description: `Check out of your accommodation in ${from} and prepare for departure.`,
+        startTime: '',
+        category: 'accommodation',
+        type: 'accommodation',
+      }),
+      // 2 — Head to transport hub
+      mkActivity(`travel-depart-${dn}`, `Head to ${hubLabel}`, {
+        __syntheticTravel: true,
+        description: `Travel to the ${hubLabel} for your ${transportName.toLowerCase()} to ${to}.`,
+        startTime: '',
+        category: 'transit',
+      }),
+      // 3 — The transport itself (holds seat/ticket info)
+      mkActivity(`travel-transport-${dn}`, `${transportName}: ${from} → ${to}`, {
+        __syntheticTravel: true,
+        description: [
+          carrier && `${carrier}`,
+          flightNum && `${flightNum}`,
+          seatInfo && `Seat: ${seatInfo}`,
+          bookingRef && `Ref: ${bookingRef}`,
+          dur && `Duration: ${dur}`,
+        ].filter(Boolean).join(' · ') || `${transportName} from ${from} to ${to}`,
+        startTime: depTime,
+        endTime: arrTime,
+        duration: dur,
+        cost: price != null ? { amount: price, currency } : undefined,
+      }),
+      // 4 — Arrival
+      mkActivity(`travel-arrive-${dn}`, `Arrive in ${to}`, {
+        __syntheticTravel: true,
+        description: `Arrive at ${to}${arrTime ? ` at ${arrTime}` : ''}. Collect luggage and head to accommodation.`,
+        startTime: arrTime || '',
+        category: 'transit',
+      }),
+      // 5 — Check-in
+      mkActivity(`travel-checkin-${dn}`, `Check in — ${to}`, {
+        __syntheticTravel: true,
+        description: `Check in to your accommodation in ${to} and settle in.`,
+        startTime: '',
+        category: 'accommodation',
+        type: 'accommodation',
+      }),
+    ];
 
     return {
       ...day,
-      activities: [travelActivity, ...day.activities],
+      activities: [...travelCards, ...day.activities],
     };
   }), [rawDays]);
   const [expandedDays, setExpandedDays] = useState<number[]>(initialDays.map(d => d.dayNumber));
