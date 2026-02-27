@@ -2554,26 +2554,49 @@ export function EditorialItinerary({
     toast.success(`${newActivities.length} activities ${verb}!`);
   }, [tripCurrency]);
 
-  // Update activity time
-  const handleUpdateActivityTime = useCallback((dayIndex: number, activityIndex: number, startTime: string, endTime: string) => {
+  // Update activity time — with optional cascade to shift all following activities
+  const handleUpdateActivityTime = useCallback((dayIndex: number, activityIndex: number, startTime: string, endTime: string, cascade = false) => {
     setDays(prev => prev.map((day, dIdx) => {
       if (dIdx !== dayIndex) return day;
+
+      const targetActivity = day.activities[activityIndex];
+      if (!targetActivity) return day;
+
+      const oldStartStr = targetActivity.startTime || targetActivity.time || '12:00';
+      const parseTime = (t: string) => { const [h, m] = t.split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+      const formatTime = (mins: number) => {
+        const c = Math.max(0, Math.min(mins, 23 * 60 + 59));
+        return `${String(Math.floor(c / 60)).padStart(2, '0')}:${String(c % 60).padStart(2, '0')}`;
+      };
+      const deltaMinutes = parseTime(startTime) - parseTime(oldStartStr);
+
       return {
         ...day,
         activities: day.activities.map((activity, aIdx) => {
-          if (aIdx !== activityIndex) return activity;
-          return {
-            ...activity,
-            startTime,
-            endTime,
-            time: startTime, // Keep backward compatibility
-          };
+          // The edited activity itself
+          if (aIdx === activityIndex) {
+            return { ...activity, startTime, endTime, time: startTime };
+          }
+          // Cascade: shift all activities after the edited one
+          if (cascade && aIdx > activityIndex && deltaMinutes !== 0) {
+            const aStart = activity.startTime || activity.time;
+            const aEnd = activity.endTime;
+            const newStart = aStart ? formatTime(parseTime(aStart) + deltaMinutes) : aStart;
+            const newEnd = aEnd ? formatTime(parseTime(aEnd) + deltaMinutes) : aEnd;
+            return { ...activity, startTime: newStart, endTime: newEnd, time: newStart || activity.time };
+          }
+          return activity;
         }),
       };
     }));
     setHasChanges(true);
     setTimeEditModal(null);
-    toast.success('Activity time updated');
+
+    if (cascade) {
+      toast.success('Schedule shifted');
+    } else {
+      toast.success('Activity time updated');
+    }
   }, []);
 
   // Update existing activity (full edit)
@@ -4019,9 +4042,9 @@ export function EditorialItinerary({
         isOpen={!!timeEditModal}
         activity={timeEditModal?.activity || null}
         onClose={() => setTimeEditModal(null)}
-        onSave={(startTime, endTime) => {
+        onSave={(startTime, endTime, cascade) => {
           if (timeEditModal) {
-            handleUpdateActivityTime(timeEditModal.dayIndex, timeEditModal.activityIndex, startTime, endTime);
+            handleUpdateActivityTime(timeEditModal.dayIndex, timeEditModal.activityIndex, startTime, endTime, cascade);
           }
         }}
       />
@@ -6895,19 +6918,40 @@ interface TimeEditModalProps {
   isOpen: boolean;
   activity: EditorialActivity | null;
   onClose: () => void;
-  onSave: (startTime: string, endTime: string) => void;
+  onSave: (startTime: string, endTime: string, cascade: boolean) => void;
+}
+
+/** Parse "HH:MM" to minutes since midnight */
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+/** Convert minutes since midnight to "HH:MM" */
+function minutesToTime(mins: number): string {
+  const clamped = Math.max(0, Math.min(mins, 23 * 60 + 59));
+  const h = Math.floor(clamped / 60);
+  const m = clamped % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 function TimeEditModal({ isOpen, activity, onClose, onSave }: TimeEditModalProps) {
   const [startTime, setStartTime] = useState(activity?.startTime || activity?.time || '12:00');
   const [endTime, setEndTime] = useState(activity?.endTime || '13:00');
+  const [cascade, setCascade] = useState(true);
 
   useEffect(() => {
     if (activity) {
       setStartTime(activity.startTime || activity.time || '12:00');
       setEndTime(activity.endTime || '13:00');
+      setCascade(true);
     }
   }, [activity]);
+
+  // Calculate the time delta for preview
+  const originalStart = activity?.startTime || activity?.time || '12:00';
+  const deltaMinutes = timeToMinutes(startTime) - timeToMinutes(originalStart);
+  const deltaLabel = deltaMinutes === 0 ? '' : deltaMinutes > 0 ? `+${deltaMinutes} min` : `${deltaMinutes} min`;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -6918,8 +6962,8 @@ function TimeEditModal({ isOpen, activity, onClose, onSave }: TimeEditModalProps
             Edit Time
           </DialogTitle>
         </DialogHeader>
-        <div className="py-4">
-          <p className="text-sm text-muted-foreground mb-4">{activity?.title}</p>
+        <div className="py-4 space-y-4">
+          <p className="text-sm text-muted-foreground">{activity?.title}</p>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="start-time-input" className="text-sm font-medium mb-2 block">Start Time</label>
@@ -6944,10 +6988,36 @@ function TimeEditModal({ isOpen, activity, onClose, onSave }: TimeEditModalProps
               />
             </div>
           </div>
+
+          {/* Cascade toggle */}
+          {deltaMinutes !== 0 && (
+            <div className="rounded-lg border border-border bg-secondary/30 p-3 space-y-2">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={cascade}
+                  onChange={(e) => setCascade(e.target.checked)}
+                  className="h-4 w-4 rounded border-input text-primary focus:ring-primary accent-primary"
+                />
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    Shift all following activities ({deltaLabel})
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {cascade 
+                      ? 'Everything after this will move by the same amount' 
+                      : 'Only this activity will change'}
+                  </p>
+                </div>
+              </label>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => onSave(startTime, endTime)}>Save Time</Button>
+          <Button onClick={() => onSave(startTime, endTime, cascade && deltaMinutes !== 0)}>
+            {cascade && deltaMinutes !== 0 ? 'Shift Schedule' : 'Save Time'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
