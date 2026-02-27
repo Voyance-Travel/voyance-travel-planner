@@ -111,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Load user data directly from Supabase
   const loadUserData = async (supabaseUser: SupabaseUser) => {
     try {
-      console.log('[Auth] Loading user data from Supabase for:', supabaseUser.id);
+      // Auth data load (silent in production)
 
       // Fetch profile and preferences in parallel from Supabase
       const [profileResult, preferencesResult] = await Promise.allSettled([
@@ -126,8 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ? preferencesResult.value.data
         : null;
 
-      console.log('[Auth] Loaded profile:', profile);
-      console.log('[Auth] Loaded preferences:', preferences);
+      // Profile and preferences loaded
 
       return { profile, preferences };
     } catch (error) {
@@ -182,7 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Clean up both possible storage keys
       localStorage.removeItem('voyance_demo_trips');
       localStorage.removeItem('voyance_local_trips');
-      console.log('[Auth] Migrated local trips into account:', toUpsert.length);
+      // Local trips migrated
     } catch (error) {
       console.error('[Auth] Failed to migrate local trips:', error);
     }
@@ -191,7 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Sync profile to Supabase on sign in
   const syncProfile = async (supabaseUser: SupabaseUser) => {
     try {
-      console.log('[Auth] Syncing profile to Supabase for:', supabaseUser.id);
+      // Sync profile
       await supabase.from('profiles').upsert(
         {
           id: supabaseUser.id,
@@ -227,13 +226,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let isMounted = true;
     const sg = getAuthSingleton();
     sg.mountCount += 1;
-    console.log('[Auth] AuthProvider MOUNTED, count:', sg.mountCount);
+    // AuthProvider mounted
     
     isProcessingAuthRef.current = false;
     
     // If auth already initialized in a previous mount, restore cached state and skip
     if (sg.initialized) {
-      console.log('[Auth] AuthProvider re-mounted but auth already initialized — skipping');
+      // Auth already initialized, restoring cached state
       initialLoadCompleteRef.current = true;
       setIsLoading(false);
       // Still set up the listener below, but don't run initializeAuth again
@@ -245,11 +244,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!sg.initialized) {
       loadingTimeoutRef.current = setTimeout(() => {
         if (initialLoadCompleteRef.current) {
-          console.log('[Auth] Timeout fired but auth already complete — skipping');
+          // Timeout fired but auth already complete
           return;
         }
         if (isMounted) {
-          console.warn('[Auth] Loading timeout - forcing isLoading to false');
+          // Loading timeout - forcing completion
           setIsLoading(false);
         }
       }, 8000);
@@ -259,7 +258,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, newSession) => {
-      console.log('[Auth] Auth state changed:', event, 'initialLoadComplete:', initialLoadCompleteRef.current);
+      // Auth state change event
       
       // During initial load, let initializeAuth handle everything — don't touch state
       if (!initialLoadCompleteRef.current) {
@@ -268,7 +267,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Skip if we're already processing an auth change (prevents cascading re-entry)
       if (isProcessingAuthRef.current) {
-        console.log('[Auth] Already processing auth change — skipping');
+        // Already processing auth change
         return;
       }
 
@@ -296,7 +295,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Skip if this is the same user we already loaded during initializeAuth
         // This prevents redundant setUser/setSession calls that cause re-renders
         if (currentUserIdRef.current === newSession.user.id) {
-          console.log('[Auth] SIGNED_IN for already-loaded user — skipping redundant load');
+          // Same user already loaded
           setSession(newSession); // Update session token silently
           return;
         }
@@ -335,21 +334,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // INITIAL load - this controls isLoading
     const initializeAuth = async () => {
       try {
-        console.log('[Auth] Starting initial auth check...');
+        // Starting initial auth check
         
         const { data: { session: initialSession } } = await supabase.auth.getSession();
         
         if (!isMounted) return;
         
         if (!initialSession?.user) {
-          console.log('[Auth] No session found');
+          // No session found
           currentUserIdRef.current = null;
           setSession(null);
           setUser(null);
           return;
         }
         
-        console.log('[Auth] Session found, validating user...');
+        // Session found, validating user
         setSession(initialSession);
         
         const { data: userData, error: userError } = await supabase.auth.getUser();
@@ -360,7 +359,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                               userError.status === 401 || userError.status === 403;
           
           if (isAuthError) {
-            console.warn('[Auth] Stale session detected, signing out:', userError.message);
+            // Stale session detected, signing out
             await supabase.auth.signOut();
             if (isMounted) {
               currentUserIdRef.current = null;
@@ -370,16 +369,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return;
           }
           
-          console.warn('[Auth] getUser failed (non-auth error), continuing with session:', userError.message);
+          // getUser failed (non-auth error), continuing with session
         }
         
-        console.log('[Auth] User valid, loading profile data...');
+        // User valid, loading profile data
         const { profile, preferences } = await loadUserData(initialSession.user);
         
         if (isMounted) {
           currentUserIdRef.current = initialSession.user.id;
           setUser(transformProfile(initialSession.user, profile, preferences));
-          console.log('[Auth] Initial load complete, user set');
+          // Initial load complete
         }
       } catch (error) {
         console.error('[Auth] Error during initial auth:', error);
@@ -394,7 +393,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Cache for potential re-mounts
         if (isMounted) {
           setIsLoading(false);
-          console.log('[Auth] isLoading set to false');
+          // Auth loading complete
         }
       }
     };
@@ -405,7 +404,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     return () => {
-      console.log('[Auth] AuthProvider UNMOUNTED');
+      // AuthProvider cleanup
       isMounted = false;
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
