@@ -3931,13 +3931,17 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
             const isTransition = n === 0 && i > 0;
             const isSameCountry = isTransition && tripCities[i - 1].country === city.country;
             const defaultTransport = isSameCountry ? 'train' : 'flight';
+            // transport_type may be stored on this city (correct) OR the previous city (legacy bug)
+            const resolvedTransport = isTransition
+              ? (city.transport_type || tripCities[i - 1].transport_type || defaultTransport)
+              : undefined;
             dayMap.push({
               cityName: city.city_name,
               country: city.country,
               isTransitionDay: isTransition,
               transitionFrom: isTransition ? tripCities[i - 1].city_name : undefined,
               transitionTo: isTransition ? city.city_name : undefined,
-              transportType: isTransition ? (city.transport_type || defaultTransport) : undefined,
+              transportType: resolvedTransport,
             });
           }
         }

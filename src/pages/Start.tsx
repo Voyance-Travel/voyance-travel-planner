@@ -1992,7 +1992,7 @@ export default function Start() {
                               generation_status: 'pending',
                               days_generated: 0,
                               days_total: city.nights,
-                              transport_type: details.cityTransports?.[idx] || null,
+                              transport_type: idx > 0 ? (details.cityTransports?.[idx - 1] || null) : null,
                             };
                           });
                           const { error: citiesErr } = await supabase.from('trip_cities').insert(cityRows as any[]);
