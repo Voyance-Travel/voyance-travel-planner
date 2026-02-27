@@ -422,6 +422,56 @@ serve(async (req) => {
 
     const parsed = JSON.parse(toolCall.function.arguments);
 
+    // --- CJK / schema-leak sanitization ---
+    // AI models sometimes inject Chinese characters or leak schema field names
+    // (e.g. "宣,duration:4,practicalTips;|") into text values.
+    const CJK_RE = /[\u4E00-\u9FFF\u3400-\u4DBF\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF\uF900-\uFAFF]/g;
+    const SCHEMA_LEAK_RE = /[,;|]*\s*(?:duration|practicalTips|accommodationNotes|tripVibe|tripPriorities|theme|dayNumber|activities|unparsed|dates|travelers|tripType)\s*[:;|]\s*[^,;|]*/gi;
+    
+    function sanitizeStr(s: string): string {
+      if (!s || typeof s !== 'string') return s;
+      let cleaned = s.replace(CJK_RE, '').replace(SCHEMA_LEAK_RE, '').trim();
+      // Remove leading/trailing punctuation artifacts
+      cleaned = cleaned.replace(/^[,;|:\s]+|[,;|:\s]+$/g, '').trim();
+      return cleaned;
+    }
+    
+    function sanitizeDeep(obj: unknown): unknown {
+      if (typeof obj === 'string') return sanitizeStr(obj);
+      if (Array.isArray(obj)) return obj.map(sanitizeDeep);
+      if (obj && typeof obj === 'object') {
+        const result: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+          result[k] = sanitizeDeep(v);
+        }
+        return result;
+      }
+      return obj;
+    }
+    
+    // Sanitize all string fields in the parsed output
+    sanitizeDeep(parsed);
+    // Apply in-place to top-level fields
+    if (parsed.destination && typeof parsed.destination === 'string') parsed.destination = sanitizeStr(parsed.destination);
+    if (parsed.tripVibe && typeof parsed.tripVibe === 'string') parsed.tripVibe = sanitizeStr(parsed.tripVibe);
+    if (parsed.days) {
+      for (const day of parsed.days) {
+        if (day.theme) day.theme = sanitizeStr(day.theme);
+        if (day.activities) {
+          for (const act of day.activities) {
+            if (act.name) act.name = sanitizeStr(act.name);
+            if (act.notes) act.notes = sanitizeStr(act.notes);
+            if (act.description) act.description = sanitizeStr(act.description);
+            if (act.location) act.location = sanitizeStr(act.location);
+          }
+        }
+      }
+    }
+    if (parsed.accommodationNotes) parsed.accommodationNotes = parsed.accommodationNotes.map((n: string) => sanitizeStr(n)).filter(Boolean);
+    if (parsed.practicalTips) parsed.practicalTips = parsed.practicalTips.map((t: string) => sanitizeStr(t)).filter(Boolean);
+    if (parsed.unparsed) parsed.unparsed = parsed.unparsed.map((u: string) => sanitizeStr(u)).filter(Boolean);
+    if (parsed.tripPriorities) parsed.tripPriorities = parsed.tripPriorities.map((p: string) => sanitizeStr(p)).filter(Boolean);
+
     // --- Month-reference date fixing ---
     // When users type "in March", "next June", etc., the AI often defaults
     // start_date to today. Detect month names in the original text and
