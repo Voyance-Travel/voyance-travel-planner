@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { registerSubscription, unregisterSubscription } from '@/lib/realtimeSubscriptionManager';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, X, ChevronRight, MessageSquare, Plane, Flag, Cloud, RefreshCw, UserPlus, Check, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -168,28 +169,31 @@ export function NotificationBell() {
   const markAllReadMutation = useMarkAllAsRead();
   const respondMutation = useRespondToFriendRequest();
 
-  // Realtime subscription for instant notification updates
+  // Realtime subscription via the subscription manager
   useEffect(() => {
     if (!user?.id) return;
 
-    const channel = supabase
-      .channel(`notifications-${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'trip_notifications',
-          filter: `user_id=eq.${user.id}`,
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ['user-notifications', user.id] });
-        }
-      )
-      .subscribe();
+    const key = `notifications-${user.id}`;
+    registerSubscription(key, () =>
+      supabase
+        .channel(key)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'trip_notifications',
+            filter: `user_id=eq.${user.id}`,
+          },
+          () => {
+            queryClient.invalidateQueries({ queryKey: ['user-notifications', user.id] });
+          }
+        )
+        .subscribe()
+    );
 
     return () => {
-      supabase.removeChannel(channel);
+      unregisterSubscription(key);
     };
   }, [user?.id, queryClient]);
 
