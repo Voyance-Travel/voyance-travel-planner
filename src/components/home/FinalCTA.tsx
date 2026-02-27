@@ -98,6 +98,7 @@ export default function FinalCTA() {
                   src="https://images.unsplash.com/photo-1534008897995-27a23e859048?w=800"
                   alt="Amalfi Coast, Italy"
                   className="w-full h-full object-cover"
+                  onError={(e) => { const t = e.currentTarget; if (!t.dataset.fallbackApplied) { t.dataset.fallbackApplied = 'true'; t.style.display = 'none'; } }}
                 />
               </div>
               
@@ -116,6 +117,7 @@ export default function FinalCTA() {
                 src={destinations[0].image}
                 alt={destinations[0].name}
                 className="w-full h-full object-cover shadow-elevated"
+                onError={(e) => { const t = e.currentTarget; if (!t.dataset.fallbackApplied) { t.dataset.fallbackApplied = 'true'; t.style.display = 'none'; } }}
               />
             </div>
             
@@ -124,6 +126,7 @@ export default function FinalCTA() {
                 src={destinations[1].image}
                 alt={destinations[1].name}
                 className="w-full h-full object-cover opacity-60"
+                onError={(e) => { const t = e.currentTarget; if (!t.dataset.fallbackApplied) { t.dataset.fallbackApplied = 'true'; t.style.display = 'none'; } }}
               />
             </div>
 

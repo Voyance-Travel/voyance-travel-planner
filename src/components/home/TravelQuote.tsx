@@ -9,6 +9,7 @@ export default function TravelQuote() {
           src="https://images.unsplash.com/photo-1682687982501-1e58ab814714?w=1920&q=80"
           alt="Inspirational landscape"
           className="w-full h-full object-cover"
+          onError={(e) => { const t = e.currentTarget; if (!t.dataset.fallbackApplied) { t.dataset.fallbackApplied = 'true'; t.style.display = 'none'; } }}
         />
         <div className="absolute inset-0 bg-black/50" />
       </div>

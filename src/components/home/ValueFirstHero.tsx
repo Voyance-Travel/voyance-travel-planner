@@ -16,6 +16,7 @@ export default function ValueFirstHero({ onScrollToDemo }: ValueFirstHeroProps) 
           src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=1920&q=80"
           alt="Scenic mountain road at sunset"
           className="w-full h-full object-cover"
+          onError={(e) => { const t = e.currentTarget; if (!t.dataset.fallbackApplied) { t.dataset.fallbackApplied = 'true'; t.style.display = 'none'; } }}
           fetchPriority="high"
           decoding="async"
         />
