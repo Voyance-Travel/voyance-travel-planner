@@ -1,64 +1,64 @@
 
-Root issue identified: the “Just Tell Us” confirmation can display multiple cities, but the persisted trip record is still being saved as single-city for chat-created trips. In current data, chat trips are consistently stored with:
-- `is_multi_city = false`
-- `destinations = null`
-- no rows in `trip_cities`
+# Add Inter-City Transport Selection to "Just Tell Us" Confirm Card
 
-The itinerary generator then behaves exactly as coded: it only enters multi-city routing when `trip.is_multi_city` is true. So even if the title contains multiple cities, generation stays single-city.
+## Problem
+When users describe a multi-city trip in the chat flow ("Hong Kong then Shanghai then Beijing then Tokyo"), the confirm card shows the city breakdown but doesn't let them choose **how** they'll travel between cities (train, flight, bus, car, ferry). This transport preference is never captured, so the itinerary generator has no guidance on inter-city transit.
 
-Implementation plan:
+The manual multi-city builder (`MultiCitySelector`) already has this UI -- a dropdown between each city pair. The chat flow's `TripConfirmCard` is missing it.
 
-1) Make confirmed `cities[]` authoritative in chat trip creation
-- In `Start.tsx` chat callback (`onChatDetailsExtracted`), stop treating multi-city as “best effort inference.”
-- Priority order for city resolution:
-  1. `details.cities` from confirm card (authoritative if length > 1)
-  2. fallback parser from destination/notes only when `cities[]` is missing/invalid
-- If resolved city count > 1, force:
-  - `is_multi_city = true`
-  - `creation_source = 'multi_city'` (or a stable chat-multi source)
-  - `destinations` JSON filled with ordered city legs + nights
+## Plan
 
-2) Remove brittle re-inference divergence between chat UI and trip persistence
-- Ensure the same normalization rules are used between:
-  - `TripChatPlanner` extraction/fallback
-  - `Start.tsx` persistence
-- Centralize city normalization into one shared utility (single source of truth), so “what user confirmed” == “what gets written.”
+### 1. Add transport selectors to `TripConfirmCard`
 
-3) Enforce successful write of per-city records (no silent failure)
-- Current chat path can fail silently when writing `trip_cities`.
-- Change to strict handling:
-  - if multi-city: `trip_cities` insert must succeed for all legs
-  - if single-city: at least one `trip_cities` row must succeed
-  - on failure: show explicit error and avoid navigating to generation
-- Optional hardening (recommended): move chat-trip creation into one backend function to make trip + trip_cities persistence atomic and avoid partial writes.
+In the multi-city route breakdown section (lines 84-100 of `TripConfirmCard.tsx`), add a transport mode selector between each consecutive city pair. This will use the same visual pattern as `MultiCitySelector` -- a small dropdown with train/flight/bus/car/ferry icons between city rows.
 
-4) Keep generator contract aligned (no behavior change needed there)
-- `generate-itinerary` currently relies on persisted `trip.is_multi_city` and `destinations`/`trip_cities`.
-- Once creation writes correctly, generator will naturally produce multi-city itineraries.
-- No prompt-only fix is sufficient unless persistence contract is correct.
+The component will accept a new `onTransportChange` callback and a `transports` array prop so the parent can track selections.
 
-5) Add defensive observability for future regressions
-- Add structured logs (frontend + backend function if added):
-  - detected city count
-  - resolved city list
-  - final payload fields (`is_multi_city`, destinations length, city_rows inserted)
-- Add a guard before navigation to `/trip/:id?generate=true`:
-  - if route has >1 city but `is_multi_city !== true`, block and toast a diagnostic error.
+### 2. Update `TripChatPlanner` to manage transport state
 
-Validation plan (must pass):
-1. Create via Just Tell Us: “Hong Kong then Shanghai then Beijing then Tokyo.”
-2. Confirm card shows 4 cities.
-3. In database for the new trip:
-   - `is_multi_city = true`
-   - `destinations` contains all 4 in order
-   - `trip_cities` has 4 rows with correct `city_order` and dates/nights
-4. Generate itinerary:
-   - days are mapped across all cities
-   - transition days appear between city legs
-5. Regression checks:
-   - single-city Just Tell Us still creates 1 city row and normal itinerary
-   - two-city phrasing variants (“London and Paris”, “London, Paris”, “London -> Paris”) all persist as multi-city.
+Add a `cityTransports` state array to `TripChatPlanner.tsx` that tracks the user's transport choice per city leg. Initialize it with defaults (e.g., 'flight') when `extractedDetails` populates with multiple cities.
 
-Technical note on why this keeps recurring:
-- The extraction/prompt quality is not the primary blocker anymore.
-- The blocker is persistence contract mismatch: multi-city intent is seen in chat/confirmation, but not consistently committed into the fields (`is_multi_city`, `destinations`, `trip_cities`) that generation actually uses.
+Pass `cityTransports` and the setter into `TripConfirmCard`.
+
+### 3. Wire transport preferences into trip creation
+
+In `Start.tsx`'s `onChatDetailsExtracted` callback, read the transport selections from the confirmed details and write them to `trip_cities` rows as `transport_type` (the column already exists in the database schema).
+
+This ensures the itinerary generator receives the user's transport preference per city leg and can plan transition days accordingly (train station logistics vs airport logistics, etc.).
+
+## Technical Details
+
+### Files to modify
+
+| File | Change |
+|------|--------|
+| `src/components/planner/TripConfirmCard.tsx` | Add transport dropdown between each city pair in the multi-city breakdown; accept `transports` and `onTransportChange` props |
+| `src/components/planner/TripChatPlanner.tsx` | Add `cityTransports` state; initialize on extraction; pass to `TripConfirmCard`; include in confirmed details passed to parent |
+| `src/pages/Start.tsx` | Read transport selections from chat details; write to `trip_cities.transport_type` during insert |
+| `src/types/multiCity.ts` | No changes needed -- `InterCityTransport` type already exists with the right shape |
+
+### UI Design
+
+The transport selector appears inline in the city breakdown:
+
+```text
+City breakdown
+1. Hong Kong         4 nights
+   [Train v] to Shanghai
+2. Shanghai          3 nights
+   [Flight v] to Beijing
+3. Beijing           4 nights
+   [Train v] to Tokyo
+4. Tokyo             5 nights
+```
+
+Each dropdown shows: Train, Flight, Bus, Car, Ferry -- with matching icons (reusing the icon set from `MultiCitySelector`).
+
+### Data Flow
+
+1. User describes multi-city trip in chat
+2. AI extracts cities array
+3. `TripConfirmCard` renders with transport selectors (defaulting to "flight")
+4. User picks transport modes and clicks "Confirm & Generate"
+5. `Start.tsx` writes each city row with `transport_type` set
+6. Itinerary generator reads `transport_type` from `trip_cities` and plans transition days accordingly
