@@ -38,7 +38,7 @@ export function DayActionToolbar({
       animate={{ y: 0, opacity: 1 }}
       transition={{ type: 'spring', damping: 25, stiffness: 300 }}
       className={cn(
-        'fixed bottom-0 left-0 right-0 z-40',
+        'sticky bottom-0 left-0 right-0 z-40',
         className
       )}
     >
