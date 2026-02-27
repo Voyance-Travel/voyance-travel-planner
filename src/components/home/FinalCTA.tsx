@@ -3,12 +3,16 @@ import { ArrowRight, Sparkles, Compass } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
+import SafeImage from '@/components/SafeImage';
+import { toSiteImageUrlFromPhotoId } from '@/utils/unsplash';
 
 const destinations = [
-  { name: 'Tokyo', image: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=400' },
-  { name: 'Paris', image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=400' },
-  { name: 'Bali', image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400' },
+  { name: 'Tokyo', image: toSiteImageUrlFromPhotoId('photo-1540959733332-eab4deabeeaf') },
+  { name: 'Paris', image: toSiteImageUrlFromPhotoId('photo-1502602898657-3e91760cbb34') },
+  { name: 'Bali', image: toSiteImageUrlFromPhotoId('photo-1537996194471-e657df975ab4') },
 ];
+
+const amalfiImage = toSiteImageUrlFromPhotoId('photo-1534008897995-27a23e859048');
 
 export default function FinalCTA() {
   return (
@@ -100,12 +104,11 @@ export default function FinalCTA() {
             {/* Main large image - Amalfi Coast */}
             <div className="relative z-10">
               <div className="aspect-[4/5] overflow-hidden">
-                <img
-                  src="https://images.unsplash.com/photo-1534008897995-27a23e859048?w=800"
+                <SafeImage
+                  src={amalfiImage}
                   alt="Amalfi Coast, Italy"
                   className="w-full h-full object-cover"
                   loading="lazy"
-                  onError={(e) => { const t = e.currentTarget; if (!t.dataset.fallbackApplied) { t.dataset.fallbackApplied = 'true'; t.style.display = 'none'; } }}
                 />
               </div>
               
@@ -120,22 +123,20 @@ export default function FinalCTA() {
 
             {/* Smaller stacked images */}
             <div className="absolute -top-8 -right-8 w-32 h-40 z-20 hidden lg:block">
-              <img
+              <SafeImage
                 src={destinations[0].image}
                 alt={destinations[0].name}
                 className="w-full h-full object-cover shadow-elevated"
                 loading="lazy"
-                onError={(e) => { const t = e.currentTarget; if (!t.dataset.fallbackApplied) { t.dataset.fallbackApplied = 'true'; t.style.display = 'none'; } }}
               />
             </div>
             
             <div className="absolute top-1/4 -right-4 w-24 h-32 z-0 hidden lg:block">
-              <img
+              <SafeImage
                 src={destinations[1].image}
                 alt={destinations[1].name}
                 className="w-full h-full object-cover opacity-60"
                 loading="lazy"
-                onError={(e) => { const t = e.currentTarget; if (!t.dataset.fallbackApplied) { t.dataset.fallbackApplied = 'true'; t.style.display = 'none'; } }}
               />
             </div>
 
