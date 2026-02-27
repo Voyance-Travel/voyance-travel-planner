@@ -21,6 +21,12 @@ export interface FlightLeg {
   };
   price: number;
   cabin: string;
+  seatNumber?: string;
+  confirmationCode?: string;
+  terminal?: string;
+  gate?: string;
+  baggageInfo?: string;
+  boardingPassUrl?: string;
 }
 
 export interface NormalizedFlightSelection {

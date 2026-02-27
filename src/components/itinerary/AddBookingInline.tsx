@@ -43,6 +43,12 @@ export interface ManualFlightEntry {
   arrivalTime: string;
   departureDate: string;
   price?: number; // Optional price for budget tracking
+  seatNumber?: string;
+  confirmationCode?: string;
+  cabinClass?: string;
+  terminal?: string;
+  gate?: string;
+  baggageInfo?: string;
 }
 
 export interface ManualHotelEntry {
@@ -133,6 +139,12 @@ export function AddFlightInline({
         departureTime: '',
         arrivalTime: '',
         departureDate: r.date || (i === 0 ? startDate : ''),
+        seatNumber: '',
+        confirmationCode: '',
+        cabinClass: '',
+        terminal: '',
+        gate: '',
+        baggageInfo: '',
       }));
     }
 
@@ -145,6 +157,12 @@ export function AddFlightInline({
       departureTime: '',
       arrivalTime: '',
       departureDate: startDate,
+      seatNumber: '',
+      confirmationCode: '',
+      cabinClass: '',
+      terminal: '',
+      gate: '',
+      baggageInfo: '',
     }];
   };
 
@@ -166,6 +184,12 @@ export function AddFlightInline({
       departureTime: '',
       arrivalTime: '',
       departureDate: '',
+      seatNumber: '',
+      confirmationCode: '',
+      cabinClass: '',
+      terminal: '',
+      gate: '',
+      baggageInfo: '',
     }]);
     setExpandedLeg(legs.length);
   };
@@ -201,7 +225,12 @@ export function AddFlightInline({
           time: leg.arrivalTime,
         },
         price: leg.price || 0,
-        cabin: 'economy',
+        cabin: leg.cabinClass || 'economy',
+        seatNumber: leg.seatNumber || undefined,
+        confirmationCode: leg.confirmationCode || undefined,
+        terminal: leg.terminal || undefined,
+        gate: leg.gate || undefined,
+        baggageInfo: leg.baggageInfo || undefined,
       }));
 
       const flightSelection: Record<string, unknown> = {
@@ -460,6 +489,76 @@ export function AddFlightInline({
                           onChange={(e) => updateLeg(idx, { price: e.target.value ? Number(e.target.value) : undefined })}
                           className="text-sm"
                         />
+                      </div>
+                    </div>
+
+                    {/* Traveler details section */}
+                    <div className="pt-2 border-t border-border/50">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">Traveler Details</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Confirmation Code</Label>
+                          <Input
+                            placeholder="e.g. ABCDEF"
+                            value={leg.confirmationCode || ''}
+                            onChange={(e) => updateLeg(idx, { confirmationCode: e.target.value.toUpperCase() })}
+                            className="text-sm font-mono"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Seat</Label>
+                          <Input
+                            placeholder="e.g. 12A"
+                            value={leg.seatNumber || ''}
+                            onChange={(e) => updateLeg(idx, { seatNumber: e.target.value.toUpperCase() })}
+                            className="text-sm font-mono"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 mt-3">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Class</Label>
+                          <select
+                            value={leg.cabinClass || ''}
+                            onChange={(e) => updateLeg(idx, { cabinClass: e.target.value })}
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            <option value="">Select class</option>
+                            <option value="Economy">Economy</option>
+                            <option value="Premium Economy">Premium Economy</option>
+                            <option value="Business">Business</option>
+                            <option value="First">First</option>
+                          </select>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Baggage</Label>
+                          <Input
+                            placeholder="e.g. 1 checked bag"
+                            value={leg.baggageInfo || ''}
+                            onChange={(e) => updateLeg(idx, { baggageInfo: e.target.value })}
+                            className="text-sm"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 mt-3">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Terminal</Label>
+                          <Input
+                            placeholder="e.g. Terminal B"
+                            value={leg.terminal || ''}
+                            onChange={(e) => updateLeg(idx, { terminal: e.target.value })}
+                            className="text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Gate</Label>
+                          <Input
+                            placeholder="e.g. B42"
+                            value={leg.gate || ''}
+                            onChange={(e) => updateLeg(idx, { gate: e.target.value })}
+                            className="text-sm"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>

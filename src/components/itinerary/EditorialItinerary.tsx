@@ -261,6 +261,11 @@ export interface FlightLegDisplay {
   cabinClass?: string;
   seat?: string;
   duration?: string;
+  confirmationCode?: string;
+  terminal?: string;
+  gate?: string;
+  baggageInfo?: string;
+  boardingPassUrl?: string;
 }
 
 export interface FlightSelection {
@@ -1776,10 +1781,18 @@ export function EditorialItinerary({
   // Derive a flat list of all flight legs (prefer legs[], fall back to outbound/return)
   const allFlightLegs: FlightLegDisplay[] = useMemo(() => {
     if (!flightSelection) return [];
-    if (flightSelection.legs && flightSelection.legs.length > 0) return flightSelection.legs;
+    // Helper to normalize raw leg data field names
+    const normalizeLeg = (leg: Record<string, unknown>): FlightLegDisplay => ({
+      ...leg as FlightLegDisplay,
+      seat: (leg.seat as string) || (leg.seatNumber as string) || undefined,
+      cabinClass: (leg.cabinClass as string) || (leg.cabin as string) || undefined,
+    });
+    if (flightSelection.legs && flightSelection.legs.length > 0) {
+      return flightSelection.legs.map(l => normalizeLeg(l as unknown as Record<string, unknown>));
+    }
     const result: FlightLegDisplay[] = [];
-    if (flightSelection.outbound) result.push(flightSelection.outbound);
-    if (flightSelection.return) result.push(flightSelection.return);
+    if (flightSelection.outbound) result.push(normalizeLeg(flightSelection.outbound as unknown as Record<string, unknown>));
+    if (flightSelection.return) result.push(normalizeLeg(flightSelection.return as unknown as Record<string, unknown>));
     return result;
   }, [flightSelection]);
 
@@ -3879,13 +3892,37 @@ export function EditorialItinerary({
                               </div>
                             </div>
                             
-                            {(leg.cabinClass || leg.seat) && (
-                              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/50">
-                                {leg.cabinClass && (
-                                  <span className="text-xs px-2 py-0.5 rounded bg-secondary text-muted-foreground">{leg.cabinClass}</span>
+                            {(leg.cabinClass || leg.seat || leg.confirmationCode || leg.terminal || leg.gate || leg.baggageInfo) && (
+                              <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
+                                {/* Confirmation code + seat row */}
+                                {(leg.confirmationCode || leg.seat || leg.cabinClass) && (
+                                  <div className="flex items-center gap-3 flex-wrap">
+                                    {leg.confirmationCode && (
+                                      <span className="text-xs font-mono px-2 py-0.5 rounded bg-primary/10 text-primary font-semibold tracking-wider">
+                                        {leg.confirmationCode}
+                                      </span>
+                                    )}
+                                    {leg.cabinClass && (
+                                      <span className="text-xs px-2 py-0.5 rounded bg-secondary text-muted-foreground">{leg.cabinClass}</span>
+                                    )}
+                                    {leg.seat && (
+                                      <span className="text-xs text-muted-foreground">Seat {leg.seat}</span>
+                                    )}
+                                  </div>
                                 )}
-                                {leg.seat && (
-                                  <span className="text-xs text-muted-foreground">Seat {leg.seat}</span>
+                                {/* Terminal, gate, baggage row */}
+                                {(leg.terminal || leg.gate || leg.baggageInfo) && (
+                                  <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+                                    {leg.terminal && (
+                                      <span>{leg.terminal}</span>
+                                    )}
+                                    {leg.gate && (
+                                      <span>Gate {leg.gate}</span>
+                                    )}
+                                    {leg.baggageInfo && (
+                                      <span>🧳 {leg.baggageInfo}</span>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                             )}
@@ -4488,6 +4525,12 @@ export function EditorialItinerary({
                 arrivalTime: leg.arrival?.time || '',
                 departureDate: leg.departure?.date || (i === 0 ? startDate : i === allFlightLegs.length - 1 ? endDate : ''),
                 price: leg.price,
+                seatNumber: leg.seat || '',
+                confirmationCode: leg.confirmationCode || '',
+                cabinClass: leg.cabinClass || '',
+                terminal: leg.terminal || '',
+                gate: leg.gate || '',
+                baggageInfo: leg.baggageInfo || '',
               })) : undefined}
               multiCityRoute={allHotels && allHotels.length > 1 ? (() => {
                 const route: Array<{ from: string; to: string; date?: string }> = [];
