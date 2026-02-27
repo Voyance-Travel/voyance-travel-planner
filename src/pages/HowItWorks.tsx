@@ -221,40 +221,39 @@ export default function HowItWorks() {
       </section>
 
       {/* The Journey */}
-      <section id="journey" className="py-32 relative">
+      <section id="journey" className="py-16 md:py-32 relative">
         <div className="max-w-6xl mx-auto px-4">
           {/* Chapter 1 */}
           <motion.div
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
-            className="grid lg:grid-cols-2 gap-16 items-center mb-32"
+            className="grid grid-cols-[1fr_1fr] md:grid-cols-2 gap-4 md:gap-16 items-center mb-12 md:mb-32"
           >
             <div>
-              <span className="text-8xl font-serif font-bold text-primary/10">01</span>
-              <h2 className="text-3xl md:text-4xl font-serif font-bold text-foreground -mt-8 mb-6">
+              <span className="text-4xl md:text-8xl font-serif font-bold text-primary/10">01</span>
+              <h2 className="text-xl md:text-4xl font-serif font-bold text-foreground -mt-4 md:-mt-8 mb-3 md:mb-6">
                 Tell us who you are
               </h2>
-              <p className="text-lg text-muted-foreground leading-relaxed mb-6">
-                Not what you want to see - who you are. Our quiz measures 8 core traits: 
+              <p className="text-sm md:text-lg text-muted-foreground leading-relaxed mb-3 md:mb-6">
+                Not what you want to see – who you are. Our quiz measures 8 core traits: 
                 how you plan, how you recharge, what thrills you, what bores you.
               </p>
-              <p className="text-lg text-muted-foreground leading-relaxed">
+              <p className="hidden md:block text-lg text-muted-foreground leading-relaxed">
                 In 5 minutes, we identify your type from 29 distinct traveler types. 
                 Not a horoscope. A blueprint.
               </p>
-              <div className="mt-8 flex items-center gap-4 text-sm text-muted-foreground">
-                <span className="px-3 py-1 bg-muted rounded-full">Your profile stays with you</span>
-                <span className="px-3 py-1 bg-muted rounded-full">5 minutes</span>
-                <span className="px-3 py-1 bg-muted rounded-full">29 types</span>
+              <div className="mt-4 md:mt-8 flex flex-wrap items-center gap-2 md:gap-4 text-xs md:text-sm text-muted-foreground">
+                <span className="px-2 md:px-3 py-1 bg-muted rounded-full">5 minutes</span>
+                <span className="px-2 md:px-3 py-1 bg-muted rounded-full">29 types</span>
               </div>
             </div>
             <div className="relative">
-              <div className="absolute -inset-4 bg-gradient-to-br from-primary/20 to-accent/20 rounded-3xl blur-2xl" />
+              <div className="absolute -inset-2 md:-inset-4 bg-gradient-to-br from-primary/20 to-accent/20 rounded-2xl md:rounded-3xl blur-xl md:blur-2xl" />
               <img 
                 src={quizImage}
                 alt="Taking the travel quiz"
-                className="relative rounded-2xl shadow-2xl w-full aspect-[4/3] object-cover"
+                className="relative rounded-xl md:rounded-2xl shadow-xl md:shadow-2xl w-full aspect-square md:aspect-[4/3] object-cover"
               />
             </div>
           </motion.div>
@@ -264,75 +263,46 @@ export default function HowItWorks() {
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
-            className="grid lg:grid-cols-2 gap-16 items-center mb-32"
+            className="grid grid-cols-[1fr_1fr] md:grid-cols-2 gap-4 md:gap-16 items-start mb-12 md:mb-32"
           >
-            <div className="lg:order-2">
-              <span className="text-8xl font-serif font-bold text-primary/10">02</span>
-              <h2 className="text-3xl md:text-4xl font-serif font-bold text-foreground -mt-8 mb-6">
-                Start your way
-              </h2>
-              <p className="text-lg text-muted-foreground leading-relaxed mb-8">
-                No two planners are alike - so we give you four ways to begin. 
-                Pick the one that matches how you think.
-              </p>
-
-              <div className="space-y-4">
-                <div className="flex items-start gap-4 p-4 rounded-xl bg-muted/50 border border-border hover:border-primary/30 transition-colors">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <MapPin className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-foreground mb-1">Pick a City</h4>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      Choose your destination, dates, and budget. We build an AI-powered itinerary matched to your Travel DNA.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-4 p-4 rounded-xl bg-muted/50 border border-border hover:border-primary/30 transition-colors">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <Globe className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-foreground mb-1">Multi-City</h4>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      Hopping between cities? Plan a multi-stop trip with smart day allocation and transition-day logistics.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-4 p-4 rounded-xl bg-muted/50 border border-border hover:border-primary/30 transition-colors">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <MessageCircle className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-foreground mb-1">Just Tell Us</h4>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      Describe your dream trip in plain English. Our AI extracts the details and builds your itinerary from conversation.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-4 p-4 rounded-xl bg-muted/50 border border-border hover:border-primary/30 transition-colors">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <ClipboardPaste className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-foreground mb-1">Build It Yourself</h4>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      Already have an itinerary from another app, a blog, or a friend? Paste it in - we'll parse, structure, and enhance it.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="relative lg:order-1">
-              <div className="absolute -inset-4 bg-gradient-to-br from-accent/20 to-primary/20 rounded-3xl blur-2xl" />
+            <div className="relative md:order-1 order-2">
+              <div className="absolute -inset-2 md:-inset-4 bg-gradient-to-br from-accent/20 to-primary/20 rounded-2xl md:rounded-3xl blur-xl md:blur-2xl" />
               <img 
                 src={planImage}
                 alt="Multiple ways to plan your trip"
-                className="relative rounded-2xl shadow-2xl w-full aspect-[4/3] object-cover"
+                className="relative rounded-xl md:rounded-2xl shadow-xl md:shadow-2xl w-full aspect-square md:aspect-[4/3] object-cover"
               />
+            </div>
+            <div className="md:order-2 order-1">
+              <span className="text-4xl md:text-8xl font-serif font-bold text-primary/10">02</span>
+              <h2 className="text-xl md:text-4xl font-serif font-bold text-foreground -mt-4 md:-mt-8 mb-3 md:mb-6">
+                Start your way
+              </h2>
+              <p className="text-sm md:text-lg text-muted-foreground leading-relaxed mb-4 md:mb-8">
+                Four ways to begin – pick the one that matches how you think.
+              </p>
+
+              {/* Compact cards on mobile, full cards on desktop */}
+              <div className="space-y-2 md:space-y-4">
+                {[
+                  { icon: MapPin, title: 'Pick a City', desc: 'Choose destination, dates, budget – we build the itinerary.' },
+                  { icon: Globe, title: 'Multi-City', desc: 'Plan a multi-stop trip with smart day allocation.' },
+                  { icon: MessageCircle, title: 'Just Tell Us', desc: 'Describe your dream trip – AI extracts the details.' },
+                  { icon: ClipboardPaste, title: 'Build It Yourself', desc: 'Paste an existing itinerary – we parse and enhance it.' },
+                ].map(({ icon: Icon, title, desc }) => (
+                  <div key={title} className="flex items-start gap-2 md:gap-4 p-2 md:p-4 rounded-lg md:rounded-xl bg-muted/50 border border-border">
+                    <div className="w-7 h-7 md:w-10 md:h-10 rounded-md md:rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <Icon className="h-3.5 w-3.5 md:h-5 md:w-5 text-primary" />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="font-semibold text-foreground text-sm md:text-base">{title}</h4>
+                      <p className="text-xs md:text-sm text-muted-foreground leading-snug line-clamp-2">
+                        {desc}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </motion.div>
 
@@ -341,44 +311,42 @@ export default function HowItWorks() {
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
-            className="grid lg:grid-cols-2 gap-16 items-center"
+            className="grid grid-cols-[1fr_1fr] md:grid-cols-2 gap-4 md:gap-16 items-center"
           >
             <div>
-              <span className="text-8xl font-serif font-bold text-primary/10">03</span>
-              <h2 className="text-3xl md:text-4xl font-serif font-bold text-foreground -mt-8 mb-6">
+              <span className="text-4xl md:text-8xl font-serif font-bold text-primary/10">03</span>
+              <h2 className="text-xl md:text-4xl font-serif font-bold text-foreground -mt-4 md:-mt-8 mb-3 md:mb-6">
                 Get your itinerary
               </h2>
-              <p className="text-lg text-muted-foreground leading-relaxed mb-6">
+              <p className="text-sm md:text-lg text-muted-foreground leading-relaxed mb-3 md:mb-6">
                 Day-by-day. Hour-by-hour. Every activity timed to your pace, 
-                every route optimized to save you walking, every recommendation 
-                backed by real reviews.
+                every route optimized, every recommendation backed by real reviews.
               </p>
-              <p className="text-lg text-muted-foreground leading-relaxed">
+              <p className="hidden md:block text-lg text-muted-foreground leading-relaxed">
                 Don't like something? Swap it. Love something? Lock it. 
-                Want a different vibe? Regenerate the whole day. 
-                It's your trip. We just built the first draft.
+                Want a different vibe? Regenerate the whole day.
               </p>
-              <div className="mt-8 grid grid-cols-3 gap-4 text-center">
-                <div className="p-4 bg-muted/50 rounded-xl">
-                  <p className="text-2xl font-bold text-primary">Hours</p>
-                  <p className="text-xs text-muted-foreground">of planning saved</p>
+              <div className="mt-4 md:mt-8 grid grid-cols-3 gap-2 md:gap-4 text-center">
+                <div className="p-2 md:p-4 bg-muted/50 rounded-lg md:rounded-xl">
+                  <p className="text-lg md:text-2xl font-bold text-primary">Hours</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">saved</p>
                 </div>
-                <div className="p-4 bg-muted/50 rounded-xl">
-                  <p className="text-2xl font-bold text-primary">Global</p>
-                  <p className="text-xs text-muted-foreground">coverage</p>
+                <div className="p-2 md:p-4 bg-muted/50 rounded-lg md:rounded-xl">
+                  <p className="text-lg md:text-2xl font-bold text-primary">Global</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">coverage</p>
                 </div>
-                <div className="p-4 bg-muted/50 rounded-xl">
-                  <p className="text-2xl font-bold text-primary">Real</p>
-                  <p className="text-xs text-muted-foreground">reviews only</p>
+                <div className="p-2 md:p-4 bg-muted/50 rounded-lg md:rounded-xl">
+                  <p className="text-lg md:text-2xl font-bold text-primary">Real</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">reviews</p>
                 </div>
               </div>
             </div>
             <div className="relative">
-              <div className="absolute -inset-4 bg-gradient-to-br from-primary/20 to-accent/20 rounded-3xl blur-2xl" />
+              <div className="absolute -inset-2 md:-inset-4 bg-gradient-to-br from-primary/20 to-accent/20 rounded-2xl md:rounded-3xl blur-xl md:blur-2xl" />
               <img 
                 src={itineraryImage}
                 alt="Your personalized itinerary"
-                className="relative rounded-2xl shadow-2xl w-full aspect-[4/3] object-cover"
+                className="relative rounded-xl md:rounded-2xl shadow-xl md:shadow-2xl w-full aspect-square md:aspect-[4/3] object-cover"
               />
             </div>
           </motion.div>
