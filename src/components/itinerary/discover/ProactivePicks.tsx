@@ -15,6 +15,8 @@ export interface ProactiveSuggestion {
   bestTime?: string;
   scheduleFit?: string;
   rating?: number;
+  distance?: string;
+  walkTime?: string;
 }
 
 interface ProactivePicksProps {
@@ -73,11 +75,26 @@ function SuggestionCard({
         </Button>
       </div>
 
-      {suggestion.scheduleFit && (
-        <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-          <Clock className="h-3 w-3" />
-          {suggestion.scheduleFit}
-        </p>
+      {(suggestion.distance || suggestion.walkTime || suggestion.scheduleFit) && (
+        <div className="flex items-center gap-3 text-[11px] text-muted-foreground flex-wrap">
+          {suggestion.walkTime && (
+            <span className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {suggestion.walkTime}
+            </span>
+          )}
+          {suggestion.distance && (
+            <span className="flex items-center gap-1">
+              <MapPin className="h-3 w-3" />
+              {suggestion.distance}
+            </span>
+          )}
+          {suggestion.scheduleFit && (
+            <span className="flex items-center gap-1">
+              {suggestion.scheduleFit}
+            </span>
+          )}
+        </div>
       )}
 
       {suggestion.whyForYou && (

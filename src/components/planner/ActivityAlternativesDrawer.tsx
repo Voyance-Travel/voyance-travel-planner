@@ -4,7 +4,7 @@ import {
   X, Search, Star, MapPin, Clock, DollarSign, 
   Sparkles, Loader2, ArrowRightLeft, Check,
   Shuffle, Heart, Utensils, Camera, Mountain, 
-  Wine, Music, ShoppingBag, Palette
+  Wine, Music, ShoppingBag, Palette, Footprints
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -43,6 +43,8 @@ interface AlternativeActivity {
   matchScore?: number;
   whyRecommended?: string;
   suggestionType?: 'similar' | 'different';
+  distanceFromOriginal?: string;
+  walkTimeFromOriginal?: string;
 }
 
 // Map AI category strings to valid ActivityType
@@ -390,6 +392,22 @@ export default function ActivityAlternativesDrawer({
                   (alt.location as { name?: string; address?: string })?.address || ''}
             </span>
           </div>
+          {(alt.walkTimeFromOriginal || alt.distanceFromOriginal) && (
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground/80 mt-1">
+              {alt.walkTimeFromOriginal && (
+                <span className="flex items-center gap-1">
+                  <Footprints className="w-3 h-3" />
+                  {alt.walkTimeFromOriginal}
+                </span>
+              )}
+              {alt.distanceFromOriginal && (
+                <span className="flex items-center gap-1">
+                  <MapPin className="w-3 h-3" />
+                  {alt.distanceFromOriginal}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors">
