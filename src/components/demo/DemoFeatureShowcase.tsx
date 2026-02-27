@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { toSiteImageUrlFromPhotoId } from '@/utils/unsplash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   RefreshCw, MapPin, Lock, 
@@ -628,7 +629,7 @@ function CustomizeVisual() {
       )}>
         <div className="w-12 h-12 rounded-md bg-muted overflow-hidden shrink-0">
           <img 
-            src="https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=200" 
+            src={toSiteImageUrlFromPhotoId('photo-1537996194471-e657df975ab4')} 
             alt="" 
             className="w-full h-full object-cover"
           />
@@ -655,7 +656,7 @@ function CustomizeVisual() {
       >
         <div className="w-12 h-12 rounded-md bg-muted overflow-hidden shrink-0">
           <img 
-            src="https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=200" 
+            src={toSiteImageUrlFromPhotoId('photo-1504674900247-0877df9cc836')} 
             alt="" 
             className="w-full h-full object-cover"
           />

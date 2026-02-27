@@ -1,3 +1,5 @@
+import { toSiteImageUrlFromPhotoId } from '@/utils/unsplash';
+
 /**
  * Voyance Travel Guides
  * 
@@ -27,7 +29,7 @@ export const guides: Guide[] = [
     subtitle: "Smart strategies for authentic, uncrowded experiences at famous landmarks",
     category: "Smart Travel",
     readTime: "6 min read",
-    coverImage: "https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=800&q=80",
+    coverImage: toSiteImageUrlFromPhotoId("photo-1499856871958-5b9627545d1a"),
     summary: "Strategic approaches to experiencing iconic attractions like the Eiffel Tower, Times Square, and the Taj Mahal the way locals do - with better timing, hidden viewpoints, and authentic nearby dining.",
     content: `# Experience Iconic Attractions Like a Local
 
@@ -108,7 +110,7 @@ By applying even a few of these strategies, you can transform your visit into a 
     subtitle: "How to immerse in local culture, not just see it",
     category: "Destinations",
     readTime: "5 min read",
-    coverImage: "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?w=800&q=80", // Street market scene
+    coverImage: toSiteImageUrlFromPhotoId("photo-1517457373958-b7bdd4587205"),
     summary: "Move beyond tourist hotspots and experience destinations authentically, from morning routines to evening traditions, creating deeper connections and more meaningful travel experiences.",
     content: `# Travel Like a Local
 
@@ -251,7 +253,7 @@ The most rewarding travel doesn't require abandoning tourist activities entirely
     subtitle: "The art of minimalist packing without sacrificing comfort",
     category: "Packing",
     readTime: "5 min read",
-    coverImage: "https://images.unsplash.com/photo-1553531384-cc64ac80f931?w=800&q=80", // Travel backpack
+    coverImage: toSiteImageUrlFromPhotoId("photo-1553531384-cc64ac80f931"),
     summary: "Master the art of traveling with just one bag, reducing stress, saving money on baggage fees, and gaining mobility without sacrificing essentials or style.",
     content: `# Packing for One-Bag Travel
 
@@ -390,7 +392,7 @@ Remember that true one-bag mastery comes not from following a rigid formula, but
     subtitle: "Turn waiting time into mini-adventures",
     category: "Airport Hacks",
     readTime: "5 min read",
-    coverImage: "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=800&q=80", // Airport window with plane
+    coverImage: toSiteImageUrlFromPhotoId("photo-1436491865332-7a61a109cc05"),
     summary: "Strategic advice for converting layovers into valuable exploration time at cities like Singapore, Istanbul, and Seoul, including time calculations, transit options, and practical tips.",
     content: `# How to Maximize Long Layovers
 
@@ -479,7 +481,7 @@ With strategic planning, your next long layover could transform from dead time i
     subtitle: "Discovering the extraordinary beyond the tourist track",
     category: "Destinations",
     readTime: "6 min read",
-    coverImage: "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&q=80", // London hidden alley
+    coverImage: toSiteImageUrlFromPhotoId("photo-1513635269975-59663e0ac1ad"),
     summary: "Venture beyond the iconic landmarks to discover authentic local experiences in the world's most visited cities, from secret gardens and underground speakeasies to neighborhood eateries where tourists rarely tread.",
     content: `# Hidden Gems in Big Cities
 
@@ -588,7 +590,7 @@ The best hidden gems aren't specific locations but moments of connection—when 
     subtitle: "Strategic timing to secure the best deals and availability",
     category: "Travel Tips",
     readTime: "4 min read",
-    coverImage: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80", // Mountain landscape at sunrise
+    coverImage: toSiteImageUrlFromPhotoId("photo-1506905925346-21bda4d32df4"),
     summary: "A strategic guide to timing your 2025 travel bookings for maximum savings and availability, with month-by-month recommendations for popular destinations.",
     content: `# Best Time to Book for 2025
 

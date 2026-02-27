@@ -1,4 +1,5 @@
 import MainLayout from '@/components/layout/MainLayout';
+import { toSiteImageUrlFromPhotoId } from '@/utils/unsplash';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
 import { 
@@ -168,7 +169,7 @@ export default function HelpCenter() {
       <section className="relative pt-20 pb-24 overflow-hidden">
         <div className="absolute inset-0">
           <img 
-            src="https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1920&q=80"
+            src={toSiteImageUrlFromPhotoId('photo-1469474968028-56623f02e42e')}
             alt=""
             className="w-full h-full object-cover"
           />
@@ -305,7 +306,7 @@ export default function HelpCenter() {
         <div className="max-w-4xl mx-auto px-4">
           <div className="relative rounded-2xl overflow-hidden">
             <img 
-              src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200&q=80"
+              src={toSiteImageUrlFromPhotoId('photo-1507525428034-b723cf961d3e')}
               alt=""
               className="w-full h-64 object-cover"
             />

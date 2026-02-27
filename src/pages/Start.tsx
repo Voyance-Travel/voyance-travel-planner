@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toSiteImageUrlFromPhotoId } from '@/utils/unsplash';
 
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -117,21 +118,21 @@ const sampleItineraries = [
     duration: '5 days',
     highlight: 'Bamboo forest at dawn',
     tags: ['Culture', 'Hidden Gems'],
-    image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400',
+    image: toSiteImageUrlFromPhotoId('photo-1493976040374-85c8e12f0c0e'),
   },
   {
     destination: 'Amalfi Coast',
     duration: '7 days',
     highlight: 'Cliffside dinner in Ravello',
     tags: ['Romance', 'Cuisine'],
-    image: 'https://images.unsplash.com/photo-1534113414509-0eec2bfb493f?w=400',
+    image: toSiteImageUrlFromPhotoId('photo-1534113414509-0eec2bfb493f'),
   },
   {
     destination: 'Bali',
     duration: '6 days',
     highlight: 'Private temple ceremony',
     tags: ['Wellness', 'Adventure'],
-    image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400',
+    image: toSiteImageUrlFromPhotoId('photo-1537996194471-e657df975ab4'),
   },
 ];
 

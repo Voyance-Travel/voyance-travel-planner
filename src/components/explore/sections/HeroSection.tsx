@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { Search, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { toSiteImageUrlFromPhotoId } from '@/utils/unsplash';
 
 interface HeroSectionProps {
   onFilterToggle: () => void;
@@ -30,7 +31,7 @@ export default function HeroSection({
       {/* Background */}
       <div className="absolute inset-0 bg-[#2c3e50]">
         <img
-          src="https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920"
+          src={toSiteImageUrlFromPhotoId('photo-1476514525535-07fb3b4ae5f1')}
           alt="Scenic lake and mountains"
           className="w-full h-full object-cover"
         />

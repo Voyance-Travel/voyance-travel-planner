@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { toSiteImageUrlFromPhotoId } from '@/utils/unsplash';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { format, addDays, isBefore, startOfToday, differenceInDays } from 'date-fns';
@@ -182,7 +183,7 @@ export default function MultiCityPlanner() {
       <section className="relative min-h-[40vh] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0">
           <img
-            src="https://images.unsplash.com/photo-1488085061387-422e29b40080?w=1920&q=80"
+            src={toSiteImageUrlFromPhotoId('photo-1488085061387-422e29b40080')}
             alt=""
             className="w-full h-full object-cover"
           />

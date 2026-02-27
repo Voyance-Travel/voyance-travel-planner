@@ -6,6 +6,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { toSiteImageUrlFromPhotoId } from '@/utils/unsplash';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 // ============================================================================
@@ -235,12 +236,12 @@ const HOTEL_TEMPLATES = [
 ];
 
 const HOTEL_IMAGES = [
-  'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600&q=80',
-  'https://images.unsplash.com/photo-1582719508461-905c673771fd?w=600&q=80',
-  'https://images.unsplash.com/photo-1590490360182-c33d57733427?w=600&q=80',
-  'https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=600&q=80',
-  'https://images.unsplash.com/photo-1618773928121-c32242e63f39?w=600&q=80',
-  'https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=600&q=80',
+  toSiteImageUrlFromPhotoId('photo-1566073771259-6a8506099945'),
+  toSiteImageUrlFromPhotoId('photo-1582719508461-905c673771fd'),
+  toSiteImageUrlFromPhotoId('photo-1590490360182-c33d57733427'),
+  toSiteImageUrlFromPhotoId('photo-1551882547-ff40c63fe5fa'),
+  toSiteImageUrlFromPhotoId('photo-1618773928121-c32242e63f39'),
+  toSiteImageUrlFromPhotoId('photo-1571896349842-33c89424de2d'),
 ];
 
 function calculateNights(checkIn: string, checkOut: string): number {

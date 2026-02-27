@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { MapPin, Star, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { buildRoute } from '@/config/routes';
+import { toSiteImageUrlFromPhotoId } from '@/utils/unsplash';
 import nolaHero1 from '@/assets/destinations/new-orleans-1.jpg';
 
 // Unique images for each destination to avoid duplicates across site
@@ -10,7 +11,7 @@ const destinations = [
     slug: 'austin',
     name: 'Austin',
     country: 'USA',
-    image: 'https://images.unsplash.com/photo-1531218150217-54595bc2b934?w=600',
+    image: toSiteImageUrlFromPhotoId('photo-1531218150217-54595bc2b934'),
     rating: 4.7,
     category: 'Urban',
   },
@@ -18,7 +19,7 @@ const destinations = [
     slug: 'lisbon',
     name: 'Lisbon',
     country: 'Portugal',
-    image: 'https://images.unsplash.com/photo-1585208798174-6cedd86e019a?w=600',
+    image: toSiteImageUrlFromPhotoId('photo-1585208798174-6cedd86e019a'),
     rating: 4.8,
     category: 'Culture',
   },
@@ -26,7 +27,7 @@ const destinations = [
     slug: 'bali',
     name: 'Bali',
     country: 'Indonesia',
-    image: 'https://images.unsplash.com/photo-1573790387438-4da905039392?w=600',
+    image: toSiteImageUrlFromPhotoId('photo-1573790387438-4da905039392'),
     rating: 4.7,
     category: 'Wellness',
   },
@@ -34,7 +35,7 @@ const destinations = [
     slug: 'cape-town',
     name: 'Cape Town',
     country: 'South Africa',
-    image: 'https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=600',
+    image: toSiteImageUrlFromPhotoId('photo-1580060839134-75a5edca2e99'),
     rating: 4.8,
     category: 'Adventure',
   },
@@ -42,7 +43,7 @@ const destinations = [
     slug: 'marrakech',
     name: 'Marrakech',
     country: 'Morocco',
-    image: 'https://images.unsplash.com/photo-1597212618440-806262de4f6b?w=600',
+    image: toSiteImageUrlFromPhotoId('photo-1597212618440-806262de4f6b'),
     rating: 4.6,
     category: 'Adventure',
   },
