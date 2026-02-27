@@ -22,7 +22,7 @@ import {
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
-  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2, ClipboardPaste, Compass, Bus, Ship, ArrowRight
+  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2, ClipboardPaste, Compass, Bus, Ship, ArrowRight, Droplets
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
@@ -5118,13 +5118,11 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
     );
   };
 
-  // Default information for common destinations - prioritize AI insights when available
+  // Static essentials only — currency, tipping, transit live in Travel Intel
   const getDefaultInfo = () => {
     // If we have AI-generated insights, use those
     if (aiInsights) {
       return {
-        currency: aiInsights.currency?.name || 'Local currency',
-        currencyTips: aiInsights.currency?.tips || ['Check current exchange rates'],
         language: aiInsights.language?.primary || 'Local language',
         languageTips: aiInsights.language?.phrases?.map((p: any) => 
           `"${p.phrase}" = "${p.translation}" (${p.pronunciation})`
@@ -5132,10 +5130,6 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
         languageEnglishFriendly: aiInsights.language?.englishFriendly,
         timezone: aiInsights.timezone?.zone || 'Local time',
         timezoneTips: aiInsights.timezone?.tips || ['Check local business hours'],
-        tipping: aiInsights.tipping?.custom || 'Varies by location',
-        tippingTips: aiInsights.tipping?.tips || ['Research local customs'],
-        transit: aiInsights.transit?.overview || 'Various public transport options',
-        transitTips: aiInsights.transit?.tips || ['Download local transit apps'],
         water: aiInsights.water?.description || (aiInsights.water?.safe ? 'Tap water is safe' : 'Check local advisories'),
         waterTips: aiInsights.water?.tips || ['When in doubt, use bottled water'],
         voltage: `${aiInsights.voltage?.voltage || '230V'}, ${aiInsights.voltage?.plugType || 'Check adapter requirements'}`,
@@ -5151,13 +5145,6 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
     // UK / London
     if (country.includes('uk') || country.includes('united kingdom') || country.includes('england') || dest.includes('london')) {
       return {
-        currency: 'British Pound (£)',
-        currencyTips: [
-          'Contactless payments widely accepted everywhere',
-          'Tipping 10-15% at restaurants is customary',
-          'ATMs available at banks and on high streets',
-          'Most places accept major credit cards'
-        ],
         language: 'English',
         languageTips: [
           'British English differs from American English',
@@ -5170,20 +5157,6 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
           'Shops typically close 6-7 PM, later in central London',
           'Pubs traditionally close around 11 PM',
           'Sunday trading hours are limited'
-        ],
-        tipping: '10-15% at restaurants if service not included',
-        tippingTips: [
-          'Check if service charge is already added',
-          'Round up taxi fares',
-          'Not expected at pubs for bar service',
-          'Hotel porters: £1-2 per bag'
-        ],
-        transit: 'Tube, buses, Overground. Use Oyster or contactless.',
-        transitTips: [
-          'Oyster card or contactless for cheaper fares',
-          'Stand on right on escalators, walk on left',
-          'Buses don\'t accept cash - tap to pay',
-          'Night Tube runs on weekends'
         ],
         water: 'Tap water is safe and excellent quality',
         waterTips: [
@@ -5210,13 +5183,6 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
     // France / Paris
     if (country.includes('france') || dest.includes('paris')) {
       return {
-        currency: 'Euro (€)',
-        currencyTips: [
-          'Cards accepted almost everywhere',
-          'Some small shops prefer cash',
-          'ATMs available at banks and metro stations',
-          'Notify your bank before traveling'
-        ],
         language: 'French',
         languageTips: [
           '"Bonjour" (Hello) - always greet first',
@@ -5229,20 +5195,6 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
           'Many shops close Sundays',
           'Lunch is typically 12-2 PM',
           'Dinner starts around 8 PM'
-        ],
-        tipping: 'Service included, rounding up appreciated',
-        tippingTips: [
-          'Service compris (service included) in bill',
-          'Leave small change for good service',
-          'Round up taxi fares',
-          'Not expected at cafes'
-        ],
-        transit: 'Metro, RER, buses. Buy tickets at stations.',
-        transitTips: [
-          'Metro runs 5:30 AM - 1 AM (2 AM weekends)',
-          'Keep ticket until you exit',
-          'Navigo pass for unlimited weekly travel',
-          'Uber and taxis widely available'
         ],
         water: 'Tap water is safe to drink',
         waterTips: [
@@ -5269,13 +5221,6 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
     // Spain / Barcelona / Madrid
     if (country.includes('spain') || dest.includes('barcelona') || dest.includes('madrid')) {
       return {
-        currency: 'Euro (€)',
-        currencyTips: [
-          'Cards widely accepted',
-          'Cash useful for small purchases',
-          'ATMs available at banks',
-          'Dynamic currency conversion - always pay in EUR'
-        ],
         language: 'Spanish (Catalan in Barcelona)',
         languageTips: [
           '"Hola" (Hello) - friendly greeting',
@@ -5288,20 +5233,6 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
           'Siesta: many shops close 2-5 PM',
           'Dinner typically starts 9-10 PM',
           'Nightlife runs very late'
-        ],
-        tipping: '5-10% appreciated but not expected',
-        tippingTips: [
-          'Service charge rarely included',
-          'Round up at casual places',
-          'Leave a few euros at nice restaurants',
-          'Not expected at tapas bars'
-        ],
-        transit: 'Metro, buses, trams. TMB card in Barcelona.',
-        transitTips: [
-          'T-Casual card for 10 trips in Barcelona',
-          'Metro runs until midnight (later weekends)',
-          'Taxis are affordable',
-          'Walking is great in city centers'
         ],
         water: 'Tap water is safe but tastes mineral',
         waterTips: [
@@ -5328,13 +5259,6 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
     // Italy / Rome
     if (country.includes('italy') || dest.includes('rome') || dest.includes('milan') || dest.includes('florence') || dest.includes('venice')) {
       return {
-        currency: 'Euro (€)',
-        currencyTips: [
-          'Credit cards widely accepted in cities',
-          'Cash preferred at smaller shops & markets',
-          'ATMs (Bancomat) available everywhere',
-          'Notify your bank before traveling'
-        ],
         language: 'Italian',
         languageTips: [
           '"Buongiorno" (Good morning) - formal greeting',
@@ -5347,20 +5271,6 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
           'Shops often close 1-4 PM for "riposo"',
           'Dinner typically starts 8-9 PM',
           'Museums may close early on Mondays'
-        ],
-        tipping: '10% at restaurants is appreciated but not required',
-        tippingTips: [
-          'Service charge ("coperto") often included',
-          'Round up taxi fares',
-          'Hotel porters: €1-2 per bag',
-          'Not expected at cafes for standing service'
-        ],
-        transit: 'Metro, buses, trams. Buy tickets before boarding.',
-        transitTips: [
-          'Validate tickets on buses/trams to avoid fines',
-          'Roma Pass includes transport + museum entries',
-          'Uber/taxi apps work well in major cities',
-          'Walking is often the best way in historic centers'
         ],
         water: 'Tap water is safe to drink',
         waterTips: [
@@ -5386,13 +5296,6 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
     // Germany / Berlin / Munich
     if (country.includes('germany') || dest.includes('berlin') || dest.includes('munich')) {
       return {
-        currency: 'Euro (€)',
-        currencyTips: [
-          'Cash is king - many places don\'t accept cards',
-          'Bring enough Euros especially for small purchases',
-          'EC cards (debit) more common than credit',
-          'ATMs at banks and train stations'
-        ],
         language: 'German',
         languageTips: [
           '"Guten Tag" (Hello) - formal greeting',
@@ -5405,20 +5308,6 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
           'Shops closed on Sundays (except tourist areas)',
           'Punctuality is highly valued',
           'Dinner typically 6-8 PM'
-        ],
-        tipping: '5-10% at restaurants',
-        tippingTips: [
-          'Round up or add 5-10%',
-          'Say the total you want to pay when giving cash',
-          'Not expected at counters',
-          'Cash tips preferred'
-        ],
-        transit: 'U-Bahn, S-Bahn, buses, trams. Honor system.',
-        transitTips: [
-          'Validate ticket before boarding',
-          'Heavy fines for no ticket (€60+)',
-          'Day passes often good value',
-          'Excellent regional train connections'
         ],
         water: 'Tap water is excellent quality',
         waterTips: [
@@ -5444,24 +5333,16 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
 
     // Default fallback
     return {
-      currency: destinationInfo?.currency || 'Local currency',
-      currencyTips: ['Check current exchange rates before you go', 'ATMs usually offer best rates', 'Notify your bank of travel plans'],
       language: destinationInfo?.language || 'Local language',
       languageTips: ['Learn basic greetings', 'Translation apps work offline', 'Locals appreciate any effort'],
       timezone: destinationInfo?.timezone || 'Local time',
       timezoneTips: ['Adjust sleep schedule a few days before', 'Stay hydrated during flights'],
-      tipping: destinationInfo?.tipping || 'Varies by location',
-      tippingTips: ['Research local customs', 'Cash tips often preferred'],
-      transit: destinationInfo?.transit || 'Various public transport options available',
-      transitTips: ['Download local transit apps', 'Consider day passes for savings'],
       water: destinationInfo?.water || 'Check local advisories',
       waterTips: ['When in doubt, use bottled water', 'Ice in drinks may use tap water'],
       voltage: destinationInfo?.voltage || 'Check adapter requirements',
       voltageTips: ['Universal adapters are convenient', 'Check voltage compatibility for hair dryers'],
       emergency: destinationInfo?.emergency || 'Contact local authorities',
       emergencyTips: ['Save emergency numbers in your phone', 'Know your hotel address in local language'],
-      entryRequirements: 'Check visa requirements for your nationality',
-      entryTips: ['Passport must be valid 6+ months beyond travel dates', 'Check visa requirements well in advance', 'Some countries require proof of onward travel', 'Keep digital copies of all documents'],
     };
   };
 
@@ -5658,13 +5539,27 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
       value: entryInfo.health,
       tips: entryInfo.healthTips,
     },
-    // Static basics only — dynamic intel (money, transport, tips) lives in Travel Intel
+    // Static basics — currency, tipping, transit live in Travel Intel
+    {
+      id: 'language',
+      icon: <Globe className="h-5 w-5" />,
+      label: 'Language',
+      value: info.language + (info.languageEnglishFriendly ? ` — ${info.languageEnglishFriendly}` : ''),
+      tips: info.languageTips,
+    },
     {
       id: 'timezone',
       icon: <Clock className="h-5 w-5" />,
       label: 'Timezone',
       value: info.timezone,
       tips: info.timezoneTips,
+    },
+    {
+      id: 'water',
+      icon: <Droplets className="h-5 w-5" />,
+      label: 'Water Safety',
+      value: info.water,
+      tips: info.waterTips,
     },
     {
       id: 'voltage',

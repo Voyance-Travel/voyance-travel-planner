@@ -14,6 +14,7 @@ interface TravelIntelRequest {
   travelers?: number;
   archetype?: string;
   interests?: string[];
+  hotelArea?: string;
 }
 
 serve(async (req) => {
@@ -24,7 +25,7 @@ serve(async (req) => {
   }
 
   try {
-    const { destination, country, startDate, endDate, travelers, archetype, interests } = await req.json() as TravelIntelRequest;
+    const { destination, country, startDate, endDate, travelers, archetype, interests, hotelArea } = await req.json() as TravelIntelRequest;
 
     if (!destination || !startDate || !endDate) {
       return new Response(
@@ -46,6 +47,7 @@ serve(async (req) => {
     const travelerCount = travelers || 2;
     const archetypeContext = archetype ? `The traveler is a "${archetype}" type.` : '';
     const interestContext = interests?.length ? `Their interests include: ${interests.join(', ')}.` : '';
+    const hotelContext = hotelArea ? `They are staying near ${hotelArea}.` : '';
 
     console.log(`Generating travel intel for ${locationContext}, ${startDate} to ${endDate}`);
 
@@ -60,7 +62,9 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are a brilliant travel intelligence analyst. You provide timely, date-specific, opinionated destination intelligence that makes travelers feel smarter than the average tourist. Your advice is specific, practical, and feels like getting insider tips from a well-connected local friend.
+            content: `You are a brilliant travel intelligence analyst who sounds like a well-traveled friend, not a Wikipedia article. You provide timely, date-specific, opinionated destination intelligence.
+
+This section is the ONLY place for currency, tipping, transit, and local customs info — the separate "Need to Know" section only covers static logistics (visa, voltage, emergency, etc.). So be thorough here.
 
 Return a JSON object with this EXACT structure:
 {
@@ -82,7 +86,9 @@ Return a JSON object with this EXACT structure:
     "etiquetteTip": "string (a behavior tip locals care about)"
   },
   "moneyAndSpending": {
-    "paymentTip": "string (cash vs card advice)",
+    "paymentTip": "string (cash vs card, what's accepted, ATM advice)",
+    "currencyInfo": "string (e.g. 'British Pound (£). Currently ~$1.27 USD. Contactless is king.')",
+    "tippingCustom": "string (e.g. '10-15% at restaurants. Check if service charge is included. Not expected at pubs.')",
     "mealCosts": {
       "budget": "string (e.g. '£8-12')",
       "midRange": "string (e.g. '£20-35')",
@@ -106,6 +112,20 @@ Return a JSON object with this EXACT structure:
     "packingList": ["string item 1", "string item 2", "string item 3", "string item 4"],
     "dontPack": "string (what to leave at home)"
   },
+  "localCustomsAndEtiquette": [
+    {
+      "do": "string (what TO do, e.g. 'Always greet shopkeepers when entering')",
+      "dont": "string (what NOT to do, e.g. 'Don't snap your fingers to call a waiter')",
+      "context": "string (brief explanation of why)"
+    }
+  ],
+  "neighborhoodGuide": {
+    "stayingNear": "string (area name or 'Central area' if unknown)",
+    "vibe": "string (1 sentence describing the area's character)",
+    "walkingDistance": ["string (nearby highlight 1)", "string (nearby highlight 2)", "string (nearby highlight 3)"],
+    "localGem": "string (a specific restaurant, café, or shop worth visiting nearby)",
+    "avoidNearby": "string (what to skip or be cautious of in that area, or null)"
+  },
   "insiderTips": [
     {
       "tip": "string (the actual tip — specific, actionable, opinionated)",
@@ -121,22 +141,29 @@ RULES:
 - Events must be real events actually happening during those dates. If unsure, don't fabricate — include fewer but accurate ones
 - eventsAndHappenings: 3-6 events. Include festivals, exhibitions, sporting events, seasonal markets, holidays
 - bookNowVsWalkUp: 3-5 items in each list
+- localCustomsAndEtiquette: 3-5 do/don't pairs
+- neighborhoodGuide: If hotel area is provided, focus on that. Otherwise give general central area guide
 - insiderTips: 4-6 tips that feel genuinely insider, not Wikipedia-level
+- moneyAndSpending.currencyInfo: Include the actual currency name, symbol, and a current approximate exchange rate vs USD
+- moneyAndSpending.tippingCustom: Be specific about when, how much, and when NOT to tip
 - Be opinionated. Say "Do this, skip that" not "You might consider..."
+- Sound like advice from a well-traveled friend, not a guidebook
 - Costs should be realistic and current
 - ONLY return valid JSON. No markdown, no explanation, no wrapping.`
           },
           {
             role: 'user',
-            content: `Generate timely travel intelligence for ${locationContext} for a trip from ${startDate} to ${endDate}. ${travelerCount} traveler(s). ${archetypeContext} ${interestContext}
+            content: `Generate timely travel intelligence for ${locationContext} for a trip from ${startDate} to ${endDate}. ${travelerCount} traveler(s). ${archetypeContext} ${interestContext} ${hotelContext}
 
 Focus on:
 1. What's actually happening in ${destination} during those exact dates (festivals, events, exhibitions, sports, seasonal things)
 2. How locals actually get around (not generic "public transport available")
-3. Real meal costs and money tips
+3. Real meal costs, currency tips, tipping customs, and money advice
 4. What needs advance booking vs what you can walk up to
 5. Weather and packing specific to those dates
-6. Insider tips that make the traveler feel prepared`
+6. Local customs and etiquette — the stuff that makes you look like you've been before
+7. Neighborhood guide for where they're staying
+8. Insider tips that make the traveler feel prepared`
           }
         ],
       }),

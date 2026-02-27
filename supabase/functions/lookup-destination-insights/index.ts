@@ -51,7 +51,9 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are a travel expert providing practical destination information for travelers.
+            content: `You are a travel expert providing essential static destination information.
+
+IMPORTANT: This is for essential logistics ONLY. Do NOT include currency, tipping, or transit info — those are covered separately in a dynamic Travel Intel section.
 
 Return a JSON object with this exact structure:
 {
@@ -67,22 +69,9 @@ Return a JSON object with this exact structure:
     ],
     "englishFriendly": "string (how widely English is spoken)"
   },
-  "currency": {
-    "name": "string (e.g., 'Euro (€)')",
-    "code": "string (e.g., 'EUR')",
-    "tips": ["string tip 1", "string tip 2", "string tip 3"]
-  },
-  "tipping": {
-    "custom": "string (brief tipping culture description)",
-    "tips": ["string tip 1", "string tip 2", "string tip 3"]
-  },
   "timezone": {
     "zone": "string (e.g., 'CET (UTC+1)')",
     "tips": ["string about business hours", "string about meal times", "string about local customs"]
-  },
-  "transit": {
-    "overview": "string (main transport options)",
-    "tips": ["string tip 1", "string tip 2", "string tip 3"]
   },
   "water": {
     "safe": boolean,
@@ -104,11 +93,12 @@ RULES:
 - Provide ACCURATE, destination-specific information
 - Use real local translations, not generic placeholders
 - Include practical, actionable tips travelers actually need
+- Do NOT include currency, tipping customs, or transit/transport info
 - ONLY return valid JSON. No markdown, no explanation.`
           },
           {
             role: 'user',
-            content: `Provide practical travel information for ${locationContext}. Include real local language phrases with accurate translations and pronunciation guides.`
+            content: `Provide essential travel logistics for ${locationContext}. Include real local language phrases with accurate translations and pronunciation guides. Do NOT include currency, tipping, or transit information.`
           }
         ],
       }),
