@@ -1061,7 +1061,46 @@ export function EditorialItinerary({
       .catch(err => console.error('[EditorialItinerary] Budget sync failed:', err));
   }, [tripId, queryClient]);
 
-  const days = rawDays;
+  // Inject a synthetic "Travel" activity card at the top of transition days
+  // so inter-city transport appears as a real activity in the itinerary
+  const days = useMemo(() => rawDays.map(day => {
+    const d = day as any;
+    if (!d.isTransitionDay || !d.transitionFrom || !d.transitionTo) return day;
+    // Check if a travel activity was already injected (avoid duplicates)
+    if (day.activities.some(a => (a as any).__syntheticTravel)) return day;
+
+    // Build a synthetic travel activity from the transition day metadata
+    const transportLabel = (() => {
+      const sel = d.transportComparison?.find((o: any) => o.id === d.selectedTransportId) || d.transportComparison?.[0];
+      if (sel) return sel;
+      return null;
+    })();
+
+    const travelActivity: EditorialActivity = {
+      id: `travel-${d.transitionFrom}-${d.transitionTo}-${day.dayNumber}`,
+      title: `Travel: ${d.transitionFrom} → ${d.transitionTo}`,
+      name: `Travel: ${d.transitionFrom} → ${d.transitionTo}`,
+      type: 'transit',
+      category: 'transit',
+      startTime: transportLabel?.departureTime || d.transportDetails?.departureTime || '',
+      endTime: transportLabel?.arrivalTime || d.transportDetails?.arrivalTime || '',
+      duration: transportLabel?.duration || d.transportDetails?.duration || '',
+      description: transportLabel
+        ? `${transportLabel.mode || transportLabel.type || 'Transfer'} — ${transportLabel.carrier || ''} ${transportLabel.flightNumber || ''}`.trim()
+        : `${d.transitionFrom} to ${d.transitionTo}`,
+      location: undefined,
+      cost: transportLabel?.price != null
+        ? { amount: transportLabel.price, currency: transportLabel.currency || 'USD' }
+        : undefined,
+      isLocked: true,
+      __syntheticTravel: true,
+    } as any;
+
+    return {
+      ...day,
+      activities: [travelActivity, ...day.activities],
+    };
+  }), [rawDays]);
   const [expandedDays, setExpandedDays] = useState<number[]>(initialDays.map(d => d.dayNumber));
   // Persisted option group selections (key = optionGroup id, value = selected activity id)
   const [optionSelections, setOptionSelections] = useState<Record<string, string>>(
