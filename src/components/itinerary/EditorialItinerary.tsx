@@ -4086,9 +4086,9 @@ export function EditorialItinerary({
                                 setTransportEditorOpen(true);
                               }
                             }}
-                            className="w-full flex items-center gap-2 py-2 px-3 my-2 rounded-lg border border-dashed border-primary/20 bg-primary/5 hover:bg-primary/10 hover:border-primary/40 transition-colors text-left group"
+                          className="w-full flex items-center gap-3 py-3 px-4 my-2 rounded-xl border border-dashed border-primary/20 bg-primary/5 hover:bg-primary/10 hover:border-primary/40 transition-colors text-left group"
                           >
-                            <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
                               {getTransportIcon(cityHotel.transportType)}
                             </div>
                             <div className="flex-1 min-w-0">
@@ -4096,21 +4096,61 @@ export function EditorialItinerary({
                                 <span>{allHotels[idx - 1].cityName}</span>
                                 <ArrowRight className="h-3 w-3 text-muted-foreground" />
                                 <span>{cityHotel.cityName}</span>
+                                <span className="text-[10px] font-normal text-muted-foreground ml-1">
+                                  ({getTransportLabel(cityHotel.transportType)})
+                                </span>
                               </div>
                               {(cityHotel.transportDetails?.carrier || cityHotel.transportDetails?.flightNumber || cityHotel.transportDetails?.departureTime) ? (
-                                <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
-                                  <span>{getTransportLabel(cityHotel.transportType)}</span>
-                                  {cityHotel.transportDetails?.carrier && (
-                                    <span>· {cityHotel.transportDetails.carrier as string}</span>
+                                <div className="space-y-0.5 mt-1">
+                                  {/* Line 1: Carrier + number */}
+                                  {(cityHotel.transportDetails?.carrier || cityHotel.transportDetails?.flightNumber) && (
+                                    <div className="flex items-center gap-1.5 text-[11px] text-foreground/80">
+                                      {cityHotel.transportDetails?.carrier && (
+                                        <span className="font-medium">{cityHotel.transportDetails.carrier as string}</span>
+                                      )}
+                                      {cityHotel.transportDetails?.flightNumber && (
+                                        <span className="text-muted-foreground">{cityHotel.transportDetails.flightNumber as string}</span>
+                                      )}
+                                    </div>
                                   )}
-                                  {cityHotel.transportDetails?.flightNumber && (
-                                    <span>· {cityHotel.transportDetails.flightNumber as string}</span>
+                                  {/* Line 2: Times + duration */}
+                                  {(cityHotel.transportDetails?.departureTime || cityHotel.transportDetails?.arrivalTime) && (
+                                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                      {cityHotel.transportDetails?.departureTime && (
+                                        <span>{cityHotel.transportDetails.departureTime as string}</span>
+                                      )}
+                                      {cityHotel.transportDetails?.departureTime && cityHotel.transportDetails?.arrivalTime && (
+                                        <ArrowRight className="h-2.5 w-2.5" />
+                                      )}
+                                      {cityHotel.transportDetails?.arrivalTime && (
+                                        <span>{cityHotel.transportDetails.arrivalTime as string}</span>
+                                      )}
+                                      {cityHotel.transportDetails?.duration && (
+                                        <span className="ml-1 text-muted-foreground/70">({cityHotel.transportDetails.duration as string})</span>
+                                      )}
+                                    </div>
                                   )}
-                                  {cityHotel.transportDetails?.departureTime && (
-                                    <span>· {cityHotel.transportDetails.departureTime as string}</span>
+                                  {/* Line 3: Station/airport info */}
+                                  {((cityHotel.transportDetails as any)?.departureStation || (cityHotel.transportDetails as any)?.departureAirport) && (
+                                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/70">
+                                      <span>{((cityHotel.transportDetails as any)?.departureStation || (cityHotel.transportDetails as any)?.departureAirport) as string}</span>
+                                      <ArrowRight className="h-2 w-2" />
+                                      <span>{((cityHotel.transportDetails as any)?.arrivalStation || (cityHotel.transportDetails as any)?.arrivalAirport) as string}</span>
+                                    </div>
                                   )}
-                                  {cityHotel.transportDetails?.duration && (
-                                    <span>· {cityHotel.transportDetails.duration as string}</span>
+                                  {/* Line 4: Booking ref + seat */}
+                                  {(cityHotel.transportDetails?.bookingRef || (cityHotel.transportDetails as any)?.seatNumber) && (
+                                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground/70">
+                                      {cityHotel.transportDetails?.bookingRef && (
+                                        <span>Ref: {cityHotel.transportDetails.bookingRef as string}</span>
+                                      )}
+                                      {(cityHotel.transportDetails as any)?.seatNumber && (
+                                        <span>Seat: {(cityHotel.transportDetails as any).seatNumber as string}</span>
+                                      )}
+                                      {cityHotel.transportDetails?.seatClass && (
+                                        <span>({cityHotel.transportDetails.seatClass as string})</span>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               ) : (
@@ -4120,9 +4160,11 @@ export function EditorialItinerary({
                               )}
                             </div>
                             {cityHotel.transportCostCents && cityHotel.transportCostCents > 0 ? (
-                              <span className="text-xs font-medium text-primary shrink-0">
-                                {formatCurrency(cityHotel.transportCostCents / 100, cityHotel.transportCurrency || 'USD')}
-                              </span>
+                              <div className="text-right shrink-0">
+                                <span className="text-xs font-medium text-primary">
+                                  {formatCurrency(cityHotel.transportCostCents / 100, cityHotel.transportCurrency || 'USD')}
+                                </span>
+                              </div>
                             ) : (
                               <Edit3 className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
                             )}
