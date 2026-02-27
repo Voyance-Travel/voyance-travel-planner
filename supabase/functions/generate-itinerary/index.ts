@@ -6318,14 +6318,11 @@ async function finalSaveItinerary(
     };
 
     // Build DNA snapshot from unified profile for audit trail
-    const dnaSnapshot = unifiedProfile ? {
-      archetype: unifiedProfile.archetype,
-      secondaryArchetype: unifiedProfile.secondaryArchetype,
-      archetypeSource: unifiedProfile.archetypeSource,
-      traitScores: unifiedProfile.traitScores,
-      budgetTier: unifiedProfile.budgetTier,
-      dataCompleteness: unifiedProfile.dataCompleteness,
-      isFallback: unifiedProfile.isFallback,
+    const dnaSnapshot = context.travelerDNA ? {
+      archetype: context.travelerDNA.primaryArchetype,
+      secondaryArchetype: context.travelerDNA.secondaryArchetype,
+      traitScores: context.travelerDNA.traits,
+      budgetTier: context.budgetTier,
       snapshotAt: new Date().toISOString(),
     } : null;
 
