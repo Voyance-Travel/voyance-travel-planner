@@ -5037,41 +5037,13 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
       value: entryInfo.health,
       tips: entryInfo.healthTips,
     },
-    // General info
-    {
-      id: 'currency',
-      icon: <Wallet className="h-5 w-5" />,
-      label: 'Currency & Money',
-      value: info.currency,
-      tips: info.currencyTips,
-    },
-    {
-      id: 'language',
-      icon: <Languages className="h-5 w-5" />,
-      label: 'Language',
-      value: info.language,
-      tips: info.languageTips,
-    },
+    // Static basics only — dynamic intel (money, transport, tips) lives in Travel Intel
     {
       id: 'timezone',
       icon: <Clock className="h-5 w-5" />,
       label: 'Timezone',
       value: info.timezone,
       tips: info.timezoneTips,
-    },
-    {
-      id: 'transit',
-      icon: <Train className="h-5 w-5" />,
-      label: 'Getting Around',
-      value: info.transit,
-      tips: info.transitTips,
-    },
-    {
-      id: 'tipping',
-      icon: <Utensils className="h-5 w-5" />,
-      label: 'Tipping',
-      value: info.tipping,
-      tips: info.tippingTips,
     },
     {
       id: 'voltage',
