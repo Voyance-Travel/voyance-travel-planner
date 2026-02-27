@@ -58,6 +58,8 @@ import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityIma
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
+import { useRefreshDay, type RefreshResult } from '@/hooks/useRefreshDay';
+import { RefreshDayPanel } from './RefreshDayPanel';
 import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternativesDrawer';
 import { RegenerateGuidedAssistDialog } from './RegenerateGuidedAssistDialog';
 import { WeatherForecast } from './WeatherForecast';
@@ -1127,6 +1129,42 @@ export function EditorialItinerary({
   const [showGuidedAssist, setShowGuidedAssist] = useState(false);
   const [guidedAssistDayIndex, setGuidedAssistDayIndex] = useState<number | null>(null);
   const [pendingGuidedPreferences, setPendingGuidedPreferences] = useState<string | null>(null);
+  
+  // Refresh day validation state
+  const [refreshResults, setRefreshResults] = useState<Record<number, RefreshResult>>({});
+  const { isRefreshing: isRefreshingDay, refreshDay } = useRefreshDay();
+  const [refreshingDayNumber, setRefreshingDayNumber] = useState<number | null>(null);
+  
+  const handleRefreshDay = useCallback(async (dayIndex: number) => {
+    const day = days[dayIndex];
+    if (!day) return;
+    setRefreshingDayNumber(day.dayNumber);
+    const activities = day.activities.map(a => ({
+      id: a.id,
+      title: a.title || '',
+      category: a.category,
+      startTime: a.startTime || (a as any).time,
+      endTime: a.endTime,
+      location: a.location,
+      operatingHours: (a as any).operatingHours,
+      durationMinutes: a.durationMinutes,
+      cost: a.cost,
+    }));
+    const result = await refreshDay(activities, day.date || '', destination, day.dayNumber);
+    if (result) {
+      setRefreshResults(prev => ({ ...prev, [day.dayNumber]: result }));
+      const errorCount = result.issues.filter(i => i.severity === 'error').length;
+      const warnCount = result.issues.filter(i => i.severity === 'warning').length;
+      if (result.issues.length === 0) {
+        toast.success(`Day ${day.dayNumber} validated — no issues found!`);
+      } else {
+        toast(`Day ${day.dayNumber}: ${errorCount} error${errorCount !== 1 ? 's' : ''}, ${warnCount} warning${warnCount !== 1 ? 's' : ''}`, {
+          icon: '⚠️',
+        });
+      }
+    }
+    setRefreshingDayNumber(null);
+  }, [days, destination, refreshDay]);
   
   // Credit nudge state
   const [creditNudge, setCreditNudge] = useState<{ action: keyof typeof CREDIT_COSTS } | null>(null);
@@ -3524,6 +3562,10 @@ export function EditorialItinerary({
                             setOptionSelections(prev => ({ ...prev, [groupKey]: selectedId }));
                           }}
                           compactCards={isManualMode || creationSource === 'smart_finish'}
+                          onRefreshDay={() => handleRefreshDay(selectedDayIndex)}
+                          isRefreshingDay={refreshingDayNumber === selectedDay.dayNumber}
+                          refreshResult={refreshResults[selectedDay.dayNumber] || null}
+                          onDismissRefresh={() => setRefreshResults(prev => { const next = { ...prev }; delete next[selectedDay.dayNumber]; return next; })}
                         />
                       )}
                     </>
@@ -5881,6 +5923,10 @@ interface DayCardProps {
   changingTransportActivityId?: string | null;
   collaboratorColorMap?: Map<string, CollaboratorAttribution>;
   aiLocked?: boolean;
+  onRefreshDay?: () => void;
+  isRefreshingDay?: boolean;
+  refreshResult?: RefreshResult | null;
+  onDismissRefresh?: () => void;
   /** Guest in propose & vote mode — show reduced menu with only Propose Replacement */
   guestMustPropose?: boolean;
   /** Persisted option group selections: map of optionGroup key → selected activity id */
@@ -5938,6 +5984,10 @@ function DayCard({
   guestMustPropose,
   optionSelections = {},
   onOptionSelect,
+  onRefreshDay,
+  isRefreshingDay = false,
+  refreshResult,
+  onDismissRefresh,
   compactCards = false,
 }: DayCardProps) {
   // Per-day preview: a day is preview only if the global flag is set AND the day itself is a preview
@@ -6316,6 +6366,18 @@ function DayCard({
                             Import
                           </Button>
                         )}
+                        {onRefreshDay && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={onRefreshDay}
+                            disabled={isRefreshingDay}
+                            className="gap-1 bg-background hover:bg-accent/10 hover:border-accent/30"
+                          >
+                            <RefreshCw className={cn("h-4 w-4", isRefreshingDay && "animate-spin")} />
+                            {isRefreshingDay ? 'Validating...' : 'Refresh Day'}
+                          </Button>
+                        )}
                       </div>
                     )}
                     <span className="font-medium text-foreground px-3 py-1 rounded-full bg-primary/10 text-primary">
@@ -6323,6 +6385,16 @@ function DayCard({
                     </span>
                   </div>
                 </div>
+              )}
+
+              {/* Refresh Day Validation Results */}
+              {refreshResult && refreshResult.dayNumber === day.dayNumber && (
+                <RefreshDayPanel
+                  issues={refreshResult.issues}
+                  transitEstimates={refreshResult.transitEstimates}
+                  onDismiss={() => onDismissRefresh?.()}
+                  className="mt-3"
+                />
               )}
             </div>
           </motion.div>
