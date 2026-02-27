@@ -552,7 +552,13 @@ export const TRIP_COST_EXAMPLES = {
 // HELPER FUNCTIONS
 // ============================================================
 
+const MAX_REASONABLE_CREDITS = 100_000;
+
 export function formatCredits(credits: number): string {
+  if (credits > MAX_REASONABLE_CREDITS) {
+    console.error(`[formatCredits] Unreasonable credit value detected: ${credits}. Possible data corruption.`);
+    return '—';
+  }
   return credits.toLocaleString();
 }
 
