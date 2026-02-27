@@ -392,7 +392,10 @@ const weatherIcons: Record<string, React.ReactNode> = {
 function formatTime(time: string | undefined): string {
   if (!time || typeof time !== 'string') return '';
   
-  const cleanTime = time.trim();
+  // Strip any non-ASCII characters (e.g. stray Chinese/Unicode from AI output)
+  const cleanTime = time.replace(/[^\x00-\x7F]/g, '').trim();
+  if (!cleanTime) return '';
+  
   if (/\d{1,2}:\d{2}\s*(AM|PM)/i.test(cleanTime)) {
     return cleanTime;
   }
@@ -408,6 +411,12 @@ function formatTime(time: string | undefined): string {
   const period = hours >= 12 ? 'PM' : 'AM';
   const displayHours = hours % 12 || 12;
   return `${displayHours}:${minutes} ${period}`;
+}
+
+/** Strip stray non-ASCII characters from AI-generated text fields */
+function sanitizeAiText(text: string | undefined): string {
+  if (!text || typeof text !== 'string') return '';
+  return text.replace(/[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/g, '').trim();
 }
 
 // Exchange rates relative to USD (1 USD = X units of target currency)
