@@ -1,15 +1,14 @@
 /**
- * Enrich Manual Trip — Smart Finish via Full Generation
+ * Enrich Manual Trip — Smart Finish via Full Generation (ASYNC)
  *
  * When a user purchases Smart Finish on a manually-built itinerary, this function:
  * 1. Reads the user's parsed research/activities from the existing itinerary_data
  * 2. Converts them into a "mustDoActivities" research context string
  * 3. Writes that context into trips.metadata so generate-itinerary can use it
- * 4. Calls generate-itinerary with action: 'generate-full' to produce a complete,
- *    polished Voyance itinerary — identical in quality to the standard flow
+ * 4. Kicks off generate-itinerary in the BACKGROUND (fire-and-forget)
+ * 5. Returns immediately so the client never times out
  *
- * This approach ensures Smart Finish produces the SAME output format as normal
- * Voyance-generated trips, not a weird "enrichment" hybrid.
+ * The client polls trips.metadata.smartFinishCompleted to know when it's done.
  */
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
@@ -29,7 +28,6 @@ function buildResearchContext(itinerary: any): string {
 
   const lines: string[] = [];
 
-  // Extract preferences/notes if present
   if (itinerary.preferences) {
     const prefs = itinerary.preferences;
     if (prefs.rawPreferenceText) {
@@ -45,7 +43,6 @@ function buildResearchContext(itinerary: any): string {
     }
   }
 
-  // Include trip vibe/priorities if extracted by parse-trip-input
   if (itinerary.tripVibe) {
     lines.push(`TRIP VIBE/INTENT: ${itinerary.tripVibe}`);
   }
@@ -96,18 +93,113 @@ function buildResearchContext(itinerary: any): string {
     }
   }
 
-  // Add practical tips if present
   if (itinerary.practicalTips?.length) {
     lines.push(`\nPRACTICAL TIPS FROM USER'S RESEARCH:\n${itinerary.practicalTips.slice(0, 5).map((t: string) => `- ${t}`).join("\n")}`);
   }
 
-  // Add accommodation notes
   if (itinerary.accommodationNotes?.length || itinerary.metadata?.accommodationNotes?.length) {
     const notes = itinerary.accommodationNotes || itinerary.metadata?.accommodationNotes;
     lines.push(`\nACCOMMODATION NOTES:\n${notes.slice(0, 5).map((n: string) => `- ${n}`).join("\n")}`);
   }
 
   return lines.join("\n");
+}
+
+/**
+ * Background generation task.
+ * Runs AFTER the HTTP response has been sent to the client.
+ */
+async function runGenerationInBackground(
+  supabaseUrl: string,
+  supabaseServiceKey: string,
+  authHeader: string,
+  tripId: string,
+  userId: string,
+  updatedMetadata: any,
+  pendingChargeId: string | null,
+) {
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+  try {
+    console.log(`[enrich-manual-trip:bg] Starting generate-itinerary for trip ${tripId}`);
+
+    const generateResponse = await fetch(`${supabaseUrl}/functions/v1/generate-itinerary`, {
+      method: "POST",
+      headers: {
+        "Authorization": authHeader,
+        "Content-Type": "application/json",
+        "apikey": Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      },
+      body: JSON.stringify({
+        action: "generate-full",
+        tripId,
+      }),
+    });
+
+    if (!generateResponse.ok) {
+      const errText = await generateResponse.text();
+      console.error(`[enrich-manual-trip:bg] generate-itinerary returned ${generateResponse.status}: ${errText}`);
+      throw new Error(`Generation failed: ${generateResponse.status}`);
+    }
+
+    const generateData = await generateResponse.json();
+
+    if (!generateData.success) {
+      const errMsg = generateData.error || "Generation returned failure status";
+      console.error(`[enrich-manual-trip:bg] generate-itinerary failed:`, errMsg);
+      throw new Error(errMsg);
+    }
+
+    console.log(`[enrich-manual-trip:bg] ✓ Smart Finish complete: ${generateData.totalDays} days, ${generateData.totalActivities} activities`);
+
+    // Mark completion in metadata
+    const completedMeta = {
+      ...updatedMetadata,
+      smartFinishCompleted: true,
+      smartFinishCompletedAt: new Date().toISOString(),
+      smartFinishTotalActivities: generateData.totalActivities || 0,
+    };
+    await supabase
+      .from("trips")
+      .update({
+        metadata: completedMeta,
+        smart_finish_purchased: true,
+        creation_source: "smart_finish",
+      })
+      .eq("id", tripId);
+
+    // Mark pending charge as completed
+    if (pendingChargeId) {
+      await supabase
+        .from("pending_credit_charges")
+        .update({ status: "completed", resolved_at: new Date().toISOString(), resolution_note: "Smart Finish succeeded" })
+        .eq("id", pendingChargeId);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[enrich-manual-trip:bg] Background generation FAILED:`, msg);
+
+    // Mark failure in metadata so client can detect it
+    const failedMeta = {
+      ...updatedMetadata,
+      smartFinishCompleted: false,
+      smartFinishFailed: true,
+      smartFinishFailedAt: new Date().toISOString(),
+      smartFinishError: msg,
+    };
+    await supabase
+      .from("trips")
+      .update({ metadata: failedMeta })
+      .eq("id", tripId);
+
+    // Mark pending charge as failed
+    if (pendingChargeId) {
+      await supabase
+        .from("pending_credit_charges")
+        .update({ status: "failed", resolved_at: new Date().toISOString(), resolution_note: `Smart Finish failed: ${msg}` })
+        .eq("id", pendingChargeId);
+    }
+  }
 }
 
 serve(async (req) => {
@@ -153,11 +245,9 @@ serve(async (req) => {
       return new Response(JSON.stringify({
         success: true,
         alreadyCompleted: true,
+        status: "completed",
         totalDays: 0,
         totalActivities: 0,
-        tipsAdded: 0,
-        gapFixes: [],
-        routeHints: [],
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -189,8 +279,6 @@ serve(async (req) => {
     console.log(`[enrich-manual-trip] Starting Smart Finish for trip ${tripId} (${trip.destination})`);
 
     // --- Ensure Travel DNA traits are non-zero before generation ---
-    // Users whose DNA was calculated during a prior bug may have all-zero trait_scores.
-    // Detect this and trigger a recalculation so generate-itinerary gets real values.
     try {
       const { data: dnaRow } = await supabase
         .from("travel_dna_profiles")
@@ -233,9 +321,11 @@ serve(async (req) => {
     const updatedMetadata = {
       ...existingMetadata,
       mustDoActivities: researchContext,
-      // Use standard generation prompt with seeded user itinerary context.
       smartFinishSource: "manual_builder_standard",
       smartFinishRequestedAt: new Date().toISOString(),
+      smartFinishStatus: "generating", // <-- client polls this
+      smartFinishFailed: false,
+      smartFinishError: null,
       accommodationNotes: itinerary.metadata?.accommodationNotes || itinerary.accommodationNotes || existingMetadata.accommodationNotes || [],
       practicalTips: itinerary.metadata?.practicalTips || itinerary.practicalTips || existingMetadata.practicalTips || [],
       tripVibe: itinerary.tripVibe || existingMetadata.tripVibe || null,
@@ -255,68 +345,33 @@ serve(async (req) => {
       throw new Error(`Failed to write research context: ${metaUpdateError.message}`);
     }
 
-    console.log(`[enrich-manual-trip] Metadata written, calling generate-itinerary...`);
+    console.log(`[enrich-manual-trip] Metadata written. Kicking off background generation and returning immediately.`);
 
-    // --- Call generate-itinerary with generate-full action ---
-    const generateResponse = await fetch(`${supabaseUrl}/functions/v1/generate-itinerary`, {
-      method: "POST",
-      headers: {
-        "Authorization": authHeader,
-        "Content-Type": "application/json",
-        "apikey": Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      },
-      body: JSON.stringify({
-        action: "generate-full",
-        tripId,
-      }),
-    });
+    // --- Fire-and-forget: run generation in background ---
+    // EdgeRuntime.waitUntil keeps the isolate alive after we return the response.
+    const bgPromise = runGenerationInBackground(
+      supabaseUrl,
+      supabaseServiceKey,
+      authHeader,
+      tripId,
+      user.id,
+      updatedMetadata,
+      pendingChargeId,
+    );
 
-    if (!generateResponse.ok) {
-      const errText = await generateResponse.text();
-      console.error(`[enrich-manual-trip] generate-itinerary returned ${generateResponse.status}: ${errText}`);
-      throw new Error(`Generation failed: ${generateResponse.status}`);
+    // Use waitUntil if available (Supabase Edge Runtime), otherwise just fire-and-forget
+    if (typeof (globalThis as any).EdgeRuntime !== "undefined" && (globalThis as any).EdgeRuntime.waitUntil) {
+      (globalThis as any).EdgeRuntime.waitUntil(bgPromise);
+    } else {
+      // Fallback: just let the promise run (function stays alive until it completes or times out)
+      bgPromise.catch(err => console.error("[enrich-manual-trip] bg fallback error:", err));
     }
 
-    const generateData = await generateResponse.json();
-
-    if (!generateData.success) {
-      const errMsg = generateData.error || "Generation returned failure status";
-      console.error(`[enrich-manual-trip] generate-itinerary failed:`, errMsg);
-      throw new Error(errMsg);
-    }
-
-    console.log(`[enrich-manual-trip] ✓ Smart Finish complete: ${generateData.totalDays} days, ${generateData.totalActivities} activities`);
-
-    // Mark completion in metadata
-    const completedMeta = {
-      ...updatedMetadata,
-      smartFinishCompleted: true,
-      smartFinishCompletedAt: new Date().toISOString(),
-    };
-    await supabase
-      .from("trips")
-      .update({
-        metadata: completedMeta,
-        smart_finish_purchased: true,
-        creation_source: "smart_finish",
-      })
-      .eq("id", tripId);
-
-    // --- Mark pending charge as completed ---
-    if (pendingChargeId) {
-      await supabase
-        .from("pending_credit_charges")
-        .update({ status: "completed", resolved_at: new Date().toISOString(), resolution_note: "Smart Finish succeeded" })
-        .eq("id", pendingChargeId);
-    }
-
+    // --- Return immediately ---
     return new Response(JSON.stringify({
       success: true,
-      totalDays: generateData.totalDays,
-      totalActivities: generateData.totalActivities,
-      tipsAdded: generateData.totalActivities || 0,
-      gapFixes: [],
-      routeHints: [],
+      status: "generating",
+      message: "Smart Finish is generating your itinerary. This may take a minute or two.",
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

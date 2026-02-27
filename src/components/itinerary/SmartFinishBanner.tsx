@@ -143,92 +143,117 @@ export function SmartFinishBanner({
   }, [checkSmartFinishCompletion]);
 
   /**
-   * Guaranteed-refund wrapper for enrich-manual-trip calls.
-   * Prevents false negatives when the backend finishes near timeout.
+   * Poll trips.metadata until smartFinishCompleted or smartFinishFailed.
+   */
+  const pollForCompletion = async (source: string, maxChecks = 40, intervalMs = 5000): Promise<{ success: boolean; data?: any }> => {
+    for (let i = 1; i <= maxChecks; i++) {
+      await new Promise((r) => setTimeout(r, intervalMs));
+      const { data, error } = await supabase
+        .from('trips')
+        .select('metadata')
+        .eq('id', tripId)
+        .maybeSingle();
+
+      if (error || !data) continue;
+
+      const meta = (data.metadata ?? {}) as Record<string, unknown>;
+
+      if (meta.smartFinishCompleted === true) {
+        console.log(`[SmartFinish ${source}] Completed (poll ${i}/${maxChecks})`);
+        return { success: true, data: { success: true, totalActivities: meta.smartFinishTotalActivities || 0 } };
+      }
+
+      if (meta.smartFinishFailed === true) {
+        console.error(`[SmartFinish ${source}] Backend reported failure: ${meta.smartFinishError}`);
+        return { success: false };
+      }
+    }
+
+    console.error(`[SmartFinish ${source}] Polling timed out after ${maxChecks} checks`);
+    return { success: false };
+  };
+
+  /**
+   * Kick off enrich-manual-trip (returns immediately) then poll for completion.
+   * Issues guaranteed refund if generation fails.
    */
   const callEnrichWithGuaranteedRefund = async (source: string): Promise<{ success: boolean; data?: any }> => {
-    const ENRICHMENT_TIMEOUT_MS = 240_000; // 4m safety window for long itinerary generation
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), ENRICHMENT_TIMEOUT_MS);
-    let enrichmentSucceeded = false;
-
     try {
+      // Kick off — returns immediately with status: "generating"
       const { data, error } = await supabase.functions.invoke('enrich-manual-trip', {
         body: { tripId },
-        // @ts-ignore — signal is supported but not in all type defs
-        signal: controller.signal,
       });
 
       if (error || !data?.success) {
         const errorMsg = data?.error || error?.message || 'Unknown error';
-        const isAmbiguousNetworkFailure = /Failed to send a request to the Edge Function|network|fetch|timeout/i.test(errorMsg);
+        console.error(`[SmartFinish ${source}] Kickoff failed:`, errorMsg);
+        // Still check if backend completed despite the error
+        const recovered = await pollForCompletion(source, 8, 3000);
+        if (recovered.success) return recovered;
 
-        if (isAmbiguousNetworkFailure) {
-          const completedAfterFailure = await waitForSmartFinishCompletion(source);
-          if (completedAfterFailure) {
-            enrichmentSucceeded = true;
-            return { success: true, data: { success: true, recovered: true } };
-          }
-        }
-
-        console.error(`[SmartFinish ${source}] Enrichment failed:`, errorMsg);
+        await issueGuaranteedRefund(source);
         return { success: false };
       }
 
-      enrichmentSucceeded = true;
-      return { success: true, data };
+      // If already completed (idempotent re-call)
+      if (data.status === 'completed' || data.alreadyCompleted) {
+        return { success: true, data };
+      }
+
+      // Poll for background completion
+      const result = await pollForCompletion(source);
+
+      if (!result.success) {
+        await issueGuaranteedRefund(source);
+        return { success: false };
+      }
+
+      return result;
     } catch (err: unknown) {
-      // Catch ALL error types: Error, TypeError, DOMException (AbortController), etc.
-      const isTimeout = err instanceof DOMException && err.name === 'AbortError';
-      const completedAfterException = await waitForSmartFinishCompletion(source);
-      if (completedAfterException) {
-        enrichmentSucceeded = true;
-        return { success: true, data: { success: true, recovered: true } };
-      }
+      console.error(`[SmartFinish ${source}] Exception:`, err);
+      const recovered = await pollForCompletion(source, 8, 3000);
+      if (recovered.success) return recovered;
 
-      console.error(`[SmartFinish ${source}] ${isTimeout ? 'TIMEOUT' : 'Exception'}:`, err);
+      await issueGuaranteedRefund(source);
       return { success: false };
-    } finally {
-      clearTimeout(timeoutId);
-
-      // GUARANTEED REFUND: only if not successful and not completed by backend
-      if (!enrichmentSucceeded) {
-        console.log(`[SmartFinish ${source}] Enrichment not confirmed successful — issuing guaranteed refund`);
-        try {
-          const { data: refundData, error: refundError } = await supabase.functions.invoke('spend-credits', {
-            body: {
-              action: 'REFUND',
-              tripId,
-              metadata: { reason: `smart_finish_${source}_failed`, originalAction: 'SMART_FINISH' },
-            },
-          });
-
-          if (refundError || !refundData?.success) {
-            console.error(`[SmartFinish ${source}] Guaranteed refund FAILED:`, refundError ?? refundData);
-            toast.error('Enrichment failed. Credit refund also failed — please contact support.', { duration: 8000 });
-          } else {
-            console.log(`[SmartFinish ${source}] Guaranteed refund OK: +${refundData.refunded} credits`);
-            toast.error('Enrichment failed — your credits have been refunded.', {
-              description: 'You can retry again.',
-              duration: 6000,
-            });
-          }
-        } catch (refundErr) {
-          console.error(`[SmartFinish ${source}] Guaranteed refund exception:`, refundErr);
-          toast.error('Enrichment failed. Credit refund also failed — please contact support.', { duration: 8000 });
-        }
-
-        // Reset purchased flag so banner stays visible
-        await supabase
-          .from('trips')
-          .update({ smart_finish_purchased: false })
-          .eq('id', tripId);
-
-        setEnrichmentFailed(true);
-        queryClient.invalidateQueries({ queryKey: ['credits'] });
-        queryClient.invalidateQueries({ queryKey: ['entitlements'] });
-      }
     }
+  };
+
+  const issueGuaranteedRefund = async (source: string) => {
+    console.log(`[SmartFinish ${source}] Enrichment not confirmed — issuing guaranteed refund`);
+    try {
+      const { data: refundData, error: refundError } = await supabase.functions.invoke('spend-credits', {
+        body: {
+          action: 'REFUND',
+          tripId,
+          metadata: { reason: `smart_finish_${source}_failed`, originalAction: 'SMART_FINISH' },
+        },
+      });
+
+      if (refundError || !refundData?.success) {
+        console.error(`[SmartFinish ${source}] Guaranteed refund FAILED:`, refundError ?? refundData);
+        toast.error('Enrichment failed. Credit refund also failed — please contact support.', { duration: 8000 });
+      } else {
+        console.log(`[SmartFinish ${source}] Guaranteed refund OK: +${refundData.refunded} credits`);
+        toast.error('Enrichment failed — your credits have been refunded.', {
+          description: 'You can retry again.',
+          duration: 6000,
+        });
+      }
+    } catch (refundErr) {
+      console.error(`[SmartFinish ${source}] Guaranteed refund exception:`, refundErr);
+      toast.error('Enrichment failed. Credit refund also failed — please contact support.', { duration: 8000 });
+    }
+
+    // Reset purchased flag so banner stays visible
+    await supabase
+      .from('trips')
+      .update({ smart_finish_purchased: false })
+      .eq('id', tripId);
+
+    setEnrichmentFailed(true);
+    queryClient.invalidateQueries({ queryKey: ['credits'] });
+    queryClient.invalidateQueries({ queryKey: ['entitlements'] });
   };
 
   const handleRetryEnrichment = async () => {

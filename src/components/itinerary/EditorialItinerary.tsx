@@ -1471,21 +1471,49 @@ export function EditorialItinerary({
     // Handle return from Stripe checkout
     const params = new URLSearchParams(window.location.search);
     if (params.get('smart_finish') === 'success') {
-      // Trigger enrichment
+      // Trigger enrichment (async — kicks off, then poll for completion)
       const enrich = async () => {
-        toast.info('Smart Finish purchased! Enriching your itinerary...');
-        const { error } = await supabase.functions.invoke('enrich-manual-trip', {
-          body: { tripId },
-        });
-        if (!error) {
-          setSmartFinishPurchased(true);
-          toast.success('Your itinerary has been enriched with tips, route hints, and DNA fixes!');
-          // Remove query param and reload to get enriched data
-          const url = new URL(window.location.href);
-          url.searchParams.delete('smart_finish');
-          window.history.replaceState({}, '', url.toString());
-          window.location.reload();
-        } else {
+        toast.info('Smart Finish purchased! Generating your full itinerary…');
+        // Remove query param immediately to prevent re-triggering on refresh
+        const url = new URL(window.location.href);
+        url.searchParams.delete('smart_finish');
+        window.history.replaceState({}, '', url.toString());
+
+        try {
+          // Kick off — returns immediately
+          const { error } = await supabase.functions.invoke('enrich-manual-trip', {
+            body: { tripId },
+          });
+          if (error) {
+            toast.error('Failed to start enrichment. Please refresh and try again.');
+            return;
+          }
+
+          // Poll for completion
+          const MAX_POLLS = 40;
+          const POLL_INTERVAL = 5000;
+          for (let i = 0; i < MAX_POLLS; i++) {
+            await new Promise(r => setTimeout(r, POLL_INTERVAL));
+            const { data: tripData } = await supabase
+              .from('trips')
+              .select('metadata')
+              .eq('id', tripId)
+              .maybeSingle();
+            const meta = (tripData?.metadata ?? {}) as Record<string, unknown>;
+            if (meta.smartFinishCompleted === true) {
+              setSmartFinishPurchased(true);
+              toast.success('Your itinerary has been enriched with DNA-matched activities!');
+              window.location.reload();
+              return;
+            }
+            if (meta.smartFinishFailed === true) {
+              toast.error('Enrichment failed. Your credits will be refunded. Please try again.');
+              return;
+            }
+          }
+          toast.error('Enrichment is taking longer than expected. Please refresh the page.');
+        } catch (err) {
+          console.error('[EditorialItinerary] Smart Finish enrichment error:', err);
           toast.error('Enrichment failed. Please refresh the page to try again.');
         }
       };
