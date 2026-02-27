@@ -9,6 +9,10 @@ const NON_LATIN_SCRIPT = /[\u4E00-\u9FFF\u3400-\u4DBF\u3040-\u309F\u30A0-\u30FF\
 // Regex to detect garbled/corrupted text patterns (nonsensical fragments)
 const GARBLED_PATTERN = /(?:[bcdfghjklmnpqrstvwxz]{5,}|[A-Z][a-z]{0,2}[A-Z][a-z]{0,2}[A-Z])/g;
 
+// Regex to detect leaked JSON schema field names in text values
+// e.g. "宣,duration:4,practicalTips;|" or ",theme:" artifacts
+const SCHEMA_LEAK_RE = /[,;|]*\s*(?:duration|practicalTips|accommodationNotes|tripVibe|tripPriorities|theme|dayNumber|activities|unparsed|dates|travelers|tripType)\s*[:;|]\s*[^,;|]*/gi;
+
 /**
  * Replace em dashes (—) with standard dashes ( - ) in any text.
  * Also handles en dashes (–).
@@ -31,11 +35,15 @@ export function sanitizeAIOutput(text: string | undefined | null): string {
   // Remove non-Latin script characters (replace with empty or space)
   cleaned = cleaned.replace(NON_LATIN_SCRIPT, '');
   
-  // Clean up artifacts: double spaces, trailing fragments
+  // Remove leaked schema field names (e.g. ",duration:4,practicalTips;|")
+  cleaned = cleaned.replace(SCHEMA_LEAK_RE, '');
+  
+  // Clean up artifacts: double spaces, trailing fragments, leading/trailing punctuation
   cleaned = cleaned
     .replace(/\s{2,}/g, ' ')
     .replace(/—/g, ' - ')
     .replace(/–/g, '-')
+    .replace(/^[,;|:\s]+|[,;|:\s]+$/g, '')
     .trim();
   
   return cleaned;

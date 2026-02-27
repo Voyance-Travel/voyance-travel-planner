@@ -20,6 +20,10 @@ import { cn } from '@/lib/utils';
 import type { ParsedTripInput, ParsedPreferences } from '@/types/parsedTrip';
 import { createTripFromParsed } from '@/utils/createTripFromParsed';
 import { safeUpdatePreferences } from '@/utils/safeDbOperations';
+import { sanitizeAIOutput } from '@/utils/textSanitizer';
+
+/** Strip CJK chars and leaked schema field names from a string */
+const sanitizeAIField = (s: string): string => sanitizeAIOutput(s);
 
 type Step = 'paste' | 'review' | 'creating';
 
@@ -104,6 +108,21 @@ export function ManualTripPasteEntry({ }: ManualTripPasteEntryProps = {}) {
         setIsParsing(false);
         return;
       }
+
+      // Client-side sanitization safety net — strip any CJK / schema-leak artifacts
+      if (result.destination) result.destination = sanitizeAIField(result.destination);
+      if (result.days) {
+        for (const day of result.days) {
+          if (day.theme) day.theme = sanitizeAIField(day.theme);
+          for (const act of day.activities) {
+            if (act.name) act.name = sanitizeAIField(act.name);
+            if (act.notes) act.notes = sanitizeAIField(act.notes);
+            if (act.description) act.description = sanitizeAIField(act.description);
+          }
+        }
+      }
+      if (result.accommodationNotes) result.accommodationNotes = result.accommodationNotes.map(sanitizeAIField).filter(Boolean);
+      if (result.practicalTips) result.practicalTips = result.practicalTips.map(sanitizeAIField).filter(Boolean);
 
       setParsed(result);
       setEditedPreferences(result.preferences || null);

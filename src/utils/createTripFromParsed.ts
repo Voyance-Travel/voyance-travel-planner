@@ -6,6 +6,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import type { ParsedTripInput, ParsedActivity, ParsedDay } from '@/types/parsedTrip';
+import { sanitizeAIOutput } from '@/utils/textSanitizer';
 
 interface ItineraryActivity {
   id: string;
@@ -153,7 +154,7 @@ export async function createTripFromParsed(
   userId: string
 ): Promise<{ tripId: string } | { error: string }> {
   try {
-    const destination = parsed.destination || 'Unknown';
+    const destination = sanitizeAIOutput(parsed.destination) || 'Unknown';
     const tripName = `Trip to ${destination}`;
     const itineraryData = convertParsedToItineraryData(parsed);
 
