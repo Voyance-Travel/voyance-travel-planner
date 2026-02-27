@@ -11,7 +11,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown, Sparkles, CalendarDays, TrainFront, Wallet,
   Clock, CloudSun, Lightbulb, Ticket, MapPin, Loader2,
-  AlertTriangle, ShoppingBag, Utensils,
+  AlertTriangle, ShoppingBag, Utensils, Ban, CheckCircle2,
+  PiggyBank, EyeOff, GraduationCap, CreditCard, Brain,
+  Thermometer, CloudRain, Check, X, Zap, Music, Palette,
+  Trophy, Theater, Gift, Pin,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -86,9 +89,9 @@ interface TravelIntelCardProps {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const eventTypeIcon: Record<string, string> = {
-  festival: '🎪', exhibition: '🎨', sports: '⚽', concert: '🎵',
-  theatre: '🎭', market: '🛍️', holiday: '🎉', other: '📌',
+const eventTypeIcon: Record<string, React.ElementType> = {
+  festival: Gift, exhibition: Palette, sports: Trophy, concert: Music,
+  theatre: Theater, market: ShoppingBag, holiday: Sparkles, other: Pin,
 };
 
 const tipCategoryIcon: Record<string, typeof Lightbulb> = {
@@ -206,7 +209,7 @@ export default function TravelIntelCard({
               {intel.archetypeAdvice && (
                 <div className="p-3 rounded-lg bg-primary/5 border border-primary/10">
                   <p className="text-xs text-foreground italic leading-relaxed">
-                    💡 {intel.archetypeAdvice}
+                    <Lightbulb className="w-3 h-3 inline-block mr-1 -mt-0.5 text-primary" />{intel.archetypeAdvice}
                   </p>
                 </div>
               )}
@@ -217,7 +220,7 @@ export default function TravelIntelCard({
                   <div className="space-y-2.5">
                     {intel.eventsAndHappenings.map((ev, i) => (
                       <div key={i} className="flex items-start gap-2.5">
-                        <span className="text-sm mt-0.5">{eventTypeIcon[ev.type] || '📌'}</span>
+                        {(() => { const EvIcon = eventTypeIcon[ev.type] || Pin; return <EvIcon className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />; })()}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-xs font-medium text-foreground">{ev.name}</span>
@@ -228,7 +231,7 @@ export default function TravelIntelCard({
                           <p className="text-[11px] text-muted-foreground">{ev.dates}</p>
                           <p className="text-xs text-muted-foreground mt-0.5">{ev.description}</p>
                           {ev.bookingTip && (
-                            <p className="text-[11px] text-primary mt-0.5 font-medium">⚡ {ev.bookingTip}</p>
+                            <p className="text-[11px] text-primary mt-0.5 font-medium flex items-center gap-1"><Zap className="w-3 h-3 shrink-0" />{ev.bookingTip}</p>
                           )}
                         </div>
                       </div>
@@ -241,11 +244,11 @@ export default function TravelIntelCard({
               {intel.gettingAround && (
                 <Section icon={TrainFront} title="Getting Around" iconColor="text-blue-500">
                   <div className="space-y-2">
-                    <TipLine icon="🚫" label={intel.gettingAround.doNotDo} highlight />
-                    <TipLine icon="✅" label={intel.gettingAround.bestOption} />
-                    <TipLine icon="💰" label={intel.gettingAround.moneyTip} />
-                    <TipLine icon="🤫" label={intel.gettingAround.localSecret} />
-                    <TipLine icon="🎩" label={intel.gettingAround.etiquetteTip} />
+                    <TipLine icon={Ban} label={intel.gettingAround.doNotDo} highlight iconColor="text-destructive" />
+                    <TipLine icon={CheckCircle2} label={intel.gettingAround.bestOption} iconColor="text-green-600" />
+                    <TipLine icon={PiggyBank} label={intel.gettingAround.moneyTip} iconColor="text-emerald-500" />
+                    <TipLine icon={EyeOff} label={intel.gettingAround.localSecret} iconColor="text-violet-500" />
+                    <TipLine icon={GraduationCap} label={intel.gettingAround.etiquetteTip} iconColor="text-amber-600" />
                   </div>
                 </Section>
               )}
@@ -254,14 +257,14 @@ export default function TravelIntelCard({
               {intel.moneyAndSpending && (
                 <Section icon={Wallet} title="Money & Spending" iconColor="text-emerald-500">
                   <div className="space-y-2">
-                    <TipLine icon="💳" label={intel.moneyAndSpending.paymentTip} />
+                    <TipLine icon={CreditCard} label={intel.moneyAndSpending.paymentTip} iconColor="text-blue-500" />
                     <div className="grid grid-cols-3 gap-2 py-1">
                       <MealCostPill label="Budget" cost={intel.moneyAndSpending.mealCosts.budget} />
                       <MealCostPill label="Mid-range" cost={intel.moneyAndSpending.mealCosts.midRange} />
                       <MealCostPill label="Fine dining" cost={intel.moneyAndSpending.mealCosts.fineDining} />
                     </div>
-                    <TipLine icon="⚠️" label={intel.moneyAndSpending.moneyTrap} highlight />
-                    <TipLine icon="🧠" label={intel.moneyAndSpending.savingHack} />
+                    <TipLine icon={AlertTriangle} label={intel.moneyAndSpending.moneyTrap} highlight iconColor="text-amber-500" />
+                    <TipLine icon={Brain} label={intel.moneyAndSpending.savingHack} iconColor="text-purple-500" />
                   </div>
                 </Section>
               )}
@@ -306,17 +309,17 @@ export default function TravelIntelCard({
                   <div className="space-y-2">
                     <p className="text-xs text-foreground">{intel.weatherAndPacking.summary}</p>
                     <div className="flex flex-wrap gap-2 text-[11px]">
-                      <Badge variant="outline" className="font-normal">🌡️ {intel.weatherAndPacking.temperature}</Badge>
-                      <Badge variant="outline" className="font-normal">🌧️ {intel.weatherAndPacking.rainChance}</Badge>
+                      <Badge variant="outline" className="font-normal flex items-center gap-1"><Thermometer className="w-3 h-3" />{intel.weatherAndPacking.temperature}</Badge>
+                      <Badge variant="outline" className="font-normal flex items-center gap-1"><CloudRain className="w-3 h-3" />{intel.weatherAndPacking.rainChance}</Badge>
                     </div>
                     <div className="flex flex-wrap gap-1.5 mt-1">
                       {intel.weatherAndPacking.packingList?.map((item, i) => (
-                        <Badge key={i} variant="secondary" className="text-[10px] font-normal">✓ {item}</Badge>
+                        <Badge key={i} variant="secondary" className="text-[10px] font-normal flex items-center gap-0.5"><Check className="w-2.5 h-2.5 text-green-600" />{item}</Badge>
                       ))}
                     </div>
                     {intel.weatherAndPacking.dontPack && (
                       <p className="text-[11px] text-muted-foreground mt-1">
-                        ❌ Leave at home: {intel.weatherAndPacking.dontPack}
+                        <X className="w-3 h-3 inline-block mr-0.5 -mt-0.5 text-destructive" />Leave at home: {intel.weatherAndPacking.dontPack}
                       </p>
                     )}
                   </div>
@@ -366,14 +369,14 @@ function Section({ icon: Icon, title, iconColor, children }: {
   );
 }
 
-function TipLine({ icon, label, highlight }: { icon: string; label: string; highlight?: boolean }) {
+function TipLine({ icon: Icon, label, highlight, iconColor }: { icon: React.ElementType; label: string; highlight?: boolean; iconColor?: string }) {
   return (
     <div className={cn(
       'flex items-start gap-2 text-xs',
       highlight && 'font-medium text-foreground',
       !highlight && 'text-muted-foreground',
     )}>
-      <span className="shrink-0 mt-0.5">{icon}</span>
+      <Icon className={cn('w-3.5 h-3.5 shrink-0 mt-0.5', iconColor || 'text-muted-foreground')} />
       <span className="leading-relaxed">{label}</span>
     </div>
   );
