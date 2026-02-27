@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { registerSubscription, unregisterSubscription } from '@/lib/realtimeSubscriptionManager';
 import { Send, MessageCircle, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,31 +57,33 @@ export default function TripChat({ tripId, tripType, shareToken, className }: Tr
     loadMessages();
   }, [tripId]);
 
-  // Subscribe to realtime updates
+  // Subscribe to realtime updates via the subscription manager
   useEffect(() => {
-    const channel = supabase
-      .channel(`trip-chat-${tripId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'trip_chat_messages',
-          filter: `trip_id=eq.${tripId}`,
-        },
-        (payload) => {
-          const newMsg = payload.new as ChatMessage;
-          setMessages((prev) => {
-            // Avoid duplicates
-            if (prev.some((m) => m.id === newMsg.id)) return prev;
-            return [...prev, newMsg];
-          });
-        }
-      )
-      .subscribe();
+    const key = `trip-chat-${tripId}`;
+    registerSubscription(key, () =>
+      supabase
+        .channel(key)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'trip_chat_messages',
+            filter: `trip_id=eq.${tripId}`,
+          },
+          (payload) => {
+            const newMsg = payload.new as ChatMessage;
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === newMsg.id)) return prev;
+              return [...prev, newMsg];
+            });
+          }
+        )
+        .subscribe()
+    );
 
     return () => {
-      supabase.removeChannel(channel);
+      unregisterSubscription(key);
     };
   }, [tripId]);
 

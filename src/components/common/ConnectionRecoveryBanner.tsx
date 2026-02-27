@@ -18,6 +18,8 @@ import { RefreshCw, WifiOff } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
+import { resubscribeAll, onStaleConnection } from '@/lib/realtimeSubscriptionManager';
+import { toast } from 'sonner';
 
 /** How many consecutive fetch failures (credits, entitlements, etc.) before we show the banner */
 const FAILURE_THRESHOLD = 3;
@@ -65,6 +67,13 @@ export function ConnectionRecoveryBanner() {
   const [isRecovering, setIsRecovering] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Register stale-channel detection to trigger recovery banner
+  useEffect(() => {
+    onStaleConnection(() => {
+      reportConnectionFailure();
+    });
+  }, []);
+
   // Show banner after sustained failures
   useEffect(() => {
     if (failureCount >= FAILURE_THRESHOLD && !showBanner) {
@@ -92,14 +101,18 @@ export function ConnectionRecoveryBanner() {
         // If refresh truly fails, a re-login is needed — but still clear the cascade
       }
 
-      // 3. Invalidate all React-Query caches so hooks re-fetch with fresh connections
+      // 3. Re-establish all registered Realtime subscriptions
+      const restored = resubscribeAll();
+
+      // 4. Invalidate all React-Query caches so hooks re-fetch with fresh connections
       queryClient.invalidateQueries();
 
-      // 4. Reset failure counter
+      // 5. Reset failure counter
       resetConnectionFailures();
       setShowBanner(false);
 
-      console.log('[ConnectionRecovery] Recovery complete — all channels reset, session refreshed');
+      toast.success('Reconnected', { duration: 3000 });
+      console.log(`[ConnectionRecovery] Recovery complete — ${restored} channel(s) restored, session refreshed`);
     } catch (err) {
       console.error('[ConnectionRecovery] Recovery failed:', err);
       // Last resort: suggest hard refresh

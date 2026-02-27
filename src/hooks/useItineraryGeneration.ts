@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { reportConnectionFailure, resetConnectionFailures } from '@/components/common/ConnectionRecoveryBanner';
+import { resubscribeAll } from '@/lib/realtimeSubscriptionManager';
 import { getTripCities } from '@/services/tripCitiesService';
 
 // =============================================================================
@@ -269,6 +270,7 @@ export function useItineraryGeneration() {
         try {
           supabase.removeAllChannels();
           await supabase.auth.refreshSession();
+          resubscribeAll();
           resetConnectionFailures();
         } catch (cleanupErr) {
           console.warn('[useItineraryGeneration] Post-failure cleanup failed:', cleanupErr);
@@ -546,6 +548,7 @@ export function useItineraryGeneration() {
         try {
           supabase.removeAllChannels();
           await supabase.auth.refreshSession();
+          resubscribeAll();
           resetConnectionFailures();
         } catch (cleanupErr) {
           console.warn('[useItineraryGeneration] Post-failure cleanup failed:', cleanupErr);

@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { registerSubscription, unregisterSubscription } from '@/lib/realtimeSubscriptionManager';
 import { ThumbsUp, Plus, Lightbulb, User, Loader2, ArrowRightLeft, CalendarClock, Pencil, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -128,24 +129,27 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
     loadSuggestions();
   }, [loadSuggestions]);
 
-  // Realtime subscriptions
+  // Realtime subscriptions via the subscription manager
   useEffect(() => {
-    const sugChannel = supabase
-      .channel(`suggestions-${tripId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'trip_suggestions',
-        filter: `trip_id=eq.${tripId}`,
-      }, () => loadSuggestions())
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'trip_suggestion_votes',
-      }, () => loadSuggestions())
-      .subscribe();
+    const key = `suggestions-${tripId}`;
+    registerSubscription(key, () =>
+      supabase
+        .channel(key)
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'trip_suggestions',
+          filter: `trip_id=eq.${tripId}`,
+        }, () => loadSuggestions())
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'trip_suggestion_votes',
+        }, () => loadSuggestions())
+        .subscribe()
+    );
 
-    return () => { supabase.removeChannel(sugChannel); };
+    return () => { unregisterSubscription(key); };
   }, [tripId, loadSuggestions]);
 
   const handleSubmit = useCallback(async () => {
