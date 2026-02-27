@@ -3291,6 +3291,7 @@ export function EditorialItinerary({
                   <AirportGamePlan 
                     flightSelection={flightSelection} 
                     hotelSelection={hotelSelection}
+                    allHotels={allHotels}
                     destination={destination}
                     onNavigateToBookings={() => setActiveTab('details')}
                   />
@@ -5329,13 +5330,16 @@ interface TransferData {
 interface AirportGamePlanProps {
   flightSelection?: FlightSelection | null;
   hotelSelection?: HotelSelection | null;
+  allHotels?: CityHotelInfo[];
   destination: string;
   onNavigateToBookings?: () => void;
 }
 
-function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavigateToBookings }: AirportGamePlanProps) {
+function AirportGamePlan({ flightSelection, hotelSelection, allHotels, destination, onNavigateToBookings }: AirportGamePlanProps) {
   const outbound = flightSelection?.outbound;
-  const hasHotel = !!hotelSelection?.name;
+  const fallbackCityHotel = allHotels?.find(h => !!h.hotel?.name)?.hotel || null;
+  const effectiveHotelSelection = hotelSelection?.name ? hotelSelection : fallbackCityHotel;
+  const hasHotel = !!effectiveHotelSelection?.name;
   const [transferData, setTransferData] = useState<TransferData | null>(null);
   const [isLoadingTransfer, setIsLoadingTransfer] = useState(false);
   
@@ -5347,7 +5351,7 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavig
   // Fetch dynamic transfer data from Google Maps Distance Matrix API
   // Runs when hotel exists (flight optional - uses destination airport as fallback)
   useEffect(() => {
-    if (!hotelSelection?.name) return;
+    if (!effectiveHotelSelection?.name) return;
     
     const fetchTransferData = async () => {
       setIsLoadingTransfer(true);
@@ -5361,8 +5365,8 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavig
           : `${destination} Airport`;
         
         // Build destination string (hotel or city center)
-        const hotelDest = hotelSelection?.address 
-          || `${hotelSelection.name}, ${destination}`;
+        const hotelDest = effectiveHotelSelection?.address 
+          || `${effectiveHotelSelection.name}, ${destination}`;
         
         const response = await supabase.functions.invoke('airport-transfers', {
           body: { 
@@ -5408,7 +5412,7 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavig
     };
     
     fetchTransferData();
-  }, [outbound?.arrival?.airport, hotelSelection?.name, hotelSelection?.address, destination]);
+  }, [outbound?.arrival?.airport, effectiveHotelSelection?.name, effectiveHotelSelection?.address, destination]);
   
   // Parse arrival time and calculate recommendations (move up to use in all states)
   const arrivalTime = outbound?.arrival?.time || '';
@@ -5614,14 +5618,14 @@ function AirportGamePlan({ flightSelection, hotelSelection, destination, onNavig
                 <Hotel className="h-4 w-4 text-primary" />
               </div>
               <div className="flex-1">
-                <p className="font-medium text-sm">{hotelSelection?.name}</p>
-                {hotelSelection?.address && (
-                  <p className="text-xs text-muted-foreground mt-0.5">{hotelSelection.address}</p>
+                <p className="font-medium text-sm">{effectiveHotelSelection?.name}</p>
+                {effectiveHotelSelection?.address && (
+                  <p className="text-xs text-muted-foreground mt-0.5">{effectiveHotelSelection.address}</p>
                 )}
-                {hotelSelection?.checkInDate && (
+                {(effectiveHotelSelection?.checkInDate || allHotels?.[0]?.checkInDate) && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Check-in: {safeFormatDate(hotelSelection.checkInDate, 'MMM d', 'Date TBD')}
-                    {hotelSelection?.checkInTime && ` at ${hotelSelection.checkInTime}`}
+                    Check-in: {safeFormatDate(effectiveHotelSelection?.checkInDate || allHotels?.[0]?.checkInDate, 'MMM d', 'Date TBD')}
+                    {(effectiveHotelSelection?.checkInTime || effectiveHotelSelection?.checkIn || allHotels?.[0]?.hotel?.checkIn) && ` at ${effectiveHotelSelection?.checkInTime || effectiveHotelSelection?.checkIn || allHotels?.[0]?.hotel?.checkIn}`}
                   </p>
                 )}
               </div>
