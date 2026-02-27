@@ -278,7 +278,7 @@ export default function TravelIntelCard({
                         {intel.bookNowVsWalkUp.bookNow?.map((item, i) => (
                           <div key={i} className="text-xs">
                             <span className="font-medium text-foreground">{item.name}</span>
-                            {item.reason && <span className="text-muted-foreground"> — {item.reason}</span>}
+                            {item.reason && <span className="text-muted-foreground"> - {item.reason}</span>}
                           </div>
                         ))}
                       </div>
@@ -291,7 +291,7 @@ export default function TravelIntelCard({
                         {intel.bookNowVsWalkUp.walkUpFine?.map((item, i) => (
                           <div key={i} className="text-xs">
                             <span className="font-medium text-foreground">{item.name}</span>
-                            {item.note && <span className="text-muted-foreground"> — {item.note}</span>}
+                            {item.note && <span className="text-muted-foreground"> - {item.note}</span>}
                           </div>
                         ))}
                       </div>

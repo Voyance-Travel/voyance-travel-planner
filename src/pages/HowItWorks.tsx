@@ -272,7 +272,7 @@ export default function HowItWorks() {
                 Start your way
               </h2>
               <p className="text-lg text-muted-foreground leading-relaxed mb-8">
-                No two planners are alike — so we give you four ways to begin. 
+                No two planners are alike - so we give you four ways to begin. 
                 Pick the one that matches how you think.
               </p>
 

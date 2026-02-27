@@ -217,7 +217,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
           } else {
             // All required fields present — show summary for confirmation
             if (!assistantContent) {
-              assistantContent = `Here's what I've captured for your trip to **${details.destination}** — review and confirm when you're ready! 🎉`;
+              assistantContent = `Here's what I've captured for your trip to **${details.destination}** - review and confirm when you're ready! 🎉`;
               setMessages(prev => [...prev, { role: 'assistant', content: assistantContent }]);
             }
             setExtractedDetails(details);
@@ -333,7 +333,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
                 setCityTransports([]);
                 setMessages(prev => [
                   ...prev,
-                  { role: 'assistant', content: "No problem — what would you like to change?" },
+                  { role: 'assistant', content: "No problem - what would you like to change?" },
                 ]);
               }}
             />

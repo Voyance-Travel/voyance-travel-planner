@@ -274,7 +274,7 @@ export function TransportComparisonCard({
       </div>
 
       <p className="text-[10px] text-muted-foreground/60 px-1 italic">
-        Prices are estimates — verify current fares before booking
+        Prices are estimates - verify current fares before booking
       </p>
     </div>
   );

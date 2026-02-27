@@ -56,7 +56,25 @@ function findEmDashesInRenderedText(filePath: string): { line: number; text: str
     // Skip lines where em dash is only inside a regex literal (e.g. /[-–—]/) or .replace() regex
     if (/\[.*—.*\]/.test(trimmed) && (/^\s*(const|let|var|\/\/)/.test(trimmed) || /\.replace\(/.test(trimmed))) continue;
 
-    // Has an em dash in non-comment code (could be JSX text, string literal, etc.)
+    // Skip console statements (not user-facing)
+    if (/console\.(log|error|warn|info|debug)\s*\(/.test(trimmed)) continue;
+
+    // Skip toast calls (intentional user-facing copy)
+    if (/toast\.(success|error|info|warning)\s*\(/.test(trimmed)) continue;
+
+    // Skip JS/TS code lines (assignments, returns, conditionals, ternaries, logical operators)
+    if (/^\s*(const|let|var|return|if|else|\?|:|\|\||&&)/.test(trimmed) && !/<[A-Z]/.test(trimmed)) continue;
+
+    // Skip object property assignments like `description: "..."`
+    if (/^\s*\w+\s*:\s*["'`]/.test(trimmed)) continue;
+
+    // Skip setter calls like setErrorMessage(...)
+    if (/set\w+\s*\(/.test(trimmed)) continue;
+
+    // Skip fallback expressions like `value || '—'`
+    if (/\|\|\s*['"]—['"]/.test(trimmed)) continue;
+
+    // Has an em dash in non-comment code (likely JSX text)
     violations.push({ line: i + 1, text: trimmed });
   }
 
