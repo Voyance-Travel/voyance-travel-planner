@@ -316,7 +316,7 @@ serve(async (req) => {
       can_regenerate_day: true,
       can_send_message: true,
       can_get_restaurant_rec: true,
-      can_optimize_routes: unlockedDays >= 1,
+      can_optimize_routes: unlockedDays >= 1 || isFirstTrip || hasPaidAccess,
 
       // Free caps
       free_caps: freeCaps,
