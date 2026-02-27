@@ -390,9 +390,9 @@ export function ImportActivitiesModal({
                   : 'bg-primary/10 text-primary'
               )}>
                 {importMode === 'replace' ? (
-                  <><RefreshCw className="h-3.5 w-3.5" /> Starting over — existing activities will be replaced</>
+                  <><RefreshCw className="h-3.5 w-3.5" /> Starting over - existing activities will be replaced</>
                 ) : (
-                  <><Merge className="h-3.5 w-3.5" /> Merging — imported activities will be added alongside existing ones</>
+                  <><Merge className="h-3.5 w-3.5" /> Merging - imported activities will be added alongside existing ones</>
                 )}
               </div>
             )}

@@ -211,7 +211,7 @@ function DNARevealCard({ dnaResult }: { dnaResult: DNAResult }) {
           transition={{ delay: 1.5 }}
           className="mt-4 p-3 rounded-lg bg-accent/10 border border-accent/20 text-sm text-muted-foreground"
         >
-          Want a more specific result? Try answering with stronger preferences —
+          Want a more specific result? Try answering with stronger preferences -
           the quiz works best when you lean into what makes you unique.
           <button 
             onClick={() => navigate('/quiz?retake=true')}

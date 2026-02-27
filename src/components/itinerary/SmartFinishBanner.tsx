@@ -347,7 +347,7 @@ export function SmartFinishBanner({
                   className="inline-flex items-center gap-1.5 mt-2 text-xs text-amber-600 dark:text-amber-400 hover:underline"
                 >
                   <AlertTriangle className="h-3 w-3" />
-                  {analysis.gapCount} gap{analysis.gapCount !== 1 ? 's' : ''} found — review details
+                  {analysis.gapCount} gap{analysis.gapCount !== 1 ? 's' : ''} found - review details
                   <ChevronRight className="h-3 w-3" />
                 </button>
               )}
@@ -389,7 +389,7 @@ export function SmartFinishBanner({
                 ) : (
                   <Sparkles className="h-4 w-4" />
                 )}
-                Smart Finish — {CREDIT_COSTS.SMART_FINISH} credits
+                Smart Finish - {CREDIT_COSTS.SMART_FINISH} credits
               </Button>
             )}
             <p className="text-[10px] text-center text-muted-foreground mt-1.5">
@@ -456,7 +456,7 @@ export function SmartFinishBanner({
               ) : (
                 <Coins className="h-4 w-4" />
               )}
-              Smart Finish — {CREDIT_COSTS.SMART_FINISH} credits
+              Smart Finish - {CREDIT_COSTS.SMART_FINISH} credits
             </Button>
             <p className="text-[11px] text-center text-muted-foreground">
               Your research. Our polish. Route optimization, reviews, tips & DNA fixes.

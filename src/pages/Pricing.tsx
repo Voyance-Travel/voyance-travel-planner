@@ -127,7 +127,7 @@ function FoundingMemberBadge() {
     <div className="flex items-center gap-2 text-xs text-primary mb-4 bg-primary/5 rounded-lg px-3 py-2">
       <Award className="h-3.5 w-3.5 shrink-0" />
       <span className="font-medium">
-        {isSoldOut ? 'Founding Member badge — sold out!' : `Founding Member badge — ${remaining} of 1,000 remaining`}
+        {isSoldOut ? 'Founding Member badge - sold out!' : `Founding Member badge - ${remaining} of 1,000 remaining`}
       </span>
     </div>
   );

@@ -506,7 +506,7 @@ function ActivityCard({
             <div className="flex items-center gap-1.5 mt-1 px-2 py-1 bg-destructive/10 border border-destructive/20 rounded-md">
               <AlertTriangle className="h-3 w-3 text-destructive flex-shrink-0" />
               <span className="text-xs text-destructive font-medium">
-                May be closed — {(activity as any).closedRiskReason || 'Check hours before visiting'}
+                May be closed - {(activity as any).closedRiskReason || 'Check hours before visiting'}
               </span>
             </div>
           )}

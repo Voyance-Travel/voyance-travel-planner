@@ -158,7 +158,7 @@ export function DiscoverDrawer({
             Discover in {destination}
           </SheetTitle>
           <p className="text-sm text-muted-foreground mt-1">
-            Find things to do nearby — personalized for your travel style
+            Find things to do nearby - personalized for your travel style
           </p>
         </SheetHeader>
 

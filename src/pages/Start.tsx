@@ -2114,7 +2114,7 @@ export default function Start() {
               Want a personalized trip?
             </DialogTitle>
             <DialogDescription className="text-sm leading-relaxed pt-2">
-              We don't have your Travel DNA yet — a quick 5-minute quiz lets us tailor 
+              We don't have your Travel DNA yet - a quick 5-minute quiz lets us tailor 
               every recommendation to your pace, style, and interests.
             </DialogDescription>
           </DialogHeader>
