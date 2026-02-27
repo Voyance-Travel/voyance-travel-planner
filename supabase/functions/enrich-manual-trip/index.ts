@@ -152,12 +152,74 @@ async function runGenerationInBackground(
 
     console.log(`[enrich-manual-trip:bg] ✓ Smart Finish complete: ${generateData.totalDays} days, ${generateData.totalActivities} activities`);
 
+    // --- Post-generation quality check ---
+    // Re-fetch the saved itinerary and validate Smart Finish quality
+    const { data: savedTrip } = await supabase
+      .from("trips")
+      .select("itinerary_data, start_date, end_date")
+      .eq("id", tripId)
+      .single();
+
+    const savedItinerary = savedTrip?.itinerary_data;
+    const savedDays = savedItinerary?.days || savedItinerary?.itinerary?.days || [];
+    const SLOT_LABELS = /^(morning|afternoon|evening|dinner|lunch|breakfast|night|brunch|midday)$/i;
+    const HH_MM = /^\d{1,2}:\d{2}/;
+
+    let qualityPass = true;
+    const qualityIssues: string[] = [];
+
+    // Check 1: Days exist
+    if (!Array.isArray(savedDays) || savedDays.length === 0) {
+      qualityPass = false;
+      qualityIssues.push("No days generated");
+    } else {
+      for (const day of savedDays) {
+        const dayNum = day.dayNumber || day.day || "?";
+        const acts = day.activities || [];
+
+        // Check 2: Minimum activity count (6 for first/last, 8 for middle)
+        const isEdgeDay = dayNum === 1 || dayNum === savedDays.length;
+        const minActs = isEdgeDay ? 6 : 8;
+        if (acts.length < minActs) {
+          qualityIssues.push(`Day ${dayNum}: only ${acts.length} activities (need ${minActs}+)`);
+        }
+
+        // Check 3: No unresolved slot labels in times
+        for (const act of acts) {
+          const time = act.startTime || act.start_time || act.time || "";
+          if (SLOT_LABELS.test(time.trim()) || (time && !HH_MM.test(time.trim()))) {
+            qualityPass = false;
+            qualityIssues.push(`Day ${dayNum}: "${act.title || act.name}" has non-HH:MM time "${time}"`);
+          }
+        }
+      }
+    }
+
+    // Check 4: accommodationNotes / practicalTips present
+    const hasAccNotes = Array.isArray(savedItinerary?.accommodationNotes) && savedItinerary.accommodationNotes.length > 0;
+    const hasTips = Array.isArray(savedItinerary?.practicalTips) && savedItinerary.practicalTips.length > 0;
+    if (!hasAccNotes) qualityIssues.push("Missing accommodationNotes");
+    if (!hasTips) qualityIssues.push("Missing practicalTips");
+
+    if (qualityIssues.length > 0) {
+      console.warn(`[enrich-manual-trip:bg] Quality issues: ${qualityIssues.join("; ")}`);
+    }
+
+    if (!qualityPass) {
+      console.error(`[enrich-manual-trip:bg] ❌ Smart Finish FAILED quality gate: ${qualityIssues.join("; ")}`);
+      throw new Error(`Quality gate failed: ${qualityIssues.slice(0, 3).join("; ")}`);
+    }
+
+    console.log(`[enrich-manual-trip:bg] ✓ Quality gate passed (${qualityIssues.length} minor warnings)`);
+
     // Mark completion in metadata
     const completedMeta = {
       ...updatedMetadata,
       smartFinishCompleted: true,
       smartFinishCompletedAt: new Date().toISOString(),
       smartFinishTotalActivities: generateData.totalActivities || 0,
+      smartFinishStatus: "success",
+      smartFinishQualityWarnings: qualityIssues.length > 0 ? qualityIssues : undefined,
     };
     await supabase
       .from("trips")
@@ -322,6 +384,7 @@ serve(async (req) => {
       ...existingMetadata,
       mustDoActivities: researchContext,
       smartFinishSource: "manual_builder_standard",
+      smartFinishMode: true, // Explicit boolean — generate-itinerary uses this as primary detection
       smartFinishRequestedAt: new Date().toISOString(),
       smartFinishStatus: "generating", // <-- client polls this
       smartFinishFailed: false,
