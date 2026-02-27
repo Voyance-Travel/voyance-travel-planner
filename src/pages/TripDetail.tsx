@@ -1200,8 +1200,13 @@ export default function TripDetail() {
               const cityHotels: import('@/components/itinerary/EditorialItinerary').CityHotelInfo[] = (() => {
                 if (!isMultiCity) return [];
 
+                // When is_multi_city is true but tripCities hasn't loaded yet, skip the
+                // destination-string fallback (which often produces only 1 city) and wait
+                // for tripCities to load on the next render cycle.
+                if (tripCities.length === 0) return [];
+
                 // Prefer trip_cities from DB (authoritative source)
-                if (tripCities.length > 1) {
+                if (tripCities.length >= 1) {
                   return tripCities.map((city, idx) => {
                     const hotelData = city.hotel_selection as any;
                     const normalizedHotel = allNormalizedHotels[idx];
