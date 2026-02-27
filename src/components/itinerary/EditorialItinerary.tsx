@@ -49,8 +49,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { format, parseISO, isToday } from 'date-fns';
-import { safeFormatDate } from '@/utils/dateUtils';
+import { format, parseISO, isToday, addDays } from 'date-fns';
+import { safeFormatDate, parseLocalDate } from '@/utils/dateUtils';
 import type { ActivityType, ItineraryActivity, WeatherCondition, DayItinerary } from '@/types/itinerary';
 import { convertFrontendDayToBackend, convertFrontendActivityToBackend } from '@/types/itinerary';
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
@@ -1015,7 +1015,7 @@ export function EditorialItinerary({
     // Auto-select "Today" if trip is active
     const todayIndex = initialDays.findIndex(d => {
       if (!d.date) return false;
-      try { return isToday(parseISO(d.date)); } catch { return false; }
+      try { return isToday(parseLocalDate(d.date)); } catch { return false; }
     });
     return todayIndex >= 0 ? todayIndex : 0;
   });
@@ -3113,77 +3113,139 @@ export function EditorialItinerary({
 
 
             {/* Day Navigation Bar */}
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setSelectedDayIndex(prev => Math.max(0, prev - 1))}
-                disabled={!canGoPrev}
-                className="shrink-0"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </Button>
-
-              <div className="flex-1 overflow-x-auto">
-                <div className="flex gap-2 justify-center" data-tour="day-picker">
-                  {days.map((day, index) => {
-                    let dayDate: Date | null = null;
-                    try { dayDate = day.date ? parseISO(day.date) : null; if (dayDate && isNaN(dayDate.getTime())) dayDate = null; } catch { dayDate = null; }
-                    const isSelected = index === selectedDayIndex;
-                    const isTodayDay = dayDate ? isToday(dayDate) : false;
-                    
-                    return (
-                      <button
-                        key={day.dayNumber}
-                        ref={el => { dayButtonRefs.current[index] = el; }}
-                        onClick={() => {
-                          setSelectedDayIndex(index);
-                          setExpandedDays([day.dayNumber]);
-                        }}
-                        className={cn(
-                          'flex flex-col items-center px-3 py-2 rounded-lg transition-all min-w-[60px] relative',
-                          isSelected 
-                            ? (day.metadata?.isLocked && !isManualMode) ? 'bg-muted border border-border' : 'bg-primary text-primary-foreground'
-                            : (day.metadata?.isLocked && !isManualMode) ? 'bg-muted/30 opacity-60 hover:opacity-80' : 'bg-muted/50 hover:bg-muted',
-                          isTodayDay && !isSelected && 'ring-2 ring-primary ring-offset-2'
-                        )}
-                      >
-                        {day.metadata?.isLocked && !isManualMode && (
-                          <Lock className="h-3 w-3 absolute top-1 right-1 text-muted-foreground" />
-                        )}
-                        {dayDate && (
-                          <>
-                            <span className="text-xs font-medium">
-                              {format(dayDate, 'EEE')}
-                            </span>
-                            <span className="text-lg font-bold">
-                              {format(dayDate, 'd')}
-                            </span>
-                          </>
-                        )}
-                        {!dayDate && (
-                          <span className="text-lg font-bold">Day {day.dayNumber}</span>
-                        )}
-                        {isTodayDay && (
-                          <Badge variant="secondary" className="text-[10px] mt-1">
-                            Today
-                          </Badge>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+            <div className="space-y-2">
+              {/* Trip length header */}
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs font-medium text-muted-foreground">
+                  {days.length} day{days.length !== 1 ? 's' : ''}
+                  {startDate && endDate ? ` · ${safeFormatDate(startDate, 'MMM d')} – ${safeFormatDate(endDate, 'MMM d')}` : ''}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Day {selectedDayIndex + 1} of {days.length}
+                </span>
               </div>
 
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setSelectedDayIndex(prev => Math.min(days.length - 1, prev + 1))}
-                disabled={!canGoNext}
-                className="shrink-0"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSelectedDayIndex(prev => Math.max(0, prev - 1))}
+                  disabled={!canGoPrev}
+                  className="shrink-0"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </Button>
+
+                <div className="flex-1 overflow-x-auto scrollbar-hide">
+                  <div className="flex gap-1.5" data-tour="day-picker">
+                    {days.map((day, index) => {
+                      // Compute date from startDate + dayNumber for reliable cross-month handling
+                      let dayDate: Date | null = null;
+                      try {
+                        if (day.date) {
+                          dayDate = parseLocalDate(day.date);
+                        } else if (startDate) {
+                          dayDate = addDays(parseLocalDate(startDate), (day.dayNumber || index + 1) - 1);
+                        }
+                        if (dayDate && isNaN(dayDate.getTime())) dayDate = null;
+                      } catch { dayDate = null; }
+                      
+                      const isSelected = index === selectedDayIndex;
+                      const isTodayDay = dayDate ? isToday(dayDate) : false;
+
+                      // Resolve city name for multi-city trips
+                      let cityName: string | null = null;
+                      if (allHotels && allHotels.length > 1 && dayDate) {
+                        const dateStr = `${dayDate.getFullYear()}-${String(dayDate.getMonth() + 1).padStart(2, '0')}-${String(dayDate.getDate()).padStart(2, '0')}`;
+                        for (const ch of allHotels) {
+                          if (ch.checkInDate && ch.checkOutDate && dateStr >= ch.checkInDate && dateStr < ch.checkOutDate) {
+                            cityName = ch.cityName;
+                            break;
+                          }
+                        }
+                        // Fallback: use day title if it looks like a city
+                        if (!cityName && day.title && allHotels.some(h => day.title?.includes(h.cityName))) {
+                          cityName = allHotels.find(h => day.title?.includes(h.cityName))?.cityName || null;
+                        }
+                      }
+
+                      return (
+                        <button
+                          key={day.dayNumber}
+                          ref={el => { dayButtonRefs.current[index] = el; }}
+                          onClick={() => {
+                            setSelectedDayIndex(index);
+                            setExpandedDays([day.dayNumber]);
+                          }}
+                          className={cn(
+                            'flex flex-col items-center px-3 py-2 rounded-xl transition-all min-w-[72px] relative border',
+                            isSelected 
+                              ? (day.metadata?.isLocked && !isManualMode) 
+                                ? 'bg-muted border-border shadow-sm' 
+                                : 'bg-primary text-primary-foreground border-primary shadow-md'
+                              : (day.metadata?.isLocked && !isManualMode) 
+                                ? 'bg-muted/30 border-transparent opacity-60 hover:opacity-80' 
+                                : 'bg-card border-border/50 hover:bg-muted hover:border-border',
+                            isTodayDay && !isSelected && 'ring-2 ring-primary ring-offset-2 ring-offset-background'
+                          )}
+                        >
+                          {day.metadata?.isLocked && !isManualMode && (
+                            <Lock className="h-3 w-3 absolute top-1 right-1 text-muted-foreground" />
+                          )}
+                          {/* Day number */}
+                          <span className={cn(
+                            'text-[10px] font-semibold uppercase tracking-wide',
+                            isSelected ? 'text-primary-foreground/80' : 'text-muted-foreground'
+                          )}>
+                            Day {day.dayNumber}
+                          </span>
+                          {dayDate ? (
+                            <>
+                              {/* Date number */}
+                              <span className="text-lg font-bold leading-tight">
+                                {dayDate.getDate()}
+                              </span>
+                              {/* Weekday + month */}
+                              <span className={cn(
+                                'text-[10px]',
+                                isSelected ? 'text-primary-foreground/70' : 'text-muted-foreground'
+                              )}>
+                                {format(dayDate, 'EEE')}, {format(dayDate, 'MMM')}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-lg font-bold leading-tight">–</span>
+                          )}
+                          {/* City name for multi-city */}
+                          {cityName && (
+                            <span className={cn(
+                              'text-[9px] font-medium truncate max-w-[64px] mt-0.5',
+                              isSelected ? 'text-primary-foreground/70' : 'text-muted-foreground/70'
+                            )}>
+                              {cityName}
+                            </span>
+                          )}
+                          {isTodayDay && (
+                            <Badge variant={isSelected ? 'secondary' : 'default'} className="text-[9px] mt-1 px-1.5 py-0">
+                              Today
+                            </Badge>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSelectedDayIndex(prev => Math.min(days.length - 1, prev + 1))}
+                  disabled={!canGoNext}
+                  className="shrink-0"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </Button>
+              </div>
             </div>
             
             {/* Bulk Unlock Banner - show when 2+ days are locked */}
