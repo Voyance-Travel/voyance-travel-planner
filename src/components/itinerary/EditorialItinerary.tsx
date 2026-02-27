@@ -4479,7 +4479,29 @@ export function EditorialItinerary({
                 onBookingAdded?.();
               }}
               editMode={true}
-              existingOutbound={flightSelection?.outbound ? {
+              existingLegs={allFlightLegs.length > 0 ? allFlightLegs.map((leg, i) => ({
+                airline: leg.airline || '',
+                flightNumber: leg.flightNumber || '',
+                departureAirport: leg.departure?.airport || '',
+                arrivalAirport: leg.arrival?.airport || '',
+                departureTime: leg.departure?.time || '',
+                arrivalTime: leg.arrival?.time || '',
+                departureDate: leg.departure?.date || (i === 0 ? startDate : i === allFlightLegs.length - 1 ? endDate : ''),
+                price: leg.price,
+              })) : undefined}
+              multiCityRoute={allHotels && allHotels.length > 1 ? (() => {
+                const route: Array<{ from: string; to: string; date?: string }> = [];
+                // Outbound: origin → first city
+                if (originCity) route.push({ from: originCity, to: allHotels[0].cityName, date: startDate });
+                // Inter-city: each city → next city
+                for (let i = 0; i < allHotels.length - 1; i++) {
+                  route.push({ from: allHotels[i].cityName, to: allHotels[i + 1].cityName, date: allHotels[i].checkOutDate });
+                }
+                // Return: last city → origin
+                if (originCity) route.push({ from: allHotels[allHotels.length - 1].cityName, to: originCity, date: endDate });
+                return route;
+              })() : undefined}
+              existingOutbound={!allFlightLegs.length && flightSelection?.outbound ? {
                 airline: flightSelection.outbound.airline || '',
                 flightNumber: flightSelection.outbound.flightNumber || '',
                 departureAirport: flightSelection.outbound.departure?.airport || '',
@@ -4488,7 +4510,7 @@ export function EditorialItinerary({
                 arrivalTime: flightSelection.outbound.arrival?.time || '',
                 departureDate: flightSelection.outbound.departure?.date || startDate,
               } : undefined}
-              existingReturn={flightSelection?.return ? {
+              existingReturn={!allFlightLegs.length && flightSelection?.return ? {
                 airline: flightSelection.return.airline || '',
                 flightNumber: flightSelection.return.flightNumber || '',
                 departureAirport: flightSelection.return.departure?.airport || '',
