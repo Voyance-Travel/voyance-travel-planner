@@ -59,8 +59,8 @@ import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityIma
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
-import { useRefreshDay, type RefreshResult } from '@/hooks/useRefreshDay';
-import { RefreshDayPanel } from './RefreshDayPanel';
+import { useRefreshDay, type RefreshResult, type ProposedChange } from '@/hooks/useRefreshDay';
+import { RefreshDayDiffView } from './RefreshDayDiffView';
 import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternativesDrawer';
 import { RegenerateGuidedAssistDialog } from './RegenerateGuidedAssistDialog';
 import { WeatherForecast } from './WeatherForecast';
@@ -1324,6 +1324,32 @@ export function EditorialItinerary({
     }
     setRefreshingDayNumber(null);
   }, [days, destination, refreshDay]);
+
+  // Apply accepted refresh changes — patches activity startTime/endTime by ID
+  const handleApplyRefreshChanges = useCallback((dayIndex: number, changes: ProposedChange[]) => {
+    setDays(prev => prev.map((day, dIdx) => {
+      if (dIdx !== dayIndex) return day;
+      return {
+        ...day,
+        activities: day.activities.map(activity => {
+          const change = changes.find(c => c.activityId === activity.id && c.patch);
+          if (!change?.patch) return activity;
+          return {
+            ...activity,
+            ...(change.patch.startTime ? { startTime: change.patch.startTime as string, time: change.patch.startTime as string } : {}),
+            ...(change.patch.endTime ? { endTime: change.patch.endTime as string } : {}),
+          };
+        }),
+      };
+    }));
+    setHasChanges(true);
+    // Clear refresh results for this day
+    const dayNum = days[dayIndex]?.dayNumber;
+    if (dayNum) {
+      setRefreshResults(prev => { const next = { ...prev }; delete next[dayNum]; return next; });
+    }
+    toast.success(`Applied ${changes.length} change${changes.length !== 1 ? 's' : ''} to Day ${dayNum || dayIndex + 1}`);
+  }, [days]);
   
   // Credit nudge state
   const [creditNudge, setCreditNudge] = useState<{ action: keyof typeof CREDIT_COSTS } | null>(null);
@@ -3786,6 +3812,7 @@ export function EditorialItinerary({
                           isRefreshingDay={refreshingDayNumber === selectedDay.dayNumber}
                           refreshResult={refreshResults[selectedDay.dayNumber] || null}
                           onDismissRefresh={() => setRefreshResults(prev => { const next = { ...prev }; delete next[selectedDay.dayNumber]; return next; })}
+                          onApplyRefreshChanges={(changes) => handleApplyRefreshChanges(selectedDayIndex, changes)}
                         />
                       )}
                     </>
@@ -6393,6 +6420,7 @@ interface DayCardProps {
   isRefreshingDay?: boolean;
   refreshResult?: RefreshResult | null;
   onDismissRefresh?: () => void;
+  onApplyRefreshChanges?: (changes: ProposedChange[]) => void;
   /** Guest in propose & vote mode — show reduced menu with only Propose Replacement */
   guestMustPropose?: boolean;
   /** Persisted option group selections: map of optionGroup key → selected activity id */
@@ -6454,6 +6482,7 @@ function DayCard({
   isRefreshingDay = false,
   refreshResult,
   onDismissRefresh,
+  onApplyRefreshChanges,
   compactCards = false,
 }: DayCardProps) {
   // Per-day preview: a day is preview only if the global flag is set AND the day itself is a preview
@@ -6823,11 +6852,15 @@ function DayCard({
                 </div>
               )}
 
-              {/* Refresh Day Validation Results */}
+              {/* Refresh Day Diff View */}
               {refreshResult && refreshResult.dayNumber === day.dayNumber && (
-                <RefreshDayPanel
+                <RefreshDayDiffView
+                  dayNumber={day.dayNumber}
+                  proposedChanges={refreshResult.proposedChanges || []}
                   issues={refreshResult.issues}
                   transitEstimates={refreshResult.transitEstimates}
+                  onAcceptAll={(changes) => onApplyRefreshChanges?.(changes)}
+                  onAcceptSelected={(changes) => onApplyRefreshChanges?.(changes)}
                   onDismiss={() => onDismissRefresh?.()}
                   className="mt-3"
                 />

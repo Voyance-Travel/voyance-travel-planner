@@ -2,16 +2,16 @@
  * refresh-day — Lightweight validation pass for a single itinerary day.
  *
  * Re-validates timing, transit, operating hours, buffer gaps, and flags conflicts.
- * Does NOT regenerate content — it only validates and suggests fixes.
+ * Returns issues AND proposed changes that users can accept/reject individually.
  *
  * POST {
- *   activities: Array<{ id, title, category, startTime, endTime, location?, operatingHours?, durationMinutes? }>,
+ *   activities: Array<{ id, title, category, startTime, endTime, location?, operatingHours?, durationMinutes?, cost? }>,
  *   date: string (ISO),
  *   destination: string,
  *   dayNumber: number
  * }
  *
- * Returns { issues, suggestions, updatedActivities, transitEstimates }
+ * Returns { issues, proposedChanges, transitEstimates, totalCost, activitiesValidated, dayNumber }
  */
 
 const corsHeaders = {
@@ -38,6 +38,19 @@ interface ValidationIssue {
   severity: 'warning' | 'error';
   message: string;
   suggestion?: string;
+}
+
+interface ProposedChange {
+  id: string;
+  type: 'time_shift' | 'replacement' | 'buffer_added' | 'reorder' | 'no_change';
+  activityId: string;
+  activityTitle: string;
+  icon: string; // emoji
+  description: string;
+  oldValue?: string;
+  newValue?: string;
+  /** Fields to apply when accepted */
+  patch?: Record<string, unknown>;
 }
 
 interface TransitEstimate {
@@ -88,7 +101,6 @@ function checkOperatingHours(
   const dayName = getDayOfWeek(dateStr);
   const hours = activity.operatingHours[dayName];
   if (!hours) {
-    // Possibly closed this day
     return { withinHours: false, dayName, opens: 'closed', closes: 'closed' };
   }
 
@@ -121,7 +133,6 @@ function getMinBufferMinutes(fromCategory?: string, toCategory?: string): number
   const fromLower = fromCategory?.toLowerCase() || '';
   const toLower = toCategory?.toLowerCase() || '';
 
-  // Transit slots ARE the buffer — they don't need additional buffer
   if (transitCats.some(t => fromLower.includes(t)) || transitCats.some(t => toLower.includes(t))) return 0;
   if (diningCats.includes(fromLower)) return 10;
   if (diningCats.includes(toLower)) return 10;
@@ -147,9 +158,8 @@ function estimateTransit(a: Activity, b: Activity): TransitEstimate | null {
     { lat: b.location.lat, lng: b.location.lng! }
   );
 
-  const walkMin = Math.ceil(distMeters / 80); // ~5km/h
+  const walkMin = Math.ceil(distMeters / 80);
   const taxiMin = Math.max(3, Math.ceil(distMeters / 400));
-
   const isWalkable = walkMin <= 15;
 
   return {
@@ -185,7 +195,9 @@ Deno.serve(async (req: Request) => {
     }
 
     const issues: ValidationIssue[] = [];
+    const proposedChanges: ProposedChange[] = [];
     const transitEstimates: TransitEstimate[] = [];
+    let changeCounter = 0;
 
     // Sort by start time for sequential validation
     const sorted = [...activities].sort((a, b) => {
@@ -195,6 +207,9 @@ Deno.serve(async (req: Request) => {
       if (bMin === null) return -1;
       return aMin - bMin;
     });
+
+    // Track which activity IDs already have a proposed change
+    const changedIds = new Set<string>();
 
     for (let i = 0; i < sorted.length; i++) {
       const act = sorted[i];
@@ -213,18 +228,49 @@ Deno.serve(async (req: Request) => {
             message: `${act.title} appears to be closed on ${hoursCheck.dayName || 'this day'}.`,
             suggestion: `Consider swapping this with an alternative activity.`,
           });
+          // No auto-fix for closures — user must pick alternative
         } else {
-          const suggestion = startMin !== null && parseTime(hoursCheck.opens!) !== null && startMin < parseTime(hoursCheck.opens!)!
-            ? `Move start time to ${hoursCheck.opens} or later.`
-            : `Adjust to finish by ${hoursCheck.closes}.`;
-          issues.push({
-            type: 'operating_hours',
-            activityId: act.id,
-            activityTitle: act.title,
-            severity: 'warning',
-            message: `${act.title} operates ${hoursCheck.opens}–${hoursCheck.closes} but is scheduled ${act.startTime || '?'}–${act.endTime || '?'}.`,
-            suggestion,
-          });
+          const opensMin = parseTime(hoursCheck.opens!);
+          const tooEarly = startMin !== null && opensMin !== null && startMin < opensMin;
+
+          if (tooEarly && opensMin !== null) {
+            const duration = act.durationMinutes || (endMin !== null && startMin !== null ? endMin - startMin : 60);
+            const newStart = minutesToTime(opensMin);
+            const newEnd = minutesToTime(opensMin + duration);
+
+            issues.push({
+              type: 'operating_hours',
+              activityId: act.id,
+              activityTitle: act.title,
+              severity: 'warning',
+              message: `${act.title} operates ${hoursCheck.opens}–${hoursCheck.closes} but is scheduled at ${act.startTime || '?'}.`,
+              suggestion: `Move start time to ${hoursCheck.opens}.`,
+            });
+
+            proposedChanges.push({
+              id: `change-${++changeCounter}`,
+              type: 'time_shift',
+              activityId: act.id,
+              activityTitle: act.title,
+              icon: '✏️',
+              description: `${act.title}: ${act.startTime} → ${newStart} (opens at ${hoursCheck.opens})`,
+              oldValue: `${act.startTime}–${act.endTime || '?'}`,
+              newValue: `${newStart}–${newEnd}`,
+              patch: { startTime: newStart, endTime: newEnd },
+            });
+            changedIds.add(act.id);
+          } else {
+            // Too late — suggest finishing earlier
+            const suggestion = `Adjust to finish by ${hoursCheck.closes}.`;
+            issues.push({
+              type: 'operating_hours',
+              activityId: act.id,
+              activityTitle: act.title,
+              severity: 'warning',
+              message: `${act.title} operates ${hoursCheck.opens}–${hoursCheck.closes} but is scheduled ${act.startTime || '?'}–${act.endTime || '?'}.`,
+              suggestion,
+            });
+          }
         }
       }
 
@@ -242,6 +288,25 @@ Deno.serve(async (req: Request) => {
             message: `"${act.title}" ends at ${act.endTime} but "${next.title}" starts at ${next.startTime}.`,
             suggestion: `Move "${next.title}" to ${minutesToTime(endMin + 5)} or later.`,
           });
+
+          if (!changedIds.has(next.id)) {
+            const nextDuration = next.durationMinutes || (parseTime(next.endTime) !== null && nextStart !== null ? parseTime(next.endTime)! - nextStart : 60);
+            const fixedStart = minutesToTime(endMin + 5);
+            const fixedEnd = minutesToTime(endMin + 5 + nextDuration);
+
+            proposedChanges.push({
+              id: `change-${++changeCounter}`,
+              type: 'time_shift',
+              activityId: next.id,
+              activityTitle: next.title,
+              icon: '✏️',
+              description: `${next.title}: ${next.startTime} → ${fixedStart} (resolve overlap)`,
+              oldValue: `${next.startTime}–${next.endTime || '?'}`,
+              newValue: `${fixedStart}–${fixedEnd}`,
+              patch: { startTime: fixedStart, endTime: fixedEnd },
+            });
+            changedIds.add(next.id);
+          }
         }
 
         // 3. Transit estimate between consecutive activities
@@ -264,6 +329,25 @@ Deno.serve(async (req: Request) => {
                 message: `Only ${gap} min gap between "${act.title}" and "${next.title}", but transit alone is ~${transit.durationMinutes} min ${transit.method} (${transit.distance}).`,
                 suggestion: `Delay "${next.title}" to ${minutesToTime(endMin + totalNeeded)} for a comfortable transition.`,
               });
+
+              if (!changedIds.has(next.id)) {
+                const nextDuration = next.durationMinutes || (parseTime(next.endTime) !== null && nextStart !== null ? parseTime(next.endTime)! - nextStart : 60);
+                const bufferedStart = minutesToTime(endMin + totalNeeded);
+                const bufferedEnd = minutesToTime(endMin + totalNeeded + nextDuration);
+
+                proposedChanges.push({
+                  id: `change-${++changeCounter}`,
+                  type: 'buffer_added',
+                  activityId: next.id,
+                  activityTitle: next.title,
+                  icon: '⏱️',
+                  description: `Added ${totalNeeded - gap} min buffer before "${next.title}" (${transit.durationMinutes} min ${transit.method})`,
+                  oldValue: next.startTime,
+                  newValue: bufferedStart,
+                  patch: { startTime: bufferedStart, endTime: bufferedEnd },
+                });
+                changedIds.add(next.id);
+              }
             }
           }
         }
@@ -282,13 +366,37 @@ Deno.serve(async (req: Request) => {
         message: 'Hotel checkout should come before airport transfer.',
         suggestion: 'Swap the checkout and airport transfer order.',
       });
+
+      proposedChanges.push({
+        id: `change-${++changeCounter}`,
+        type: 'reorder',
+        activityId: sorted[checkoutIdx].id,
+        activityTitle: 'Checkout/Airport sequence',
+        icon: '🔄',
+        description: 'Swap checkout and airport transfer order',
+        patch: {},
+      });
     }
 
-    // Compute updated daily cost
+    // Mark activities with no changes
+    for (const act of sorted) {
+      if (!changedIds.has(act.id)) {
+        proposedChanges.push({
+          id: `change-${++changeCounter}`,
+          type: 'no_change',
+          activityId: act.id,
+          activityTitle: act.title,
+          icon: '✅',
+          description: `${act.title} — no changes needed`,
+        });
+      }
+    }
+
     const totalCost = activities.reduce((sum, a) => sum + (a.cost?.amount || 0), 0);
 
     return new Response(JSON.stringify({
       issues,
+      proposedChanges,
       transitEstimates,
       totalCost,
       activitiesValidated: sorted.length,
