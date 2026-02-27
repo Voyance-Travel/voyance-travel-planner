@@ -10,40 +10,17 @@ import type { Json } from '@/integrations/supabase/types';
 
 // ============================================================================
 // GUARDRAILS (COMMON-SENSE SCHEDULING)
-// - Never alter travel-critical blocks (arrival/airport/transfer/check-in/out)
-// - Keep meal structure unless the user is explicitly filtering dining
-// - Avoid spammy duplicates (e.g. multiple "sunset" blocks in a row)
 // ============================================================================
 
 const PROTECTED_ACTIVITY_KEYWORDS = [
-  'arrival',
-  'land',
-  'flight',
-  'airport',
-  'customs',
-  'immigration',
-  'baggage',
-  'transfer',
-  'check-in',
-  'check in',
-  'check-out',
-  'check out',
-  'hotel check-in',
-  'hotel check in',
-  'hotel check-out',
-  'hotel check out',
-  'drive to',
-  'train to',
-  'depart',
+  'arrival', 'land', 'flight', 'airport', 'customs', 'immigration',
+  'baggage', 'transfer', 'check-in', 'check in', 'check-out', 'check out',
+  'hotel check-in', 'hotel check in', 'hotel check-out', 'hotel check out',
+  'drive to', 'train to', 'depart',
 ];
 
 const PROTECTED_CATEGORIES = [
-  'transport',
-  'transportation',
-  'transfer',
-  'flight',
-  'logistics',
-  'accommodation',
+  'transport', 'transportation', 'transfer', 'flight', 'logistics', 'accommodation',
 ];
 
 const MEAL_KEYWORDS = ['breakfast', 'brunch', 'lunch', 'dinner', 'restaurant', 'cafe', 'coffee', 'meal', 'eat'];
@@ -59,7 +36,6 @@ function activityTitle(activity: Activity): string {
 function isProtectedActivity(activity: Activity): boolean {
   const title = norm(activityTitle(activity));
   const category = norm(activity.category);
-
   if (PROTECTED_CATEGORIES.includes(category)) return true;
   return PROTECTED_ACTIVITY_KEYWORDS.some(k => title.includes(k));
 }
@@ -116,12 +92,79 @@ interface AlternativeActivity {
   whyRecommended: string;
 }
 
+export interface DiffEntry {
+  type: 'removed' | 'added' | 'moved' | 'modified';
+  dayNumber: number;
+  activityTitle: string;
+  category?: string;
+  costBefore?: number;
+  costAfter?: number;
+}
+
 export interface ActionExecutionResult {
   success: boolean;
   message: string;
   updatedDays?: ItineraryDay[];
   alternatives?: AlternativeActivity[];
+  diff?: DiffEntry[];
+  costDelta?: number; // positive = more expensive, negative = cheaper
   error?: string;
+}
+
+// ============================================================================
+// DIFF & BUDGET VALIDATION
+// ============================================================================
+
+function getActivityCost(a: Activity): number {
+  if (typeof a.cost === 'number') return a.cost;
+  if (a.cost && typeof a.cost === 'object' && 'amount' in a.cost) return (a.cost as { amount?: number }).amount || 0;
+  return 0;
+}
+
+/**
+ * Compute a diff between old and new day activities
+ */
+export function computeDayDiff(dayNumber: number, oldActivities: Activity[], newActivities: Activity[]): DiffEntry[] {
+  const diff: DiffEntry[] = [];
+  const oldIds = new Set(oldActivities.map(a => a.id));
+  const newIds = new Set(newActivities.map(a => a.id));
+  const oldByTitle = new Map(oldActivities.map(a => [(a.title || a.name || '').toLowerCase(), a]));
+  const newByTitle = new Map(newActivities.map(a => [(a.title || a.name || '').toLowerCase(), a]));
+
+  for (const a of oldActivities) {
+    const title = (a.title || a.name || '').toLowerCase();
+    if (!newIds.has(a.id) && !newByTitle.has(title)) {
+      diff.push({ type: 'removed', dayNumber, activityTitle: a.title || a.name || '', category: a.category, costBefore: getActivityCost(a) });
+    }
+  }
+  for (const a of newActivities) {
+    const title = (a.title || a.name || '').toLowerCase();
+    if (!oldIds.has(a.id) && !oldByTitle.has(title)) {
+      diff.push({ type: 'added', dayNumber, activityTitle: a.title || a.name || '', category: a.category, costAfter: getActivityCost(a) });
+    }
+  }
+  return diff;
+}
+
+/**
+ * Compute total cost for a day
+ */
+function computeDayCost(activities: Activity[]): number {
+  return activities.reduce((sum, a) => sum + getActivityCost(a), 0);
+}
+
+/**
+ * Detect budget direction intent from user message context
+ */
+export function detectBudgetIntent(actions: Array<{ type: string; params: Record<string, unknown> }>): 'cheaper' | 'expensive' | null {
+  for (const action of actions) {
+    const instructions = String(action.params.instructions || action.params.reason || '').toLowerCase();
+    const cheaperWords = ['cheaper', 'budget', 'save', 'less expensive', 'more affordable', 'cut cost', 'reduce cost', 'lower cost', 'frugal', 'economical'];
+    const expensiveWords = ['luxury', 'premium', 'upscale', 'splurge', 'high-end', 'more expensive'];
+    if (cheaperWords.some(w => instructions.includes(w))) return 'cheaper';
+    if (expensiveWords.some(w => instructions.includes(w))) return 'expensive';
+  }
+  return null;
 }
 
 // ============================================================================
@@ -165,8 +208,7 @@ export async function executeAction(
 }
 
 /**
- * Execute a rewrite_day action — sends detailed natural language instructions
- * to generate-itinerary to rewrite an entire day while preserving locked items.
+ * Execute a rewrite_day action
  */
 async function executeRewriteDayAction(
   action: ItineraryAction,
@@ -183,24 +225,14 @@ async function executeRewriteDayAction(
 
   const dayIndex = currentDays.findIndex(d => d.dayNumber === target_day);
   if (dayIndex === -1) {
-    return {
-      success: false,
-      message: `Day ${target_day} not found`,
-      error: 'Day not found',
-    };
+    return { success: false, message: `Day ${target_day} not found`, error: 'Day not found' };
   }
 
   const day = currentDays[dayIndex];
-
-  // Determine which activities to preserve
   const keepActivities = preserve_locked
-    ? day.activities
-        .filter(a => a.isLocked || isProtectedActivity(a))
-        .map(a => a.id)
-        .filter(Boolean)
+    ? day.activities.filter(a => a.isLocked || isProtectedActivity(a)).map(a => a.id).filter(Boolean)
     : [];
 
-  // Call generate-itinerary with the rewrite instructions
   const { data, error } = await supabase.functions.invoke('generate-itinerary', {
     body: {
       action: 'regenerate-day',
@@ -217,31 +249,30 @@ async function executeRewriteDayAction(
   });
 
   if (error || !data?.day) {
-    return {
-      success: false,
-      message: 'Failed to rewrite day',
-      error: error?.message || data?.error || 'Unknown error',
-    };
+    return { success: false, message: 'Failed to rewrite day', error: error?.message || data?.error || 'Unknown error' };
   }
 
-  const updatedDays = [...currentDays];
-  updatedDays[dayIndex] = {
-    ...day,
-    ...data.day,
-    activities: data.day.activities || day.activities,
-  };
+  const newActivities = data.day.activities || day.activities;
+  const diff = computeDayDiff(target_day, day.activities, newActivities);
+  const costBefore = computeDayCost(day.activities);
+  const costAfter = computeDayCost(newActivities);
+  const costDelta = costAfter - costBefore;
 
+  const updatedDays = [...currentDays];
+  updatedDays[dayIndex] = { ...day, ...data.day, activities: newActivities };
   await updateTripItinerary(tripId, updatedDays);
 
   return {
     success: true,
     message: reason || `Rewrote Day ${target_day} based on your instructions`,
     updatedDays,
+    diff,
+    costDelta,
   };
 }
 
 /**
- * Execute a swap action - get alternatives and apply the best match
+ * Execute a swap action
  */
 async function executeSwapAction(
   action: ItineraryAction,
@@ -263,19 +294,12 @@ async function executeSwapAction(
     preference_hint?: string;
   };
 
-  // Find the target day
   const dayIndex = currentDays.findIndex(d => d.dayNumber === target_day);
   if (dayIndex === -1) {
-    return {
-      success: false,
-      message: `Day ${target_day} not found in itinerary`,
-      error: 'Day not found',
-    };
+    return { success: false, message: `Day ${target_day} not found in itinerary`, error: 'Day not found' };
   }
 
   const day = currentDays[dayIndex];
-  
-  // Find the target activity
   let activityIndex = target_activity_index;
   if (activityIndex === undefined && target_activity_title) {
     activityIndex = day.activities.findIndex(
@@ -284,47 +308,27 @@ async function executeSwapAction(
   }
 
   if (activityIndex === undefined || activityIndex < 0 || activityIndex >= day.activities.length) {
-    return {
-      success: false,
-      message: `Activity "${target_activity_title}" not found on Day ${target_day}`,
-      error: 'Activity not found',
-    };
+    return { success: false, message: `Activity "${target_activity_title}" not found on Day ${target_day}`, error: 'Activity not found' };
   }
 
   const targetActivity = day.activities[activityIndex];
-  
-  // Check if activity is locked
   if (targetActivity.isLocked) {
-    return {
-      success: false,
-      message: `"${targetActivity.title || targetActivity.name}" is locked and cannot be swapped`,
-      error: 'Activity is locked',
-    };
+    return { success: false, message: `"${activityTitle(targetActivity)}" is locked and cannot be swapped`, error: 'Activity is locked' };
   }
-
-  // Guardrail: never swap travel-critical blocks unless explicitly rebuilt via full generator
   if (isProtectedActivity(targetActivity)) {
-    return {
-      success: false,
-      message: `That item is part of your travel logistics (arrival/transfer/check-in) and can't be swapped via chat.`,
-      error: 'Protected activity',
-    };
+    return { success: false, message: `That item is part of your travel logistics and can't be swapped via chat.`, error: 'Protected activity' };
   }
 
-  // Build search query from preference hint or reason
   const searchQuery = preference_hint || reason || '';
-  
-  // Collect all existing activity names to exclude from suggestions
   const existingActivityNames = currentDays.flatMap(d => 
     d.activities.map(a => a.title || a.name).filter(Boolean)
   ) as string[];
 
-  // Fetch alternatives using the existing edge function
   const { data, error } = await supabase.functions.invoke('get-activity-alternatives', {
     body: {
       currentActivity: {
         id: targetActivity.id || `act-${dayIndex}-${activityIndex}`,
-        name: targetActivity.title || targetActivity.name || 'Activity',
+        name: activityTitle(targetActivity) || 'Activity',
         type: targetActivity.category || 'activity',
         description: targetActivity.description,
         time: targetActivity.startTime || targetActivity.time,
@@ -336,42 +340,25 @@ async function executeSwapAction(
   });
 
   if (error || !data?.success) {
-    return {
-      success: false,
-      message: 'Failed to fetch alternatives',
-      error: error?.message || data?.error || 'Unknown error',
-    };
+    return { success: false, message: 'Failed to fetch alternatives', error: error?.message || data?.error || 'Unknown error' };
   }
 
   const alternatives = data.alternatives as AlternativeActivity[];
-  
   if (!alternatives || alternatives.length === 0) {
-    return {
-      success: false,
-      message: 'No suitable alternatives found',
-      error: 'No alternatives available',
-    };
+    return { success: false, message: 'No suitable alternatives found', error: 'No alternatives available' };
   }
 
-  // Pick the best alternative (highest matchScore)
-  const bestAlternative = alternatives.reduce((best, curr) => 
-    (curr.matchScore > best.matchScore) ? curr : best
-  );
+  const bestAlternative = alternatives.reduce((best, curr) => (curr.matchScore > best.matchScore) ? curr : best);
 
-  // Apply the swap to the itinerary — build a FRESH activity object
-  // instead of spreading `...act`, which would carry over stale metadata
-  // (rating, reviewCount, voyanceInsight, etc.) from the old activity.
   const updatedDays = [...currentDays];
   updatedDays[dayIndex] = {
     ...day,
     activities: day.activities.map((act, idx) => {
       if (idx === activityIndex) {
         return {
-          // Only preserve scheduling fields from the old activity
           startTime: act.startTime,
           time: act.time,
           duration: act.duration,
-          // Use ALL data from the fetched alternative
           id: bestAlternative.id,
           title: bestAlternative.name,
           name: bestAlternative.name,
@@ -382,7 +369,6 @@ async function executeSwapAction(
           rating: bestAlternative.rating,
           matchScore: bestAlternative.matchScore,
           whyRecommended: bestAlternative.whyRecommended,
-          // Explicitly blank out stale fields
           tips: undefined,
           voyanceInsight: undefined,
           isVoyancePick: false,
@@ -394,14 +380,22 @@ async function executeSwapAction(
     }),
   };
 
-  // Update the trip in database
+  const costBefore = getActivityCost(targetActivity);
+  const costAfter = bestAlternative.estimatedCost || 0;
+  const diff: DiffEntry[] = [
+    { type: 'removed', dayNumber: target_day, activityTitle: activityTitle(targetActivity), category: targetActivity.category, costBefore },
+    { type: 'added', dayNumber: target_day, activityTitle: bestAlternative.name, category: bestAlternative.category, costAfter },
+  ];
+
   await updateTripItinerary(tripId, updatedDays);
 
   return {
     success: true,
-    message: `Swapped "${targetActivity.title || targetActivity.name}" → "${bestAlternative.name}"`,
+    message: `Swapped "${activityTitle(targetActivity)}" → "${bestAlternative.name}"`,
     updatedDays,
     alternatives,
+    diff,
+    costDelta: costAfter - costBefore,
   };
 }
 
@@ -421,21 +415,10 @@ async function executeRegenerateAction(
 
   const dayIndex = currentDays.findIndex(d => d.dayNumber === target_day);
   if (dayIndex === -1) {
-    return {
-      success: false,
-      message: `Day ${target_day} not found`,
-      error: 'Day not found',
-    };
+    return { success: false, message: `Day ${target_day} not found`, error: 'Day not found' };
   }
 
   const day = currentDays[dayIndex];
-
-  // IMPORTANT:
-  // Chat-based "regenerate" should NOT do naive activity-by-activity swaps.
-  // Use the same flight-aware day generator used elsewhere so we keep:
-  // - arrival/airport/transfer/check-in sequencing
-  // - meals / sane pacing
-  // - realistic time windows
   const keepActivities = day.activities
     .filter(a => a.isLocked || isProtectedActivity(a) || isMealActivity(a))
     .map(a => a.id)
@@ -448,35 +431,29 @@ async function executeRegenerateAction(
       dayNumber: target_day,
       destination,
       keepActivities,
-      // Pass the full current activities so edge function can preserve locked ones
       currentActivities: day.activities,
-      // Soft hint only; generator may ignore unknown preference keys
       preferences: new_focus ? { dayFocus: new_focus } : undefined,
     },
   });
 
   if (error || !data?.day) {
-    return {
-      success: false,
-      message: 'Failed to regenerate day with scheduling constraints',
-      error: error?.message || data?.error || 'Unknown error',
-    };
+    return { success: false, message: 'Failed to regenerate day with scheduling constraints', error: error?.message || data?.error || 'Unknown error' };
   }
 
-  const updatedDays = [...currentDays];
-  updatedDays[dayIndex] = {
-    ...day,
-    ...data.day,
-    activities: data.day.activities || day.activities,
-  };
+  const regenActivities = data.day.activities || day.activities;
+  const regenDiff = computeDayDiff(target_day, day.activities, regenActivities);
+  const regenCostDelta = computeDayCost(regenActivities) - computeDayCost(day.activities);
 
-  // The generator already persists; also update local trip copy for UI consistency
+  const updatedDays = [...currentDays];
+  updatedDays[dayIndex] = { ...day, ...data.day, activities: regenActivities };
   await updateTripItinerary(tripId, updatedDays);
 
   return {
     success: true,
-    message: `Refreshed Day ${target_day}${new_focus ? ` (more “${new_focus}”)` : ''} without breaking flight/arrival timing`,
+    message: 'Refreshed Day ' + target_day + (new_focus ? ' (more "' + new_focus + '")' : '') + ' without breaking flight/arrival timing',
     updatedDays,
+    diff: regenDiff,
+    costDelta: regenCostDelta,
   };
 }
 
@@ -496,33 +473,23 @@ async function executePacingAction(
 
   const dayIndex = currentDays.findIndex(d => d.dayNumber === target_day);
   if (dayIndex === -1) {
-    return {
-      success: false,
-      message: `Day ${target_day} not found`,
-      error: 'Day not found',
-    };
+    return { success: false, message: `Day ${target_day} not found`, error: 'Day not found' };
   }
 
   const day = currentDays[dayIndex];
   let updatedActivities = [...day.activities];
 
   if (adjustment === 'more_relaxed') {
-    // Remove the lowest priority unlocked activity
     const unlockedIdx = updatedActivities.findIndex(a => !a.isLocked);
     if (unlockedIdx !== -1 && updatedActivities.length > 2) {
       updatedActivities.splice(unlockedIdx, 1);
     }
   } else if (adjustment === 'more_packed') {
-    // Add an additional activity suggestion
     const existingActivity = day.activities.find(a => !a.isLocked) || day.activities[0];
     
     const { data, error } = await supabase.functions.invoke('get-activity-alternatives', {
       body: {
-        currentActivity: {
-          id: 'new',
-          name: 'Quick Activity',
-          type: 'activity',
-        },
+        currentActivity: { id: 'new', name: 'Quick Activity', type: 'activity' },
         destination,
         searchQuery: 'quick nearby experience',
       },
@@ -531,7 +498,6 @@ async function executePacingAction(
     if (!error && data?.success && data.alternatives?.length > 0) {
       const alternatives = data.alternatives as AlternativeActivity[];
       const newActivity = alternatives[0];
-      
       updatedActivities.push({
         id: newActivity.id,
         title: newActivity.name,
@@ -540,18 +506,17 @@ async function executePacingAction(
         category: newActivity.category,
         cost: { amount: newActivity.estimatedCost },
         location: { name: newActivity.location },
-        startTime: '15:00', // Default afternoon slot
+        startTime: '15:00',
         isLocked: false,
       });
     }
   }
 
-  const updatedDays = [...currentDays];
-  updatedDays[dayIndex] = {
-    ...day,
-    activities: updatedActivities,
-  };
+  const pacingDiff = computeDayDiff(target_day, day.activities, updatedActivities);
+  const pacingDelta = computeDayCost(updatedActivities) - computeDayCost(day.activities);
 
+  const updatedDays = [...currentDays];
+  updatedDays[dayIndex] = { ...day, activities: updatedActivities };
   await updateTripItinerary(tripId, updatedDays);
 
   return {
@@ -560,6 +525,8 @@ async function executePacingAction(
       ? `Made Day ${target_day} more relaxed`
       : `Added more activities to Day ${target_day}`,
     updatedDays,
+    diff: pacingDiff,
+    costDelta: pacingDelta,
   };
 }
 
@@ -572,8 +539,6 @@ async function executeFilterAction(
   currentDays: ItineraryDay[],
   destination: string
 ): Promise<ActionExecutionResult> {
-  // NOTE: the chatbot tool schema uses scopes like "entire_trip"/"specific_day".
-  // Keep this parsing permissive so we don't accidentally apply a trip-wide rewrite.
   const { filter_type, filter_value, scope, target_day } = action.params as {
     filter_type: string;
     filter_value: string;
@@ -590,7 +555,6 @@ async function executeFilterAction(
     .flatMap(d => d.activities.map(a => activityTitle(a)).filter(Boolean))
     .map(s => s.trim());
 
-  // Determine which days to apply to
   const normalizedScope = scope || 'entire_trip';
   const dayIndexes: number[] = (() => {
     if (normalizedScope === 'day' || normalizedScope === 'specific_day') {
@@ -601,13 +565,10 @@ async function executeFilterAction(
     return currentDays.map((_, idx) => idx);
   })();
 
-  // For "romantic" and similar vibe filters: avoid rewriting the whole day.
-  // Make at most a couple swaps per day and never touch meals/logistics.
-  const maxSwapsPerDay = (filter_type === 'romantic' || filter_type === 'adventure' || filter_type === 'family_friendly')
-    ? 2
-    : 999;
+  const maxSwapsPerDay = (filter_type === 'romantic' || filter_type === 'adventure' || filter_type === 'family_friendly') ? 2 : 999;
+  const allDiffs: DiffEntry[] = [];
+  let totalCostDelta = 0;
 
-  // Apply filter to relevant days
   for (const dayIndex of dayIndexes) {
     const day = currentDays[dayIndex];
     const updatedActivities = [...day.activities];
@@ -616,19 +577,14 @@ async function executeFilterAction(
     for (let actIndex = 0; actIndex < day.activities.length; actIndex++) {
       const activity = day.activities[actIndex];
       if (activity.isLocked) continue;
-
-      // Guardrail: never touch arrival/transfer/check-in/out blocks via filters
       if (isProtectedActivity(activity)) continue;
 
-      // Guardrail: keep meals unless filter explicitly targets dining
       const diningOnly = normalizedScope === 'dining_only' || filter_type === 'dietary';
       const activitiesOnly = normalizedScope === 'activities_only' || filter_type === 'romantic' || filter_type === 'adventure';
       if (diningOnly && !isMealActivity(activity)) continue;
       if (activitiesOnly && isMealActivity(activity)) continue;
-
       if (swapsThisDay >= maxSwapsPerDay) continue;
 
-      // For dietary/accessibility, focus on dining or relevant categories
       const shouldFilter = 
         filter_type === 'dietary' ? activity.category?.toLowerCase().includes('dining') || activity.category?.toLowerCase().includes('food') :
         filter_type === 'accessibility' ? true :
@@ -641,7 +597,7 @@ async function executeFilterAction(
         body: {
           currentActivity: {
             id: activity.id || `act-${dayIndex}-${actIndex}`,
-            name: activity.title || activity.name || 'Activity',
+            name: activityTitle(activity) || 'Activity',
             type: activity.category || 'activity',
             description: activity.description,
             time: activity.startTime || activity.time,
@@ -656,19 +612,23 @@ async function executeFilterAction(
         const alternatives = data.alternatives as AlternativeActivity[];
         const best = alternatives[0];
         
-        // Only count as a swap if the new activity is actually different
         const currentName = (activity.title || activity.name || '').toLowerCase().trim();
         const newName = (best.name || '').toLowerCase().trim();
-        const isSameActivity = currentName === newName || 
-          currentName.includes(newName) || 
-          newName.includes(currentName);
+        const isSameActivity = currentName === newName || currentName.includes(newName) || newName.includes(currentName);
         
-        // Simple dedupe for spammy concepts like multiple "sunset" blocks
         const bestName = norm(best.name);
         const wouldDuplicateSunset = bestName.includes('sunset') && hasKeywordInDay(day, 'sunset');
         const wouldDuplicateOpera = bestName.includes('opera') && hasKeywordInDay(day, 'opera');
 
         if (!isSameActivity && !wouldDuplicateSunset && !wouldDuplicateOpera) {
+          const oldCost = getActivityCost(activity);
+          const newCost = best.estimatedCost || 0;
+          allDiffs.push(
+            { type: 'removed', dayNumber: day.dayNumber, activityTitle: activityTitle(activity), category: activity.category, costBefore: oldCost },
+            { type: 'added', dayNumber: day.dayNumber, activityTitle: best.name, category: best.category, costAfter: newCost },
+          );
+          totalCostDelta += newCost - oldCost;
+
           allAlternatives.push(...alternatives);
           updatedActivities[actIndex] = {
             ...activity,
@@ -699,6 +659,8 @@ async function executeFilterAction(
       : `No activities needed updating for ${filter_type} filter`,
     updatedDays,
     alternatives: allAlternatives,
+    diff: allDiffs,
+    costDelta: totalCostDelta,
   };
 }
 
@@ -706,14 +668,9 @@ async function executeFilterAction(
 // CHRONOLOGICAL SORTING
 // ============================================================================
 
-/**
- * Parse time string (e.g., "9:00 AM", "14:30", "3:00 PM") to minutes since midnight
- */
 function parseTimeToMinutes(timeStr: string | undefined): number {
   if (!timeStr) return 0;
   const normalized = timeStr.trim().toUpperCase();
-
-  // 12-hour format: "9:00 AM", "3:00 PM"
   const match12 = normalized.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/);
   if (match12) {
     let hours = parseInt(match12[1], 10);
@@ -723,20 +680,13 @@ function parseTimeToMinutes(timeStr: string | undefined): number {
     if (period === 'AM' && hours === 12) hours = 0;
     return hours * 60 + minutes;
   }
-
-  // 24-hour format: "14:30"
   const match24 = normalized.match(/^(\d{1,2}):(\d{2})$/);
   if (match24) {
     return parseInt(match24[1], 10) * 60 + parseInt(match24[2], 10);
   }
-
   return 0;
 }
 
-/**
- * Sort a day's activities chronologically by startTime/time.
- * Applied before every database write so AI-added activities land in the right position.
- */
 function sortActivitiesChronologically(days: ItineraryDay[]): ItineraryDay[] {
   return days.map(day => ({
     ...day,
@@ -752,14 +702,9 @@ function sortActivitiesChronologically(days: ItineraryDay[]): ItineraryDay[] {
 // DATABASE UPDATE
 // ============================================================================
 
-/**
- * Update the trip's itinerary_data in the database.
- * Always sorts activities chronologically before persisting.
- */
 async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]): Promise<void> {
   const sortedDays = sortActivitiesChronologically(updatedDays);
   try {
-    // First get the current trip to preserve other itinerary_data fields
     const { data: trip, error: fetchError } = await supabase
       .from('trips')
       .select('itinerary_data')
@@ -772,8 +717,6 @@ async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]):
     }
 
     const currentData = (trip?.itinerary_data as Record<string, unknown>) || {};
-    
-    // Update with new days - serialize to JSON for Supabase
     const itineraryUpdate: Json = {
       ...currentData,
       days: JSON.parse(JSON.stringify(sortedDays)),

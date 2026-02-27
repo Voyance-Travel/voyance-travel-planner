@@ -9,7 +9,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { MessageCircle, X, Send, Loader2, ArrowLeftRight, Gauge, Filter, RefreshCw, Check, ThumbsDown, Settings2, Coins, Pencil } from 'lucide-react';
+import { MessageCircle, X, Send, Loader2, ArrowLeftRight, Gauge, Filter, RefreshCw, Check, ThumbsDown, Settings2, Coins, Pencil, TrendingDown, TrendingUp, Minus, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -32,7 +32,9 @@ import {
 import { 
   executeAction, 
   updateLocalTripItinerary,
+  detectBudgetIntent,
   type ItineraryDay,
+  type DiffEntry,
 } from '@/services/itineraryActionExecutor';
 import { useSpendCredits } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
@@ -197,6 +199,9 @@ export function ItineraryAssistant({
 
       setMessages(prev => [...prev, assistantMessage]);
 
+      // Detect budget intent from the user's message for validation
+      const budgetIntent = detectBudgetIntent(response.actions || []);
+
       // If not in approval mode and there are actions, auto-apply ALL sequentially
       if (!approvalMode && response.actions?.length > 0) {
         for (let i = 0; i < response.actions.length; i++) {
@@ -324,8 +329,27 @@ export function ItineraryAssistant({
 
         toast.success('Action applied', {
           id: actionId,
-          description: result.message,
+          description: result.message + (result.costDelta != null && result.costDelta !== 0
+            ? ` (${result.costDelta > 0 ? '+' : ''}$${result.costDelta.toFixed(0)} cost impact)`
+            : ''),
         });
+
+        // Show diff summary in chat
+        if (result.diff && result.diff.length > 0) {
+          const diffLines = result.diff.map(d => 
+            d.type === 'removed' ? `− ${d.activityTitle}${d.costBefore ? ` ($${d.costBefore})` : ''}`
+            : `+ ${d.activityTitle}${d.costAfter ? ` ($${d.costAfter})` : ''}`
+          ).join('\n');
+          const costNote = result.costDelta != null && result.costDelta !== 0
+            ? `\n\n💰 Cost impact: ${result.costDelta > 0 ? '+' : ''}$${result.costDelta.toFixed(0)}`
+            : '';
+          setMessages(prev => [...prev, {
+            id: `msg_${Date.now()}_diff`,
+            role: 'assistant',
+            content: `**Changes applied:**\n${diffLines}${costNote}`,
+            timestamp: new Date(),
+          }]);
+        }
       } else {
         toast.error('Action failed', {
           id: actionId,
@@ -486,6 +510,9 @@ export function ItineraryAssistant({
                                     <p className="text-xs text-muted-foreground line-clamp-2">
                                       {isThisExecuting ? 'Applying changes...' : displayInfo.description}
                                     </p>
+                                    <span className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                                      <Coins className="h-3 w-3" /> {displayInfo.creditCost} credits
+                                    </span>
                                   </div>
                                 </div>
                                 
