@@ -5064,6 +5064,11 @@ Generate activities for this day following ALL constraints above.`;
           const nextStartMins = parseTimeToMinutes(next.startTime || '');
           if (currentEndMins === null || nextStartMins === null) continue;
 
+          // Determine if current activity IS a transport/transit activity
+          const currentIsTransport = ['transport', 'transportation', 'transit'].includes(
+            (current.category || '').toLowerCase()
+          ) || /\b(stroll|walk|taxi|uber|metro|bus|train|cab|ride|transfer)\b/i.test(current.title || '');
+
           // Parse the NEXT activity's transportation.duration (e.g., "25 min", "1h 30m")
           let requiredTransitMins = 0;
           const transitDur = next.transportation?.duration;
@@ -5081,6 +5086,29 @@ Generate activities for this day following ALL constraints above.`;
             else if (dist <= 15) requiredTransitMins = 35;  // cross-city
             else requiredTransitMins = 45;                   // far
           }
+
+          // When current IS a transport activity, the travel is already accounted for.
+          // But we still need an ARRIVAL BUFFER at the next venue:
+          // - Museum/attraction entry (bag check, ticket queue): 10 min
+          // - Restaurant (check-in, seated): 10 min
+          // - Hotel (front desk, elevator): 15 min
+          // - Generic venue: 10 min
+          if (currentIsTransport) {
+            const nextCat = (next.category || '').toLowerCase();
+            const nextTitle = (next.title || '').toLowerCase();
+            let arrivalBuffer = 10; // default venue entry
+            if (nextCat === 'accommodation' || /hotel|check.?in/i.test(nextTitle)) {
+              arrivalBuffer = 15;
+            } else if (nextCat === 'dining' || /restaurant|cafe|lunch|dinner|breakfast|brunch/i.test(nextTitle)) {
+              arrivalBuffer = 10;
+            } else if (/museum|gallery|palace|castle|cathedral/i.test(nextTitle)) {
+              arrivalBuffer = 10;
+            }
+            // For transport→venue, required gap is just the arrival buffer
+            // (travel time is already in the transport activity duration)
+            requiredTransitMins = Math.max(requiredTransitMins, arrivalBuffer);
+          }
+
           // Absolute minimum: 10 min (even for adjacent venues)
           if (requiredTransitMins < 10) requiredTransitMins = 10;
 
