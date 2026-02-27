@@ -9,6 +9,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { Activity } from '@/lib/destinations';
+import { handleImageError } from '@/utils/imageFallback';
 
 interface ActivityModalProps {
   activity: Activity | null;
@@ -60,6 +61,7 @@ export function ActivityModal({
             src={destinationImage || 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=600&q=80'} 
             alt={activity.title}
             className="w-full h-full object-cover"
+            onError={handleImageError}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
           <div className="absolute bottom-4 left-4 right-4">
