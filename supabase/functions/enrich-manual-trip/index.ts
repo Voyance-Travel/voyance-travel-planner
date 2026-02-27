@@ -54,37 +54,27 @@ function buildResearchContext(itinerary: any): string {
   }
 
   lines.push("");
-  lines.push("═══════════════════════════════════════════════════════════════");
-  lines.push("SMART FINISH ENRICHMENT — CRITICAL INSTRUCTIONS");
-  lines.push("═══════════════════════════════════════════════════════════════");
-  lines.push("The user pasted a ROUGH itinerary with ~3-4 items per day.");
-  lines.push("Your job is to TRANSFORM it into a COMPLETE, premium trip with 10-14 entries per day.");
-  lines.push("");
-  lines.push("YOU MUST ADD ALL OF THE FOLLOWING:");
-  lines.push("  1. SPECIFIC TIMES: Every activity needs startTime in HH:MM format (e.g. '09:30'). NO vague labels like 'Morning' or 'Afternoon'.");
-  lines.push("  2. MEALS: Add breakfast, lunch, and dinner as full activity entries with restaurant names, prices, and addresses.");
-  lines.push("  3. TRANSIT: Add transport entries between EVERY pair of activities with mode, duration, and cost.");
-  lines.push("  4. NEW ACTIVITIES: Add 2-4 DNA-matched activities per day (hidden gems, walks, coffee stops) BETWEEN user picks.");
-  lines.push("  5. LOGISTICS: Exact addresses, opening hours, booking URLs for every venue.");
-  lines.push("  6. NIGHTLIFE: Evening activity after dinner (bar, live music, night walk).");
-  lines.push("  7. HOTEL BOOKENDS: Start/end day at hotel with transit details.");
-  lines.push("");
-  lines.push("The user's items are ANCHORS. Build a full day around each one. DO NOT just return their items back.");
-  lines.push("═══════════════════════════════════════════════════════════════");
+  lines.push("SMART_FINISH_SOURCE_NOTES:");
+  lines.push("Use the user's researched venues below as hard anchors.");
+  lines.push("Keep all user-provided anchors, then expand with DNA-matched additions, transit, meals, and exact HH:MM times.");
   lines.push("");
 
   lines.push("USER'S RESEARCHED PLACES & ACTIVITIES (incorporate ALL of these, then EXPAND with additional DNA-matched activities):");
 
-  // Deduplicate activities
-  const seen = new Set<string>();
   for (const day of itinerary.days) {
     const dayNum = day.dayNumber || day.day;
     if (dayNum) lines.push(`\n  Day ${dayNum}:`);
+
     const dayActivities = day.activities || [];
+    const daySeen = new Set<string>();
+
     for (const activity of dayActivities) {
       const name = activity.title || activity.name || "";
-      if (!name || seen.has(name.toLowerCase())) continue;
-      seen.add(name.toLowerCase());
+      if (!name) continue;
+
+      const normalizedName = name.toLowerCase().trim();
+      if (daySeen.has(normalizedName)) continue;
+      daySeen.add(normalizedName);
 
       const parts: string[] = [`  - ${name}`];
       if (activity.category) parts.push(`(${activity.category})`);

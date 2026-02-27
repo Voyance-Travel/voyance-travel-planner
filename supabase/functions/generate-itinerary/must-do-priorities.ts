@@ -119,41 +119,72 @@ export function parseMustDoInput(
   forceAllMust: boolean = false
 ): MustDoPriority[] {
   const priorities: MustDoPriority[] = [];
-  
-  // Split by newlines first (preserves multi-word venue names that may contain commas)
+
   const lines = userInput
     .split(/\n/)
     .map(s => s.trim())
     .filter(s => s.length > 0);
-  
-  // Further split lines by semicolons only (NOT commas — venue names often contain commas)
-  const items: string[] = [];
+
+  // Smart Finish research context includes many instructional lines.
+  // When this marker exists, only parse bullet entries as candidate anchors.
+  const hasStructuredResearchSection = lines.some(line =>
+    line.toLowerCase().includes("user's researched places & activities")
+  );
+
+  const items: Array<{ text: string; preferredDay?: number }> = [];
+  let currentDay: number | undefined;
+
   for (const line of lines) {
-    // Skip header/context lines that aren't actual venue entries
-    if (line.startsWith('USER\'S ') || line.startsWith('PRACTICAL TIPS') || line.startsWith('USER PREFERENCES')) {
+    const normalized = line.toLowerCase();
+
+    const dayMatch = line.match(/^day\s+(\d+)\s*:/i);
+    if (dayMatch) {
+      currentDay = Number(dayMatch[1]);
       continue;
     }
-    // Handle semicolon-separated items within a line
-    const subItems = line.split(';').map(s => s.trim()).filter(s => s.length > 0);
-    items.push(...subItems);
-  }
-  
-  for (const item of items) {
-    // Strip leading "- " from research context format
-    const cleaned = item.replace(/^-\s*/, '').trim();
-    if (!cleaned || cleaned.length < 2) continue;
-    
-    const priority = parseItem(cleaned, destination);
-    if (priority) {
-      // When forceAllMust is true, upgrade ALL items to 'must' priority
-      // This ensures user-researched venues are never downgraded to optional
-      if (forceAllMust) {
-        priority.priority = 'must';
-      }
-      priorities.push(priority);
+
+    // Skip headings/meta lines
+    if (
+      normalized.startsWith("user's ") ||
+      normalized.startsWith('user preferences:') ||
+      normalized.startsWith('trip vibe/intent:') ||
+      normalized.startsWith('trip priorities:') ||
+      normalized.startsWith('smart_finish_source_notes') ||
+      normalized.startsWith('practical tips from') ||
+      normalized.startsWith('accommodation notes') ||
+      normalized.includes('════════')
+    ) {
+      continue;
+    }
+
+    // In structured Smart Finish text, only bullets are actual user anchors.
+    if (hasStructuredResearchSection && !/^\s*-\s+/.test(line)) {
+      continue;
+    }
+
+    const subItems = line.split(';').map(s => s.trim()).filter(Boolean);
+    for (const sub of subItems) {
+      const cleaned = sub.replace(/^\s*-\s*/, '').trim();
+      if (!cleaned || cleaned.length < 2) continue;
+      items.push({ text: cleaned, preferredDay: currentDay });
     }
   }
-  
+
+  for (const item of items) {
+    const priority = parseItem(item.text, destination);
+    if (!priority) continue;
+
+    if (forceAllMust) {
+      priority.priority = 'must';
+    }
+
+    if (item.preferredDay && !priority.preferredDay) {
+      priority.preferredDay = item.preferredDay;
+    }
+
+    priorities.push(priority);
+  }
+
   return priorities;
 }
 
@@ -180,8 +211,19 @@ function parseItem(item: string, destination: string): MustDoPriority | null {
   
   // Try to match known landmarks
   let matchedLandmark: typeof KNOWN_LANDMARKS[string] | null = null;
-  let activityName = item.replace(/must|have to|need to|would like to|want to/gi, '').trim();
-  
+  let activityName = item
+    .replace(/^\s*-\s*/, '')
+    .replace(/must|have to|need to|would like to|want to/gi, '')
+    .replace(/\[link:[^\]]+\]/gi, '')
+    .replace(/\s+—\s+.*$/, '')
+    .replace(/\s+@\s+.*$/, '')
+    .replace(/\s+at\s+\d{1,2}:\d{2}(\s*[AP]M)?/i, '')
+    .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!activityName) return null;
+
   for (const [key, data] of Object.entries(KNOWN_LANDMARKS)) {
     if (normalized.includes(key)) {
       matchedLandmark = data;

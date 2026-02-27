@@ -4491,10 +4491,19 @@ async function generateSingleDayWithRetry(
       
       // Get archetype day structure for activity limits
       const archetypeDefinition = getArchetypeDefinition(context.travelerDNA?.primaryArchetype);
-      const maxActivitiesFromArchetype = archetypeDefinition.dayStructure.maxScheduledActivities;
+      const baseMaxActivitiesFromArchetype = archetypeDefinition.dayStructure.maxScheduledActivities;
       // Use archetype min if defined, otherwise derive from schedule constraints or default to reasonable floor
-      const minActivitiesFromArchetype = archetypeDefinition.dayStructure.minScheduledActivities 
-        || Math.max(3, Math.ceil(maxActivitiesFromArchetype * 0.6));
+      const baseMinActivitiesFromArchetype = archetypeDefinition.dayStructure.minScheduledActivities
+        || Math.max(3, Math.ceil(baseMaxActivitiesFromArchetype * 0.6));
+
+      // Smart Finish should output a fully polished day (anchors + added value), not a sparse archetype-only day.
+      const isSmartFinishGeneration = !!context.isSmartFinish;
+      const effectiveMinActivities = isSmartFinishGeneration
+        ? (isFirstDay || isLastDay ? Math.max(6, baseMinActivitiesFromArchetype) : Math.max(8, baseMinActivitiesFromArchetype))
+        : baseMinActivitiesFromArchetype;
+      const effectiveMaxActivities = isSmartFinishGeneration
+        ? (isFirstDay || isLastDay ? Math.max(10, baseMaxActivitiesFromArchetype) : Math.max(14, baseMaxActivitiesFromArchetype))
+        : baseMaxActivitiesFromArchetype;
       
       // =========================================================================
       // PHASE 12: Experience Affinity - What TO prioritize (the "pull" side)
@@ -4722,9 +4731,10 @@ ${context.actualDailyBudgetPerPerson < 10 ? `🚨 EXTREMELY TIGHT BUDGET: This b
 - Include a "budget_note" field in your response: a 1-sentence honest note like "This budget is very tight for Tokyo — we've maximized free activities but meals will be the main expense."
 - Still aim to fill the day with great experiences — many of the best travel moments are free.` : context.actualDailyBudgetPerPerson < 30 ? `⚡ TIGHT BUDGET: This is a lean budget. Lean heavily on free attractions, street food, and self-guided exploration. Limit paid activities to 1-2 per day max. Use realistic local prices — do not underestimate costs to fit the budget.` : `Stay within this cap. If an activity is expensive, balance with free/cheap alternatives elsewhere in the day.`}` : ''}
 ARCHETYPE: ${context.travelerDNA?.primaryArchetype || 'balanced'}
-ACTIVITY COUNT: ${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} per day (from archetype day structure - HARD LIMITS)
-⚠️ MINIMUM ${minActivitiesFromArchetype} activities required. Going UNDER = FAILURE. Going OVER ${maxActivitiesFromArchetype} = FAILURE.
-Include a mix of: 2-3 dining slots (breakfast/lunch/dinner), 2-3 exploration/activity slots, and evening activities where appropriate.
+ACTIVITY COUNT: ${effectiveMinActivities}-${effectiveMaxActivities} per day${isSmartFinishGeneration ? ' (SMART FINISH POLISH TARGET)' : ' (from archetype day structure - HARD LIMITS)'}
+⚠️ MINIMUM ${effectiveMinActivities} activities required. Going UNDER = FAILURE. Going OVER ${effectiveMaxActivities} = FAILURE.
+Include a mix of: 3 dining slots (breakfast/lunch/dinner), transit between major moves, core exploration/activity slots, and an evening activity where appropriate.
+${isSmartFinishGeneration ? 'SMART FINISH HARD RULE: Keep ALL user-provided anchor activities by exact name and build additional activities around them — never replace or drop anchors.' : ''}
 ${multiCityPrompt}
 
 ${previousActivities.length > 0 ? `AVOID REPEATING THESE SPECIFIC ACTIVITIES: ${previousActivities.join(', ')}\n` : ''}
@@ -4732,7 +4742,7 @@ NOTE: The previous-activities list is ONLY for de-duplication. Do NOT treat it a
 ${bannedTypes.length > 0 ? `\n🚫 BANNED EXPERIENCE TYPES (already done on previous days - DO NOT INCLUDE): ${bannedTypes.join(', ')}\n` : ''}
 
 CRITICAL REMINDERS:
-1. ${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} scheduled activities required. Going under ${minActivitiesFromArchetype} OR over ${maxActivitiesFromArchetype} = FAILURE.
+1. ${effectiveMinActivities}-${effectiveMaxActivities} scheduled activities required. Going under ${effectiveMinActivities} OR over ${effectiveMaxActivities} = FAILURE.
 2. Check the archetype's avoid list. If it says "no spa", there are ZERO spa activities.
 3. Check the budget constraints. If value-focused, no €100+ experiences.
 4. ${context.travelerDNA?.primaryArchetype === 'flexible_wanderer' || context.travelerDNA?.primaryArchetype === 'slow_traveler' || (context.travelerDNA?.traits?.pace || 0) <= -3 ? 'Include at least one 2+ hour UNSCHEDULED block labeled "Free time to explore [neighborhood]"' : 'Follow the pacing guidelines for this archetype'}
@@ -5042,6 +5052,15 @@ Generate activities for this day following ALL constraints above.`;
         return normalizedAct;
       });
 
+      // Force 24-hour HH:MM time format for UI consistency (some model outputs include AM/PM)
+      for (const act of generatedDay.activities) {
+        const parsedStart = parseTimeToMinutes(act.startTime || '');
+        if (parsedStart !== null) act.startTime = minutesToHHMM(parsedStart);
+
+        const parsedEnd = parseTimeToMinutes(act.endTime || '');
+        if (parsedEnd !== null) act.endTime = minutesToHHMM(parsedEnd);
+      }
+
       // ==========================================================================
       // TRANSIT-TIME ENFORCEMENT: Adjust gaps between activities based on each
       // activity's own transportation.duration instead of static 15-min buffers.
@@ -5205,6 +5224,18 @@ Generate activities for this day following ALL constraints above.`;
 
       // Validate the generated day - pass previousDays for trip-wide uniqueness checks
       const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays);
+
+      // Smart Finish quality gate: ensure days are fully built out, not sparse drafts.
+      if (context.isSmartFinish) {
+        const minSmartFinishActivities = (isFirstDay || isLastDay) ? 6 : 8;
+        if ((generatedDay.activities?.length || 0) < minSmartFinishActivities) {
+          validation.errors.push(
+            `Smart Finish requires at least ${minSmartFinishActivities} activities on Day ${dayNumber}; got ${generatedDay.activities?.length || 0}`
+          );
+          validation.isValid = false;
+        }
+      }
+
       lastValidation = validation;
 
       if (validation.errors.length > 0) {
@@ -7746,12 +7777,11 @@ ${'='.repeat(60)}
           };
           
           const fmtT = (mins: number): string => {
-            let h = Math.floor(mins / 60) % 24;
-            const m = mins % 60;
-            const period = h >= 12 ? 'PM' : 'AM';
-            if (h > 12) h -= 12;
-            if (h === 0) h = 12;
-            return `${h}:${String(m).padStart(2, '0')} ${period}`;
+            const dayMinutes = 24 * 60;
+            const normalized = ((mins % dayMinutes) + dayMinutes) % dayMinutes;
+            const h = Math.floor(normalized / 60);
+            const m = normalized % 60;
+            return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
           };
           
           // Compute current activity's end time
