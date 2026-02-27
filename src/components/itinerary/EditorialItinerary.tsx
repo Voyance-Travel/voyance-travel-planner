@@ -123,6 +123,35 @@ import { InterCityTransportEditor } from './InterCityTransportEditor';
 import { useUpdateCityTransport } from '@/hooks/useTripCities';
 
 import { ParsedTripNotesSection } from './ParsedTripNotesSection';
+
+// =============================================================================
+// BOARDING PASS VIEW BUTTON (inline helper)
+// =============================================================================
+
+function BoardingPassViewButton({ storagePath }: { storagePath: string }) {
+  const handleView = async () => {
+    try {
+      const { data } = await supabase.storage
+        .from('boarding-passes')
+        .createSignedUrl(storagePath, 3600);
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank');
+      }
+    } catch {
+      console.error('Failed to open boarding pass');
+    }
+  };
+  return (
+    <button
+      onClick={handleView}
+      className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors font-medium"
+    >
+      <FileText className="h-3 w-3" />
+      Boarding Pass
+    </button>
+  );
+}
+
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -267,6 +296,7 @@ export interface FlightLegDisplay {
   gate?: string;
   baggageInfo?: string;
   boardingPassUrl?: string;
+  frequentFlyerNumber?: string;
 }
 
 export interface FlightSelection {
@@ -3924,7 +3954,7 @@ export function EditorialItinerary({
                               </div>
                             </div>
                             
-                            {(leg.cabinClass || leg.seat || leg.confirmationCode || leg.terminal || leg.gate || leg.baggageInfo) && (
+                            {(leg.cabinClass || leg.seat || leg.confirmationCode || leg.terminal || leg.gate || leg.baggageInfo || leg.frequentFlyerNumber || leg.boardingPassUrl) && (
                               <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
                                 {/* Confirmation code + seat row */}
                                 {(leg.confirmationCode || leg.seat || leg.cabinClass) && (
@@ -3953,6 +3983,17 @@ export function EditorialItinerary({
                                     )}
                                     {leg.baggageInfo && (
                                       <span>🧳 {leg.baggageInfo}</span>
+                                    )}
+                                  </div>
+                                )}
+                                {/* Frequent flyer + boarding pass row */}
+                                {(leg.frequentFlyerNumber || leg.boardingPassUrl) && (
+                                  <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+                                    {leg.frequentFlyerNumber && (
+                                      <span className="font-mono">FF# {leg.frequentFlyerNumber}</span>
+                                    )}
+                                    {leg.boardingPassUrl && (
+                                      <BoardingPassViewButton storagePath={leg.boardingPassUrl} />
                                     )}
                                   </div>
                                 )}
