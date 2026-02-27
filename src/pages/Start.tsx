@@ -63,6 +63,106 @@ interface ManualHotelEntry {
   includeInBudget?: boolean;
 }
 
+interface ChatCityInput {
+  name: string;
+  country?: string;
+  nights: number;
+}
+
+const COUNTRY_HINTS = new Set([
+  'usa', 'united states', 'canada', 'mexico', 'uk', 'united kingdom', 'england', 'scotland', 'wales',
+  'france', 'italy', 'spain', 'portugal', 'germany', 'austria', 'switzerland', 'netherlands', 'belgium',
+  'japan', 'china', 'thailand', 'vietnam', 'south korea', 'korea', 'australia', 'new zealand',
+  'greece', 'turkey', 'morocco', 'egypt', 'uae', 'india', 'indonesia', 'singapore', 'malaysia',
+]);
+
+function cleanCityCandidate(value: string): string {
+  return value
+    .replace(/^route:\s*/i, '')
+    .replace(/\b(?:flying|fly|into|out\s+of|arrive(?:ing)?|depart(?:ing)?|return(?:ing)?|next|then)\b/gi, ' ')
+    .replace(/[()[\]]/g, ' ')
+    .replace(/[.;:!?]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function distributeNights(cities: string[], startDate: Date, endDate: Date): ChatCityInput[] {
+  const totalNights = Math.max(cities.length, differenceInDays(endDate, startDate));
+  const baseNights = Math.floor(totalNights / cities.length);
+  let remainder = totalNights % cities.length;
+
+  return cities.map((name) => {
+    const nights = Math.max(1, baseNights + (remainder > 0 ? 1 : 0));
+    if (remainder > 0) remainder -= 1;
+    return { name, nights };
+  });
+}
+
+function inferChatCities(details: any, startDate: Date, endDate: Date): ChatCityInput[] {
+  const rawCities = Array.isArray(details?.cities) ? details.cities : [];
+
+  if (rawCities.length > 1) {
+    const normalized = rawCities
+      .map((city: any) => ({
+        name: cleanCityCandidate(String(city?.name || '')),
+        country: city?.country ? String(city.country) : undefined,
+        nights: Number(city?.nights),
+      }))
+      .filter((city: ChatCityInput) => city.name.length > 1);
+
+    if (normalized.length > 1) {
+      const hasValidNights = normalized.every((city: ChatCityInput) => Number.isFinite(city.nights) && city.nights > 0);
+      if (hasValidNights) {
+        return normalized.map((city: ChatCityInput) => ({ ...city, nights: Math.max(1, Math.round(city.nights)) }));
+      }
+
+      const evenlyDistributed = distributeNights(normalized.map((city: ChatCityInput) => city.name), startDate, endDate);
+      return evenlyDistributed.map((city, index) => ({ ...city, country: normalized[index]?.country }));
+    }
+  }
+
+  const destination = String(details?.destination || '');
+  const notes = String(details?.additionalNotes || '');
+
+  const connectorPattern = /(→|->|–>|=>|\bthen\b|\band\b|&|,)/i;
+  const strongConnectorPattern = /(→|->|–>|=>|\bthen\b|\band\b|&)/i;
+
+  const candidateNames: string[] = [];
+
+  if (connectorPattern.test(destination)) {
+    const destinationParts = destination
+      .split(/\s*(?:→|->|–>|=>|\bthen\b|\band\b|&|,)\s*/i)
+      .map(cleanCityCandidate)
+      .filter((part) => part.length > 1 && part.length < 50 && !/\d/.test(part));
+
+    if (destinationParts.length > 2 || strongConnectorPattern.test(destination)) {
+      candidateNames.push(...destinationParts);
+    } else if (destinationParts.length === 2) {
+      const second = destinationParts[1].toLowerCase();
+      if (!COUNTRY_HINTS.has(second)) {
+        candidateNames.push(...destinationParts);
+      }
+    }
+  }
+
+  if (candidateNames.length <= 1 && notes) {
+    const routeSegment = (notes.match(/route:\s*([^\n]+)/i)?.[1] || notes).split(/[.!?\n]/)[0];
+    const noteParts = routeSegment
+      .split(/\s*(?:→|->|–>|=>|\bthen\b|\band\b|&|,)\s*/i)
+      .map(cleanCityCandidate)
+      .filter((part) => part.length > 1 && part.length < 50 && !/\d/.test(part));
+
+    if (noteParts.length > 1) {
+      candidateNames.push(...noteParts);
+    }
+  }
+
+  const deduped = Array.from(new Map(candidateNames.map((name) => [name.toLowerCase(), name])).values());
+  if (deduped.length <= 1) return [];
+
+  return distributeNights(deduped, startDate, endDate);
+}
+
 // Trip occasions
 const tripOccasions = [
   { id: 'leisure', label: 'Leisure' },
@@ -1900,8 +2000,11 @@ export default function Start() {
                         const chatBudget = details.budgetAmount || budgetAmount;
                         const chatTripType = details.tripType || tripType;
                         const chatTravelers = details.travelers || travelers;
-                        const chatCities = details.cities && details.cities.length > 1 ? details.cities : null;
-                        const isChatMultiCity = !!chatCities;
+                        const chatCities = inferChatCities(details, chatStartDate, chatEndDate);
+                        const isChatMultiCity = chatCities.length > 1;
+                        const destinationSummary = isChatMultiCity
+                          ? chatCities.map((city) => city.name).join(', ')
+                          : dest;
 
                         // Sync extracted details back to form state so widgets reflect chat intent
                         if (details.travelers && details.travelers !== travelers) {
@@ -1923,7 +2026,7 @@ export default function Start() {
                           .from('trips')
                           .insert({
                             user_id: user.id,
-                            name: isChatMultiCity ? `Trip: ${dest}` : `Trip to ${dest}`,
+                            name: isChatMultiCity ? `Trip to ${destinationSummary}` : `Trip to ${dest}`,
                             destination: isChatMultiCity ? chatCities[0].name : dest,
                             start_date: format(chatStartDate, 'yyyy-MM-dd'),
                             end_date: format(chatEndDate, 'yyyy-MM-dd'),
