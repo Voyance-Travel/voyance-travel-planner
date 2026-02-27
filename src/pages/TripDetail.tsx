@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { getTripCities } from '@/services/tripCitiesService';
 import type { TripCity } from '@/types/tripCity';
+import { checkRedistributionNeeded, applyNightsRedistribution, type NightsRedistribution } from '@/utils/syncTripCitiesNights';
+import { NightsRedistributionModal } from '@/components/trip/NightsRedistributionModal';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { format, isAfter, isBefore, differenceInDays, addDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
@@ -91,6 +93,12 @@ export default function TripDetail() {
   const scheduleNotifications = useScheduleNotifications();
   const { isManualBuilder } = useManualBuilderStore();
   const [tripCities, setTripCities] = useState<TripCity[]>([]);
+  const [redistributionModal, setRedistributionModal] = useState<{
+    open: boolean;
+    totalNights: number;
+    redistribution: NightsRedistribution[];
+    pendingDateResult: DateChangeResult | null;
+  }>({ open: false, totalNights: 0, redistribution: [], pendingDateResult: null });
   const isManualMode = tripId ? isManualBuilder(tripId) : false;
   const { user } = useAuth();
   const hotelEnrichmentAttempted = useRef(false);
@@ -719,6 +727,59 @@ export default function TripDetail() {
     handleShowGenerator(true);
   }, []);
 
+  // Sync trip_cities after date change is persisted
+  const syncCitiesAfterDateChange = useCallback(async (
+    result: DateChangeResult,
+    redistribution?: NightsRedistribution[]
+  ) => {
+    if (!tripId || tripCities.length === 0) return;
+
+    const newStart = parseLocalDate(result.newStartDate);
+    const newEnd = parseLocalDate(result.newEndDate);
+    const newTotalNights = differenceInDays(newEnd, newStart);
+    if (newTotalNights <= 0) return;
+
+    const check = checkRedistributionNeeded(tripCities, newTotalNights);
+    if (!check.needed) {
+      // Still re-date cities even if nights didn't change (shift case)
+      await applyNightsRedistribution(tripCities, check.redistribution.length > 0 ? check.redistribution : tripCities.map(c => ({
+        cityId: c.id, cityName: c.city_name, oldNights: c.nights || 1, newNights: c.nights || 1,
+      })), result.newStartDate);
+      // Refresh local state
+      const updated = await getTripCities(tripId);
+      setTripCities(updated);
+      return;
+    }
+
+    if (check.isMultiCity && !redistribution) {
+      // Show modal for user to adjust
+      setRedistributionModal({
+        open: true,
+        totalNights: newTotalNights,
+        redistribution: check.redistribution,
+        pendingDateResult: result,
+      });
+      return;
+    }
+
+    // Single-city or user confirmed redistribution
+    const finalRedist = redistribution || check.redistribution;
+    await applyNightsRedistribution(tripCities, finalRedist, result.newStartDate);
+    const updated = await getTripCities(tripId);
+    setTripCities(updated);
+  }, [tripId, tripCities]);
+
+  // Handle redistribution modal confirm
+  const handleRedistributionConfirm = useCallback(async (redistribution: NightsRedistribution[]) => {
+    const pending = redistributionModal.pendingDateResult;
+    if (!pending || !tripId) return;
+
+    await applyNightsRedistribution(tripCities, redistribution, pending.newStartDate);
+    const updated = await getTripCities(tripId);
+    setTripCities(updated);
+    toast.success('City nights redistributed');
+  }, [redistributionModal.pendingDateResult, tripId, tripCities]);
+
   // Handle trip date changes — shift/extend/shorten itinerary
   const handleDateChange = useCallback(async (result: DateChangeResult) => {
     if (!trip || !tripId) return;
@@ -728,22 +789,18 @@ export default function TripDetail() {
     let days = [...((metadata?.days as any[]) || [])];
 
     if (isShiftOnly) {
-      // Shift all day dates without changing structure
       const newStart = parseLocalDate(newStartDate);
       days = days.map((day: any, idx: number) => ({
         ...day,
         date: format(addDays(newStart, idx), 'yyyy-MM-dd'),
       }));
     } else if (daysAdded > 0) {
-      // Extend — add blank days at end
       const lastDayNum = days.length;
       const newStart = parseLocalDate(newStartDate);
-      // Re-date existing days
       days = days.map((day: any, idx: number) => ({
         ...day,
         date: format(addDays(newStart, idx), 'yyyy-MM-dd'),
       }));
-      // Add new blank days
       for (let i = 0; i < daysAdded; i++) {
         const dayNum = lastDayNum + i + 1;
         days.push({
@@ -755,9 +812,8 @@ export default function TripDetail() {
         });
       }
     } else if (daysAdded < 0) {
-      // Shorten — remove days from the end
       const newStart = parseLocalDate(newStartDate);
-      const newDayCount = days.length + daysAdded; // daysAdded is negative
+      const newDayCount = days.length + daysAdded;
       days = days.slice(0, Math.max(1, newDayCount)).map((day: any, idx: number) => ({
         ...day,
         dayNumber: idx + 1,
@@ -767,7 +823,6 @@ export default function TripDetail() {
 
     const updatedItinerary = { ...(metadata || {}), days };
 
-    // Update local state
     setTrip(prev => prev ? {
       ...prev,
       start_date: newStartDate,
@@ -775,7 +830,6 @@ export default function TripDetail() {
       itinerary_data: updatedItinerary as any,
     } : null);
 
-    // Persist to backend
     try {
       const { error } = await supabase
         .from('trips')
@@ -796,12 +850,15 @@ export default function TripDetail() {
           daysAdded > 0 ? `${daysAdded} day${daysAdded > 1 ? 's' : ''} added` :
           `${Math.abs(daysAdded)} day${Math.abs(daysAdded) > 1 ? 's' : ''} removed`
         );
+
+        // Sync trip_cities nights/dates
+        await syncCitiesAfterDateChange(result);
       }
     } catch (err) {
       console.error('[TripDetail] Date change error:', err);
       toast.error('Failed to update dates');
     }
-  }, [trip, tripId]);
+  }, [trip, tripId, syncCitiesAfterDateChange]);
 
   // Handle applying hotel-based swap suggestions to itinerary
   const handleApplySwaps = useCallback((swaps: SwapSuggestion[]) => {
@@ -1439,6 +1496,16 @@ export default function TripDetail() {
           tripName={trip.name}
         />
       )}
+
+      {/* Nights Redistribution Modal for multi-city date changes */}
+      <NightsRedistributionModal
+        open={redistributionModal.open}
+        onOpenChange={(open) => setRedistributionModal(prev => ({ ...prev, open }))}
+        totalNights={redistributionModal.totalNights}
+        initialRedistribution={redistributionModal.redistribution}
+        onConfirm={handleRedistributionConfirm}
+        hasItinerary={hasItinerary}
+      />
     </MainLayout>
   );
 }
