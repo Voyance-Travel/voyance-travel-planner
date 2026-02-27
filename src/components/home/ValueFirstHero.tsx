@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import DestinationEntry from './DestinationEntry';
+import { toSiteImageUrlFromPhotoId } from '@/utils/unsplash';
 
 interface ValueFirstHeroProps {
   onScrollToDemo?: () => void;
@@ -12,7 +13,7 @@ export default function ValueFirstHero({ onScrollToDemo }: ValueFirstHeroProps) 
       {/* Full-screen Background Image - LCP optimized */}
       <div className="absolute inset-0 bg-[#2c3e50]">
         <img
-          src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=1920&q=80"
+          src={toSiteImageUrlFromPhotoId('photo-1469854523086-cc02fe5d8800')}
           alt="Scenic mountain road at sunset"
           className="w-full h-full object-cover"
           onError={(e) => { const t = e.currentTarget; if (!t.dataset.fallbackApplied) { t.dataset.fallbackApplied = 'true'; t.style.display = 'none'; } }}

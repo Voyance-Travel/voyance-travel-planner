@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
 import { strangerCopy } from '@/lib/strangerCopy';
+import { toSiteImageUrlFromPhotoId } from '@/utils/unsplash';
 
 export default function TravelDNAHero() {
   const { hero } = strangerCopy.homepage;
@@ -17,7 +18,7 @@ export default function TravelDNAHero() {
       {/* Background Image */}
       <div className="absolute inset-0">
         <img
-          src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=1920&q=80"
+          src={toSiteImageUrlFromPhotoId('photo-1469854523086-cc02fe5d8800')}
           alt="Scenic mountain road at sunset"
           className="w-full h-full object-cover"
           onError={(e) => { const t = e.currentTarget; if (!t.dataset.fallbackApplied) { t.dataset.fallbackApplied = 'true'; t.style.display = 'none'; } }}

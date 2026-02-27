@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { toSiteImageUrlFromPhotoId } from '@/utils/unsplash';
 
 export default function TravelQuote() {
   return (
@@ -6,7 +7,7 @@ export default function TravelQuote() {
       {/* Full-width background image */}
       <div className="absolute inset-0">
         <img
-          src="https://images.unsplash.com/photo-1682687982501-1e58ab814714?w=1920&q=80"
+          src={toSiteImageUrlFromPhotoId('photo-1682687982501-1e58ab814714')}
           alt="Inspirational landscape"
           className="w-full h-full object-cover"
           onError={(e) => { const t = e.currentTarget; if (!t.dataset.fallbackApplied) { t.dataset.fallbackApplied = 'true'; t.style.display = 'none'; } }}
