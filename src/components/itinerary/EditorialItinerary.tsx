@@ -2440,50 +2440,50 @@ export function EditorialItinerary({
       };
     });
 
-    setDays(prev => prev.map((day, idx) => {
-      if (idx !== dayIndex) return day;
-      return { ...day, activities: updated };
-    }));
+    setDays(prev => {
+      const newDays = prev.map((day, idx) => {
+        if (idx !== dayIndex) return day;
+        return { ...day, activities: updated };
+      });
+      syncBudgetFromDays(newDays);
+      return newDays;
+    });
     setHasChanges(true);
-  }, []);
+  }, [syncBudgetFromDays]);
 
   // Move activity to a different day
   const handleMoveToDay = useCallback((fromDayIndex: number, activityId: string, toDayIndex: number) => {
     if (fromDayIndex === toDayIndex) return;
     
     setDays(prev => {
-      const fromDay = prev[fromDayIndex];
-      const toDay = prev[toDayIndex];
-      if (!fromDay || !toDay) return prev;
-      
-      const activity = fromDay.activities.find(a => a.id === activityId);
+      const activity = prev[fromDayIndex]?.activities.find(a => a.id === activityId);
       if (!activity) return prev;
-      
-      // Helper to parse time string to minutes for comparison
-      const parseTimeToMinutes = (timeStr?: string): number => {
-        if (!timeStr) return 9999; // No time = end of day
-        const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
-        if (!match) return 9999;
+
+      // Parse time for chronological insertion
+      const parseTimeToMinutes = (time?: string): number => {
+        if (!time) return Infinity;
+        const match = time.match(/^(\d{1,2}):(\d{2})/);
+        if (!match) return Infinity;
         let hours = parseInt(match[1], 10);
         const minutes = parseInt(match[2], 10);
-        const period = match[3]?.toUpperCase();
-        if (period === 'PM' && hours !== 12) hours += 12;
-        if (period === 'AM' && hours === 12) hours = 0;
+        const ampm = time.match(/(AM|PM)/i);
+        if (ampm) {
+          const period = ampm[1].toUpperCase();
+          if (period === 'PM' && hours !== 12) hours += 12;
+          if (period === 'AM' && hours === 12) hours = 0;
+        }
         return hours * 60 + minutes;
       };
       
       const activityTime = parseTimeToMinutes(activity.startTime || activity.time);
       
-      return prev.map((day, idx) => {
+      const updated = prev.map((day, idx) => {
         if (idx === fromDayIndex) {
-          // Remove from source day
           return { ...day, activities: day.activities.filter(a => a.id !== activityId) };
         }
         if (idx === toDayIndex) {
-          // Insert at correct chronological position based on startTime
           const newActivities = [...day.activities];
-          let insertIndex = newActivities.length; // Default to end
-          
+          let insertIndex = newActivities.length;
           for (let i = 0; i < newActivities.length; i++) {
             const existingTime = parseTimeToMinutes(newActivities[i].startTime || newActivities[i].time);
             if (activityTime < existingTime) {
@@ -2491,16 +2491,17 @@ export function EditorialItinerary({
               break;
             }
           }
-          
           newActivities.splice(insertIndex, 0, activity);
           return { ...day, activities: newActivities };
         }
         return day;
       });
+      syncBudgetFromDays(updated);
+      return updated;
     });
     setHasChanges(true);
     toast.success(`Moved to Day ${toDayIndex + 1}`);
-  }, []);
+  }, [syncBudgetFromDays]);
 
   const handleActivityRemove = useCallback((dayIndex: number, activityId: string) => {
     setDays(prev => {
@@ -2759,29 +2760,31 @@ export function EditorialItinerary({
       isLocked: false,
     } as EditorialActivity));
 
-    setDays(prev => prev.map((day, idx) => {
-      if (idx !== dayIndex) return day;
-      if (mode === 'replace') {
-        // Start Over: replace all activities with imported ones
-        return { ...day, activities: newActivities };
-      }
-      // Merge: combine existing + imported, sort by startTime
-      const combined = [...day.activities, ...newActivities];
-      combined.sort((a, b) => {
-        const timeA = a.startTime || '';
-        const timeB = b.startTime || '';
-        if (!timeA && !timeB) return 0;
-        if (!timeA) return 1;
-        if (!timeB) return -1;
-        return timeA.localeCompare(timeB);
+    setDays(prev => {
+      const updated = prev.map((day, idx) => {
+        if (idx !== dayIndex) return day;
+        if (mode === 'replace') {
+          return { ...day, activities: newActivities };
+        }
+        const combined = [...day.activities, ...newActivities];
+        combined.sort((a, b) => {
+          const timeA = a.startTime || '';
+          const timeB = b.startTime || '';
+          if (!timeA && !timeB) return 0;
+          if (!timeA) return 1;
+          if (!timeB) return -1;
+          return timeA.localeCompare(timeB);
+        });
+        return { ...day, activities: combined };
       });
-      return { ...day, activities: combined };
-    }));
+      syncBudgetFromDays(updated);
+      return updated;
+    });
     setHasChanges(true);
     setImportModal(null);
     const verb = mode === 'replace' ? 'replaced with' : 'merged';
     toast.success(`${newActivities.length} activities ${verb}!`);
-  }, [tripCurrency]);
+  }, [tripCurrency, syncBudgetFromDays]);
 
   // Update activity time — with optional cascade to shift all following activities
   const handleUpdateActivityTime = useCallback((dayIndex: number, activityIndex: number, startTime: string, endTime: string, cascade = false) => {
