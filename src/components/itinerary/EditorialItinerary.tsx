@@ -22,7 +22,7 @@ import {
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
-  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2, ClipboardPaste, Compass
+  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2, ClipboardPaste, Compass, Bus, Ship, ArrowRight
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
@@ -297,6 +297,20 @@ export interface CityHotelInfo {
   nights?: number;
   hotel?: HotelSelection | null;
   cityId?: string; // trip_cities row id for hotel search targeting
+  // Inter-city transport info
+  transportType?: 'flight' | 'train' | 'bus' | 'car' | 'ferry';
+  transportDetails?: {
+    carrier?: string;
+    flightNumber?: string;
+    departureTime?: string;
+    arrivalTime?: string;
+    bookingRef?: string;
+    seatClass?: string;
+    duration?: string;
+    notes?: string;
+  };
+  transportCostCents?: number;
+  transportCurrency?: string;
 }
 
 export interface EditorialItineraryProps {
@@ -3802,96 +3816,159 @@ export function EditorialItinerary({
               {/* Multi-city hotels */}
               {allHotels && allHotels.length > 0 ? (
                 <div className="space-y-3">
-                  {allHotels.map((cityHotel, idx) => (
-                    <div key={idx} className="rounded-xl border border-border bg-card overflow-hidden">
-                      {/* City header */}
-                      <div className="flex items-center justify-between px-4 py-3 bg-secondary/30 border-b border-border">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4 text-primary" />
-                          <span className="font-medium text-sm text-foreground">{cityHotel.cityName}</span>
-                          {cityHotel.checkInDate && cityHotel.checkOutDate && (
-                            <span className="text-xs text-muted-foreground">
-                              {safeFormatDate(cityHotel.checkInDate, 'MMM d')} → {safeFormatDate(cityHotel.checkOutDate, 'MMM d')}
-                              {cityHotel.nights ? ` · ${cityHotel.nights} nights` : ''}
-                            </span>
+                  {allHotels.map((cityHotel, idx) => {
+                    // Transport icon helper
+                    const getTransportIcon = (type?: string) => {
+                      switch (type) {
+                        case 'flight': return <Plane className="h-3.5 w-3.5" />;
+                        case 'train': return <Train className="h-3.5 w-3.5" />;
+                        case 'bus': return <Bus className="h-3.5 w-3.5" />;
+                        case 'car': return <Car className="h-3.5 w-3.5" />;
+                        case 'ferry': return <Ship className="h-3.5 w-3.5" />;
+                        default: return <ArrowRight className="h-3.5 w-3.5" />;
+                      }
+                    };
+                    const getTransportLabel = (type?: string) => {
+                      switch (type) {
+                        case 'flight': return 'Flight';
+                        case 'train': return 'Train';
+                        case 'bus': return 'Bus';
+                        case 'car': return 'Drive';
+                        case 'ferry': return 'Ferry';
+                        default: return 'Transfer';
+                      }
+                    };
+
+                    return (
+                      <div key={idx}>
+                        {/* Inter-city transport card (shown before city 2+) */}
+                        {idx > 0 && (cityHotel.transportType || allHotels[idx - 1]) && (
+                          <div className="flex items-center gap-2 py-2 px-3 my-2 rounded-lg border border-dashed border-primary/20 bg-primary/5">
+                            <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                              {getTransportIcon(cityHotel.transportType)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                                <span>{allHotels[idx - 1].cityName}</span>
+                                <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                                <span>{cityHotel.cityName}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
+                                <span>{getTransportLabel(cityHotel.transportType)}</span>
+                                {cityHotel.transportDetails?.carrier && (
+                                  <span>· {cityHotel.transportDetails.carrier}</span>
+                                )}
+                                {cityHotel.transportDetails?.flightNumber && (
+                                  <span>· {cityHotel.transportDetails.flightNumber}</span>
+                                )}
+                                {cityHotel.transportDetails?.duration && (
+                                  <span>· {cityHotel.transportDetails.duration}</span>
+                                )}
+                                {cityHotel.transportDetails?.departureTime && (
+                                  <span>· {cityHotel.transportDetails.departureTime}</span>
+                                )}
+                              </div>
+                            </div>
+                            {cityHotel.transportCostCents && cityHotel.transportCostCents > 0 && (
+                              <span className="text-xs font-medium text-primary shrink-0">
+                                {formatCurrency(cityHotel.transportCostCents / 100, cityHotel.transportCurrency || 'USD')}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* City hotel card */}
+                        <div className="rounded-xl border border-border bg-card overflow-hidden">
+                          {/* City header */}
+                          <div className="flex items-center justify-between px-4 py-3 bg-secondary/30 border-b border-border">
+                            <div className="flex items-center gap-2">
+                              <MapPin className="h-4 w-4 text-primary" />
+                              <span className="font-medium text-sm text-foreground">{cityHotel.cityName}</span>
+                              {cityHotel.checkInDate && cityHotel.checkOutDate && (
+                                <span className="text-xs text-muted-foreground">
+                                  {safeFormatDate(cityHotel.checkInDate, 'MMM d')} → {safeFormatDate(cityHotel.checkOutDate, 'MMM d')}
+                                  {cityHotel.nights ? ` · ${cityHotel.nights} nights` : ''}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {cityHotel.hotel?.name ? (
+                            <div className="p-4 space-y-3">
+                              <div className="flex items-start gap-3">
+                                {/* Hotel image thumbnail */}
+                                <div className="h-16 w-16 rounded-lg bg-muted/30 overflow-hidden shrink-0">
+                                  {cityHotel.hotel.imageUrl ? (
+                                    <img
+                                      src={cityHotel.hotel.imageUrl}
+                                      alt={cityHotel.hotel.name}
+                                      className="w-full h-full object-cover"
+                                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <Hotel className="h-6 w-6 text-muted-foreground/30" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <h4 className="font-medium text-foreground truncate">{cityHotel.hotel.name}</h4>
+                                  {cityHotel.hotel.rating && (
+                                    <div className="flex items-center gap-1 mt-0.5">
+                                      {[1, 2, 3, 4, 5].map((star) => (
+                                        <Star key={star} className={cn("h-3 w-3", star <= Math.floor(cityHotel.hotel!.rating || 0) ? "text-amber-400 fill-amber-400" : "text-muted-foreground/30")} />
+                                      ))}
+                                    </div>
+                                  )}
+                                  {cityHotel.hotel.address && (
+                                    <p className="text-xs text-muted-foreground mt-1 truncate">{cityHotel.hotel.address}</p>
+                                  )}
+                                </div>
+                                {cityHotel.hotel.pricePerNight && (
+                                  <div className="text-right shrink-0">
+                                    <p className="text-xs text-muted-foreground">per night</p>
+                                    <p className="font-medium text-primary text-sm">${cityHotel.hotel.pricePerNight}</p>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Check-in/out times */}
+                              <div className="flex gap-2">
+                                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary/50 text-xs">
+                                  <span className="text-muted-foreground">In:</span>
+                                  <span className="font-medium">{cityHotel.hotel.checkIn || '3:00 PM'}</span>
+                                </div>
+                                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary/50 text-xs">
+                                  <span className="text-muted-foreground">Out:</span>
+                                  <span className="font-medium">{cityHotel.hotel.checkOut || '11:00 AM'}</span>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            /* No hotel for this city */
+                            <div className="p-4">
+                              <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                                  <Search className="h-4 w-4 text-primary" />
+                                </div>
+                                <div className="flex-1">
+                                  <p className="text-sm text-muted-foreground">No hotel selected for {cityHotel.cityName}</p>
+                                </div>
+                                <AddHotelInline
+                                  tripId={tripId}
+                                  destination={cityHotel.cityName}
+                                  startDate={cityHotel.checkInDate || startDate}
+                                  endDate={cityHotel.checkOutDate || endDate}
+                                  travelers={travelers}
+                                  onHotelAdded={onBookingAdded}
+                                />
+                              </div>
+                            </div>
                           )}
                         </div>
                       </div>
-
-                      {cityHotel.hotel?.name ? (
-                        <div className="p-4 space-y-3">
-                          <div className="flex items-start gap-3">
-                            {/* Hotel image thumbnail */}
-                            <div className="h-16 w-16 rounded-lg bg-muted/30 overflow-hidden shrink-0">
-                              {cityHotel.hotel.imageUrl ? (
-                                <img
-                                  src={cityHotel.hotel.imageUrl}
-                                  alt={cityHotel.hotel.name}
-                                  className="w-full h-full object-cover"
-                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                                />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center">
-                                  <Hotel className="h-6 w-6 text-muted-foreground/30" />
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <h4 className="font-medium text-foreground truncate">{cityHotel.hotel.name}</h4>
-                              {cityHotel.hotel.rating && (
-                                <div className="flex items-center gap-1 mt-0.5">
-                                  {[1, 2, 3, 4, 5].map((star) => (
-                                    <Star key={star} className={cn("h-3 w-3", star <= Math.floor(cityHotel.hotel!.rating || 0) ? "text-amber-400 fill-amber-400" : "text-muted-foreground/30")} />
-                                  ))}
-                                </div>
-                              )}
-                              {cityHotel.hotel.address && (
-                                <p className="text-xs text-muted-foreground mt-1 truncate">{cityHotel.hotel.address}</p>
-                              )}
-                            </div>
-                            {cityHotel.hotel.pricePerNight && (
-                              <div className="text-right shrink-0">
-                                <p className="text-xs text-muted-foreground">per night</p>
-                                <p className="font-medium text-primary text-sm">${cityHotel.hotel.pricePerNight}</p>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Check-in/out times */}
-                          <div className="flex gap-2">
-                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary/50 text-xs">
-                              <span className="text-muted-foreground">In:</span>
-                              <span className="font-medium">{cityHotel.hotel.checkIn || '3:00 PM'}</span>
-                            </div>
-                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary/50 text-xs">
-                              <span className="text-muted-foreground">Out:</span>
-                              <span className="font-medium">{cityHotel.hotel.checkOut || '11:00 AM'}</span>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        /* No hotel for this city */
-                        <div className="p-4">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                              <Search className="h-4 w-4 text-primary" />
-                            </div>
-                            <div className="flex-1">
-                              <p className="text-sm text-muted-foreground">No hotel selected for {cityHotel.cityName}</p>
-                            </div>
-                            <AddHotelInline
-                              tripId={tripId}
-                              destination={cityHotel.cityName}
-                              startDate={cityHotel.checkInDate || startDate}
-                              endDate={cityHotel.checkOutDate || endDate}
-                              travelers={travelers}
-                              onHotelAdded={onBookingAdded}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : hotelSelection?.name ? (
                 <div className="rounded-xl border border-border bg-card overflow-hidden group">

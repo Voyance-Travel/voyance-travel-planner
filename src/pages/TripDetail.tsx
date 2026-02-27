@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { getTripCities } from '@/services/tripCitiesService';
+import type { TripCity } from '@/types/tripCity';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { format, isAfter, isBefore, differenceInDays, addDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
@@ -88,6 +90,7 @@ export default function TripDetail() {
   const [hasCollaborators, setHasCollaborators] = useState(false);
   const scheduleNotifications = useScheduleNotifications();
   const { isManualBuilder } = useManualBuilderStore();
+  const [tripCities, setTripCities] = useState<TripCity[]>([]);
   const isManualMode = tripId ? isManualBuilder(tripId) : false;
   const { user } = useAuth();
   const hotelEnrichmentAttempted = useRef(false);
@@ -416,6 +419,15 @@ export default function TripDetail() {
         }
 
         setTrip(tripData);
+
+        // Load trip_cities for multi-city detection & per-city hotel/transport display
+        try {
+          const cities = await getTripCities(tripId);
+          setTripCities(cities);
+        } catch (e) {
+          console.warn('[TripDetail] trip_cities load failed:', e);
+          setTripCities([]);
+        }
 
         // Check for collaborators to show chat tab
         if (user?.id) {
@@ -1183,11 +1195,49 @@ export default function TripDetail() {
               );
               const primaryHotelSelection = allNormalizedHotels[0] || null;
 
-              // Build per-city hotel info for multi-city trips
-              const isMultiCity = !!(trip as any).is_multi_city;
+              // Build per-city hotel info — prefer trip_cities DB data, fallback to string splitting
+              const isMultiCity = !!(trip as any).is_multi_city || tripCities.length > 1;
               const cityHotels: import('@/components/itinerary/EditorialItinerary').CityHotelInfo[] = (() => {
                 if (!isMultiCity) return [];
-                // Multi-city: derive city hotels from the hotel array + destination string
+
+                // Prefer trip_cities from DB (authoritative source)
+                if (tripCities.length > 1) {
+                  return tripCities.map((city, idx) => {
+                    const hotelData = city.hotel_selection as any;
+                    const normalizedHotel = allNormalizedHotels[idx];
+                    const hotel = hotelData?.name ? hotelData : normalizedHotel;
+                    return {
+                      cityName: city.city_name,
+                      cityOrder: city.city_order,
+                      cityId: city.id,
+                      checkInDate: city.arrival_date,
+                      checkOutDate: city.departure_date,
+                      nights: city.nights || (city.arrival_date && city.departure_date
+                        ? Math.max(1, Math.ceil((new Date(city.departure_date).getTime() - new Date(city.arrival_date).getTime()) / (1000 * 60 * 60 * 24)))
+                        : undefined),
+                      hotel: hotel?.name ? {
+                        name: hotel.name,
+                        address: hotel.address,
+                        rating: hotel.rating,
+                        imageUrl: hotel.imageUrl || hotel.image_url,
+                        images: hotel.images,
+                        website: hotel.website,
+                        googleMapsUrl: hotel.googleMapsUrl || hotel.google_maps_url,
+                        checkIn: hotel.checkIn || hotel.check_in || '3:00 PM',
+                        checkOut: hotel.checkOut || hotel.check_out || '11:00 AM',
+                        pricePerNight: hotel.pricePerNight || hotel.price_per_night,
+                        amenities: hotel.amenities,
+                      } as any : null,
+                      // Transport to this city
+                      transportType: city.transport_type || undefined,
+                      transportDetails: city.transport_details || undefined,
+                      transportCostCents: city.transport_cost_cents || 0,
+                      transportCurrency: city.transport_currency || 'USD',
+                    };
+                  });
+                }
+
+                // Fallback: derive from destination string
                 const cities = (trip.destination || '').split(/\s*[→→,]\s*/).filter(Boolean);
                 return cities.map((cityName, idx) => {
                   const hotel = allNormalizedHotels[idx];
