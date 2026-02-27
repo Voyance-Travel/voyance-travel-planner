@@ -118,6 +118,8 @@ import { EditActivityModal } from './EditActivityModal';
 import { DiscoverDrawer } from './DiscoverDrawer';
 import { ImportActivitiesModal, type ImportMode } from './ImportActivitiesModal';
 import { SmartFinishBanner } from './SmartFinishBanner';
+import { InterCityTransportEditor } from './InterCityTransportEditor';
+import { useUpdateCityTransport } from '@/hooks/useTripCities';
 
 import { ParsedTripNotesSection } from './ParsedTripNotesSection';
 // =============================================================================
@@ -1271,6 +1273,19 @@ export function EditorialItinerary({
   // Edit Flight/Hotel modal state
   const [editFlightOpen, setEditFlightOpen] = useState(false);
   const [editHotelOpen, setEditHotelOpen] = useState(false);
+  
+  // Inter-city transport editor state
+  const [transportEditorOpen, setTransportEditorOpen] = useState(false);
+  const [transportEditorCity, setTransportEditorCity] = useState<{
+    cityId: string;
+    fromCity: string;
+    toCity: string;
+    transportType?: 'flight' | 'train' | 'bus' | 'car' | 'ferry';
+    transportDetails?: Record<string, unknown>;
+    transportCostCents?: number;
+    transportCurrency?: string;
+  } | null>(null);
+  const updateCityTransport = useUpdateCityTransport(tripId);
 
   // Optimize preferences dialog state
   const [showOptimizeDialog, setShowOptimizeDialog] = useState(false);
@@ -3986,7 +4001,24 @@ export function EditorialItinerary({
                       <div key={idx}>
                         {/* Inter-city transport card (shown before city 2+) */}
                         {idx > 0 && (cityHotel.transportType || allHotels[idx - 1]) && (
-                          <div className="flex items-center gap-2 py-2 px-3 my-2 rounded-lg border border-dashed border-primary/20 bg-primary/5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (cityHotel.cityId) {
+                                setTransportEditorCity({
+                                  cityId: cityHotel.cityId,
+                                  fromCity: allHotels[idx - 1].cityName,
+                                  toCity: cityHotel.cityName,
+                                  transportType: cityHotel.transportType,
+                                  transportDetails: cityHotel.transportDetails,
+                                  transportCostCents: cityHotel.transportCostCents,
+                                  transportCurrency: cityHotel.transportCurrency,
+                                });
+                                setTransportEditorOpen(true);
+                              }
+                            }}
+                            className="w-full flex items-center gap-2 py-2 px-3 my-2 rounded-lg border border-dashed border-primary/20 bg-primary/5 hover:bg-primary/10 hover:border-primary/40 transition-colors text-left group"
+                          >
                             <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
                               {getTransportIcon(cityHotel.transportType)}
                             </div>
@@ -3996,28 +4028,36 @@ export function EditorialItinerary({
                                 <ArrowRight className="h-3 w-3 text-muted-foreground" />
                                 <span>{cityHotel.cityName}</span>
                               </div>
-                              <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
-                                <span>{getTransportLabel(cityHotel.transportType)}</span>
-                                {cityHotel.transportDetails?.carrier && (
-                                  <span>· {cityHotel.transportDetails.carrier}</span>
-                                )}
-                                {cityHotel.transportDetails?.flightNumber && (
-                                  <span>· {cityHotel.transportDetails.flightNumber}</span>
-                                )}
-                                {cityHotel.transportDetails?.duration && (
-                                  <span>· {cityHotel.transportDetails.duration}</span>
-                                )}
-                                {cityHotel.transportDetails?.departureTime && (
-                                  <span>· {cityHotel.transportDetails.departureTime}</span>
-                                )}
-                              </div>
+                              {(cityHotel.transportDetails?.carrier || cityHotel.transportDetails?.flightNumber || cityHotel.transportDetails?.departureTime) ? (
+                                <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
+                                  <span>{getTransportLabel(cityHotel.transportType)}</span>
+                                  {cityHotel.transportDetails?.carrier && (
+                                    <span>· {cityHotel.transportDetails.carrier as string}</span>
+                                  )}
+                                  {cityHotel.transportDetails?.flightNumber && (
+                                    <span>· {cityHotel.transportDetails.flightNumber as string}</span>
+                                  )}
+                                  {cityHotel.transportDetails?.departureTime && (
+                                    <span>· {cityHotel.transportDetails.departureTime as string}</span>
+                                  )}
+                                  {cityHotel.transportDetails?.duration && (
+                                    <span>· {cityHotel.transportDetails.duration as string}</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="text-[11px] text-primary/70 mt-0.5 group-hover:text-primary transition-colors">
+                                  Tap to add {getTransportLabel(cityHotel.transportType)?.toLowerCase() || 'transport'} details
+                                </div>
+                              )}
                             </div>
-                            {cityHotel.transportCostCents && cityHotel.transportCostCents > 0 && (
+                            {cityHotel.transportCostCents && cityHotel.transportCostCents > 0 ? (
                               <span className="text-xs font-medium text-primary shrink-0">
                                 {formatCurrency(cityHotel.transportCostCents / 100, cityHotel.transportCurrency || 'USD')}
                               </span>
+                            ) : (
+                              <Edit3 className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
                             )}
-                          </div>
+                          </button>
                         )}
 
                         {/* City hotel card */}
@@ -4493,6 +4533,43 @@ export function EditorialItinerary({
             />
           </DialogContent>
         </Dialog>
+      )}
+
+      {/* Inter-city Transport Editor */}
+      {transportEditorCity && (
+        <InterCityTransportEditor
+          open={transportEditorOpen}
+          onOpenChange={(open) => {
+            setTransportEditorOpen(open);
+            if (!open) setTransportEditorCity(null);
+          }}
+          fromCity={transportEditorCity.fromCity}
+          toCity={transportEditorCity.toCity}
+          transportType={transportEditorCity.transportType}
+          transportDetails={transportEditorCity.transportDetails as any}
+          transportCostCents={transportEditorCity.transportCostCents}
+          transportCurrency={transportEditorCity.transportCurrency}
+          saving={updateCityTransport.isPending}
+          onSave={(data) => {
+            updateCityTransport.mutate({
+              cityId: transportEditorCity.cityId,
+              transportType: data.transportType,
+              transportDetails: data.transportDetails as any,
+              transportCostCents: data.transportCostCents,
+              currency: data.currency,
+            }, {
+              onSuccess: () => {
+                setTransportEditorOpen(false);
+                setTransportEditorCity(null);
+                toast.success('Transport details saved');
+                onBookingAdded?.();
+              },
+              onError: (err) => {
+                toast.error('Failed to save transport details');
+              },
+            });
+          }}
+        />
       )}
 
       {/* Activity Alternatives Drawer (AI Swap) */}
