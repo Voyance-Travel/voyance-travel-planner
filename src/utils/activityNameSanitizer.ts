@@ -42,7 +42,8 @@ const SYSTEM_PREFIXES = [
 export function sanitizeActivityName(name: string | undefined | null): string {
   if (!name) return 'Activity';
   
-  let sanitized = name.trim();
+  // Strip stray CJK characters injected by AI models (e.g. 旋)
+  let sanitized = name.replace(/[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/g, '').trim();
   
   // Strip any system prefixes
   for (const prefix of SYSTEM_PREFIXES) {
