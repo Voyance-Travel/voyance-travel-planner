@@ -3877,6 +3877,23 @@ export function EditorialItinerary({
                 />
               </div>
             )}
+
+            {/* Day Action Toolbar — inside itinerary tab content */}
+            {days[selectedDayIndex] && (() => {
+              const selectedDay = days[selectedDayIndex];
+              const dayTotalCost = getDayTotalCost(selectedDay.activities, travelers, budgetTier, destination, destinationCountry);
+              return (
+                <DayActionToolbar
+                  onAdd={() => setAddActivityModal({ dayIndex: selectedDayIndex })}
+                  onDiscover={() => setDiscoverDrawerOpen(true)}
+                  onImport={() => setImportModal({ dayIndex: selectedDayIndex })}
+                  onRefreshDay={() => handleRefreshDay(selectedDayIndex)}
+                  isRefreshing={refreshingDayNumber === selectedDay.dayNumber}
+                  dayTotal={`Day Total: ${formatCurrency(displayCost(dayTotalCost), tripCurrency)}${travelers > 1 ? '/pp' : ''}`}
+                  isEditable={effectiveIsEditable}
+                />
+              );
+            })()}
           </motion.div>
         )}
 
@@ -5058,22 +5075,7 @@ export function EditorialItinerary({
          tripId={tripId}
       />
 
-      {/* Fixed Bottom Day Action Toolbar — visible on itinerary tab for all flows */}
-      {activeTab === 'itinerary' && days[selectedDayIndex] && (() => {
-        const selectedDay = days[selectedDayIndex];
-        const dayTotalCost = getDayTotalCost(selectedDay.activities, travelers, budgetTier, destination, destinationCountry);
-        return (
-          <DayActionToolbar
-            onAdd={() => setAddActivityModal({ dayIndex: selectedDayIndex })}
-            onDiscover={() => setDiscoverDrawerOpen(true)}
-            onImport={() => setImportModal({ dayIndex: selectedDayIndex })}
-            onRefreshDay={() => handleRefreshDay(selectedDayIndex)}
-            isRefreshing={refreshingDayNumber === selectedDay.dayNumber}
-            dayTotal={`Day Total: ${formatCurrency(displayCost(dayTotalCost), tripCurrency)}${travelers > 1 ? '/pp' : ''}`}
-            isEditable={effectiveIsEditable}
-          />
-        );
-      })()}
+      {/* DayActionToolbar moved inside itinerary tab content above */}
     </div>
   );
 }
