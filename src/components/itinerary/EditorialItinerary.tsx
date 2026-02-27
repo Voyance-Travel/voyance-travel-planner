@@ -96,6 +96,7 @@ import RestaurantSearchDrawer from '@/components/restaurants/RestaurantSearchDra
 import { ItineraryOnboardingTour } from './ItineraryOnboardingTour';
 import ShareGuideSheet from '@/components/sharing/ShareGuideSheet';
 import { preloadAirportCodes, getAirportDisplaySync } from '@/services/locationSearchAPI';
+import { DayActionToolbar } from './DayActionToolbar';
 // InlineModifier removed — redundant with TripChat
 import type { ItineraryDay } from '@/services/itineraryActionExecutor';
 import { ItineraryValueHeader } from './ItineraryValueHeader';
@@ -3547,7 +3548,7 @@ export function EditorialItinerary({
                           onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
                           onAddActivity={(afterIndex?: number) => setAddActivityModal({ dayIndex: selectedDayIndex, afterIndex })}
                           onDiscover={() => setDiscoverDrawerOpen(true)}
-                          onImportActivities={creationSource === 'manual_paste' ? () => setImportModal({ dayIndex: selectedDayIndex }) : undefined}
+                          onImportActivities={() => setImportModal({ dayIndex: selectedDayIndex })}
                           onTimeEdit={(dIdx, aIdx, activity) => setTimeEditModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
                           onActivityEdit={(dIdx, aIdx, activity) => setEditActivityModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
                           onPaymentRequest={onPaymentRequest}
@@ -4590,6 +4591,23 @@ export function EditorialItinerary({
         context="route"
          tripId={tripId}
       />
+
+      {/* Fixed Bottom Day Action Toolbar — visible on itinerary tab for all flows */}
+      {activeTab === 'itinerary' && days[selectedDayIndex] && (() => {
+        const selectedDay = days[selectedDayIndex];
+        const dayTotalCost = getDayTotalCost(selectedDay.activities, travelers, budgetTier, destination, destinationCountry);
+        return (
+          <DayActionToolbar
+            onAdd={() => setAddActivityModal({ dayIndex: selectedDayIndex })}
+            onDiscover={() => setDiscoverDrawerOpen(true)}
+            onImport={() => setImportModal({ dayIndex: selectedDayIndex })}
+            onRefreshDay={() => handleRefreshDay(selectedDayIndex)}
+            isRefreshing={refreshingDayNumber === selectedDay.dayNumber}
+            dayTotal={`Day Total: ${formatCurrency(displayCost(dayTotalCost), tripCurrency)}`}
+            isEditable={effectiveIsEditable}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -6350,43 +6368,10 @@ function DayCard({
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-4">
-                    {isEditable && (
-                      <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => onAddActivity()} className="gap-1 bg-background hover:bg-primary/5 hover:border-primary/30">
-                          <Plus className="h-4 w-4" />
-                          Add
-                        </Button>
-                        {onDiscover && (
-                          <Button variant="outline" size="sm" onClick={onDiscover} className="gap-1 bg-background hover:bg-accent/10 hover:border-accent/30">
-                            <Compass className="h-4 w-4" />
-                            Discover
-                          </Button>
-                        )}
-                        {onImportActivities && (
-                          <Button variant="outline" size="sm" onClick={onImportActivities} className="gap-1 bg-background hover:bg-primary/5 hover:border-primary/30">
-                            <ClipboardPaste className="h-4 w-4" />
-                            Import
-                          </Button>
-                        )}
-                        {onRefreshDay && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={onRefreshDay}
-                            disabled={isRefreshingDay}
-                            className="gap-1 bg-background hover:bg-accent/10 hover:border-accent/30"
-                          >
-                            <RefreshCw className={cn("h-4 w-4", isRefreshingDay && "animate-spin")} />
-                            {isRefreshingDay ? 'Validating...' : 'Refresh Day'}
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                    <span className="font-medium text-foreground px-3 py-1 rounded-full bg-primary/10 text-primary">
-                      Day Total: {formatCurrency(displayCost(totalCost), tripCurrency)}
-                    </span>
-                  </div>
+                  {/* Day total inline badge — toolbar actions moved to fixed bottom DayActionToolbar */}
+                  <span className="font-medium text-foreground px-3 py-1 rounded-full bg-primary/10 text-primary">
+                    Day Total: {formatCurrency(displayCost(totalCost), tripCurrency)}
+                  </span>
                 </div>
               )}
 
