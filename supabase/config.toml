@@ -168,6 +168,9 @@ verify_jwt = false
 [functions.lookup-activity-url]
 verify_jwt = false
 
+[functions.generate-travel-intel]
+verify_jwt = false
+
 [functions.lookup-destination-insights]
 verify_jwt = false
 

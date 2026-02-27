@@ -1220,6 +1220,11 @@ export default function TripDetail() {
                   <TravelIntelCard
                     city={trip.destination}
                     country={trip.destination_country || ((destinationMeta as any)?.country as string | undefined)}
+                    startDate={trip.start_date}
+                    endDate={effectiveEndDate}
+                    travelers={trip.travelers || 2}
+                    archetype={(trip as any).travel_style || undefined}
+                    interests={(trip as any).interests || undefined}
                     className="mb-4"
                   />
                   <EditorialItinerary
