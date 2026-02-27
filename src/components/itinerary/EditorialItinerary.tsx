@@ -6282,6 +6282,9 @@ function DayCard({
                         gapMinutes={gapMinutes}
                         transportation={activityToRender.transportation}
                         hasTransitBadge={hasTransitBadgeVisible}
+                        currentCategory={activityToRender.category || activityToRender.type}
+                        nextCategory={nextActivity?.category || nextActivity?.type}
+                        sameLocation={!!(activityToRender.location?.name && nextActivity?.location?.name && activityToRender.location.name === nextActivity.location.name)}
                       />
                     )}
                     {/* Inline Add Activity button between activities */}

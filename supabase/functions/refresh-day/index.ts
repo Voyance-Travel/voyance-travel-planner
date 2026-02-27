@@ -116,11 +116,15 @@ function checkOperatingHours(
 
 function getMinBufferMinutes(fromCategory?: string, toCategory?: string): number {
   const diningCats = ['dining', 'food', 'restaurant', 'cafe', 'breakfast', 'lunch', 'dinner'];
-  const transitCats = ['transportation', 'transit', 'transfer'];
+  const transitCats = ['transportation', 'transit', 'transfer', 'taxi', 'transport', 'commute', 'travel'];
 
-  if (transitCats.includes(fromCategory?.toLowerCase() || '')) return 5;
-  if (diningCats.includes(fromCategory?.toLowerCase() || '')) return 10;
-  if (diningCats.includes(toCategory?.toLowerCase() || '')) return 10;
+  const fromLower = fromCategory?.toLowerCase() || '';
+  const toLower = toCategory?.toLowerCase() || '';
+
+  // Transit slots ARE the buffer — they don't need additional buffer
+  if (transitCats.some(t => fromLower.includes(t)) || transitCats.some(t => toLower.includes(t))) return 0;
+  if (diningCats.includes(fromLower)) return 10;
+  if (diningCats.includes(toLower)) return 10;
   return 5;
 }
 

@@ -17,6 +17,12 @@ interface TransitGapIndicatorProps {
   } | null;
   /** Whether full TransitBadge is already visible (avoid duplication) */
   hasTransitBadge?: boolean;
+  /** Category/type of the current (previous) activity */
+  currentCategory?: string;
+  /** Category/type of the next activity */
+  nextCategory?: string;
+  /** Whether the two activities share the same location */
+  sameLocation?: boolean;
 }
 
 function parseTimeToMinutes(timeStr?: string): number | null {
@@ -75,13 +81,26 @@ function getTransportIcon(method?: string) {
   return <Footprints className="h-2.5 w-2.5" />;
 }
 
-export function TransitGapIndicator({ gapMinutes, transportation, hasTransitBadge }: TransitGapIndicatorProps) {
+const TRANSIT_CATEGORIES = ['transit', 'transportation', 'transfer', 'taxi', 'transport', 'commute', 'travel'];
+
+function isTransitCategory(cat?: string): boolean {
+  if (!cat) return false;
+  const lower = cat.toLowerCase();
+  return TRANSIT_CATEGORIES.some(t => lower.includes(t));
+}
+
+export function TransitGapIndicator({ gapMinutes, transportation, hasTransitBadge, currentCategory, nextCategory, sameLocation }: TransitGapIndicatorProps) {
   // Don't show if TransitBadge is already visible with full details
   if (hasTransitBadge) return null;
 
-  const isZeroGap = gapMinutes <= 0;
-  const isTightGap = gapMinutes > 0 && gapMinutes < 15;
-  const isComfortable = gapMinutes >= 15;
+  // Transit/transportation slots ARE the buffer — don't warn about them
+  const eitherIsTransit = isTransitCategory(currentCategory) || isTransitCategory(nextCategory);
+  // Same-location activities don't need transit buffer
+  const skipBufferWarning = eitherIsTransit || sameLocation;
+
+  const isZeroGap = !skipBufferWarning && gapMinutes <= 0;
+  const isTightGap = !skipBufferWarning && gapMinutes > 0 && gapMinutes < 15;
+  const isComfortable = gapMinutes >= 15 || skipBufferWarning;
 
   const icon = transportation ? getTransportIcon(transportation.method) : <Clock className="h-2.5 w-2.5" />;
   // Use real transport duration when available, fall back to computed gap
