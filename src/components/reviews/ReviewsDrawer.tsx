@@ -37,6 +37,7 @@ import {
   sortReviews,
   getRatingDistribution,
 } from '@/services/reviewsService';
+import { handleImageError } from '@/utils/imageFallback';
 
 interface ReviewsDrawerProps {
   open: boolean;
@@ -157,6 +158,7 @@ export default function ReviewsDrawer({
                           src={photo}
                           alt={`${place.name} photo ${idx + 1}`}
                           className="w-full h-full object-cover"
+                          onError={handleImageError}
                         />
                       </button>
                     ))}
@@ -332,6 +334,7 @@ export default function ReviewsDrawer({
                                 src={review.authorPhoto}
                                 alt={review.authorName}
                                 className="w-10 h-10 rounded-full object-cover"
+                                onError={handleImageError}
                               />
                             ) : (
                               <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
@@ -411,6 +414,7 @@ export default function ReviewsDrawer({
               src={selectedPhoto}
               alt="Full size"
               className="max-w-full max-h-full object-contain rounded-lg"
+              onError={handleImageError}
             />
           </div>
         )}
