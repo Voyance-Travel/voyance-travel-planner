@@ -413,24 +413,39 @@ FAILURE TO INCLUDE ANY OF THESE IS A HARD FAILURE.
 6. Only use AI recommendations to fill REMAINING empty slots after ALL user venues are placed
 7. If you cannot fit all user venues, ADD more activity slots — do NOT drop user venues
 
-### 🧭 SMART FINISH ENRICHMENT — EXPAND & ADD VALUE
-The user's list is a STARTING POINT, not the final itinerary. You MUST add significant value:
+### 🧭 SMART FINISH ENRICHMENT — TRANSFORM A ROUGH PLAN INTO A PREMIUM ITINERARY
+The user's list is a STARTING POINT with 3-4 venues per day. You MUST produce a COMPLETE, polished plan with 10-14 entries per day.
 
-8. **FILL GAPS**: Add breakfast, lunch, dinner, coffee stops, and transit between every user venue
-9. **ADD LOGISTICS**: For EVERY activity (user-specified AND AI-added), provide:
-   - Exact street address (real, verifiable)
-   - Opening hours and best arrival time
-   - Realistic transit instructions FROM the previous activity (walk 10 min, taxi 15 min, metro Line 2)
-   - Estimated cost per person in local currency AND USD
-   - Booking URL or official website link
-10. **EXPAND WITH DNA-MATCHED ACTIVITIES**: Between user venues, add 2-4 additional activities per day that match the traveler's DNA archetype — hidden gems, local favorites, scenic walks, cultural stops
-11. **ADD PRACTICAL TIPS**: For each user-specified venue, add an insider tip (best entrance, skip-the-line strategy, what to order, photo spot)
-12. **TIME EVERYTHING**: Every activity needs a specific start time (e.g., "09:30") and duration — create a minute-by-minute schedule
+8. **FILL EVERY GAP WITH REAL ENTRIES**: Between every user venue, add:
+   - A transit entry (category: "transport") with mode, duration, cost, and directions
+   - Meals they didn't specify: breakfast café near hotel, lunch spot near morning activities, dinner restaurant
+   - Coffee/snack stops for long gaps (> 2 hours between activities)
+   - Each of these MUST be a full JSON activity object with id, title, startTime, endTime, category, location, cost
+
+9. **SPECIFIC TIMES ON EVERYTHING**: Every activity MUST have a startTime in "HH:MM" 24-hour format (e.g., "09:30", "14:00").
+   Do NOT use labels like "Morning", "Afternoon", "Before Departure". Those are NOT valid times.
+   Breakfast: 08:00-09:30 range. Lunch: 12:00-13:30 range. Dinner: 18:30-20:30 range.
+
+10. **ADD LOGISTICS**: For EVERY activity (user-specified AND AI-added), provide:
+   - Exact street address (real, verifiable) in location.address
+   - Opening hours context in tips field
+   - Realistic transit instructions FROM the previous activity
+   - Estimated cost per person in cost.amount
+   - Booking URL or official website link in website field
+
+11. **EXPAND WITH DNA-MATCHED ACTIVITIES**: Add 2-4 NEW activities per day that match the traveler's DNA:
+   - Hidden gems, local favorites, scenic walks, cultural stops
+   - These are IN ADDITION to the user's picks, not replacements
+   - Each new activity needs full details: times, location, cost, description
+
+12. **ADD PRACTICAL TIPS**: For each user-specified venue, add an insider tip
+13. **MINIMUM OUTPUT PER DAY**: At least 8 activity entries per full day (experiences + meals + transit)
 
 ### 🚩 DNA MISMATCH FLAGGING
-13. If ANY user-specified activity does NOT align with the traveler's DNA profile (e.g., a budget hostel for a Luxury Seeker, or a museum for an Adrenaline Architect), include a "dnaFlag" field on that activity:
-    - "dnaFlag": "This doesn't match your usual style — but you chose it, so we've kept it! Consider [DNA-aligned alternative] nearby if you change your mind."
-14. DNA-flagged activities stay in the itinerary — they are NOT removed. The flag is informational only.
+14. If ANY user-specified activity does NOT align with the traveler's DNA profile, include a "dnaFlag" field:
+    - "dnaFlag": "This doesn't match your usual style — but you chose it, so we've kept it! Consider [DNA-aligned alternative] nearby."
+15. DNA-flagged activities stay in the itinerary — they are NOT removed. The flag is informational only.
+
 `;
 
   return prompt;

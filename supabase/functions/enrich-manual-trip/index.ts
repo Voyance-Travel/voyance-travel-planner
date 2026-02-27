@@ -55,18 +55,21 @@ function buildResearchContext(itinerary: any): string {
 
   lines.push("");
   lines.push("═══════════════════════════════════════════════════════════════");
-  lines.push("SMART FINISH ENRICHMENT INSTRUCTIONS");
+  lines.push("SMART FINISH ENRICHMENT — CRITICAL INSTRUCTIONS");
   lines.push("═══════════════════════════════════════════════════════════════");
-  lines.push("The user pasted or built a rough itinerary. Your job is to TRANSFORM it into a premium, fully-planned trip.");
-  lines.push("Use their items as ANCHORS, then ADD everything missing:");
-  lines.push("  • Exact addresses and opening hours for every venue");
-  lines.push("  • Transit directions between activities (walk, metro, taxi with duration & cost)");
-  lines.push("  • Booking URLs and official website links");
-  lines.push("  • Meals they didn't plan (breakfast, lunch, dinner, coffee)");
-  lines.push("  • DNA-matched activities to fill gaps between their picks");
-  lines.push("  • Insider tips for every user-specified venue");
-  lines.push("  • Cost estimates in local currency and USD");
-  lines.push("  • Flag any activity that doesn't match their Travel DNA");
+  lines.push("The user pasted a ROUGH itinerary with ~3-4 items per day.");
+  lines.push("Your job is to TRANSFORM it into a COMPLETE, premium trip with 10-14 entries per day.");
+  lines.push("");
+  lines.push("YOU MUST ADD ALL OF THE FOLLOWING:");
+  lines.push("  1. SPECIFIC TIMES: Every activity needs startTime in HH:MM format (e.g. '09:30'). NO vague labels like 'Morning' or 'Afternoon'.");
+  lines.push("  2. MEALS: Add breakfast, lunch, and dinner as full activity entries with restaurant names, prices, and addresses.");
+  lines.push("  3. TRANSIT: Add transport entries between EVERY pair of activities with mode, duration, and cost.");
+  lines.push("  4. NEW ACTIVITIES: Add 2-4 DNA-matched activities per day (hidden gems, walks, coffee stops) BETWEEN user picks.");
+  lines.push("  5. LOGISTICS: Exact addresses, opening hours, booking URLs for every venue.");
+  lines.push("  6. NIGHTLIFE: Evening activity after dinner (bar, live music, night walk).");
+  lines.push("  7. HOTEL BOOKENDS: Start/end day at hotel with transit details.");
+  lines.push("");
+  lines.push("The user's items are ANCHORS. Build a full day around each one. DO NOT just return their items back.");
   lines.push("═══════════════════════════════════════════════════════════════");
   lines.push("");
 
