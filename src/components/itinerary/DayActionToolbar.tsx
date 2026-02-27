@@ -38,12 +38,11 @@ export function DayActionToolbar({
       animate={{ y: 0, opacity: 1 }}
       transition={{ type: 'spring', damping: 25, stiffness: 300 }}
       className={cn(
-        'fixed bottom-4 left-1/2 -translate-x-1/2 z-40',
-        'w-[calc(100%-2rem)] max-w-2xl',
+        'fixed bottom-0 left-0 right-0 z-40',
         className
       )}
     >
-      <div className="bg-card/95 backdrop-blur-xl border border-border rounded-2xl shadow-elevated px-3 py-2.5 flex items-center justify-between gap-1.5 sm:gap-2">
+      <div className="bg-card/95 backdrop-blur-xl border-t border-border px-3 py-2.5 flex items-center justify-between gap-1.5 sm:gap-2 max-w-3xl mx-auto">
         {/* Action buttons */}
         <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto scrollbar-hide">
           <Button
