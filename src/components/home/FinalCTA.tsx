@@ -44,26 +44,32 @@ export default function FinalCTA() {
               Your type. Your pace. Your perfect trip, built in minutes.
             </p>
 
-            {/* Multi-level CTAs */}
+            {/* CTAs — single primary on mobile, multi on desktop */}
             <div className="flex flex-col sm:flex-row gap-4 mb-6">
-              {/* Primary CTA */}
               <Button 
                 asChild 
                 size="lg" 
-                className="text-base px-10 py-6 font-sans font-medium tracking-wide"
+                className="text-base px-10 py-6 font-sans font-medium tracking-wide min-h-[48px]"
               >
                 <Link to={ROUTES.START}>
-                  Build My Itinerary
+                  Start Planning
                   <ArrowRight className="ml-3 h-4 w-4" />
                 </Link>
               </Button>
 
-              {/* Secondary CTA */}
+              {/* Secondary — text link on mobile, button on desktop */}
+              <Link 
+                to={ROUTES.QUIZ}
+                className="sm:hidden inline-flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors font-sans"
+              >
+                <Sparkles className="h-4 w-4" />
+                Or discover your travel style
+              </Link>
               <Button 
                 asChild 
                 variant="outline"
                 size="lg" 
-                className="text-base px-8 py-6 font-sans font-medium"
+                className="hidden sm:inline-flex text-base px-8 py-6 font-sans font-medium"
               >
                 <Link to={ROUTES.QUIZ}>
                   <Sparkles className="mr-2 h-4 w-4" />
@@ -72,10 +78,10 @@ export default function FinalCTA() {
               </Button>
             </div>
 
-            {/* Tertiary CTA */}
+            {/* Tertiary — desktop only */}
             <Link 
               to={ROUTES.EXPLORE}
-              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors font-sans"
+              className="hidden sm:inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors font-sans"
             >
               <Compass className="h-4 w-4" />
               Or explore destinations first
@@ -98,6 +104,7 @@ export default function FinalCTA() {
                   src="https://images.unsplash.com/photo-1534008897995-27a23e859048?w=800"
                   alt="Amalfi Coast, Italy"
                   className="w-full h-full object-cover"
+                  loading="lazy"
                   onError={(e) => { const t = e.currentTarget; if (!t.dataset.fallbackApplied) { t.dataset.fallbackApplied = 'true'; t.style.display = 'none'; } }}
                 />
               </div>
@@ -117,6 +124,7 @@ export default function FinalCTA() {
                 src={destinations[0].image}
                 alt={destinations[0].name}
                 className="w-full h-full object-cover shadow-elevated"
+                loading="lazy"
                 onError={(e) => { const t = e.currentTarget; if (!t.dataset.fallbackApplied) { t.dataset.fallbackApplied = 'true'; t.style.display = 'none'; } }}
               />
             </div>
@@ -126,6 +134,7 @@ export default function FinalCTA() {
                 src={destinations[1].image}
                 alt={destinations[1].name}
                 className="w-full h-full object-cover opacity-60"
+                loading="lazy"
                 onError={(e) => { const t = e.currentTarget; if (!t.dataset.fallbackApplied) { t.dataset.fallbackApplied = 'true'; t.style.display = 'none'; } }}
               />
             </div>

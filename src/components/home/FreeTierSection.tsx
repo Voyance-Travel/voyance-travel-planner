@@ -68,18 +68,24 @@ export default function FreeTierSection() {
             </div>
           </div>
 
-          {/* CTA */}
           <div className="pt-4">
             <Button 
               asChild 
               size="lg" 
-              className="rounded-full px-8"
+              className="hidden sm:inline-flex rounded-full px-8"
             >
               <Link to={ROUTES.START}>
                 <Sparkles className="mr-2 h-4 w-4" />
                 Get Started Free
               </Link>
             </Button>
+            <Link
+              to={ROUTES.START}
+              className="sm:hidden inline-flex items-center gap-2 text-sm text-primary font-medium hover:text-primary/80 transition-colors"
+            >
+              <Sparkles className="h-4 w-4" />
+              Get Started Free
+            </Link>
           </div>
         </motion.div>
       </div>

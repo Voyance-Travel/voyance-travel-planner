@@ -138,6 +138,7 @@ function ItineraryCard({ itinerary }: { itinerary: typeof SAMPLE_ITINERARIES[0] 
           src={itinerary.image}
           alt={`${itinerary.destination}, ${itinerary.country}`}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          loading="lazy"
           onError={(e) => { const t = e.currentTarget; if (!t.dataset.fallbackApplied) { t.dataset.fallbackApplied = 'true'; t.style.display = 'none'; t.parentElement?.classList.add('bg-gradient-to-br', 'from-muted', 'to-muted-foreground/20'); } }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />

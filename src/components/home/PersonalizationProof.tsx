@@ -420,12 +420,19 @@ export default function PersonalizationProof() {
         >
           <Button 
             size="lg" 
-            className="gap-2 rounded-full px-8"
+            className="hidden sm:inline-flex gap-2 rounded-full px-8"
             onClick={() => navigate(ROUTES.QUIZ)}
           >
             Discover Your Travel DNA
             <ArrowRight className="h-4 w-4" />
           </Button>
+          <button
+            onClick={() => navigate(ROUTES.QUIZ)}
+            className="sm:hidden inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 font-medium transition-colors"
+          >
+            Discover Your Travel DNA
+            <ArrowRight className="h-4 w-4" />
+          </button>
           <p className="text-xs text-muted-foreground mt-2">
             5-minute quiz. No account required to start.
           </p>
