@@ -143,14 +143,17 @@ export function InterCityTransportEditor({
             </motion.div>
           </AnimatePresence>
 
-          {/* Common fields: times, cost, booking ref, notes */}
+          {/* Common fields: times, duration, cost, booking ref, notes */}
           <div className="space-y-3 pt-2 border-t border-border">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <Field label="Departure time" icon={Clock}>
                 <Input type="time" value={details.departureTime || ''} onChange={e => update({ departureTime: e.target.value })} />
               </Field>
               <Field label="Arrival time" icon={Clock}>
                 <Input type="time" value={details.arrivalTime || ''} onChange={e => update({ arrivalTime: e.target.value })} />
+              </Field>
+              <Field label="Duration" icon={Clock}>
+                <Input placeholder="e.g. 2h 30m" value={details.duration || ''} onChange={e => update({ duration: e.target.value })} />
               </Field>
             </div>
 
