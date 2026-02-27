@@ -3,16 +3,17 @@
  * Calls the grant-monthly-credits edge function once per session
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useContext } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { AuthContext } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 
 // Session-level dedup key to prevent double-fire in StrictMode
 const MONTHLY_CREDITS_SESSION_KEY = 'voyance_monthly_credits_checked';
 
 export function useMonthlyCredits() {
-  const { user } = useAuth();
+  const authContext = useContext(AuthContext);
+  const user = authContext?.user ?? null;
   const queryClient = useQueryClient();
   const hasChecked = useRef(false);
 

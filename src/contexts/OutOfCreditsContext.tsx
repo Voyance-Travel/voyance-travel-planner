@@ -73,7 +73,12 @@ export function OutOfCreditsProvider({ children }: { children: ReactNode }) {
 export function useOutOfCredits() {
   const ctx = useContext(OutOfCreditsContext);
   if (!ctx) {
-    throw new Error('useOutOfCredits must be used within OutOfCreditsProvider');
+    // Return safe defaults instead of crashing during HMR/mount races
+    return {
+      state: { isOpen: false } as OutOfCreditsState,
+      showOutOfCredits: (() => {}) as OutOfCreditsContextValue['showOutOfCredits'],
+      dismiss: () => {},
+    } satisfies OutOfCreditsContextValue;
   }
   return ctx;
 }
