@@ -11,6 +11,39 @@
 
 import { format, parseISO, addDays } from 'date-fns';
 
+// Strip non-Latin scripts from AI text artifacts before rendering
+const NON_LATIN_SCRIPT = /[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF\u0600-\u06FF\u0400-\u04FF\u0E00-\u0E7F]+/g;
+
+function sanitizeDisplayString(value: string | undefined | null): string | undefined {
+  if (!value) return undefined;
+  const cleaned = value
+    .replace(NON_LATIN_SCRIPT, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return cleaned || undefined;
+}
+
+function sanitizeUnknownStrings(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return sanitizeDisplayString(value) ?? '';
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeUnknownStrings(item));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        sanitizeUnknownStrings(item),
+      ])
+    );
+  }
+
+  return value;
+}
+
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -165,7 +198,7 @@ function extractString(obj: Record<string, unknown>, keys: string[]): string | u
   for (const key of keys) {
     const val = obj[key];
     if (typeof val === 'string' && val.trim()) {
-      return val.trim();
+      return sanitizeDisplayString(val);
     }
   }
   return undefined;
@@ -338,43 +371,48 @@ function parseSingleActivity(
   dayIndex: number,
   activityIndex: number
 ): ParsedActivity {
-  const a = asRecord(raw);
+  const activityData = sanitizeUnknownStrings(asRecord(raw)) as Record<string, unknown>;
   
   // Generate stable ID - no Math.random()!
-  const id = extractString(a, ['id']) || `day${dayIndex + 1}-act${activityIndex}`;
-  const title = extractString(a, ['title', 'name']) || 'Untitled Activity';
+  const id = extractString(activityData, ['id']) || `day${dayIndex + 1}-act${activityIndex}`;
+  const title = extractString(activityData, ['title', 'name']) || 'Untitled Activity';
   
   return {
-    // Spread all raw fields first to preserve unknown/editorial-specific fields
+    // Spread sanitized raw fields first to preserve unknown/editorial-specific fields
     // (timeBlockType, bookingUrl, bookingState, vendorName, viatorProductCode, etc.)
-    ...a,
+    ...activityData,
     // Then override with safely parsed versions
     id,
     title,
     name: title, // Alias for backwards compatibility
-    description: extractString(a, ['description']),
-    type: extractString(a, ['type']),
-    category: extractString(a, ['category']),
-    startTime: extractString(a, ['startTime', 'start_time', 'time']),
-    endTime: extractString(a, ['endTime', 'end_time']),
-    time: extractString(a, ['time', 'startTime', 'start_time']),
-    duration: extractString(a, ['duration']),
-    durationMinutes: extractNumber(a, ['durationMinutes', 'duration_minutes']),
-    location: parseLocation(a.location),
-    imageUrl: extractString(a, ['imageUrl', 'image_url', 'image']),
-    tips: a.tips as string | string[] | undefined,
-    confirmationNumber: extractString(a, ['confirmationNumber', 'confirmation_number']),
-    voucherUrl: extractString(a, ['voucherUrl', 'voucher_url']),
-    bookingRequired: extractBoolean(a, ['bookingRequired', 'booking_required']),
-    reservationTime: extractString(a, ['reservationTime', 'reservation_time']),
-    cost: parseCost(a.cost || a.estimatedCost || a.estimated_cost),
-    estimatedCost: parseCost(a.estimatedCost || a.estimated_cost || a.cost),
-    transportation: parseTransportation(a.transportation),
-    isLocked: extractBoolean(a, ['isLocked', 'is_locked', 'locked']),
-    rating: parseRating(a.rating),
-    website: extractString(a, ['website', 'url']),
-    photos: a.photos as Array<{ url: string } | string> | undefined,
-    tags: Array.isArray(a.tags) ? a.tags.filter((t): t is string => typeof t === 'string') : [],
+    description: extractString(activityData, ['description']),
+    type: extractString(activityData, ['type']),
+    category: extractString(activityData, ['category']),
+    startTime: extractString(activityData, ['startTime', 'start_time', 'time']),
+    endTime: extractString(activityData, ['endTime', 'end_time']),
+    time: extractString(activityData, ['time', 'startTime', 'start_time']),
+    duration: extractString(activityData, ['duration']),
+    durationMinutes: extractNumber(activityData, ['durationMinutes', 'duration_minutes']),
+    location: parseLocation(activityData.location),
+    imageUrl: extractString(activityData, ['imageUrl', 'image_url', 'image']),
+    tips: activityData.tips as string | string[] | undefined,
+    confirmationNumber: extractString(activityData, ['confirmationNumber', 'confirmation_number']),
+    voucherUrl: extractString(activityData, ['voucherUrl', 'voucher_url']),
+    bookingRequired: extractBoolean(activityData, ['bookingRequired', 'booking_required']),
+    reservationTime: extractString(activityData, ['reservationTime', 'reservation_time']),
+    cost: parseCost(activityData.cost || activityData.estimatedCost || activityData.estimated_cost),
+    estimatedCost: parseCost(activityData.estimatedCost || activityData.estimated_cost || activityData.cost),
+    transportation: parseTransportation(activityData.transportation),
+    isLocked: extractBoolean(activityData, ['isLocked', 'is_locked', 'locked']),
+    rating: parseRating(activityData.rating),
+    website: extractString(activityData, ['website', 'url']),
+    photos: activityData.photos as Array<{ url: string } | string> | undefined,
+    tags: Array.isArray(activityData.tags)
+      ? activityData.tags
+          .filter((t): t is string => typeof t === 'string')
+          .map((t) => sanitizeDisplayString(t))
+          .filter((t): t is string => Boolean(t))
+      : [],
   };
 }
 
@@ -391,12 +429,12 @@ function parseSingleDay(
   dayIndex: number,
   tripStartDate?: string
 ): ParsedDay {
-  const d = asRecord(raw);
+  const dayData = sanitizeUnknownStrings(asRecord(raw)) as Record<string, unknown>;
   
-  const dayNumber = extractNumber(d, ['dayNumber', 'day_number', 'day']) ?? dayIndex + 1;
+  const dayNumber = extractNumber(dayData, ['dayNumber', 'day_number', 'day']) ?? dayIndex + 1;
   
   // Get activities array safely
-  const rawActivities = Array.isArray(d.activities) ? d.activities : [];
+  const rawActivities = Array.isArray(dayData.activities) ? dayData.activities : [];
   
   // Filter null/undefined activities BEFORE mapping
   const parsedActivities = rawActivities
@@ -422,25 +460,25 @@ function parseSingleDay(
   });
   
   return {
-    // Spread raw day fields first to preserve unknown/editorial-specific fields
-    ...d,
+    // Spread sanitized day fields first to preserve unknown/editorial-specific fields
+    ...dayData,
     dayNumber,
-    date: extractString(d, ['date']) || calculateDayDate(tripStartDate, dayIndex),
-    title: extractString(d, ['title', 'theme']),
-    theme: extractString(d, ['theme', 'title']),
-    description: extractString(d, ['description']),
-    estimatedWalkingTime: extractString(d, ['estimatedWalkingTime', 'estimated_walking_time']),
-    estimatedDistance: extractString(d, ['estimatedDistance', 'estimated_distance']),
+    date: extractString(dayData, ['date']) || calculateDayDate(tripStartDate, dayIndex),
+    title: extractString(dayData, ['title', 'theme']),
+    theme: extractString(dayData, ['theme', 'title']),
+    description: extractString(dayData, ['description']),
+    estimatedWalkingTime: extractString(dayData, ['estimatedWalkingTime', 'estimated_walking_time']),
+    estimatedDistance: extractString(dayData, ['estimatedDistance', 'estimated_distance']),
     activities,
-    weather: parseWeather(d.weather),
+    weather: parseWeather(dayData.weather),
     // Explicitly extract multi-city / transition day fields for type safety
-    city: extractString(d, ['city']),
-    country: extractString(d, ['country']),
-    isTransitionDay: extractBoolean(d, ['isTransitionDay', 'is_transition_day']),
-    transitionFrom: extractString(d, ['transitionFrom', 'transition_from']),
-    transitionTo: extractString(d, ['transitionTo', 'transition_to']),
-    transportComparison: Array.isArray(d.transportComparison) ? d.transportComparison : undefined,
-    selectedTransportId: extractString(d, ['selectedTransportId', 'selected_transport_id']),
+    city: extractString(dayData, ['city']),
+    country: extractString(dayData, ['country']),
+    isTransitionDay: extractBoolean(dayData, ['isTransitionDay', 'is_transition_day']),
+    transitionFrom: extractString(dayData, ['transitionFrom', 'transition_from']),
+    transitionTo: extractString(dayData, ['transitionTo', 'transition_to']),
+    transportComparison: Array.isArray(dayData.transportComparison) ? dayData.transportComparison : undefined,
+    selectedTransportId: extractString(dayData, ['selectedTransportId', 'selected_transport_id']),
   };
 }
 
