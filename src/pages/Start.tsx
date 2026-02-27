@@ -44,6 +44,8 @@ import GuestLinkModal, { type LinkedGuest } from '@/components/planner/GuestLink
 import { TripChatPlanner } from '@/components/planner/TripChatPlanner';
 import { ManualTripPasteEntry } from '@/components/planner/ManualTripPasteEntry';
 import { TripCostEstimate } from '@/components/planner/TripCostEstimate';
+import { resolveCities } from '@/utils/cityNormalization';
+import logger from '@/lib/logger';
 
 // Types
 interface LocationSelection {
@@ -69,99 +71,8 @@ interface ChatCityInput {
   nights: number;
 }
 
-const COUNTRY_HINTS = new Set([
-  'usa', 'united states', 'canada', 'mexico', 'uk', 'united kingdom', 'england', 'scotland', 'wales',
-  'france', 'italy', 'spain', 'portugal', 'germany', 'austria', 'switzerland', 'netherlands', 'belgium',
-  'japan', 'china', 'thailand', 'vietnam', 'south korea', 'korea', 'australia', 'new zealand',
-  'greece', 'turkey', 'morocco', 'egypt', 'uae', 'india', 'indonesia', 'singapore', 'malaysia',
-]);
-
-function cleanCityCandidate(value: string): string {
-  return value
-    .replace(/^route:\s*/i, '')
-    .replace(/\b(?:flying|fly|into|out\s+of|arrive(?:ing)?|depart(?:ing)?|return(?:ing)?|next|then)\b/gi, ' ')
-    .replace(/[()[\]]/g, ' ')
-    .replace(/[.;:!?]+$/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function distributeNights(cities: string[], startDate: Date, endDate: Date): ChatCityInput[] {
-  const totalNights = Math.max(cities.length, differenceInDays(endDate, startDate));
-  const baseNights = Math.floor(totalNights / cities.length);
-  let remainder = totalNights % cities.length;
-
-  return cities.map((name) => {
-    const nights = Math.max(1, baseNights + (remainder > 0 ? 1 : 0));
-    if (remainder > 0) remainder -= 1;
-    return { name, nights };
-  });
-}
-
-function inferChatCities(details: any, startDate: Date, endDate: Date): ChatCityInput[] {
-  const rawCities = Array.isArray(details?.cities) ? details.cities : [];
-
-  if (rawCities.length > 1) {
-    const normalized = rawCities
-      .map((city: any) => ({
-        name: cleanCityCandidate(String(city?.name || '')),
-        country: city?.country ? String(city.country) : undefined,
-        nights: Number(city?.nights),
-      }))
-      .filter((city: ChatCityInput) => city.name.length > 1);
-
-    if (normalized.length > 1) {
-      const hasValidNights = normalized.every((city: ChatCityInput) => Number.isFinite(city.nights) && city.nights > 0);
-      if (hasValidNights) {
-        return normalized.map((city: ChatCityInput) => ({ ...city, nights: Math.max(1, Math.round(city.nights)) }));
-      }
-
-      const evenlyDistributed = distributeNights(normalized.map((city: ChatCityInput) => city.name), startDate, endDate);
-      return evenlyDistributed.map((city, index) => ({ ...city, country: normalized[index]?.country }));
-    }
-  }
-
-  const destination = String(details?.destination || '');
-  const notes = String(details?.additionalNotes || '');
-
-  const connectorPattern = /(→|->|–>|=>|\bthen\b|\band\b|&|,)/i;
-  const strongConnectorPattern = /(→|->|–>|=>|\bthen\b|\band\b|&)/i;
-
-  const candidateNames: string[] = [];
-
-  if (connectorPattern.test(destination)) {
-    const destinationParts = destination
-      .split(/\s*(?:→|->|–>|=>|\bthen\b|\band\b|&|,)\s*/i)
-      .map(cleanCityCandidate)
-      .filter((part) => part.length > 1 && part.length < 50 && !/\d/.test(part));
-
-    if (destinationParts.length > 2 || strongConnectorPattern.test(destination)) {
-      candidateNames.push(...destinationParts);
-    } else if (destinationParts.length === 2) {
-      const second = destinationParts[1].toLowerCase();
-      if (!COUNTRY_HINTS.has(second)) {
-        candidateNames.push(...destinationParts);
-      }
-    }
-  }
-
-  if (candidateNames.length <= 1 && notes) {
-    const routeSegment = (notes.match(/route:\s*([^\n]+)/i)?.[1] || notes).split(/[.!?\n]/)[0];
-    const noteParts = routeSegment
-      .split(/\s*(?:→|->|–>|=>|\bthen\b|\band\b|&|,)\s*/i)
-      .map(cleanCityCandidate)
-      .filter((part) => part.length > 1 && part.length < 50 && !/\d/.test(part));
-
-    if (noteParts.length > 1) {
-      candidateNames.push(...noteParts);
-    }
-  }
-
-  const deduped = Array.from(new Map(candidateNames.map((name) => [name.toLowerCase(), name])).values());
-  if (deduped.length <= 1) return [];
-
-  return distributeNights(deduped, startDate, endDate);
-}
+// Note: City normalization logic has been centralized in src/utils/cityNormalization.ts
+// Both TripChatPlanner (UI) and Start.tsx (persistence) use the same resolveCities() function.
 
 // Trip occasions
 const tripOccasions = [
@@ -2000,11 +1911,18 @@ export default function Start() {
                         const chatBudget = details.budgetAmount || budgetAmount;
                         const chatTripType = details.tripType || tripType;
                         const chatTravelers = details.travelers || travelers;
-                        const chatCities = inferChatCities(details, chatStartDate, chatEndDate);
+                        // Use shared city normalization (single source of truth)
+                        const chatCities = resolveCities(details, chatStartDate, chatEndDate);
                         const isChatMultiCity = chatCities.length > 1;
                         const destinationSummary = isChatMultiCity
                           ? chatCities.map((city) => city.name).join(', ')
                           : dest;
+
+                        logger.info('[Start] Chat trip city resolution:', {
+                          cityCount: chatCities.length,
+                          cities: chatCities.map(c => c.name),
+                          isMultiCity: isChatMultiCity,
+                        });
 
                         // Sync extracted details back to form state so widgets reflect chat intent
                         if (details.travelers && details.travelers !== travelers) {
@@ -2037,7 +1955,7 @@ export default function Start() {
                             hotel_selection: hotelSelection,
                             creation_source: isChatMultiCity ? 'multi_city' : 'chat',
                             status: 'draft',
-                            is_multi_city: isChatMultiCity || null,
+                            is_multi_city: isChatMultiCity ? true : null,
                             destinations: isChatMultiCity ? chatCities.map((c, i) => ({
                               city: c.name,
                               country: c.country || '',
@@ -2056,8 +1974,8 @@ export default function Start() {
 
                         if (error) throw error;
 
-                        // Insert trip_cities rows
-                        if (isChatMultiCity && chatCities) {
+                        // Insert trip_cities rows — STRICT: must succeed before navigation
+                        if (isChatMultiCity) {
                           let currentDate = new Date(chatStartDate);
                           const cityRows = chatCities.map((city, idx) => {
                             const arrivalDate = format(currentDate, 'yyyy-MM-dd');
@@ -2077,13 +1995,24 @@ export default function Start() {
                             };
                           });
                           const { error: citiesErr } = await supabase.from('trip_cities').insert(cityRows as any[]);
-                          if (citiesErr) console.error('[Start] chat multi-city trip_cities insert failed:', citiesErr);
+                          if (citiesErr) {
+                            logger.error('[Start] CRITICAL: trip_cities insert failed for multi-city trip:', citiesErr);
+                            toast.error('Failed to save city details. Please try again.');
+                            // Clean up the orphaned trip
+                            await supabase.from('trips').delete().eq('id', trip.id);
+                            return;
+                          }
+                          logger.info('[Start] trip_cities inserted successfully:', {
+                            tripId: trip.id,
+                            rowCount: cityRows.length,
+                            cities: cityRows.map(r => r.city_name),
+                          });
                         } else {
                           // Single-city: insert one trip_cities row for unified schema
                           const startMs = chatStartDate.getTime();
                           const endMs = chatEndDate.getTime();
                           const nights = Math.max(1, Math.ceil((endMs - startMs) / (1000 * 60 * 60 * 24)));
-                          await supabase.from('trip_cities').insert({
+                          const { error: singleErr } = await supabase.from('trip_cities').insert({
                             trip_id: trip.id,
                             city_order: 0,
                             city_name: dest,
@@ -2094,6 +2023,24 @@ export default function Start() {
                             days_generated: 0,
                             days_total: nights,
                           } as any);
+                          if (singleErr) {
+                            logger.error('[Start] trip_cities insert failed for single-city trip:', singleErr);
+                          }
+                        }
+
+                        // Navigation guard: verify multi-city data was persisted correctly
+                        if (isChatMultiCity) {
+                          const { data: savedTrip } = await supabase
+                            .from('trips')
+                            .select('is_multi_city, destinations')
+                            .eq('id', trip.id)
+                            .single();
+                          
+                          if (!savedTrip?.is_multi_city) {
+                            logger.error('[Start] GUARD: Multi-city trip saved but is_multi_city is falsy!', savedTrip);
+                            toast.error('Multi-city trip data mismatch — please try again.');
+                            return;
+                          }
                         }
 
                         navigate(`/trip/${trip.id}?generate=true`);

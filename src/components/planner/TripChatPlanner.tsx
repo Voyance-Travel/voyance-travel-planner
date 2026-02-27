@@ -14,6 +14,7 @@ import ReactMarkdown from 'react-markdown';
 import { supabase } from '@/integrations/supabase/client';
 import { sanitizeAIOutput } from '@/utils/textSanitizer';
 import { TripConfirmCard } from './TripConfirmCard';
+import { resolveCities, type NormalizedCity } from '@/utils/cityNormalization';
 
 export interface ChatTripCity {
   name: string;
@@ -48,54 +49,24 @@ interface TripChatPlannerProps {
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-trip-planner`;
 
 /**
- * Fallback parser: extracts multi-city routes from destination or additionalNotes
- * when the AI fails to populate the cities[] array.
+ * Normalize multi-city details using the shared utility.
+ * This ensures the same logic is used for both the confirm card display
+ * and the persistence layer in Start.tsx.
  */
-function parseMultiCityFallback(
-  destination: string,
-  additionalNotes?: string,
-  startDate?: string,
-  endDate?: string
-): ChatTripCity[] | null {
-  // Separator pattern: "→", "->", ",", "then", "&", "and"
-  const separators = /\s*(?:→|->|–>|=>|,\s*(?:then\s+)?|then\s+|&\s+|\band\b\s+)\s*/i;
-
-  // Try destination first — most reliable signal
-  const destParts = destination.split(separators).map(s => s.trim()).filter(s => s.length > 1 && s.length < 50);
-
-  let cities: string[] = [];
-  if (destParts.length > 1) {
-    cities = destParts;
-  }
-
-  // If not found in destination, scan additionalNotes for route patterns
-  if (cities.length <= 1 && additionalNotes) {
-    const routeMatch = additionalNotes.match(/Route:\s*(.+)/i);
-    const routeStr = routeMatch ? routeMatch[1] : additionalNotes;
-    const noteParts = routeStr.split(separators).map(s => s.trim().replace(/\.+$/, '')).filter(s => s.length > 1 && s.length < 50);
-    if (noteParts.length > 1) {
-      cities = noteParts;
+function normalizeMultiCity(details: TripDetails): TripDetails {
+  if (!details.startDate || !details.endDate) return details;
+  const start = new Date(details.startDate);
+  const end = new Date(details.endDate);
+  const resolved = resolveCities(details, start, end);
+  if (resolved.length > 1) {
+    details.cities = resolved;
+    // Ensure destination reflects all cities
+    const destSummary = resolved.map(c => c.name).join(', ');
+    if (!details.destination || !details.destination.includes(',')) {
+      details.destination = destSummary;
     }
   }
-
-  if (cities.length <= 1) return null;
-
-  // Distribute nights evenly, accounting for travel days
-  let totalDays = 14;
-  if (startDate && endDate) {
-    const ms = new Date(endDate).getTime() - new Date(startDate).getTime();
-    totalDays = Math.max(cities.length, Math.ceil(ms / 86400000));
-  }
-  const travelDays = cities.length - 1;
-  const availableNights = Math.max(cities.length, totalDays - travelDays);
-  const baseNights = Math.floor(availableNights / cities.length);
-  let remainder = availableNights - baseNights * cities.length;
-
-  return cities.map(name => {
-    const nights = baseNights + (remainder > 0 ? 1 : 0);
-    if (remainder > 0) remainder--;
-    return { name, nights };
-  });
+  return details;
 }
 
 export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlannerProps) {
@@ -217,19 +188,10 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
       // Handle tool call result — extract details and trigger generation
       if (isToolCall && toolCallArgs) {
         try {
-          const details = JSON.parse(toolCallArgs) as TripDetails;
+          let details = JSON.parse(toolCallArgs) as TripDetails;
 
-          // Fallback: parse multi-city from destination/additionalNotes if cities[] is empty
-          if ((!details.cities || details.cities.length <= 1) && details.destination) {
-            const parsedCities = parseMultiCityFallback(details.destination, details.additionalNotes, details.startDate, details.endDate);
-            if (parsedCities && parsedCities.length > 1) {
-              details.cities = parsedCities;
-              // Update destination to summary if it was just the first city
-              if (!details.destination.includes(',') && !details.destination.includes('&')) {
-                details.destination = parsedCities.map(c => c.name).join(', ');
-              }
-            }
-          }
+          // Normalize multi-city using shared utility (single source of truth)
+          details = normalizeMultiCity(details);
 
           // Validate required fields before triggering generation
           const hasDest = !!details.destination?.trim();
