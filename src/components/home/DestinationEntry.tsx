@@ -164,7 +164,7 @@ export default function DestinationEntry() {
       <motion.h1 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-2xl sm:text-3xl md:text-5xl lg:text-6xl font-serif font-normal mb-3 sm:mb-4 leading-tight"
+        className="text-xl sm:text-3xl md:text-5xl lg:text-6xl font-serif font-normal mb-2 sm:mb-4 leading-tight"
       >
         <span 
           className="block text-white/90"
@@ -184,7 +184,7 @@ export default function DestinationEntry() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="text-base sm:text-lg md:text-xl text-white/90 mb-6 sm:mb-10 px-2"
+        className="text-sm sm:text-lg md:text-xl text-white/90 mb-4 sm:mb-10 px-2"
         style={{ textShadow: '0 1px 10px rgba(0,0,0,0.7), 0 2px 20px rgba(0,0,0,0.5)' }}
       >
         Tell us how you travel. We'll build an experience for everyday.
