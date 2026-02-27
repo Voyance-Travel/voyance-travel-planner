@@ -2050,30 +2050,41 @@ export function EditorialItinerary({
 
       toast.info('Optimizing routes and fetching real costs...', { duration: 3000 });
       
+      // Build filtered days for optimization
+      const filteredDays = days
+        .filter((_d, idx) => {
+          const dayNumber = idx + 1;
+          return canViewPremiumContentForDay(entitlements, dayNumber);
+        })
+        .map(d => ({
+          dayNumber: d.dayNumber,
+          date: d.date,
+          activities: d.activities.map(a => ({
+            id: a.id,
+            title: a.title,
+            category: a.category || a.type,
+            startTime: a.startTime,
+            endTime: a.endTime,
+            location: a.location,
+            cost: a.cost,
+            isLocked: a.isLocked,
+            transportation: a.transportation,
+          })),
+        }));
+
+      if (filteredDays.length === 0) {
+        toast.error('No unlocked days to optimize. Unlock days first.');
+        setIsOptimizing(false);
+        return;
+      }
+
+      console.log(`[optimize] Sending ${filteredDays.length} days, destination=${destination}, tripId=${tripId}`);
+
       const { data, error } = await supabase.functions.invoke('optimize-itinerary', {
         body: {
           tripId,
           destination,
-          days: days
-            .filter((_d, idx) => {
-              const dayNumber = idx + 1;
-              return canViewPremiumContentForDay(entitlements, dayNumber);
-            })
-            .map(d => ({
-              dayNumber: d.dayNumber,
-              date: d.date,
-              activities: d.activities.map(a => ({
-                id: a.id,
-                title: a.title,
-                category: a.category || a.type,
-                startTime: a.startTime,
-                endTime: a.endTime,
-                location: a.location,
-                cost: a.cost,
-                isLocked: a.isLocked,
-                transportation: a.transportation,
-              })),
-            })),
+          days: filteredDays,
           enableRouteOptimization: true,
           enableRealTransport: true,
           enableCostLookup: true,
