@@ -27,6 +27,7 @@ export interface FlightLeg {
   gate?: string;
   baggageInfo?: string;
   boardingPassUrl?: string;
+  frequentFlyerNumber?: string;
 }
 
 export interface NormalizedFlightSelection {

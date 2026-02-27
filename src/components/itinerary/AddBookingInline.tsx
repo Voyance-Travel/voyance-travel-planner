@@ -8,6 +8,7 @@
  */
 
 import { useState } from 'react';
+import { BoardingPassUpload } from './BoardingPassUpload';
 import { useNavigate } from 'react-router-dom';
 import { Plane, Hotel, Plus, ArrowRight, Loader2, CalendarIcon, ChevronDown, ChevronUp, Upload, Sparkles } from 'lucide-react';
 import { format } from 'date-fns';
@@ -49,6 +50,8 @@ export interface ManualFlightEntry {
   terminal?: string;
   gate?: string;
   baggageInfo?: string;
+  boardingPassUrl?: string;
+  frequentFlyerNumber?: string;
 }
 
 export interface ManualHotelEntry {
@@ -231,6 +234,8 @@ export function AddFlightInline({
         terminal: leg.terminal || undefined,
         gate: leg.gate || undefined,
         baggageInfo: leg.baggageInfo || undefined,
+        boardingPassUrl: leg.boardingPassUrl || undefined,
+        frequentFlyerNumber: leg.frequentFlyerNumber || undefined,
       }));
 
       const flightSelection: Record<string, unknown> = {
@@ -557,6 +562,27 @@ export function AddFlightInline({
                             value={leg.gate || ''}
                             onChange={(e) => updateLeg(idx, { gate: e.target.value })}
                             className="text-sm"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 mt-3">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Frequent Flyer #</Label>
+                          <Input
+                            placeholder="e.g. FF123456789"
+                            value={leg.frequentFlyerNumber || ''}
+                            onChange={(e) => updateLeg(idx, { frequentFlyerNumber: e.target.value.toUpperCase() })}
+                            className="text-sm font-mono"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Boarding Pass</Label>
+                          <BoardingPassUpload
+                            tripId={tripId}
+                            legIndex={idx}
+                            currentUrl={leg.boardingPassUrl}
+                            onUploaded={(url) => updateLeg(idx, { boardingPassUrl: url })}
+                            onRemoved={() => updateLeg(idx, { boardingPassUrl: undefined })}
                           />
                         </div>
                       </div>
