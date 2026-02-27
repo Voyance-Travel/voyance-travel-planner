@@ -300,8 +300,13 @@ export default function TripDetail() {
   function hasItineraryData(t: Trip | null): boolean {
     if (!t) return false;
     const meta = t.itinerary_data as Record<string, unknown> | null;
-    const rawDays = meta?.days as unknown[] | undefined;
-    return Array.isArray(rawDays) && rawDays.length > 0;
+    if (!meta) return false;
+    // Check canonical top-level days first
+    const rawDays = meta.days as unknown[] | undefined;
+    if (Array.isArray(rawDays) && rawDays.length > 0) return true;
+    // Fallback: check nested itinerary.days (backward compat with older saves)
+    const nested = meta.itinerary as Record<string, unknown> | undefined;
+    return Array.isArray(nested?.days) && (nested.days as unknown[]).length > 0;
   }
 
   const loadLocalTrip = (id: string): Trip | null => {

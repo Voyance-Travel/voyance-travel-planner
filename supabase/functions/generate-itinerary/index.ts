@@ -3832,7 +3832,7 @@ interface DirectTripData {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function prepareContext(supabase: any, tripId: string, userId?: string, directTripData?: DirectTripData): Promise<GenerationContext | null> {
+async function prepareContext(supabase: any, tripId: string, userId?: string, directTripData?: DirectTripData, requestSmartFinishMode?: boolean): Promise<GenerationContext | null> {
   console.log(`[Stage 1] Preparing context for trip ${tripId}`);
 
   // First try to fetch from database
@@ -3910,8 +3910,10 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     celebrationDay: trip.metadata?.celebrationDay,
     // User research notes / must-do activities from Page 2 paste field
     mustDoActivities: trip.metadata?.mustDoActivities || undefined,
-    isSmartFinish: trip.metadata?.smartFinishMode === true || (trip.metadata?.smartFinishSource || '').toString().includes('manual_builder'),
-    smartFinishRequested: !!trip.metadata?.smartFinishRequestedAt,
+    // Smart Finish detection: prefer direct request body flag (avoids DB race condition),
+    // then fall back to metadata checks for backward compatibility
+    isSmartFinish: requestSmartFinishMode === true || trip.metadata?.smartFinishMode === true || (trip.metadata?.smartFinishSource || '').toString().includes('manual_builder'),
+    smartFinishRequested: requestSmartFinishMode === true || !!trip.metadata?.smartFinishRequestedAt,
     tripVibe: trip.metadata?.tripVibe || undefined,
     tripPriorities: trip.metadata?.tripPriorities || undefined,
   };
@@ -6686,7 +6688,7 @@ serve(async (req) => {
     // ACTION: generate-full - Complete 7-stage pipeline
     // ==========================================================================
     if (action === 'generate-full') {
-      const { tripId, tripData } = params;
+      const { tripId, tripData, smartFinishMode: requestSmartFinishMode } = params;
       
       // PHASE 2 FIX: Use authenticated user ID as the canonical source of truth
       // This fixes missing personalization and hardens security (prevents userId spoofing)
@@ -6724,7 +6726,7 @@ serve(async (req) => {
       // =======================================================================
       // STAGE 1.1: Prepare trip context (MUST happen before any context.* access)
       // =======================================================================
-      const context = await prepareContext(supabase, tripId, userId);
+      const context = await prepareContext(supabase, tripId, userId, undefined, requestSmartFinishMode);
       if (!context) {
         console.error(`[generate-full] prepareContext returned null for trip ${tripId}`);
         return new Response(
@@ -8520,8 +8522,8 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
           .single();
         const metadata = tripMeta?.metadata as Record<string, unknown> | null;
         const mustDoActivities = (metadata?.mustDoActivities as string) || '';
-        const isSmartFinish = metadata?.smartFinishSource === 'manual_builder';
-        const smartFinishRequested = !!metadata?.smartFinishRequestedAt;
+        const isSmartFinish = metadata?.smartFinishMode === true || (metadata?.smartFinishSource || '').toString().includes('manual_builder');
+        const smartFinishRequested = !!metadata?.smartFinishRequestedAt || isSmartFinish;
         if (mustDoActivities.trim()) {
           const forceAllMust = !!isSmartFinish || !!smartFinishRequested;
           const mustDoAnalysis = parseMustDoInput(mustDoActivities, destination, forceAllMust);

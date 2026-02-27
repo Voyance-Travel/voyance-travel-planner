@@ -133,6 +133,7 @@ async function runGenerationInBackground(
       body: JSON.stringify({
         action: "generate-full",
         tripId,
+        smartFinishMode: true, // Pass directly — eliminates DB race condition
       }),
     });
 
