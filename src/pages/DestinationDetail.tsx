@@ -38,6 +38,7 @@ import { getActivitiesByDestination as getDbActivities } from '@/services/supaba
 import { useAuth } from '@/contexts/AuthContext';
 import { formatEnumDisplay } from '@/utils/textFormatting';
 import { handleImageError } from '@/utils/imageFallback';
+import { useCachedDestinationImage } from '@/hooks/useCachedImage';
 
 export default function DestinationDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -188,6 +189,15 @@ export default function DestinationDetail() {
     return combined;
   }, [staticActivities, dbAttractions, dbActivities]);
   
+  // Cache destination hero image in our storage so we don't rely on external URLs
+  const { data: cachedHeroUrl } = useCachedDestinationImage(
+    slug,
+    destination?.imageUrl
+  );
+  
+  // Use cached storage URL if available, otherwise original
+  const heroImageUrl = cachedHeroUrl || destination?.imageUrl || '';
+
   // Loading state for database fetch
   if (!staticDestination && isLoadingDb) {
     return (
@@ -282,7 +292,7 @@ export default function DestinationDetail() {
           className="absolute inset-0"
         >
           <img 
-            src={destination.imageUrl} 
+            src={heroImageUrl} 
             alt={destination.city}
             className="w-full h-full object-cover"
             onError={handleImageError}
@@ -640,7 +650,7 @@ export default function DestinationDetail() {
         activity={selectedActivity}
         isOpen={!!selectedActivity}
         onClose={() => setSelectedActivity(null)}
-        destinationImage={destination.imageUrl}
+        destinationImage={heroImageUrl}
         destinationName={`${destination.city}, ${destination.country}`}
         onViewReviews={(activityName, category) => {
           let placeType: 'restaurant' | 'attraction' | 'hotel' | 'activity' = 'activity';
