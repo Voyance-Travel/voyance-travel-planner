@@ -18,6 +18,7 @@ import { EditorialItinerary } from '@/components/itinerary/EditorialItinerary';
 import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
 import { ItineraryAssistant } from '@/components/itinerary/ItineraryAssistant';
 import TravelIntelCard from '@/components/itinerary/TravelIntelCard';
+import { TripHealthPanel } from '@/components/trip/TripHealthPanel';
 import { useEntitlements, canViewPremiumContentForDay } from '@/hooks/useEntitlements';
 import { computeUnlockedDayCount } from '@/lib/voyanceFlowController';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
@@ -1389,6 +1390,27 @@ export default function TripDetail() {
 
               return (
                 <>
+                  <TripHealthPanel
+                    days={editorDays}
+                    totalDaysExpected={editorDays.length}
+                    hasFlights={!!trip.flight_selection}
+                    hasHotel={!!trip.hotel_selection}
+                    isMultiCity={!!(trip as any).is_multi_city || tripCities.length > 1}
+                    hasInterCityTransport={editorDays.some((d: any) => d.isTransitionDay)}
+                    className="mb-4"
+                    onAction={(action, ctx) => {
+                      if (action === 'add_flights' || action === 'add_hotel') {
+                        // Scroll to booking section
+                        const el = document.querySelector('[data-section="bookings"]');
+                        el?.scrollIntoView({ behavior: 'smooth' });
+                      } else if (action === 'generate_day' || action === 'refresh_day') {
+                        // Could trigger day-level generation
+                        toast.info(`Use the day toolbar to ${action === 'generate_day' ? 'generate' : 'refresh'} Day ${ctx?.dayNumber || ''}`);
+                      } else if (action === 'generate_missing_days' || action === 'generate_all') {
+                        setShowGenerator(true);
+                      }
+                    }}
+                  />
                   <TravelIntelCard
                     city={trip.destination}
                     country={trip.destination_country || ((destinationMeta as any)?.country as string | undefined)}
