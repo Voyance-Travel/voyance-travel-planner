@@ -784,50 +784,106 @@ export default function TripDetail() {
   const handleDateChange = useCallback(async (result: DateChangeResult) => {
     if (!trip || !tripId) return;
 
-    const { newStartDate, newEndDate, daysAdded, isShiftOnly } = result;
+    const { newStartDate, newEndDate, daysAdded, isShiftOnly, insertPosition, removedDayNumbers } = result;
     const metadata = trip.itinerary_data as Record<string, unknown> | null;
     let days = [...((metadata?.days as any[]) || [])];
+    let archivedDays: any[] | undefined;
 
     if (isShiftOnly) {
+      // SHIFT — recalculate all dates, keep activities
       const newStart = parseLocalDate(newStartDate);
       days = days.map((day: any, idx: number) => ({
         ...day,
         date: format(addDays(newStart, idx), 'yyyy-MM-dd'),
       }));
     } else if (daysAdded > 0) {
-      const lastDayNum = days.length;
+      // EXTEND — insert new blank days at the specified position
       const newStart = parseLocalDate(newStartDate);
-      days = days.map((day: any, idx: number) => ({
-        ...day,
-        date: format(addDays(newStart, idx), 'yyyy-MM-dd'),
-      }));
+      const blankDays: any[] = [];
       for (let i = 0; i < daysAdded; i++) {
-        const dayNum = lastDayNum + i + 1;
-        days.push({
-          dayNumber: dayNum,
-          date: format(addDays(newStart, lastDayNum + i), 'yyyy-MM-dd'),
+        blankDays.push({
+          dayNumber: 0, // renumbered below
+          date: '',
           theme: 'Free Day',
           description: 'Open for planning',
           activities: [],
         });
       }
+
+      if (insertPosition === 'before') {
+        days = [...blankDays, ...days];
+      } else {
+        // 'after' or default — append at end
+        days = [...days, ...blankDays];
+      }
+
+      // Renumber all days and recalculate dates
+      days = days.map((day: any, idx: number) => ({
+        ...day,
+        dayNumber: idx + 1,
+        date: format(addDays(newStart, idx), 'yyyy-MM-dd'),
+      }));
     } else if (daysAdded < 0) {
+      // SHORTEN — remove specific days or from the end
       const newStart = parseLocalDate(newStartDate);
-      const newDayCount = days.length + daysAdded;
-      days = days.slice(0, Math.max(1, newDayCount)).map((day: any, idx: number) => ({
+
+      if (removedDayNumbers && removedDayNumbers.length > 0) {
+        // User chose specific days to remove — archive them
+        const removeSet = new Set(removedDayNumbers);
+        archivedDays = days.filter((d: any) => removeSet.has(d.dayNumber));
+        days = days.filter((d: any) => !removeSet.has(d.dayNumber));
+      } else {
+        // Remove from end (default)
+        const newDayCount = days.length + daysAdded;
+        const keepCount = Math.max(1, newDayCount);
+        archivedDays = days.slice(keepCount);
+        days = days.slice(0, keepCount);
+      }
+
+      // Renumber and re-date
+      days = days.map((day: any, idx: number) => ({
         ...day,
         dayNumber: idx + 1,
         date: format(addDays(newStart, idx), 'yyyy-MM-dd'),
       }));
     }
 
-    const updatedItinerary = { ...(metadata || {}), days };
+    // Preserve archived days in metadata for undo
+    const updatedItinerary = {
+      ...(metadata || {}),
+      days,
+      ...(archivedDays && archivedDays.length > 0
+        ? { archivedDays: [...((metadata?.archivedDays as any[]) || []), ...archivedDays] }
+        : {}),
+    };
+
+    // Update hotel check-in/check-out dates if present
+    let updatedHotelSelection = trip.hotel_selection;
+    if (trip.hotel_selection) {
+      try {
+        const hotels = Array.isArray(trip.hotel_selection) ? [...trip.hotel_selection] : [trip.hotel_selection];
+        const updatedHotels = hotels.map((h: any, idx: number) => {
+          if (!h || typeof h !== 'object') return h;
+          return {
+            ...h,
+            checkIn: idx === 0 ? newStartDate : h.checkIn,
+            check_in: idx === 0 ? newStartDate : h.check_in,
+            checkOut: idx === hotels.length - 1 ? newEndDate : h.checkOut,
+            check_out: idx === hotels.length - 1 ? newEndDate : h.check_out,
+          };
+        });
+        updatedHotelSelection = Array.isArray(trip.hotel_selection) ? updatedHotels : updatedHotels[0];
+      } catch {
+        // Ignore hotel update errors — non-critical
+      }
+    }
 
     setTrip(prev => prev ? {
       ...prev,
       start_date: newStartDate,
       end_date: newEndDate,
       itinerary_data: updatedItinerary as any,
+      hotel_selection: updatedHotelSelection as any,
     } : null);
 
     try {
@@ -837,6 +893,7 @@ export default function TripDetail() {
           start_date: newStartDate,
           end_date: newEndDate,
           itinerary_data: updatedItinerary as any,
+          hotel_selection: updatedHotelSelection as any,
           updated_at: new Date().toISOString(),
         })
         .eq('id', tripId);
@@ -845,11 +902,12 @@ export default function TripDetail() {
         console.error('[TripDetail] Failed to save date change:', error);
         toast.error('Failed to save date changes');
       } else {
-        toast.success(
-          isShiftOnly ? 'Trip dates shifted' :
-          daysAdded > 0 ? `${daysAdded} day${daysAdded > 1 ? 's' : ''} added` :
-          `${Math.abs(daysAdded)} day${Math.abs(daysAdded) > 1 ? 's' : ''} removed`
-        );
+        const msg = isShiftOnly
+          ? 'Trip dates shifted — use "Refresh Day" to check for scheduling issues'
+          : daysAdded > 0
+            ? `${daysAdded} day${daysAdded > 1 ? 's' : ''} added${insertPosition === 'before' ? ' at the start' : ' at the end'}`
+            : `${Math.abs(daysAdded)} day${Math.abs(daysAdded) > 1 ? 's' : ''} removed${archivedDays ? ' (archived)' : ''}`;
+        toast.success(msg);
 
         // Sync trip_cities nights/dates
         await syncCitiesAfterDateChange(result);
@@ -1044,6 +1102,8 @@ export default function TripDetail() {
                   hasItinerary={hasItinerary}
                   flightSelection={trip.flight_selection as Record<string, unknown> | null}
                   onDateChange={handleDateChange}
+                  days={itineraryDays.map(d => ({ dayNumber: d.dayNumber, theme: d.theme, activities: d.activities }))}
+                  cities={tripCities.map(c => ({ id: c.id, city_name: c.city_name, nights: c.nights ?? undefined }))}
                 />
 
                 {/* Inline confirmation buttons (only shows for draft trips within 14 days) */}
