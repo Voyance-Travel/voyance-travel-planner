@@ -352,7 +352,7 @@ export default function About() {
           </motion.div>
 
           {/* Visual Before/After with VS indicator */}
-          <div className="grid grid-cols-2 lg:grid-cols-2 gap-3 md:gap-16 max-w-6xl mx-auto relative">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 max-w-6xl mx-auto relative">
             <ChaosMockup />
             
             {/* VS indicator between mockups */}
