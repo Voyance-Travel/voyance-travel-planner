@@ -36,6 +36,7 @@ import { useUnlockDay } from '@/hooks/useUnlockDay';
 import { useBulkUnlock } from '@/hooks/useBulkUnlock';
 import { HotelGalleryModal } from './HotelGalleryModal';
 import { DraggableActivityList } from './DraggableActivityList';
+import { TransportComparisonCard } from './TransportComparisonCard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -3218,8 +3219,10 @@ export function EditorialItinerary({
                       const isTodayDay = dayDate ? isToday(dayDate) : false;
 
                       // Resolve city name for multi-city trips
-                      let cityName: string | null = null;
-                      if (allHotels && allHotels.length > 1 && dayDate) {
+                      // Prefer day.city from parser (authoritative from backend), fall back to hotel date matching
+                      let cityName: string | null = (day as any).city || null;
+                      const isDayTransition = !!(day as any).isTransitionDay;
+                      if (!cityName && allHotels && allHotels.length > 1 && dayDate) {
                         const dateStr = `${dayDate.getFullYear()}-${String(dayDate.getMonth() + 1).padStart(2, '0')}-${String(dayDate.getDate()).padStart(2, '0')}`;
                         for (const ch of allHotels) {
                           if (ch.checkInDate && ch.checkOutDate && dateStr >= ch.checkInDate && dateStr < ch.checkOutDate) {
@@ -3283,9 +3286,10 @@ export function EditorialItinerary({
                           {/* City name for multi-city */}
                           {cityName && (
                             <span className={cn(
-                              'text-[9px] font-medium truncate max-w-[64px] mt-0.5',
+                              'text-[9px] font-medium truncate max-w-[64px] mt-0.5 flex items-center gap-0.5',
                               isSelected ? 'text-primary-foreground/70' : 'text-muted-foreground/70'
                             )}>
+                              {isDayTransition && <ArrowRight className="h-2 w-2 shrink-0" />}
                               {cityName}
                             </span>
                           )}
@@ -5981,6 +5985,21 @@ function DayCard({
               <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-6 sm:w-8 h-0.5 bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
             </div>
             <div className="min-w-0">
+              {/* City badge for multi-city trips */}
+              {day.city && (
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-primary/30 bg-primary/5 text-primary font-medium">
+                    <MapPin className="h-2.5 w-2.5 mr-0.5" />
+                    {day.city}{day.country ? `, ${day.country}` : ''}
+                  </Badge>
+                  {day.isTransitionDay && day.transitionFrom && day.transitionTo && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-accent/40 bg-accent/10 text-accent-foreground font-medium">
+                      <ArrowRight className="h-2.5 w-2.5 mr-0.5" />
+                      {day.transitionFrom} → {day.transitionTo}
+                    </Badge>
+                  )}
+                </div>
+              )}
               <h3 className="font-serif text-lg sm:text-xl font-medium text-foreground mb-0.5 sm:mb-1 truncate">
                 {day.title || day.theme || `Day ${day.dayNumber}`}
               </h3>
@@ -6075,6 +6094,27 @@ function DayCard({
             transition={{ duration: 0.3 }}
           >
             <div className="border-t border-border">
+              {/* Transition Day: Transport Comparison Card */}
+              {day.isTransitionDay && day.transitionFrom && day.transitionTo && day.transportComparison && (day.transportComparison as any[]).length > 0 && (
+                <div className="p-4 border-b border-border bg-muted/30">
+                  <TransportComparisonCard
+                    transitionFrom={day.transitionFrom}
+                    transitionTo={day.transitionTo}
+                    options={day.transportComparison as any}
+                    selectedId={day.selectedTransportId}
+                  />
+                </div>
+              )}
+              {/* Transition Day: Fallback banner when no transport comparison data */}
+              {day.isTransitionDay && day.transitionFrom && day.transitionTo && (!day.transportComparison || (day.transportComparison as any[]).length === 0) && (
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-accent/5">
+                  <Train className="h-4 w-4 text-primary shrink-0" />
+                  <p className="text-sm text-muted-foreground">
+                    <span className="font-medium text-foreground">Travel day:</span>{' '}
+                    {day.transitionFrom} → {day.transitionTo}
+                  </p>
+                </div>
+              )}
               {/* Route Map — shown when Show Routes is active */}
               <AnimatePresence>
                 {showTransportDetails && (
