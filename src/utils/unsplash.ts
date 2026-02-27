@@ -1,23 +1,29 @@
-const BROKEN_UNSPLASH_IDS = new Set([
-  'photo-1563177978-4f4a11e3f462',
-  'photo-1579606032821-4e6161c81571',
-  'photo-1513635269975-59663e0ac1ad',
-  'photo-1512635269975-5963e0ac1ad',
-]);
-
-const DEFAULT_FALLBACK_PHOTO_ID = 'photo-1488646953014-85cb44e25828';
-
+const SITE_IMAGES_BUCKET = 'site-images';
 export const PLACEHOLDER_TRAVEL_SRC = '/placeholder-travel.svg';
 
-function hasBrokenUnsplashId(url: string): boolean {
-  return Array.from(BROKEN_UNSPLASH_IDS).some((id) => url.includes(id));
+function getSiteImagesBaseUrl(): string {
+  const base = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+  if (!base) return '';
+  return `${base}/storage/v1/object/public/${SITE_IMAGES_BUCKET}`;
 }
 
-function parseSourceUnsplashDimensions(url: string): { width: number; height: number } {
-  const match = url.match(/source\.unsplash\.com\/(\d+)x(\d+)\//i);
-  const width = Number(match?.[1] || 1600);
-  const height = Number(match?.[2] || 900);
-  return { width, height };
+export function extractPhotoId(value?: string | null): string | null {
+  if (!value) return null;
+  const input = value.trim();
+  if (!input) return null;
+
+  const direct = input.match(/(photo-[a-z0-9-]+)/i)?.[1];
+  if (direct) return direct.toLowerCase();
+
+  try {
+    const parsed = new URL(input);
+    const fromPath = parsed.pathname.match(/(photo-[a-z0-9-]+)/i)?.[1];
+    if (fromPath) return fromPath.toLowerCase();
+  } catch {
+    return null;
+  }
+
+  return null;
 }
 
 export function isUnsplashUrl(url?: string | null): boolean {
@@ -25,9 +31,16 @@ export function isUnsplashUrl(url?: string | null): boolean {
   return /(?:source|images|api)\.unsplash\.com/i.test(url);
 }
 
+export function toSiteImageUrlFromPhotoId(photoId?: string | null): string {
+  const id = (photoId || '').trim().toLowerCase();
+  const base = getSiteImagesBaseUrl();
+  if (!id || !id.startsWith('photo-') || !base) return PLACEHOLDER_TRAVEL_SRC;
+  return `${base}/${id}`;
+}
+
 /**
- * Normalizes Unsplash URLs to the stable images CDN pattern with explicit params.
- * Also blocks known-broken photo IDs and deprecated source.unsplash URLs.
+ * Converts legacy Unsplash URLs (or raw photo IDs) to internal storage URLs.
+ * Falls back to placeholder when we cannot extract a valid photo id.
  */
 export function normalizeUnsplashUrl(url?: string | null): string {
   if (!url) return PLACEHOLDER_TRAVEL_SRC;
@@ -35,37 +48,20 @@ export function normalizeUnsplashUrl(url?: string | null): string {
   const value = url.trim();
   if (!value) return PLACEHOLDER_TRAVEL_SRC;
 
-  if (!isUnsplashUrl(value)) {
+  // Already an internal or local asset
+  if (
+    value.startsWith('/') ||
+    value.startsWith('data:') ||
+    value.includes('/storage/v1/object/public/site-images/')
+  ) {
     return value;
   }
 
-  if (hasBrokenUnsplashId(value)) {
-    return PLACEHOLDER_TRAVEL_SRC;
+  if (isUnsplashUrl(value) || /photo-[a-z0-9-]+/i.test(value)) {
+    const photoId = extractPhotoId(value);
+    return toSiteImageUrlFromPhotoId(photoId);
   }
 
-  if (value.includes('source.unsplash.com')) {
-    const { width, height } = parseSourceUnsplashDimensions(value);
-    return `https://images.unsplash.com/${DEFAULT_FALLBACK_PHOTO_ID}?w=${width}&h=${height}&fit=crop&auto=format&q=80`;
-  }
-
-  try {
-    const parsed = new URL(value);
-
-    if (!parsed.hostname.includes('images.unsplash.com')) {
-      return value;
-    }
-
-    const id = parsed.pathname.split('/').filter(Boolean)[0] || '';
-    if (id && BROKEN_UNSPLASH_IDS.has(id)) {
-      return PLACEHOLDER_TRAVEL_SRC;
-    }
-
-    if (!parsed.searchParams.has('auto')) parsed.searchParams.set('auto', 'format');
-    if (!parsed.searchParams.has('fit')) parsed.searchParams.set('fit', 'crop');
-    if (!parsed.searchParams.has('q')) parsed.searchParams.set('q', '80');
-
-    return parsed.toString();
-  } catch {
-    return value;
-  }
+  return value;
 }
+

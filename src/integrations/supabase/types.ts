@@ -4557,6 +4557,39 @@ export type Database = {
         }
         Relationships: []
       }
+      site_image_mappings: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          original_url: string
+          photo_id: string
+          status: string
+          storage_path: string
+          storage_url: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          original_url: string
+          photo_id: string
+          status?: string
+          storage_path: string
+          storage_url: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          original_url?: string
+          photo_id?: string
+          status?: string
+          storage_path?: string
+          storage_url?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       suggestion_votes: {
         Row: {
           created_at: string
