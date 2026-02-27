@@ -16,6 +16,29 @@ export interface TransportDetails {
   seatClass?: string;
   duration?: string;
   notes?: string;
+  // Station / airport / terminal info
+  departureStation?: string;
+  arrivalStation?: string;
+  departureAirport?: string;
+  arrivalAirport?: string;
+  departureTerminal?: string;
+  arrivalTerminal?: string;
+  // Extra details
+  seatNumber?: string;
+  costPerPerson?: number;
+  totalCost?: number;
+  currency?: string;
+  // Car rental specific
+  rentalCompany?: string;
+  carClass?: string;
+  pickupLocation?: string;
+  dropoffLocation?: string;
+  costPerDay?: number;
+  // Ferry specific
+  cabinType?: string;
+  // General
+  fromCity?: string;
+  toCity?: string;
 }
 
 export interface TripCity {
