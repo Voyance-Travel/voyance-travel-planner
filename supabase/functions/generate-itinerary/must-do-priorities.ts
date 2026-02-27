@@ -137,7 +137,7 @@ export function parseMustDoInput(
   for (const line of lines) {
     const normalized = line.toLowerCase();
 
-    const dayMatch = line.match(/^day\s+(\d+)\s*:/i);
+    const dayMatch = line.match(/^\s*day\s+(\d+)\s*:/i);
     if (dayMatch) {
       currentDay = Number(dayMatch[1]);
       continue;

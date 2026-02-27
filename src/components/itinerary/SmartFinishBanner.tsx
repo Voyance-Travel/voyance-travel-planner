@@ -108,12 +108,46 @@ export function SmartFinishBanner({
   }, [shouldShow, hasAnalyzed, enrichmentFailed, runAnalysis]);
 
   /**
+   * Check whether backend already completed Smart Finish even if client request timed out.
+   */
+  const checkSmartFinishCompletion = useCallback(async (): Promise<boolean> => {
+    const { data, error } = await supabase
+      .from('trips')
+      .select('smart_finish_purchased, metadata')
+      .eq('id', tripId)
+      .maybeSingle();
+
+    if (error || !data) return false;
+
+    const metadata = (data.metadata ?? {}) as Record<string, unknown>;
+    return Boolean(
+      data.smart_finish_purchased &&
+      (metadata.smartFinishCompleted === true || typeof metadata.smartFinishCompletedAt === 'string')
+    );
+  }, [tripId]);
+
+  const waitForSmartFinishCompletion = useCallback(async (source: string): Promise<boolean> => {
+    const CHECKS = 8;
+    const INTERVAL_MS = 3000;
+
+    for (let i = 1; i <= CHECKS; i++) {
+      await new Promise((resolve) => setTimeout(resolve, INTERVAL_MS));
+      const completed = await checkSmartFinishCompletion();
+      if (completed) {
+        console.log(`[SmartFinish ${source}] Backend completed after client-side uncertainty (check ${i}/${CHECKS})`);
+        return true;
+      }
+    }
+
+    return false;
+  }, [checkSmartFinishCompletion]);
+
+  /**
    * Guaranteed-refund wrapper for enrich-manual-trip calls.
-   * Uses AbortController timeout + catch-all + finally to ensure
-   * credits are ALWAYS refunded on ANY failure mode.
+   * Prevents false negatives when the backend finishes near timeout.
    */
   const callEnrichWithGuaranteedRefund = async (source: string): Promise<{ success: boolean; data?: any }> => {
-    const ENRICHMENT_TIMEOUT_MS = 90_000; // 90s — edge function has ~60s limit
+    const ENRICHMENT_TIMEOUT_MS = 240_000; // 4m safety window for long itinerary generation
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), ENRICHMENT_TIMEOUT_MS);
     let enrichmentSucceeded = false;
@@ -127,6 +161,16 @@ export function SmartFinishBanner({
 
       if (error || !data?.success) {
         const errorMsg = data?.error || error?.message || 'Unknown error';
+        const isAmbiguousNetworkFailure = /Failed to send a request to the Edge Function|network|fetch|timeout/i.test(errorMsg);
+
+        if (isAmbiguousNetworkFailure) {
+          const completedAfterFailure = await waitForSmartFinishCompletion(source);
+          if (completedAfterFailure) {
+            enrichmentSucceeded = true;
+            return { success: true, data: { success: true, recovered: true } };
+          }
+        }
+
         console.error(`[SmartFinish ${source}] Enrichment failed:`, errorMsg);
         return { success: false };
       }
@@ -136,12 +180,18 @@ export function SmartFinishBanner({
     } catch (err: unknown) {
       // Catch ALL error types: Error, TypeError, DOMException (AbortController), etc.
       const isTimeout = err instanceof DOMException && err.name === 'AbortError';
+      const completedAfterException = await waitForSmartFinishCompletion(source);
+      if (completedAfterException) {
+        enrichmentSucceeded = true;
+        return { success: true, data: { success: true, recovered: true } };
+      }
+
       console.error(`[SmartFinish ${source}] ${isTimeout ? 'TIMEOUT' : 'Exception'}:`, err);
       return { success: false };
     } finally {
       clearTimeout(timeoutId);
 
-      // GUARANTEED REFUND: if enrichment didn't explicitly succeed, refund
+      // GUARANTEED REFUND: only if not successful and not completed by backend
       if (!enrichmentSucceeded) {
         console.log(`[SmartFinish ${source}] Enrichment not confirmed successful — issuing guaranteed refund`);
         try {

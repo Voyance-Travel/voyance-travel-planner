@@ -311,8 +311,10 @@ interface GenerationContext {
   // Phase 3: Premium features
   preBookedCommitments?: PreBookedCommitment[];
   mustDoActivities?: string;
-  /** Whether this generation is triggered by Smart Finish (user-pasted research must be honored) */
+  /** Whether this generation is triggered by Smart Finish enrichment mode */
   isSmartFinish?: boolean;
+  /** Smart Finish was requested for this trip (anchors must still be preserved) */
+  smartFinishRequested?: boolean;
   /** Trip vibe/intent extracted from pasted text (e.g. "foodie adventure") */
   tripVibe?: string;
   /** Specific trip priorities extracted from pasted text */
@@ -3871,7 +3873,8 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     celebrationDay: trip.metadata?.celebrationDay,
     // User research notes / must-do activities from Page 2 paste field
     mustDoActivities: trip.metadata?.mustDoActivities || undefined,
-    isSmartFinish: trip.metadata?.smartFinishSource === 'manual_builder' || trip.creation_source === 'smart_finish',
+    isSmartFinish: trip.metadata?.smartFinishSource === 'manual_builder',
+    smartFinishRequested: !!trip.metadata?.smartFinishRequestedAt,
     tripVibe: trip.metadata?.tripVibe || undefined,
     tripPriorities: trip.metadata?.tripPriorities || undefined,
   };
@@ -7562,8 +7565,8 @@ ${'='.repeat(60)}
       // =======================================================================
       let userResearchPrompt = "";
       if (context.mustDoActivities && context.mustDoActivities.trim()) {
-        // For Smart Finish trips, force all user-researched items to 'must' priority
-        const forceAllMust = !!context.isSmartFinish;
+        // Keep all user itinerary anchors as must-have when Smart Finish was requested.
+        const forceAllMust = !!context.isSmartFinish || !!context.smartFinishRequested;
         const mustDoAnalysis = parseMustDoInput(context.mustDoActivities, context.destination, forceAllMust);
         if (mustDoAnalysis.length > 0) {
           const scheduled = scheduleMustDos(mustDoAnalysis, context.totalDays);
@@ -8386,9 +8389,10 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
           .single();
         const metadata = tripMeta?.metadata as Record<string, unknown> | null;
         const mustDoActivities = (metadata?.mustDoActivities as string) || '';
-        const isSmartFinish = metadata?.smartFinishSource === 'manual_builder' || tripMeta?.creation_source === 'smart_finish';
+        const isSmartFinish = metadata?.smartFinishSource === 'manual_builder';
+        const smartFinishRequested = !!metadata?.smartFinishRequestedAt;
         if (mustDoActivities.trim()) {
-          const forceAllMust = !!isSmartFinish;
+          const forceAllMust = !!isSmartFinish || !!smartFinishRequested;
           const mustDoAnalysis = parseMustDoInput(mustDoActivities, destination, forceAllMust);
           if (mustDoAnalysis.length > 0) {
             const scheduled = scheduleMustDos(mustDoAnalysis, totalDays);

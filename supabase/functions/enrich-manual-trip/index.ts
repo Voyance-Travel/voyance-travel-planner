@@ -233,7 +233,8 @@ serve(async (req) => {
     const updatedMetadata = {
       ...existingMetadata,
       mustDoActivities: researchContext,
-      smartFinishSource: "manual_builder",
+      // Use standard generation prompt with seeded user itinerary context.
+      smartFinishSource: "manual_builder_standard",
       smartFinishRequestedAt: new Date().toISOString(),
       accommodationNotes: itinerary.metadata?.accommodationNotes || itinerary.accommodationNotes || existingMetadata.accommodationNotes || [],
       practicalTips: itinerary.metadata?.practicalTips || itinerary.practicalTips || existingMetadata.practicalTips || [],
@@ -247,7 +248,6 @@ serve(async (req) => {
         metadata: updatedMetadata,
         smart_finish_purchased: true,
         smart_finish_purchased_at: new Date().toISOString(),
-        creation_source: "smart_finish",
       })
       .eq("id", tripId);
 
