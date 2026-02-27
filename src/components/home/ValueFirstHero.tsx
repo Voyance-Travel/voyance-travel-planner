@@ -8,7 +8,7 @@ interface ValueFirstHeroProps {
 export default function ValueFirstHero({ onScrollToDemo }: ValueFirstHeroProps) {
 
   return (
-    <section className="relative min-h-[55vh] md:min-h-screen flex flex-col items-center justify-center overflow-hidden">
+    <section className="relative min-h-[85vh] md:min-h-screen flex flex-col items-center justify-center overflow-hidden">
       {/* Full-screen Background Image - LCP optimized */}
       <div className="absolute inset-0 bg-[#2c3e50]">
         <img
