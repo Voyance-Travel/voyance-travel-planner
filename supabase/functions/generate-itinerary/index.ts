@@ -9409,6 +9409,23 @@ ARCHETYPE: ${primaryArchetype}
 ${isFullDay ? `DAY TYPE: Full exploration day — generate a COMPLETE hour-by-hour plan with 3 meals, transit between every stop, evening activity, and next-morning preview.` : `SIGHTSEEING ACTIVITY COUNT: ${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} (adjust for arrival/departure constraints)`}
 ${preferences?.pace ? `Pace: ${preferences.pace}` : ''}
 ${preferences?.dayFocus ? `Day focus: ${preferences.dayFocus}` : ''}
+${(() => {
+  const focus = (preferences?.dayFocus || preferences?.rewriteInstructions || '').toLowerCase();
+  const isBudgetDown = /cheap|budget|afford|save money|less expensive|lower cost|reduce.*cost|cut.*spending|frugal/i.test(focus);
+  if (isBudgetDown && currentActivities?.length) {
+    const currentCosts = currentActivities.map((a: any) => a.cost?.amount ?? a.estimatedCost ?? 0);
+    const maxCurrent = Math.max(...currentCosts);
+    const avgCurrent = currentCosts.reduce((s: number, c: number) => s + c, 0) / (currentCosts.length || 1);
+    return `
+🚨 BUDGET-DOWN REWRITE — HARD CONSTRAINT:
+The user explicitly asked for CHEAPER options. Every replacement activity MUST cost LESS than what it replaces.
+Current day average cost per activity: ~$${Math.round(avgCurrent)}. Current max: ~$${Math.round(maxCurrent)}.
+Your replacements should average BELOW $${Math.round(avgCurrent * 0.5)} per activity.
+Prefer FREE alternatives: public parks, free museums, self-guided walks, street food, markets, viewpoints.
+NEVER suggest a more expensive alternative when the user asks for cheaper. This is non-negotiable.`;
+  }
+  return '';
+})()}
 ${preferenceContext}
 ${tripIntentsContext}
 ${mustDoPrompt}
