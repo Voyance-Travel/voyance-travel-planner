@@ -223,9 +223,9 @@ export default function Pricing() {
             <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-2">Your First Trip, On Us</h2>
             <p className="text-sm text-muted-foreground max-w-lg mx-auto">Experience everything Voyance can do. No credit card, no credits needed.</p>
           </motion.div>
-          <div className="grid sm:grid-cols-2 gap-3 max-w-3xl mx-auto">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 max-w-3xl mx-auto">
             {firstTripFeatures.map((feat, i) => (
-              <motion.div key={i} initial={{ opacity: 0, y: 8 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.04 }} className="flex items-start gap-3 bg-card border border-border rounded-xl p-4">
+              <motion.div key={i} initial={{ opacity: 0, y: 8 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.04 }} className="flex items-start gap-2 sm:gap-3 bg-card border border-border rounded-lg sm:rounded-xl p-2.5 sm:p-4">
                 <div className="p-2 rounded-lg bg-primary/10 shrink-0"><feat.icon className="h-4 w-4 text-primary" /></div>
                 <div>
                   <p className="font-medium text-foreground text-sm">{feat.text}</p>
@@ -244,9 +244,9 @@ export default function Pricing() {
             <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-2">Every Trip After</h2>
             <p className="text-sm text-muted-foreground max-w-lg mx-auto">Future trips start with a preview. Unlock full details with credits.</p>
           </motion.div>
-          <div className="grid sm:grid-cols-3 gap-3 max-w-3xl mx-auto">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 max-w-3xl mx-auto">
             {afterFirstTripFeatures.map((feat, i) => (
-              <motion.div key={i} initial={{ opacity: 0, y: 8 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.04 }} className="flex items-start gap-3 bg-card border border-border rounded-xl p-4">
+              <motion.div key={i} initial={{ opacity: 0, y: 8 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.04 }} className="flex flex-col sm:flex-row items-start gap-1.5 sm:gap-3 bg-card border border-border rounded-lg sm:rounded-xl p-2.5 sm:p-4">
                 <div className="p-2 rounded-lg bg-muted shrink-0"><feat.icon className="h-4 w-4 text-muted-foreground" /></div>
                 <div>
                   <p className="font-medium text-foreground text-sm">{feat.text}</p>
@@ -265,9 +265,9 @@ export default function Pricing() {
             <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-2">What Credits Unlock</h2>
             <p className="text-sm text-muted-foreground max-w-lg mx-auto">Unlock your full itinerary: every day, every detail.</p>
           </motion.div>
-          <div className="grid sm:grid-cols-3 gap-4 max-w-4xl mx-auto">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4 max-w-4xl mx-auto">
             {unlockGroups.map((group, gi) => (
-              <motion.div key={gi} initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: gi * 0.06 }} className="bg-card border border-primary/20 rounded-xl p-5">
+              <motion.div key={gi} initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: gi * 0.06 }} className={cn("bg-card border border-primary/20 rounded-lg sm:rounded-xl p-3 sm:p-5", gi === 2 && "col-span-2 sm:col-span-1")}>
                 <h3 className="font-semibold text-foreground text-sm mb-4">{group.title}</h3>
                 <ul className="space-y-2.5">
                   {group.items.map((item, ii) => (
@@ -320,7 +320,7 @@ export default function Pricing() {
               <p className="text-sm text-muted-foreground">Fund your account. Build freely. Get rewarded.</p>
             </div>
 
-            <div className="grid sm:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
               {VOYANCE_CLUB_PACKS.map((pack, index) => {
                 const isFeatured = pack.featured;
                 const isAdventurer = pack.tier === 'adventurer';
@@ -393,9 +393,9 @@ export default function Pricing() {
             <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-2">Everything Included</h2>
             <p className="text-sm text-muted-foreground max-w-lg mx-auto">No tiers. No feature gates. Credits unlock the full experience.</p>
           </motion.div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-6">
             {everythingIncluded.map((group, gi) => (
-              <motion.div key={gi} initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: gi * 0.06 }} className="bg-card border border-border rounded-xl p-5">
+              <motion.div key={gi} initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: gi * 0.06 }} className="bg-card border border-border rounded-lg sm:rounded-xl p-3 sm:p-5">
                 <h3 className="font-semibold text-foreground text-sm mb-4">{group.title}</h3>
                 <ul className="space-y-2.5">
                   {group.items.map((item, ii) => (
