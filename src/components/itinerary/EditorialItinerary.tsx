@@ -110,6 +110,7 @@ import { DayRouteMap } from './DayRouteMap';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { useActionCap } from '@/hooks/useActionCap';
 import { AddActivityModal } from './AddActivityModal';
+import { EditActivityModal } from './EditActivityModal';
 import { ImportActivitiesModal, type ImportMode } from './ImportActivitiesModal';
 import { SmartFinishBanner } from './SmartFinishBanner';
 import { OptionGroupBlock } from './OptionGroupBlock';
@@ -3973,6 +3974,19 @@ export function EditorialItinerary({
         destination={destination}
       />
 
+      {/* Edit Activity Modal */}
+      <EditActivityModal
+        isOpen={!!editActivityModal}
+        activity={editActivityModal?.activity || null}
+        onClose={() => setEditActivityModal(null)}
+        onSave={(updates) => {
+          if (editActivityModal) {
+            handleUpdateActivity(editActivityModal.dayIndex, editActivityModal.activityIndex, updates);
+          }
+        }}
+        currency={tripCurrency}
+      />
+
       {/* Import Activities Modal */}
       <ImportActivitiesModal
         isOpen={!!importModal}
@@ -5951,6 +5965,18 @@ function DayCard({
                         hasTransitBadge={hasTransitBadgeVisible}
                       />
                     )}
+                    {/* Inline Add Activity button between activities */}
+                    {isEditable && !isLastActivity && (
+                      <div className="flex justify-center py-1 opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => onAddActivity()}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors px-3 py-1 rounded-full border border-dashed border-border hover:border-primary/40 bg-background"
+                        >
+                          <Plus className="h-3 w-3" />
+                          Add activity
+                        </button>
+                      </div>
+                    )}
                   </div>
                   );
                 }}
@@ -6737,6 +6763,13 @@ function ActivityRow({
                       </>
                       )}
                       <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => onEdit(dayIndex, activityIndex, activity)}
+                        className="cursor-pointer gap-2"
+                      >
+                        <Edit3 className="h-4 w-4" />
+                        Edit Details
+                      </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => onRemove(dayIndex, activity.id)}
                         className="cursor-pointer gap-2 text-destructive focus:text-destructive"
