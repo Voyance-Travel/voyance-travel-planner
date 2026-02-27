@@ -36,11 +36,13 @@ import {
   type ItineraryDay,
   type DiffEntry,
 } from '@/services/itineraryActionExecutor';
+import { syncItineraryToBudget } from '@/services/tripBudgetService';
 import { useSpendCredits } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { useActionCap } from '@/hooks/useActionCap';
 import { CREDIT_COSTS } from '@/config/pricing';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface ItineraryAssistantProps {
   tripId: string;
@@ -74,6 +76,7 @@ export function ItineraryAssistant({
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Credit system hooks
+  const queryClient = useQueryClient();
   const { data: creditData } = useCredits();
   const { isPaid } = useEntitlements();
   const spendCredits = useSpendCredits();
@@ -346,6 +349,25 @@ export function ItineraryAssistant({
           
           // Notify parent to update its state
           onItineraryUpdate?.(sortedDays);
+
+          // Explicitly sync budget after chatbot-driven changes
+          const daysForSync = sortedDays.map(day => ({
+            dayNumber: day.dayNumber,
+            date: day.date || '',
+            activities: day.activities.map(act => ({
+              id: act.id,
+              title: act.title || act.name || 'Activity',
+              category: String(act.category || act.type || 'activities'),
+              cost: act.cost ? (typeof act.cost === 'number' ? { amount: act.cost, currency: 'USD' } : { amount: act.cost.amount ?? 0, currency: act.cost.currency ?? 'USD' }) : undefined,
+            })),
+          }));
+          syncItineraryToBudget(tripId, daysForSync)
+            .then(() => {
+              queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
+              queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
+              queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
+            })
+            .catch(err => console.error('[ItineraryAssistant] Budget sync failed:', err));
         }
 
         toast.success('Action applied', {
