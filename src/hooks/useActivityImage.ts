@@ -11,31 +11,32 @@ const imageCache = new Map<string, { url: string; source: string }>();
 // Pending requests to dedupe concurrent fetches
 const pendingRequests = new Map<string, Promise<{ url: string; source: string } | null>>();
 
-// Category-based static fallbacks (used while loading or if all sources fail)
-const CATEGORY_FALLBACKS: Record<string, string> = {
-  breakfast: 'https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=400&h=300&fit=crop',
-  brunch: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=400&h=300&fit=crop',
-  lunch: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop',
-  dinner: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400&h=300&fit=crop',
-  dining: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop',
-  cafe: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400&h=300&fit=crop',
-  coffee: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=400&h=300&fit=crop',
-  museum: 'https://images.unsplash.com/photo-1554907984-15263bfd63bd?w=400&h=300&fit=crop',
-  cultural: 'https://images.unsplash.com/photo-1569974498991-d3c12a504f95?w=400&h=300&fit=crop',
-  sightseeing: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=400&h=300&fit=crop',
-  tour: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=400&h=300&fit=crop',
-  activity: 'https://images.unsplash.com/photo-1530789253388-582c481c54b0?w=400&h=300&fit=crop',
-  adventure: 'https://images.unsplash.com/photo-1551632811-561732d1e306?w=400&h=300&fit=crop',
-  spa: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=400&h=300&fit=crop', // Face mask spa treatment
-  relaxation: 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=400&h=300&fit=crop', // Massage/spa
-  recharge: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=400&h=300&fit=crop', // Face mask
-  beach: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&h=300&fit=crop',
-  shopping: 'https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?w=400&h=300&fit=crop',
-  entertainment: 'https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=400&h=300&fit=crop',
-  nightlife: 'https://images.unsplash.com/photo-1566417713940-fe7c737a9ef2?w=400&h=300&fit=crop',
-  transport: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=400&h=300&fit=crop',
-  accommodation: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400&h=300&fit=crop',
-};
+function generateCategoryGradient(category: string): string {
+  const seed = (category || 'activity').toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+  }
+
+  const hue1 = Math.abs(hash % 360);
+  const hue2 = (hue1 + 36) % 360;
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300">
+    <defs>
+      <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:hsl(${hue1},60%,42%)"/>
+        <stop offset="100%" style="stop-color:hsl(${hue2},58%,32%)"/>
+      </linearGradient>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#g)"/>
+  </svg>`;
+
+  return `data:image/svg+xml;base64,${btoa(svg)}`;
+}
+
+function getCategoryFallback(category?: string): string {
+  return generateCategoryGradient(category || 'activity');
+}
 
 function getCacheKey(title: string, destination?: string, cacheId?: string): string {
   const normalized = `${cacheId || title}-${destination || 'unknown'}`
@@ -43,11 +44,6 @@ function getCacheKey(title: string, destination?: string, cacheId?: string): str
     .replace(/[^a-z0-9]/g, '-')
     .slice(0, 80);
   return normalized;
-}
-
-function getCategoryFallback(category?: string): string {
-  const cat = (category || 'activity').toLowerCase();
-  return CATEGORY_FALLBACKS[cat] || CATEGORY_FALLBACKS.activity;
 }
 
 async function fetchImageFromBackend(
