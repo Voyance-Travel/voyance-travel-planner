@@ -23,6 +23,7 @@ import parisMid from '@/assets/destinations/paris-mid.jpg';
 // Lisbon: local curated images
 import lisbonHero from '@/assets/destinations/lisbon-hero.jpg';
 import lisbonMid from '@/assets/destinations/lisbon-mid.jpg';
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 
 // Curated high-quality images for popular destinations
 const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {

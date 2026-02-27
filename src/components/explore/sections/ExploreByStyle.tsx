@@ -2,43 +2,44 @@ import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import { useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 
 const styles = [
-  { 
-    id: 'luxury', 
-    label: 'Luxury', 
+  {
+    id: 'luxury',
+    label: 'Luxury',
     description: 'Five-star experiences',
-    image: 'https://images.unsplash.com/photo-1582719508461-905c673771fd?w=400'
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1582719508461-905c673771fd?w=400')
   },
-  { 
-    id: 'adventure', 
-    label: 'Adventure', 
+  {
+    id: 'adventure',
+    label: 'Adventure',
     description: 'Off the beaten path',
-    image: 'https://images.unsplash.com/photo-1533130061792-64b345e4a833?w=400'
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1533130061792-64b345e4a833?w=400')
   },
-  { 
-    id: 'culture', 
-    label: 'Culture', 
+  {
+    id: 'culture',
+    label: 'Culture',
     description: 'History & heritage',
-    image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400'
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400')
   },
-  { 
-    id: 'wellness', 
-    label: 'Wellness', 
+  {
+    id: 'wellness',
+    label: 'Wellness',
     description: 'Rest & renewal',
-    image: 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=400'
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=400')
   },
-  { 
-    id: 'culinary', 
-    label: 'Culinary', 
+  {
+    id: 'culinary',
+    label: 'Culinary',
     description: 'Taste the world',
-    image: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400'
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400')
   },
-  { 
-    id: 'romantic', 
-    label: 'Romantic', 
+  {
+    id: 'romantic',
+    label: 'Romantic',
     description: 'Escapes for two',
-    image: 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=400'
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=400')
   },
 ];
 
