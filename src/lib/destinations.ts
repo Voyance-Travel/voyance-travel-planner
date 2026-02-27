@@ -2,11 +2,22 @@ import nolaHero1 from '@/assets/destinations/new-orleans-1.jpg';
 import nolaHero2 from '@/assets/destinations/new-orleans-2.jpg';
 import nolaHero3 from '@/assets/destinations/new-orleans-3.jpg';
 import { DESTINATION_STORAGE_IMAGES } from '@/data/destinationStorageImages';
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 
-// Helper to get storage images with Unsplash fallback
+// Helper to get storage images with normalized fallbacks
 function si(slug: string, fallbackUrl: string, fallbackImages: string[]): { imageUrl: string; images: string[] } {
   const stored = DESTINATION_STORAGE_IMAGES[slug];
-  return stored || { imageUrl: fallbackUrl, images: fallbackImages };
+  if (stored) {
+    return {
+      imageUrl: normalizeUnsplashUrl(stored.imageUrl),
+      images: stored.images.map((image) => normalizeUnsplashUrl(image)),
+    };
+  }
+
+  return {
+    imageUrl: normalizeUnsplashUrl(fallbackUrl),
+    images: fallbackImages.map((image) => normalizeUnsplashUrl(image)),
+  };
 }
 
 export interface Destination {

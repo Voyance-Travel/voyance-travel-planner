@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { guides, getGuideBySlug, getRelatedGuides } from '@/data/guides';
 import { toast } from 'sonner';
 import ShareGuideSheet from '@/components/sharing/ShareGuideSheet';
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 // Parse markdown-style content into structured JSX
 function parseContent(content: string) {
   // Remove the main title (# Title) as it's displayed in the hero
