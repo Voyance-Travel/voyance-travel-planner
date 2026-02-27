@@ -146,16 +146,20 @@ export function ItineraryAssistant({
       return;
     }
 
-    // Charge credits for AI messages (server handles free cap logic)
-    let messageSpendResult: any = null;
+    // Pre-flight credit check: verify the user CAN pay before calling the API.
+    // The actual charge happens AFTER a successful response to prevent credit drain on failures.
     try {
-      messageSpendResult = await spendCredits.mutateAsync({
-        action: 'AI_MESSAGE',
-        tripId,
-        metadata: { source: 'itinerary_assistant' },
-      });
+      // Dry-run: useSpendCredits validates balance & free caps server-side.
+      // We do a lightweight check here; the real deduction is below.
+      if (!aiMessageCap.isFree && totalCredits < CREDIT_COSTS.AI_MESSAGE) {
+        spendCredits.mutateAsync({
+          action: 'AI_MESSAGE',
+          tripId,
+          metadata: { source: 'itinerary_assistant_preflight' },
+        }).catch(() => {}); // triggers OutOfCreditsModal via hook
+        return;
+      }
     } catch {
-      // Credit deduction failed — useSpendCredits shows error toast / OutOfCreditsModal
       return;
     }
 
@@ -183,6 +187,22 @@ export function ItineraryAssistant({
       apiMessages.push({ role: 'user', content: userMessage.content });
 
       const response = await sendChatMessage(apiMessages, itineraryContext, conversationId);
+
+      // ✅ Charge credits AFTER successful AI response — prevents credit drain on API failures
+      try {
+        const messageSpendResult = await spendCredits.mutateAsync({
+          action: 'AI_MESSAGE',
+          tripId,
+          metadata: { source: 'itinerary_assistant' },
+        });
+        if (!messageSpendResult.success) {
+          console.warn('[ItineraryAssistant] Post-response credit charge failed (non-fatal):', messageSpendResult);
+        }
+      } catch (creditErr) {
+        // The AI already responded — log but don't block the user from seeing it.
+        // This is a rare edge case (balance changed between pre-check and charge).
+        console.error('[ItineraryAssistant] Post-response credit charge error:', creditErr);
+      }
 
       // Create assistant message with actions
       const assistantMessage: ChatMessage = {
@@ -227,6 +247,7 @@ export function ItineraryAssistant({
 
     } catch (error) {
       console.error('[ItineraryAssistant] Error:', error);
+      // No credits were charged (charge-on-success pattern), so no refund needed.
       
       const errorMessage = error instanceof Error ? error.message : 'Something went wrong';
       
