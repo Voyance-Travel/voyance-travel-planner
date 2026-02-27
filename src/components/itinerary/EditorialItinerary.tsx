@@ -1401,7 +1401,7 @@ export function EditorialItinerary({
     }
   }, [days, isPaid, totalCredits, spendCredits, tripId, destination, transportCap]);
   // Get trip permission for current user
-  const { data: tripPermission } = useTripPermission(tripId);
+  const { data: tripPermission, isLoading: permissionLoading } = useTripPermission(tripId);
   const { data: collaborators = [] } = useTripCollaborators(tripId);
   const { data: tripMembers = [] } = useTripMembers(tripId);
   const { guestEditMode, isPropose, setGuestEditMode, isUpdating: isUpdatingEditMode } = useGuestEditMode(tripId);
@@ -1415,9 +1415,13 @@ export function EditorialItinerary({
   // Determine effective editability based on permission + guest edit mode
   // Owner always can edit. Guests can edit freely only if mode is 'free_edit' AND they have edit permission.
   // In 'propose_approve' mode, guests can only propose changes (not directly edit).
+  // IMPORTANT: While permission is loading, default to editable (owner assumption) to avoid blocking UI.
+  const permissionResolved = !permissionLoading && !!tripPermission;
   const guestCanDirectEdit = tripPermission?.canEdit && guestEditMode === 'free_edit';
-  const effectiveIsEditable = !effectiveIsPreview && isEditable && (tripPermission?.isOwner || guestCanDirectEdit);
-  const guestMustPropose = !effectiveIsPreview && isEditable && !tripPermission?.isOwner && tripPermission?.canEdit && isPropose;
+  const effectiveIsEditable = !effectiveIsPreview && isEditable && (
+    !permissionResolved || tripPermission?.isOwner || guestCanDirectEdit
+  );
+  const guestMustPropose = !effectiveIsPreview && isEditable && permissionResolved && !tripPermission?.isOwner && tripPermission?.canEdit && isPropose;
 
   // Build collaborator color map for activity attribution (only for group trips)
   const collaboratorColorMap = useMemo(() => {
