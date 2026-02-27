@@ -114,7 +114,7 @@ import { EditActivityModal } from './EditActivityModal';
 import { DiscoverDrawer } from './DiscoverDrawer';
 import { ImportActivitiesModal, type ImportMode } from './ImportActivitiesModal';
 import { SmartFinishBanner } from './SmartFinishBanner';
-import { OptionGroupBlock } from './OptionGroupBlock';
+
 import { ParsedTripNotesSection } from './ParsedTripNotesSection';
 // =============================================================================
 // TYPES
@@ -5824,6 +5824,29 @@ function DayCard({
   
   // Normalize destination for image lookups
   const cleanDestination = normalizeDestination(destination);
+
+  const getSelectedOptionForGroup = (groupKey: string): EditorialActivity | null => {
+    const groupOptions = day.activities.filter(a => a.optionGroup === groupKey);
+    const selectedId = optionSelections[groupKey] || groupOptions[0]?.id;
+    return groupOptions.find(a => a.id === selectedId) || groupOptions[0] || null;
+  };
+
+  const findNextVisibleActivity = (startIndex: number): EditorialActivity | null => {
+    for (let i = startIndex + 1; i < day.activities.length; i += 1) {
+      const candidate = day.activities[i];
+      if (!(candidate.isOption && candidate.optionGroup)) return candidate;
+      const selectedInGroup = getSelectedOptionForGroup(candidate.optionGroup);
+      if (selectedInGroup?.id === candidate.id) return candidate;
+    }
+    return null;
+  };
+
+  const visibleActivitiesCount = day.activities.reduce((count, candidate) => {
+    if (!(candidate.isOption && candidate.optionGroup)) return count + 1;
+    const selectedInGroup = getSelectedOptionForGroup(candidate.optionGroup);
+    return selectedInGroup?.id === candidate.id ? count + 1 : count;
+  }, 0);
+
   // Library modal state removed - agent features disabled
 
   return (
@@ -5961,60 +5984,36 @@ function DayCard({
                 highlightedIds={highlightedActivityIds}
                 disabled={!isEditable}
                 renderItem={(activity, activityIndex, isDragging, isHighlighted) => {
-                  // Option group handling: render OptionGroupBlock for first activity in a group,
-                  // skip subsequent activities in the same group
+                  // Collapse option groups to one curated activity in default view (no radio choices)
+                  let activityToRender = activity;
+                  let activityRenderIndex = activityIndex;
+                  let nextLookupStartIndex = activityIndex;
+
                   if (activity.isOption && activity.optionGroup) {
-                    // Check if this is the first activity in the group
-                    const firstInGroup = day.activities.findIndex(
-                      a => a.optionGroup === activity.optionGroup
-                    );
+                    const groupKey = activity.optionGroup;
+                    const firstInGroup = day.activities.findIndex(a => a.optionGroup === groupKey);
                     if (firstInGroup !== activityIndex) {
-                      // Not the first — already rendered by the group block
                       return null;
                     }
-                    // Gather all options in this group
-                    const groupOptions = day.activities.filter(
-                      a => a.optionGroup === activity.optionGroup
-                    );
-                    return (
-                      <div className="px-6 py-3">
-                        <OptionGroupBlock
-                          options={groupOptions}
-                          selectedId={optionSelections[activity.optionGroup!] || groupOptions[0]?.id}
-                          currency={tripCurrency}
-                          onSelect={(selectedActivityId) => {
-                            // Persist selection via parent callback (triggers auto-save → DB)
-                            const groupKey = activity.optionGroup!;
-                            onOptionSelect?.(groupKey, selectedActivityId);
 
-                            // Reorder: put selected first in the group
-                            const reordered = [...day.activities];
-                            const groupIds = new Set(groupOptions.map(o => o.id));
-                            const nonGroup = reordered.filter(a => !groupIds.has(a.id));
-                            const selected = groupOptions.find(o => o.id === selectedActivityId);
-                            const rest = groupOptions.filter(o => o.id !== selectedActivityId);
-                            // Insert group at original position
-                            const insertAt = reordered.findIndex(a => groupIds.has(a.id));
-                            nonGroup.splice(insertAt, 0, ...(selected ? [selected, ...rest] : groupOptions));
-                            onActivityReorder?.(nonGroup);
-                          }}
-                        />
-                      </div>
-                    );
+                    const selectedInGroup = getSelectedOptionForGroup(groupKey);
+                    if (!selectedInGroup) return null;
+
+                    activityToRender = selectedInGroup;
+                    activityRenderIndex = day.activities.findIndex(a => a.id === selectedInGroup.id);
+                    nextLookupStartIndex = activityRenderIndex;
                   }
 
-                  const nextActivity = activityIndex < day.activities.length - 1 
-                    ? day.activities[activityIndex + 1] 
-                    : null;
-                  const isLastActivity = activityIndex === day.activities.length - 1;
-                  const hasTransitBadgeVisible = showTransportDetails && !!activity.transportation && !isLastActivity;
+                  const nextActivity = findNextVisibleActivity(nextLookupStartIndex);
+                  const isLastActivity = !nextActivity;
+                  const hasTransitBadgeVisible = showTransportDetails && !!activityToRender.transportation && !isLastActivity;
                   
                   // Compute gap to next activity
                   const gapMinutes = nextActivity 
                     ? computeGapMinutes(
-                        activity.endTime,
-                        activity.startTime || activity.time,
-                        activity.duration,
+                        activityToRender.endTime,
+                        activityToRender.startTime || activityToRender.time,
+                        activityToRender.duration,
                         nextActivity.startTime || nextActivity.time,
                       )
                     : null;
@@ -6025,12 +6024,12 @@ function DayCard({
                     isHighlighted && "bg-primary/5"
                   )}>
                     <ActivityRow
-                      activity={activity}
+                      activity={activityToRender}
                       destination={cleanDestination}
                       destinationCountry={destinationCountry}
                       dayIndex={dayIndex}
-                      activityIndex={activityIndex}
-                      totalActivities={day.activities.length}
+                      activityIndex={activityRenderIndex}
+                      totalActivities={visibleActivitiesCount}
                       totalDays={totalDays}
                       isLast={isLastActivity}
                       isEditable={isEditable}
@@ -6043,7 +6042,7 @@ function DayCard({
                       displayCost={displayCost}
                       tripId={tripId}
                       showTransportDetails={showTransportDetails}
-                      existingPayment={getPaymentForItem('activity', activity.id)}
+                      existingPayment={getPaymentForItem('activity', activityToRender.id)}
                       onPaymentSuccess={refreshPayments}
                       onLock={onActivityLock}
                        onSwap={onActivitySwap}
@@ -6061,12 +6060,12 @@ function DayCard({
                        collaboratorColorMap={collaboratorColorMap}
                        aiLocked={aiLocked}
                        compact={compactCards}
-                     />
+                      />
                     {/* Compact transit gap indicator between activities */}
                     {!isLastActivity && gapMinutes !== null && !dayIsPreview && (
                       <TransitGapIndicator
                         gapMinutes={gapMinutes}
-                        transportation={activity.transportation}
+                        transportation={activityToRender.transportation}
                         hasTransitBadge={hasTransitBadgeVisible}
                       />
                     )}
