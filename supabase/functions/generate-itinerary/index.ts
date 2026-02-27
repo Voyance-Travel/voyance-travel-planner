@@ -4538,12 +4538,18 @@ async function generateSingleDayWithRetry(
 
       // Smart Finish should output a fully polished day (anchors + added value), not a sparse archetype-only day.
       const isSmartFinishGeneration = !!context.isSmartFinish;
-      const effectiveMinActivities = isSmartFinishGeneration
-        ? (isFirstDay || isLastDay ? Math.max(6, baseMinActivitiesFromArchetype) : Math.max(8, baseMinActivitiesFromArchetype))
-        : baseMinActivitiesFromArchetype;
-      const effectiveMaxActivities = isSmartFinishGeneration
-        ? (isFirstDay || isLastDay ? Math.max(10, baseMaxActivitiesFromArchetype) : Math.max(14, baseMaxActivitiesFromArchetype))
-        : baseMaxActivitiesFromArchetype;
+      // Override activity counts for transition days — they have a fixed structure (6-8)
+      const isTransitionDayForCounts = context.multiCityDayMap?.[dayNumber - 1]?.isTransitionDay || false;
+      const effectiveMinActivities = isTransitionDayForCounts
+        ? 6
+        : isSmartFinishGeneration
+          ? (isFirstDay || isLastDay ? Math.max(6, baseMinActivitiesFromArchetype) : Math.max(8, baseMinActivitiesFromArchetype))
+          : baseMinActivitiesFromArchetype;
+      const effectiveMaxActivities = isTransitionDayForCounts
+        ? 10
+        : isSmartFinishGeneration
+          ? (isFirstDay || isLastDay ? Math.max(10, baseMaxActivitiesFromArchetype) : Math.max(14, baseMaxActivitiesFromArchetype))
+          : baseMaxActivitiesFromArchetype;
       
       // =========================================================================
       // PHASE 12: Experience Affinity - What TO prioritize (the "pull" side)
@@ -5302,6 +5308,26 @@ Generate activities for this day following ALL constraints above.`;
 
       // Validate the generated day - pass previousDays for trip-wide uniqueness checks
       const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays);
+
+      // Transition day validation: MUST contain at least one inter-city transport activity
+      if (isTransitionDay && dayCity?.transitionFrom && dayCity?.transitionTo) {
+        const hasTransport = generatedDay.activities?.some((a: any) => {
+          const title = (a.title || '').toLowerCase();
+          const category = (a.category || '').toLowerCase();
+          const fromCity = (dayCity.transitionFrom || '').toLowerCase();
+          const toCity = (dayCity.transitionTo || '').toLowerCase();
+          return (category === 'transport' || category === 'transit') &&
+            (title.includes(fromCity) || title.includes(toCity) ||
+             title.includes('train') || title.includes('flight') || title.includes('bus') ||
+             title.includes('eurostar') || title.includes('ferry'));
+        });
+        if (!hasTransport) {
+          validation.errors.push(
+            `Transition day ${dayNumber} (${dayCity.transitionFrom} → ${dayCity.transitionTo}) MUST contain at least one inter-city transport activity`
+          );
+          validation.isValid = false;
+        }
+      }
 
       // Smart Finish quality gate: ensure days are fully built out, not sparse drafts.
       if (context.isSmartFinish) {

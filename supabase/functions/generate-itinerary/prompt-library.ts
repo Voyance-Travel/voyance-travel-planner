@@ -1853,5 +1853,24 @@ ${'='.repeat(70)}
 - Do NOT include tourist attractions requiring extended visits. Keep evening activities casual.
 - The transportComparison array is REQUIRED. Do not omit it.
 - Activity count for transition days: exactly 6-8 activities (the 6 mandatory + 1-2 evening).
+
+${'='.repeat(70)}
+⏰ ARRIVAL-TIME SCHEDULING CONSTRAINT
+${'='.repeat(70)}
+The FIRST activity in ${transitionTo} CANNOT be scheduled before:
+  arrival_time + transfer_to_hotel + check_in_buffer (30 min) + rest_buffer (30 min)
+
+Example: If the train arrives at 15:00 + 45 min transfer + 30 min check-in + 30 min rest = earliest activity at 16:45.
+
+If arriving AFTER 18:00:
+- Only schedule a light dinner and/or neighborhood stroll — NOT a museum, tour, or attraction.
+- The evening should feel relaxed, not rushed.
+
+If arriving AFTER 21:00:
+- Only suggest "Settle in and rest" or a very short walk to a nearby restaurant.
+- No scheduled activities beyond dinner.
+
+The NEXT DAY (Day ${transitionTo} Day 1) is a FULL day — schedule normally from 08:00-09:00 breakfast onward.
 `;
+
 }
