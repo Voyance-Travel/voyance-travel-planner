@@ -87,6 +87,14 @@ export interface ParsedDay {
   estimatedDistance?: string;
   activities: ParsedActivity[];
   weather?: ParsedWeather;
+  // Multi-city / transition day fields
+  city?: string;
+  country?: string;
+  isTransitionDay?: boolean;
+  transitionFrom?: string;
+  transitionTo?: string;
+  transportComparison?: unknown[];
+  selectedTransportId?: string;
   [key: string]: unknown;
 }
 
@@ -425,6 +433,14 @@ function parseSingleDay(
     estimatedDistance: extractString(d, ['estimatedDistance', 'estimated_distance']),
     activities,
     weather: parseWeather(d.weather),
+    // Explicitly extract multi-city / transition day fields for type safety
+    city: extractString(d, ['city']),
+    country: extractString(d, ['country']),
+    isTransitionDay: extractBoolean(d, ['isTransitionDay', 'is_transition_day']),
+    transitionFrom: extractString(d, ['transitionFrom', 'transition_from']),
+    transitionTo: extractString(d, ['transitionTo', 'transition_to']),
+    transportComparison: Array.isArray(d.transportComparison) ? d.transportComparison : undefined,
+    selectedTransportId: extractString(d, ['selectedTransportId', 'selected_transport_id']),
   };
 }
 

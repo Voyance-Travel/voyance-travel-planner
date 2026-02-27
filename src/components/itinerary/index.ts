@@ -15,4 +15,5 @@ export { BlendedProfilesCard } from './BlendedProfilesCard';
 export { GroupCompatibilityCard } from './GroupCompatibilityCard';
 export { DNAQuizPrompt } from './DNAQuizPrompt';
 export { MapNavigationButton, TransitNavigation } from './MapNavigationButton';
-export type { EditorialDay, EditorialActivity, EditorialItineraryProps } from './EditorialItinerary';
+export type { EditorialDay, EditorialActivity, EditorialItineraryProps, TransportOption } from './EditorialItinerary';
+export { TransportComparisonCard } from './TransportComparisonCard';

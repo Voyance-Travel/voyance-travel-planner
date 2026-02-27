@@ -74,6 +74,7 @@ import {
   extractFlightData,
   extractHotelData,
   buildTravelerDNA,
+  buildTransitionDayPrompt,
   type FlightData as PromptFlightData,
   type HotelData as PromptHotelData,
   type TravelerDNA,
@@ -3911,75 +3912,86 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     context.isMultiCity = true;
     console.log(`[Stage 1] Multi-city trip detected`);
     
-    // Try destinations JSONB first (always present), then trip_cities table
-    const destinations = trip.destinations as Array<{ city: string; country?: string; nights: number; order?: number }> | null;
+    // PRIORITY: Query trip_cities FIRST (has transport_type), fall back to destinations JSONB
+    let tripCitiesResolved = false;
+    try {
+      const { data: tripCities } = await supabase
+        .from('trip_cities')
+        .select('*')
+        .eq('trip_id', tripId)
+        .order('city_order', { ascending: true });
+      
+      if (tripCities && tripCities.length >= 2) {
+        const dayMap: MultiCityDayInfo[] = [];
+        for (let i = 0; i < tripCities.length; i++) {
+          const city = tripCities[i];
+          const nights = city.nights || city.days_total || 1;
+          
+          for (let n = 0; n < nights; n++) {
+            const isTransition = n === 0 && i > 0;
+            const isSameCountry = isTransition && tripCities[i - 1].country === city.country;
+            const defaultTransport = isSameCountry ? 'train' : 'flight';
+            dayMap.push({
+              cityName: city.city_name,
+              country: city.country,
+              isTransitionDay: isTransition,
+              transitionFrom: isTransition ? tripCities[i - 1].city_name : undefined,
+              transitionTo: isTransition ? city.city_name : undefined,
+              transportType: isTransition ? (city.transport_type || defaultTransport) : undefined,
+            });
+          }
+        }
+        while (dayMap.length < totalDays) {
+          const last = dayMap[dayMap.length - 1] || { cityName: context.destination, isTransitionDay: false };
+          dayMap.push({ ...last, isTransitionDay: false });
+        }
+        context.multiCityDayMap = dayMap.slice(0, totalDays);
+        tripCitiesResolved = true;
+        console.log(`[Stage 1] Multi-city day map (from trip_cities): ${context.multiCityDayMap.map(d => `${d.cityName}${d.isTransitionDay ? '(T)' : ''}`).join(' → ')}`);
+      }
+    } catch (e) {
+      console.warn(`[Stage 1] Failed to query trip_cities, falling back to destinations JSONB:`, e);
+    }
+
+    // Fallback: destinations JSONB (lacks transportType)
+    if (!tripCitiesResolved) {
+      const destinations = trip.destinations as Array<{ city: string; country?: string; nights: number; order?: number }> | null;
+      
+      if (destinations && destinations.length >= 2) {
+        const sorted = [...destinations].sort((a, b) => (a.order || 0) - (b.order || 0));
+        
+        const dayMap: MultiCityDayInfo[] = [];
+        for (let i = 0; i < sorted.length; i++) {
+          const dest = sorted[i];
+          const nights = dest.nights || 1;
+          
+          for (let n = 0; n < nights; n++) {
+            const isTransition = n === 0 && i > 0;
+            const isSameCountry = isTransition && sorted[i - 1].country === dest.country;
+            dayMap.push({
+              cityName: dest.city,
+              country: dest.country,
+              isTransitionDay: isTransition,
+              transitionFrom: isTransition ? sorted[i - 1].city : undefined,
+              transitionTo: isTransition ? dest.city : undefined,
+              transportType: isTransition ? (isSameCountry ? 'train' : 'flight') : undefined,
+            });
+          }
+        }
+        
+        while (dayMap.length < totalDays) {
+          const last = dayMap[dayMap.length - 1] || { cityName: context.destination, isTransitionDay: false };
+          dayMap.push({ ...last, isTransitionDay: false });
+        }
+        context.multiCityDayMap = dayMap.slice(0, totalDays);
+        
+        console.log(`[Stage 1] Multi-city day map (from destinations JSONB): ${context.multiCityDayMap.map(d => d.cityName).join(' → ')}`);
+      }
+    }
     
-    if (destinations && destinations.length >= 2) {
-      // Sort by order if available
-      const sorted = [...destinations].sort((a, b) => (a.order || 0) - (b.order || 0));
-      
-      const dayMap: MultiCityDayInfo[] = [];
-      for (let i = 0; i < sorted.length; i++) {
-        const dest = sorted[i];
-        const nights = dest.nights || 1;
-        
-        for (let n = 0; n < nights; n++) {
-          const isTransition = n === 0 && i > 0;
-          dayMap.push({
-            cityName: dest.city,
-            country: dest.country,
-            isTransitionDay: isTransition,
-            transitionFrom: isTransition ? sorted[i - 1].city : undefined,
-            transitionTo: isTransition ? dest.city : undefined,
-          });
-        }
-      }
-      
-      // Pad or trim to match totalDays
-      while (dayMap.length < totalDays) {
-        const last = dayMap[dayMap.length - 1] || { cityName: context.destination, isTransitionDay: false };
-        dayMap.push({ ...last, isTransitionDay: false });
-      }
-      context.multiCityDayMap = dayMap.slice(0, totalDays);
-      
-      console.log(`[Stage 1] Multi-city day map: ${context.multiCityDayMap.map(d => d.cityName).join(' → ')}`);
-    } else {
-      // Fallback: try trip_cities table
-      try {
-        const { data: tripCities } = await supabase
-          .from('trip_cities')
-          .select('*')
-          .eq('trip_id', tripId)
-          .order('city_order', { ascending: true });
-        
-        if (tripCities && tripCities.length >= 2) {
-          const dayMap: MultiCityDayInfo[] = [];
-          for (let i = 0; i < tripCities.length; i++) {
-            const city = tripCities[i];
-            const nights = city.nights || city.days_total || 1;
-            
-            for (let n = 0; n < nights; n++) {
-              const isTransition = n === 0 && i > 0;
-              dayMap.push({
-                cityName: city.city_name,
-                country: city.country,
-                isTransitionDay: isTransition,
-                transitionFrom: isTransition ? tripCities[i - 1].city_name : undefined,
-                transitionTo: isTransition ? city.city_name : undefined,
-                transportType: isTransition ? city.transport_type : undefined,
-              });
-            }
-          }
-          while (dayMap.length < totalDays) {
-            const last = dayMap[dayMap.length - 1] || { cityName: context.destination, isTransitionDay: false };
-            dayMap.push({ ...last, isTransitionDay: false });
-          }
-          context.multiCityDayMap = dayMap.slice(0, totalDays);
-          console.log(`[Stage 1] Multi-city day map (from trip_cities): ${context.multiCityDayMap.map(d => d.cityName).join(' → ')}`);
-        }
-      } catch (e) {
-        console.warn('[Stage 1] Could not load trip_cities:', e);
-      }
+    // If we still have no day map, log a warning (single-city or malformed data)
+    if (!context.multiCityDayMap) {
+      console.warn('[Stage 1] Multi-city trip detected but no day map could be built from trip_cities or destinations');
     }
   }
 
@@ -4672,7 +4684,19 @@ These help the traveler prepare for their trip.
       if (context.isMultiCity && dayCity) {
         multiCityPrompt = `\n🌍 MULTI-CITY TRIP: This day is in **${dayDestination}${dayCountry ? `, ${dayCountry}` : ''}**. ALL activities MUST be located in ${dayDestination}.`;
         if (isTransitionDay && dayCity.transitionFrom) {
-          multiCityPrompt += `\n🚆 TRANSITION DAY: Traveler is moving from ${dayCity.transitionFrom} to ${dayDestination} today. Start the day with travel/transfer, then plan afternoon activities in ${dayDestination}.`;
+          // Use the full transition day prompt builder instead of the weak 2-line fallback
+          const transitionPrompt = buildTransitionDayPrompt({
+            transitionFrom: dayCity.transitionFrom,
+            transitionFromCountry: context.multiCityDayMap?.find(d => d.cityName === dayCity.transitionFrom)?.country,
+            transitionTo: dayDestination,
+            transitionToCountry: dayCountry,
+            transportType: dayCity.transportType,
+            travelers: context.travelers,
+            budgetTier: context.budgetTier,
+            primaryArchetype: context.travelerDNA?.primaryArchetype,
+            currency: context.currency,
+          });
+          multiCityPrompt += `\n${transitionPrompt}`;
         }
       }
 
@@ -4840,7 +4864,53 @@ Generate activities for this day following ALL constraints above.`;
                       }
                     },
                     accommodationNotes: { type: "array", items: { type: "string" }, description: "2-3 accommodation tips for this destination (e.g. best neighborhoods to stay, hotel recommendations, booking tips)" },
-                    practicalTips: { type: "array", items: { type: "string" }, description: "3-4 practical travel tips for this destination (e.g. transport tips, money-saving advice, cultural etiquette, safety tips)" }
+                    practicalTips: { type: "array", items: { type: "string" }, description: "3-4 practical travel tips for this destination (e.g. transport tips, money-saving advice, cultural etiquette, safety tips)" },
+                    transportComparison: {
+                      type: "array",
+                      description: "Transport options for transition days between cities. Required when isTransitionDay is true.",
+                      items: {
+                        type: "object",
+                        properties: {
+                          id: { type: "string" },
+                          mode: { type: "string", enum: ["train", "flight", "bus", "car", "ferry"] },
+                          operator: { type: "string" },
+                          inTransitDuration: { type: "string" },
+                          doorToDoorDuration: { type: "string" },
+                          cost: {
+                            type: "object",
+                            properties: {
+                              perPerson: { type: "number" },
+                              total: { type: "number" },
+                              currency: { type: "string" },
+                              includesTransfers: { type: "boolean" }
+                            },
+                            required: ["perPerson", "total", "currency"]
+                          },
+                          departure: {
+                            type: "object",
+                            properties: {
+                              point: { type: "string" },
+                              neighborhood: { type: "string" }
+                            }
+                          },
+                          arrival: {
+                            type: "object",
+                            properties: {
+                              point: { type: "string" },
+                              neighborhood: { type: "string" }
+                            }
+                          },
+                          pros: { type: "array", items: { type: "string" } },
+                          cons: { type: "array", items: { type: "string" } },
+                          bookingTip: { type: "string" },
+                          scenicOpportunities: { type: "array", items: { type: "string" } },
+                          isRecommended: { type: "boolean" },
+                          recommendationReason: { type: "string" }
+                        },
+                        required: ["id", "mode", "operator", "inTransitDuration", "doorToDoorDuration", "cost", "departure", "arrival", "pros", "cons", "isRecommended"]
+                      }
+                    },
+                    selectedTransportId: { type: "string", description: "ID of the recommended transport option" }
                   },
                   required: ["dayNumber", "date", "title", "activities"]
                 }
@@ -5121,6 +5191,10 @@ Generate activities for this day following ALL constraints above.`;
           generatedDay.isTransitionDay = dayCity.isTransitionDay;
           generatedDay.transitionFrom = dayCity.transitionFrom;
           generatedDay.transitionTo = dayCity.transitionTo;
+          // Preserve transportComparison from AI response
+          if (generatedDay.transportComparison) {
+            console.log(`[Stage 2] Day ${dayNumber}: Transport comparison with ${generatedDay.transportComparison.length} options`);
+          }
         }
         console.log(`[Stage 2] Day ${dayNumber} generated successfully (${generatedDay.activities.length} activities${dayCity ? `, city: ${dayCity.cityName}` : ''})`);
         return generatedDay;
