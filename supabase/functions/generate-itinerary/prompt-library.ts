@@ -1020,7 +1020,9 @@ export function buildArrivalDayPrompt(
   lines.push(`⚡ ENERGY & ACTIVITY GUIDANCE`);
   lines.push(`${'─'.repeat(40)}`);
   lines.push(`   Energy level: ${energyLevel.toUpperCase()}`);
-  lines.push(`   Max activities: ${maxActivities} (${densityReasoning})`);
+  lines.push(`   Max EXPERIENCE activities: ${maxActivities} (${densityReasoning})`);
+  lines.push(`   ⚠️ Meals (dinner at minimum), transit, and hotel check-in are MANDATORY additions on top.`);
+  lines.push(`   Total entries for arrival day: ${maxActivities + 3}-${maxActivities + 6} (experiences + meals + transit + hotel)`);
   lines.push(`   Min downtime between activities: ${minDowntime} minutes`);
   lines.push('');
   lines.push(`   Suggested activity types for ${energyLevel} energy:`);
@@ -1164,7 +1166,9 @@ export function buildDepartureDayPrompt(
   // Activity guidance
   lines.push(`⚡ ACTIVITY GUIDANCE`);
   lines.push(`${'─'.repeat(40)}`);
-  lines.push(`   Max activities BEFORE checkout: ${maxActivities}`);
+  lines.push(`   Max EXPERIENCE activities BEFORE checkout: ${maxActivities}`);
+  lines.push(`   ⚠️ Meals (breakfast at minimum), transit, hotel checkout, and airport transfer are MANDATORY additions.`);
+  lines.push(`   Total entries for departure day: ${maxActivities + 3}-${maxActivities + 5} (experiences + meals + transit + checkout)`);
   lines.push(`   (${densityReasoning})`);
   lines.push('');
   
@@ -1352,7 +1356,14 @@ export function buildRegularDayPrompt(
 
   lines.push(`⚡ ACTIVITY DENSITY`);
   lines.push(`${'─'.repeat(40)}`);
-  lines.push(`   Max activities: ${maxActivities} (including meals, transit, and evening)`);
+  lines.push(`   Max EXPERIENCE activities: ${maxActivities} (museums, tours, attractions, cultural sites)`);
+  lines.push(`   ⚠️ IMPORTANT: Meals, transit, coffee stops, nightlife, and hotel bookends are MANDATORY ADDITIONS`);
+  lines.push(`   on top of the experience count. A full day should have 10-14 TOTAL entries:`);
+  lines.push(`     - ${maxActivities} experience activities (paid + free mix)`);
+  lines.push(`     - 3 meals (breakfast, lunch, dinner) = 3 entries`);
+  lines.push(`     - 4-6 transit entries between stops`);
+  lines.push(`     - 1 nightlife/evening entry`);
+  lines.push(`     - 1-2 hotel bookend entries (return to freshen up, end of day)`);
   lines.push(`   Min downtime: ${minDowntime} minutes between major activities`);
   lines.push(`   Energy level: ${energyLevel.toUpperCase()}`);
   lines.push(`   (${densityReasoning})`);
