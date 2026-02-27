@@ -57,43 +57,31 @@ function parseMultiCityFallback(
   startDate?: string,
   endDate?: string
 ): ChatTripCity[] | null {
-  // Look for route patterns in destination or notes
-  const routePatterns = [
-    /Route:\s*(.+)/i,
-    /(.+?)\s*(?:→|->|–>|then|,)\s*(.+)/,
-  ];
+  // Separator pattern: "→", "->", ",", "then", "&", "and"
+  const separators = /\s*(?:→|->|–>|=>|,\s*(?:then\s+)?|then\s+|&\s+|\band\b\s+)\s*/i;
 
-  let routeStr = '';
+  // Try destination first — most reliable signal
+  const destParts = destination.split(separators).map(s => s.trim()).filter(s => s.length > 1 && s.length < 50);
 
-  // Check if destination itself contains multiple cities
-  const separators = /\s*(?:→|->|–>|,\s*(?:then\s+)?|then\s+|&\s+|and\s+)\s*/i;
-  const destParts = destination.split(separators).map(s => s.trim()).filter(Boolean);
+  let cities: string[] = [];
   if (destParts.length > 1) {
-    routeStr = destination;
+    cities = destParts;
   }
 
-  // If not found in destination, check additionalNotes
-  if (!routeStr && additionalNotes) {
-    for (const pattern of routePatterns) {
-      const match = additionalNotes.match(pattern);
-      if (match) {
-        routeStr = match[1] || match[0];
-        break;
-      }
+  // If not found in destination, scan additionalNotes for route patterns
+  if (cities.length <= 1 && additionalNotes) {
+    const routeMatch = additionalNotes.match(/Route:\s*(.+)/i);
+    const routeStr = routeMatch ? routeMatch[1] : additionalNotes;
+    const noteParts = routeStr.split(separators).map(s => s.trim().replace(/\.+$/, '')).filter(s => s.length > 1 && s.length < 50);
+    if (noteParts.length > 1) {
+      cities = noteParts;
     }
   }
-
-  if (!routeStr) return null;
-
-  const cities = routeStr
-    .split(separators)
-    .map(s => s.trim().replace(/\.+$/, ''))
-    .filter(s => s.length > 1 && s.length < 50);
 
   if (cities.length <= 1) return null;
 
   // Distribute nights evenly, accounting for travel days
-  let totalDays = 14; // default
+  let totalDays = 14;
   if (startDate && endDate) {
     const ms = new Date(endDate).getTime() - new Date(startDate).getTime();
     totalDays = Math.max(cities.length, Math.ceil(ms / 86400000));
