@@ -7,27 +7,42 @@ const corsHeaders = {
 };
 
 interface TransferRequest {
-  origin: string;      // Airport name or code (e.g., "FCO" or "Rome Fiumicino Airport")
-  destination: string; // Hotel address or city center
-  city: string;        // City name for fare lookup
-  airportCode?: string; // Optional airport code for more specific lookup
-  arrivalTime?: string; // ISO date string for departure time
+  origin: string;
+  destination: string;
+  city: string;
+  airportCode?: string;
+  arrivalTime?: string;
+  hotelName?: string;
+  archetype?: string;
+  travelers?: number;
+  isReturn?: boolean; // true = hotel→airport, false = airport→hotel
 }
 
 interface TransferOption {
+  id: string;
   mode: string;
+  label: string;
   duration: string;
   durationMinutes: number;
   estimatedCost: string;
+  costPerPerson?: string;
+  route?: string;
   notes?: string;
+  pros?: string[];
+  cons?: string[];
   trainLine?: string;
+  recommended?: boolean;
+  recommendedFor?: string; // archetype match
+  bookingTip?: string;
+  icon: string; // emoji
 }
 
 interface TransferResponse {
   origin: string;
   destination: string;
   options: TransferOption[];
-  source: 'database' | 'estimated';
+  aiRecommendation?: string;
+  source: 'database+ai' | 'database' | 'estimated' | 'ai';
   lastVerified?: string;
   fetchedAt: string;
 }
@@ -47,6 +62,10 @@ interface FareRecord {
   train_cost: number | null;
   train_line: string | null;
   train_notes: string | null;
+  bus_cost: number | null;
+  bus_duration_min: number | null;
+  bus_duration_max: number | null;
+  bus_notes: string | null;
   currency: string;
   currency_symbol: string;
   last_verified_at: string;
@@ -55,9 +74,7 @@ interface FareRecord {
 
 const formatDuration = (seconds: number): string => {
   const minutes = Math.round(seconds / 60);
-  if (minutes < 60) {
-    return `${minutes} min`;
-  }
+  if (minutes < 60) return `${minutes} min`;
   const hours = Math.floor(minutes / 60);
   const remainingMins = minutes % 60;
   return remainingMins > 0 ? `${hours}h ${remainingMins}m` : `${hours}h`;
@@ -79,95 +96,57 @@ const formatCost = (min: number | null, max: number | null, symbol: string, isFi
 };
 
 // Regional transfer cost estimates for cities not in the database
-// Based on typical airport-to-city-center fares by region
 interface RegionalEstimate {
   taxiMin: number; taxiMax: number;
   trainCost: number | null;
+  busCost: number | null;
   symbol: string;
   taxiDuration: string;
   trainDuration: string | null;
+  busDuration: string | null;
+  hotelCarMin: number | null; hotelCarMax: number | null;
 }
 
 const REGIONAL_ESTIMATES: Record<string, RegionalEstimate> = {
-  // Latin America
-  'mexico': { taxiMin: 15, taxiMax: 30, trainCost: 1, symbol: '$', taxiDuration: '30-50 min', trainDuration: '40-60 min' },
-  'colombia': { taxiMin: 10, taxiMax: 25, trainCost: null, symbol: '$', taxiDuration: '40-70 min', trainDuration: null },
-  'brazil': { taxiMin: 20, taxiMax: 40, trainCost: 2, symbol: 'R$', taxiDuration: '30-60 min', trainDuration: '40-60 min' },
-  'argentina': { taxiMin: 15, taxiMax: 30, trainCost: 1, symbol: '$', taxiDuration: '30-50 min', trainDuration: '45 min' },
-  'peru': { taxiMin: 8, taxiMax: 20, trainCost: null, symbol: 'S/', taxiDuration: '30-50 min', trainDuration: null },
-  'chile': { taxiMin: 15, taxiMax: 30, trainCost: 2, symbol: '$', taxiDuration: '25-40 min', trainDuration: '30 min' },
-  'costa rica': { taxiMin: 25, taxiMax: 45, trainCost: null, symbol: '$', taxiDuration: '20-40 min', trainDuration: null },
-  // Europe
-  'europe_default': { taxiMin: 30, taxiMax: 60, trainCost: 10, symbol: '€', taxiDuration: '30-50 min', trainDuration: '30-45 min' },
-  'uk': { taxiMin: 40, taxiMax: 80, trainCost: 15, symbol: '£', taxiDuration: '30-60 min', trainDuration: '30-45 min' },
-  'scandinavia': { taxiMin: 40, taxiMax: 80, trainCost: 12, symbol: '€', taxiDuration: '25-40 min', trainDuration: '20-35 min' },
-  'eastern_europe': { taxiMin: 10, taxiMax: 25, trainCost: 3, symbol: '€', taxiDuration: '25-45 min', trainDuration: '30-45 min' },
-  // Asia
-  'southeast_asia': { taxiMin: 5, taxiMax: 15, trainCost: 2, symbol: '$', taxiDuration: '30-60 min', trainDuration: '30-45 min' },
-  'japan': { taxiMin: 60, taxiMax: 200, trainCost: 30, symbol: '¥', taxiDuration: '45-90 min', trainDuration: '35-60 min' },
-  'india': { taxiMin: 8, taxiMax: 20, trainCost: 1, symbol: '₹', taxiDuration: '30-60 min', trainDuration: '40-60 min' },
-  'china': { taxiMin: 15, taxiMax: 35, trainCost: 5, symbol: '¥', taxiDuration: '30-50 min', trainDuration: '20-40 min' },
-  // Africa
-  'africa': { taxiMin: 10, taxiMax: 30, trainCost: null, symbol: '$', taxiDuration: '25-50 min', trainDuration: null },
-  'south_africa': { taxiMin: 15, taxiMax: 35, trainCost: 5, symbol: 'R', taxiDuration: '25-40 min', trainDuration: '30 min' },
-  'morocco': { taxiMin: 10, taxiMax: 25, trainCost: 3, symbol: 'MAD ', taxiDuration: '20-40 min', trainDuration: '30-45 min' },
-  // Middle East
-  'middle_east': { taxiMin: 15, taxiMax: 40, trainCost: 5, symbol: '$', taxiDuration: '20-40 min', trainDuration: '25-40 min' },
-  // Oceania
-  'australia': { taxiMin: 40, taxiMax: 80, trainCost: 15, symbol: 'A$', taxiDuration: '25-45 min', trainDuration: '30-45 min' },
-  'new_zealand': { taxiMin: 30, taxiMax: 60, trainCost: null, symbol: 'NZ$', taxiDuration: '25-40 min', trainDuration: null },
-  // Default
-  'default': { taxiMin: 20, taxiMax: 50, trainCost: 5, symbol: '$', taxiDuration: '30-50 min', trainDuration: '30-45 min' },
+  'mexico': { taxiMin: 15, taxiMax: 30, trainCost: 1, busCost: 3, symbol: '$', taxiDuration: '30-50 min', trainDuration: '40-60 min', busDuration: '50-70 min', hotelCarMin: 40, hotelCarMax: 60 },
+  'colombia': { taxiMin: 10, taxiMax: 25, trainCost: null, busCost: 3, symbol: '$', taxiDuration: '40-70 min', trainDuration: null, busDuration: '50-80 min', hotelCarMin: 30, hotelCarMax: 50 },
+  'brazil': { taxiMin: 20, taxiMax: 40, trainCost: 2, busCost: 3, symbol: 'R$', taxiDuration: '30-60 min', trainDuration: '40-60 min', busDuration: '50-70 min', hotelCarMin: 50, hotelCarMax: 80 },
+  'europe_default': { taxiMin: 30, taxiMax: 60, trainCost: 10, busCost: 6, symbol: '€', taxiDuration: '30-50 min', trainDuration: '30-45 min', busDuration: '45-60 min', hotelCarMin: 70, hotelCarMax: 120 },
+  'uk': { taxiMin: 40, taxiMax: 80, trainCost: 15, busCost: 8, symbol: '£', taxiDuration: '30-60 min', trainDuration: '30-45 min', busDuration: '50-70 min', hotelCarMin: 80, hotelCarMax: 130 },
+  'scandinavia': { taxiMin: 40, taxiMax: 80, trainCost: 12, busCost: 8, symbol: '€', taxiDuration: '25-40 min', trainDuration: '20-35 min', busDuration: '35-50 min', hotelCarMin: 80, hotelCarMax: 120 },
+  'eastern_europe': { taxiMin: 10, taxiMax: 25, trainCost: 3, busCost: 2, symbol: '€', taxiDuration: '25-45 min', trainDuration: '30-45 min', busDuration: '40-55 min', hotelCarMin: 30, hotelCarMax: 50 },
+  'southeast_asia': { taxiMin: 5, taxiMax: 15, trainCost: 2, busCost: 1, symbol: '$', taxiDuration: '30-60 min', trainDuration: '30-45 min', busDuration: '40-60 min', hotelCarMin: 20, hotelCarMax: 40 },
+  'japan': { taxiMin: 60, taxiMax: 200, trainCost: 30, busCost: 10, symbol: '¥', taxiDuration: '45-90 min', trainDuration: '35-60 min', busDuration: '60-90 min', hotelCarMin: 100, hotelCarMax: 250 },
+  'india': { taxiMin: 8, taxiMax: 20, trainCost: 1, busCost: 1, symbol: '₹', taxiDuration: '30-60 min', trainDuration: '40-60 min', busDuration: '45-70 min', hotelCarMin: 25, hotelCarMax: 50 },
+  'middle_east': { taxiMin: 15, taxiMax: 40, trainCost: 5, busCost: 3, symbol: '$', taxiDuration: '20-40 min', trainDuration: '25-40 min', busDuration: '35-50 min', hotelCarMin: 50, hotelCarMax: 90 },
+  'australia': { taxiMin: 40, taxiMax: 80, trainCost: 15, busCost: 10, symbol: 'A$', taxiDuration: '25-45 min', trainDuration: '30-45 min', busDuration: '45-60 min', hotelCarMin: 80, hotelCarMax: 140 },
+  'default': { taxiMin: 20, taxiMax: 50, trainCost: 5, busCost: 4, symbol: '$', taxiDuration: '30-50 min', trainDuration: '30-45 min', busDuration: '40-55 min', hotelCarMin: 50, hotelCarMax: 100 },
 };
 
-// Map city/country to region for cost estimation
 const CITY_REGION_MAP: Record<string, string> = {
-  // Latin America cities
   'bogota': 'colombia', 'medellin': 'colombia', 'cartagena': 'colombia',
-  'mexico city': 'mexico', 'cancun': 'mexico', 'cabo san lucas': 'mexico', 'oaxaca': 'mexico', 'playa del carmen': 'mexico', 'tulum': 'mexico',
+  'mexico city': 'mexico', 'cancun': 'mexico', 'cabo san lucas': 'mexico',
   'rio de janeiro': 'brazil', 'sao paulo': 'brazil',
-  'buenos aires': 'argentina',
-  'lima': 'peru', 'cusco': 'peru',
-  'santiago': 'chile',
-  'san jose': 'costa rica',
-  // Europe
-  'edinburgh': 'uk', 'dublin': 'europe_default', 'manchester': 'uk',
-  'stockholm': 'scandinavia', 'copenhagen': 'scandinavia', 'oslo': 'scandinavia', 'helsinki': 'scandinavia',
-  'prague': 'eastern_europe', 'budapest': 'eastern_europe', 'krakow': 'eastern_europe', 'warsaw': 'eastern_europe', 'bucharest': 'eastern_europe',
-  'amsterdam': 'europe_default', 'brussels': 'europe_default', 'vienna': 'europe_default', 'zurich': 'europe_default',
-  'lisbon': 'europe_default', 'porto': 'europe_default',
-  'berlin': 'europe_default', 'munich': 'europe_default',
-  'santorini': 'europe_default', 'mykonos': 'europe_default',
-  // Asia
-  'hanoi': 'southeast_asia', 'ho chi minh': 'southeast_asia', 'saigon': 'southeast_asia',
-  'kuala lumpur': 'southeast_asia', 'phuket': 'southeast_asia', 'chiang mai': 'southeast_asia',
-  'manila': 'southeast_asia', 'jakarta': 'southeast_asia',
-  'kyoto': 'japan', 'osaka': 'japan',
-  'mumbai': 'india', 'delhi': 'india', 'new delhi': 'india', 'jaipur': 'india', 'goa': 'india',
-  'shanghai': 'china', 'beijing': 'china',
-  // Africa
-  'cape town': 'south_africa', 'johannesburg': 'south_africa',
-  'marrakech': 'morocco', 'fez': 'morocco', 'casablanca': 'morocco',
-  'nairobi': 'africa', 'cairo': 'africa', 'accra': 'africa', 'lagos': 'africa',
-  'inhambane': 'africa', 'maputo': 'africa',
-  // Middle East
-  'amman': 'middle_east', 'doha': 'middle_east', 'muscat': 'middle_east', 'tel aviv': 'middle_east', 'istanbul': 'middle_east',
-  // Oceania
-  'sydney': 'australia', 'melbourne': 'australia', 'brisbane': 'australia',
-  'auckland': 'new_zealand', 'queenstown': 'new_zealand',
-  // US cities not in DB
-  'austin': 'default', 'nashville': 'default', 'denver': 'default', 'seattle': 'default',
-  'portland': 'default', 'boston': 'default', 'atlanta': 'default', 'new orleans': 'default',
-  'washington dc': 'default', 'philadelphia': 'default', 'san diego': 'default', 'honolulu': 'default',
+  'edinburgh': 'uk', 'dublin': 'europe_default', 'manchester': 'uk', 'london': 'uk',
+  'stockholm': 'scandinavia', 'copenhagen': 'scandinavia', 'oslo': 'scandinavia',
+  'prague': 'eastern_europe', 'budapest': 'eastern_europe', 'krakow': 'eastern_europe',
+  'amsterdam': 'europe_default', 'brussels': 'europe_default', 'vienna': 'europe_default',
+  'lisbon': 'europe_default', 'porto': 'europe_default', 'rome': 'europe_default',
+  'florence': 'europe_default', 'milan': 'europe_default', 'venice': 'europe_default',
+  'paris': 'europe_default', 'nice': 'europe_default', 'barcelona': 'europe_default',
+  'madrid': 'europe_default', 'berlin': 'europe_default', 'munich': 'europe_default',
+  'hanoi': 'southeast_asia', 'ho chi minh': 'southeast_asia', 'bangkok': 'southeast_asia',
+  'bali': 'southeast_asia', 'singapore': 'southeast_asia',
+  'kyoto': 'japan', 'osaka': 'japan', 'tokyo': 'japan',
+  'mumbai': 'india', 'delhi': 'india', 'jaipur': 'india',
+  'dubai': 'middle_east', 'amman': 'middle_east', 'istanbul': 'middle_east',
+  'sydney': 'australia', 'melbourne': 'australia',
 };
 
 function getRegionalEstimate(city: string): RegionalEstimate {
   const cityLower = city.toLowerCase().trim();
   const regionKey = CITY_REGION_MAP[cityLower];
-  if (regionKey && REGIONAL_ESTIMATES[regionKey]) {
-    return REGIONAL_ESTIMATES[regionKey];
-  }
-  // Fuzzy match
+  if (regionKey && REGIONAL_ESTIMATES[regionKey]) return REGIONAL_ESTIMATES[regionKey];
   for (const [key, region] of Object.entries(CITY_REGION_MAP)) {
     if (cityLower.includes(key) || key.includes(cityLower)) {
       return REGIONAL_ESTIMATES[region] || REGIONAL_ESTIMATES['default'];
@@ -176,192 +155,267 @@ function getRegionalEstimate(city: string): RegionalEstimate {
   return REGIONAL_ESTIMATES['default'];
 }
 
+// Generate AI recommendation based on archetype
+function getArchetypeRecommendation(
+  archetype: string | undefined,
+  options: TransferOption[],
+  hotelName?: string,
+  travelers?: number
+): { recommendation: string; recommendedId: string } {
+  const pax = travelers || 2;
+  const taxiOpt = options.find(o => o.id === 'taxi');
+  const trainOpt = options.find(o => o.id === 'train');
+  const hotelCarOpt = options.find(o => o.id === 'hotel_car');
+  const busOpt = options.find(o => o.id === 'bus');
+
+  const arch = (archetype || '').toLowerCase();
+
+  if (arch.includes('luxury') || arch.includes('premium')) {
+    const rec = hotelCarOpt || taxiOpt;
+    return {
+      recommendedId: rec?.id || 'taxi',
+      recommendation: hotelCarOpt
+        ? `As a Luxury traveler, the hotel car service is worth it after a long flight. Driver meets you at arrivals — no navigating, no luggage hassle.${hotelName ? ` Book through ${hotelName} concierge when you confirm your reservation.` : ''}`
+        : `A pre-booked taxi or ride service gives you door-to-door comfort with minimal hassle after your flight.`,
+    };
+  }
+
+  if (arch.includes('budget') || arch.includes('backpack') || arch.includes('explorer')) {
+    const rec = trainOpt?.estimatedCost !== 'N/A' ? trainOpt : busOpt || taxiOpt;
+    return {
+      recommendedId: rec?.id || 'train',
+      recommendation: trainOpt?.estimatedCost !== 'N/A'
+        ? `The train is your best bet — fast, cheap, and you get to see the city on the way in.${trainOpt?.trainLine ? ` Take the ${trainOpt.trainLine}.` : ''}`
+        : `The airport bus/shuttle gives you the best value. Save your travel budget for experiences!`,
+    };
+  }
+
+  if (arch.includes('cultural') || arch.includes('foodie')) {
+    const rec = trainOpt?.estimatedCost !== 'N/A' ? trainOpt : taxiOpt;
+    return {
+      recommendedId: rec?.id || 'train',
+      recommendation: `The train gives you a first taste of local life — watch the city unfold from street level. It's part of the experience!`,
+    };
+  }
+
+  if (arch.includes('family') || arch.includes('group')) {
+    return {
+      recommendedId: 'taxi',
+      recommendation: pax > 2
+        ? `With ${pax} travelers, a taxi splits nicely and saves the luggage hassle. Door-to-door is worth it with a group.`
+        : `A taxi gets you to the hotel quickly with luggage — especially important when traveling as a family.`,
+    };
+  }
+
+  // Default balanced recommendation
+  return {
+    recommendedId: taxiOpt?.id || 'taxi',
+    recommendation: `A taxi/rideshare is the most convenient option — door-to-door service with no transfers. If you're budget-conscious, the train is a great alternative.`,
+  };
+}
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { origin, destination, city, airportCode, arrivalTime } = await req.json() as TransferRequest;
-    
+    const body = await req.json() as TransferRequest;
+    const { origin, destination, city, airportCode, arrivalTime, hotelName, archetype, travelers, isReturn } = body;
+
     if (!city) {
       return new Response(
-        JSON.stringify({ error: 'City is required for fare lookup' }),
+        JSON.stringify({ error: 'City is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Look up fare data from database
-    let fareQuery = supabase
-      .from('airport_transfer_fares')
-      .select('*')
-      .ilike('city', city);
-    
-    // If airport code provided, filter by it
-    if (airportCode) {
-      fareQuery = fareQuery.eq('airport_code', airportCode.toUpperCase());
-    }
-
-    const { data: fares, error: fareError } = await fareQuery.limit(1);
-    
-    if (fareError) {
-      console.error('Database lookup error:', fareError);
-    }
-
+    let fareQuery = supabase.from('airport_transfer_fares').select('*').ilike('city', city);
+    if (airportCode) fareQuery = fareQuery.eq('airport_code', airportCode.toUpperCase());
+    const { data: fares } = await fareQuery.limit(1);
     const fareRecord = fares?.[0] as FareRecord | undefined;
-    
-    // Also fetch live duration from Google Maps if configured
-    let liveTaxiDuration: string | null = null;
-    let liveTransitDuration: string | null = null;
-    
-    const GOOGLE_MAPS_API_KEY = Deno.env.get('GOOGLE_MAPS_API_KEY');
-    
-    if (GOOGLE_MAPS_API_KEY && origin && destination) {
-      // Fetch driving duration
-      try {
-        const drivingParams = new URLSearchParams({
-          origins: origin,
-          destinations: destination,
-          mode: 'driving',
-          departure_time: 'now',
-          key: GOOGLE_MAPS_API_KEY,
-        });
-        
-        const drivingResp = await fetch(
-          `https://maps.googleapis.com/maps/api/distancematrix/json?${drivingParams.toString()}`
-        );
-        const drivingData = await drivingResp.json();
-        
-        if (drivingData.status === 'OK' && drivingData.rows?.[0]?.elements?.[0]?.status === 'OK') {
-          const element = drivingData.rows[0].elements[0];
-          const seconds = element.duration_in_traffic?.value || element.duration.value;
-          liveTaxiDuration = formatDuration(seconds);
-        }
-      } catch (e) {
-        console.error('Google Maps driving lookup failed:', e);
-      }
 
-      // Fetch transit duration
-      try {
-        const transitParams = new URLSearchParams({
-          origins: origin,
-          destinations: destination,
-          mode: 'transit',
-          departure_time: arrivalTime 
-            ? Math.floor(new Date(arrivalTime).getTime() / 1000).toString()
-            : 'now',
-          key: GOOGLE_MAPS_API_KEY,
-        });
-        
-        const transitResp = await fetch(
-          `https://maps.googleapis.com/maps/api/distancematrix/json?${transitParams.toString()}`
-        );
-        const transitData = await transitResp.json();
-        
-        if (transitData.status === 'OK' && transitData.rows?.[0]?.elements?.[0]?.status === 'OK') {
-          const element = transitData.rows[0].elements[0];
-          const seconds = element.duration.value;
-          liveTransitDuration = formatDuration(seconds);
-        }
-      } catch (e) {
-        console.error('Google Maps transit lookup failed:', e);
-      }
+    // Google Maps live duration
+    let liveTaxiDuration: string | null = null;
+    let liveTaxiMinutes: number | null = null;
+    let liveTransitDuration: string | null = null;
+    let liveTransitMinutes: number | null = null;
+
+    const GOOGLE_MAPS_API_KEY = Deno.env.get('GOOGLE_MAPS_API_KEY');
+    const googleOrigin = isReturn ? destination : origin;
+    const googleDest = isReturn ? origin : destination;
+
+    if (GOOGLE_MAPS_API_KEY && googleOrigin && googleDest) {
+      const fetchPromises = [];
+
+      // Driving
+      const drivingParams = new URLSearchParams({
+        origins: googleOrigin, destinations: googleDest,
+        mode: 'driving', departure_time: 'now', key: GOOGLE_MAPS_API_KEY,
+      });
+      fetchPromises.push(
+        fetch(`https://maps.googleapis.com/maps/api/distancematrix/json?${drivingParams}`)
+          .then(r => r.json())
+          .then(data => {
+            if (data.status === 'OK' && data.rows?.[0]?.elements?.[0]?.status === 'OK') {
+              const seconds = data.rows[0].elements[0].duration_in_traffic?.value || data.rows[0].elements[0].duration.value;
+              liveTaxiDuration = formatDuration(seconds);
+              liveTaxiMinutes = Math.round(seconds / 60);
+            }
+          })
+          .catch(() => {})
+      );
+
+      // Transit
+      const transitParams = new URLSearchParams({
+        origins: googleOrigin, destinations: googleDest,
+        mode: 'transit',
+        departure_time: arrivalTime ? Math.floor(new Date(arrivalTime).getTime() / 1000).toString() : 'now',
+        key: GOOGLE_MAPS_API_KEY,
+      });
+      fetchPromises.push(
+        fetch(`https://maps.googleapis.com/maps/api/distancematrix/json?${transitParams}`)
+          .then(r => r.json())
+          .then(data => {
+            if (data.status === 'OK' && data.rows?.[0]?.elements?.[0]?.status === 'OK') {
+              const seconds = data.rows[0].elements[0].duration.value;
+              liveTransitDuration = formatDuration(seconds);
+              liveTransitMinutes = Math.round(seconds / 60);
+            }
+          })
+          .catch(() => {})
+      );
+
+      await Promise.all(fetchPromises);
     }
 
     const options: TransferOption[] = [];
-    
-    if (fareRecord) {
-      // Use curated database fares with live duration if available
-      const symbol = fareRecord.currency_symbol;
-      
-      // Taxi option
-      const taxiDuration = liveTaxiDuration || formatDurationRange(
-        fareRecord.taxi_duration_min, 
-        fareRecord.taxi_duration_max
-      );
-      
+    const pax = travelers || 2;
+    const regional = getRegionalEstimate(city);
+    const sym = fareRecord?.currency_symbol || regional.symbol;
+
+    // 1) Taxi/Rideshare
+    const taxiDuration = liveTaxiDuration || (fareRecord
+      ? formatDurationRange(fareRecord.taxi_duration_min, fareRecord.taxi_duration_max)
+      : regional.taxiDuration);
+    const taxiMinutes = liveTaxiMinutes || fareRecord?.taxi_duration_max || fareRecord?.taxi_duration_min || 40;
+    const taxiCost = fareRecord
+      ? formatCost(fareRecord.taxi_cost_min, fareRecord.taxi_cost_max, sym, fareRecord.taxi_is_fixed_price)
+      : `${sym}${regional.taxiMin}-${regional.taxiMax}`;
+
+    options.push({
+      id: 'taxi',
+      mode: 'taxi',
+      label: 'Taxi / Rideshare',
+      icon: '🚕',
+      duration: taxiDuration,
+      durationMinutes: taxiMinutes,
+      estimatedCost: taxiCost,
+      costPerPerson: pax > 1 ? `~${sym}${Math.round((fareRecord?.taxi_cost_min || regional.taxiMin) / pax)}-${Math.round((fareRecord?.taxi_cost_max || regional.taxiMax) / pax)} pp` : undefined,
+      route: `Direct door-to-door from ${isReturn ? (hotelName || 'hotel') : 'airport'} to ${isReturn ? 'airport' : (hotelName || 'hotel')}`,
+      pros: ['Door-to-door, no transfers', 'Best with luggage', 'Available 24/7'],
+      cons: ['Traffic can add 20-30 min at peak hours', 'Ride apps may surge price'],
+      notes: liveTaxiDuration ? 'Live traffic estimate' : (fareRecord?.taxi_notes || undefined),
+      bookingTip: 'Pre-book via hotel or use Uber/Bolt at arrivals',
+    });
+
+    // 2) Train/Metro
+    if ((fareRecord && fareRecord.train_cost !== null) || regional.trainCost !== null) {
+      const trainDuration = liveTransitDuration || (fareRecord
+        ? formatDurationRange(fareRecord.train_duration_min, fareRecord.train_duration_max)
+        : regional.trainDuration || '30-45 min');
+      const trainMinutes = liveTransitMinutes || fareRecord?.train_duration_max || fareRecord?.train_duration_min || 35;
+      const trainCost = fareRecord?.train_cost
+        ? `${sym}${fareRecord.train_cost}`
+        : `${sym}${regional.trainCost}`;
+
       options.push({
-        mode: 'Taxi/Rideshare',
-        duration: taxiDuration,
-        durationMinutes: fareRecord.taxi_duration_max || fareRecord.taxi_duration_min || 40,
-        estimatedCost: formatCost(
-          fareRecord.taxi_cost_min, 
-          fareRecord.taxi_cost_max, 
-          symbol, 
-          fareRecord.taxi_is_fixed_price
-        ),
-        notes: liveTaxiDuration 
-          ? `Live traffic • ${fareRecord.taxi_notes || ''}`
-          : fareRecord.taxi_notes || undefined,
+        id: 'train',
+        mode: 'train',
+        label: 'Train / Metro',
+        icon: '🚆',
+        duration: trainDuration,
+        durationMinutes: trainMinutes,
+        estimatedCost: trainCost,
+        costPerPerson: `${trainCost} pp`,
+        trainLine: fareRecord?.train_line || undefined,
+        route: fareRecord?.train_line
+          ? `${fareRecord.train_line} to city center, then walk/taxi to ${hotelName || 'hotel'}`
+          : `Airport express to central station, then metro/taxi`,
+        pros: ['Cheapest option', 'No traffic delays', 'See the city on the way'],
+        cons: ['Luggage can be awkward', 'May need a transfer', 'Limited late-night service'],
+        notes: fareRecord?.train_notes || undefined,
+        bookingTip: 'Buy tickets at the airport station or use contactless payment',
       });
-      
-      // Train option
-      if (fareRecord.train_cost !== null) {
-        const trainDuration = liveTransitDuration || formatDurationRange(
-          fareRecord.train_duration_min, 
-          fareRecord.train_duration_max
-        );
-        
-        options.push({
-          mode: 'Train/Metro',
-          duration: trainDuration,
-          durationMinutes: fareRecord.train_duration_max || fareRecord.train_duration_min || 35,
-          estimatedCost: `${symbol}${fareRecord.train_cost}`,
-          trainLine: fareRecord.train_line || undefined,
-          notes: fareRecord.train_notes || undefined,
-        });
-      } else {
-        options.push({
-          mode: 'Train/Metro',
-          duration: 'N/A',
-          durationMinutes: 0,
-          estimatedCost: 'N/A',
-          notes: fareRecord.train_notes || 'No train service',
-        });
-      }
-    } else {
-      // Fallback: Use regional estimates with Google Maps duration if available
-      const regional = getRegionalEstimate(city);
-      
+    }
+
+    // 3) Airport Bus/Shuttle
+    if ((fareRecord && fareRecord.bus_cost !== null) || regional.busCost !== null) {
+      const busDuration = fareRecord
+        ? formatDurationRange(fareRecord.bus_duration_min, fareRecord.bus_duration_max)
+        : regional.busDuration || '45-60 min';
+      const busMinutes = fareRecord?.bus_duration_max || fareRecord?.bus_duration_min || 50;
+      const busCost = fareRecord?.bus_cost
+        ? `${sym}${fareRecord.bus_cost}`
+        : `${sym}${regional.busCost}`;
+
       options.push({
-        mode: 'Taxi/Rideshare',
-        duration: liveTaxiDuration || regional.taxiDuration,
-        durationMinutes: 40,
-        estimatedCost: `${regional.symbol}${regional.taxiMin}-${regional.taxiMax}`,
-        notes: liveTaxiDuration ? 'Live traffic estimate' : 'Regional estimate',
+        id: 'bus',
+        mode: 'bus',
+        label: 'Airport Bus / Shuttle',
+        icon: '🚌',
+        duration: busDuration,
+        durationMinutes: busMinutes,
+        estimatedCost: busCost,
+        costPerPerson: `${busCost} pp`,
+        route: 'Airport shuttle to city center drop-off point',
+        pros: ['Very affordable', 'Comfortable seating', 'Luggage space included'],
+        cons: ['Fixed schedule', 'Multiple stops', 'Longer journey time'],
+        notes: fareRecord?.bus_notes || undefined,
+        bookingTip: 'Check schedule at arrivals — runs every 15-30 min typically',
       });
-      
-      if (regional.trainCost !== null && regional.trainDuration) {
-        options.push({
-          mode: 'Train/Metro',
-          duration: liveTransitDuration || regional.trainDuration,
-          durationMinutes: 35,
-          estimatedCost: `${regional.symbol}${regional.trainCost}`,
-          notes: 'Regional estimate',
-        });
-      } else {
-        options.push({
-          mode: 'Train/Metro',
-          duration: 'N/A',
-          durationMinutes: 0,
-          estimatedCost: 'N/A',
-          notes: 'Taxi/rideshare recommended',
-        });
+    }
+
+    // 4) Hotel Car Service / Private Transfer
+    const hotelCarMin = regional.hotelCarMin || 50;
+    const hotelCarMax = regional.hotelCarMax || 100;
+    options.push({
+      id: 'hotel_car',
+      mode: 'private',
+      label: 'Hotel Car Service',
+      icon: '🚘',
+      duration: liveTaxiDuration || taxiDuration, // same as taxi route
+      durationMinutes: taxiMinutes,
+      estimatedCost: `${sym}${hotelCarMin}-${hotelCarMax}`,
+      route: `Pre-arranged driver waiting at arrivals with name sign`,
+      pros: ['Most comfortable', 'Driver waiting at arrivals', 'No navigation needed', 'Premium vehicles'],
+      cons: ['Most expensive option', 'Must book in advance'],
+      notes: hotelName ? `Ask ${hotelName} concierge about car service` : 'Contact hotel for car service',
+      bookingTip: hotelName ? `Book through ${hotelName} when confirming your reservation` : 'Book through your hotel concierge',
+    });
+
+    // AI recommendation
+    const { recommendation, recommendedId } = getArchetypeRecommendation(archetype, options, hotelName, pax);
+
+    // Mark recommended option
+    for (const opt of options) {
+      if (opt.id === recommendedId) {
+        opt.recommended = true;
+        opt.recommendedFor = archetype || 'you';
       }
     }
 
     const result: TransferResponse = {
       origin: origin || `${city} Airport`,
-      destination: destination || city,
+      destination: destination || (hotelName || city),
       options,
-      source: fareRecord ? 'database' : 'estimated',
+      aiRecommendation: recommendation,
+      source: fareRecord ? (liveTaxiDuration ? 'database+ai' : 'database') : (liveTaxiDuration ? 'ai' : 'estimated'),
       lastVerified: fareRecord?.last_verified_at,
       fetchedAt: new Date().toISOString(),
     };
