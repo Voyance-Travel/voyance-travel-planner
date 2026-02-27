@@ -1,8 +1,6 @@
 const BROKEN_UNSPLASH_IDS = new Set([
   'photo-1563177978-4f4a11e3f462',
   'photo-1579606032821-4e6161c81571',
-  'photo-1469854523086-cc02fe5d8800',
-  'photo-1613395877344-13d4a8e0d49e',
   'photo-1513635269975-59663e0ac1ad',
   'photo-1512635269975-5963e0ac1ad',
 ]);
