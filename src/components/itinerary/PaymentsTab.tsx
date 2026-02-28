@@ -740,12 +740,21 @@ export function PaymentsTab({
   const renderPayableItem = (item: PayableItem) => {
     const isPaid = item.payment?.status === 'paid';
     const assignedMembers = item.assignedMemberIds
-      .map(id => {
-        // Try synthetic ID first, then check if a raw member maps to this ID
-        const member = tripMembers.find(m => m.id === id);
-        if (member) return member;
-        // Check if this is a raw trip_members ID that maps to a synthetic member
-        const raw = rawTripMembers.find(rm => rm.id === id);
+      .map(rawId => {
+        // Use the realIdToSyntheticId map first (covers owner-*, collab-* synthetic IDs)
+        const syntheticId = realIdToSyntheticId.get(rawId);
+        if (syntheticId) {
+          const member = tripMembers.find(m => m.id === syntheticId);
+          if (member) return member;
+        }
+        // Direct match on synthetic ID
+        const directMatch = tripMembers.find(m => m.id === rawId);
+        if (directMatch) return directMatch;
+        // Match by userId (raw assigned_member_id might be a user_id or trip_members.id)
+        const byUserId = tripMembers.find(m => m.userId === rawId);
+        if (byUserId) return byUserId;
+        // Check raw trip_members for userId lookup
+        const raw = rawTripMembers.find(rm => rm.id === rawId);
         if (raw?.userId) {
           return tripMembers.find(m => m.userId === raw.userId) || null;
         }
