@@ -40,6 +40,11 @@ export interface ItineraryContext {
       isLocked?: boolean;
     }>;
   }>;
+  blendedDna?: {
+    blendedTraits: Record<string, number>;
+    travelerProfiles: Array<{ userId: string; name: string; archetypeId: string; isOwner: boolean; weight: number }>;
+    isBlended: boolean;
+  };
 }
 
 export interface ChatResponse {
@@ -73,6 +78,7 @@ export async function sendChatMessage(
       itineraryContext,
       conversationId,
       stream: false,
+      blendedDna: itineraryContext.blendedDna,
     },
   });
 

@@ -333,12 +333,18 @@ serve(async (req) => {
       messages, 
       itineraryContext, 
       conversationId,
-      stream = false 
+      stream = false,
+      blendedDna,
     }: { 
       messages: ChatMessage[]; 
       itineraryContext: ItineraryContext;
       conversationId?: string;
       stream?: boolean;
+      blendedDna?: {
+        blendedTraits: Record<string, number>;
+        travelerProfiles: Array<{ userId: string; name: string; archetypeId: string; isOwner: boolean; weight: number }>;
+        isBlended: boolean;
+      };
     } = body;
 
     if (!messages || !itineraryContext) {
@@ -378,11 +384,33 @@ serve(async (req) => {
       messageCount: messages.length, 
       destination: itineraryContext.destination,
       userId,
+      isBlended: blendedDna?.isBlended,
     });
 
     // Fetch and inject Traveler DNA for personalized responses
     let personaPrompt = '';
     let tripType = '';
+    let blendedDnaFromTrip = blendedDna;
+
+    // If blendedDna not passed from client, try fetching from trip record
+    if (!blendedDnaFromTrip && itineraryContext.tripId) {
+      try {
+        const { data: tripRecord } = await supabase
+          .from('trips')
+          .select('blended_dna')
+          .eq('id', itineraryContext.tripId)
+          .maybeSingle();
+        if (tripRecord?.blended_dna && typeof tripRecord.blended_dna === 'object') {
+          const bd = tripRecord.blended_dna as Record<string, unknown>;
+          if (bd.isBlended) {
+            blendedDnaFromTrip = bd as typeof blendedDna;
+          }
+        }
+      } catch (e) {
+        log("Failed to fetch blended_dna from trip", { error: String(e) });
+      }
+    }
+
     if (userId) {
       try {
         const dnaResult = await fetchTravelerDNA(supabase, userId);
@@ -405,6 +433,29 @@ serve(async (req) => {
       } catch (dnaError) {
         log("DNA fetch failed, continuing without", { error: String(dnaError) });
       }
+    }
+
+    // Build group context if this is a blended trip
+    let groupContext = '';
+    if (blendedDnaFromTrip?.isBlended && blendedDnaFromTrip.travelerProfiles?.length > 1) {
+      const profiles = blendedDnaFromTrip.travelerProfiles;
+      const owner = profiles.find(p => p.isOwner);
+      const companions = profiles.filter(p => !p.isOwner);
+      
+      groupContext = `\n\n## GROUP TRIP CONTEXT
+This is a GROUP trip with ${profiles.length} travelers. Blended DNA was used to generate this itinerary.
+
+**Travelers:**
+${profiles.map(p => `- ${p.name} (${p.isOwner ? 'Trip Owner' : 'Companion'}, archetype: ${p.archetypeId.replace(/_/g, ' ')}, weight: ${Math.round(p.weight * 100)}%)`).join('\n')}
+
+**Blended Trait Scores:** ${JSON.stringify(blendedDnaFromTrip.blendedTraits)}
+
+**IMPORTANT GROUP RULES:**
+- When a user mentions a specific traveler by name (e.g., "${companions[0]?.name || 'a companion'} would love something more exciting"), reference that traveler's archetype and individual preferences.
+- Activities tagged with \`suggestedFor\` were inspired by specific travelers. Mention this when discussing swaps.
+- When swapping an activity inspired by a specific traveler, suggest alternatives that still cater to that traveler's style.
+- If removing an activity for one traveler, consider adding something else for them to maintain blend balance.
+- For group compromises, prioritize activities that satisfy multiple travelers simultaneously.`;
     }
 
     // Build context string from itinerary — include MORE detail for rewrite_day
@@ -431,8 +482,8 @@ ${itineraryDescription}
 - Filter application: 5 credits per affected activity`;
 
     const fullSystemPrompt = personaPrompt 
-      ? `${SYSTEM_PROMPT}\n\n## TRAVELER PROFILE\n${personaPrompt}\n\nIMPORTANT: All suggestions, swaps, and recommendations MUST align with this traveler's DNA profile above. Be OPINIONATED — justify every suggestion by referencing their specific preferences, past trips, or traits. Never give generic advice.`
-      : SYSTEM_PROMPT;
+      ? `${SYSTEM_PROMPT}\n\n## TRAVELER PROFILE\n${personaPrompt}${groupContext}\n\nIMPORTANT: All suggestions, swaps, and recommendations MUST align with this traveler's DNA profile above. Be OPINIONATED — justify every suggestion by referencing their specific preferences, past trips, or traits. Never give generic advice.`
+      : `${SYSTEM_PROMPT}${groupContext}`;
 
     const apiMessages = [
       { role: "system", content: fullSystemPrompt },

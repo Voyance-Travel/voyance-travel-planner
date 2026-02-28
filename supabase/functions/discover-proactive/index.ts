@@ -11,9 +11,14 @@ interface ProactiveRequest {
   dayNumber: number;
   dayActivities: { title: string; category: string; time?: string; location?: string }[];
   tripDates?: { start: string; end: string };
-  budgetTier?: string; // 'budget' | 'moderate' | 'premium' | 'luxury'
+  budgetTier?: string;
   interests?: string[];
   timeOfDay?: string;
+  blendedDna?: {
+    blendedTraits: Record<string, number>;
+    travelerProfiles: Array<{ userId: string; name: string; archetypeId: string; isOwner: boolean; weight: number }>;
+    isBlended: boolean;
+  };
 }
 
 serve(async (req: Request) => {
@@ -23,7 +28,7 @@ serve(async (req: Request) => {
 
   try {
     const body: ProactiveRequest = await req.json();
-    const { destination, archetype, dayNumber, dayActivities, tripDates, budgetTier, interests, timeOfDay } = body;
+    const { destination, archetype, dayNumber, dayActivities, tripDates, budgetTier, interests, timeOfDay, blendedDna } = body;
 
     if (!destination || !archetype) {
       return new Response(
@@ -46,6 +51,22 @@ serve(async (req: Request) => {
     const budgetContext = budgetTier ? `\nBudget tier: ${budgetTier}` : '';
     const dateContext = tripDates ? `\nTrip dates: ${tripDates.start} to ${tripDates.end}` : '';
 
+    // Build group context if blended
+    let groupDiscoverContext = '';
+    if (blendedDna?.isBlended && blendedDna.travelerProfiles?.length > 1) {
+      const travelerList = blendedDna.travelerProfiles.map(p => 
+        `- ${p.name} (${p.isOwner ? 'Trip Owner' : 'Companion'}, archetype: ${p.archetypeId.replace(/_/g, ' ')}, weight: ${Math.round(p.weight * 100)}%)`
+      ).join('\n');
+      groupDiscoverContext = `
+
+GROUP TRIP: This trip has ${blendedDna.travelerProfiles.length} travelers with blended preferences.
+${travelerList}
+
+Blended Traits: ${JSON.stringify(blendedDna.blendedTraits)}
+
+For the "forYou" category, generate suggestions tagged for SPECIFIC travelers based on their archetypes. Include a "forTraveler" field with the traveler's name. Alternate between travelers so each person gets personalized picks. For "nearSchedule" and "hiddenGems", suggest activities that appeal to the GROUP.`;
+    }
+
     const systemPrompt = `You are Voyance, a premium AI travel planner. You PROACTIVELY suggest activities that this specific traveler would love — not generic tourist attractions, but things matched to WHO they are.
 
 DESTINATION: ${destination}
@@ -55,10 +76,11 @@ ${scheduleContext}
 ${interestsContext}
 ${budgetContext}
 ${dateContext}
+${groupDiscoverContext}
 
 Generate THREE categories of proactive suggestions:
 
-1. "forYou" — 3 suggestions specifically matched to the ${archetype} archetype. These should feel personal and surprising, not obvious. Explain WHY this traveler would love each one based on their archetype traits.
+1. "forYou" — 3 suggestions specifically matched to ${blendedDna?.isBlended ? 'the group travelers (tag each with "forTraveler" name)' : `the ${archetype} archetype`}. These should feel personal and surprising, not obvious. Explain WHY this traveler would love each one based on their archetype traits.
 
 2. "nearSchedule" — 2-3 suggestions that fit into gaps or complement activities already on Day ${dayNumber}. If the day is empty, suggest great ways to start or fill the day. Reference specific schedule gaps or transitions.
 
@@ -74,6 +96,7 @@ For each suggestion, provide:
 - How it fits with their schedule
 - Estimated distance from the nearest itinerary activity that day (e.g. "1.2 km", "800m")
 - Estimated walking time from the nearest activity (e.g. "15 min walk", "5 min walk")
+${blendedDna?.isBlended ? '- "forTraveler": Name of the traveler this is best suited for (for "forYou" category)' : ''}
 
 CRITICAL: Be opinionated. Don't suggest things every tourist does. Suggest things that make the traveler feel like Voyance truly knows them.
 
@@ -91,7 +114,7 @@ OUTPUT FORMAT (JSON only, no markdown):
       "scheduleFit": "Perfect for the 2pm gap between museum and dinner",
       "rating": 4.5,
       "distance": "1.2 km from your lunch spot",
-      "walkTime": "15 min walk"
+      "walkTime": "15 min walk"${blendedDna?.isBlended ? ',\n      "forTraveler": "Traveler Name"' : ''}
     }
   ],
   "nearSchedule": [...],

@@ -53,6 +53,11 @@ interface ItineraryAssistantProps {
   days: ItineraryDay[];
   isLocalTrip?: boolean;
   onItineraryUpdate?: (updatedDays: ItineraryDay[]) => void;
+  blendedDna?: {
+    blendedTraits: Record<string, number>;
+    travelerProfiles: Array<{ userId: string; name: string; archetypeId: string; isOwner: boolean; weight: number }>;
+    isBlended: boolean;
+  };
 }
 
 export function ItineraryAssistant({
@@ -63,6 +68,7 @@ export function ItineraryAssistant({
   days,
   isLocalTrip = false,
   onItineraryUpdate,
+  blendedDna,
 }: ItineraryAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -112,6 +118,7 @@ export function ItineraryAssistant({
         isLocked: a.isLocked,
       })),
     })),
+    blendedDna,
   };
 
   // Auto-scroll to bottom when new messages arrive

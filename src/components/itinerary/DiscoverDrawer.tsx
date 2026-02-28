@@ -47,6 +47,11 @@ export interface DiscoverDrawerProps {
   budgetTier?: string;
   tripDates?: { start: string; end: string };
   currentDay?: DayContext;
+  blendedDna?: {
+    blendedTraits: Record<string, number>;
+    travelerProfiles: Array<{ userId: string; name: string; archetypeId: string; isOwner: boolean; weight: number }>;
+    isBlended: boolean;
+  };
   onAddActivity: (activity: {
     title: string;
     description: string;
@@ -78,6 +83,7 @@ export function DiscoverDrawer({
   budgetTier,
   tripDates,
   currentDay,
+  blendedDna,
   onAddActivity,
 }: DiscoverDrawerProps) {
   // Proactive picks state
@@ -129,6 +135,7 @@ export function DiscoverDrawer({
           budgetTier,
           interests,
           timeOfDay: getTimeOfDay(),
+          blendedDna: blendedDna?.isBlended ? blendedDna : undefined,
         },
       });
 
