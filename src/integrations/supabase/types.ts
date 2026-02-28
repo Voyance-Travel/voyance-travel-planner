@@ -6804,6 +6804,7 @@ export type Database = {
           abandoned_at: string | null
           agent_notes: string | null
           arrival_transfer: Json | null
+          blended_dna: Json | null
           budget_allocations: Json | null
           budget_currency: string | null
           budget_include_flight: boolean | null
@@ -6857,6 +6858,7 @@ export type Database = {
           abandoned_at?: string | null
           agent_notes?: string | null
           arrival_transfer?: Json | null
+          blended_dna?: Json | null
           budget_allocations?: Json | null
           budget_currency?: string | null
           budget_include_flight?: boolean | null
@@ -6910,6 +6912,7 @@ export type Database = {
           abandoned_at?: string | null
           agent_notes?: string | null
           arrival_transfer?: Json | null
+          blended_dna?: Json | null
           budget_allocations?: Json | null
           budget_currency?: string | null
           budget_include_flight?: boolean | null

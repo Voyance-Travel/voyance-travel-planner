@@ -367,6 +367,8 @@ interface GenerationContext {
   groupArchetypes?: TravelerArchetype[];
   // Collaborator user IDs and names for suggestedFor attribution
   collaboratorTravelers?: Array<{ userId: string; name: string }>;
+  // Blended DNA snapshot for saving to trip record
+  blendedDnaSnapshot?: Record<string, unknown> | null;
   // Celebration day: User-specified day for birthday/anniversary celebration (1-indexed)
   celebrationDay?: number;
   // Multi-city support
@@ -6744,6 +6746,7 @@ async function finalSaveItinerary(
       itinerary_status: 'ready',
       dna_snapshot: dnaSnapshot,
       updated_at: new Date().toISOString(),
+      ...(context.blendedDnaSnapshot && { blended_dna: context.blendedDnaSnapshot }),
     };
     if (computedEndDate) {
       updatePayload.end_date = computedEndDate;
@@ -6971,6 +6974,8 @@ serve(async (req) => {
       // =======================================================================
       console.log("[Stage 1.2] Checking for trip collaborators...");
       const collaboratorPrefs = await getCollaboratorPreferences(supabase, tripId);
+      let groupBlendingPromptSection = '';
+      let blendedDnaSnapshot: Record<string, unknown> | null = null;
       
       if (collaboratorPrefs.length > 0) {
         console.log(`[Stage 1.2] Found ${collaboratorPrefs.length} collaborators - blending preferences`);
@@ -7008,6 +7013,120 @@ serve(async (req) => {
           name: profileMap.get(uid!) || 'Traveler',
         }));
         console.log(`[Stage 1.2] Attribution travelers: ${context.collaboratorTravelers.map(t => `${t.name}(${t.userId.slice(0,8)})`).join(', ')}`);
+
+        // =======================================================================
+        // STAGE 1.2.1: ARCHETYPE-LEVEL GROUP BLENDING
+        // Load each companion's Travel DNA, run blendGroupArchetypes(), inject prompt
+        // =======================================================================
+        console.log("[Stage 1.2.1] Loading companion archetypes for group blending...");
+        try {
+          // Load companion DNA profiles
+          const companionUserIds = (collabRows || []).map((c: any) => c.user_id).filter(Boolean);
+          const { data: companionDnaRows } = await supabase
+            .from('travel_dna_profiles')
+            .select('user_id, primary_archetype_name, trait_scores, travel_dna_v2')
+            .in('user_id', companionUserIds);
+
+          // Build TravelerArchetype array for blendGroupArchetypes
+          const travelers: TravelerArchetype[] = [];
+          
+          // Add owner
+          const ownerDnaRow = await supabase
+            .from('travel_dna_profiles')
+            .select('primary_archetype_name, trait_scores')
+            .eq('user_id', userId)
+            .maybeSingle();
+          
+          const ownerArchetype = ownerDnaRow?.data?.primary_archetype_name || 'balanced_story_collector';
+          travelers.push({
+            travelerId: userId,
+            name: profileMap.get(userId) || 'You',
+            archetype: ownerArchetype,
+            isPrimary: true,
+          });
+
+          // Add companions with DNA
+          const companionTraitScoresMap = new Map<string, Record<string, number>>();
+          for (const dna of (companionDnaRows || [])) {
+            const archetype = dna.primary_archetype_name 
+              || (dna.travel_dna_v2 as any)?.primary_archetype_name 
+              || 'balanced_story_collector';
+            travelers.push({
+              travelerId: dna.user_id,
+              name: profileMap.get(dna.user_id) || 'Guest',
+              archetype,
+              isPrimary: false,
+            });
+            // Store trait scores for blending
+            const rawScores = dna.trait_scores || (dna.travel_dna_v2 as any)?.trait_scores || {};
+            companionTraitScoresMap.set(dna.user_id, {
+              pace: Number(rawScores.pace ?? rawScores.travel_pace ?? 0),
+              budget: Number(rawScores.budget ?? rawScores.value_focus ?? 0),
+              social: Number(rawScores.social ?? rawScores.social_battery ?? 0),
+              planning: Number(rawScores.planning ?? rawScores.planning_preference ?? 0),
+              comfort: Number(rawScores.comfort ?? rawScores.comfort_level ?? 0),
+              authenticity: Number(rawScores.authenticity ?? rawScores.cultural_depth ?? 0),
+              adventure: Number(rawScores.adventure ?? rawScores.risk_tolerance ?? 0),
+              cultural: Number(rawScores.cultural ?? rawScores.cultural_interest ?? 0),
+            });
+          }
+
+          if (travelers.length > 1) {
+            // Run archetype-level blending (day assignments, conflicts, split activities)
+            const blendResult = await blendGroupArchetypes(travelers, context.totalDays, context.destination);
+            groupBlendingPromptSection = blendResult.promptSection;
+            console.log(`[Stage 1.2.1] ✓ Group archetype blending complete: ${travelers.length} travelers, ${blendResult.conflicts.length} conflicts, ${blendResult.splitOpportunities.length} split opportunities`);
+
+            // Build blended trait scores snapshot (owner 50%, companions split remaining 50%)
+            const ownerTraits = ownerDnaRow?.data?.trait_scores || {};
+            const ownerTraitsNormalized: Record<string, number> = {
+              pace: Number(ownerTraits.pace ?? 0),
+              budget: Number(ownerTraits.budget ?? 0),
+              social: Number(ownerTraits.social ?? 0),
+              planning: Number(ownerTraits.planning ?? 0),
+              comfort: Number(ownerTraits.comfort ?? 0),
+              authenticity: Number(ownerTraits.authenticity ?? 0),
+              adventure: Number(ownerTraits.adventure ?? 0),
+              cultural: Number(ownerTraits.cultural ?? 0),
+            };
+
+            const companionTraitsList = companionUserIds
+              .map((uid: string) => companionTraitScoresMap.get(uid))
+              .filter(Boolean) as Record<string, number>[];
+
+            const ownerWeight = 0.5;
+            const companionWeight = companionTraitsList.length > 0 ? 0.5 / companionTraitsList.length : 0;
+            
+            const blendedTraits: Record<string, number> = {};
+            const traitKeys = ['pace', 'budget', 'social', 'planning', 'comfort', 'authenticity', 'adventure', 'cultural'];
+            for (const key of traitKeys) {
+              const ownerVal = ownerTraitsNormalized[key] || 0;
+              const companionSum = companionTraitsList.reduce((sum, ct) => sum + (ct[key] || 0) * companionWeight, 0);
+              blendedTraits[key] = Math.round(ownerVal * ownerWeight + companionSum);
+            }
+
+            blendedDnaSnapshot = {
+              blendedTraits,
+              travelers: travelers.map(t => ({
+                userId: t.travelerId,
+                name: t.name,
+                archetype: t.archetype,
+                weight: t.isPrimary ? ownerWeight : companionWeight,
+                isPrimary: t.isPrimary,
+              })),
+              blendMethod: 'weighted_average',
+              generatedAt: new Date().toISOString(),
+              conflicts: blendResult.conflicts.length,
+              dayAssignments: blendResult.dayAssignments,
+            };
+
+            // Store group archetypes and blended DNA on context for downstream modules
+            context.groupArchetypes = travelers;
+            context.blendedDnaSnapshot = blendedDnaSnapshot;
+          }
+        } catch (blendErr) {
+          console.warn("[Stage 1.2.1] Archetype blending failed (non-blocking):", blendErr);
+        }
       }
       
       // =======================================================================
@@ -7973,7 +8092,7 @@ ${'='.repeat(60)}
       // Order: ARCHETYPE CONSTRAINTS → INTEREST OVERRIDE → TRIP VIBE → TRIP TYPE → SKIP LIST → DIETARY ENFORCEMENT → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → HIDDEN GEMS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE → USER RESEARCH
       // NOTE: generationHierarchy includes destination essentials, archetype behavioral rules, budget guardrails (Phase 2 Fix)
       // Phase 2 Fix: Removed unifiedDNAContext - all traveler data now comes from generationHierarchy via unified profile
-      const preferenceContext = generationHierarchy + '\n\n' + interestOverridePrompt + '\n\n' + tripVibePrompt + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + (context.flightIntelligencePrompt ? '\n\n' + context.flightIntelligencePrompt : '') + tripLearningsContext + recentlyUsedContext + localEventsContext + hiddenGemsContext + voyancePicksContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt + userResearchPrompt;
+      const preferenceContext = generationHierarchy + '\n\n' + interestOverridePrompt + '\n\n' + tripVibePrompt + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + (context.flightIntelligencePrompt ? '\n\n' + context.flightIntelligencePrompt : '') + tripLearningsContext + recentlyUsedContext + localEventsContext + hiddenGemsContext + voyancePicksContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + groupBlendingPromptSection + geographicPrompt + userResearchPrompt;
 
       // STAGE 1.9999: Pre-fetch known venue hours from verified_venues cache
       try {
