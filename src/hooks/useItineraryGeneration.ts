@@ -550,13 +550,11 @@ export function useItineraryGeneration() {
       if (isConnectionError) {
         try {
           supabase.removeAllChannels();
-          await supabase.auth.refreshSession();
+          await guardedRefreshSession();
           resubscribeAll();
           resetConnectionFailures();
         } catch (cleanupErr) {
           console.warn('[useItineraryGeneration] Post-failure cleanup failed:', cleanupErr);
-          reportConnectionFailure();
-          reportConnectionFailure();
           reportConnectionFailure();
         }
       }
