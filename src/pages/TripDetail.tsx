@@ -135,74 +135,107 @@ export default function TripDetail() {
   const enrichHotelIfNeeded = useCallback(async () => {
     if (!trip || hotelEnrichmentAttempted.current) return;
 
-    // hotel_selection supports array (multi-hotel) and legacy single-object.
-    // For enrichment we enrich the primary hotel (first in array).
-    const hotelRaw = trip.hotel_selection as unknown;
-    const hotels = normalizeLegacyHotelSelection(hotelRaw, trip.start_date, trip.end_date);
-    const primaryHotel: HotelBooking | undefined = hotels[0];
-    if (!primaryHotel?.name) return; // No hotel selected
-    
-    // Check if enrichment is needed
-    const hasAddress = !!primaryHotel.address;
-    const hasWebsite = !!primaryHotel.website;
-    const hasPhotos = Array.isArray(primaryHotel.images) && primaryHotel.images.length > 0;
-    
-    if (hasAddress && hasWebsite && hasPhotos) {
-      // Hotel already enriched, skipping
-      return;
-    }
-    
-    hotelEnrichmentAttempted.current = true;
-    // Enriching hotel data
-    
-    // Normalize destination (strip IATA codes)
     const cleanDestination = (trip.destination || '')
       .replace(/\s*\([A-Z]{3}\)\s*$/i, '')
       .trim();
-    
-    const enrichment = await enrichHotel(primaryHotel.name as string, cleanDestination);
-    
-    if (!enrichment) {
-      // Hotel enrichment returned no data
-      return;
-    }
-    
-    // Merge enrichment data into hotel selection
-    const enrichedHotel = {
-      ...primaryHotel,
-      address: enrichment.address || primaryHotel.address,
-      website: enrichment.website || primaryHotel.website,
-      googleMapsUrl: enrichment.googleMapsUrl || primaryHotel.googleMapsUrl,
-      images: (enrichment.photos && enrichment.photos.length > 0) 
-        ? enrichment.photos 
-        : primaryHotel.images,
-      placeId: enrichment.placeId || primaryHotel.placeId,
-    };
-    
-    // Enriched hotel data ready
-    
-    // Rebuild array (preserve other hotels) and update local state
-    const updatedHotels = hotels.map((h, idx) => (idx === 0 ? enrichedHotel : h));
-    setTrip(prev => (prev ? { ...prev, hotel_selection: updatedHotels as any } : prev));
-    
-    // Persist to backend
-    if (tripId) {
-      try {
-        const { error } = await supabase
-          .from('trips')
-          .update({ hotel_selection: updatedHotels as any, updated_at: new Date().toISOString() })
-          .eq('id', tripId);
-        
-        if (error) {
-          console.error('[TripDetail] Failed to persist enriched hotel:', error);
-        } else {
-          // Enriched hotel persisted successfully
+
+    // --- Path A: Enrich primary hotel from trips.hotel_selection (single-city) ---
+    const hotelRaw = trip.hotel_selection as unknown;
+    const hotels = normalizeLegacyHotelSelection(hotelRaw, trip.start_date, trip.end_date);
+    const primaryHotel: HotelBooking | undefined = hotels[0];
+
+    if (primaryHotel?.name) {
+      const hasAddress = !!primaryHotel.address;
+      const hasWebsite = !!primaryHotel.website;
+      const hasPhotos = Array.isArray(primaryHotel.images) && primaryHotel.images.length > 0;
+
+      if (!(hasAddress && hasWebsite && hasPhotos)) {
+        hotelEnrichmentAttempted.current = true;
+
+        const enrichment = await enrichHotel(primaryHotel.name as string, cleanDestination);
+        if (enrichment) {
+          const enrichedHotel = {
+            ...primaryHotel,
+            address: enrichment.address || primaryHotel.address,
+            website: enrichment.website || primaryHotel.website,
+            googleMapsUrl: enrichment.googleMapsUrl || primaryHotel.googleMapsUrl,
+            images: (enrichment.photos && enrichment.photos.length > 0)
+              ? enrichment.photos
+              : primaryHotel.images,
+            placeId: enrichment.placeId || primaryHotel.placeId,
+            rating: enrichment.rating || (primaryHotel as any).rating,
+          };
+
+          const updatedHotels = hotels.map((h, idx) => (idx === 0 ? enrichedHotel : h));
+          setTrip(prev => (prev ? { ...prev, hotel_selection: updatedHotels as any } : prev));
+
+          if (tripId) {
+            try {
+              await supabase
+                .from('trips')
+                .update({ hotel_selection: updatedHotels as any, updated_at: new Date().toISOString() })
+                .eq('id', tripId);
+            } catch (err) {
+              console.error('[TripDetail] Error persisting enriched hotel:', err);
+            }
+          }
         }
-      } catch (err) {
-        console.error('[TripDetail] Error persisting enriched hotel:', err);
+        return;
       }
     }
-  }, [trip, tripId]);
+
+    // --- Path B: Enrich per-city hotels from trip_cities (multi-city) ---
+    if (tripCities.length > 0) {
+      let anyEnriched = false;
+      for (const city of tripCities) {
+        const cityHotelRaw = city.hotel_selection as any;
+        const cityHotel = Array.isArray(cityHotelRaw) && cityHotelRaw.length > 0 ? cityHotelRaw[0] : cityHotelRaw;
+        if (!cityHotel?.name) continue;
+
+        const hasPhotos = Array.isArray(cityHotel.images) && cityHotel.images.length > 0;
+        const hasWebsite = !!cityHotel.website;
+        if (hasPhotos && hasWebsite) continue;
+
+        const cityDest = (city.city_name || '').replace(/\s*\([A-Z]{3}\)\s*$/i, '').trim();
+        const enrichment = await enrichHotel(cityHotel.name, cityDest || cleanDestination);
+        if (!enrichment) continue;
+
+        const enrichedCityHotel = {
+          ...cityHotel,
+          address: enrichment.address || cityHotel.address,
+          website: enrichment.website || cityHotel.website,
+          googleMapsUrl: enrichment.googleMapsUrl || cityHotel.googleMapsUrl,
+          images: (enrichment.photos?.length) ? enrichment.photos : cityHotel.images,
+          imageUrl: (enrichment.photos?.length) ? enrichment.photos[0] : cityHotel.imageUrl,
+          placeId: enrichment.placeId || cityHotel.placeId,
+          rating: enrichment.rating || cityHotel.rating,
+        };
+
+        const updatedSelection = Array.isArray(cityHotelRaw)
+          ? [enrichedCityHotel, ...cityHotelRaw.slice(1)]
+          : [enrichedCityHotel];
+
+        try {
+          await supabase
+            .from('trip_cities')
+            .update({ hotel_selection: updatedSelection as any })
+            .eq('id', city.id);
+          anyEnriched = true;
+        } catch (err) {
+          console.error(`[TripDetail] Failed to enrich city hotel for ${city.city_name}:`, err);
+        }
+      }
+
+      if (anyEnriched) {
+        try {
+          const updated = await getTripCities(tripId);
+          setTripCities(updated);
+        } catch { /* non-critical */ }
+      }
+    }
+
+    hotelEnrichmentAttempted.current = true;
+  }, [trip, tripId, tripCities]);
 
   // Trigger hotel enrichment when trip loads
   useEffect(() => {
@@ -1332,7 +1365,9 @@ export default function TripDetail() {
                 // Prefer trip_cities from DB (authoritative source)
                 if (tripCities.length >= 1) {
                   return tripCities.map((city, idx) => {
-                    const hotelData = city.hotel_selection as any;
+                    const hotelRaw = city.hotel_selection as any;
+                    // hotel_selection in trip_cities can be an array [{name:...}] or object {name:...}
+                    const hotelData = Array.isArray(hotelRaw) && hotelRaw.length > 0 ? hotelRaw[0] : hotelRaw;
                     const normalizedHotel = allNormalizedHotels[idx];
                     const hotel = hotelData?.name ? hotelData : normalizedHotel;
                     return {
