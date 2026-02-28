@@ -1001,6 +1001,38 @@ function FlightHotelStep({
   const [lastImportedLegs, setLastImportedLegs] = useState<ManualFlightEntry[]>([]);
   const [importNonce, setImportNonce] = useState(0);
 
+  const normalizeLegs = (legs: ManualFlightEntry[]): ManualFlightEntry[] => {
+    const hasContent = (leg: ManualFlightEntry) => Boolean(
+      leg.airline ||
+      leg.flightNumber ||
+      leg.departureAirport ||
+      leg.arrivalAirport ||
+      leg.departureTime ||
+      leg.arrivalTime ||
+      leg.price
+    );
+
+    const makeKey = (leg: ManualFlightEntry) => [
+      leg.airline || '',
+      leg.flightNumber || '',
+      leg.departureAirport || '',
+      leg.arrivalAirport || '',
+      leg.departureTime || '',
+      leg.arrivalTime || '',
+      leg.departureDate || '',
+      Number(leg.price || 0),
+    ].join('|').toLowerCase();
+
+    const seen = new Set<string>();
+    return legs.filter((leg) => {
+      if (!hasContent(leg)) return false;
+      const key = makeKey(leg);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
   const handleImportFlight = (outbound: ManualFlightEntry, returnFlightData?: ManualFlightEntry) => {
     setOutboundFlight(outbound);
     if (returnFlightData) {
@@ -1012,44 +1044,46 @@ function FlightHotelStep({
   };
 
   const handleImportAllLegs = (legs: ManualFlightEntry[]) => {
-    if (legs.length === 0) return;
+    const normalizedLegs = normalizeLegs(legs);
+    if (normalizedLegs.length === 0) return;
 
-    setLastImportedLegs(legs);
+    setLastImportedLegs(normalizedLegs);
     setImportNonce((n) => n + 1);
 
     // First leg = outbound
-    setOutboundFlight(legs[0]);
+    setOutboundFlight(normalizedLegs[0]);
     // Last leg = return (if more than 1)
-    if (legs.length >= 2) {
-      setReturnFlight(legs[legs.length - 1]);
+    if (normalizedLegs.length >= 2) {
+      setReturnFlight(normalizedLegs[normalizedLegs.length - 1]);
       setShowReturnFlight(true);
     }
     // Middle legs stored separately
-    if (legs.length > 2) {
-      setAdditionalLegs(legs.slice(1, -1));
+    if (normalizedLegs.length > 2) {
+      setAdditionalLegs(normalizedLegs.slice(1, -1));
     } else {
       setAdditionalLegs([]);
     }
     setShowFlightSection(true);
     setShowFlightDetails(true);
-    if (legs.length > 2) {
-      toast.success(`Imported ${legs.length} flight segments`, {
-        description: `Route: ${legs.map(l => l.departureAirport).concat(legs[legs.length - 1].arrivalAirport).filter(Boolean).join(' → ')}`,
+    if (normalizedLegs.length > 2) {
+      toast.success(`Imported ${normalizedLegs.length} flight segments`, {
+        description: `Route: ${normalizedLegs.map(l => l.departureAirport).concat(normalizedLegs[normalizedLegs.length - 1].arrivalAirport).filter(Boolean).join(' → ')}`,
       });
     }
   };
 
   // Handler for multi-leg editor changes — syncs back to parent state
   const handleMultiLegsChange = (legs: ManualFlightEntry[]) => {
-    if (legs.length > 0) {
-      setOutboundFlight(legs[0]);
+    const normalizedLegs = normalizeLegs(legs);
+    if (normalizedLegs.length > 0) {
+      setOutboundFlight(normalizedLegs[0]);
     }
-    if (legs.length >= 2) {
-      setReturnFlight(legs[legs.length - 1]);
+    if (normalizedLegs.length >= 2) {
+      setReturnFlight(normalizedLegs[normalizedLegs.length - 1]);
       setShowReturnFlight(true);
     }
-    if (legs.length > 2) {
-      setAdditionalLegs(legs.slice(1, -1));
+    if (normalizedLegs.length > 2) {
+      setAdditionalLegs(normalizedLegs.slice(1, -1));
     } else {
       setAdditionalLegs([]);
     }

@@ -135,6 +135,18 @@ function isSameFlightEntry(a: ManualFlightEntry, b: ManualFlightEntry): boolean 
   );
 }
 
+function uniqueMeaningfulLegs(legs: ManualFlightEntry[]): ManualFlightEntry[] {
+  const unique: ManualFlightEntry[] = [];
+
+  for (const leg of legs) {
+    if (!hasFlightContent(leg)) continue;
+    if (unique.some((existing) => isSameFlightEntry(existing, leg))) continue;
+    unique.push(leg);
+  }
+
+  return unique;
+}
+
 /**
  * Generate leg slots from destinations array.
  * For destinations [London, Paris, Rome], generates:
@@ -501,11 +513,8 @@ export default function MultiLegFlightEditor({
       }
 
       if (changed) {
-        onLegsChangeRef.current(
-          next
-            .filter((s) => s.transportType === 'flight')
-            .map((s) => s.flight)
-        );
+        const emittedLegs = uniqueMeaningfulLegs(next.map((s) => s.flight));
+        onLegsChangeRef.current(emittedLegs);
       }
 
       return changed ? next : prev;
@@ -514,7 +523,7 @@ export default function MultiLegFlightEditor({
 
   // Sync changes to parent — emit all legs (including non-flight) so data isn't lost
   const syncToParent = useCallback((updatedSlots: FlightLegSlot[]) => {
-    const allLegs = updatedSlots.map(s => s.flight);
+    const allLegs = uniqueMeaningfulLegs(updatedSlots.map(s => s.flight));
     onLegsChangeRef.current(allLegs);
   }, []);
 
