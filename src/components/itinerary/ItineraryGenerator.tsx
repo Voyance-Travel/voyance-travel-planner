@@ -177,8 +177,15 @@ export function ItineraryGenerator({
     }
   }, [prePhase, days.length, status]);
 
+  const isFirstTrip = entitlements?.is_first_trip ?? false;
+
   // Show cost confirmation before generating (for non-first-trip users)
   const handleGenerateClick = () => {
+    // First trip is always free — skip cost confirmation
+    if (isFirstTrip) {
+      handleGenerate();
+      return;
+    }
     // If cost > 0, show confirmation first
     if (costEstimate.totalCredits > 0) {
       setShowCostConfirm(true);
@@ -659,9 +666,11 @@ export function ItineraryGenerator({
               >
                 <Sparkles className="h-5 w-5" />
                 Generate Itinerary
-                {costEstimate.totalCredits > 0 && (
+                {isFirstTrip ? (
+                  <span className="text-xs opacity-80">· Free</span>
+                ) : costEstimate.totalCredits > 0 ? (
                   <span className="text-xs opacity-80">· {formatCredits(costEstimate.totalCredits)} cr</span>
-                )}
+                ) : null}
               </Button>
               
               {onCancel && (
@@ -673,9 +682,11 @@ export function ItineraryGenerator({
           )}
 
           <p className="text-xs text-muted-foreground mt-6">
-            {costEstimate.totalCredits > 0 
-              ? `${formatCredits(costEstimate.totalCredits)} credits for ${totalDaysEstimate} days · Day unlocks charged separately`
-              : 'Includes activities, restaurants, transportation, and local tips'
+            {isFirstTrip
+              ? 'Your first trip is free — includes activities, restaurants, transit & tips'
+              : costEstimate.totalCredits > 0 
+                ? `${formatCredits(costEstimate.totalCredits)} credits for ${totalDaysEstimate} days · Day unlocks charged separately`
+                : 'Includes activities, restaurants, transportation, and local tips'
             }
           </p>
         </div>
