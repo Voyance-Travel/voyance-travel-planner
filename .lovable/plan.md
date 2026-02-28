@@ -1,141 +1,49 @@
 
-I traced the full chain and found why you still get “teleporting” even when train is selected. The issue is real, reproducible in code, and comes from a split generation path.
+# Fix All 2025/Past Date References Across the Platform
 
-## What I confirmed (with code-level evidence)
+## Problem
+Multiple files across the codebase still use `new Date().toISOString().split('T')[0]` (UTC-based, can be off by a day) or contain hardcoded 2024/2025 dates in prompts, placeholders, and examples. Since it is now 2026, any reference to 2025 in user-facing flows is stale.
 
-1. Step 1 transport choices are being stored in backend city rows  
-- `src/pages/Start.tsx` writes `trip_cities.transport_type` and `transition_day_mode` during trip creation (around lines 1892–1931).
-- Your latest rows in backend show `transport_type = train` and `transition_day_mode = half_and_half` for transition cities.
+## Changes
 
-2. Frontend generation call already sends transition context  
-- `src/hooks/useItineraryGeneration.ts` sends:
-  - `isTransitionDay`
-  - `transitionFrom`
-  - `transitionTo`
-  - `transitionMode`
-  in the `generate-day` call (around lines 399–404).
+### 1. Update placeholder text to say "2026"
+- **`src/components/planner/steps/TripSetup.tsx`** -- Change `"Summer Adventure 2024"` placeholder to `"Summer Adventure 2026"`
+- **`src/lib/copy.ts`** -- Change `"Summer Adventure 2024"` to `"Summer Adventure 2026"`
 
-3. The `generate-day` backend action drops that transition context  
-- In `supabase/functions/generate-itinerary/index.ts`, `generate-day` only destructures:
-  `tripId, dayNumber, totalDays, destination, destinationCountry, date, travelers, ...`
-  and does **not** destructure `isTransitionDay/transitionFrom/transitionTo/transitionMode` (around line 8449).
-- So transition info sent by frontend is ignored.
+### 2. Replace remaining `toISOString().split('T')[0]` with `getLocalToday()` in client code
+These files use the UTC-based pattern for "today" and risk off-by-one date bugs:
 
-4. The robust transition logic exists, but in a different path  
-- The full Stage-2 generator path has `multiCityDayMap`, `buildTransitionDayPrompt(...)`, and transition validation (around lines 3954+, 4839+, 5386+).
-- But active flow uses `generate-day` progressive path, not that Stage-2 branch.
+- **`src/services/userAPI.ts`** (line 294) -- `new Date().toISOString().split('T')[0]` for filtering trips
+- **`src/contexts/TripPlannerContext.tsx`** (lines 275-276, 340-341) -- fallback dates for trip creation
+- **`src/services/weatherAPI.ts`** (line 54) -- weather API start date
+- **`src/pages/planner/PlannerFlight.tsx`** (line 256) -- default departure date fallback
+- **`src/hooks/useBulkUnlock.ts`** (line 97) -- date calculation for itinerary generation
+- **`src/types/multiCity.ts`** (lines 177-179) -- multi-city date calculations
 
-5. Rendering depends on transition flags that are missing  
-- `EditorialItinerary` injects synthetic travel cards only when `day.isTransitionDay && transitionFrom && transitionTo` (around line 1140).
-- Recent generated multi-city itineraries in backend have empty transition flags arrays, so UI cannot inject travel-day structure.
+Each will import and use `getLocalToday()` or `parseLocalDate()` as appropriate.
 
-## Root cause summary
+### 3. Fix edge function prompts with hardcoded years
+- **`supabase/functions/generate-trip-preview/index.ts`** (line 174) -- Example JSON has `"date": "2024-03-15"`. Change to a dynamic or generic placeholder like `"YYYY-MM-DD"` or use the actual trip dates from the request.
+- **`supabase/functions/generate-quick-preview/index.ts`** (line 294) -- Prompt asks about `"2024/2025"` entry requirements. Change to dynamically reference the current year.
 
-Primary break:
-- `generate-day` ignores transition parameters and never enforces transition-day structure.
-- Result: day content can jump to next city without explicit inter-city travel entries.
+### 4. Update static content references
+- **`src/components/home/Testimonials.tsx`** (line 6) -- `"Anonymous beta user, 2025"` to `"Anonymous beta user, 2026"`
+- **`src/data/guides.ts`** -- The "Best Time to Book for 2025" guide: update title, slug, and body text references to 2026
+- **`src/utils/pressKitGenerator.ts`** -- `"Press Kit 2025"` to `"Press Kit 2026"`
 
-Secondary effect:
-- Since `isTransitionDay/transitionFrom/transitionTo` are missing in saved days, itinerary UI cannot add synthetic travel cards either.
+### 5. Fix `addDays` utility in dateUtils.ts
+The `addDays` function (line 79) still uses `toISOString().split('T')[0]` which can produce wrong dates near midnight. Update it to use local date formatting consistent with `getLocalToday()`.
 
----
+## Technical Details
 
-## Implementation plan (what I will change once approved)
+All client-side files will import from `@/utils/dateUtils`:
+```typescript
+import { getLocalToday, parseLocalDate } from '@/utils/dateUtils';
+```
 
-### 1) Fix `generate-day` to actually consume transition context
-**File:** `supabase/functions/generate-itinerary/index.ts`
+Edge functions will compute the current year dynamically:
+```typescript
+const currentYear = new Date().getFullYear();
+```
 
-- Extend param extraction in `generate-day` to include:
-  - `isMultiCity`
-  - `isTransitionDay`
-  - `transitionFrom`
-  - `transitionTo`
-  - `transitionMode`
-- Add a resolver helper in `generate-day`:
-  - If explicit transition params are present, trust them.
-  - Else (tripId + multi-city), compute day transition context from `trip_cities` (`city_order`, `nights`, `transition_day_mode`, `transport_type`).
-- Resolve per-day canonical values:
-  - `resolvedDestination`
-  - `resolvedCountry`
-  - `resolvedIsTransitionDay`
-  - `resolvedTransitionFrom`
-  - `resolvedTransitionTo`
-  - `resolvedTransportMode`
-
-### 2) Inject mandatory transition-day prompt in `generate-day`
-**File:** `supabase/functions/generate-itinerary/index.ts`  
-**Reuse existing helper from:** `prompt-library.ts`
-
-- When `resolvedIsTransitionDay === true`, append:
-  - `buildTransitionDayPrompt({...})`
-  with resolved from/to/mode/travelers/budget/currency.
-- Force user prompt to include “travel day, no teleporting” constraints and exact sequence:
-  checkout → departure transfer → inter-city transport → arrival transfer → check-in → light evening.
-
-### 3) Add hard post-generation guard (no silent teleporting)
-**File:** `supabase/functions/generate-itinerary/index.ts`
-
-- After AI output normalization in `generate-day`, validate that transition day contains at least one inter-city transport activity referencing route or transport mode.
-- If missing:
-  - First try one repair regeneration pass with explicit error feedback.
-  - If still missing, inject deterministic fallback transport blocks so day cannot ship without travel.
-- This removes current behavior where missing travel can still pass through.
-
-### 4) Return and persist transition metadata on each generated day
-**File:** `supabase/functions/generate-itinerary/index.ts`
-
-- Ensure `generatedDay` includes:
-  - `city`
-  - `country`
-  - `isTransitionDay`
-  - `transitionFrom`
-  - `transitionTo`
-  - `transportType` (or mapped field)
-- This enables `EditorialItinerary` travel-card injection and consistent day labeling.
-
-### 5) Keep frontend aligned (minimal but important)
-**File:** `src/hooks/useItineraryGeneration.ts`
-
-- Keep passing transition params (already correct), but ensure values are always present by deriving from loaded `trip_cities` with `transition_day_mode !== 'skip'` exactly once.
-- Add defensive logging for day transition payload (dev-only) for fast future diagnosis.
-
-### 6) Optional UI wording cleanup (to match expected behavior)
-**File:** `src/pages/Start.tsx` (+ any step header component if needed)
-
-- Rename “Flight Details” section label to “Transportation Details” for multi-city mode.
-- Keep flight-specific fields only for legs with `transportType === 'flight'`.
-- Non-flight legs continue to show station/terminal style fields in existing editor.
-
----
-
-## Verification plan (end-to-end, exact scenario)
-
-1. Create multi-city trip with 2+ city transitions.
-2. Step 1: choose `train` for at least one transition.
-3. Step 2: confirm leg shows `train` mode (not flight fallback).
-4. Generate itinerary.
-5. Validate transition day contains explicit travel sequence (no city jump):
-   - checkout in city A
-   - transfer to station/terminal
-   - inter-city train activity A→B
-   - arrival transfer
-   - check-in in city B
-6. Validate day metadata in saved itinerary includes:
-   - `isTransitionDay = true`
-   - `transitionFrom = city A`
-   - `transitionTo = city B`
-7. Validate UI shows transition/travel structure (including synthetic cards if applicable).
-8. Regression: single-city trip generation still works unchanged.
-
----
-
-## Risks and mitigation
-
-- Risk: Over-constraining transition days could reduce variety.
-  - Mitigation: enforce mandatory travel skeleton, keep evening portion flexible.
-- Risk: Existing old trips without city metadata.
-  - Mitigation: fallback to request params, then fallback to destination-only behavior with explicit warning logs.
-- Risk: one-day generation retries could increase latency.
-  - Mitigation: limit repair attempts and then deterministic fallback injection.
-
-This plan directly targets the teleporting bug at the true failure point (the active `generate-day` path) instead of only patching UI symptoms.
+No database changes are needed. This is purely a code sweep to eliminate stale year references and UTC date bugs.
