@@ -11,9 +11,10 @@ import {
   getDestinationImages as getCuratedDestinationImages,
   hasCuratedImages,
 } from '@/utils/destinationImages';
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 
-// Bump to invalidate any stale React Query caches that may still contain people photos.
-const IMAGE_QUERY_VERSION = 'img_v3_no_people_curated';
+// Bump to invalidate stale client-side caches after URL stabilization changes.
+const IMAGE_QUERY_VERSION = 'img_v4_stable_city_urls';
 
 // Destinations that MUST use curated images (no third-party sources allowed)
 // These destinations have had issues with third-party APIs returning wrong/misleading images
@@ -88,6 +89,26 @@ function normalizeDestinationQuery(destination?: string): string | undefined {
     .trim();
 }
 
+function normalizeImageUrl(url?: string | null): string {
+  if (!url) return '';
+
+  const value = url.trim();
+  if (!value) return '';
+
+  // Convert signed object URLs from public buckets to stable public URLs.
+  const signedMatch = value.match(/^(https?:\/\/[^/]+)\/storage\/v1\/object\/sign\/([^?]+)(?:\?.*)?$/i);
+  if (signedMatch) {
+    return `${signedMatch[1]}/storage/v1/object/public/${signedMatch[2]}`;
+  }
+
+  // Strip noisy query params from public object URLs.
+  if (value.includes('/storage/v1/object/public/')) {
+    return value.split('?')[0];
+  }
+
+  return normalizeUnsplashUrl(value);
+}
+
 /**
  * Get destination images with fallback chain:
  * Database → Google Places → Gradient
@@ -109,7 +130,7 @@ export async function getDestinationImages(
     const urls = getCuratedDestinationImages(normalizedDestination, limit);
     return urls.map((url, i) => ({
       id: `curated-local-${type}-${i}`,
-      url,
+      url: normalizeImageUrl(url),
       alt: `${normalizedDestination} photo ${i + 1}`,
       type,
       source: 'database',
@@ -132,7 +153,14 @@ export async function getDestinationImages(
     return [];
   }
 
-  return (data as ImagesResponse)?.images || [];
+  const images = (data as ImagesResponse)?.images || [];
+
+  return images
+    .map((image) => ({
+      ...image,
+      url: normalizeImageUrl(image.url),
+    }))
+    .filter((image) => !!image.url);
 }
 
 /**

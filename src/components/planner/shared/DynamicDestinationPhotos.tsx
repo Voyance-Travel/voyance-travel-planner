@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { MapPin, Calendar, Users, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { prefetchDestinationImages } from '@/utils/imagePrefetch';
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 
 interface DynamicDestinationPhotosProps {
   destination: string;
@@ -105,6 +106,8 @@ export default function DynamicDestinationPhotos({
       return null;
     }
   };
+
+  const heroSrc = heroImage ? normalizeUnsplashUrl(heroImage.url) : '';
 
   // Generate gradient fallback
   const getGradientStyle = () => {
@@ -232,7 +235,7 @@ export default function DynamicDestinationPhotos({
     return (
       <div className={`relative rounded-xl overflow-hidden h-20 bg-muted ${className}`}>
         <img
-          src={heroImage.url}
+          src={heroSrc}
           alt={heroImage.alt || cleanDestination}
           className="absolute inset-0 w-full h-full object-cover"
           onError={() => { setHeroImage(null); setError(true); }}
@@ -253,7 +256,7 @@ export default function DynamicDestinationPhotos({
     return (
       <div className={`relative rounded-2xl overflow-hidden h-32 bg-muted ${className}`}>
         <img
-          src={heroImage.url}
+          src={heroSrc}
           alt={heroImage.alt || cleanDestination}
           className="absolute inset-0 w-full h-full object-cover"
           onError={() => { setHeroImage(null); setError(true); }}
@@ -293,7 +296,7 @@ export default function DynamicDestinationPhotos({
         initial={{ opacity: 0, scale: 1.02 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5 }}
-        src={heroImage.url}
+        src={heroSrc}
         alt={heroImage.alt || cleanDestination}
         className="absolute inset-0 w-full h-full object-cover"
         onError={() => { setHeroImage(null); setError(true); }}

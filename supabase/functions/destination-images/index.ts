@@ -120,9 +120,53 @@ async function checkCuratedCache(
 
     console.log(`[Images] ✅ Found cached image for: ${entityKey}`);
 
+    let resolvedUrl = String(pick.image_url || '').trim();
+
+    const needsHeal =
+      !!resolvedUrl &&
+      !resolvedUrl.startsWith('data:') &&
+      !resolvedUrl.includes('/storage/v1/object/public/trip-photos/');
+
+    // Self-heal legacy external URLs by copying once into our storage bucket.
+    if (needsHeal) {
+      let healedToStorage = false;
+
+      try {
+        const healEntityType: 'destination' | 'activity' = entityType === 'destination' ? 'destination' : 'activity';
+        const healEntityId = String(pick.place_id || normalizedKey || entityKey)
+          .toLowerCase()
+          .replace(/[^a-z0-9-]/g, '-')
+          .slice(0, 80);
+
+        const healed = await getCachedPhotoUrl(healEntityType, healEntityId, resolvedUrl, {
+          destination: destination || pick.destination,
+          placeName: pick.alt_text || entityKey,
+          placeId: pick.place_id,
+        });
+
+        if (healed.source === 'storage') {
+          healedToStorage = true;
+          resolvedUrl = healed.url;
+          await supabase
+            .from('curated_images')
+            .update({ image_url: resolvedUrl, updated_at: new Date().toISOString() })
+            .eq('id', pick.id);
+          console.log(`[Images] ♻️ Healed cached URL for: ${entityKey}`);
+        }
+      } catch (healError) {
+        console.warn('[Images] Cache heal skipped:', healError);
+      }
+
+      // If we couldn't heal this legacy external URL, bypass cache and fetch a fresh image.
+      if (!healedToStorage) {
+        console.log(`[Images] Cached URL could not be healed for ${entityKey}, bypassing cache`);
+        return null;
+      }
+    }
+
     return {
       id: pick.id,
-      url: pick.image_url,
+      url: resolvedUrl || pick.image_url,
       alt: pick.alt_text || `${entityKey} photo`,
       type: entityType === "destination" ? "hero" : "activity",
       source: "curated",
@@ -701,8 +745,74 @@ Return ONLY the number (1, 2, 3, etc.) of the best image. Just the number, nothi
 }
 
 // =============================================================================
-// CACHE RESULT
+// URL STABILIZATION + CACHE RESULT
 // =============================================================================
+function isTripPhotoStorageUrl(url: string): boolean {
+  return url.includes('/storage/v1/object/public/trip-photos/');
+}
+
+function shouldPersistInCuratedCache(image: DestinationImage): boolean {
+  if (!image.url || image.url.startsWith('data:')) return false;
+
+  const lower = image.url.toLowerCase();
+
+  // Never cache transient/sensitive URLs.
+  if (lower.includes('places.googleapis.com')) return false;
+  if (lower.includes('x-amz-signature=')) return false;
+  if (/[?&]token=/.test(lower)) return false;
+
+  // External providers must be persisted to storage first, otherwise links may break.
+  if (
+    (image.source === 'lovable_ai' || image.source === 'tripadvisor' || image.source === 'wikimedia' || image.source === 'google_places') &&
+    !isTripPhotoStorageUrl(image.url)
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+async function ensurePersistentStorageUrl(
+  image: DestinationImage,
+  entityType: string,
+  entityKey: string,
+  destination: string
+): Promise<DestinationImage> {
+  if (!image.url || image.url.startsWith('data:') || isTripPhotoStorageUrl(image.url)) {
+    return image;
+  }
+
+  // Normalize removable query params from external CDN links.
+  const normalizedUrl = image.url.includes('media-cdn.tripadvisor.com')
+    ? image.url.split('?')[0]
+    : image.url;
+
+  try {
+    const hashSeed = normalizedUrl.split('').reduce((acc, ch) => ((acc << 5) - acc + ch.charCodeAt(0)) | 0, 0);
+    const stableEntityId = `${entityKey}-${Math.abs(hashSeed).toString(36)}`
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')
+      .slice(0, 80);
+
+    const storageEntityType: 'destination' | 'activity' = entityType === 'destination' ? 'destination' : 'activity';
+
+    const persisted = await getCachedPhotoUrl(storageEntityType, stableEntityId, normalizedUrl, {
+      destination,
+      placeName: image.alt,
+      placeId: image.placeId,
+    });
+
+    if (persisted.source === 'storage') {
+      return { ...image, url: persisted.url };
+    }
+
+    return { ...image, url: normalizedUrl };
+  } catch (persistError) {
+    console.warn('[Images] Could not persist external image URL:', persistError);
+    return { ...image, url: normalizedUrl };
+  }
+}
+
 async function cacheImage(
   supabase: any,
   entityType: string,
@@ -712,9 +822,9 @@ async function cacheImage(
   qualityScore?: number
 ): Promise<void> {
   try {
-    // CRITICAL: Never cache base64 data URLs - they are huge and break the database
-    if (image.url.startsWith('data:')) {
-      console.log(`[Images] Skipping cache for base64 data URL: ${entityKey}`);
+    // Never cache transient URLs or inline data URLs.
+    if (!shouldPersistInCuratedCache(image)) {
+      console.log(`[Images] Skipping cache for transient image URL: ${entityKey}`);
       return;
     }
 
@@ -1241,19 +1351,34 @@ async function fetchImageTiered(
       }
     }
 
+    // Persist external image URLs into our own storage when possible.
+    const persistentBestImage = await ensurePersistentStorageUrl(
+      bestImage,
+      entityType,
+      venueName,
+      destination
+    );
+
     // Cache the result with quality score
-    await cacheImage(supabase, entityType, venueName, destination, bestImage, qualityScore);
+    await cacheImage(supabase, entityType, venueName, destination, persistentBestImage, qualityScore);
     
-    return bestImage;
+    return persistentBestImage;
   }
 
   // TIER 5: AI Generation (try before category fallback for better quality)
   if (lovableApiKey) {
     const aiImage = await generateAIImage(cleanName, destination, lovableApiKey);
     if (aiImage) {
+      const persistentAiImage = await ensurePersistentStorageUrl(
+        aiImage,
+        entityType,
+        venueName,
+        destination
+      );
+
       // Cache AI images with lower quality score
-      await cacheImage(supabase, entityType, venueName, destination, aiImage, 0.5);
-      return aiImage;
+      await cacheImage(supabase, entityType, venueName, destination, persistentAiImage, 0.5);
+      return persistentAiImage;
     }
   }
 
