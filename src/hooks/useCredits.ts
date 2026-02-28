@@ -125,6 +125,7 @@ export function useCredits() {
     enabled: !!user?.id,
     staleTime: 30 * 1000,
     refetchOnWindowFocus: true,
+    refetchOnMount: 'always',
   });
 
   // Fix #12: Poll for credits if new user has 0 credits
