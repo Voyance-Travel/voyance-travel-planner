@@ -99,6 +99,8 @@ import { useRouteOptCost } from '@/hooks/useRouteOptCost';
 import ReviewsDrawer from '@/components/reviews/ReviewsDrawer';
 import RestaurantSearchDrawer from '@/components/restaurants/RestaurantSearchDrawer';
 import { ItineraryOnboardingTour } from './ItineraryOnboardingTour';
+import { HelpButton } from './HelpButton';
+import { FirstUseHint } from './FirstUseHint';
 import ShareGuideSheet from '@/components/sharing/ShareGuideSheet';
 import { preloadAirportCodes, getAirportDisplaySync } from '@/services/locationSearchAPI';
 // InlineModifier removed — redundant with TripChat
@@ -3158,6 +3160,8 @@ export function EditorialItinerary({
     <div className="space-y-6">
       {/* Onboarding Tour for first-time visitors */}
       <ItineraryOnboardingTour tripId={tripId} />
+      {/* Persistent Help Button */}
+      <HelpButton />
       {/* (Sticky toolbar removed — controls moved to bottom Trip Summary section) */}
 
       {/* View-Only Mode Indicator */}
@@ -3291,11 +3295,13 @@ export function EditorialItinerary({
             className="space-y-6"
           >
             {/* Itinerary Value Header - Shows the hidden value */}
-            <ItineraryValueHeader
-              stats={valueStats}
-              destination={destination}
-              archetype={style}
-            />
+            <div data-tour="value-header">
+              <ItineraryValueHeader
+                stats={valueStats}
+                destination={destination}
+                archetype={style}
+              />
+            </div>
 
             {/* Smart Finish Banner — DNA gap analysis for manual trips */}
             {isManualMode && (
@@ -3939,6 +3945,11 @@ export function EditorialItinerary({
         )}
 
         {activeTab === 'budget' && (
+          <>
+          <FirstUseHint
+            hintKey="budget_hint_shown"
+            message="Set a trip budget and Voyance will track your spending across all activities automatically."
+          />
           <BudgetTab
             tripId={tripId}
             travelers={travelers}
@@ -3987,6 +3998,7 @@ export function EditorialItinerary({
               setHasChanges(true);
             }}
           />
+          </>
         )}
 
         {activeTab === 'payments' && (
@@ -6565,7 +6577,7 @@ function DayCard({
   // Library modal state removed - agent features disabled
 
   return (
-    <div className="border border-border bg-card overflow-hidden rounded-xl shadow-sm hover:shadow-md transition-shadow">
+    <div className="border border-border bg-card overflow-hidden rounded-xl shadow-sm hover:shadow-md transition-shadow" data-tour="day-header">
       {/* Day Header - Editorial Style with Color Accent */}
       <div className={cn(
         "relative p-4 sm:p-6 transition-colors duration-500",
@@ -7233,7 +7245,7 @@ function ActivityRow({
       "flex flex-col sm:flex-row sm:items-stretch group/activity hover:bg-secondary/10 transition-colors",
       !isLast && "border-b border-border",
       activity.isLocked && "bg-primary/5"
-    )}>
+    )} data-tour="activity-card">
       {/* Mobile: Compact header with time + icon */}
       <div className="sm:hidden flex items-center gap-2 px-3 py-2 border-b border-border/50 bg-gradient-to-r from-secondary/20 to-transparent">
         <span className="p-1 rounded bg-primary/10 text-primary">{style.icon}</span>
