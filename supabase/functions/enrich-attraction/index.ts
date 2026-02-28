@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { buildCacheKey, getCached, setCache, TTL } from "../_shared/perplexity-cache.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -26,6 +27,16 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ success: false, error: 'Attraction name and destination are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check cache first (24-hour TTL for hours/prices)
+    const cacheKey = buildCacheKey('attraction', attractionName, destination);
+    const cached = await getCached<{ data: unknown; citations?: unknown }>(cacheKey);
+    if (cached) {
+      return new Response(
+        JSON.stringify({ success: true, data: cached.data, citations: cached.citations, cached: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -96,7 +107,6 @@ ONLY return valid JSON. No markdown, no explanation.`
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content?.trim() || '';
     
-    // Track cost
     costTracker.recordPerplexity(1);
     costTracker.recordAiUsage(data, 'perplexity/sonar');
     await costTracker.save();
@@ -107,8 +117,13 @@ ONLY return valid JSON. No markdown, no explanation.`
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const enrichmentData = JSON.parse(jsonMatch[0]);
+        const result = { data: enrichmentData, citations: data.citations };
+        
+        // Cache for 24 hours
+        await setCache(cacheKey, 'attraction_enrichment', result, TTL.ONE_DAY);
+        
         return new Response(
-          JSON.stringify({ success: true, data: enrichmentData, citations: data.citations }),
+          JSON.stringify({ success: true, ...result }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }

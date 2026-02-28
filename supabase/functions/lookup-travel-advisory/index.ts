@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { buildCacheKey, getCached, setCache, TTL } from "../_shared/perplexity-cache.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -26,6 +27,17 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ success: false, error: 'Destination is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check cache first (7-day TTL for travel advisories)
+    const origin = originCountry || 'US';
+    const cacheKey = buildCacheKey('travel-advisory', destination, origin);
+    const cached = await getCached<{ data: unknown; citations?: unknown }>(cacheKey);
+    if (cached) {
+      return new Response(
+        JSON.stringify({ success: true, data: cached.data, citations: cached.citations, cached: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -103,7 +115,6 @@ RULES:
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content?.trim() || '';
     
-    // Track cost
     costTracker.recordPerplexity(1);
     costTracker.recordAiUsage(data, 'perplexity/sonar');
     await costTracker.save();
@@ -114,8 +125,13 @@ RULES:
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const advisoryData = JSON.parse(jsonMatch[0]);
+        const result = { data: advisoryData, citations: data.citations };
+        
+        // Cache for 7 days
+        await setCache(cacheKey, 'travel_advisory', result, TTL.SEVEN_DAYS);
+        
         return new Response(
-          JSON.stringify({ success: true, data: advisoryData, citations: data.citations }),
+          JSON.stringify({ success: true, ...result }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }

@@ -1,12 +1,12 @@
 /**
  * ActivityLink Component
  * 
- * Uses AI-powered search (Perplexity) to find the official booking URL for activities.
- * Displays a loading state while looking up, then shows the direct booking link.
+ * On-demand booking URL lookup — only calls Perplexity when the user clicks,
+ * not on mount. This prevents N API calls per itinerary view.
  */
 
-import { useState, useEffect } from 'react';
-import { ExternalLink, Loader2, Ticket } from 'lucide-react';
+import { useState } from 'react';
+import { ExternalLink, Loader2, Ticket, Search } from 'lucide-react';
 import { lookupActivityUrl } from '@/services/enrichmentService';
 
 interface ActivityLinkProps {
@@ -16,6 +16,8 @@ interface ActivityLinkProps {
   className?: string;
   /** If true, shows "Book Now" instead of "Get Tickets" */
   bookingStyle?: boolean;
+  /** If a URL is already known (e.g. stored during generation), skip the lookup */
+  knownUrl?: string | null;
 }
 
 export function ActivityLink({ 
@@ -23,69 +25,86 @@ export function ActivityLink({
   destination, 
   activityType,
   className,
-  bookingStyle = false
+  bookingStyle = false,
+  knownUrl,
 }: ActivityLinkProps) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [url, setUrl] = useState<string | null>(knownUrl ?? null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasSearched, setHasSearched] = useState(!!knownUrl);
 
-  useEffect(() => {
-    let cancelled = false;
-    
-    async function lookup() {
-      try {
-        const result = await lookupActivityUrl(activityName, destination, activityType);
-        
-        if (!cancelled) {
-          setUrl(result.url);
-          setIsLoading(false);
-        }
-      } catch (err) {
-        console.error('Error looking up activity URL:', err);
-        if (!cancelled) {
-          setUrl(null);
-          setIsLoading(false);
-        }
-      }
+  async function handleClick() {
+    // If we already have a URL, just open it
+    if (url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return;
     }
-    
-    lookup();
-    
-    return () => {
-      cancelled = true;
-    };
-  }, [activityName, destination, activityType]);
 
-  if (isLoading) {
-    return (
-      <span className={`inline-flex items-center gap-1.5 text-xs text-muted-foreground ${className || ''}`}>
-        <Loader2 className="h-3 w-3 animate-spin" />
-        Finding tickets...
-      </span>
-    );
+    // If already searching or already searched with no result, bail
+    if (isLoading || (hasSearched && !url)) return;
+
+    setIsLoading(true);
+    try {
+      const result = await lookupActivityUrl(activityName, destination, activityType);
+      setUrl(result.url);
+      setHasSearched(true);
+      if (result.url) {
+        window.open(result.url, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err) {
+      console.error('Error looking up activity URL:', err);
+      setHasSearched(true);
+    } finally {
+      setIsLoading(false);
+    }
   }
 
-  if (!url) {
+  // Already searched but nothing found
+  if (hasSearched && !url && !knownUrl) {
     return null;
   }
 
+  // Known URL — render as a direct link
+  if (url) {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`inline-flex items-center gap-1.5 text-xs text-primary hover:underline ${className || ''}`}
+      >
+        {bookingStyle ? (
+          <>
+            <ExternalLink className="h-3 w-3" />
+            Book Now
+          </>
+        ) : (
+          <>
+            <Ticket className="h-3 w-3" />
+            Get Tickets
+          </>
+        )}
+      </a>
+    );
+  }
+
+  // Not yet searched — show clickable "Find tickets" button
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={`inline-flex items-center gap-1.5 text-xs text-primary hover:underline ${className || ''}`}
+    <button
+      onClick={handleClick}
+      disabled={isLoading}
+      className={`inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors ${className || ''}`}
     >
-      {bookingStyle ? (
+      {isLoading ? (
         <>
-          <ExternalLink className="h-3 w-3" />
-          Book Now
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Finding...
         </>
       ) : (
         <>
-          <Ticket className="h-3 w-3" />
-          Get Tickets
+          <Search className="h-3 w-3" />
+          Find tickets
         </>
       )}
-    </a>
+    </button>
   );
 }

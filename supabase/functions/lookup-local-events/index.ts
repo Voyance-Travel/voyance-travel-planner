@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { buildCacheKey, getCached, setCache, TTL } from "../_shared/perplexity-cache.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -27,6 +28,16 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ success: false, error: 'Destination, start date, and end date are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check cache first (6-hour TTL for events)
+    const cacheKey = buildCacheKey('local-events', destination, startDate, endDate);
+    const cached = await getCached<{ events: unknown[]; citations?: unknown }>(cacheKey);
+    if (cached) {
+      return new Response(
+        JSON.stringify({ success: true, events: cached.events, citations: cached.citations, cached: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -101,7 +112,6 @@ RULES:
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content?.trim() || '';
     
-    // Track cost
     costTracker.recordPerplexity(1);
     costTracker.recordAiUsage(data, 'perplexity/sonar');
     await costTracker.save();
@@ -112,8 +122,13 @@ RULES:
       const jsonMatch = content.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
         const events = JSON.parse(jsonMatch[0]);
+        const result = { events, citations: data.citations };
+        
+        // Cache for 6 hours
+        await setCache(cacheKey, 'local_events', result, TTL.SIX_HOURS);
+        
         return new Response(
-          JSON.stringify({ success: true, events, citations: data.citations }),
+          JSON.stringify({ success: true, ...result }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
