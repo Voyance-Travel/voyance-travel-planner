@@ -992,6 +992,8 @@ function FlightHotelStep({
   const [showHotelModal, setShowHotelModal] = useState(false);
   const [editingHotelIndex, setEditingHotelIndex] = useState<number | null>(null); // for split-stay editing
   const [editingHotelCity, setEditingHotelCity] = useState<string | null>(null);
+  const [lastImportedLegs, setLastImportedLegs] = useState<ManualFlightEntry[]>([]);
+  const [importNonce, setImportNonce] = useState(0);
 
   const handleImportFlight = (outbound: ManualFlightEntry, returnFlightData?: ManualFlightEntry) => {
     setOutboundFlight(outbound);
@@ -1005,6 +1007,10 @@ function FlightHotelStep({
 
   const handleImportAllLegs = (legs: ManualFlightEntry[]) => {
     if (legs.length === 0) return;
+
+    setLastImportedLegs(legs);
+    setImportNonce((n) => n + 1);
+
     // First leg = outbound
     setOutboundFlight(legs[0]);
     // Last leg = return (if more than 1)
@@ -1100,6 +1106,8 @@ function FlightHotelStep({
               initialOutbound={outboundFlight}
               initialReturn={returnFlight}
               initialAdditionalLegs={additionalLegs}
+              importedLegs={lastImportedLegs}
+              importNonce={importNonce}
             />
           ) : (
             /* Single-city: keep current outbound + return layout */

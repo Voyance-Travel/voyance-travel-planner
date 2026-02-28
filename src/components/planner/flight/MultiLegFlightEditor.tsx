@@ -66,6 +66,10 @@ interface MultiLegFlightEditorProps {
   initialOutbound?: ManualFlightEntry;
   initialReturn?: ManualFlightEntry;
   initialAdditionalLegs?: ManualFlightEntry[];
+  /** Explicitly imported legs from modal; applied by index to visible slots */
+  importedLegs?: ManualFlightEntry[];
+  /** Incremented on each import to force deterministic re-apply */
+  importNonce?: number;
 }
 
 const TRANSPORT_ICONS: Record<LegTransportType, typeof Plane> = {
@@ -208,6 +212,8 @@ export default function MultiLegFlightEditor({
   initialOutbound,
   initialReturn,
   initialAdditionalLegs,
+  importedLegs,
+  importNonce,
 }: MultiLegFlightEditorProps) {
   const [slots, setSlots] = useState<FlightLegSlot[]>([]);
   const [initialized, setInitialized] = useState(false);
@@ -303,6 +309,50 @@ export default function MultiLegFlightEditor({
       return changed ? next : prev;
     });
   }, [initialized, initialOutbound, initialAdditionalLegs, initialReturn]);
+
+  // Deterministically apply last import to visible slots (fixes empty fields after import)
+  useEffect(() => {
+    if (!initialized || !importedLegs || importedLegs.length === 0) return;
+
+    setSlots((prev) => {
+      const flightSlotIndexes = prev
+        .map((slot, idx) => ({ slot, idx }))
+        .filter(({ slot }) => slot.transportType === 'flight')
+        .map(({ idx }) => idx);
+
+      if (flightSlotIndexes.length === 0) return prev;
+
+      const next = [...prev];
+      let changed = false;
+
+      importedLegs.slice(0, flightSlotIndexes.length).forEach((leg, i) => {
+        const slotIndex = flightSlotIndexes[i];
+        const current = next[slotIndex].flight;
+        if (!isSameFlightEntry(current, leg)) {
+          next[slotIndex] = {
+            ...next[slotIndex],
+            isExpanded: true,
+            flight: {
+              ...current,
+              ...leg,
+            },
+          };
+          changed = true;
+        }
+      });
+
+      if (changed) {
+        // Keep parent state aligned with what user sees
+        onLegsChange(
+          next
+            .filter((s) => s.transportType === 'flight')
+            .map((s) => s.flight)
+        );
+      }
+
+      return changed ? next : prev;
+    });
+  }, [initialized, importNonce, importedLegs, onLegsChange]);
 
   // Sync changes to parent
   const syncToParent = useCallback((updatedSlots: FlightLegSlot[]) => {
