@@ -403,13 +403,13 @@ export function TripCollaboratorsPanel({
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="viewer">
+                                    <SelectItem value="view">
                                       <div className="flex items-center gap-2">
                                         <Eye className="h-3 w-3" />
                                         Viewer
                                       </div>
                                     </SelectItem>
-                                    <SelectItem value="editor">
+                                    <SelectItem value="edit">
                                       <div className="flex items-center gap-2">
                                         <Edit3 className="h-3 w-3" />
                                         Editor
