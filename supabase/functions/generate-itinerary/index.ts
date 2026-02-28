@@ -4180,8 +4180,19 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
 
     // Logistics should NOT have booking required
     const logisticsKeywords = ['check-in', 'checkout', 'check-out', 'check in', 'check out', 'arrival', 'departure', 'transfer', 'free time', 'at leisure'];
+    const transportLikeKeywords = ['rideshare', 'uber', 'lyft', 'taxi', 'metro', 'subway', 'tram', 'bus', 'train', 'ferry', 'flight'];
     const isLogistics = logisticsKeywords.some(kw => (act.title || '').toLowerCase().includes(kw)) ||
                         ['transport', 'accommodation', 'downtime', 'free_time'].includes(act.category?.toLowerCase() || '');
+
+    const isTransportLikeActivity = (activity: StrictActivity): boolean => {
+      const title = normalizeText(activity.title || '');
+      const category = normalizeText(activity.category || '');
+      return (
+        category.includes('transport') ||
+        category.includes('transit') ||
+        transportLikeKeywords.some((kw) => title.includes(kw))
+      );
+    };
     
     if (isLogistics && act.bookingRequired) {
       warnings.push(`Activity ${i + 1} (${act.title || 'unknown'}): Logistics activity should not require booking`);
@@ -4204,13 +4215,15 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
       const prevAct = day.activities[i - 1];
       const currTitle = normalizeText(act.title || '');
       const prevTitle = normalizeText(prevAct.title || '');
+      const currIsTransportLike = isTransportLikeActivity(act);
+      const prevIsTransportLike = isTransportLikeActivity(prevAct);
       
       // Use hoisted extractConcept function
       const currConcept = extractConcept(currTitle);
       const prevConcept = extractConcept(prevTitle);
       
-      // Use hoisted conceptSimilarity function
-      if (conceptSimilarity(currConcept, prevConcept)) {
+      // Transport/logistics adjacency is expected in real itineraries (e.g. rideshare -> venue)
+      if (!currIsTransportLike && !prevIsTransportLike && conceptSimilarity(currConcept, prevConcept)) {
         errors.push(`Activities ${i} and ${i + 1} are too similar: "${prevAct.title}" followed by "${act.title}" - AVOID duplicate concepts back-to-back`);
       }
 
@@ -4222,12 +4235,16 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
       }
       
       // Check for same meal type back-to-back (e.g., two breakfast spots, two dinner restaurants)
-      const mealCategories = ['breakfast', 'brunch', 'lunch', 'dinner', 'dining', 'cafe', 'coffee'];
-      const currMealType = mealCategories.find(m => currTitle.includes(m) || (act.category || '').toLowerCase().includes(m));
-      const prevMealType = mealCategories.find(m => prevTitle.includes(m) || (prevAct.category || '').toLowerCase().includes(m));
-      
-      if (currMealType && prevMealType && currMealType === prevMealType) {
+      const specificMealCategories = ['breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'coffee'];
+      const currMealType = specificMealCategories.find(m => currTitle.includes(m) || (act.category || '').toLowerCase().includes(m));
+      const prevMealType = specificMealCategories.find(m => prevTitle.includes(m) || (prevAct.category || '').toLowerCase().includes(m));
+      const currIsGenericDining = !currMealType && (act.category || '').toLowerCase().includes('dining');
+      const prevIsGenericDining = !prevMealType && (prevAct.category || '').toLowerCase().includes('dining');
+
+      if (!currIsTransportLike && !prevIsTransportLike && currMealType && prevMealType && currMealType === prevMealType) {
         errors.push(`Activities ${i} and ${i + 1} are both "${currMealType}" meals - NEVER schedule two ${currMealType} spots back-to-back`);
+      } else if (!currIsTransportLike && !prevIsTransportLike && currIsGenericDining && prevIsGenericDining) {
+        warnings.push(`Activities ${i} and ${i + 1} are both dining entries - consider more variety`);
       }
       
       // Check for same activity category repeating (excluding transport/accommodation/downtime - those can repeat for logistics)
