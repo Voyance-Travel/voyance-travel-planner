@@ -194,7 +194,6 @@ export default function MultiLegFlightEditor({
 
     // Merge with initial data if available
     if (initialOutbound && (initialOutbound.arrivalTime || initialOutbound.departureAirport)) {
-      // Fill outbound slot
       if (autoSlots.length > 0 && autoSlots[0].legType === 'outbound') {
         autoSlots[0].flight = { ...initialOutbound };
       }
@@ -206,7 +205,6 @@ export default function MultiLegFlightEditor({
       }
     }
     if (initialAdditionalLegs && initialAdditionalLegs.length > 0) {
-      // Try to map additional legs to inter-city slots
       const interCitySlots = autoSlots.filter(s => s.legType === 'intercity');
       initialAdditionalLegs.forEach((leg, i) => {
         if (i < interCitySlots.length) {
@@ -218,6 +216,25 @@ export default function MultiLegFlightEditor({
     setSlots(autoSlots);
     setInitialized(true);
   }, [destinations, startDate, endDate, transportSelections, initialized, initialOutbound, initialReturn, initialAdditionalLegs]);
+
+  // Sync transport type selections from InterCityTransportComparison into existing slots
+  useEffect(() => {
+    if (!initialized || !transportSelections) return;
+    setSlots(prev => {
+      let changed = false;
+      const updated = prev.map(s => {
+        if (s.legType === 'intercity' && s.transitionIndex >= 0) {
+          const sel = transportSelections[s.transitionIndex];
+          if (sel && sel.type !== s.transportType) {
+            changed = true;
+            return { ...s, transportType: sel.type };
+          }
+        }
+        return s;
+      });
+      return changed ? updated : prev;
+    });
+  }, [initialized, transportSelections]);
 
   // Sync changes to parent
   const syncToParent = useCallback((updatedSlots: FlightLegSlot[]) => {
