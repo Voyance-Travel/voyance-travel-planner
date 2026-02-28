@@ -1,137 +1,73 @@
 
 
-# Fix Flight Import → Step 2 Mapping & Missing Leg Communication
+# Fix: 4th Flight Leg (Return) Disappearing in Multi-City Step 2
 
-## Problem Summary
+## Root Cause
 
-When a user imports 4 flight segments (ATL->MAD->PMI, MAD->BOS->ATL), the Step 2 page has three issues:
+There are **two competing useEffects** in `MultiLegFlightEditor.tsx` that both try to populate the flight slots when an import happens, and they **fight each other**, causing the return leg to be dropped.
 
-1. **Positional mapping drops flights**: The editor creates 3 slots (Outbound, Mallorca->Madrid, Return) but receives 4 legs. The 4th leg (BOS->ATL) is silently dropped.
-2. **Classification data is lost**: The `ManualFlightEntry` type doesn't carry `classification` (OUTBOUND, RETURN, CONNECTION, etc.) from the parser, so the editor can't intelligently group connecting flights.
-3. **Missing legs don't reach Transport section**: Intelligence detects PMI->MAD is missing, but this never flows to the "Transportation Between Cities" section, which still shows its default comparison options as if nothing is booked or missing.
+### The Race Condition
 
----
+When you import 4 legs (e.g., ATL->MAD, MAD->PMI, MAD->BOS, BOS->ATL):
+
+1. `handleImportAllLegs` in Start.tsx splits the 4 legs into:
+   - `outboundFlight` = leg 0 (ATL->MAD)
+   - `additionalLegs` = legs 1-2 (MAD->PMI, MAD->BOS)
+   - `returnFlight` = leg 3 (BOS->ATL)
+
+2. This triggers **two effects simultaneously** in `MultiLegFlightEditor`:
+   - **Effect A (line 277)**: The "rehydration" effect, triggered by changes to `initialOutbound`/`initialReturn`/`initialAdditionalLegs`. It builds `incomingLegs = [outbound, ...additional, return]` = 4 legs, but only has 3 auto-generated slots (outbound, intercity, return). It fills 3 slots and tries to insert 1 custom slot.
+   - **Effect B (line 341)**: The "import" effect, triggered by `importNonce`. It does classification-aware matching and also tries to insert custom slots.
+
+3. Both effects call `setSlots()` with the **same `prev` state** (React batching), so one overwrites the other. The return leg's custom slot insertion from one effect gets wiped by the other effect's result.
+
+### Why previous fixes didn't work
+
+Every attempt added more logic to insert "extra" legs, but the fundamental issue is that **two effects both try to modify slots from the same import event**, and React's state updates mean the second one overwrites the first.
 
 ## Solution
 
-### 1. Extend `ManualFlightEntry` with classification metadata
+**Make the import effect (Effect B) the sole authority during imports, and prevent the rehydration effect (Effect A) from firing when an import just happened.**
 
-**File**: `src/components/itinerary/AddBookingInline.tsx`
+### File Changes
 
-Add optional fields to `ManualFlightEntry`:
-- `classification?: 'OUTBOUND' | 'RETURN' | 'CONNECTION' | 'INTER_DESTINATION'`
-- `connectionGroup?: number`
+#### 1. `src/components/planner/flight/MultiLegFlightEditor.tsx`
 
-This lets the parser's classification survive through the import pipeline.
-
-### 2. Carry classification through the FlightImportModal
-
-**File**: `src/components/itinerary/FlightImportModal.tsx`
-
-In `handleConfirmImport()` (line 246), include `classification` and `connectionGroup` when mapping `parsedSegments` to `ManualFlightEntry[]`:
-
-```
-classification: seg.classification,
-connectionGroup: seg.connectionGroup,
-```
-
-### 3. Smart leg-to-slot mapping in MultiLegFlightEditor
-
-**File**: `src/components/planner/flight/MultiLegFlightEditor.tsx`
-
-Replace the positional mapping in the import rehydration effect (line 317-358) with classification-aware matching:
-
-- **OUTBOUND + its CONNECTIONs** -> group into the outbound slot (use the first leg's departure, last leg's arrival)
-- **RETURN + its CONNECTIONs** -> group into the return slot (use the first leg's departure, last leg's arrival)
-- **INTER_DESTINATION** -> match to the intercity slot by comparing airport codes to `suggestedFrom`/`suggestedTo`
-- **Fallback**: If no classification, fall back to airport-code matching (leg's departureAirport matches slot's suggestedFrom or arrivalAirport matches slot's suggestedTo)
-
-For grouped connections (e.g., ATL->MAD + MAD->PMI as outbound):
-- Store the primary leg (ATL->MAD) in the slot's `flight` field
-- Store the connecting leg (MAD->PMI) in a new optional `connectionLegs` array on `FlightLegSlot`
-- The slot header shows the full route: "ATL -> MAD -> PMI" instead of just one segment
-- Both legs are preserved for the trip insert
-
-### 4. Add `connectionLegs` to FlightLegSlot
-
-**File**: `src/components/planner/flight/MultiLegFlightEditor.tsx`
-
-Add to the `FlightLegSlot` interface:
-```
-connectionLegs?: ManualFlightEntry[]  // Additional connecting flights grouped with this slot
-```
-
-Update the slot UI to show "via MAD" or similar when connection legs exist.
-
-### 5. Pass intelligence `missingLegs` to InterCityTransportComparison
-
-**File**: `src/pages/Start.tsx`
-
-- Thread `flightIntelligence` state down to the `FlightHotelStep` component (it's already available via `onIntelligenceCapture`)
-- Add a `missingLegs` prop to `InterCityTransportComparison`
-- When a transition matches a missing leg (fromCity/toCity), show an amber "Not yet booked" badge and a "Book this" prompt instead of the default AI comparison options
-
-### 6. Mark booked transitions in InterCityTransportComparison
-
-**File**: `src/components/planner/InterCityTransportComparison.tsx`
-
-Add support for:
-- `missingLegs?: Array<{ fromCity: string; toCity: string; suggestedDateRange?: { earliest: string; latest: string } }>`
-- `bookedTransitions?: Record<number, { type: string; details: string }>` (transitions that already have imported flight data)
-
-For each transition:
-- If it matches a `missingLeg`: Show amber warning card with "Need flight from X to Y" + suggested booking dates
-- If it has booked data: Show a green "Booked" badge instead of comparison options
-- Otherwise: Show the normal AI comparison options
-
----
-
-## Technical Flow After Changes
+- Add a `lastAppliedNonce` ref to track when an import was just processed
+- In the **rehydration effect (line 277)**: Skip execution if `importNonce` matches `lastAppliedNonce` (meaning the import effect will handle it)
+- In the **import effect (line 341)**: 
+  - Set `lastAppliedNonce.current = importNonce` when processing
+  - Build slots from scratch for the import case: start with the auto-generated slots, match ALL imported legs (primary + connections + unplaced), and create custom slots for anything left over -- all in ONE pass
+  - Remove the `alreadyExists` check that was incorrectly filtering out legs that partially matched slots from the racing rehydration effect
 
 ```text
-User pastes confirmation
-       |
-       v
-parse-booking-confirmation (edge function)
-  -> Returns segments WITH classification + intelligence WITH missingLegs
-       |
-       v
-FlightImportModal
-  -> Maps segments to ManualFlightEntry[] WITH classification
-  -> Passes intelligence via onIntelligence callback
-       |
-       v
-handleImportAllLegs (Start.tsx)
-  -> Stores legs in state
-  -> Stores intelligence in flightIntelligence state
-       |
-       v
-MultiLegFlightEditor
-  -> Groups OUTBOUND+CONNECTION legs into outbound slot
-  -> Groups RETURN+CONNECTION legs into return slot  
-  -> Matches INTER_DESTINATION to intercity slots by airport code
-  -> Shows full route per slot (e.g., "ATL -> MAD -> PMI")
-       |
-       v
-InterCityTransportComparison
-  -> Reads missingLegs from intelligence
-  -> Shows "Not yet booked" warning for Mallorca->Madrid transition
-  -> Shows "Booked" badge for transitions with imported data
+Before (two effects racing):
+  Import arrives
+    -> Effect A fires (rehydration): fills 3 slots, tries to add 1 custom
+    -> Effect B fires (import): fills 3 slots, tries to add customs
+    -> Effect B overwrites Effect A -> return leg lost
+
+After (single authority):
+  Import arrives
+    -> Effect A fires but sees importNonce === lastAppliedNonce, skips
+    -> Effect B fires: fills 3 slots + creates 1 custom slot for 4th leg
+    -> All 4 legs visible
 ```
 
-## Files to Change
+#### 2. No other files need changes
 
-1. `src/components/itinerary/AddBookingInline.tsx` -- Add `classification` and `connectionGroup` to `ManualFlightEntry`
-2. `src/components/itinerary/FlightImportModal.tsx` -- Pass classification through in `handleConfirmImport`
-3. `src/components/planner/flight/MultiLegFlightEditor.tsx` -- Smart grouping logic, `connectionLegs` on slots, updated UI
-4. `src/pages/Start.tsx` -- Thread `flightIntelligence` to `InterCityTransportComparison`, pass missing legs
-5. `src/components/planner/InterCityTransportComparison.tsx` -- Handle `missingLegs` and `bookedTransitions` props
+The `handleImportAllLegs` in Start.tsx, the `FlightImportModal`, and `AddBookingInline` are all correct. The split into outbound/additional/return is fine -- the bug is entirely in how `MultiLegFlightEditor` processes these inputs.
 
-## Sequencing
+## Technical Details
 
-1. Extend `ManualFlightEntry` with classification fields
-2. Update `FlightImportModal` to carry classification through
-3. Rewrite import mapping in `MultiLegFlightEditor` with smart grouping
-4. Thread intelligence to `InterCityTransportComparison`
-5. Add missing leg warnings and booked badges to transport comparison UI
+Changes to `MultiLegFlightEditor.tsx`:
 
+1. Add `const lastAppliedNonce = useRef<number>(0);` after the `initialized` state
+2. In the rehydration effect (~line 277), add guard: `if (importNonce && importNonce === lastAppliedNonce.current) return;`
+3. In the import effect (~line 341):
+   - Set `lastAppliedNonce.current = importNonce!;` at the top
+   - After matching primary legs to existing slots, do a single pass for ALL unplaced legs (connections + unmatched), inserting them before the return slot
+   - Remove the `alreadyExists` dedup check that was based on partial data from the racing effect, and instead use `placedLegIds` (already tracked) as the sole dedup mechanism
+4. Add `importNonce` to the rehydration effect's dependency array so it can check against it
+
+This is a **targeted, minimal fix** -- no architectural changes, no new props, no new components.
