@@ -174,9 +174,15 @@ export function generateDestinationDates(
   let currentDate = new Date(startDate);
   
   return destinations.map((dest, index) => {
-    const arrivalDate = currentDate.toISOString().split('T')[0];
+    const aY = currentDate.getFullYear();
+    const aM = String(currentDate.getMonth() + 1).padStart(2, '0');
+    const aD = String(currentDate.getDate()).padStart(2, '0');
+    const arrivalDate = `${aY}-${aM}-${aD}`;
     currentDate.setDate(currentDate.getDate() + dest.nights);
-    const departureDate = currentDate.toISOString().split('T')[0];
+    const dY = currentDate.getFullYear();
+    const dM = String(currentDate.getMonth() + 1).padStart(2, '0');
+    const dD = String(currentDate.getDate()).padStart(2, '0');
+    const departureDate = `${dY}-${dM}-${dD}`;
     
     return {
       ...dest,

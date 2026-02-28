@@ -171,7 +171,7 @@ Respond in JSON format:
   "days": [
     {
       "dayNumber": 1,
-      "date": "2024-03-15",
+      "date": "YYYY-MM-DD",
       "title": "Arrival & First Taste",
       "theme": "Immersion",
       "neighborhood": "Shibuya",

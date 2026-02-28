@@ -103,7 +103,7 @@ export const copy = {
   placeholders: {
     destination: "Paris, Tokyo, Bali...",
     departureCity: "New York, London...",
-    tripName: "Summer Adventure 2024",
+    tripName: "Summer Adventure 2026",
     hotel: "Where are you staying?",
     activity: "What do you want to do?",
     search: "Search...",

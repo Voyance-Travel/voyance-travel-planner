@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode, useCallback,
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
 import { useEntitlements } from '@/hooks/useEntitlements';
+import { getLocalToday } from '@/utils/dateUtils';
 
 // Anonymous session management
 const ANON_SESSION_KEY = 'voyance_anonymous_session';
@@ -272,8 +273,8 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
         name: tripName,
         destination: state.basics.destination || 'Unknown',
         destination_country: null,
-        start_date: state.basics.startDate || new Date().toISOString().split('T')[0],
-        end_date: state.basics.endDate || new Date().toISOString().split('T')[0],
+        start_date: state.basics.startDate || getLocalToday(),
+        end_date: state.basics.endDate || getLocalToday(),
         trip_type: state.basics.tripType || 'vacation',
         travelers: state.basics.travelers || 1,
         origin_city: state.basics.originCity,
@@ -337,8 +338,8 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
           .select('id')
           .eq('user_id', user.id)
           .eq('destination', state.basics.destination || 'Unknown')
-          .eq('start_date', state.basics.startDate || new Date().toISOString().split('T')[0])
-          .eq('end_date', state.basics.endDate || new Date().toISOString().split('T')[0])
+          .eq('start_date', state.basics.startDate || getLocalToday())
+          .eq('end_date', state.basics.endDate || getLocalToday())
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();

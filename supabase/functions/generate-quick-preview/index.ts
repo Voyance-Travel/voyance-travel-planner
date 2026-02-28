@@ -291,7 +291,7 @@ Be concise. Assume US passport holder. JSON only, no markdown.`
           },
           {
             role: "user",
-            content: `Entry requirements for ${destination} for US citizens in 2024/2025?`
+            content: `Entry requirements for ${destination} for US citizens in ${new Date().getFullYear()}/${new Date().getFullYear() + 1}?`
           }
         ],
         max_tokens: 150,

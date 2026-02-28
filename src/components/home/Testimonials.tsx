@@ -3,15 +3,15 @@ import { motion } from 'framer-motion';
 const testimonials = [
   {
     quote: 'It felt like someone planned my dream trip for me, and they nailed it.',
-    tag: 'Anonymous beta user, 2025',
+    tag: 'Anonymous beta user, 2026',
   },
   {
     quote: 'I saved 12 hours and booked a better trip. I\'m never planning manually again.',
-    tag: 'Anonymous beta user, 2025',
+    tag: 'Anonymous beta user, 2026',
   },
   {
     quote: 'The only AI I\'ve ever used that made my life easier, not harder.',
-    tag: 'Anonymous beta user, 2025',
+    tag: 'Anonymous beta user, 2026',
   },
 ];
 

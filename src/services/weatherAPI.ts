@@ -6,6 +6,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { getLocalToday } from '@/utils/dateUtils';
 
 // ============================================================================
 // Types
@@ -51,7 +52,7 @@ export async function getWeather(destinationId: string): Promise<WeatherResponse
   const { data, error } = await supabase.functions.invoke('weather', {
     body: {
       destination: destinationId,
-      startDate: new Date().toISOString().split('T')[0],
+      startDate: getLocalToday(),
       days: 7,
     },
   });

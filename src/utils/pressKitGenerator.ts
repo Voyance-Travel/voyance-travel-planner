@@ -99,7 +99,7 @@ export async function generatePressKitPDF(): Promise<void> {
   
   pdf.setFontSize(14);
   pdf.setFont('helvetica', 'normal');
-  pdf.text('Press Kit 2025', pageWidth / 2, 42, { align: 'center' });
+  pdf.text('Press Kit 2026', pageWidth / 2, 42, { align: 'center' });
   
   y = 80;
   pdf.setTextColor(0, 0, 0);
