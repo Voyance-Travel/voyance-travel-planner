@@ -225,17 +225,6 @@ function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => voi
               </Button>
             </motion.div>
 
-            {canEarnBonus && (
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.6 }}
-                className="text-sm font-medium text-primary flex items-center gap-1.5"
-              >
-                <Gift className="w-4 h-4" />
-                Earn 100 credits for completing
-              </motion.p>
-            )}
 
             <div className="flex items-center gap-3 text-muted-foreground text-sm">
               <span>or</span>
