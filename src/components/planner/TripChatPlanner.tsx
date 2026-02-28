@@ -6,7 +6,8 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Loader2, Sparkles, User, ClipboardPaste } from 'lucide-react';
+import { Send, Loader2, Sparkles, User, ClipboardPaste, Mic, MicOff } from 'lucide-react';
+import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -85,6 +86,12 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
   const [cityTransports, setCityTransports] = useState<InterCityTransportMode[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const { isListening, isSupported: micSupported, toggleListening, interimTranscript } = useSpeechRecognition({
+    onResult: (transcript) => {
+      setInput(prev => (prev ? prev + ' ' : '') + transcript);
+    },
+  });
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -379,6 +386,18 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
               disabled={isStreaming}
             />
             <div className="absolute right-1.5 bottom-1.5 flex items-center gap-0.5">
+              {micSupported && (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className={cn("h-7 w-7", isListening && "text-destructive")}
+                  onClick={toggleListening}
+                  title={isListening ? "Stop listening" : "Voice input"}
+                >
+                  {isListening ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+                </Button>
+              )}
               <Button
                 type="button"
                 size="icon"

@@ -9,7 +9,8 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { MessageCircle, X, Send, Loader2, ArrowLeftRight, Gauge, Filter, RefreshCw, Check, ThumbsDown, Settings2, Coins, Pencil, TrendingDown, TrendingUp, Minus, Plus } from 'lucide-react';
+import { MessageCircle, X, Send, Loader2, ArrowLeftRight, Gauge, Filter, RefreshCw, Check, ThumbsDown, Settings2, Coins, Pencil, TrendingDown, TrendingUp, Minus, Plus, Mic, MicOff } from 'lucide-react';
+import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -75,6 +76,11 @@ export function ItineraryAssistant({
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const { isListening, isSupported: micSupported, toggleListening } = useSpeechRecognition({
+    onResult: (transcript) => {
+      setInputValue(prev => (prev ? prev + ' ' : '') + transcript);
+    },
+  });
   // Credit system hooks
   const queryClient = useQueryClient();
   const { data: creditData } = useCredits();
@@ -634,6 +640,17 @@ export function ItineraryAssistant({
                 maxLength={MAX_MESSAGE_LENGTH}
                 className="flex-1"
               />
+              {micSupported && (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant={isListening ? "destructive" : "outline"}
+                  onClick={toggleListening}
+                  title={isListening ? "Stop listening" : "Voice input"}
+                >
+                  {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                </Button>
+              )}
               <Button 
                 type="submit" 
                 size="icon"

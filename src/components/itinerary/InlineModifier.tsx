@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Check, X, Loader2, MessageSquare, Lightbulb } from 'lucide-react';
+import { Sparkles, Check, X, Loader2, MessageSquare, Lightbulb, Mic, MicOff } from 'lucide-react';
+import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { sendChatMessage, getActionDisplayInfo, type ItineraryContext } from '@/services/itineraryChatAPI';
@@ -51,6 +52,12 @@ export function InlineModifier({
   const [pendingChange, setPendingChange] = useState<PendingChange | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
 
+  const { isListening, isSupported: micSupported, toggleListening } = useSpeechRecognition({
+    onResult: (transcript) => {
+      setInput(prev => (prev ? prev + ' ' : '') + transcript);
+      if (!isExpanded) setIsExpanded(true);
+    },
+  });
   const { user } = useAuth();
 
   // Credit system hooks
@@ -304,6 +311,18 @@ export function InlineModifier({
                   className="flex-1"
                   autoFocus
                 />
+                {micSupported && (
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant={isListening ? "destructive" : "outline"}
+                    onClick={toggleListening}
+                    title={isListening ? "Stop listening" : "Voice input"}
+                    className="shrink-0"
+                  >
+                    {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                  </Button>
+                )}
                 <Button
                   onClick={handleSubmit}
                   disabled={isProcessing || !input.trim()}
