@@ -1397,6 +1397,8 @@ export default function TripDetail() {
                       transportDetails: city.transport_details || undefined,
                       transportCostCents: city.transport_cost_cents || 0,
                       transportCurrency: city.transport_currency || 'USD',
+                      arrivalTransfer: (city as any).arrival_transfer || null,
+                      departureTransfer: (city as any).departure_transfer || null,
                     };
                   });
                 }
@@ -1535,7 +1537,13 @@ export default function TripDetail() {
                       })),
                     } : null);
                   }}
-                  onBookingAdded={() => window.location.reload()}
+                  onBookingAdded={async () => {
+                    // Refetch trip_cities to pick up transfer/hotel changes without full reload
+                    try {
+                      const updated = await getTripCities(tripId);
+                      setTripCities(updated);
+                    } catch { /* non-critical */ }
+                  }}
                   onUnlockComplete={(enrichedItinerary) => {
                     refreshEntitlements();
                     setTrip(prev => prev ? {
