@@ -624,8 +624,8 @@ function TripDetailsStep({
           <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
             Travelers
           </label>
-          <div className="flex items-center gap-2">
-            {[1, 2, 3, 4].map((num) => (
+          <div className="flex items-center gap-2 flex-wrap">
+            {[1, 2, 3, 4, 5, 6, 8, 10].map((num) => (
               <button
                 key={num}
                 type="button"
@@ -647,36 +647,6 @@ function TripDetailsStep({
                 {num}
               </button>
             ))}
-            {travelers >= 5 ? (
-              /* Stepper for 5+ travelers */
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setTravelers(Math.max(5, travelers - 1))}
-                  className="w-9 h-11 sm:w-10 sm:h-12 rounded-lg border-2 border-primary/50 text-primary hover:bg-primary/10 transition-all text-sm font-medium"
-                >
-                  −
-                </button>
-                <span className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg border-2 bg-primary text-primary-foreground border-primary flex items-center justify-center text-sm font-medium">
-                  {travelers}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setTravelers(Math.min(10, travelers + 1))}
-                  className="w-9 h-11 sm:w-10 sm:h-12 rounded-lg border-2 border-primary/50 text-primary hover:bg-primary/10 transition-all text-sm font-medium"
-                >
-                  +
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setTravelers(5)}
-                className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg border-2 border-border text-muted-foreground hover:border-primary/50 hover:text-foreground transition-all text-sm font-medium min-w-[44px]"
-              >
-                5+
-              </button>
-            )}
         </div>
 
         {/* Link Friends */}
