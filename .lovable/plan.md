@@ -1,49 +1,128 @@
 
-# Fix All 2025/Past Date References Across the Platform
+
+# Flight Intelligence Pipeline Upgrade
 
 ## Problem
-Multiple files across the codebase still use `new Date().toISOString().split('T')[0]` (UTC-based, can be off by a day) or contain hardcoded 2024/2025 dates in prompts, placeholders, and examples. Since it is now 2026, any reference to 2025 in user-facing flows is stale.
+When users paste airline confirmations in the Step 2 modal, the system extracts raw segments but doesn't reason about them. Layover airports get treated as destinations, missing legs aren't detected, and the itinerary generator schedules activities during layovers.
 
-## Changes
+## Overview
+This upgrade touches 4 layers: the AI parsing edge function, the import modal UI, trip state persistence, and the itinerary generation prompt pipeline.
 
-### 1. Update placeholder text to say "2026"
-- **`src/components/planner/steps/TripSetup.tsx`** -- Change `"Summer Adventure 2024"` placeholder to `"Summer Adventure 2026"`
-- **`src/lib/copy.ts`** -- Change `"Summer Adventure 2024"` to `"Summer Adventure 2026"`
+---
 
-### 2. Replace remaining `toISOString().split('T')[0]` with `getLocalToday()` in client code
-These files use the UTC-based pattern for "today" and risk off-by-one date bugs:
+## Area 1: Upgrade `parse-booking-confirmation` Edge Function
 
-- **`src/services/userAPI.ts`** (line 294) -- `new Date().toISOString().split('T')[0]` for filtering trips
-- **`src/contexts/TripPlannerContext.tsx`** (lines 275-276, 340-341) -- fallback dates for trip creation
-- **`src/services/weatherAPI.ts`** (line 54) -- weather API start date
-- **`src/pages/planner/PlannerFlight.tsx`** (line 256) -- default departure date fallback
-- **`src/hooks/useBulkUnlock.ts`** (line 97) -- date calculation for itinerary generation
-- **`src/types/multiCity.ts`** (lines 177-179) -- multi-city date calculations
+**File:** `supabase/functions/parse-booking-confirmation/index.ts`
 
-Each will import and use `getLocalToday()` or `parseLocalDate()` as appropriate.
+- Accept an optional `tripContext` object alongside `confirmationText`:
+  ```text
+  { destinations, destinationAirports, tripDates, nightsPerCity }
+  ```
+- Expand the LLM prompt (two-phase approach within a single call):
+  1. **Extract** all raw flight segments (existing behavior)
+  2. **Analyze** segments against `tripContext` to produce an `intelligence` block:
+     - **Classify** each segment: `OUTBOUND`, `RETURN`, `CONNECTION` (same airport within 6h), `INTER_DESTINATION`
+     - **Detect missing legs** between consecutive destinations with reason, suggested date range, and priority
+     - **Calculate availability windows** per destination:
+       - `availableFrom` = arrival + 3h (international) or +1.5h (domestic)
+       - `availableUntil` = departure - 3.5h (international) or -2.5h (domestic)
+     - **Build route summary** with layover markers: `Dallas -> (layover: Madrid) -> [Mallorca] -> [Madrid] -> Dallas`
+     - **Identify layovers** with airport, times, and duration
+     - **Generate warnings** array
+- Update response interface to include `intelligence` alongside `booking`
+- Add server-side validation/defaults for the intelligence block (handle cases where AI omits fields)
+- Sort segments chronologically by departure datetime
+- Never discard any user-provided segment data
 
-### 3. Fix edge function prompts with hardcoded years
-- **`supabase/functions/generate-trip-preview/index.ts`** (line 174) -- Example JSON has `"date": "2024-03-15"`. Change to a dynamic or generic placeholder like `"YYYY-MM-DD"` or use the actual trip dates from the request.
-- **`supabase/functions/generate-quick-preview/index.ts`** (line 294) -- Prompt asks about `"2024/2025"` entry requirements. Change to dynamically reference the current year.
+---
 
-### 4. Update static content references
-- **`src/components/home/Testimonials.tsx`** (line 6) -- `"Anonymous beta user, 2025"` to `"Anonymous beta user, 2026"`
-- **`src/data/guides.ts`** -- The "Best Time to Book for 2025" guide: update title, slug, and body text references to 2026
-- **`src/utils/pressKitGenerator.ts`** -- `"Press Kit 2025"` to `"Press Kit 2026"`
+## Area 2: Upgrade Flight Import Modal Frontend
 
-### 5. Fix `addDays` utility in dateUtils.ts
-The `addDays` function (line 79) still uses `toISOString().split('T')[0]` which can produce wrong dates near midnight. Update it to use local date formatting consistent with `getLocalToday()`.
+**File:** `src/components/itinerary/FlightImportModal.tsx`
 
-## Technical Details
+**Props changes:**
+- Add `destinations`, `destinationAirports`, `nightsPerCity` props (sourced from Start.tsx trip state)
 
-All client-side files will import from `@/utils/dateUtils`:
-```typescript
-import { getLocalToday, parseLocalDate } from '@/utils/dateUtils';
-```
+**API call changes:**
+- Pass `tripContext` to the edge function call alongside `confirmationText`
 
-Edge functions will compute the current year dynamically:
-```typescript
-const currentYear = new Date().getFullYear();
-```
+**New UI in review step (before individual segment cards):**
 
-No database changes are needed. This is purely a code sweep to eliminate stale year references and UTC date bugs.
+1. **Flight Analysis Card** -- a summary card showing:
+   - Intelligent route display (with "(layover)" labels)
+   - Destination schedule table (city, available dates, available times)
+   - Summary text from `intelligence.summary`
+
+2. **Missing Leg Warnings** -- amber alert cards for each missing leg:
+   - Warning message explaining why it's needed
+   - Suggested booking window
+   - "Help me find this flight" button (future: links to search)
+
+3. **"Does this look right?" prompt** with Yes / Adjust buttons
+
+**Segment card enhancements:**
+- Add classification badge (pill) on each segment header: "Outbound", "Connection", "Return", "Inter-destination"
+- For `isLayoverArrival: true` segments, replace "Used to plan Day 1" text with "Connection -- your journey continues to [next city]"
+- Group segments with the same `connectionGroup` visually (connected card styling, vertical connector line)
+
+**File:** `src/pages/Start.tsx`
+- Pass trip context data (destinations, airports, nights per city) to `FlightImportModal` props
+
+---
+
+## Area 3: Store Flight Intelligence in Trip State
+
+**File:** `src/pages/Start.tsx` (and related state)
+
+- When user confirms import in the modal, store the full `intelligence` object alongside flight legs in the trip state
+- Persist `intelligence` data into the trip's `flight_selection` JSON blob (or a new `flight_intelligence` field on the `trips` table if needed)
+- This data flows through to `generate-itinerary` when "Build My Itinerary" is clicked
+
+**Database:** Add a `flight_intelligence` JSONB column to the `trips` table (nullable, default null) via migration. This stores `destinationSchedule`, `layovers`, `missingLegs`, `route`, and `warnings`.
+
+---
+
+## Area 4: Update Itinerary Generation to Use Flight Intelligence
+
+**File:** `supabase/functions/generate-itinerary/index.ts`
+
+- In the flight/hotel data loading stage (~Stage 1.4), read `flight_intelligence` from the trip record
+- If present, inject a new prompt section into the day generation prompt:
+
+**New prompt rules:**
+- **FLIGHT-AWARE SCHEDULING**: For each destination in `destinationSchedule`, enforce `availableFrom` and `availableUntil` as hard constraints on the day's activity window
+- **LAYOVER EXCLUSIONS**: For each layover, explicitly instruct the AI to schedule zero activities in that city during the layover window
+- **FIRST/LAST DESTINATION**: Lighter schedule on arrival day (2-3 activities, afternoon/evening only); last day ends by `availableUntil`
+- **MISSING LEG HANDLING**: Leave travel days between missing-leg cities flexible with a "Travel day -- flight not yet booked" note
+- **TRAVEL INTEL COVERAGE**: Generate Travel Intel for ALL cities in `destinationSchedule`, not just the first
+
+**File:** `supabase/functions/generate-itinerary/prompt-library.ts`
+
+- Update `extractFlightData()` to also check for `flight_intelligence` and produce per-destination timing constraints
+- Add a new `buildFlightIntelligencePrompt(intelligence)` function that generates the prompt section described above
+- Update `DayConstraints` interface to include destination-specific availability windows from intelligence data
+
+**File:** `src/services/itineraryAPI.ts`
+
+- When calling `generate-itinerary`, include the `flight_intelligence` data from the trip record in the request body
+
+---
+
+## Sequencing
+
+1. Database migration: add `flight_intelligence` JSONB column to `trips`
+2. Update `parse-booking-confirmation` edge function (new prompt, new response format, backward-compatible)
+3. Update `FlightImportModal` (new props, new UI sections, intelligence display)
+4. Update `Start.tsx` (pass context to modal, store intelligence on confirm)
+5. Update `prompt-library.ts` (new `buildFlightIntelligencePrompt` function)
+6. Update `generate-itinerary/index.ts` (read intelligence, inject into prompt pipeline)
+7. Update `itineraryAPI.ts` (pass intelligence in request body)
+8. Deploy edge functions and test end-to-end
+
+## Edge Cases Handled
+
+- No `tripContext` provided: function falls back to current extraction-only behavior (backward compatible)
+- Single-city trips: intelligence still generated but simpler (no missing legs, no inter-destination classification)
+- AI fails to produce intelligence block: server-side defaults applied, segments still returned
+- Layover city is also a destination: classified independently based on timing context
+
