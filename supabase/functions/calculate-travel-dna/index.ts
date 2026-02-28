@@ -255,7 +255,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
   // ═══════════════════════════════════════
   {
     id: 'social_butterfly',
-    name: 'The Social Butterfly',
+    name: 'The Connection Curator',
     category: 'CONNECTOR',
     tagline: "Every stranger is a friend you haven't met.",
     primaryTraits: [
@@ -336,7 +336,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
   // ═══════════════════════════════════════
   {
     id: 'bucket_list_conqueror',
-    name: 'The Bucket List Conqueror',
+    name: 'The Milestone Voyager',
     category: 'ACHIEVER',
     tagline: 'Life is a checklist of wonders.',
     primaryTraits: [
@@ -385,7 +385,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
   },
   {
     id: 'status_seeker',
-    name: 'The Status Seeker',
+    name: 'The Prestige Traveler',
     category: 'ACHIEVER',
     tagline: "First class isn't a seat, it's a lifestyle.",
     primaryTraits: [
@@ -480,7 +480,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
   },
   {
     id: 'escape_artist',
-    name: 'The Escape Artist',
+    name: 'The Reset Traveler',
     category: 'RESTORER',
     tagline: 'Sometimes you need to leave to find yourself.',
     primaryTraits: [
@@ -587,7 +587,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
   // ═══════════════════════════════════════
   {
     id: 'gap_year_graduate',
-    name: 'The Gap Year Graduate',
+    name: 'The Horizon Chaser',
     category: 'TRANSFORMER',
     tagline: 'The world is the ultimate classroom.',
     primaryTraits: [
@@ -599,7 +599,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
   },
   {
     id: 'midlife_explorer',
-    name: 'The Midlife Explorer',
+    name: 'The Renaissance Voyager',
     category: 'TRANSFORMER',
     tagline: "It's never too late to become who you were meant to be.",
     primaryTraits: [
@@ -631,7 +631,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
   },
   {
     id: 'healing_journeyer',
-    name: 'The Healing Journeyer',
+    name: 'The Restoration Seeker',
     category: 'TRANSFORMER',
     tagline: 'Travel is the medicine for the soul.',
     primaryTraits: [
@@ -650,7 +650,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
   },
   {
     id: 'retirement_ranger',
-    name: 'The Retirement Ranger',
+    name: 'The Boundless Explorer',
     category: 'TRANSFORMER',
     tagline: 'Finally free to explore without limits.',
     primaryTraits: [

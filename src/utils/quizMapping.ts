@@ -614,21 +614,21 @@ function getArchetypeDisplayName(id: string): string {
     digital_explorer: 'The Digital Explorer',
     explorer: 'The Explorer',
     // CONNECTOR category
-    social_butterfly: 'The Social Butterfly',
+    social_butterfly: 'The Connection Curator',
     family_architect: 'The Family Architect',
     romantic_curator: 'The Romantic Curator',
     story_seeker: 'The Story Seeker',
     // ACHIEVER category
-    bucket_list_conqueror: 'The Bucket List Conqueror',
+    bucket_list_conqueror: 'The Milestone Voyager',
     adrenaline_architect: 'The Adrenaline Architect',
     collection_curator: 'The Collection Curator',
-    status_seeker: 'The Status Seeker',
+    status_seeker: 'The Prestige Traveler',
     // RESTORER category
     zen_seeker: 'The Zen Seeker',
     retreat_regular: 'The Retreat Regular',
     beach_therapist: 'The Beach Therapist',
     slow_traveler: 'The Slow Traveler',
-    escape_artist: 'The Escape Artist',
+    escape_artist: 'The Reset Traveler',
     // CURATOR category
     culinary_cartographer: 'The Culinary Cartographer',
     art_aficionado: 'The Art Aficionado',
@@ -636,11 +636,11 @@ function getArchetypeDisplayName(id: string): string {
     eco_ethicist: 'The Eco Ethicist',
     curated_luxe: 'Curated Luxe',
     // TRANSFORMER category
-    gap_year_graduate: 'The Gap Year Graduate',
-    midlife_explorer: 'The Midlife Explorer',
+    gap_year_graduate: 'The Horizon Chaser',
+    midlife_explorer: 'The Renaissance Voyager',
     sabbatical_scholar: 'The Sabbatical Scholar',
-    healing_journeyer: 'The Healing Journeyer',
-    retirement_ranger: 'The Retirement Ranger',
+    healing_journeyer: 'The Restoration Seeker',
+    retirement_ranger: 'The Boundless Explorer',
     // CONNECTOR (additional)
     community_builder: 'The Community Builder',
     // RESTORER (additional)
@@ -1281,6 +1281,32 @@ export async function recalculateDNAFromPreferences(
     }
     
     console.log('[DNA Recalc] Final V2 traits:', JSON.stringify(dna.trait_scores));
+    
+    // 4c. Regenerate tone_tags from final trait scores (including overrides)
+    // This ensures trait tags displayed in "Your Travel Traits" always match
+    // the actual trait values, not stale quiz-time tags.
+    if (dna.trait_scores) {
+      const ts = dna.trait_scores as Record<string, number>;
+      const freshTags: string[] = [];
+      if ((ts.adventure ?? 0) >= 5) freshTags.push('adventurous');
+      if ((ts.comfort ?? 0) >= 5) freshTags.push('comfort-seeking');
+      if ((ts.authenticity ?? 0) >= 5) freshTags.push('authentic');
+      if ((ts.pace ?? 0) <= -3) freshTags.push('slow-paced');
+      if ((ts.pace ?? 0) >= 3) freshTags.push('active');
+      if ((ts.pace ?? 0) >= 6) freshTags.push('fast-paced');
+      if ((ts.transformation ?? 0) >= 5) freshTags.push('transformative');
+      if ((ts.social ?? 0) >= 5) freshTags.push('social');
+      if ((ts.social ?? 0) <= -3) freshTags.push('introspective');
+      if ((ts.budget ?? 0) >= 5) freshTags.push('budget-savvy');
+      if ((ts.budget ?? 0) <= -5) freshTags.push('luxury-leaning');
+      if ((ts.planning ?? 0) >= 5) freshTags.push('detail-oriented');
+      if ((ts.planning ?? 0) <= -3) freshTags.push('spontaneous');
+      // Only replace if we generated any tags; otherwise keep existing
+      if (freshTags.length > 0) {
+        dna.tone_tags = freshTags;
+        console.log('[DNA Recalc] Regenerated tone_tags:', freshTags);
+      }
+    }
     
     // 5. Save the new DNA
     const dnaSuccess = await saveTravelDNA(userId, null, dna);
