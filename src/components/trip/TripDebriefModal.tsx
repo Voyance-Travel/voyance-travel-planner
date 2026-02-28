@@ -333,17 +333,19 @@ export function TripDebriefModal({
               <Input
                 placeholder="What was the issue?"
                 value={newPainPoint.issue}
-                onChange={(e) => setNewPainPoint({ ...newPainPoint, issue: e.target.value })}
+                onChange={(e) => setNewPainPoint((prev) => ({ ...prev, issue: e.target.value }))}
+                onKeyDown={(e) => e.key === 'Enter' && newPainPoint.issue.trim() && addPainPoint()}
               />
               <Input
                 placeholder="What would fix it? (optional)"
                 value={newPainPoint.solution}
-                onChange={(e) => setNewPainPoint({ ...newPainPoint, solution: e.target.value })}
+                onChange={(e) => setNewPainPoint((prev) => ({ ...prev, solution: e.target.value }))}
+                onKeyDown={(e) => e.key === 'Enter' && newPainPoint.issue.trim() && addPainPoint()}
               />
               <Button
-                variant="outline"
+                variant={newPainPoint.issue.trim() ? 'default' : 'outline'}
                 onClick={addPainPoint}
-                disabled={!newPainPoint.issue}
+                disabled={!newPainPoint.issue.trim()}
                 className="w-full gap-2"
               >
                 <Plus className="w-4 h-4" />
