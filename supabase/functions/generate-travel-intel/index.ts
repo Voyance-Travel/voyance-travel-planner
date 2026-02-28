@@ -198,7 +198,32 @@ Focus on:
     try {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        const intelData = JSON.parse(jsonMatch[0]);
+        let jsonStr = jsonMatch[0];
+        
+        // Attempt repair: fix common truncation issues from LLM output
+        // Balance unclosed brackets/braces
+        const openBraces = (jsonStr.match(/\{/g) || []).length;
+        const closeBraces = (jsonStr.match(/\}/g) || []).length;
+        const openBrackets = (jsonStr.match(/\[/g) || []).length;
+        const closeBrackets = (jsonStr.match(/\]/g) || []).length;
+        
+        // Remove trailing comma before attempting to close
+        jsonStr = jsonStr.replace(/,\s*$/, '');
+        
+        // Close unclosed strings - if odd number of unescaped quotes, add one
+        const unescapedQuotes = jsonStr.match(/(?<!\\)"/g) || [];
+        if (unescapedQuotes.length % 2 !== 0) {
+          jsonStr += '"';
+        }
+        
+        // Close brackets then braces
+        for (let i = 0; i < openBrackets - closeBrackets; i++) jsonStr += ']';
+        for (let i = 0; i < openBraces - closeBraces; i++) jsonStr += '}';
+        
+        // Remove trailing commas before closing brackets/braces
+        jsonStr = jsonStr.replace(/,\s*([}\]])/g, '$1');
+        
+        const intelData = JSON.parse(jsonStr);
         return new Response(
           JSON.stringify({
             success: true,
@@ -212,11 +237,13 @@ Focus on:
       }
     } catch (parseError) {
       console.error('Failed to parse travel intel:', parseError);
+      console.error('Raw content length:', content.length, 'first 500 chars:', content.substring(0, 500));
     }
 
+    // Return partial success instead of 500 so the UI can still function
     return new Response(
-      JSON.stringify({ success: false, error: 'Failed to parse travel intelligence' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ success: false, error: 'Travel intelligence is temporarily unavailable. Please try again.' }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Error generating travel intel:', error);
