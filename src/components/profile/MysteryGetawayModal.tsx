@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { getLocalToday } from '@/utils/dateUtils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, 
@@ -598,7 +599,7 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
+                    min={getLocalToday()}
                     className="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     style={{ fontSize: '16px' }}
                   />
@@ -611,7 +612,7 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    min={startDate || new Date().toISOString().split('T')[0]}
+                    min={startDate || getLocalToday()}
                     className="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     style={{ fontSize: '16px' }}
                   />
