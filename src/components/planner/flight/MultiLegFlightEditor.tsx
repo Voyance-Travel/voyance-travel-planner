@@ -223,6 +223,11 @@ export default function MultiLegFlightEditor({
   const [slots, setSlots] = useState<FlightLegSlot[]>([]);
   const [initialized, setInitialized] = useState(false);
   const lastAppliedNonce = useRef<number>(0);
+  const onLegsChangeRef = useRef(onLegsChange);
+
+  useEffect(() => {
+    onLegsChangeRef.current = onLegsChange;
+  }, [onLegsChange]);
 
   // Generate slots on mount / destination change
   useEffect(() => {
@@ -277,7 +282,17 @@ export default function MultiLegFlightEditor({
   // Rehydrate slots when parent receives imported/loaded legs after initial mount
   useEffect(() => {
     if (!initialized) return;
-    // Skip if an import just happened — the import effect is the sole authority
+
+    // If a new import nonce is pending, let the import effect be the sole authority.
+    const hasPendingImportApply = Boolean(
+      importNonce &&
+      importedLegs &&
+      importedLegs.length > 0 &&
+      importNonce !== lastAppliedNonce.current
+    );
+    if (hasPendingImportApply) return;
+
+    // Skip if the current import has already been applied.
     if (importNonce && importNonce === lastAppliedNonce.current) return;
 
     const incomingLegs: ManualFlightEntry[] = [
@@ -338,7 +353,7 @@ export default function MultiLegFlightEditor({
 
       return changed ? next : prev;
     });
-  }, [initialized, initialOutbound, initialAdditionalLegs, initialReturn, importNonce]);
+  }, [initialized, initialOutbound, initialAdditionalLegs, initialReturn, importNonce, importedLegs]);
 
   // Deterministically apply last import to visible slots using classification-aware matching
   useEffect(() => {
@@ -486,7 +501,7 @@ export default function MultiLegFlightEditor({
       }
 
       if (changed) {
-        onLegsChange(
+        onLegsChangeRef.current(
           next
             .filter((s) => s.transportType === 'flight')
             .map((s) => s.flight)
@@ -495,13 +510,13 @@ export default function MultiLegFlightEditor({
 
       return changed ? next : prev;
     });
-  }, [initialized, importNonce, importedLegs, onLegsChange]);
+  }, [initialized, importNonce, importedLegs]);
 
   // Sync changes to parent — emit all legs (including non-flight) so data isn't lost
   const syncToParent = useCallback((updatedSlots: FlightLegSlot[]) => {
     const allLegs = updatedSlots.map(s => s.flight);
-    onLegsChange(allLegs);
-  }, [onLegsChange]);
+    onLegsChangeRef.current(allLegs);
+  }, []);
 
   const updateSlotFlight = useCallback((slotId: string, patch: Partial<ManualFlightEntry>) => {
     setSlots(prev => {
