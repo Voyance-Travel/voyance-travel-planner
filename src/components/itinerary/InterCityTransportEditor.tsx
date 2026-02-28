@@ -63,13 +63,44 @@ export function InterCityTransportEditor({
   const [costStr, setCostStr] = useState('');
   const [currency, setCurrency] = useState(transportCurrency || 'USD');
 
+  // Normalize legacy transport_details field names from Step 1/2 into editor field names
+  const normalizeDetails = (raw: TransportDetails | undefined, mode: TransportType): TransportDetails => {
+    if (!raw) return {};
+    const d = raw as Record<string, any>;
+    const normalized: TransportDetails = { ...raw };
+
+    // Map "operator" → "carrier"
+    if (d.operator && !d.carrier) normalized.carrier = d.operator;
+
+    // For flights: "departureStation"/"arrivalStation" may hold airport names
+    if (mode === 'flight') {
+      if (d.departureStation && !d.departureAirport) normalized.departureAirport = d.departureStation;
+      if (d.arrivalStation && !d.arrivalAirport) normalized.arrivalAirport = d.arrivalStation;
+    }
+
+    // Map duration variants
+    if (!d.duration) {
+      if (d.inTransitDuration) normalized.duration = d.inTransitDuration;
+      else if (d.doorToDoorDuration) normalized.duration = d.doorToDoorDuration;
+    }
+
+    return normalized;
+  };
+
   // Reset form when opening
   useEffect(() => {
     if (open) {
-      setMode(transportType || 'train');
-      setDetails(transportDetails || {});
-      setCostStr(transportCostCents && transportCostCents > 0 ? (transportCostCents / 100).toFixed(2) : '');
-      setCurrency(transportCurrency || 'USD');
+      const m = transportType || 'train';
+      setMode(m);
+      setDetails(normalizeDetails(transportDetails, m));
+      // Prefer totalCost from details if transportCostCents is missing
+      const rawDetails = transportDetails as Record<string, any> | undefined;
+      const costFromCents = transportCostCents && transportCostCents > 0
+        ? (transportCostCents / 100).toFixed(2)
+        : '';
+      const costFromDetails = rawDetails?.totalCost ? String(rawDetails.totalCost) : '';
+      setCostStr(costFromCents || costFromDetails);
+      setCurrency(transportCurrency || (rawDetails?.currency as string) || 'USD');
     }
   }, [open, transportType, transportDetails, transportCostCents, transportCurrency]);
 
