@@ -325,12 +325,12 @@ export default function RestaurantSearchDrawer({
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground mb-1.5 block">Price Range</label>
-                  <Select value={budgetLevel} onValueChange={(v) => setBudgetLevel(v as BudgetLevel | '')}>
+                  <Select value={budgetLevel || 'all'} onValueChange={(v) => setBudgetLevel(v === 'all' ? '' : v as BudgetLevel)}>
                     <SelectTrigger className="h-9">
                       <SelectValue placeholder="Any price" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Any price</SelectItem>
+                      <SelectItem value="all">Any price</SelectItem>
                       {PRICE_LEVELS.map(p => (
                         <SelectItem key={p.value} value={p.value}>
                           {p.label} {p.description}
