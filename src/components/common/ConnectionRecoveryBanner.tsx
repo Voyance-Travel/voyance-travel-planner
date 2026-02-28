@@ -19,12 +19,17 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { resubscribeAll, onStaleConnection } from '@/lib/realtimeSubscriptionManager';
+import { guardedRefreshSession } from '@/lib/authSessionGuard';
 import { toast } from 'sonner';
 
 /** How many consecutive fetch failures (credits, entitlements, etc.) before we show the banner */
 const FAILURE_THRESHOLD = 3;
 /** Once we detect trouble, how long to wait before showing the banner (avoids flash on transient blips) */
 const DEBOUNCE_MS = 4_000;
+/** Minimum ms between reportConnectionFailure increments */
+const FAILURE_THROTTLE_MS = 2_000;
+/** Max failures per throttle window */
+const MAX_FAILURES_PER_WINDOW = 5;
 
 /**
  * Global failure counter — incremented by any Supabase query/function hook that
@@ -33,8 +38,19 @@ const DEBOUNCE_MS = 4_000;
  */
 let _globalFailureCount = 0;
 let _listeners: Array<() => void> = [];
+let _lastFailureReportAt = 0;
+let _failuresInWindow = 0;
 
 export function reportConnectionFailure() {
+  const now = Date.now();
+  // Throttle: cap the rate of failure reports to prevent runaway cascades
+  if (now - _lastFailureReportAt < FAILURE_THROTTLE_MS) {
+    _failuresInWindow++;
+    if (_failuresInWindow >= MAX_FAILURES_PER_WINDOW) return; // silently drop excess
+  } else {
+    _failuresInWindow = 1;
+    _lastFailureReportAt = now;
+  }
   _globalFailureCount++;
   _listeners.forEach(fn => fn());
 }
@@ -94,8 +110,8 @@ export function ConnectionRecoveryBanner() {
       // 1. Tear down all Realtime channels to stop failing reconnect loops
       supabase.removeAllChannels();
 
-      // 2. Force-refresh the auth session to clear any stale/locked tokens
-      const { error } = await supabase.auth.refreshSession();
+      // 2. Force-refresh the auth session to clear any stale/locked tokens (deduplicated)
+      const { error } = await guardedRefreshSession();
       if (error) {
         console.warn('[ConnectionRecovery] Session refresh failed, signing out:', error.message);
         // If refresh truly fails, a re-login is needed — but still clear the cascade
