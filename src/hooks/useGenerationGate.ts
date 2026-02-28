@@ -124,7 +124,7 @@ export function useGenerationGate() {
           recommendedPack: null,
           isFirstTrip: true,
           requestedDays: params.days,
-          generateDays: params.days, // Generate ALL days; premium content gated via entitlements
+          generateDays: 2, // Only generate 2 free days; remaining days generated on-demand when user pays
         };
       }
     }
