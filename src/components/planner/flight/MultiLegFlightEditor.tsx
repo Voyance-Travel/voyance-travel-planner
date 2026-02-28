@@ -346,22 +346,30 @@ export default function MultiLegFlightEditor({
     lastAppliedNonce.current = importNonce;
 
     setSlots((prev) => {
-      const next = [...prev];
-      let changed = false;
+      // Remove stale custom slots created by previous imports.
+      // Keep only explicit user-added custom rows.
+      const baseSlots = prev.filter((slot) => {
+        if (slot.legType !== 'custom') return true;
+        return slot.label === 'Additional Flight';
+      });
+
+      const next = [...baseSlots];
+      let changed = baseSlots.length !== prev.length;
+
+      const isLegAlreadyRepresented = (leg: ManualFlightEntry, slotsToCheck: FlightLegSlot[]) =>
+        slotsToCheck.some((slot) => slot.transportType === 'flight' && isSameFlightEntry(slot.flight, leg));
 
       // Group imported legs by classification
-      const outboundLegs = importedLegs.filter(l => l.classification === 'OUTBOUND' || l.classification === 'CONNECTION' && importedLegs.some(o => o.classification === 'OUTBOUND' && o.connectionGroup != null && o.connectionGroup === l.connectionGroup));
-      const returnLegs = importedLegs.filter(l => l.classification === 'RETURN' || l.classification === 'CONNECTION' && importedLegs.some(o => o.classification === 'RETURN' && o.connectionGroup != null && o.connectionGroup === l.connectionGroup));
-      const interDestLegs = importedLegs.filter(l => l.classification === 'INTER_DESTINATION');
-      
+      const interDestLegs = importedLegs.filter((l) => l.classification === 'INTER_DESTINATION');
+
       // Separate true outbound/return from their connections
-      const primaryOutbound = importedLegs.find(l => l.classification === 'OUTBOUND');
-      const outboundConnections = primaryOutbound?.connectionGroup != null 
-        ? importedLegs.filter(l => l.classification === 'CONNECTION' && l.connectionGroup === primaryOutbound.connectionGroup)
+      const primaryOutbound = importedLegs.find((l) => l.classification === 'OUTBOUND');
+      const outboundConnections = primaryOutbound?.connectionGroup != null
+        ? importedLegs.filter((l) => l.classification === 'CONNECTION' && l.connectionGroup === primaryOutbound.connectionGroup)
         : [];
-      const primaryReturn = importedLegs.find(l => l.classification === 'RETURN');
+      const primaryReturn = importedLegs.find((l) => l.classification === 'RETURN');
       const returnConnections = primaryReturn?.connectionGroup != null
-        ? importedLegs.filter(l => l.classification === 'CONNECTION' && l.connectionGroup === primaryReturn.connectionGroup)
+        ? importedLegs.filter((l) => l.classification === 'CONNECTION' && l.connectionGroup === primaryReturn.connectionGroup)
         : [];
 
       // Track which imported legs have been placed to avoid duplicates
@@ -370,7 +378,7 @@ export default function MultiLegFlightEditor({
       // Map primary legs to existing slots
       next.forEach((slot, idx) => {
         if (slot.transportType !== 'flight') return;
-        
+
         let matchedLeg: ManualFlightEntry | undefined;
         let matchedIdx = -1;
 
@@ -382,7 +390,7 @@ export default function MultiLegFlightEditor({
           matchedIdx = importedLegs.indexOf(primaryReturn);
         } else if (slot.legType === 'intercity') {
           // Match inter-destination legs by airport code
-          const found = interDestLegs.find(l => 
+          const found = interDestLegs.find((l) =>
             (l.departureAirport && slot.suggestedFrom && l.departureAirport === slot.suggestedFrom) ||
             (l.arrivalAirport && slot.suggestedTo && l.arrivalAirport === slot.suggestedTo)
           );
@@ -394,7 +402,7 @@ export default function MultiLegFlightEditor({
 
         // Fallback: if no classification match, try airport-code matching
         if (!matchedLeg && slot.transportType === 'flight') {
-          const found = importedLegs.find((l, li) => 
+          const found = importedLegs.find((l, li) =>
             !placedLegIds.has(li) && !l.classification && (
               (l.departureAirport && slot.suggestedFrom && l.departureAirport === slot.suggestedFrom) ||
               (l.arrivalAirport && slot.suggestedTo && l.arrivalAirport === slot.suggestedTo)
@@ -423,11 +431,11 @@ export default function MultiLegFlightEditor({
       // Insert connection legs as separate slots so they appear in the UI
       const connectionLegsToInsert: { afterLegType: string; legs: ManualFlightEntry[] }[] = [];
       if (outboundConnections.length > 0) {
-        outboundConnections.forEach(c => placedLegIds.add(importedLegs.indexOf(c)));
+        outboundConnections.forEach((c) => placedLegIds.add(importedLegs.indexOf(c)));
         connectionLegsToInsert.push({ afterLegType: 'outbound', legs: outboundConnections });
       }
       if (returnConnections.length > 0) {
-        returnConnections.forEach(c => placedLegIds.add(importedLegs.indexOf(c)));
+        returnConnections.forEach((c) => placedLegIds.add(importedLegs.indexOf(c)));
         connectionLegsToInsert.push({ afterLegType: 'return', legs: returnConnections });
       }
 
@@ -443,18 +451,22 @@ export default function MultiLegFlightEditor({
         let insertAfterIdx: number;
         if (group.afterLegType === 'return') {
           // Insert before the return slot
-          insertAfterIdx = next.findIndex(s => s.legType === 'return');
+          insertAfterIdx = next.findIndex((s) => s.legType === 'return');
           if (insertAfterIdx < 0) insertAfterIdx = next.length;
         } else {
           // Insert after the outbound slot
-          insertAfterIdx = next.findIndex(s => s.legType === 'outbound');
+          insertAfterIdx = next.findIndex((s) => s.legType === 'outbound');
           if (insertAfterIdx >= 0) insertAfterIdx += 1;
           else insertAfterIdx = 1;
         }
 
-        // Check if these connection legs are already represented as slots
         const newConnectionSlots: FlightLegSlot[] = [];
         for (const leg of group.legs) {
+          // Prevent duplicates if already mapped or already in the list.
+          if (isLegAlreadyRepresented(leg, next) || newConnectionSlots.some((s) => isSameFlightEntry(s.flight, leg))) {
+            continue;
+          }
+
           newConnectionSlots.push({
             id: nextSlotId(),
             transitionIndex: -1,
@@ -465,11 +477,11 @@ export default function MultiLegFlightEditor({
             isAutoGenerated: false,
             isExpanded: true,
           });
-          changed = true;
         }
 
         if (newConnectionSlots.length > 0) {
           next.splice(insertAfterIdx, 0, ...newConnectionSlots);
+          changed = true;
         }
       }
 
