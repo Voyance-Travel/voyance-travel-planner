@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, MapPin, Loader2, Globe, Link2 } from 'lucide-react';
+import { Search, MapPin, Loader2, Globe, Link2, CheckCircle2 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useAddressSearch, type AddressResult } from '@/hooks/useAddressSearch';
 import { TransitPreview } from './TransitPreview';
 import { cn } from '@/lib/utils';
@@ -56,6 +57,7 @@ export function AddActivityModal({ isOpen, onClose, onAdd, currency = 'USD', des
   const [endTime, setEndTime] = useState('13:00');
   const [cost, setCost] = useState('0');
   const [website, setWebsite] = useState('');
+  const [reservationMade, setReservationMade] = useState(false);
   const [locationName, setLocationName] = useState('');
   const [locationAddress, setLocationAddress] = useState('');
   const [locationCoords, setLocationCoords] = useState<{ lat?: number; lng?: number }>({});
@@ -118,6 +120,7 @@ export function AddActivityModal({ isOpen, onClose, onAdd, currency = 'USD', des
       endTime,
       cost: { amount: costNum, currency },
       website: website.trim() || undefined,
+      reservationMade,
       location: {
         name: locationName,
         address: locationAddress,
@@ -135,6 +138,7 @@ export function AddActivityModal({ isOpen, onClose, onAdd, currency = 'USD', des
     setEndTime('13:00');
     setCost('0');
     setWebsite('');
+    setReservationMade(false);
     setLocationName('');
     setLocationAddress('');
     setLocationCoords({});
@@ -302,6 +306,19 @@ export function AddActivityModal({ isOpen, onClose, onAdd, currency = 'USD', des
               <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://..." className="pl-9" />
             </div>
+          </div>
+
+          {/* Reservation confirmation */}
+          <div className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg">
+            <Checkbox 
+              id="add-reservation-made" 
+              checked={reservationMade} 
+              onCheckedChange={(checked) => setReservationMade(checked === true)} 
+            />
+            <label htmlFor="add-reservation-made" className="text-sm font-medium flex items-center gap-2 cursor-pointer">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              Reservation / Tickets Confirmed
+            </label>
           </div>
 
           {/* Description */}
