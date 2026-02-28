@@ -1249,6 +1249,154 @@ function FlightHotelStep({
                     </Collapsible>
                   </div>
 
+                  {/* Connection / Additional Legs */}
+                  {additionalLegs.length > 0 && (
+                    <div className="space-y-3 border-t border-border pt-3">
+                      <h4 className="font-medium text-sm flex items-center gap-2 text-muted-foreground">
+                        <Plane className="h-3.5 w-3.5" />
+                        Connection Flights ({additionalLegs.length})
+                      </h4>
+                      {additionalLegs.map((leg, idx) => (
+                        <Collapsible key={idx}>
+                          <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2 text-sm">
+                                <span className="font-medium">
+                                  {leg.departureAirport || '???'} → {leg.arrivalAirport || '???'}
+                                </span>
+                                {leg.airline && (
+                                  <span className="text-muted-foreground text-xs">
+                                    {leg.airline} {leg.flightNumber}
+                                  </span>
+                                )}
+                              </div>
+                              <CollapsibleTrigger asChild>
+                                <Button variant="ghost" size="sm" className="text-xs h-7 px-2">
+                                  <ChevronDown className="h-3 w-3" />
+                                </Button>
+                              </CollapsibleTrigger>
+                            </div>
+                            {(leg.departureDate || leg.departureTime || leg.arrivalTime) && (
+                              <div className="flex gap-3 text-xs text-muted-foreground">
+                                {leg.departureDate && <span>{leg.departureDate}</span>}
+                                {leg.departureTime && <span>Dep {leg.departureTime}</span>}
+                                {leg.arrivalTime && <span>Arr {leg.arrivalTime}</span>}
+                              </div>
+                            )}
+                            <CollapsibleContent className="space-y-3 pt-2">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">From</Label>
+                                  <AirportAutocomplete
+                                    value={leg.departureAirport}
+                                    onChange={(code) => {
+                                      const updated = [...additionalLegs];
+                                      updated[idx] = { ...updated[idx], departureAirport: code };
+                                      setAdditionalLegs(updated);
+                                    }}
+                                    placeholder="Airport"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">To</Label>
+                                  <AirportAutocomplete
+                                    value={leg.arrivalAirport}
+                                    onChange={(code) => {
+                                      const updated = [...additionalLegs];
+                                      updated[idx] = { ...updated[idx], arrivalAirport: code };
+                                      setAdditionalLegs(updated);
+                                    }}
+                                    placeholder="Airport"
+                                  />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-3 gap-3">
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">Date</Label>
+                                  <Input
+                                    type="date"
+                                    value={leg.departureDate}
+                                    onChange={(e) => {
+                                      const updated = [...additionalLegs];
+                                      updated[idx] = { ...updated[idx], departureDate: e.target.value };
+                                      setAdditionalLegs(updated);
+                                    }}
+                                    className="text-sm"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">Departs</Label>
+                                  <Input
+                                    type="time"
+                                    value={leg.departureTime}
+                                    onChange={(e) => {
+                                      const updated = [...additionalLegs];
+                                      updated[idx] = { ...updated[idx], departureTime: e.target.value };
+                                      setAdditionalLegs(updated);
+                                    }}
+                                    className="text-sm"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">Arrives</Label>
+                                  <Input
+                                    type="time"
+                                    value={leg.arrivalTime}
+                                    onChange={(e) => {
+                                      const updated = [...additionalLegs];
+                                      updated[idx] = { ...updated[idx], arrivalTime: e.target.value };
+                                      setAdditionalLegs(updated);
+                                    }}
+                                    className="text-sm"
+                                  />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">Airline</Label>
+                                  <AirlineAutocomplete
+                                    value={leg.airline}
+                                    onChange={(val) => {
+                                      const updated = [...additionalLegs];
+                                      updated[idx] = { ...updated[idx], airline: val };
+                                      setAdditionalLegs(updated);
+                                    }}
+                                    placeholder="e.g. Delta"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">Flight #</Label>
+                                  <Input
+                                    placeholder="e.g. DL456"
+                                    value={leg.flightNumber}
+                                    onChange={(e) => {
+                                      const updated = [...additionalLegs];
+                                      updated[idx] = { ...updated[idx], flightNumber: e.target.value };
+                                      setAdditionalLegs(updated);
+                                    }}
+                                    className="text-sm"
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex justify-end">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-xs text-destructive hover:text-destructive"
+                                  onClick={() => {
+                                    setAdditionalLegs(additionalLegs.filter((_, i) => i !== idx));
+                                  }}
+                                >
+                                  Remove leg
+                                </Button>
+                              </div>
+                            </CollapsibleContent>
+                          </div>
+                        </Collapsible>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Return Flight Toggle */}
                   <Collapsible open={showReturnFlight} onOpenChange={setShowReturnFlight}>
                     <CollapsibleTrigger asChild>
