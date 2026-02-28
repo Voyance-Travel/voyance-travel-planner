@@ -359,6 +359,9 @@ export interface CityHotelInfo {
   };
   transportCostCents?: number;
   transportCurrency?: string;
+  // Airport-hotel transfer selections
+  arrivalTransfer?: SelectedTransfer | null;
+  departureTransfer?: SelectedTransfer | null;
 }
 
 export interface EditorialItineraryProps {
@@ -4435,7 +4438,7 @@ export function EditorialItinerary({
                                   airportCode={idx === 0 ? (flightSelection?.outbound?.arrival?.airport || undefined) : undefined}
                                   hotelName={cityHotel.hotel.name}
                                   travelers={travelers}
-                                  existingSelection={(cityHotel as any).arrival_transfer || null}
+                                  existingSelection={cityHotel.arrivalTransfer || null}
                                   onTransferSelected={() => onBookingAdded?.()}
                                 />
                               )}

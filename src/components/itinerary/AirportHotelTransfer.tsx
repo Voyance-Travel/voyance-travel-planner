@@ -142,10 +142,19 @@ export function AirportHotelTransfer({
 
     // Persist to DB
     const transferField = isReturn ? 'departure_transfer' : 'arrival_transfer';
+    let error: any = null;
     if (cityId) {
-      await supabase.from('trip_cities').update({ [transferField]: transfer }).eq('id', cityId);
-    } else {
-      await supabase.from('trips').update({ [transferField]: transfer as unknown as Record<string, unknown> }).eq('id', tripId);
+      const result = await supabase.from('trip_cities').update({ [transferField]: transfer }).eq('id', cityId);
+      error = result.error;
+    } else if (tripId) {
+      const result = await supabase.from('trips').update({ [transferField]: transfer as unknown as Record<string, unknown> }).eq('id', tripId);
+      error = result.error;
+    }
+
+    if (error) {
+      console.error('[AirportHotelTransfer] Failed to save selection:', error);
+      setSelectedId(existingSelection?.optionId || null); // rollback
+      return;
     }
 
     onTransferSelected?.(transfer);
