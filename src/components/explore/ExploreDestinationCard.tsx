@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Heart, Share2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 import DestinationHeroImage from '@/components/common/DestinationHeroImage';
 import SafeImage from '@/components/SafeImage';
 import { supabase } from '@/integrations/supabase/client';
@@ -14,6 +15,7 @@ interface ExploreDestinationCardProps {
 }
 
 export default function ExploreDestinationCard({ destination, index, onClick }: ExploreDestinationCardProps) {
+  const queryClient = useQueryClient();
   const [isFavorited, setIsFavorited] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -36,6 +38,7 @@ export default function ExploreDestinationCard({ destination, index, onClick }: 
           .eq('item_type', 'destination')
           .eq('item_id', destination.id);
         setIsFavorited(false);
+        queryClient.invalidateQueries({ queryKey: ['saved-destinations'] });
         toast.success('Removed from favorites');
       } else {
         await supabase
@@ -53,6 +56,7 @@ export default function ExploreDestinationCard({ destination, index, onClick }: 
             },
           });
         setIsFavorited(true);
+        queryClient.invalidateQueries({ queryKey: ['saved-destinations'] });
         toast.success(`${destination.city} saved to favorites`);
       }
     } catch {

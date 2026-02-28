@@ -13,6 +13,7 @@ import HeroSection from '@/components/explore/sections/HeroSection';
 import ExploreByStyle from '@/components/explore/sections/ExploreByStyle';
 
 import VoyanceGuides from '@/components/explore/sections/VoyanceGuides';
+import SavedDestinations from '@/components/explore/sections/SavedDestinations';
 
 import { scrollToTop } from '@/utils/scrollUtils';
 import { destinations as allDestinations } from '@/lib/destinations';
@@ -308,14 +309,15 @@ export default function Explore() {
       )}
 
       {/* Show regular sections when not searching */}
+      {/* Saved destinations — always shown when user has favorites */}
+      <SavedDestinations />
+
       {!isSearching && (
         <>
-
           {/* Explore by Style */}
           <ScrollTarget id="styles" className="scroll-mt-20">
             <ExploreByStyle />
           </ScrollTarget>
-
 
           {/* Voyance Guides */}
           <ScrollTarget id="guides" className="scroll-mt-20">
