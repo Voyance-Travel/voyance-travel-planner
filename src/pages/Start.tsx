@@ -29,6 +29,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import { useTripPlanner } from '@/contexts/TripPlannerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
@@ -900,6 +901,8 @@ function FlightHotelStep({
   setManualHotel,
   isFirstTimeVisitor,
   setIsFirstTimeVisitor,
+  firstTimePerCity,
+  setFirstTimePerCity,
   mustDoActivities,
   setMustDoActivities,
   onSubmit,
@@ -928,6 +931,8 @@ function FlightHotelStep({
   setManualHotel: (h: ManualHotelEntry) => void;
   isFirstTimeVisitor: boolean;
   setIsFirstTimeVisitor: (v: boolean) => void;
+  firstTimePerCity: Record<string, boolean>;
+  setFirstTimePerCity: (v: Record<string, boolean>) => void;
   mustDoActivities: string;
   setMustDoActivities: (v: string) => void;
   onSubmit: () => void;
@@ -1357,29 +1362,60 @@ function FlightHotelStep({
             </label>
           </div>
 
-          {/* First-Time Visitor Toggle */}
-          <div className="flex items-start gap-3 p-4 rounded-lg border border-border bg-muted/30">
-            <Checkbox
-              id="firstTimeVisitor"
-              checked={isFirstTimeVisitor}
-              onCheckedChange={(checked) => setIsFirstTimeVisitor(checked === true)}
-              className="mt-0.5"
-            />
-            <div className="flex-1">
-              <label 
-                htmlFor="firstTimeVisitor" 
-                className="flex items-center gap-2 text-sm font-medium cursor-pointer"
-              >
-                <Globe className="w-4 h-4 text-muted-foreground" />
-                First time visiting {destination}?
-              </label>
-              <p className="text-xs text-muted-foreground mt-1">
-                {isFirstTimeVisitor 
-                  ? "We'll include iconic landmarks and must-see attractions" 
-                  : "We'll focus on hidden gems and local favorites"}
+          {/* First-Time Visitor Toggle(s) */}
+          {isMultiCity && multiCityDestinations && multiCityDestinations.length >= 2 ? (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">We'll tailor each city based on your familiarity.</p>
+              <div className="grid gap-2">
+                {multiCityDestinations.map((dest) => {
+                  const isFirst = firstTimePerCity[dest.city] ?? true;
+                  return (
+                    <div key={dest.city} className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Globe className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                        <span className="text-sm font-medium truncate">First time in {dest.city}?</span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-xs text-muted-foreground">{isFirst ? 'Yes' : 'No'}</span>
+                        <Switch
+                          checked={isFirst}
+                          onCheckedChange={(checked) => {
+                            setFirstTimePerCity({ ...firstTimePerCity, [dest.city]: checked });
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                First time → iconic landmarks & must-sees. Returning → hidden gems & local favorites.
               </p>
             </div>
-          </div>
+          ) : (
+            <div className="flex items-start gap-3 p-4 rounded-lg border border-border bg-muted/30">
+              <Checkbox
+                id="firstTimeVisitor"
+                checked={isFirstTimeVisitor}
+                onCheckedChange={(checked) => setIsFirstTimeVisitor(checked === true)}
+                className="mt-0.5"
+              />
+              <div className="flex-1">
+                <label 
+                  htmlFor="firstTimeVisitor" 
+                  className="flex items-center gap-2 text-sm font-medium cursor-pointer"
+                >
+                  <Globe className="w-4 h-4 text-muted-foreground" />
+                  First time visiting {destination}?
+                </label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {isFirstTimeVisitor 
+                    ? "We'll include iconic landmarks and must-see attractions" 
+                    : "We'll focus on hidden gems and local favorites"}
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Extra Details — Optional paste field for research/notes */}
           <div className="space-y-2">
@@ -1645,6 +1681,7 @@ export default function Start() {
 
   // Personalization state
   const [isFirstTimeVisitor, setIsFirstTimeVisitor] = useState(true);
+  const [firstTimePerCity, setFirstTimePerCity] = useState<Record<string, boolean>>({});
   const [mustDoActivities, setMustDoActivities] = useState('');
 
   // Fetch user's DNA budget preference for smart defaults
@@ -1686,6 +1723,7 @@ export default function Start() {
           if (savedDraft.hotelChoice) setHotelChoice(savedDraft.hotelChoice);
           if (savedDraft.manualHotel) setManualHotel(savedDraft.manualHotel);
           if (savedDraft.isFirstTimeVisitor !== undefined) setIsFirstTimeVisitor(savedDraft.isFirstTimeVisitor);
+          if (savedDraft.firstTimePerCity) setFirstTimePerCity(savedDraft.firstTimePerCity);
           if (savedDraft.mustDoActivities) setMustDoActivities(savedDraft.mustDoActivities);
           if (savedDraft.destination) setDestinationSelection({ display: savedDraft.destination, cityName: savedDraft.destination });
           if (savedDraft.startDate) setStartDate(parseLocalDate(savedDraft.startDate));
@@ -1810,6 +1848,7 @@ export default function Start() {
           status: 'draft',
           metadata: {
             isFirstTimeVisitor,
+            firstTimePerCity: isMultiCity && Object.keys(firstTimePerCity).length > 0 ? firstTimePerCity : null,
             mustDoActivities: mustDoActivities || null,
             celebrationDay: celebrationDay || null,
             pacing: pacing || 'balanced',
@@ -2182,6 +2221,8 @@ export default function Start() {
                     setManualHotel={setManualHotel}
                     isFirstTimeVisitor={isFirstTimeVisitor}
                     setIsFirstTimeVisitor={setIsFirstTimeVisitor}
+                    firstTimePerCity={firstTimePerCity}
+                    setFirstTimePerCity={setFirstTimePerCity}
                     mustDoActivities={mustDoActivities}
                     setMustDoActivities={setMustDoActivities}
                     onSubmit={handleSubmit}
@@ -2244,6 +2285,7 @@ export default function Start() {
                   hotelChoice,
                   manualHotel,
                   isFirstTimeVisitor,
+                  firstTimePerCity,
                   mustDoActivities,
                   currentStep: 1,
                 };

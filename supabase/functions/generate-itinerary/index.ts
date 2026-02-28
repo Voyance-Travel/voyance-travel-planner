@@ -341,6 +341,7 @@ interface GenerationContext {
   hotelData?: PromptHotelData;
   // Phase 12: First-time visitor detection
   isFirstTimeVisitor?: boolean;
+  firstTimePerCity?: Record<string, boolean>;
   // Phase 2: Advanced temporal intelligence
   originCity?: string;
   destinationTimezone?: string;
@@ -3912,6 +3913,7 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     celebrationDay: trip.metadata?.celebrationDay,
     // User research notes / must-do activities from Page 2 paste field
     mustDoActivities: trip.metadata?.mustDoActivities || undefined,
+    firstTimePerCity: trip.metadata?.firstTimePerCity || undefined,
     // Smart Finish detection: prefer direct request body flag (avoids DB race condition),
     // then fall back to metadata checks for backward compatibility
     isSmartFinish: requestSmartFinishMode === true || trip.metadata?.smartFinishMode === true || (trip.metadata?.smartFinishSource || '').toString().includes('manual_builder'),
@@ -4533,8 +4535,12 @@ async function generateSingleDayWithRetry(
       // Build destination essentials prompt (non-negotiables + hidden gems)
       // Now uses DB-driven data with freshness-based Perplexity enrichment
       const authenticityScore = context.travelerDNA?.traits?.authenticity || 0;
-      // Use isFirstTimeVisitor from context if provided, default to true
-      const isFirstTimeVisitor = context.isFirstTimeVisitor ?? true;
+      // Resolve isFirstTimeVisitor per-city for multi-city trips
+      const dayCity = context.multiCityDayMap?.[dayNumber - 1];
+      const currentCityName = dayCity?.cityName || context.destination;
+      const isFirstTimeVisitor = context.firstTimePerCity
+        ? (context.firstTimePerCity[currentCityName] ?? context.isFirstTimeVisitor ?? true)
+        : (context.isFirstTimeVisitor ?? true);
       const destinationEssentialsPrompt = supabaseClient
         ? await buildDestinationEssentialsPromptWithDB(
             supabaseClient,
@@ -4825,7 +4831,11 @@ These help the traveler prepare for their trip.
       
       let multiCityPrompt = '';
       if (context.isMultiCity && dayCity) {
-        multiCityPrompt = `\n🌍 MULTI-CITY TRIP: This day is in **${dayDestination}${dayCountry ? `, ${dayCountry}` : ''}**. ALL activities MUST be located in ${dayDestination}.`;
+        const cityFirstTime = context.firstTimePerCity
+          ? (context.firstTimePerCity[dayDestination] ?? true)
+          : (context.isFirstTimeVisitor ?? true);
+        const visitorLabel = cityFirstTime ? 'FIRST-TIME visitor' : 'RETURNING visitor';
+        multiCityPrompt = `\n🌍 MULTI-CITY TRIP: This day is in **${dayDestination}${dayCountry ? `, ${dayCountry}` : ''}**. ALL activities MUST be located in ${dayDestination}.\n👤 VISITOR STATUS for ${dayDestination}: Traveler is a ${visitorLabel}.${cityFirstTime ? ' Include iconic landmarks and must-see attractions.' : ' Skip tourist staples — focus on hidden gems, local favorites, and deeper neighborhood exploration.'}`;
         if (isTransitionDay && dayCity.transitionFrom) {
           // Use the full transition day prompt builder instead of the weak 2-line fallback
           const transitionPrompt = buildTransitionDayPrompt({
