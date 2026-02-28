@@ -105,6 +105,7 @@ import type { ItineraryDay } from '@/services/itineraryActionExecutor';
 import { ItineraryValueHeader } from './ItineraryValueHeader';
 import { ItineraryUtilityBar } from './ItineraryUtilityBar';
 import { WhyWeSkippedSection } from './WhyWeSkippedSection';
+import { NewMemberSuggestionsCard } from './NewMemberSuggestionsCard';
 import { calculateItineraryValueStats } from '@/utils/intelligenceAnalytics';
 import { useSkipList } from '@/hooks/useSkipList';
 import { validateItinerary, matchesSkipList, type ValidationIssue } from '@/utils/itineraryValidator';
@@ -1378,6 +1379,7 @@ export function EditorialItinerary({
   const [showShareGuideSheet, setShowShareGuideSheet] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [showGroupUnlockModal, setShowGroupUnlockModal] = useState(false);
+  const [newlyAddedMember, setNewlyAddedMember] = useState<string | null>(null);
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
   const [showLocalCurrency, setShowLocalCurrency] = useState(true); // Currency display preference
@@ -1710,7 +1712,7 @@ export function EditorialItinerary({
   }, [days, isPaid, totalCredits, spendCredits, tripId, destination, transportCap]);
   // Get trip permission for current user
   const { data: tripPermission, isLoading: permissionLoading } = useTripPermission(tripId);
-  const { data: collaborators = [] } = useTripCollaborators(tripId);
+  const { data: collaborators = [], refetch: refetchCollaborators } = useTripCollaborators(tripId);
   const { data: tripMembers = [] } = useTripMembers(tripId);
   const { guestEditMode, isPropose, setGuestEditMode, isUpdating: isUpdatingEditMode } = useGuestEditMode(tripId);
   
@@ -3642,6 +3644,19 @@ export function EditorialItinerary({
             {/* Show only selected day */}
             {days[selectedDayIndex] && (
               <div className="space-y-6">
+                {/* New Member Suggestions Card */}
+                {newlyAddedMember && (
+                  <NewMemberSuggestionsCard
+                    memberName={newlyAddedMember}
+                    days={days}
+                    colorIndex={collaborators.length}
+                    onAddActivities={() => {
+                      // TODO: wire to lighter "enrich" endpoint
+                      toast.success(`Adding personalized activities for ${newlyAddedMember}...`);
+                    }}
+                    onDismiss={() => setNewlyAddedMember(null)}
+                  />
+                )}
                 {/* Arrival Game Plan - Show on every city arrival day */}
                 {(() => {
                   const selectedDay = days[selectedDayIndex];
@@ -4979,19 +4994,17 @@ export function EditorialItinerary({
               onInviteClick={handleCreateShareLink}
               onMemberAdded={(memberName) => {
                 toast.success(`${memberName} added to the trip!`, {
-                  description: 'Regenerate the itinerary to blend their preferences.',
+                  description: `We've highlighted activities that match ${memberName}'s interests.`,
                   action: {
-                    label: 'Regenerate',
+                    label: `Add activities for ${memberName}`,
                     onClick: () => {
-                      if (onRegenerateDay) onRegenerateDay(1);
+                      setNewlyAddedMember(memberName);
                     },
                   },
                   duration: 10000,
                 });
-                // Prompt group unlock if owner doesn't have a group budget yet
-                if (tripPermission?.isOwner) {
-                  setShowGroupUnlockModal(true);
-                }
+                // Refresh collaborator color map
+                refetchCollaborators?.();
               }}
             />
 
