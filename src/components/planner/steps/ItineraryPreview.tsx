@@ -246,7 +246,33 @@ export default function ItineraryPreview({
         setHasSetContext(true); // Already has itinerary, skip context form
       } else if (hasPreExistingContext) {
         // We have flight data from Start page - auto-start generation
-        // Using pre-existing flight context from Start page
+        // Fetch transport preferences from DB to include in generation
+        let transportPrefs: { transportationModes?: string[]; primaryTransport?: string; hasRentalCar?: boolean } = {};
+        try {
+          const { supabase } = await import('@/integrations/supabase/client');
+          const { data: tripRow } = await supabase
+            .from('trips')
+            .select('transportation_preferences')
+            .eq('id', tripId)
+            .single();
+          if (tripRow?.transportation_preferences) {
+            const prefs = tripRow.transportation_preferences as any;
+            // Handle both array-of-objects (multi-city) and object (single-city) formats
+            if (Array.isArray(prefs)) {
+              const modes = prefs.map((p: any) => p.type || p.mode).filter(Boolean);
+              transportPrefs = { transportationModes: modes };
+            } else if (prefs.modes) {
+              transportPrefs = {
+                transportationModes: prefs.modes,
+                primaryTransport: prefs.primaryMode,
+                hasRentalCar: prefs.modes?.includes('rental_car'),
+              };
+            }
+          }
+        } catch (e) {
+          console.warn('[ItineraryPreview] Could not fetch transport prefs:', e);
+        }
+
         const preContext: ItineraryContextData = {
           hotelLocation: existingHotelLocation,
           arrivalTime: existingArrivalTime,
@@ -255,25 +281,52 @@ export default function ItineraryPreview({
         setItineraryContext(preContext);
         setHasSetContext(true);
         setHasConsumedQuota(true);
-        generateItinerary(preContext);
+        generateItinerary({ ...preContext, ...transportPrefs });
       }
     };
     init();
   }, [tripId, hasPreExistingContext, existingArrivalTime, existingDepartureTime, existingHotelLocation]);
 
   // Handle context form submission - start generation with optional context
-  const handleContextSubmit = (data: ItineraryContextData) => {
+  const handleContextSubmit = async (data: ItineraryContextData) => {
     if (!tripId) return;
     
     setItineraryContext(data);
     setHasSetContext(true);
     setHasConsumedQuota(true);
     
+    // Fetch transport preferences from DB
+    let transportPrefs: { transportationModes?: string[]; primaryTransport?: string; hasRentalCar?: boolean } = {};
+    try {
+      const { supabase } = await import('@/integrations/supabase/client');
+      const { data: tripRow } = await supabase
+        .from('trips')
+        .select('transportation_preferences')
+        .eq('id', tripId)
+        .single();
+      if (tripRow?.transportation_preferences) {
+        const prefs = tripRow.transportation_preferences as any;
+        if (Array.isArray(prefs)) {
+          const modes = prefs.map((p: any) => p.type || p.mode).filter(Boolean);
+          transportPrefs = { transportationModes: modes };
+        } else if (prefs.modes) {
+          transportPrefs = {
+            transportationModes: prefs.modes,
+            primaryTransport: prefs.primaryMode,
+            hasRentalCar: prefs.modes?.includes('rental_car'),
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('[ItineraryPreview] Could not fetch transport prefs:', e);
+    }
+
     // Pass context to generation
     generateItinerary({
       hotelLocation: data.hotelLocation,
       arrivalTime: data.arrivalTime,
       departureTime: data.departureTime,
+      ...transportPrefs,
     });
   };
 
