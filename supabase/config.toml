@@ -251,3 +251,6 @@ verify_jwt = false
 
 [functions.parse-trip-input]
 verify_jwt = false
+
+[functions.budget-coach]
+verify_jwt = false
