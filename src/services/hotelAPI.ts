@@ -451,6 +451,8 @@ export interface HotelEnrichment {
   googleMapsUrl?: string;
   photos?: string[];
   placeId?: string;
+  rating?: number;
+  reviewCount?: number;
 }
 
 export async function enrichHotel(hotelName: string, destination: string): Promise<HotelEnrichment | null> {
