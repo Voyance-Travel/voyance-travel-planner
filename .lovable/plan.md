@@ -1,97 +1,77 @@
 
 
-# Flight Intelligence Pipeline — Continuation
+# Fix Viewer Permission & Improve Post-Member-Add Behavior
 
-## Summary
-Three remaining tasks: (1) fix the build error and thread `flightIntelligence` through `FlightHotelStep`, (2) persist it to the database on trip insert, and (3) wire it into the itinerary generation pipeline.
+## Problem 1: Viewer Not Working
 
----
+The permission dropdown in `TripCollaboratorsPanel.tsx` uses `SelectItem value="viewer"` (line 406) but the `CollaboratorPermission` type is `'view' | 'edit' | 'admin'`. This means:
+- Selecting "Viewer" sends `"viewer"` to the RPC instead of `"view"` -- it silently fails or stores an invalid value
+- The dropdown never shows "Viewer" as currently selected because `collaborator.permission` is `"view"` which doesn't match `"viewer"`
 
-## Task 1: Fix Build Error and Thread Props (Start.tsx)
+**Fix**: Change `value="viewer"` to `value="view"` and `value="editor"` to `value="edit"` in the Select component.
 
-**Problem:** `FlightHotelStep` references `setFlightIntelligence` at line 1673 but it's defined in the parent `Start()` component (line 1950), not inside `FlightHotelStep`.
-
-**Fix:**
-- Add `onIntelligenceCapture` callback prop to `FlightHotelStep`'s props interface (around line 952)
-- Pass `setFlightIntelligence` from `Start()` into `FlightHotelStep` at the call site (around line 2528)
-- Inside `FlightHotelStep`, change the `FlightImportModal`'s `onIntelligence` callback to use the new prop instead of directly calling `setFlightIntelligence`
-
-**File:** `src/pages/Start.tsx`
+**File**: `src/components/itinerary/TripCollaboratorsPanel.tsx` (lines 406, 412)
 
 ---
 
-## Task 2: Persist `flight_intelligence` on Trip Insert (Start.tsx)
+## Problem 2: Post-Member-Add Should Not Offer Full Regeneration
 
-**Problem:** The `handleSubmit` function (line 2144) inserts into `trips` but never includes `flight_intelligence`.
+Currently when a member is added, a toast says "Regenerate the itinerary to blend their preferences" with a Regenerate button. This is heavy-handed -- it wipes out the existing itinerary.
 
-**Fix:**
-- In the `.insert({...})` call around line 2146-2172, add:
-  ```
-  flight_intelligence: flightIntelligence || null,
-  ```
-- The column already exists from the migration created in the previous session
+**Instead, the behavior should be:**
 
-**File:** `src/pages/Start.tsx`
+1. Show the colored collaborator attribution dots on activities (this already works via `suggestedFor` + `collaboratorColorMap`) -- but refresh the color map immediately when a member is added so the legend updates.
 
----
+2. Replace the "Regenerate" toast with a friendlier message offering to **add activities** for the newcomer:
+   - Toast: "[Name] added to the trip! We found activities that match their interests too."
+   - Action button: "Add activities for [Name]" (or "Personalize" -- a lighter touch)
+   - This button could scroll to a new banner or trigger an "enrich" flow that adds supplementary activities without replacing existing ones.
 
-## Task 3: Build `buildFlightIntelligencePrompt()` in prompt-library.ts
+3. Add a **NewMemberSuggestionsCard** inline component that appears after a member is added:
+   - Shows which existing activities already align with the new member's interests (with their color dot)
+   - Offers to add 2-3 new activities per day that match the newcomer's DNA
+   - "Add these" / "Skip" buttons
+   - This is a lighter touch than regenerating the entire itinerary
 
-**Problem:** The itinerary generator has no awareness of flight intelligence data (layovers, availability windows, missing legs).
+**Files to change:**
 
-**Fix:** Add a new exported function `buildFlightIntelligencePrompt(intelligence)` that takes the intelligence JSON and returns a prompt string with:
-
-- **FLIGHT-AWARE SCHEDULING** section: For each destination in `destinationSchedule`, emit `availableFrom` / `availableUntil` constraints, first/last destination notes
-- **LAYOVER EXCLUSIONS** section: For each layover, emit "Do NOT schedule activities in {city} during layover"
-- **MISSING LEG HANDLING** section: For each missing leg, emit "Leave travel day flexible" instruction
-- **TRAVEL INTEL COVERAGE** section: List all destination cities that need Travel Intel
-
-Returns empty string if intelligence is null/undefined (backward compatible).
-
-**File:** `supabase/functions/generate-itinerary/prompt-library.ts`
+- `src/components/itinerary/EditorialItinerary.tsx` (lines 4980-4995): Replace the `onMemberAdded` callback to show the new flow instead of the regenerate toast
+- `src/components/itinerary/TripCollaboratorsPanel.tsx`: Ensure the collaborator list refetch triggers the color map to update
+- Create `src/components/itinerary/NewMemberSuggestionsCard.tsx`: A card that shows after a member is added, highlighting shared interests and offering to add personalized activities
 
 ---
 
-## Task 4: Read and Inject Intelligence in generate-itinerary/index.ts
+## Technical Details
 
-**Fix in `getFlightHotelContext()` (line 2762):**
-- Expand the `.select()` to also fetch `flight_intelligence`
-- Return `rawFlightIntelligence` alongside existing return values
+### Fix 1: SelectItem Values (TripCollaboratorsPanel.tsx)
 
-**Fix in Stage 1.4 area (around line 7077):**
-- Import `buildFlightIntelligencePrompt` from prompt-library
-- After building `promptFlightData`, call `buildFlightIntelligencePrompt(flightHotelResult.rawFlightIntelligence)`
-- Inject the resulting prompt string into the context so it flows into day generation prompts
+```text
+Line 406: SelectItem value="viewer" --> value="view"
+Line 412: SelectItem value="editor" --> value="edit"
+```
 
-**File:** `supabase/functions/generate-itinerary/index.ts`
+### Fix 2: onMemberAdded Flow (EditorialItinerary.tsx)
 
----
+Replace the current toast (lines 4980-4994) with:
+- A toast that says "[Name] has joined! We'll highlight activities matching their interests."
+- No "Regenerate" action button
+- Instead, set a state flag like `newlyAddedMember` that renders a `NewMemberSuggestionsCard` inline
+- The card shows: "Activities [Name] will love" based on their DNA overlap, plus "Add new activities for [Name]" which calls a lighter endpoint (or adds placeholder activities the owner can customize)
+- Remove the automatic `setShowGroupUnlockModal(true)` trigger -- only show it if the owner explicitly tries to use a paid feature
 
-## Task 5: Pass Intelligence from itineraryAPI.ts
+### Fix 3: NewMemberSuggestionsCard Component
 
-**Problem:** The `generateItinerary` function in `itineraryAPI.ts` calls the edge function per-day but doesn't include flight intelligence.
-
-**Fix:**
-- After fetching trip details (line 264), read `flight_intelligence` from the trip record
-- Include `flightIntelligence: trip.flight_intelligence` in the body of each `supabase.functions.invoke('generate-itinerary', { body: {...} })` call (line 304)
-
-**File:** `src/services/itineraryAPI.ts`
-
----
-
-## Task 6: Deploy and Verify
-
-- Deploy `parse-booking-confirmation` and `generate-itinerary` edge functions
-- Verify backward compatibility (trips without intelligence still generate normally)
-
----
+A new component that:
+- Takes the new member's profile/DNA and the current itinerary days
+- Cross-references activities' tags/categories with the member's archetype affinities
+- Shows existing activities that overlap with colored attribution dots
+- Offers to add 2-3 suggested activities per day
+- Has "Add these" and "Maybe later" buttons
+- Dismissible, stored in local state (not persistent)
 
 ## Sequencing
 
-1. Fix build error: thread `onIntelligenceCapture` prop through `FlightHotelStep` (Task 1)
-2. Persist `flight_intelligence` in trip insert (Task 2)
-3. Add `buildFlightIntelligencePrompt()` to prompt-library (Task 3)
-4. Update `generate-itinerary/index.ts` to read and inject intelligence (Task 4)
-5. Update `itineraryAPI.ts` to pass intelligence in request body (Task 5)
-6. Deploy edge functions (Task 6)
-
+1. Fix the `value="viewer"` / `value="editor"` bug (quick fix)
+2. Update the `onMemberAdded` callback to show the new friendlier toast
+3. Create the `NewMemberSuggestionsCard` component
+4. Wire it into the `EditorialItinerary` layout (appears after member is added)
