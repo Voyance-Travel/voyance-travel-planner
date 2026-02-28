@@ -665,7 +665,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   status_seeker: {
     id: 'status_seeker',
-    name: 'The Prestige Traveler',
+    name: 'The Luxe Achiever',
     category: 'ACHIEVER',
     hookLine: "First class isn't a seat, it's a lifestyle.",
     coreDescription: "You've earned the right to travel in style. Elite status, private experiences, and VIP access are your rewards for hard work. Travel is both pleasure and proof of success.",
@@ -815,7 +815,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   midlife_explorer: {
     id: 'midlife_explorer',
-    name: 'The Renaissance Voyager',
+    name: 'The Unscripted Explorer',
     category: 'TRANSFORMER',
     hookLine: "It's never too late to become who you were meant to be.",
     coreDescription: "You're rewriting your travel story. Life experience has taught you what matters, and now you're going after it. These trips aren't escapes. They're homecomings to your true self.",

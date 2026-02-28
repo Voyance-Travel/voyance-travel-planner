@@ -394,7 +394,7 @@ Your trips will feed your focus. We'll build around your interest, not despite i
 
   status_seeker: {
     id: 'status_seeker',
-    name: 'The Prestige Traveler',
+    name: 'The Luxe Achiever',
     category: 'ACHIEVER',
     revealParagraph: `You want the experiences that aren't available to everyone.
 
@@ -706,7 +706,7 @@ Your trips will maximize experience per dollar. We'll find the places where budg
 
   midlife_explorer: {
     id: 'midlife_explorer',
-    name: 'The Renaissance Voyager',
+    name: 'The Unscripted Explorer',
     category: 'TRANSFORMER',
     revealParagraph: `You've reached the point where you know what you want, and you're done apologizing for it.
 
