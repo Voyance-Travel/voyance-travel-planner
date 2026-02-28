@@ -350,7 +350,7 @@ export async function getOutgoingRequests(): Promise<{ id: string; addressee: Fr
     .select(`
       id,
       created_at,
-      addressee:profiles!friendships_addressee_id_fkey(id, handle, display_name, first_name, last_name, avatar_url)
+      addressee:profiles_friends!friendships_addressee_id_fkey(id, handle, display_name, avatar_url)
     `)
     .eq('requester_id', currentUserId)
     .eq('status', 'pending');
