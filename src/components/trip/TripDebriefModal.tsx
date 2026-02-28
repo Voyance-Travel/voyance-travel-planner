@@ -144,17 +144,25 @@ export function TripDebriefModal({
   };
 
   const addDiscoveredLike = () => {
-    if (newLike && !discoveredLikes.includes(newLike)) {
-      setDiscoveredLikes([...discoveredLikes, newLike]);
-      setNewLike('');
-    }
+    const normalizedLike = newLike.trim();
+    if (!normalizedLike) return;
+
+    setDiscoveredLikes((prev) => {
+      if (prev.some((item) => item.toLowerCase() === normalizedLike.toLowerCase())) return prev;
+      return [...prev, normalizedLike];
+    });
+    setNewLike('');
   };
 
   const addDiscoveredDislike = () => {
-    if (newDislike && !discoveredDislikes.includes(newDislike)) {
-      setDiscoveredDislikes([...discoveredDislikes, newDislike]);
-      setNewDislike('');
-    }
+    const normalizedDislike = newDislike.trim();
+    if (!normalizedDislike) return;
+
+    setDiscoveredDislikes((prev) => {
+      if (prev.some((item) => item.toLowerCase() === normalizedDislike.toLowerCase())) return prev;
+      return [...prev, normalizedDislike];
+    });
+    setNewDislike('');
   };
 
   const renderStep = () => {
@@ -412,9 +420,9 @@ export function TripDebriefModal({
                   placeholder="e.g., food tours, sunrise hikes..."
                   value={newLike}
                   onChange={(e) => setNewLike(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addDiscoveredLike()}
+                  onKeyDown={(e) => e.key === 'Enter' && newLike.trim() && addDiscoveredLike()}
                 />
-                <Button variant="outline" onClick={addDiscoveredLike}>
+                <Button variant={newLike.trim() ? 'default' : 'outline'} onClick={addDiscoveredLike} disabled={!newLike.trim()}>
                   <Plus className="w-4 h-4" />
                 </Button>
               </div>
@@ -444,9 +452,9 @@ export function TripDebriefModal({
                   placeholder="e.g., large group tours, loud areas..."
                   value={newDislike}
                   onChange={(e) => setNewDislike(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addDiscoveredDislike()}
+                  onKeyDown={(e) => e.key === 'Enter' && newDislike.trim() && addDiscoveredDislike()}
                 />
-                <Button variant="outline" onClick={addDiscoveredDislike}>
+                <Button variant={newDislike.trim() ? 'default' : 'outline'} onClick={addDiscoveredDislike} disabled={!newDislike.trim()}>
                   <Plus className="w-4 h-4" />
                 </Button>
               </div>
