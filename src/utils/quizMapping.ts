@@ -622,7 +622,7 @@ function getArchetypeDisplayName(id: string): string {
     bucket_list_conqueror: 'The Milestone Voyager',
     adrenaline_architect: 'The Adrenaline Architect',
     collection_curator: 'The Collection Curator',
-    status_seeker: 'The Prestige Traveler',
+    status_seeker: 'The Luxe Achiever',
     // RESTORER category
     zen_seeker: 'The Zen Seeker',
     retreat_regular: 'The Retreat Regular',
@@ -637,7 +637,7 @@ function getArchetypeDisplayName(id: string): string {
     curated_luxe: 'Curated Luxe',
     // TRANSFORMER category
     gap_year_graduate: 'The Horizon Chaser',
-    midlife_explorer: 'The Renaissance Voyager',
+    midlife_explorer: 'The Unscripted Explorer',
     sabbatical_scholar: 'The Sabbatical Scholar',
     healing_journeyer: 'The Restoration Seeker',
     retirement_ranger: 'The Boundless Explorer',
@@ -1222,62 +1222,44 @@ export async function recalculateDNAFromPreferences(
       dna = calculateTravelDNA(answers);
     }
     
-    // 4. CRITICAL: Check if V2 traits are all zero (archetype-matcher failed)
-    // If so, compute directly from preferences to avoid BSC fallback.
-    // NOTE: Do NOT re-call the edge function — it will just return zeros again.
-    // Instead, use direct preference mapping + V2-aware archetype matching.
+    // 4. Fix V2 traits if all zero (archetype-matcher failed)
     if (dna.trait_scores) {
       const allZero = Object.values(dna.trait_scores).every(v => v === 0);
       if (allZero) {
-        console.warn('[DNA Recalc] All V2 traits are zero — using direct preference mapping (no re-call)');
+        console.warn('[DNA Recalc] All V2 traits are zero — using direct preference mapping');
         const directTraits = computeV2TraitsFromPreferences(preferences);
-        console.log('[DNA Recalc] Direct V2 traits:', JSON.stringify(directTraits));
         dna.trait_scores = directTraits;
-
-        // Use the real V2 archetype-matcher on the corrected traits.
-        // This is the ONLY path that correctly resolves archetypes from V2 traits —
-        // calculateTravelDNA() uses STYLE_TO_ARCHETYPE (style string → archetype)
-        // which ignores V2 trait values and causes wrong/BSC results.
-        try {
-          const { determineArchetype } = await import('@/services/engines/travelDNA/archetype-matcher');
-          // Build a synthetic V3 trait scores object compatible with determineArchetype
-          // by using a flat quiz-answer map constructed from preferences
-          const flatAnswers: Record<string, string> = {};
-          for (const [k, v] of Object.entries(answers)) {
-            if (typeof v === 'string') flatAnswers[k] = v;
-          }
-          const archetypeResult = determineArchetype(flatAnswers);
-          const primaryId = archetypeResult.primary?.id || dna.primary_archetype_name || 'cultural_anthropologist';
-          const secondaryId = archetypeResult.secondary?.id || dna.secondary_archetype_name || null;
-
-          console.log('[DNA Recalc] V2 archetype match:', primaryId, '| secondary:', secondaryId);
-
-          // Sync ALL archetype fields so every table gets the SAME value
-          dna.primary_archetype_name = primaryId;
-          dna.secondary_archetype_name = secondaryId;
-          dna.primary_archetype_display = getArchetypeDisplayName(primaryId);
-          dna.primary_archetype_category = getArchetypeCategory(primaryId);
-          dna.primary_archetype_tagline = getArchetypeTagline(primaryId);
-          dna.trait_scores = directTraits; // Always keep direct V2 traits
-        } catch (matchErr) {
-          console.error('[DNA Recalc] Archetype matching failed, keeping edge-function result:', matchErr);
-          // At minimum, populate display fields so all UI components are consistent
-          if (dna.primary_archetype_name) {
-            dna.primary_archetype_display = getArchetypeDisplayName(dna.primary_archetype_name);
-            dna.primary_archetype_category = getArchetypeCategory(dna.primary_archetype_name);
-            dna.primary_archetype_tagline = getArchetypeTagline(dna.primary_archetype_name);
-          }
-        }
       }
     }
 
-    // 4b. Always sync display fields from the canonical primary_archetype_name.
-    // The edge function may return a stale or incorrect display name (e.g., BSC),
-    // so we always recompute from the ID to guarantee all UI components are consistent.
-    if (dna.primary_archetype_name) {
-      dna.primary_archetype_display = getArchetypeDisplayName(dna.primary_archetype_name);
-      dna.primary_archetype_category = getArchetypeCategory(dna.primary_archetype_name);
-      dna.primary_archetype_tagline = getArchetypeTagline(dna.primary_archetype_name);
+    // 4b. ALWAYS re-match archetype from current traits (including overrides).
+    // This ensures that when Fine-Tune sliders change the trait profile significantly,
+    // the archetype updates to match — preventing the mismatch where trait tags say
+    // "Adventurous, Fast-Paced" but the archetype still shows "Luxury Luminary".
+    try {
+      const { determineArchetype } = await import('@/services/engines/travelDNA/archetype-matcher');
+      const flatAnswers: Record<string, string> = {};
+      for (const [k, v] of Object.entries(answers)) {
+        if (typeof v === 'string') flatAnswers[k] = v;
+      }
+      const archetypeResult = determineArchetype(flatAnswers);
+      const primaryId = archetypeResult.primary?.id || dna.primary_archetype_name || 'cultural_anthropologist';
+      const secondaryId = archetypeResult.secondary?.id || dna.secondary_archetype_name || null;
+
+      console.log('[DNA Recalc] Archetype re-match:', primaryId, '| secondary:', secondaryId);
+
+      dna.primary_archetype_name = primaryId;
+      dna.secondary_archetype_name = secondaryId;
+      dna.primary_archetype_display = getArchetypeDisplayName(primaryId);
+      dna.primary_archetype_category = getArchetypeCategory(primaryId);
+      dna.primary_archetype_tagline = getArchetypeTagline(primaryId);
+    } catch (matchErr) {
+      console.error('[DNA Recalc] Archetype matching failed, keeping edge-function result:', matchErr);
+      if (dna.primary_archetype_name) {
+        dna.primary_archetype_display = getArchetypeDisplayName(dna.primary_archetype_name);
+        dna.primary_archetype_category = getArchetypeCategory(dna.primary_archetype_name);
+        dna.primary_archetype_tagline = getArchetypeTagline(dna.primary_archetype_name);
+      }
     }
     
     console.log('[DNA Recalc] Final V2 traits:', JSON.stringify(dna.trait_scores));
