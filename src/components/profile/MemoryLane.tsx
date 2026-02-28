@@ -18,6 +18,7 @@ import {
   BookOpen
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
@@ -368,36 +369,26 @@ const MemoryCard = ({ memory, onUpdate }: { memory: TripMemory; onUpdate: () => 
   );
 };
 
-export default function MemoryLane({ className = '' }: MemoryLaneProps) {
+export default function MemoryLane({ className = '', refreshKey }: MemoryLaneProps & { refreshKey?: number }) {
   const { user } = useAuth();
-  const [memories, setMemories] = useState<TripMemory[]>([]);
-  const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
   const itemsPerView = 2;
 
-  const loadMemories = async () => {
-    if (!user?.id) return;
-    
-    try {
+  const { data: memories = [], isLoading: loading, refetch: refetchMemories } = useQuery({
+    queryKey: ['memoryLane', user?.id, refreshKey],
+    queryFn: async () => {
       const { data, error } = await supabase
         .from('trips')
         .select('id, name, destination, destination_country, start_date, end_date, status, metadata')
-        .eq('user_id', user.id)
+        .eq('user_id', user!.id)
         .eq('status', 'completed')
         .order('end_date', { ascending: false });
-      
       if (error) throw error;
-      setMemories((data || []) as TripMemory[]);
-    } catch (err) {
-      console.error('Error loading memories:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadMemories();
-  }, [user?.id]);
+      return (data || []) as TripMemory[];
+    },
+    enabled: !!user?.id,
+    staleTime: 30_000,
+  });
 
   const maxIndex = Math.max(0, memories.length - itemsPerView);
 
@@ -469,7 +460,7 @@ export default function MemoryLane({ className = '' }: MemoryLaneProps) {
           >
             {memories.map((memory) => (
               <div key={memory.id} style={{ flex: `0 0 ${100 / Math.max(itemsPerView, memories.length)}%` }}>
-                <MemoryCard memory={memory} onUpdate={loadMemories} />
+                <MemoryCard memory={memory} onUpdate={() => refetchMemories()} />
               </div>
             ))}
           </motion.div>

@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, 
@@ -341,95 +342,65 @@ function PerfectTripPreview({ preview }: { preview: string }) {
 // MAIN COMPONENT
 // ============================================================================
 
-export default function TravelDNAReveal({ userId, className }: TravelDNARevealProps) {
-  const [dnaData, setDnaData] = useState<TravelDNAData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+export default function TravelDNAReveal({ userId, className, refreshKey }: TravelDNARevealProps & { refreshKey?: number }) {
   const [activeTab, setActiveTab] = useState('about');
   const [isInfoOpen, setIsInfoOpen] = useState(false);
 
-  useEffect(() => {
-    async function loadDNA() {
-      if (!userId) return;
+  const { data: dnaData = null, isLoading } = useQuery({
+    queryKey: ['travelDNA', userId, refreshKey],
+    queryFn: async (): Promise<TravelDNAData | null> => {
+      const [dnaResult, tripCountResult, preferencesResult] = await Promise.all([
+        supabase.from('travel_dna_profiles').select('*').eq('user_id', userId).maybeSingle(),
+        supabase.from('trips').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+        supabase.from('user_preferences').select('travel_frequency').eq('user_id', userId).maybeSingle()
+      ]);
       
-      try {
-        const [dnaResult, tripCountResult, preferencesResult] = await Promise.all([
-          supabase
-            .from('travel_dna_profiles')
-            .select('*')
-            .eq('user_id', userId)
-            .maybeSingle(),
-          supabase
-            .from('trips')
-            .select('id', { count: 'exact', head: true })
-            .eq('user_id', userId),
-          supabase
-            .from('user_preferences')
-            .select('travel_frequency')
-            .eq('user_id', userId)
-            .maybeSingle()
-        ]);
-        
-        const { data: profileData, error: profileError } = dnaResult;
-        const tripCount = tripCountResult.count || 0;
-        const travelFrequency = preferencesResult.data?.travel_frequency as string | undefined;
-        
-        if (profileData?.primary_archetype_name) {
-          const { data: profileOverrides } = await supabase
-            .from('profiles')
-            .select('travel_dna_overrides')
-            .eq('id', userId)
-            .maybeSingle();
-          
-          const overridesData = profileOverrides?.travel_dna_overrides as Record<string, number> | null;
-          
-          setDnaData({
-            ...profileData,
-            trip_count: tripCount,
-            travel_frequency: travelFrequency,
-            has_overrides: !!overridesData && Object.keys(overridesData).length > 0,
-            overrides: overridesData || {},
-          } as TravelDNAData);
-          setIsLoading(false);
-          return;
-        }
-        
-        // Fallback: Check profiles.travel_dna column
-        const { data: userProfile, error: userError } = await supabase
-          .from('profiles')
-          .select('travel_dna, quiz_completed, travel_dna_overrides')
-          .eq('id', userId)
-          .maybeSingle();
-        
-        if (userProfile?.travel_dna && typeof userProfile.travel_dna === 'object') {
-          const dnaJson = userProfile.travel_dna as Record<string, unknown>;
-          const overridesData = userProfile.travel_dna_overrides as Record<string, number> | null;
-          setDnaData({
-            primary_archetype_name: (dnaJson.primary_archetype_name as string) || null,
-            secondary_archetype_name: (dnaJson.secondary_archetype_name as string) || null,
-            dna_confidence_score: (dnaJson.dna_confidence_score as number) || null,
-            dna_rarity: (dnaJson.dna_rarity as string) || null,
-            trait_scores: dnaJson.trait_scores || null,
-            tone_tags: (dnaJson.tone_tags as string[]) || null,
-            emotional_drivers: (dnaJson.emotional_drivers as string[]) || null,
-            summary: (dnaJson.summary as string) || null,
-            trip_count: tripCount,
-            travel_frequency: travelFrequency,
-            has_overrides: !!overridesData && Object.keys(overridesData).length > 0,
-            overrides: overridesData || {},
-          });
-        }
-        
-        if (profileError) console.error('travel_dna_profiles error:', JSON.stringify(profileError, null, 2));
-        if (userError) console.error('profiles error:', JSON.stringify(userError, null, 2));
-      } catch (error) {
-        console.error('Failed to load travel DNA:', error);
-      } finally {
-        setIsLoading(false);
+      const { data: profileData, error: profileError } = dnaResult;
+      const tripCount = tripCountResult.count || 0;
+      const travelFrequency = preferencesResult.data?.travel_frequency as string | undefined;
+      
+      if (profileData?.primary_archetype_name) {
+        const { data: profileOverrides } = await supabase
+          .from('profiles').select('travel_dna_overrides').eq('id', userId).maybeSingle();
+        const overridesData = profileOverrides?.travel_dna_overrides as Record<string, number> | null;
+        return {
+          ...profileData,
+          trip_count: tripCount,
+          travel_frequency: travelFrequency,
+          has_overrides: !!overridesData && Object.keys(overridesData).length > 0,
+          overrides: overridesData || {},
+        } as TravelDNAData;
       }
-    }
-    
-    loadDNA();
-  }, [userId]);
+      
+      const { data: userProfile, error: userError } = await supabase
+        .from('profiles').select('travel_dna, quiz_completed, travel_dna_overrides').eq('id', userId).maybeSingle();
+      
+      if (userProfile?.travel_dna && typeof userProfile.travel_dna === 'object') {
+        const dnaJson = userProfile.travel_dna as Record<string, unknown>;
+        const overridesData = userProfile.travel_dna_overrides as Record<string, number> | null;
+        return {
+          primary_archetype_name: (dnaJson.primary_archetype_name as string) || null,
+          secondary_archetype_name: (dnaJson.secondary_archetype_name as string) || null,
+          dna_confidence_score: (dnaJson.dna_confidence_score as number) || null,
+          dna_rarity: (dnaJson.dna_rarity as string) || null,
+          trait_scores: dnaJson.trait_scores || null,
+          tone_tags: (dnaJson.tone_tags as string[]) || null,
+          emotional_drivers: (dnaJson.emotional_drivers as string[]) || null,
+          summary: (dnaJson.summary as string) || null,
+          trip_count: tripCount,
+          travel_frequency: travelFrequency,
+          has_overrides: !!overridesData && Object.keys(overridesData).length > 0,
+          overrides: overridesData || {},
+        } as TravelDNAData;
+      }
+      
+      if (profileError) console.error('travel_dna_profiles error:', JSON.stringify(profileError, null, 2));
+      if (userError) console.error('profiles error:', JSON.stringify(userError, null, 2));
+      return null;
+    },
+    enabled: !!userId,
+    staleTime: 30_000,
+  });
 
   if (isLoading) {
     return (
