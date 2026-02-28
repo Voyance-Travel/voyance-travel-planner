@@ -5,6 +5,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { getLocalToday } from '@/utils/dateUtils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { Json } from '@/integrations/supabase/types';
@@ -360,7 +361,7 @@ export async function getTripsByStatus(status: TripStatus): Promise<Trip[]> {
  */
 export async function getUpcomingTrips(): Promise<Trip[]> {
   const userId = await getCurrentUserId();
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalToday();
 
   const { data, error } = await supabase
     .from('trips')

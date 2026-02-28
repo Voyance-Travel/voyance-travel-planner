@@ -1,6 +1,19 @@
 import { format as dateFnsFormat, parseISO } from 'date-fns';
 
 /**
+ * Get today's date as a YYYY-MM-DD string using LOCAL time (not UTC).
+ * Use this instead of `new Date().toISOString().split('T')[0]` to avoid
+ * timezone-related off-by-one errors for users west of UTC.
+ */
+export const getLocalToday = (): string => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+/**
  * Parse a YYYY-MM-DD date string as local midnight instead of UTC midnight.
  * This prevents the off-by-one-day bug for users in timezones west of UTC.
  * Use this instead of parseISO() when displaying date-only strings from the database.

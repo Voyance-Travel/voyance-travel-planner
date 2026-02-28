@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { getLocalToday } from '@/utils/dateUtils';
 
 interface TripSetupProps {
   formData: {
@@ -22,7 +23,7 @@ interface TripSetupProps {
 export default function TripSetup({ formData, updateFormData, onContinue }: TripSetupProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalToday();
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
