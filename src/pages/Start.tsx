@@ -2040,13 +2040,24 @@ export default function Start() {
       // DNA check now happens at Step 1→2 transition, not here
 
       // Build flight selection data — use legs[] format for multi-city support
+      const hasLegData = (leg: ManualFlightEntry) =>
+        !!(
+          leg.departureAirport ||
+          leg.arrivalAirport ||
+          leg.departureTime ||
+          leg.arrivalTime ||
+          leg.airline ||
+          leg.flightNumber ||
+          leg.price
+        );
+
       let flightSelection: Record<string, unknown> | null = null;
-      if (outboundFlight.arrivalTime) {
+      if (hasLegData(outboundFlight)) {
         const allLegs: ManualFlightEntry[] = [outboundFlight];
         if (additionalLegs.length > 0) {
-          allLegs.push(...additionalLegs);
+          allLegs.push(...additionalLegs.filter(hasLegData));
         }
-        if (showReturnFlight && returnFlight.departureTime) {
+        if (showReturnFlight && hasLegData(returnFlight)) {
           allLegs.push(returnFlight);
         }
         const flightLegs: FlightLeg[] = allLegs.map((leg, i) => ({
