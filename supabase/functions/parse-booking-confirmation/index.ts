@@ -134,8 +134,59 @@ TRIP CONTEXT (use this to analyze flights intelligently):
 
 PHASE 2 — INTELLIGENT ANALYSIS (only if tripContext is provided above):
 
-After extracting raw segments, analyze them against the trip context and produce an "intelligence" object:
+After extracting raw segments, analyze them against the trip context and produce an "intelligence" object.
 
+CRITICAL: You MUST use EXACTLY these camelCase field names in the intelligence object. Do NOT use snake_case.
+
+The intelligence object MUST have this EXACT structure:
+{
+  "route": {
+    "display": "ATL → (MAD) → [PMI] → [MAD] → ATL",
+    "homeAirport": "ATL",
+    "destinationAirports": ["PMI", "MAD"],
+    "layoverAirports": []
+  },
+  "missingLegs": [
+    {
+      "from": "PMI",
+      "fromCity": "Mallorca",
+      "to": "MAD",
+      "toCity": "Madrid",
+      "reason": "Need flight from Mallorca to Madrid",
+      "suggestedDateRange": { "earliest": "2026-07-05", "latest": "2026-07-06" },
+      "priority": "CRITICAL"
+    }
+  ],
+  "destinationSchedule": [
+    {
+      "city": "Mallorca",
+      "airport": "PMI",
+      "arrivalDatetime": "2026-07-02T18:25:00",
+      "departureDatetime": null,
+      "availableFrom": "2026-07-02T21:25:00",
+      "availableUntil": null,
+      "fullDays": 3,
+      "isFirstDestination": true,
+      "isLastDestination": false,
+      "notes": ["Missing outbound flight to Madrid"]
+    }
+  ],
+  "layovers": [
+    {
+      "airport": "MAD",
+      "city": "Madrid",
+      "arrivalTime": "2026-07-02T12:15:00",
+      "departureTime": "2026-07-02T17:05:00",
+      "duration": "4h50m"
+    }
+  ],
+  "warnings": [
+    { "type": "MISSING_LEG", "message": "No flight from Mallorca to Madrid", "severity": "WARNING" }
+  ],
+  "summary": "Route: ATL → MAD → PMI → ??? → MAD → BOS → ATL. Missing: PMI→MAD leg."
+}
+
+Rules for classification:
 a) CLASSIFY each segment:
    - "OUTBOUND": leaving the home/origin city toward the first destination
    - "RETURN": going back to the home/origin city
@@ -144,33 +195,23 @@ a) CLASSIFY each segment:
    A city can be BOTH a layover at one point and a destination at another — classify independently based on timing.
 
    For each segment, also set:
-   - "isLayoverArrival": true if this segment arrives at a layover airport (where the traveler connects to another flight, not their actual destination)
-   - "connectionGroup": integer grouping connected flights (e.g., flights 1 and 2 that form a single journey with a layover get the same group number). null if standalone.
+   - "isLayoverArrival": true if this segment arrives at a layover airport
+   - "connectionGroup": integer grouping connected flights. null if standalone.
 
-b) DETECT MISSING LEGS: Check if there's a flight between each consecutive destination in the trip. If not, flag it as a missing leg with:
-   - from/to airport codes and city names
-   - reason: why this flight is needed
-   - suggestedDateRange: { earliest, latest } in YYYY-MM-DD
-   - priority: "CRITICAL" if the trip can't work without it, "WARNING" otherwise
+b) DETECT MISSING LEGS: Check if there's a flight between each consecutive destination. Flag missing legs using the EXACT field names shown above: "fromCity" (NOT "from_city"), "toCity" (NOT "to_city").
 
-c) CALCULATE DESTINATION AVAILABILITY WINDOWS for each actual destination (NOT layovers):
+c) CALCULATE DESTINATION AVAILABILITY WINDOWS:
    - availableFrom = arrival time + 3 hours (international) or + 1.5 hours (domestic/short-haul under 4h)
    - availableUntil = departure time - 3.5 hours (international) or - 2.5 hours (domestic/short-haul)
    - If arrival/departure is unknown (missing leg), set to null
-   - Include fullDays count, isFirstDestination, isLastDestination flags
-   - Add notes array with scheduling advice
 
-d) BUILD ROUTE SUMMARY: Show layovers in parentheses and destinations in brackets:
-   e.g., "Dallas → (layover: Madrid) → [Mallorca] → [Madrid] → Dallas"
+d) BUILD ROUTE SUMMARY in route.display: Show layovers in parentheses and destinations in brackets.
 
-e) IDENTIFY LAYOVERS with airport, city, arrival/departure times, and duration
+e) IDENTIFY LAYOVERS with "arrivalTime" and "departureTime" (NOT "arrival"/"departure")
 
-f) GENERATE WARNINGS for any issues (missing legs, tight connections, etc.)
+f) GENERATE WARNINGS as objects with "type", "message", "severity" keys (NOT as plain strings)
 
-g) GENERATE A SUMMARY text that shows:
-   - The route
-   - Which flights are provided (✓) and which are missing (✗)
-   - Destination days breakdown
+g) GENERATE A SUMMARY text
 
 Include the intelligence object in your response.` : '';
 
@@ -320,14 +361,86 @@ ${confirmationText}`;
       parsedBooking.is_multi_segment = parsedBooking.segments.length > 1;
     }
 
-    // Validate intelligence block defaults
+    // Normalize intelligence fields — remap snake_case / variant keys to canonical camelCase
     if (intelligence) {
-      intelligence.route = intelligence.route || {};
-      intelligence.missingLegs = intelligence.missingLegs || [];
-      intelligence.destinationSchedule = intelligence.destinationSchedule || [];
-      intelligence.layovers = intelligence.layovers || [];
-      intelligence.warnings = intelligence.warnings || [];
-      intelligence.summary = intelligence.summary || '';
+      const raw: any = intelligence;
+
+      // 1. Normalize route
+      const routeRaw = raw.route || {};
+      const isEmptyRoute = !routeRaw.display && Object.keys(routeRaw).length <= 0;
+      if (isEmptyRoute) {
+        const display = raw.route_summary || raw.routeDisplay || raw.route_display || '';
+        intelligence.route = {
+          display: display || routeRaw.display || '',
+          homeAirport: routeRaw.homeAirport || routeRaw.home_airport || '',
+          destinationAirports: routeRaw.destinationAirports || routeRaw.destination_airports || [],
+          layoverAirports: routeRaw.layoverAirports || routeRaw.layover_airports || [],
+        };
+      } else {
+        intelligence.route = {
+          display: routeRaw.display || routeRaw.route_display || '',
+          homeAirport: routeRaw.homeAirport || routeRaw.home_airport || '',
+          destinationAirports: routeRaw.destinationAirports || routeRaw.destination_airports || [],
+          layoverAirports: routeRaw.layoverAirports || routeRaw.layover_airports || [],
+        };
+      }
+
+      // 2. Normalize destinationSchedule
+      const schedRaw = raw.destinationSchedule || raw.destination_availability || raw.destination_schedule || [];
+      intelligence.destinationSchedule = (Array.isArray(schedRaw) ? schedRaw : []).map((d: any) => ({
+        city: d.city || d.destination || '',
+        airport: d.airport || d.airport_code || d.airportCode || '',
+        arrivalDatetime: d.arrivalDatetime || d.arrival_datetime || d.arrival || null,
+        departureDatetime: d.departureDatetime || d.departure_datetime || d.departure || null,
+        availableFrom: d.availableFrom || d.available_from || null,
+        availableUntil: d.availableUntil || d.available_until || null,
+        fullDays: d.fullDays ?? d.full_days ?? 0,
+        isFirstDestination: d.isFirstDestination ?? d.is_first_destination ?? false,
+        isLastDestination: d.isLastDestination ?? d.is_last_destination ?? false,
+        notes: d.notes || [],
+      }));
+
+      // 3. Normalize missingLegs
+      const legsRaw = raw.missingLegs || raw.missing_legs || [];
+      intelligence.missingLegs = (Array.isArray(legsRaw) ? legsRaw : []).map((l: any) => ({
+        from: l.from || l.from_code || '',
+        fromCity: l.fromCity || l.from_city || l.fromLocation || '',
+        to: l.to || l.to_code || '',
+        toCity: l.toCity || l.to_city || l.toLocation || '',
+        reason: l.reason || '',
+        suggestedDateRange: l.suggestedDateRange || l.suggested_date_range || l.dateRange || {},
+        priority: l.priority || 'WARNING',
+      }));
+
+      // 4. Normalize layovers
+      const layRaw = raw.layovers || [];
+      intelligence.layovers = (Array.isArray(layRaw) ? layRaw : []).map((lo: any) => ({
+        airport: lo.airport || '',
+        city: lo.city || '',
+        arrivalTime: lo.arrivalTime || lo.arrival_time || lo.arrival || '',
+        departureTime: lo.departureTime || lo.departure_time || lo.departure || '',
+        duration: lo.duration || '',
+      }));
+
+      // 5. Normalize warnings — wrap strings into objects
+      const warnRaw = raw.warnings || [];
+      intelligence.warnings = (Array.isArray(warnRaw) ? warnRaw : []).map((w: any) => {
+        if (typeof w === 'string') {
+          return { type: 'GENERAL', message: w, severity: 'WARNING' as const };
+        }
+        return {
+          type: w.type || 'GENERAL',
+          message: w.message || '',
+          severity: w.severity || 'WARNING',
+        };
+      });
+
+      // 6. Normalize summary
+      intelligence.summary = raw.summary || raw.route_summary || '';
+
+      console.log('[normalize] destinationSchedule count:', intelligence.destinationSchedule.length);
+      console.log('[normalize] missingLegs count:', intelligence.missingLegs.length);
+      console.log('[normalize] route.display:', intelligence.route?.display);
     }
 
     return new Response(
