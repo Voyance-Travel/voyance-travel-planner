@@ -312,6 +312,12 @@ interface MultiCityDayInfo {
   transitionFrom?: string;
   transitionTo?: string;
   transportType?: string;
+  // Per-city hotel info for prompt injection
+  hotelName?: string;
+  hotelAddress?: string;
+  hotelNeighborhood?: string;
+  isFirstDayInCity?: boolean;
+  isLastDayInCity?: boolean;
 }
 
 interface GenerationContext {
@@ -2760,7 +2766,7 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
   try {
     const { data: trip, error } = await supabase
       .from('trips')
-      .select('flight_selection, hotel_selection')
+      .select('flight_selection, hotel_selection, is_multi_city')
       .eq('id', tripId)
       .maybeSingle();
 
@@ -2901,6 +2907,36 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
       // Legacy single object format
       hotel = hotelRaw as HotelInfo;
       console.log(`[FlightHotel] Parsed hotel from legacy object: ${hotel?.name || 'No name'}`);
+    }
+    
+    // Multi-city fallback: read from trip_cities if trips.hotel_selection is empty
+    if (!hotel && trip.is_multi_city) {
+      try {
+        const { data: tripCities } = await supabase
+          .from('trip_cities')
+          .select('city_name, hotel_selection')
+          .eq('trip_id', tripId)
+          .order('city_order', { ascending: true });
+        
+        if (tripCities && tripCities.length > 0) {
+          const citiesWithHotels = tripCities.filter((c: any) => c.hotel_selection?.name);
+          if (citiesWithHotels.length > 0) {
+            // Use first city's hotel as primary context
+            hotel = citiesWithHotels[0].hotel_selection as HotelInfo;
+            console.log(`[FlightHotel] Parsed hotel from trip_cities (${citiesWithHotels[0].city_name}): ${hotel?.name || 'No name'}`);
+            
+            // Add multi-hotel summary if multiple cities have hotels
+            if (citiesWithHotels.length > 1) {
+              const hotelSummary = citiesWithHotels.map((c: any) => 
+                `• ${c.city_name}: ${c.hotel_selection.name}${c.hotel_selection.address ? ` (${c.hotel_selection.address})` : ''}`
+              ).join('\n');
+              sections.push(`\n${'='.repeat(40)}\n🏨 PER-CITY ACCOMMODATIONS\n${'='.repeat(40)}\n${hotelSummary}\n⚠️ Each city has its own hotel. Use the correct hotel as the daily base for that city's days.`);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`[FlightHotel] Failed to read trip_cities hotels:`, e);
+      }
     }
     
     if (hotel) {
@@ -3973,6 +4009,12 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
           const city = tripCities[i];
           const nights = city.nights || city.days_total || 1;
           
+          // Extract per-city hotel info
+          const cityHotel = city.hotel_selection as Record<string, unknown> | null;
+          const hotelName = cityHotel?.name as string | undefined;
+          const hotelAddress = cityHotel?.address as string | undefined;
+          const hotelNeighborhood = (cityHotel?.neighborhood as string) || hotelAddress;
+          
           for (let n = 0; n < nights; n++) {
             const isTransition = n === 0 && i > 0;
             const isSameCountry = isTransition && tripCities[i - 1].country === city.country;
@@ -3988,6 +4030,11 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
               transitionFrom: isTransition ? tripCities[i - 1].city_name : undefined,
               transitionTo: isTransition ? city.city_name : undefined,
               transportType: resolvedTransport,
+              hotelName,
+              hotelAddress,
+              hotelNeighborhood,
+              isFirstDayInCity: n === 0,
+              isLastDayInCity: n === nights - 1,
             });
           }
         }
@@ -4836,6 +4883,26 @@ These help the traveler prepare for their trip.
           : (context.isFirstTimeVisitor ?? true);
         const visitorLabel = cityFirstTime ? 'FIRST-TIME visitor' : 'RETURNING visitor';
         multiCityPrompt = `\n🌍 MULTI-CITY TRIP: This day is in **${dayDestination}${dayCountry ? `, ${dayCountry}` : ''}**. ALL activities MUST be located in ${dayDestination}.\n👤 VISITOR STATUS for ${dayDestination}: Traveler is a ${visitorLabel}.${cityFirstTime ? ' Include iconic landmarks and must-see attractions.' : ' Skip tourist staples — focus on hidden gems, local favorites, and deeper neighborhood exploration.'}`;
+        
+        // Inject per-city hotel context for geographic anchoring
+        if (dayCity.hotelName) {
+          const hotelArea = dayCity.hotelNeighborhood || dayCity.hotelAddress || '';
+          multiCityPrompt += `\n🏨 ACCOMMODATION in ${dayDestination}: ${dayCity.hotelName}${hotelArea ? ` (${hotelArea})` : ''}.`;
+          multiCityPrompt += `\n   ⚠️ Start each day from this hotel area and plan return in the evening.`;
+          
+          if (dayCity.isFirstDayInCity && !dayCity.isTransitionDay) {
+            // Very first city, first day — arrival logistics
+            multiCityPrompt += `\n   📍 ARRIVAL DAY: Traveler arrives and needs to get to the hotel. Include transit to ${dayCity.hotelName}, check-in (~30-60 min to settle in), THEN afternoon/evening activities near the hotel area.`;
+          } else if (dayCity.isFirstDayInCity && dayCity.isTransitionDay) {
+            // Transition day — handled by transition prompt, but add hotel check-in note
+            multiCityPrompt += `\n   📍 CHECK-IN DAY: After arriving in ${dayDestination}, traveler checks into ${dayCity.hotelName}. Allow time for check-in and settling before activities.`;
+          }
+          
+          if (dayCity.isLastDayInCity) {
+            multiCityPrompt += `\n   📍 CHECKOUT DAY: Traveler checks out of ${dayCity.hotelName} (typically by 11:00 AM). Plan morning around checkout — breakfast at/near hotel, pack and check out, then activities before departing.`;
+          }
+        }
+        
         if (isTransitionDay && dayCity.transitionFrom) {
           // Use the full transition day prompt builder instead of the weak 2-line fallback
           const transitionPrompt = buildTransitionDayPrompt({

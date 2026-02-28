@@ -34,6 +34,8 @@ interface FindMyHotelsDrawerProps {
   tripType?: string;
   className?: string;
   onHotelSelected?: () => void;
+  // Multi-city: when set, hotel is saved to trip_cities instead of trips
+  cityId?: string;
 }
 
 // Module-level lock to prevent multiple component instances from firing simultaneously
@@ -48,6 +50,7 @@ export function FindMyHotelsDrawer({
   tripType,
   className,
   onHotelSelected,
+  cityId,
 }: FindMyHotelsDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [hasPaid, setHasPaid] = useState(false);
@@ -139,14 +142,30 @@ export function FindMyHotelsDrawer({
     if (isSavingHotel) return;
     setIsSavingHotel(true);
     try {
-      await saveHotelSelection(tripId, {
+      const hotelData = {
         id: hotel.id,
         name: hotel.name,
         address: hotel.neighborhood || undefined,
         starRating: hotel.stars || undefined,
         pricePerNight: hotel.pricePerNight || undefined,
         imageUrl: hotel.imageUrl || undefined,
-      });
+      };
+
+      if (cityId) {
+        // Multi-city: save to trip_cities table
+        const { supabase } = await import('@/integrations/supabase/client');
+        const { error } = await supabase
+          .from('trip_cities')
+          .update({
+            hotel_selection: JSON.parse(JSON.stringify(hotelData)),
+            hotel_cost_cents: Math.round((hotel.pricePerNight || 0) * 100),
+          } as any)
+          .eq('id', cityId);
+        if (error) throw error;
+      } else {
+        // Single-city: save to trips table (existing behavior)
+        await saveHotelSelection(tripId, hotelData);
+      }
 
       setSelectedHotelId(hotel.id);
       toast.success(`${hotel.name} saved to your trip!`);
@@ -160,7 +179,7 @@ export function FindMyHotelsDrawer({
     } finally {
       setIsSavingHotel(false);
     }
-  }, [tripId, isSavingHotel, onHotelSelected]);
+  }, [tripId, cityId, isSavingHotel, onHotelSelected]);
 
   // Top 10 sorted by match score (already sorted by the hook)
   const displayHotels = recommendations.slice(0, 10);
