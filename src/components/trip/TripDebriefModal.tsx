@@ -274,17 +274,19 @@ export function TripDebriefModal({
               <Input
                 placeholder="What activity or experience?"
                 value={newHighlight.activity}
-                onChange={(e) => setNewHighlight({ ...newHighlight, activity: e.target.value })}
+                onChange={(e) => setNewHighlight(prev => ({ ...prev, activity: e.target.value }))}
+                onKeyDown={(e) => e.key === 'Enter' && newHighlight.activity && newHighlight.why && addHighlight()}
               />
               <Input
                 placeholder="Why was it great?"
                 value={newHighlight.why}
-                onChange={(e) => setNewHighlight({ ...newHighlight, why: e.target.value })}
+                onChange={(e) => setNewHighlight(prev => ({ ...prev, why: e.target.value }))}
+                onKeyDown={(e) => e.key === 'Enter' && newHighlight.activity && newHighlight.why && addHighlight()}
               />
               <Button
-                variant="outline"
+                variant={newHighlight.activity && newHighlight.why ? 'default' : 'outline'}
                 onClick={addHighlight}
-                disabled={!newHighlight.activity || !newHighlight.why}
+                disabled={!newHighlight.activity.trim() || !newHighlight.why.trim()}
                 className="w-full gap-2"
               >
                 <Plus className="w-4 h-4" />
