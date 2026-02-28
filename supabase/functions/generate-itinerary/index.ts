@@ -2897,12 +2897,31 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
     
     const hotelRaw = trip.hotel_selection;
     let hotel: HotelInfo | null = null;
+    let splitStayHotels: Array<HotelInfo & { checkInDate?: string; checkOutDate?: string }> = [];
     
-    // Handle array format (multi-hotel support)
+    // Handle array format (multi-hotel support / split stays)
     if (Array.isArray(hotelRaw) && hotelRaw.length > 0) {
-      // Use the first hotel for primary context
-      hotel = hotelRaw[0] as HotelInfo;
-      console.log(`[FlightHotel] Parsed hotel from array: ${hotel?.name || 'No name'}`);
+      // Check if this is a split stay (multiple hotels with dates)
+      if (hotelRaw.length > 1 && hotelRaw.some((h: any) => h.checkInDate)) {
+        splitStayHotels = hotelRaw as Array<HotelInfo & { checkInDate?: string; checkOutDate?: string }>;
+        hotel = hotelRaw[0] as HotelInfo; // primary for fallback
+        console.log(`[FlightHotel] Split stay detected: ${splitStayHotels.length} hotels`);
+        
+        // Build per-hotel schedule for the prompt
+        const hotelSchedule = splitStayHotels.map((h: any, i: number) => {
+          const accomType = h.accommodationType || 'hotel';
+          const accomEmoji = accomType === 'airbnb' ? '🏠' : accomType === 'rental' ? '🏡' : accomType === 'hostel' ? '🛏️' : '🏨';
+          return `  ${i + 1}. ${accomEmoji} ${h.name}${h.address ? ` — ${h.address}` : ''}${h.neighborhood ? ` (${h.neighborhood})` : ''}\n     Check-in: ${h.checkInDate || 'trip start'} | Check-out: ${h.checkOutDate || 'trip end'}${h.checkInTime ? ` | Time: ${h.checkInTime}` : ''}`;
+        }).join('\n');
+        
+        sections.push(`\n${'='.repeat(40)}\n🏨 SPLIT STAY — MULTIPLE ACCOMMODATIONS\n${'='.repeat(40)}\nThis traveler is doing a SPLIT STAY with ${splitStayHotels.length} different accommodations:\n${hotelSchedule}\n\n⚠️ CRITICAL SPLIT STAY RULES:\n• Each day MUST use the correct hotel based on the date ranges above.\n• On hotel transition days: start from the outgoing hotel, check out, then check in to the new hotel.\n• Activities should be clustered near the hotel that is active for that day.\n• Day 1 of each new hotel should include check-in logistics.\n• The last day at each hotel should include check-out before the transition.`);
+      } else {
+        // Single hotel in array format
+        hotel = hotelRaw[0] as HotelInfo;
+        hotelName = (hotel as any)?.name || '';
+        hotelAddress = (hotel as any)?.address || '';
+        console.log(`[FlightHotel] Parsed hotel from array: ${hotel?.name || 'No name'}`);
+      }
     } else if (hotelRaw && typeof hotelRaw === 'object' && !Array.isArray(hotelRaw)) {
       // Legacy single object format
       hotel = hotelRaw as HotelInfo;
@@ -2939,7 +2958,8 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
       }
     }
     
-    if (hotel) {
+    // For non-split-stay single hotels, add standard hotel context
+    if (hotel && splitStayHotels.length === 0) {
       const hotelInfo: string[] = [];
       const accomType = hotel.accommodationType || 'hotel';
       const accomEmoji = accomType === 'airbnb' ? '🏠' : accomType === 'rental' ? '🏡' : accomType === 'hostel' ? '🛏️' : '🏨';
@@ -2958,7 +2978,7 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
       if (hotelInfo.length > 0) {
         sections.push(`\n${'='.repeat(40)}\n${accomEmoji} ACCOMMODATION — ${accomLabel.toUpperCase()} (Use as daily starting/ending point)\n${'='.repeat(40)}\n${hotelInfo.join('\n')}\n⚠️ Start each day from the ${accomLabel.toLowerCase()} area and end nearby for easy return.\n⚠️ CRITICAL: Day 1 activities must NOT begin before check-in is complete. Standard check-in is 3:00 PM - do not schedule sightseeing before this unless arrival is very early.`);
       }
-    } else {
+    } else if (!hotel) {
       console.log(`[FlightHotel] ⚠️ NO HOTEL DATA FOUND - hotel_selection is empty or missing`);
       console.log(`[FlightHotel] Raw hotel_selection value:`, JSON.stringify(hotelRaw));
     }

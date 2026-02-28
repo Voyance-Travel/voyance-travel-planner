@@ -2061,18 +2061,39 @@ export default function Start() {
         flightSelection = buildFlightSelectionFromLegs(flightLegs, true);
       }
 
-      // Build hotel selection data
-      const hotelSelection = hotelChoice === 'own' && manualHotel.name ? [{
-        name: manualHotel.name,
-        address: manualHotel.address,
-        neighborhood: manualHotel.neighborhood,
-        checkInTime: manualHotel.checkInTime,
-        checkOutTime: manualHotel.checkOutTime,
-        pricePerNight: manualHotel.pricePerNight || undefined,
-        source: 'manual',
-      }] : null;
+      // Build hotel selection data — supports split stays (multiple hotels)
+      let hotelSelection: any[] | null = null;
+      let includeHotelInBudget = false;
 
-      const includeHotelInBudget = manualHotel.includeInBudget && manualHotel.pricePerNight && manualHotel.pricePerNight > 0;
+      if (hotelChoice === 'own') {
+        if (manualHotelList.length > 0) {
+          // Multi-hotel (split stay)
+          hotelSelection = manualHotelList.map(h => ({
+            name: h.name,
+            address: h.address,
+            neighborhood: h.neighborhood,
+            checkInTime: h.checkInTime,
+            checkOutTime: h.checkOutTime,
+            checkInDate: h.checkInDate,
+            checkOutDate: h.checkOutDate,
+            pricePerNight: h.pricePerNight || undefined,
+            source: 'manual',
+          }));
+          includeHotelInBudget = manualHotelList.some(h => h.includeInBudget && h.pricePerNight && h.pricePerNight > 0);
+        } else if (manualHotel.name) {
+          // Single hotel (legacy)
+          hotelSelection = [{
+            name: manualHotel.name,
+            address: manualHotel.address,
+            neighborhood: manualHotel.neighborhood,
+            checkInTime: manualHotel.checkInTime,
+            checkOutTime: manualHotel.checkOutTime,
+            pricePerNight: manualHotel.pricePerNight || undefined,
+            source: 'manual',
+          }];
+          includeHotelInBudget = !!(manualHotel.includeInBudget && manualHotel.pricePerNight && manualHotel.pricePerNight > 0);
+        }
+      }
 
       // Build multi-city name
       const tripName = isMultiCity && multiCityDestinations.length >= 2
