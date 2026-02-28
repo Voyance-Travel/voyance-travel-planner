@@ -4403,6 +4403,7 @@ export function EditorialItinerary({
                                   endDate={cityHotel.checkOutDate || endDate}
                                   travelers={travelers}
                                   onHotelAdded={onBookingAdded}
+                                  cityId={cityHotel.cityId}
                                 />
                               </div>
                             </div>

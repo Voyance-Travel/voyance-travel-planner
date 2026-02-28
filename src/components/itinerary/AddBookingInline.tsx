@@ -96,6 +96,8 @@ interface AddHotelInlineProps {
   existingHotel?: ManualHotelEntry;
   // Multi-hotel support
   existingHotels?: import('@/utils/hotelValidation').HotelBooking[];
+  // Multi-city: when set, hotel is saved to trip_cities instead of trips
+  cityId?: string;
 }
 
 // ============================================================================
@@ -631,7 +633,8 @@ export function AddHotelInline({
   onHotelAdded,
   editMode = false,
   existingHotel,
-  existingHotels = []
+  existingHotels = [],
+  cityId,
 }: AddHotelInlineProps) {
   const navigate = useNavigate();
   const [showManualEntry, setShowManualEntry] = useState(editMode);
@@ -752,12 +755,25 @@ export function AddHotelInline({
         parseLocalDate(a.checkInDate).getTime() - parseLocalDate(b.checkInDate).getTime()
       );
 
-      const { error } = await supabase
-        .from('trips')
-        .update({ hotel_selection: JSON.parse(JSON.stringify(updatedHotels)) })
-        .eq('id', tripId);
+      if (cityId) {
+        // Multi-city: save to trip_cities table
+        const { error } = await supabase
+          .from('trip_cities')
+          .update({
+            hotel_selection: JSON.parse(JSON.stringify(updatedHotels)),
+            hotel_cost_cents: Math.round((newHotel as any).pricePerNight ? (newHotel as any).pricePerNight * 100 : 0),
+          } as any)
+          .eq('id', cityId);
+        if (error) throw error;
+      } else {
+        // Single-city: save to trips table (existing behavior)
+        const { error } = await supabase
+          .from('trips')
+          .update({ hotel_selection: JSON.parse(JSON.stringify(updatedHotels)) })
+          .eq('id', tripId);
+        if (error) throw error;
+      }
 
-      if (error) throw error;
 
       toast.dismiss('hotel-enrich');
       toast.success(enrichment ? `${accomLabel} found and details updated!` : `${accomLabel} details saved!`);
@@ -782,6 +798,7 @@ export function AddHotelInline({
           endDate={endDate}
           travelers={travelers}
           onHotelSelected={onHotelAdded}
+          cityId={cityId}
         />
         <Button variant="outline" onClick={() => setShowManualEntry(true)}>
           {editMode ? 'Edit Details' : 'I Have a Hotel'}
