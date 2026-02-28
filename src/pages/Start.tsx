@@ -946,6 +946,7 @@ function FlightHotelStep({
   isMultiCity,
   multiCityDestinations,
   multiCityTransports,
+  setMultiCityTransports,
   transportSelections,
   onTransportSelect,
 }: {
@@ -981,6 +982,7 @@ function FlightHotelStep({
   isMultiCity?: boolean;
   multiCityDestinations?: TripDestination[];
   multiCityTransports?: InterCityTransport[];
+  setMultiCityTransports?: (transports: InterCityTransport[]) => void;
   transportSelections?: Record<number, { optionId: string; option: TransportOption }>;
   onTransportSelect?: (transitionIndex: number, option: TransportOption) => void;
 }) {
@@ -1102,6 +1104,13 @@ function FlightHotelStep({
                 return Object.keys(merged).length > 0 ? merged : undefined;
               })()}
               onLegsChange={handleMultiLegsChange}
+              onTransportModeChange={(transitionIndex, mode) => {
+                if (setMultiCityTransports && multiCityTransports) {
+                  setMultiCityTransports(multiCityTransports.map((t, i) =>
+                    i === transitionIndex ? { ...t, type: mode as InterCityTransport['type'] } : t
+                  ));
+                }
+              }}
               onOpenImport={() => setShowImportModal(true)}
               initialOutbound={outboundFlight}
               initialReturn={returnFlight}
@@ -2545,6 +2554,7 @@ export default function Start() {
                     isMultiCity={isMultiCity}
                     multiCityDestinations={multiCityDestinations}
                     multiCityTransports={multiCityTransports}
+                    setMultiCityTransports={setMultiCityTransports}
                     transportSelections={transportSelections}
                     onTransportSelect={handleTransportSelect}
                   />

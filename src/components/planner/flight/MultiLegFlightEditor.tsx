@@ -60,6 +60,8 @@ interface MultiLegFlightEditorProps {
   transportSelections?: Record<number, { type: LegTransportType }>;
   /** Called whenever legs change */
   onLegsChange: (legs: ManualFlightEntry[]) => void;
+  /** Called when user changes transport mode for an intercity leg */
+  onTransportModeChange?: (transitionIndex: number, mode: LegTransportType) => void;
   /** Called to open the import modal */
   onOpenImport: () => void;
   /** Current outbound/return/additional legs from parent (for init) */
@@ -214,6 +216,7 @@ export default function MultiLegFlightEditor({
   initialAdditionalLegs,
   importedLegs,
   importNonce,
+  onTransportModeChange,
 }: MultiLegFlightEditorProps) {
   const [slots, setSlots] = useState<FlightLegSlot[]>([]);
   const [initialized, setInitialized] = useState(false);
@@ -354,13 +357,10 @@ export default function MultiLegFlightEditor({
     });
   }, [initialized, importNonce, importedLegs, onLegsChange]);
 
-  // Sync changes to parent
+  // Sync changes to parent — emit all legs (including non-flight) so data isn't lost
   const syncToParent = useCallback((updatedSlots: FlightLegSlot[]) => {
-    // Only emit flight-type slots with data
-    const flightLegs = updatedSlots
-      .filter(s => s.transportType === 'flight')
-      .map(s => s.flight);
-    onLegsChange(flightLegs);
+    const allLegs = updatedSlots.map(s => s.flight);
+    onLegsChange(allLegs);
   }, [onLegsChange]);
 
   const updateSlotFlight = useCallback((slotId: string, patch: Partial<ManualFlightEntry>) => {
@@ -418,9 +418,14 @@ export default function MultiLegFlightEditor({
         s.id === slotId ? { ...s, transportType: type } : s
       );
       syncToParent(updated);
+      // Propagate mode change for intercity legs to parent
+      const slot = updated.find(s => s.id === slotId);
+      if (slot?.legType === 'intercity' && slot.transitionIndex >= 0 && onTransportModeChange) {
+        onTransportModeChange(slot.transitionIndex, type);
+      }
       return updated;
     });
-  }, [syncToParent]);
+  }, [syncToParent, onTransportModeChange]);
 
   // Route chain summary
   const routeChain = useMemo(() => {
