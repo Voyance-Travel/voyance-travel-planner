@@ -7,7 +7,7 @@
  * Completely distinct from Need to Know (which covers static basics like
  * visa, adapters, emergency numbers, language phrases).
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown, Sparkles, CalendarDays, TrainFront, Wallet,
@@ -15,7 +15,7 @@ import {
   AlertTriangle, ShoppingBag, Utensils, Ban, CheckCircle2,
   PiggyBank, EyeOff, GraduationCap, CreditCard, Brain,
   Thermometer, CloudRain, Check, X, Zap, Music, Palette,
-  Trophy, Theater, Gift, Pin, Coins, HandCoins,
+  Trophy, Theater, Gift, Pin, Coins, HandCoins, RefreshCw,
   ThumbsUp, ThumbsDown, Building2, Coffee, Navigation,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -106,6 +106,7 @@ interface TravelIntelCardProps {
   hotelArea?: string;
   className?: string;
   defaultExpanded?: boolean;
+  tripId?: string;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -133,43 +134,53 @@ export default function TravelIntelCard({
   hotelArea,
   className,
   defaultExpanded = false,
+  tripId,
 }: TravelIntelCardProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [intel, setIntel] = useState<TravelIntelData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isCached, setIsCached] = useState(false);
   const fetchedRef = useRef(false);
 
-  useEffect(() => {
-    if (fetchedRef.current || !city || !startDate || !endDate) return;
+  const fetchIntel = useCallback(async (forceRefresh = false) => {
+    if (!city || !startDate || !endDate) return;
 
-    const fetchIntel = async () => {
+    if (forceRefresh) {
+      setIsRefreshing(true);
+    } else {
       setIsLoading(true);
-      setError(null);
+    }
+    setError(null);
 
-      try {
-        const { data, error: fnError } = await supabase.functions.invoke('generate-travel-intel', {
-          body: { destination: city, country, startDate, endDate, travelers, archetype, interests, hotelArea },
-        });
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('generate-travel-intel', {
+        body: { destination: city, country, startDate, endDate, travelers, archetype, interests, hotelArea, tripId, forceRefresh },
+      });
 
-        if (fnError) throw fnError;
+      if (fnError) throw fnError;
 
-        if (data?.success && data?.data) {
-          setIntel(data.data);
-          fetchedRef.current = true;
-        } else {
-          setError(data?.error || 'Failed to load intel');
-        }
-      } catch (err) {
-        console.error('Failed to fetch travel intel:', err);
-        setError('Could not load travel intelligence');
-      } finally {
-        setIsLoading(false);
+      if (data?.success && data?.data) {
+        setIntel(data.data);
+        setIsCached(!!data.cached);
+        fetchedRef.current = true;
+      } else {
+        setError(data?.error || 'Failed to load intel');
       }
-    };
+    } catch (err) {
+      console.error('Failed to fetch travel intel:', err);
+      setError('Could not load travel intelligence');
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [city, country, startDate, endDate, travelers, archetype, interests, hotelArea, tripId]);
 
-    fetchIntel();
-  }, [city, country, startDate, endDate, travelers, archetype, interests, hotelArea]);
+  useEffect(() => {
+    if (fetchedRef.current) return;
+    fetchIntel(false);
+  }, [fetchIntel]);
 
   // ── Loading / Error states ──
   if (isLoading) {
@@ -193,12 +204,12 @@ export default function TravelIntelCard({
   return (
     <div className={cn('rounded-xl border border-border bg-card overflow-hidden', className)}>
       {/* Header */}
-      <button
-        type="button"
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between p-4 hover:bg-accent/30 transition-colors"
-      >
-        <div className="flex items-center gap-2.5">
+      <div className="flex items-center justify-between p-4">
+        <button
+          type="button"
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex-1 flex items-center gap-2.5 hover:opacity-80 transition-opacity"
+        >
           <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
             <Sparkles className="w-4 h-4 text-primary" />
           </div>
@@ -206,15 +217,37 @@ export default function TravelIntelCard({
             <span className="text-sm font-medium text-foreground">Travel Intel</span>
             <span className="text-xs text-muted-foreground ml-2">{city}</span>
           </div>
-          <Badge variant="secondary" className="text-[10px] ml-1 px-1.5 py-0">
-            Live
-          </Badge>
+          {isCached && (
+            <Badge variant="outline" className="text-[10px] ml-1 px-1.5 py-0 text-muted-foreground">
+              Cached
+            </Badge>
+          )}
+        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              fetchIntel(true);
+            }}
+            disabled={isRefreshing}
+            className="p-1.5 rounded-md hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground disabled:opacity-50"
+            title="Refresh Travel Intel"
+          >
+            <RefreshCw className={cn('w-3.5 h-3.5', isRefreshing && 'animate-spin')} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="p-1.5"
+          >
+            <ChevronDown className={cn(
+              'w-4 h-4 text-muted-foreground transition-transform duration-200',
+              isExpanded && 'rotate-180',
+            )} />
+          </button>
         </div>
-        <ChevronDown className={cn(
-          'w-4 h-4 text-muted-foreground transition-transform duration-200',
-          isExpanded && 'rotate-180',
-        )} />
-      </button>
+      </div>
 
       <AnimatePresence>
         {isExpanded && (

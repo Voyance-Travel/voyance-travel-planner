@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
@@ -15,17 +16,17 @@ interface TravelIntelRequest {
   archetype?: string;
   interests?: string[];
   hotelArea?: string;
+  tripId?: string;
+  forceRefresh?: boolean;
 }
 
 serve(async (req) => {
-  const costTracker = trackCost('generate_travel_intel', 'perplexity/sonar-pro');
-
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { destination, country, startDate, endDate, travelers, archetype, interests, hotelArea } = await req.json() as TravelIntelRequest;
+    const { destination, country, startDate, endDate, travelers, archetype, interests, hotelArea, tripId, forceRefresh } = await req.json() as TravelIntelRequest;
 
     if (!destination || !startDate || !endDate) {
       return new Response(
@@ -33,6 +34,39 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // ── Check cache first (if tripId provided and not forcing refresh) ──
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+    if (tripId && !forceRefresh) {
+      const { data: cached } = await supabaseAdmin
+        .from('travel_intel_cache')
+        .select('intel_data, destination, start_date, end_date')
+        .eq('trip_id', tripId)
+        .single();
+
+      if (cached?.intel_data) {
+        // Return cached data if destination and dates match
+        if (cached.destination === destination && cached.start_date === startDate && cached.end_date === endDate) {
+          console.log(`Returning cached travel intel for trip ${tripId}`);
+          return new Response(
+            JSON.stringify({
+              success: true,
+              data: cached.intel_data,
+              destination: country ? `${destination}, ${country}` : destination,
+              dates: { startDate, endDate },
+              cached: true,
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+    }
+
+    // ── No cache hit — call Perplexity ──
+    const costTracker = trackCost('generate_travel_intel', 'perplexity/sonar-pro');
 
     const apiKey = Deno.env.get('PERPLEXITY_API_KEY');
     if (!apiKey) {
@@ -49,7 +83,7 @@ serve(async (req) => {
     const interestContext = interests?.length ? `Their interests include: ${interests.join(', ')}.` : '';
     const hotelContext = hotelArea ? `They are staying near ${hotelArea}.` : '';
 
-    console.log(`Generating travel intel for ${locationContext}, ${startDate} to ${endDate}`);
+    console.log(`Generating travel intel for ${locationContext}, ${startDate} to ${endDate}${forceRefresh ? ' (forced refresh)' : ''}`);
 
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
@@ -201,29 +235,46 @@ Focus on:
         let jsonStr = jsonMatch[0];
         
         // Attempt repair: fix common truncation issues from LLM output
-        // Balance unclosed brackets/braces
         const openBraces = (jsonStr.match(/\{/g) || []).length;
         const closeBraces = (jsonStr.match(/\}/g) || []).length;
         const openBrackets = (jsonStr.match(/\[/g) || []).length;
         const closeBrackets = (jsonStr.match(/\]/g) || []).length;
         
-        // Remove trailing comma before attempting to close
         jsonStr = jsonStr.replace(/,\s*$/, '');
         
-        // Close unclosed strings - if odd number of unescaped quotes, add one
         const unescapedQuotes = jsonStr.match(/(?<!\\)"/g) || [];
         if (unescapedQuotes.length % 2 !== 0) {
           jsonStr += '"';
         }
         
-        // Close brackets then braces
         for (let i = 0; i < openBrackets - closeBrackets; i++) jsonStr += ']';
         for (let i = 0; i < openBraces - closeBraces; i++) jsonStr += '}';
         
-        // Remove trailing commas before closing brackets/braces
         jsonStr = jsonStr.replace(/,\s*([}\]])/g, '$1');
         
         const intelData = JSON.parse(jsonStr);
+
+        // ── Save to cache if tripId provided ──
+        if (tripId) {
+          const { error: upsertError } = await supabaseAdmin
+            .from('travel_intel_cache')
+            .upsert({
+              trip_id: tripId,
+              destination,
+              start_date: startDate,
+              end_date: endDate,
+              request_params: { country, travelers, archetype, interests, hotelArea },
+              intel_data: intelData,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'trip_id' });
+
+          if (upsertError) {
+            console.error('Failed to cache travel intel:', upsertError);
+          } else {
+            console.log(`Cached travel intel for trip ${tripId}`);
+          }
+        }
+
         return new Response(
           JSON.stringify({
             success: true,
@@ -231,6 +282,7 @@ Focus on:
             destination: locationContext,
             dates: { startDate, endDate },
             citations: data.citations,
+            cached: false,
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
@@ -240,7 +292,6 @@ Focus on:
       console.error('Raw content length:', content.length, 'first 500 chars:', content.substring(0, 500));
     }
 
-    // Return partial success instead of 500 so the UI can still function
     return new Response(
       JSON.stringify({ success: false, error: 'Travel intelligence is temporarily unavailable. Please try again.' }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

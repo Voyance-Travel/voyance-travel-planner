@@ -1477,6 +1477,7 @@ export default function TripDetail() {
                         travelers={trip.travelers || 2}
                         archetype={(trip as any).travel_style || undefined}
                         interests={(trip as any).interests || undefined}
+                        tripId={trip.id}
                         className="mb-4"
                       />
                     ))
@@ -1489,6 +1490,7 @@ export default function TripDetail() {
                       travelers={trip.travelers || 2}
                       archetype={(trip as any).travel_style || undefined}
                       interests={(trip as any).interests || undefined}
+                      tripId={trip.id}
                       className="mb-4"
                     />
                   )}
