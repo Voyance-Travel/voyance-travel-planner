@@ -2,13 +2,17 @@
  * ArchetypeDetailSheet - Slide-out sheet showing full archetype details
  */
 import { motion } from 'framer-motion';
-import { X, MapPin, Heart, ShieldX, Lightbulb, Sparkles } from 'lucide-react';
+import { X, MapPin, Heart, ShieldX, Lightbulb, Sparkles, Share2, Send } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { type ArchetypeDetail } from '@/data/archetypeDetailContent';
+import { useNavigate } from 'react-router-dom';
+import { ROUTES } from '@/config/routes';
+import { toast } from 'sonner';
 
 interface ArchetypeDetailSheetProps {
   archetype: ArchetypeDetail | null;
@@ -17,7 +21,23 @@ interface ArchetypeDetailSheetProps {
 }
 
 export default function ArchetypeDetailSheet({ archetype, open, onOpenChange }: ArchetypeDetailSheetProps) {
+  const navigate = useNavigate();
+
   if (!archetype) return null;
+
+  const handleShare = async () => {
+    const shareText = `I might be a ${archetype.name}! "${archetype.tagline}" — Discover your Travel DNA on Voyance`;
+    const shareUrl = `${window.location.origin}/archetypes`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `Travel DNA: ${archetype.name}`, text: shareText, url: shareUrl });
+      } catch { /* cancelled */ }
+    } else {
+      await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`);
+      toast.success('Copied to clipboard!');
+    }
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -180,6 +200,63 @@ export default function ArchetypeDetailSheet({ archetype, open, onOpenChange }: 
                 </section>
               </>
             )}
+
+            {/* Share & CTA Section */}
+            <Separator className="mb-8" />
+            <section className="space-y-4">
+              {/* Is this you? */}
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-5 text-center space-y-3">
+                <p className="text-lg font-serif font-semibold text-foreground">Is this you?</p>
+                <p className="text-sm text-muted-foreground">
+                  Take the Travel DNA quiz to find out which of our 29 archetypes matches your travel style.
+                </p>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => {
+                    onOpenChange(false);
+                    navigate(ROUTES.QUIZ);
+                  }}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Take the Quiz
+                </Button>
+              </div>
+
+              {/* Share */}
+              <div className="flex items-center justify-center gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={handleShare}
+                >
+                  <Share2 className="h-4 w-4" />
+                  Share this archetype
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-2 text-muted-foreground"
+                  onClick={async () => {
+                    const inviteText = `Think you might be a ${archetype.name}? Take the Travel DNA quiz and find out!`;
+                    const inviteUrl = `${window.location.origin}${ROUTES.QUIZ}`;
+                    if (navigator.share) {
+                      try {
+                        await navigator.share({ title: 'Take the Travel DNA Quiz', text: inviteText, url: inviteUrl });
+                      } catch { /* cancelled */ }
+                    } else {
+                      await navigator.clipboard.writeText(`${inviteText}\n${inviteUrl}`);
+                      toast.success('Quiz invite copied!');
+                    }
+                  }}
+                >
+                  <Send className="h-4 w-4" />
+                  Invite a friend
+                </Button>
+              </div>
+            </section>
 
           </div>
         </ScrollArea>
