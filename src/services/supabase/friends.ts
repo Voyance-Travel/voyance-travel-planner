@@ -117,13 +117,22 @@ export async function sendFriendRequest(handle: string): Promise<{ success: bool
       if (error) throw error;
       return { success: true, status: 'accepted' };
     }
-    // If previously declined, allow resending by updating to pending
+    // If previously declined, delete the old row and create a fresh request
     if (existing.status === 'declined') {
-      const { error } = await supabase
+      const { error: deleteError } = await supabase
         .from('friendships')
-        .update({ status: 'pending', requester_id: currentUserId, addressee_id: targetProfile.id })
+        .delete()
         .eq('id', existing.id);
-      if (error) throw error;
+      if (deleteError) throw deleteError;
+      
+      const { error: insertError } = await supabase
+        .from('friendships')
+        .insert({
+          requester_id: currentUserId,
+          addressee_id: targetProfile.id,
+          status: 'pending',
+        });
+      if (insertError) throw insertError;
       return { success: true, status: 'pending' };
     }
   }
@@ -179,13 +188,22 @@ export async function sendFriendRequestByEmail(email: string): Promise<{ success
       if (error) throw error;
       return { success: true, status: 'accepted' };
     }
-    // If previously declined, allow resending by updating to pending
+    // If previously declined, delete the old row and create a fresh request
     if (existing.status === 'declined') {
-      const { error } = await supabase
+      const { error: deleteError } = await supabase
         .from('friendships')
-        .update({ status: 'pending', requester_id: currentUserId, addressee_id: targetUserId })
+        .delete()
         .eq('id', existing.id);
-      if (error) throw error;
+      if (deleteError) throw deleteError;
+      
+      const { error: insertError } = await supabase
+        .from('friendships')
+        .insert({
+          requester_id: currentUserId,
+          addressee_id: targetUserId,
+          status: 'pending',
+        });
+      if (insertError) throw insertError;
       return { success: true, status: 'pending' };
     }
   }
