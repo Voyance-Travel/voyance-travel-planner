@@ -6,13 +6,14 @@ import Head from '@/components/common/Head';
 import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
 import ScrollTarget from '@/components/common/ScrollTarget';
+import ExploreDestinationCard from '@/components/explore/ExploreDestinationCard';
 import FilterPanel from '@/components/explore/FilterPanel';
 import HeroSection from '@/components/explore/sections/HeroSection';
 
 import ExploreByStyle from '@/components/explore/sections/ExploreByStyle';
 
 import VoyanceGuides from '@/components/explore/sections/VoyanceGuides';
-import DestinationHeroImage from '@/components/common/DestinationHeroImage';
+
 import { scrollToTop } from '@/utils/scrollUtils';
 import { destinations as allDestinations } from '@/lib/destinations';
 import { buildRoute } from '@/config/routes';
@@ -286,40 +287,12 @@ export default function Explore() {
             ) : displayDestinations.length > 0 ? (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {displayDestinations.map((destination, index) => (
-                  <motion.div
+                  <ExploreDestinationCard
                     key={destination.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="group cursor-pointer"
-                    onClick={() => handleDestinationClick(destination)}
-                  >
-                    <div className="relative aspect-[4/3] rounded-xl overflow-hidden mb-3">
-                      <DestinationHeroImage
-                        destinationName={`${destination.city}, ${destination.country}`}
-                        alt={destination.city}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        overlayGradient=""
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                      <div className="absolute bottom-3 left-3 right-3">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-white text-lg">
-                            {destination.city}
-                          </h3>
-                          {destination.source === 'featured' && (
-                            <Sparkles className="h-3 w-3 text-amber-400" />
-                          )}
-                        </div>
-                        <p className="text-sm text-white/80">
-                          {destination.country} • {destination.region}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted-foreground line-clamp-2">
-                      {destination.tagline}
-                    </p>
-                  </motion.div>
+                    destination={destination}
+                    index={index}
+                    onClick={handleDestinationClick}
+                  />
                 ))}
               </div>
             ) : (
