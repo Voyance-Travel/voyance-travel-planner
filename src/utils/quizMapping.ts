@@ -614,12 +614,12 @@ function getArchetypeDisplayName(id: string): string {
     digital_explorer: 'The Digital Explorer',
     explorer: 'The Explorer',
     // CONNECTOR category
-    social_butterfly: 'The Connection Curator',
+    social_butterfly: 'The Social Butterfly',
     family_architect: 'The Family Architect',
     romantic_curator: 'The Romantic Curator',
     story_seeker: 'The Story Seeker',
     // ACHIEVER category
-    bucket_list_conqueror: 'The Milestone Voyager',
+    bucket_list_conqueror: 'The Bucket List Conqueror',
     adrenaline_architect: 'The Adrenaline Architect',
     collection_curator: 'The Collection Curator',
     status_seeker: 'The Luxe Achiever',
@@ -628,7 +628,7 @@ function getArchetypeDisplayName(id: string): string {
     retreat_regular: 'The Retreat Regular',
     beach_therapist: 'The Beach Therapist',
     slow_traveler: 'The Slow Traveler',
-    escape_artist: 'The Reset Traveler',
+    escape_artist: 'The Escape Artist',
     // CURATOR category
     culinary_cartographer: 'The Culinary Cartographer',
     art_aficionado: 'The Art Aficionado',
@@ -636,10 +636,10 @@ function getArchetypeDisplayName(id: string): string {
     eco_ethicist: 'The Eco Ethicist',
     curated_luxe: 'Curated Luxe',
     // TRANSFORMER category
-    gap_year_graduate: 'The Horizon Chaser',
+    gap_year_graduate: 'The Gap Year Graduate',
     midlife_explorer: 'The Unscripted Explorer',
     sabbatical_scholar: 'The Sabbatical Scholar',
-    healing_journeyer: 'The Restoration Seeker',
+    healing_journeyer: 'The Healing Journeyer',
     retirement_ranger: 'The Boundless Explorer',
     // CONNECTOR (additional)
     community_builder: 'The Community Builder',
