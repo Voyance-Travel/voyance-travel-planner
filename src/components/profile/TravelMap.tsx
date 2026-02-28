@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MapPin, 
@@ -17,6 +18,7 @@ import worldSvgUrl from '@/assets/world.svg';
 interface TravelMapProps {
   userId: string;
   className?: string;
+  refreshKey?: number;
 }
 
 interface TripDestination {
@@ -153,40 +155,24 @@ function getCoordinates(destination: string): { lat: number; lng: number } | nul
   return null;
 }
 
-export default function TravelMap({ userId, className }: TravelMapProps) {
-  const [trips, setTrips] = useState<TripDestination[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+export default function TravelMap({ userId, className, refreshKey }: TravelMapProps) {
   const [selectedDestination, setSelectedDestination] = useState<Destination | null>(null);
   const [filter, setFilter] = useState<'all' | 'visited' | 'upcoming'>('all');
 
-  // Always fetch real data - no demo mode fallback
-  useEffect(() => {
-    async function loadTrips() {
-      if (!userId) {
-        setTrips([]);
-        setIsLoading(false);
-        return;
-      }
-      
-      try {
-        const { data, error } = await supabase
-          .from('trips')
-          .select('id, destination, destination_country, status, start_date, end_date')
-          .eq('user_id', userId)
-          .order('start_date', { ascending: false });
-        
-        if (error) throw error;
-        setTrips(data || []);
-      } catch (error) {
-        console.error('Failed to load trips:', error);
-        setTrips([]);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    
-    loadTrips();
-  }, [userId]);
+  const { data: trips = [], isLoading } = useQuery({
+    queryKey: ['travelMapTrips', userId, refreshKey],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('trips')
+        .select('id, destination, destination_country, status, start_date, end_date')
+        .eq('user_id', userId)
+        .order('start_date', { ascending: false });
+      if (error) throw error;
+      return (data || []) as TripDestination[];
+    },
+    enabled: !!userId,
+    staleTime: 30_000, // Refetch after 30s of staleness
+  });
 
   // Convert trips to destinations with coordinates
   const destinations = useMemo(() => {
