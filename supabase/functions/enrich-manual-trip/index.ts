@@ -106,6 +106,47 @@ function buildResearchContext(itinerary: any): string {
 }
 
 /**
+ * After a gateway timeout, generation may still complete in the backend.
+ * Reconcile by polling the trip row for a fresh ready itinerary.
+ */
+async function waitForGenerationCompletionAfterTimeout(
+  supabase: any,
+  tripId: string,
+  baselineTripUpdatedAt?: string | null,
+): Promise<boolean> {
+  const MAX_CHECKS = 18;
+  const INTERVAL_MS = 5000;
+  const baselineTs = baselineTripUpdatedAt ? Date.parse(baselineTripUpdatedAt) : 0;
+
+  for (let i = 1; i <= MAX_CHECKS; i++) {
+    await new Promise((resolve) => setTimeout(resolve, INTERVAL_MS));
+
+    const { data, error } = await supabase
+      .from("trips")
+      .select("itinerary_status, itinerary_data, updated_at")
+      .eq("id", tripId)
+      .maybeSingle();
+
+    if (error || !data) continue;
+
+    const updatedTs = data.updated_at ? Date.parse(data.updated_at as string) : 0;
+    const hasFreshUpdate = baselineTs ? updatedTs > baselineTs : true;
+    const status = String(data.itinerary_status || "").toLowerCase();
+
+    const itinerary = data.itinerary_data as any;
+    const days = itinerary?.days || itinerary?.itinerary?.days || [];
+    const hasDays = Array.isArray(days) && days.length > 0;
+
+    if (hasFreshUpdate && (status === "ready" || status === "completed") && hasDays) {
+      console.log(`[enrich-manual-trip:bg] Recovered after timeout: itinerary became ready (check ${i}/${MAX_CHECKS})`);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Background generation task.
  * Runs AFTER the HTTP response has been sent to the client.
  */
@@ -117,11 +158,14 @@ async function runGenerationInBackground(
   userId: string,
   updatedMetadata: any,
   pendingChargeId: string | null,
+  baselineTripUpdatedAt?: string | null,
 ) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
     console.log(`[enrich-manual-trip:bg] Starting generate-itinerary for trip ${tripId}`);
+
+    let generateData: any = null;
 
     const generateResponse = await fetch(`${supabaseUrl}/functions/v1/generate-itinerary`, {
       method: "POST",
@@ -140,15 +184,39 @@ async function runGenerationInBackground(
     if (!generateResponse.ok) {
       const errText = await generateResponse.text();
       console.error(`[enrich-manual-trip:bg] generate-itinerary returned ${generateResponse.status}: ${errText}`);
-      throw new Error(`Generation failed: ${generateResponse.status}`);
+
+      const isGatewayTimeout = [408, 504, 524].includes(generateResponse.status);
+      if (isGatewayTimeout) {
+        console.warn(`[enrich-manual-trip:bg] Timeout status ${generateResponse.status} — checking if generation completed anyway...`);
+        const recovered = await waitForGenerationCompletionAfterTimeout(
+          supabase,
+          tripId,
+          baselineTripUpdatedAt,
+        );
+
+        if (recovered) {
+          generateData = {
+            success: true,
+            recoveredFromTimeout: true,
+            totalDays: 0,
+            totalActivities: 0,
+          };
+        } else {
+          throw new Error(`Generation failed: ${generateResponse.status}`);
+        }
+      } else {
+        throw new Error(`Generation failed: ${generateResponse.status}`);
+      }
     }
 
-    const generateData = await generateResponse.json();
+    if (!generateData) {
+      generateData = await generateResponse.json();
 
-    if (!generateData.success) {
-      const errMsg = generateData.error || "Generation returned failure status";
-      console.error(`[enrich-manual-trip:bg] generate-itinerary failed:`, errMsg);
-      throw new Error(errMsg);
+      if (!generateData.success) {
+        const errMsg = generateData.error || "Generation returned failure status";
+        console.error(`[enrich-manual-trip:bg] generate-itinerary failed:`, errMsg);
+        throw new Error(errMsg);
+      }
     }
 
     console.log(`[enrich-manual-trip:bg] ✓ Smart Finish complete: ${generateData.totalDays} days, ${generateData.totalActivities} activities`);
@@ -163,6 +231,9 @@ async function runGenerationInBackground(
 
     const savedItinerary = savedTrip?.itinerary_data;
     const savedDays = savedItinerary?.days || savedItinerary?.itinerary?.days || [];
+    const generatedActivityCount = Array.isArray(savedDays)
+      ? savedDays.reduce((sum: number, day: any) => sum + ((day?.activities?.length as number) || 0), 0)
+      : 0;
     const SLOT_LABELS = /^(morning|afternoon|evening|dinner|lunch|breakfast|night|brunch|midday)$/i;
     const HH_MM = /^\d{1,2}:\d{2}/;
 
@@ -218,7 +289,7 @@ async function runGenerationInBackground(
       ...updatedMetadata,
       smartFinishCompleted: true,
       smartFinishCompletedAt: new Date().toISOString(),
-      smartFinishTotalActivities: generateData.totalActivities || 0,
+      smartFinishTotalActivities: generateData.totalActivities || generatedActivityCount || 0,
       smartFinishStatus: "success",
       smartFinishQualityWarnings: qualityIssues.length > 0 ? qualityIssues : undefined,
     };
@@ -235,7 +306,13 @@ async function runGenerationInBackground(
     if (pendingChargeId) {
       await supabase
         .from("pending_credit_charges")
-        .update({ status: "completed", resolved_at: new Date().toISOString(), resolution_note: "Smart Finish succeeded" })
+        .update({
+          status: "completed",
+          resolved_at: new Date().toISOString(),
+          resolution_note: generateData?.recoveredFromTimeout
+            ? "Smart Finish succeeded (recovered after gateway timeout)"
+            : "Smart Finish succeeded",
+        })
         .eq("id", pendingChargeId);
     }
   } catch (err) {
@@ -294,7 +371,7 @@ serve(async (req) => {
     // --- Load trip ---
     const { data: trip, error: tripError } = await supabase
       .from("trips")
-      .select("id, itinerary_data, destination, user_id, start_date, end_date, metadata, smart_finish_purchased, creation_source")
+      .select("id, itinerary_data, destination, user_id, start_date, end_date, metadata, smart_finish_purchased, creation_source, updated_at")
       .eq("id", tripId)
       .single();
 
@@ -421,6 +498,7 @@ serve(async (req) => {
       user.id,
       updatedMetadata,
       pendingChargeId,
+      trip.updated_at,
     );
 
     // Use waitUntil if available (Supabase Edge Runtime), otherwise just fire-and-forget
