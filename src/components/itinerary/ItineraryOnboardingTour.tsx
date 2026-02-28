@@ -160,17 +160,18 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
     return () => { cancelled = true; };
   }, [user]);
 
-  // Try to acquire the popup slot whenever we should show and the active popup changes
+  // Try to acquire the popup slot once when ready — don't re-trigger on every popup change
   useEffect(() => {
     if (!shouldShowWhenAllowed || isVisible) return;
 
     const timer = setTimeout(() => {
       const allowed = requestPopup('itinerary_tour');
       if (allowed) setIsVisible(true);
-    }, 1000);
+    }, 1500);
 
     return () => clearTimeout(timer);
-  }, [shouldShowWhenAllowed, isVisible, activePopup, requestPopup]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldShowWhenAllowed]);
 
   // Update highlight position when step changes
   useEffect(() => {
