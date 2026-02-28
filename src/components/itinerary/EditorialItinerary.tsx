@@ -3077,159 +3077,7 @@ export function EditorialItinerary({
     <div className="space-y-6">
       {/* Onboarding Tour for first-time visitors */}
       <ItineraryOnboardingTour tripId={tripId} />
-      {/* Trip Summary Bar - Editorial Style - Sticky for visibility */}
-      <div className="py-3 sm:py-4 px-3 sm:px-4 bg-gradient-to-r from-primary/5 via-background to-accent/5 rounded-xl sticky top-16 z-30 backdrop-blur-sm border border-border/50 shadow-sm overflow-hidden">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-          {/* Left: Trip info pills */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-hide">
-            <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md bg-background border border-border text-xs sm:text-sm shrink-0">
-              <Calendar className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-primary" />
-              <span className="font-medium text-foreground">{days.length} Days</span>
-            </div>
-            <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md bg-background border border-border text-xs sm:text-sm shrink-0">
-              <Users className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-primary" />
-              <span className="font-medium text-foreground">{travelers} {travelers === 1 ? 'Guest' : 'Guests'}</span>
-            </div>
-            {/* Planning Progress */}
-            {(() => {
-              const lockedDays = days.filter(d => d.activities.length > 0 && d.activities.every(a => a.isLocked)).length;
-              const totalDays = days.length;
-              if (lockedDays === 0) return null;
-              const allDone = lockedDays === totalDays;
-              return (
-                <div className={cn(
-                  "flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md border text-xs sm:text-sm shrink-0 transition-colors",
-                  allDone 
-                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400" 
-                    : "bg-background border-border"
-                )}>
-                  <Check className={cn("h-3 sm:h-3.5 w-3 sm:w-3.5", allDone ? "text-emerald-500" : "text-primary")} />
-                  <span className="font-medium">{lockedDays}/{totalDays} Planned</span>
-                </div>
-              );
-            })()}
-            {/* Unlock Status Pill */}
-            {(() => {
-              const lockedDayCount = days.filter(d => !canViewPremiumContentForDay(entitlements, d.dayNumber)).length;
-              const unlockedCount = days.length - lockedDayCount;
-              if (lockedDayCount === 0) return null;
-              return (
-                <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md bg-background border border-border text-xs sm:text-sm shrink-0">
-                  <Unlock className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-primary" />
-                  <span className="font-medium text-foreground">{unlockedCount} Unlocked</span>
-                  <span className="text-muted-foreground">·</span>
-                  <Lock className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-muted-foreground" />
-                  <span className="text-muted-foreground">{lockedDayCount} Locked</span>
-                </div>
-              );
-            })()}
-            {/* Credit Balance Pill — Clickable with Quick Buy Popover */}
-            {creditData && (
-              <CreditQuickBuy currentBalance={totalCredits} tripId={tripId}>
-                <button className="flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md bg-primary/5 border border-primary/20 text-xs sm:text-sm shrink-0 cursor-pointer hover:bg-primary/10 hover:border-primary/30 transition-colors">
-                  <Coins className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-primary" />
-                  <span className="font-medium text-primary">{totalCredits}</span>
-                  <span className="text-muted-foreground hidden sm:inline">credits</span>
-                </button>
-              </CreditQuickBuy>
-            )}
-          </div>
-          
-          {/* Right: Cost + Actions */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-hide">
-            {effectiveIsEditable && hasChanges && (
-              <Badge variant="outline" className="text-amber-600 border-amber-400 bg-amber-50 dark:bg-amber-950/50 animate-pulse text-xs shrink-0">
-                <AlertCircle className="h-3 w-3 mr-1" />
-                Unsaved
-              </Badge>
-            )}
-            {/* Currency Toggle + Total */}
-            <div className="flex items-center gap-0 shrink-0">
-              {localCurrency !== 'USD' && (
-                <button
-                  onClick={() => setShowLocalCurrency((v) => !v)}
-                  data-tour="currency-toggle"
-                  className="flex items-center gap-1 px-1.5 sm:px-2 py-1 sm:py-1.5 rounded-l-md bg-secondary/50 border border-r-0 border-border text-xs font-medium hover:bg-secondary transition-colors"
-                  title={`Switch to ${showLocalCurrency ? 'USD' : localCurrency}`}
-                >
-                  <span className={showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>
-                    {localCurrency}
-                  </span>
-                  <span className="text-muted-foreground/50">/</span>
-                  <span className={!showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>
-                    USD
-                  </span>
-                </button>
-              )}
-              <div className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 bg-primary/10 border border-primary/20 text-xs sm:text-sm ${localCurrency !== 'USD' ? 'rounded-r-md' : 'rounded-md'}`}>
-                <span className="text-muted-foreground hidden sm:inline">Total:</span>
-                <span className="font-semibold text-primary">{formatCurrency(displayCost(totalCost), tripCurrency)}</span>
-              </div>
-            </div>
-            
-            {/* Share Button */}
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => setShowShareModal(true)}
-              data-tour="share-button"
-              className="gap-1 sm:gap-1.5 h-7 sm:h-8 text-xs px-2 sm:px-3 shrink-0"
-            >
-              <Share2 className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
-              <span className="hidden sm:inline">Share</span>
-            </Button>
-            
-            {effectiveIsEditable && (
-              <>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => {
-                        if (entitlements?.can_optimize_routes) {
-                          openOptimizeDialog();
-                        } else {
-                          setShowRouteUpgrade(true);
-                        }
-                      }} 
-                      disabled={isOptimizing || days.length === 0} 
-                      data-tour="optimize-button"
-                      className="gap-1 sm:gap-1.5 h-7 sm:h-8 text-xs px-2 sm:px-3 shrink-0"
-                    >
-                      {isOptimizing ? <RefreshCw className="h-3 sm:h-3.5 w-3 sm:w-3.5 animate-spin" /> : <Route className="h-3 sm:h-3.5 w-3 sm:w-3.5" />}
-                      <span className="hidden sm:inline">{isOptimizing ? 'Optimizing...' : 'Optimize'}</span>
-                      {!entitlements?.can_optimize_routes && <Lock className="h-3 w-3 ml-0.5 opacity-60" />}
-                      {entitlements?.can_optimize_routes && !routeOptCost.isFirstTrip && routeOptCost.cost > 0 && (
-                        <span className="hidden sm:inline-flex items-center gap-0.5 text-[10px] opacity-60 ml-0.5">
-                          <Coins className="h-2.5 w-2.5" />{routeOptCost.cost}
-                        </span>
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>
-                      Reorders activities to minimize transit time
-                      {!routeOptCost.isFirstTrip && routeOptCost.cost > 0 && ` · ${routeOptCost.cost} credits`}
-                      {routeOptCost.isFirstTrip && ' · Free on first trip'}
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-                <Button 
-                  size="sm"
-                  onClick={handleSave} 
-                  disabled={isSaving || !hasChanges} 
-                  className="gap-1 sm:gap-1.5 h-7 sm:h-8 text-xs px-2 sm:px-3 shrink-0"
-                  data-tour="save-button"
-                >
-                  {isSaving ? <RefreshCw className="h-3 sm:h-3.5 w-3 sm:w-3.5 animate-spin" /> : <Save className="h-3 sm:h-3.5 w-3 sm:w-3.5" />}
-                  <span className="hidden sm:inline">{hasChanges ? 'Save' : 'Saved ✓'}</span>
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
+      {/* (Sticky toolbar removed — controls moved to bottom Trip Summary section) */}
 
       {/* View-Only Mode Indicator */}
       {isEditable && !effectiveIsEditable && !guestMustPropose && tripPermission && !tripPermission.isOwner && (
@@ -3381,58 +3229,138 @@ export function EditorialItinerary({
               />
             )}
 
-            {/* Utility Bar - Share/Save/Export/Print */}
-            <ItineraryUtilityBar
-              tripId={tripId}
-              tripName={`Trip to ${destination}`}
-              destination={destination}
-              onSave={effectiveIsEditable ? handleSave : undefined}
-              isSaving={isSaving}
-              onExportPDF={(() => {
-                // PDF export gated by entitlements — requires purchase, Smart Finish, or manual mode (user's own content)
-                // SECURITY: (!isPreview && !isManualMode) was too permissive — allowed unpaid generated trips to export
-                const canExport = entitlements?.can_export_pdf || smartFinishPurchased || isPaid || isManualMode;
-                if (!canExport) return undefined;
-                return async () => {
-                try {
-                  toast.info('Generating PDF...');
-                  const { generateConsumerTripPdf } = await import('@/utils/consumerPdfGenerator');
-                  // Build set of unlocked day numbers to enforce paywall in PDF
-                  const unlockedDayNumbers = new Set(
-                    days
-                      .filter(d => canViewPremiumContentForDay(entitlements, d.dayNumber))
-                      .map(d => d.dayNumber)
-                  );
-                  await generateConsumerTripPdf({
-                    tripName: `Trip to ${destination}`,
-                    destination,
-                    startDate,
-                    endDate,
-                    travelers,
-                    days,
-                    unlockedDayNumbers,
-                    flight: allFlightLegs[0] ? {
-                      airline: allFlightLegs[0].airline || '',
-                      departure: allFlightLegs[0].departure?.time || '',
-                      arrival: allFlightLegs[0].arrival?.time || '',
-                      departureAirport: allFlightLegs[0].departure?.airport || '',
-                      arrivalAirport: allFlightLegs[0].arrival?.airport || '',
-                    } : undefined,
-                    hotel: hotelSelection ? {
-                      name: hotelSelection.name || '',
-                      neighborhood: hotelSelection.neighborhood || '',
-                      checkIn: startDate,
-                      checkOut: endDate,
-                    } : undefined,
-                  });
-                  toast.success('PDF downloaded!');
-                } catch (err) {
-                  console.error('PDF export failed:', err);
-                  toast.error('Failed to generate PDF. Please try again.');
-                }
-                };
-              })()}
-            />
+            {/* ── Trip Summary (static, non-sticky) ── */}
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              {/* Header */}
+              <div className="px-6 py-4 bg-gradient-to-r from-primary/5 via-background to-accent/5 border-b border-border/50">
+                <h3 className="font-serif text-lg font-semibold text-foreground">Trip Summary</h3>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {days.length} Days · {travelers} {travelers === 1 ? 'Guest' : 'Guests'}
+                  {creditData && <> · <span className="text-primary font-medium">{totalCredits}</span> credits remaining</>}
+                </p>
+              </div>
+
+              {/* Price Row */}
+              <div className="px-6 py-4 flex items-center justify-between border-b border-border/50">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-muted-foreground">Trip Total</span>
+                  <span className="text-2xl font-bold text-foreground">{formatCurrency(displayCost(totalCost), tripCurrency)}</span>
+                </div>
+                {localCurrency !== 'USD' && (
+                  <button
+                    onClick={() => setShowLocalCurrency((v) => !v)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-secondary/50 border border-border text-xs font-medium hover:bg-secondary transition-colors"
+                    title={`Switch to ${showLocalCurrency ? 'USD' : localCurrency}`}
+                  >
+                    <span className={showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>{localCurrency}</span>
+                    <span className="text-muted-foreground/50">↔</span>
+                    <span className={!showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>USD</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="px-6 py-4 flex items-center justify-center gap-3 flex-wrap">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setShowShareModal(true)}
+                  className="gap-2"
+                >
+                  <Share2 className="h-4 w-4" />
+                  Share
+                </Button>
+
+                {effectiveIsEditable && (
+                  <>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => {
+                            if (entitlements?.can_optimize_routes) {
+                              openOptimizeDialog();
+                            } else {
+                              setShowRouteUpgrade(true);
+                            }
+                          }} 
+                          disabled={isOptimizing || days.length === 0}
+                          className="gap-2"
+                        >
+                          {isOptimizing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Route className="h-4 w-4" />}
+                          {isOptimizing ? 'Optimizing...' : 'Optimize'}
+                          {!entitlements?.can_optimize_routes && <Lock className="h-3 w-3 ml-0.5 opacity-60" />}
+                          {entitlements?.can_optimize_routes && !routeOptCost.isFirstTrip && routeOptCost.cost > 0 && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] opacity-60 ml-0.5">
+                              <Coins className="h-2.5 w-2.5" />{routeOptCost.cost}
+                            </span>
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>
+                          Reorders activities to minimize transit time
+                          {!routeOptCost.isFirstTrip && routeOptCost.cost > 0 && ` · ${routeOptCost.cost} credits`}
+                          {routeOptCost.isFirstTrip && ' · Free on first trip'}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+
+                    <Button 
+                      size="sm"
+                      onClick={handleSave} 
+                      disabled={isSaving || !hasChanges}
+                      className="gap-2"
+                    >
+                      {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                      {hasChanges ? 'Save' : 'Saved ✓'}
+                    </Button>
+
+                    {/* PDF Export */}
+                    {(entitlements?.can_export_pdf || smartFinishPurchased || isPaid || isManualMode) && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={async () => {
+                          try {
+                            toast.info('Generating PDF...');
+                            const { generateConsumerTripPdf } = await import('@/utils/consumerPdfGenerator');
+                            const unlockedDayNumbers = new Set(
+                              days.filter(d => canViewPremiumContentForDay(entitlements, d.dayNumber)).map(d => d.dayNumber)
+                            );
+                            await generateConsumerTripPdf({
+                              tripName: `Trip to ${destination}`,
+                              destination, startDate, endDate, travelers, days, unlockedDayNumbers,
+                              flight: allFlightLegs[0] ? {
+                                airline: allFlightLegs[0].airline || '',
+                                departure: allFlightLegs[0].departure?.time || '',
+                                arrival: allFlightLegs[0].arrival?.time || '',
+                                departureAirport: allFlightLegs[0].departure?.airport || '',
+                                arrivalAirport: allFlightLegs[0].arrival?.airport || '',
+                              } : undefined,
+                              hotel: hotelSelection ? {
+                                name: hotelSelection.name || '',
+                                neighborhood: hotelSelection.neighborhood || '',
+                                checkIn: startDate, checkOut: endDate,
+                              } : undefined,
+                            });
+                            toast.success('PDF downloaded!');
+                          } catch (err) {
+                            console.error('PDF export failed:', err);
+                            toast.error('Failed to generate PDF. Please try again.');
+                          }
+                        }}
+                      >
+                        <FileText className="h-4 w-4" />
+                        Export PDF
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
 
             {/* What We Skipped - Tourist traps avoided */}
             <WhyWeSkippedSection
