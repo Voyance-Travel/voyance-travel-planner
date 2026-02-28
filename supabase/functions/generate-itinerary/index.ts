@@ -2864,6 +2864,47 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
 
         console.log(`[FlightContext] Return raw ${returnDepartureTimeStr}, return24: ${returnDepartureTime24}, latest activity: ${latestLastActivity}`);
       }
+
+      // --- FLIGHT INTELLIGENCE OVERRIDE ---
+      // If flight_intelligence has destinationSchedule, use its times instead.
+      // This handles layover connections: e.g. ATL→MAD(layover)→PMI uses PMI arrival, not MAD.
+      const flightIntel = trip.flight_intelligence as Record<string, unknown> | null;
+      if (flightIntel) {
+        const schedule = (flightIntel.destinationSchedule || flightIntel.destination_schedule) as Array<Record<string, unknown>> | undefined;
+        if (schedule && Array.isArray(schedule)) {
+          const firstDest = schedule.find((d: any) => d.isFirstDestination || d.is_first_destination);
+          if (firstDest?.availableFrom || (firstDest as any)?.available_from) {
+            const intelAvailable = ((firstDest.availableFrom || (firstDest as any).available_from) as string);
+            const intelTime = intelAvailable.includes('T') ? intelAvailable.split('T')[1]?.substring(0, 5) : intelAvailable;
+            if (intelTime) {
+              const normalized = normalizeTo24h(intelTime);
+              if (normalized) {
+                arrivalTime24 = normalized;
+                earliestFirstActivity = normalized;
+                // Update display time from arrivalDatetime
+                const arrivalDt = (firstDest.arrivalDatetime || (firstDest as any).arrival_datetime) as string | null;
+                if (arrivalDt?.includes('T')) {
+                  arrivalTimeStr = arrivalDt.split('T')[1]?.substring(0, 5) || arrivalTimeStr;
+                }
+                console.log(`[FlightContext] ✈️ OVERRIDDEN by flight intelligence: arrival=${arrivalTimeStr}, earliest=${earliestFirstActivity}`);
+              }
+            }
+          }
+          // Override last destination departure
+          const lastDest = schedule.find((d: any) => d.isLastDestination || d.is_last_destination);
+          if (lastDest?.availableUntil || (lastDest as any)?.available_until) {
+            const intelUntil = ((lastDest.availableUntil || (lastDest as any).available_until) as string);
+            const untilTime = intelUntil.includes('T') ? intelUntil.split('T')[1]?.substring(0, 5) : intelUntil;
+            if (untilTime) {
+              const normalized = normalizeTo24h(untilTime);
+              if (normalized) {
+                latestLastActivity = normalized;
+                console.log(`[FlightContext] ✈️ Last day OVERRIDDEN by intelligence: latest=${latestLastActivity}`);
+              }
+            }
+          }
+        }
+      }
       
       if (flightInfo.length > 0) {
         let flightConstraints = `\n${'='.repeat(40)}\n✈️ FLIGHT SCHEDULE - CRITICAL CONSTRAINTS\n${'='.repeat(40)}\n${flightInfo.join('\n')}`;
