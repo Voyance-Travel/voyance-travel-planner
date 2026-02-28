@@ -4057,7 +4057,7 @@ interface DayValidationResult {
 }
 
 // Validate a single generated day for quality and correctness
-function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boolean, isLastDay: boolean, totalDays: number, previousDays: StrictDay[] = []): DayValidationResult {
+function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boolean, isLastDay: boolean, totalDays: number, previousDays: StrictDay[] = [], isSmartFinish: boolean = false): DayValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -4305,11 +4305,12 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
         continue;
       }
 
-      // Trip-wide concept similarity: HARD error only for culinary_class and wine_tasting;
-      // everything else is a WARNING (quality guidance, not a generation-blocking failure)
+      // Trip-wide concept similarity:
+      // In Smart Finish mode, ALL duplicates are warnings only — we're building fresh from user research
+      // In normal mode, culinary_class and wine_tasting are hard errors; everything else is a warning
       for (const prevConcept of previousConcepts) {
         if (conceptSimilarity(actConcept, prevConcept)) {
-          if (actType === 'culinary_class' || actType === 'wine_tasting') {
+          if (!isSmartFinish && (actType === 'culinary_class' || actType === 'wine_tasting')) {
             errors.push(`TRIP-WIDE DUPLICATE: "${act.title}" is too similar to an activity from a previous day.`);
           } else {
             warnings.push(`Trip-wide similarity: "${act.title}" resembles a previous day's activity. Consider more variety.`);
@@ -4318,14 +4319,22 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
         }
       }
       
-      // STRICT: Culinary classes/workshops can only appear ONCE per TRIP (not per day)
+      // Culinary classes/workshops: ONCE per trip (warning-only in Smart Finish)
       if (actType === 'culinary_class' && (previousExperienceTypes['culinary_class'] || 0) >= 1) {
-        errors.push(`TRIP-WIDE LIMIT: A culinary class/workshop was already scheduled on a previous day. Only ONE culinary class/workshop is allowed per ENTIRE TRIP.`);
+        if (isSmartFinish) {
+          warnings.push(`Trip already has a culinary class — consider variety.`);
+        } else {
+          errors.push(`TRIP-WIDE LIMIT: A culinary class/workshop was already scheduled on a previous day. Only ONE culinary class/workshop is allowed per ENTIRE TRIP.`);
+        }
       }
       
-      // STRICT: Wine tastings can only appear ONCE per TRIP
+      // Wine tastings: ONCE per trip (warning-only in Smart Finish)
       if (actType === 'wine_tasting' && (previousExperienceTypes['wine_tasting'] || 0) >= 1) {
-        errors.push(`TRIP-WIDE LIMIT: A wine tasting was already scheduled on a previous day. Only ONE wine tasting is allowed per ENTIRE TRIP.`);
+        if (isSmartFinish) {
+          warnings.push(`Trip already has a wine tasting — consider variety.`);
+        } else {
+          errors.push(`TRIP-WIDE LIMIT: A wine tasting was already scheduled on a previous day. Only ONE wine tasting is allowed per ENTIRE TRIP.`);
+        }
       }
       
       // SOFT: Walking tours - max 2 per trip
@@ -5340,7 +5349,7 @@ Generate activities for this day following ALL constraints above.`;
       }
 
       // Validate the generated day - pass previousDays for trip-wide uniqueness checks
-      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays);
+      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish);
 
       // Transition day validation: MUST contain at least one inter-city transport activity
       if (isTransitionDay && dayCity?.transitionFrom && dayCity?.transitionTo) {
