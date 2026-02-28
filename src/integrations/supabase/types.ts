@@ -4728,6 +4728,57 @@ export type Database = {
           },
         ]
       }
+      travel_intel_cache: {
+        Row: {
+          created_at: string
+          destination: string
+          end_date: string
+          id: string
+          intel_data: Json
+          request_params: Json
+          start_date: string
+          trip_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          destination: string
+          end_date: string
+          id?: string
+          intel_data: Json
+          request_params?: Json
+          start_date: string
+          trip_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          destination?: string
+          end_date?: string
+          id?: string
+          intel_data?: Json
+          request_params?: Json
+          start_date?: string
+          trip_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "travel_intel_cache_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: true
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "travel_intel_cache_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: true
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_action_usage: {
         Row: {
           action_type: string
