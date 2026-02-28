@@ -6772,6 +6772,7 @@ export type Database = {
           destinations: Json | null
           dna_snapshot: Json | null
           end_date: string
+          flight_intelligence: Json | null
           flight_selection: Json | null
           gap_analysis_result: Json | null
           guest_edit_mode: string
@@ -6824,6 +6825,7 @@ export type Database = {
           destinations?: Json | null
           dna_snapshot?: Json | null
           end_date: string
+          flight_intelligence?: Json | null
           flight_selection?: Json | null
           gap_analysis_result?: Json | null
           guest_edit_mode?: string
@@ -6876,6 +6878,7 @@ export type Database = {
           destinations?: Json | null
           dna_snapshot?: Json | null
           end_date?: string
+          flight_intelligence?: Json | null
           flight_selection?: Json | null
           gap_analysis_result?: Json | null
           guest_edit_mode?: string

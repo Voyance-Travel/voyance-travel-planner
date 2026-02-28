@@ -3,11 +3,11 @@
  * 
  * Modal for importing flight details via copy/paste from airline confirmations.
  * Uses AI to parse unstructured text into structured flight data.
- * Supports multi-segment/multi-city bookings.
+ * Supports multi-segment/multi-city bookings with intelligent analysis.
  */
 
 import { useState } from 'react';
-import { Plane, Clipboard, Sparkles, Loader2, AlertCircle, Check, ChevronDown, ChevronUp, ArrowRight } from 'lucide-react';
+import { Plane, Clipboard, Sparkles, Loader2, AlertCircle, Check, ChevronDown, ChevronUp, ArrowRight, AlertTriangle, MapPin, Clock, Route } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -21,6 +21,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -37,6 +39,52 @@ interface ParsedSegmentData {
   arrivalDate?: string;
   price?: number;
   cabinClass?: string;
+  classification?: 'OUTBOUND' | 'RETURN' | 'CONNECTION' | 'INTER_DESTINATION';
+  isLayoverArrival?: boolean;
+  connectionGroup?: number | null;
+}
+
+export interface FlightIntelligence {
+  route?: {
+    display?: string;
+    homeAirport?: string;
+    destinationAirports?: string[];
+    layoverAirports?: string[];
+  };
+  missingLegs?: Array<{
+    from?: string;
+    fromCity?: string;
+    to?: string;
+    toCity?: string;
+    reason?: string;
+    suggestedDateRange?: { earliest?: string; latest?: string };
+    priority?: 'CRITICAL' | 'WARNING' | 'INFO';
+  }>;
+  destinationSchedule?: Array<{
+    city?: string;
+    airport?: string;
+    arrivalDatetime?: string | null;
+    departureDatetime?: string | null;
+    availableFrom?: string | null;
+    availableUntil?: string | null;
+    fullDays?: number;
+    isFirstDestination?: boolean;
+    isLastDestination?: boolean;
+    notes?: string[];
+  }>;
+  layovers?: Array<{
+    airport?: string;
+    city?: string;
+    arrivalTime?: string;
+    departureTime?: string;
+    duration?: string;
+  }>;
+  warnings?: Array<{
+    type?: string;
+    message?: string;
+    severity?: 'WARNING' | 'INFO' | 'ERROR';
+  }>;
+  summary?: string;
 }
 
 export interface ImportedFlightLegs {
@@ -50,22 +98,40 @@ interface FlightImportModalProps {
   onImport: (outbound: ManualFlightEntry, returnFlight?: ManualFlightEntry) => void;
   /** New: all legs at once */
   onImportLegs?: (legs: ManualFlightEntry[]) => void;
+  /** Callback with intelligence data */
+  onIntelligence?: (intelligence: FlightIntelligence) => void;
   tripStartDate?: string;
   tripEndDate?: string;
+  // Trip context for intelligent analysis
+  destinations?: string[];
+  destinationAirports?: string[];
+  nightsPerCity?: Record<string, number>;
 }
+
+const classificationLabels: Record<string, { label: string; color: string }> = {
+  OUTBOUND: { label: 'Outbound', color: 'bg-blue-100 text-blue-800 border-blue-200' },
+  RETURN: { label: 'Return', color: 'bg-purple-100 text-purple-800 border-purple-200' },
+  CONNECTION: { label: 'Connection', color: 'bg-amber-100 text-amber-800 border-amber-200' },
+  INTER_DESTINATION: { label: 'Inter-destination', color: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+};
 
 export function FlightImportModal({
   open,
   onOpenChange,
   onImport,
   onImportLegs,
+  onIntelligence,
   tripStartDate,
   tripEndDate,
+  destinations,
+  destinationAirports,
+  nightsPerCity,
 }: FlightImportModalProps) {
   const [confirmationText, setConfirmationText] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [parsedSegments, setParsedSegments] = useState<ParsedSegmentData[]>([]);
+  const [intelligence, setIntelligence] = useState<FlightIntelligence | null>(null);
   const [step, setStep] = useState<'paste' | 'review'>('paste');
   const [expandedSegments, setExpandedSegments] = useState<Set<number>>(new Set([0]));
 
@@ -88,14 +154,24 @@ export function FlightImportModal({
     setError(null);
 
     try {
+      // Build tripContext if we have destination data
+      const hasTripContext = destinations && destinations.length > 0;
+      const tripContext = hasTripContext ? {
+        destinations,
+        destinationAirports: destinationAirports || [],
+        tripDates: { start: tripStartDate, end: tripEndDate },
+        nightsPerCity: nightsPerCity || {},
+      } : undefined;
+
       const { data, error: fnError } = await supabase.functions.invoke('parse-booking-confirmation', {
-        body: { confirmationText },
+        body: { confirmationText, tripContext },
       });
 
       if (fnError) throw fnError;
       if (data.error) throw new Error(data.error);
 
       const booking = data.booking;
+      const intelData = data.intelligence as FlightIntelligence | null;
       
       if (booking.segment_type !== 'flight') {
         setError('This doesn\'t look like a flight confirmation. Please paste flight details.');
@@ -114,6 +190,9 @@ export function FlightImportModal({
         arrivalDate: seg.end_date,
         cabinClass: seg.cabin_class,
         price: seg.net_cost_cents ? seg.net_cost_cents / 100 : undefined,
+        classification: seg.classification,
+        isLayoverArrival: seg.isLayoverArrival,
+        connectionGroup: seg.connectionGroup,
       }));
 
       // Fallback: if no segments array, use top-level fields
@@ -133,6 +212,7 @@ export function FlightImportModal({
       }
 
       setParsedSegments(segments);
+      setIntelligence(intelData);
       setExpandedSegments(new Set(segments.map((_, i) => i)));
       setStep('review');
     } catch (err) {
@@ -174,6 +254,11 @@ export function FlightImportModal({
       price: seg.price,
     }));
 
+    // Pass intelligence data back
+    if (onIntelligence && intelligence) {
+      onIntelligence(intelligence);
+    }
+
     // If consumer supports multi-leg, use that
     if (onImportLegs) {
       onImportLegs(legs);
@@ -190,21 +275,49 @@ export function FlightImportModal({
   const handleClose = () => {
     setConfirmationText('');
     setParsedSegments([]);
+    setIntelligence(null);
     setError(null);
     setStep('paste');
     onOpenChange(false);
   };
 
   const buildRouteChain = () => {
+    // Use intelligence route if available
+    if (intelligence?.route?.display) {
+      return intelligence.route.display;
+    }
     if (parsedSegments.length === 0) return '';
     const codes = [parsedSegments[0].departureAirport || '?'];
     parsedSegments.forEach(seg => codes.push(seg.arrivalAirport || '?'));
     return codes.join(' → ');
   };
 
+  // Group segments by connectionGroup
+  const getConnectionGroupClass = (seg: ParsedSegmentData, idx: number) => {
+    if (!seg.connectionGroup) return '';
+    const nextSeg = parsedSegments[idx + 1];
+    const prevSeg = idx > 0 ? parsedSegments[idx - 1] : null;
+    const isFirst = !prevSeg || prevSeg.connectionGroup !== seg.connectionGroup;
+    const isLast = !nextSeg || nextSeg.connectionGroup !== seg.connectionGroup;
+    if (isFirst && isLast) return '';
+    if (isFirst) return 'rounded-b-none border-b-0';
+    if (isLast) return 'rounded-t-none border-t-dashed';
+    return 'rounded-none border-t-dashed border-b-0';
+  };
+
+  // Find next destination city for layover segments
+  const getNextDestinationCity = (idx: number) => {
+    for (let i = idx + 1; i < parsedSegments.length; i++) {
+      if (!parsedSegments[i].isLayoverArrival) {
+        return parsedSegments[i].arrivalAirport || '?';
+      }
+    }
+    return '?';
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[560px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Plane className="h-5 w-5 text-primary" />
@@ -270,26 +383,116 @@ Multi-city bookings with multiple flights will all be extracted."
               <span>Extracted {parsedSegments.length} flight{parsedSegments.length > 1 ? 's' : ''}</span>
             </div>
 
-            {/* Route chain visualization */}
-            {parsedSegments.length > 1 && (
-              <div className="flex items-center gap-1.5 text-xs font-medium text-primary bg-primary/5 rounded-lg px-3 py-2 overflow-x-auto">
-                <Plane className="h-3.5 w-3.5 shrink-0" />
-                <span className="whitespace-nowrap">{buildRouteChain()}</span>
+            {/* Intelligent Route Display */}
+            <div className="flex items-center gap-1.5 text-xs font-medium text-primary bg-primary/5 rounded-lg px-3 py-2 overflow-x-auto">
+              <Route className="h-3.5 w-3.5 shrink-0" />
+              <span className="whitespace-nowrap">{buildRouteChain()}</span>
+            </div>
+
+            {/* Flight Analysis Card - Intelligence */}
+            {intelligence && (
+              <Card className="border-primary/20 bg-primary/5">
+                <CardContent className="p-3 space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    Flight Analysis
+                  </div>
+
+                  {/* Destination Schedule */}
+                  {intelligence.destinationSchedule && intelligence.destinationSchedule.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Your Destinations</p>
+                      {intelligence.destinationSchedule.map((dest, i) => (
+                        <div key={i} className="flex items-start gap-2 text-xs bg-background rounded-md p-2">
+                          <MapPin className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium">{dest.city}</span>
+                            {dest.airport && <span className="text-muted-foreground ml-1">({dest.airport})</span>}
+                            <div className="flex items-center gap-2 text-muted-foreground mt-0.5">
+                              {dest.fullDays != null && <span>{dest.fullDays} day{dest.fullDays !== 1 ? 's' : ''}</span>}
+                              {dest.availableFrom && (
+                                <span className="flex items-center gap-0.5">
+                                  <Clock className="h-3 w-3" />
+                                  from {dest.availableFrom.split('T')[1]?.slice(0, 5) || dest.availableFrom}
+                                </span>
+                              )}
+                              {dest.availableUntil && (
+                                <span>until {dest.availableUntil.split('T')[1]?.slice(0, 5) || dest.availableUntil}</span>
+                              )}
+                            </div>
+                            {dest.notes && dest.notes.length > 0 && (
+                              <p className="text-[10px] text-muted-foreground mt-0.5 italic">{dest.notes[0]}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Summary */}
+                  {intelligence.summary && (
+                    <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap font-mono bg-background rounded-md p-2 leading-relaxed">
+                      {intelligence.summary}
+                    </pre>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Missing Leg Warnings */}
+            {intelligence?.missingLegs && intelligence.missingLegs.length > 0 && (
+              <div className="space-y-2">
+                {intelligence.missingLegs.map((leg, i) => (
+                  <Alert key={i} className="border-amber-300 bg-amber-50 py-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                    <AlertDescription className="text-xs">
+                      <p className="font-medium text-amber-800">
+                        ⚠️ Missing flight: {leg.fromCity || leg.from} → {leg.toCity || leg.to}
+                      </p>
+                      {leg.reason && <p className="text-amber-700 mt-0.5">{leg.reason}</p>}
+                      {leg.suggestedDateRange && (
+                        <p className="text-amber-600 mt-0.5">
+                          Suggested: Book between {leg.suggestedDateRange.earliest} – {leg.suggestedDateRange.latest}
+                        </p>
+                      )}
+                      <Button variant="outline" size="sm" className="mt-1.5 h-6 text-[10px] border-amber-300 text-amber-700 hover:bg-amber-100">
+                        Help me find this flight
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                ))}
               </div>
             )}
 
+            {/* Segment Cards */}
             <div className="space-y-2">
               {parsedSegments.map((seg, idx) => (
-                <Collapsible key={idx} open={expandedSegments.has(idx)} onOpenChange={() => toggleSegment(idx)}>
+                <Collapsible 
+                  key={idx} 
+                  open={expandedSegments.has(idx)} 
+                  onOpenChange={() => toggleSegment(idx)}
+                >
                   <CollapsibleTrigger asChild>
-                    <button className="w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors text-left">
-                      <div className="flex items-center gap-2 text-sm">
+                    <button className={cn(
+                      "w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors text-left border",
+                      getConnectionGroupClass(seg, idx)
+                    )}>
+                      <div className="flex items-center gap-2 text-sm flex-wrap">
                         <span className="text-xs font-medium text-muted-foreground w-5">#{idx + 1}</span>
                         <span className="font-medium">{seg.departureAirport || '?'}</span>
                         <ArrowRight className="h-3 w-3 text-muted-foreground" />
                         <span className="font-medium">{seg.arrivalAirport || '?'}</span>
                         {seg.airline && (
-                          <span className="text-xs text-muted-foreground ml-1">({seg.airline})</span>
+                          <span className="text-xs text-muted-foreground">({seg.airline})</span>
+                        )}
+                        {/* Classification badge */}
+                        {seg.classification && classificationLabels[seg.classification] && (
+                          <Badge 
+                            variant="outline" 
+                            className={cn("text-[10px] px-1.5 py-0 h-4 border", classificationLabels[seg.classification].color)}
+                          >
+                            {classificationLabels[seg.classification].label}
+                          </Badge>
                         )}
                       </div>
                       {expandedSegments.has(idx) ? (
@@ -299,7 +502,10 @@ Multi-city bookings with multiple flights will all be extracted."
                       )}
                     </button>
                   </CollapsibleTrigger>
-                  <CollapsibleContent className="px-3 pb-3 space-y-3">
+                  <CollapsibleContent className={cn(
+                    "px-3 pb-3 space-y-3",
+                    getConnectionGroupClass(seg, idx) && "border-x border-b rounded-b-lg"
+                  )}>
                     <div className="grid grid-cols-2 gap-3 pt-2">
                       <div>
                         <Label className="text-xs text-muted-foreground">Airline</Label>
@@ -365,20 +571,22 @@ Multi-city bookings with multiple flights will all be extracted."
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <Label className="text-xs text-muted-foreground">
-                          Arrival Time {idx === 0 ? '*' : ''}
-                        </Label>
+                        <Label className="text-xs text-muted-foreground">Arrival Time</Label>
                         <Input
                           type="time"
                           value={seg.arrivalTime || ''}
                           onChange={(e) => updateSegment(idx, 'arrivalTime', e.target.value)}
                           className="text-sm"
                         />
-                        {idx === 0 && (
+                        {seg.isLayoverArrival ? (
+                          <p className="text-[10px] text-amber-600 mt-0.5">
+                            Connection — continues to {getNextDestinationCity(idx)}
+                          </p>
+                        ) : idx === 0 ? (
                           <p className="text-[10px] text-muted-foreground mt-0.5">
                             Used to plan Day 1
                           </p>
-                        )}
+                        ) : null}
                       </div>
                       <div>
                         <Label className="text-xs text-muted-foreground">Price ($)</Label>
@@ -395,6 +603,13 @@ Multi-city bookings with multiple flights will all be extracted."
                 </Collapsible>
               ))}
             </div>
+
+            {/* Does this look right? */}
+            {intelligence && (
+              <div className="text-center text-xs text-muted-foreground pt-1">
+                Does this look right? You can edit any field above before importing.
+              </div>
+            )}
           </div>
         )}
 

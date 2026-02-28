@@ -1670,8 +1670,12 @@ Example: "We love local food markets, sunset viewpoints, and avoiding tourist cr
         onOpenChange={setShowImportModal}
         onImport={handleImportFlight}
         onImportLegs={handleImportAllLegs}
+        onIntelligence={(intel) => setFlightIntelligence(intel as Record<string, unknown>)}
         tripStartDate={startDate}
         tripEndDate={endDate}
+        destinations={isMultiCity ? multiCityDestinations.map(d => d.city) : destination ? [destination] : undefined}
+        destinationAirports={isMultiCity ? multiCityDestinations.map(d => d.airportCode).filter(Boolean) as string[] : undefined}
+        nightsPerCity={isMultiCity ? Object.fromEntries(multiCityDestinations.map(d => [d.city, d.nights])) : undefined}
       />
 
       {/* Manual Hotel Entry Modal — city-aware for multi-city, index-aware for split stays */}
@@ -1943,6 +1947,7 @@ export default function Start() {
   });
   const [showReturnFlight, setShowReturnFlight] = useState(false);
   const [additionalLegs, setAdditionalLegs] = useState<ManualFlightEntry[]>([]);
+  const [flightIntelligence, setFlightIntelligence] = useState<Record<string, unknown> | null>(null);
 
   // Hotel state
   const [hotelChoice, setHotelChoice] = useState<'skip' | 'own'>('skip');
