@@ -83,6 +83,7 @@ import { UpgradePrompt } from '@/components/checkout/UpgradePrompt';
 import { CreditQuickBuy } from '@/components/checkout/CreditQuickBuy';
 import { AddFlightInline, AddHotelInline } from './AddBookingInline';
 import { TripCollaboratorsPanel } from './TripCollaboratorsPanel';
+import { GroupUnlockModal } from '@/components/modals/GroupUnlockModal';
 import { GuestDNABanner } from './GuestDNABanner';
 import { type CollaboratorAttribution, getCollaboratorColor, buildCollaboratorColorMap } from '@/utils/collaboratorAttribution';
 import { useTripPermission, useTripCollaborators } from '@/services/tripCollaboratorsAPI';
@@ -4938,6 +4939,19 @@ export function EditorialItinerary({
               ownerEmail={user?.email}
               ownerAvatarUrl={user?.avatar}
               onInviteClick={handleCreateShareLink}
+              onMemberAdded={(memberName) => {
+                toast.success(`${memberName} added to the trip!`, {
+                  description: 'Regenerate the itinerary to blend their preferences.',
+                  action: {
+                    label: 'Regenerate',
+                    onClick: () => {
+                      // Trigger regeneration of day 1 as a starting point
+                      if (onRegenerateDay) onRegenerateDay(1);
+                    },
+                  },
+                  duration: 10000,
+                });
+              }}
             />
 
             {/* Guest Edit Mode Toggle - only for owner */}

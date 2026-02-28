@@ -67,6 +67,7 @@ interface TripCollaboratorsPanelProps {
   ownerEmail?: string;
   ownerAvatarUrl?: string;
   onInviteClick?: () => void;
+  onMemberAdded?: (memberName: string) => void;
   compact?: boolean;
 }
 
@@ -84,6 +85,7 @@ export function TripCollaboratorsPanel({
   ownerEmail,
   ownerAvatarUrl,
   onInviteClick,
+  onMemberAdded,
   compact = false,
 }: TripCollaboratorsPanelProps) {
   const { data: collaborators = [], isLoading } = useTripCollaborators(tripId);
@@ -204,7 +206,8 @@ export function TripCollaboratorsPanel({
         userId: friend.friend.id,
         permission: 'edit',
       });
-      // Close picker if all friends added
+      const memberName = friend.friend.display_name || friend.friend.handle || 'New member';
+      onMemberAdded?.(memberName);
     } catch (error) {
       // Error handled by mutation
     }
