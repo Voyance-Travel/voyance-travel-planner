@@ -262,6 +262,7 @@ export async function generateItinerary(
   input?: GenerateItineraryInput
 ): Promise<ItineraryStatusResponse> {
   const trip = await getTripDetails(tripId);
+  const flightIntelligence = (trip as any).flight_intelligence || null;
   const totalDays = calculateDays(trip.start_date, trip.end_date);
   const isMultiCity = !!(trip as any).is_multi_city;
   
@@ -321,6 +322,7 @@ export async function generateItinerary(
         transitionFrom: cityInfo?.transitionFrom,
         transitionTo: cityInfo?.transitionTo,
         transitionMode: cityInfo?.transitionMode,
+        flightIntelligence,
       },
     });
     

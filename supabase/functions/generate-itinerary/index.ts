@@ -75,6 +75,7 @@ import {
   extractHotelData,
   buildTravelerDNA,
   buildTransitionDayPrompt,
+  buildFlightIntelligencePrompt,
   type FlightData as PromptFlightData,
   type HotelData as PromptHotelData,
   type TravelerDNA,
@@ -2576,6 +2577,7 @@ interface FlightHotelContextResult {
   // Phase 9: Raw data for prompt library extractors
   rawFlightSelection?: unknown;
   rawHotelSelection?: unknown;
+  rawFlightIntelligence?: unknown;
 }
 
 // Airport transfer fare data from database
@@ -2766,7 +2768,7 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
   try {
     const { data: trip, error } = await supabase
       .from('trips')
-      .select('flight_selection, hotel_selection, is_multi_city')
+      .select('flight_selection, hotel_selection, is_multi_city, flight_intelligence')
       .eq('id', tripId)
       .maybeSingle();
 
@@ -3004,6 +3006,7 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
       // Phase 9: Pass raw data for prompt library extractors
       rawFlightSelection: trip.flight_selection,
       rawHotelSelection: trip.hotel_selection,
+      rawFlightIntelligence: trip.flight_intelligence,
     };
   } catch (e) {
     console.error('[FlightHotel] Error:', e);
@@ -7080,6 +7083,13 @@ serve(async (req) => {
       const promptFlightData = extractFlightData(flightHotelResult.rawFlightSelection);
       const promptHotelData = extractHotelData(flightHotelResult.rawHotelSelection);
       
+      // Build flight intelligence prompt if available
+      const flightIntelligencePrompt = buildFlightIntelligencePrompt(flightHotelResult.rawFlightIntelligence);
+      if (flightIntelligencePrompt) {
+        console.log("[Stage 1.4.5] Flight intelligence prompt injected into context");
+        context.flightIntelligencePrompt = flightIntelligencePrompt;
+      }
+      
       // Build TravelerDNA from unified profile (Phase 2 Fix: no legacy travelDNA/traitOverrides)
       const promptTravelerDNA = buildTravelerDNA(
         { 
@@ -7922,7 +7932,7 @@ ${'='.repeat(60)}
       // Order: ARCHETYPE CONSTRAINTS → INTEREST OVERRIDE → TRIP VIBE → TRIP TYPE → SKIP LIST → DIETARY ENFORCEMENT → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → HIDDEN GEMS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE → USER RESEARCH
       // NOTE: generationHierarchy includes destination essentials, archetype behavioral rules, budget guardrails (Phase 2 Fix)
       // Phase 2 Fix: Removed unifiedDNAContext - all traveler data now comes from generationHierarchy via unified profile
-      const preferenceContext = generationHierarchy + '\n\n' + interestOverridePrompt + '\n\n' + tripVibePrompt + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + hiddenGemsContext + voyancePicksContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt + userResearchPrompt;
+      const preferenceContext = generationHierarchy + '\n\n' + interestOverridePrompt + '\n\n' + tripVibePrompt + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + (context.flightIntelligencePrompt ? '\n\n' + context.flightIntelligencePrompt : '') + tripLearningsContext + recentlyUsedContext + localEventsContext + hiddenGemsContext + voyancePicksContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt + userResearchPrompt;
 
       // STAGE 1.9999: Pre-fetch known venue hours from verified_venues cache
       try {
