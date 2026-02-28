@@ -895,10 +895,12 @@ function FlightHotelStep({
   setShowReturnFlight,
   additionalLegs,
   setAdditionalLegs,
-  hotelChoice,
-  setHotelChoice,
-  manualHotel,
-  setManualHotel,
+   hotelChoice,
+   setHotelChoice,
+   manualHotel,
+   setManualHotel,
+   manualHotels,
+   setManualHotels,
   isFirstTimeVisitor,
   setIsFirstTimeVisitor,
   firstTimePerCity,
@@ -930,6 +932,8 @@ function FlightHotelStep({
   setHotelChoice: (c: 'skip' | 'own') => void;
   manualHotel: ManualHotelEntry;
   setManualHotel: (h: ManualHotelEntry) => void;
+  manualHotels: Record<string, ManualHotelEntry>;
+  setManualHotels: (h: Record<string, ManualHotelEntry>) => void;
   isFirstTimeVisitor: boolean;
   setIsFirstTimeVisitor: (v: boolean) => void;
   firstTimePerCity: Record<string, boolean>;
@@ -950,6 +954,7 @@ function FlightHotelStep({
   const [showFlightDetails, setShowFlightDetails] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showHotelModal, setShowHotelModal] = useState(false);
+  const [editingHotelCity, setEditingHotelCity] = useState<string | null>(null);
 
   const handleImportFlight = (outbound: ManualFlightEntry, returnFlightData?: ManualFlightEntry) => {
     setOutboundFlight(outbound);
@@ -1279,71 +1284,115 @@ function FlightHotelStep({
           <div className="flex items-center gap-2">
             <Building2 className="h-4 w-4 text-muted-foreground" />
             <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-              Where will you stay?
+              {isMultiCity ? 'Where will you stay in each city?' : 'Where will you stay?'}
+              <span className="text-muted-foreground/60 ml-1">(optional)</span>
             </label>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            {/* I have my own */}
-            <button
-              type="button"
-              onClick={() => {
-                setHotelChoice('own');
-                setShowHotelModal(true);
-              }}
-              className={cn(
-                'p-4 rounded-xl border-2 text-center transition-all',
-                hotelChoice === 'own'
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border hover:border-primary/40'
-              )}
-            >
-              <PenLine className="h-5 w-5 mx-auto mb-2 text-muted-foreground" />
-              <div className="text-sm font-medium text-foreground">I have my own hotel</div>
-              <div className="text-[10px] text-muted-foreground mt-1">Enter details</div>
-            </button>
-
-            {/* Skip */}
-            <button
-              type="button"
-              onClick={() => setHotelChoice('skip')}
-              className={cn(
-                'p-4 rounded-xl border-2 text-center transition-all',
-                hotelChoice === 'skip'
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border hover:border-primary/40'
-              )}
-            >
-              <ArrowRight className="h-5 w-5 mx-auto mb-2 text-muted-foreground" />
-              <div className="text-sm font-medium text-foreground">Skip</div>
-              <div className="text-[10px] text-muted-foreground mt-1">Add later</div>
-            </button>
-          </div>
-
-          {/* Show entered hotel info */}
-          {hotelChoice === 'own' && manualHotel.name && (
-            <div className="p-3 rounded-lg border border-border bg-card flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Hotel className="h-5 w-5 text-primary" />
-                <div>
-                  <div className="font-medium text-sm">{manualHotel.name}</div>
-                  {manualHotel.address && (
-                    <div className="text-xs text-muted-foreground">{manualHotel.address}</div>
+          {isMultiCity && multiCityDestinations && multiCityDestinations.length >= 2 ? (
+            /* Multi-city: per-city hotel entry */
+            <>
+              <div className="space-y-2">
+                {multiCityDestinations.map((dest) => {
+                  const cityHotel = manualHotels[dest.city];
+                  return (
+                    <div
+                      key={dest.city}
+                      className="flex items-center justify-between p-3 rounded-lg border border-border bg-card"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium truncate">{dest.city}</div>
+                          {cityHotel?.name ? (
+                            <div className="text-xs text-muted-foreground truncate">{cityHotel.name}</div>
+                          ) : (
+                            <div className="text-xs text-muted-foreground/60">No hotel added</div>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        variant={cityHotel?.name ? 'ghost' : 'outline'}
+                        size="sm"
+                        onClick={() => {
+                          setEditingHotelCity(dest.city);
+                          setShowHotelModal(true);
+                        }}
+                      >
+                        {cityHotel?.name ? 'Edit' : 'Add'}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            /* Single city: existing hotel choice */
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                {/* I have my own */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHotelChoice('own');
+                    setEditingHotelCity(null);
+                    setShowHotelModal(true);
+                  }}
+                  className={cn(
+                    'p-4 rounded-xl border-2 text-center transition-all',
+                    hotelChoice === 'own'
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:border-primary/40'
                   )}
-                  {manualHotel.pricePerNight && manualHotel.pricePerNight > 0 && (
-                    <div className="text-xs text-muted-foreground">
-                      ${manualHotel.pricePerNight} total
-                      {manualHotel.includeInBudget && (
-                        <span className="ml-1 text-primary">· In budget</span>
+                >
+                  <PenLine className="h-5 w-5 mx-auto mb-2 text-muted-foreground" />
+                  <div className="text-sm font-medium text-foreground">I have my own hotel</div>
+                  <div className="text-[10px] text-muted-foreground mt-1">Enter details</div>
+                </button>
+
+                {/* Skip */}
+                <button
+                  type="button"
+                  onClick={() => setHotelChoice('skip')}
+                  className={cn(
+                    'p-4 rounded-xl border-2 text-center transition-all',
+                    hotelChoice === 'skip'
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:border-primary/40'
+                  )}
+                >
+                  <ArrowRight className="h-5 w-5 mx-auto mb-2 text-muted-foreground" />
+                  <div className="text-sm font-medium text-foreground">Skip</div>
+                  <div className="text-[10px] text-muted-foreground mt-1">Add later</div>
+                </button>
+              </div>
+
+              {/* Show entered hotel info */}
+              {hotelChoice === 'own' && manualHotel.name && (
+                <div className="p-3 rounded-lg border border-border bg-card flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Hotel className="h-5 w-5 text-primary" />
+                    <div>
+                      <div className="font-medium text-sm">{manualHotel.name}</div>
+                      {manualHotel.address && (
+                        <div className="text-xs text-muted-foreground">{manualHotel.address}</div>
+                      )}
+                      {manualHotel.pricePerNight && manualHotel.pricePerNight > 0 && (
+                        <div className="text-xs text-muted-foreground">
+                          ${manualHotel.pricePerNight} total
+                          {manualHotel.includeInBudget && (
+                            <span className="ml-1 text-primary">· In budget</span>
+                          )}
+                        </div>
                       )}
                     </div>
-                  )}
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => { setEditingHotelCity(null); setShowHotelModal(true); }}>
+                    Edit
+                  </Button>
                 </div>
-              </div>
-              <Button variant="ghost" size="sm" onClick={() => setShowHotelModal(true)}>
-                Edit
-              </Button>
-            </div>
+              )}
+            </>
           )}
         </div>
 
@@ -1491,122 +1540,144 @@ Example: "We love local food markets, sunset viewpoints, and avoiding tourist cr
         tripEndDate={endDate}
       />
 
-      {/* Manual Hotel Entry Modal */}
-      <Dialog open={showHotelModal} onOpenChange={setShowHotelModal}>
-        <DialogContent className="sm:max-w-[450px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Hotel className="h-5 w-5 text-primary" />
-              Enter Hotel Details
-            </DialogTitle>
-            <DialogDescription>
-              Add your hotel information for a complete itinerary
-            </DialogDescription>
-          </DialogHeader>
+      {/* Manual Hotel Entry Modal — city-aware for multi-city */}
+      {(() => {
+        // Determine which hotel entry to edit
+        const currentHotel = editingHotelCity
+          ? (manualHotels[editingHotelCity] || { name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00' })
+          : manualHotel;
+        const setCurrentHotel = (h: ManualHotelEntry) => {
+          if (editingHotelCity) {
+            setManualHotels({ ...manualHotels, [editingHotelCity]: h });
+          } else {
+            setManualHotel(h);
+          }
+        };
+        const modalDestination = editingHotelCity || destination;
 
-          <div className="space-y-4 py-4">
-            <div>
-              <Label>Hotel Name *</Label>
-              <HotelAutocomplete
-                value={manualHotel.name}
-                destination={destination}
-                placeholder="Start typing to search hotels..."
-                onChange={(hotel) => setManualHotel({ 
-                  ...manualHotel, 
-                  name: hotel.name, 
-                  address: hotel.address || manualHotel.address 
-                })}
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Type to search or enter manually
-              </p>
-            </div>
-            
-            <div>
-              <Label>Address</Label>
-              <Input
-                placeholder="e.g. 15 Place Vendôme, 75001 Paris"
-                value={manualHotel.address}
-                onChange={(e) => setManualHotel({ ...manualHotel, address: e.target.value })}
-              />
-            </div>
-            
-            <div>
-              <Label>Neighborhood</Label>
-              <Input
-                placeholder="e.g. 1st Arrondissement"
-                value={manualHotel.neighborhood || ''}
-                onChange={(e) => setManualHotel({ ...manualHotel, neighborhood: e.target.value })}
-              />
-            </div>
-            
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs">Check-in Time</Label>
-                <Input
-                  type="time"
-                  value={manualHotel.checkInTime || '15:00'}
-                  onChange={(e) => setManualHotel({ ...manualHotel, checkInTime: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label className="text-xs">Check-out Time</Label>
-                <Input
-                  type="time"
-                  value={manualHotel.checkOutTime || '11:00'}
-                  onChange={(e) => setManualHotel({ ...manualHotel, checkOutTime: e.target.value })}
-                />
-              </div>
-            </div>
+        return (
+          <Dialog open={showHotelModal} onOpenChange={setShowHotelModal}>
+            <DialogContent className="sm:max-w-[450px]">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Hotel className="h-5 w-5 text-primary" />
+                  {editingHotelCity ? `Hotel in ${editingHotelCity}` : 'Enter Hotel Details'}
+                </DialogTitle>
+                <DialogDescription>
+                  Add your hotel information for a complete itinerary
+                </DialogDescription>
+              </DialogHeader>
 
-            {/* Price & Budget Inclusion */}
-            <div className="space-y-3 pt-3 border-t border-border">
-              <div>
-                <Label className="text-xs">Hotel Total Price</Label>
-                <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <div className="space-y-4 py-4">
+                <div>
+                  <Label>Hotel Name *</Label>
+                  <HotelAutocomplete
+                    value={currentHotel.name}
+                    destination={modalDestination}
+                    placeholder="Start typing to search hotels..."
+                    onChange={(hotel) => setCurrentHotel({ 
+                      ...currentHotel, 
+                      name: hotel.name, 
+                      address: hotel.address || currentHotel.address 
+                    })}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Type to search or enter manually
+                  </p>
+                </div>
+                
+                <div>
+                  <Label>Address</Label>
                   <Input
-                    type="number"
-                    min={0}
-                    placeholder="e.g. 450"
-                    className="pl-9"
-                    value={manualHotel.pricePerNight || ''}
-                    onChange={(e) => setManualHotel({ ...manualHotel, pricePerNight: e.target.value ? Number(e.target.value) : undefined })}
+                    placeholder="e.g. 15 Place Vendôme, 75001 Paris"
+                    value={currentHotel.address}
+                    onChange={(e) => setCurrentHotel({ ...currentHotel, address: e.target.value })}
                   />
                 </div>
+                
+                <div>
+                  <Label>Neighborhood</Label>
+                  <Input
+                    placeholder="e.g. 1st Arrondissement"
+                    value={currentHotel.neighborhood || ''}
+                    onChange={(e) => setCurrentHotel({ ...currentHotel, neighborhood: e.target.value })}
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Check-in Time</Label>
+                    <Input
+                      type="time"
+                      value={currentHotel.checkInTime || '15:00'}
+                      onChange={(e) => setCurrentHotel({ ...currentHotel, checkInTime: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Check-out Time</Label>
+                    <Input
+                      type="time"
+                      value={currentHotel.checkOutTime || '11:00'}
+                      onChange={(e) => setCurrentHotel({ ...currentHotel, checkOutTime: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                {/* Price & Budget Inclusion */}
+                <div className="space-y-3 pt-3 border-t border-border">
+                  <div>
+                    <Label className="text-xs">Hotel Total Price</Label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="e.g. 450"
+                        className="pl-9"
+                        value={currentHotel.pricePerNight || ''}
+                        onChange={(e) => setCurrentHotel({ ...currentHotel, pricePerNight: e.target.value ? Number(e.target.value) : undefined })}
+                      />
+                    </div>
+                  </div>
+
+                  <label className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors">
+                    <Checkbox
+                      checked={currentHotel.includeInBudget || false}
+                      onCheckedChange={(checked) => setCurrentHotel({ ...currentHotel, includeInBudget: checked === true })}
+                    />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-foreground">Include hotel cost in budget</div>
+                      <div className="text-xs text-muted-foreground">Track this expense against your trip budget</div>
+                    </div>
+                  </label>
+                </div>
               </div>
 
-              <label className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors">
-                <Checkbox
-                  checked={manualHotel.includeInBudget || false}
-                  onCheckedChange={(checked) => setManualHotel({ ...manualHotel, includeInBudget: checked === true })}
-                />
-                <div className="flex-1">
-                  <div className="text-sm font-medium text-foreground">Include hotel cost in budget</div>
-                  <div className="text-xs text-muted-foreground">Track this expense against your trip budget</div>
-                </div>
-              </label>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowHotelModal(false)}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => {
-                if (!manualHotel.name) {
-                  toast.error('Please enter the hotel name');
-                  return;
-                }
-                setShowHotelModal(false);
-              }}
-            >
-              Save Hotel
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowHotelModal(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={() => {
+                    if (!currentHotel.name) {
+                      toast.error('Please enter the hotel name');
+                      return;
+                    }
+                    // Save to the correct state
+                    if (editingHotelCity) {
+                      setManualHotels({ ...manualHotels, [editingHotelCity]: currentHotel });
+                      setHotelChoice('own');
+                    }
+                    setShowHotelModal(false);
+                  }}
+                >
+                  Save Hotel
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </motion.div>
   );
 }
@@ -1694,6 +1765,7 @@ export default function Start() {
     checkInTime: '15:00',
     checkOutTime: '11:00',
   });
+  const [manualHotels, setManualHotels] = useState<Record<string, ManualHotelEntry>>({});
 
   // Personalization state
   const [isFirstTimeVisitor, setIsFirstTimeVisitor] = useState(true);
@@ -1928,6 +2000,15 @@ export default function Start() {
             : null,
           generation_status: 'pending' as const,
           days_total: d.nights,
+          hotel_selection: manualHotels[d.city]?.name ? [{
+            name: manualHotels[d.city].name,
+            address: manualHotels[d.city].address,
+            neighborhood: manualHotels[d.city].neighborhood,
+            checkInTime: manualHotels[d.city].checkInTime,
+            checkOutTime: manualHotels[d.city].checkOutTime,
+            pricePerNight: manualHotels[d.city].pricePerNight || undefined,
+            source: 'manual',
+          }] : null,
         }));
 
         const { error: citiesError } = await supabase.from('trip_cities').insert(cityRows as any[]);
@@ -2239,6 +2320,8 @@ export default function Start() {
                     setIsFirstTimeVisitor={setIsFirstTimeVisitor}
                     firstTimePerCity={firstTimePerCity}
                     setFirstTimePerCity={setFirstTimePerCity}
+                    manualHotels={manualHotels}
+                    setManualHotels={setManualHotels}
                     mustDoActivities={mustDoActivities}
                     setMustDoActivities={setMustDoActivities}
                     onSubmit={handleSubmit}
