@@ -645,24 +645,36 @@ function TripDetailsStep({
                 {num}
               </button>
             ))}
-            <button
-              type="button"
-              onClick={() => {
-                if (travelers < 5) {
-                  setTravelers(5);
-                } else {
-                  setTravelers(Math.min(10, travelers + 1));
-                }
-              }}
-              className={cn(
-                "w-11 h-11 sm:w-12 sm:h-12 rounded-lg border-2 transition-all text-sm font-medium min-w-[44px]",
-                travelers >= 5
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
-              )}
-            >
-              {travelers > 4 ? travelers : '5+'}
-            </button>
+            {travelers >= 5 ? (
+              /* Stepper for 5+ travelers */
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setTravelers(Math.max(5, travelers - 1))}
+                  className="w-9 h-11 sm:w-10 sm:h-12 rounded-lg border-2 border-primary/50 text-primary hover:bg-primary/10 transition-all text-sm font-medium"
+                >
+                  −
+                </button>
+                <span className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg border-2 bg-primary text-primary-foreground border-primary flex items-center justify-center text-sm font-medium">
+                  {travelers}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setTravelers(Math.min(10, travelers + 1))}
+                  className="w-9 h-11 sm:w-10 sm:h-12 rounded-lg border-2 border-primary/50 text-primary hover:bg-primary/10 transition-all text-sm font-medium"
+                >
+                  +
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setTravelers(5)}
+                className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg border-2 border-border text-muted-foreground hover:border-primary/50 hover:text-foreground transition-all text-sm font-medium min-w-[44px]"
+              >
+                5+
+              </button>
+            )}
         </div>
 
         {/* Link Friends */}
