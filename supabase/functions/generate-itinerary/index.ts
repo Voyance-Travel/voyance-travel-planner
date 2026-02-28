@@ -364,6 +364,8 @@ interface GenerationContext {
   // Multi-city support
   isMultiCity?: boolean;
   multiCityDayMap?: MultiCityDayInfo[];
+  // Pre-fetched venue operating hours from verified_venues cache
+  venueHoursCache?: Array<{ name: string; opening_hours: string[] }>;
 }
 
 interface StrictActivity {
@@ -4879,10 +4881,30 @@ ${context.isMultiCity ? `5. ALL activities MUST be in ${dayDestination}. Do NOT 
 ⏰ OPERATING HOURS — HARD RULE (THIS DAY IS ${dayOfWeekName.toUpperCase()}):
 - NEVER schedule an activity before the venue opens or after it closes.
 - If a museum/attraction opens at 10:00, the EARLIEST you can schedule a visit is 10:00 (plus buffer time for arrival/entry).
+- If a bar/lounge closes at 23:00, you MUST schedule it to END by 23:00 — NOT start at 23:00.
 - Many European museums close on MONDAYS. If today is Monday, do NOT schedule museum visits — use an alternative.
 - Restaurants: do NOT schedule lunch at a place that opens for dinner only, or dinner at a lunch-only spot.
 - Markets often have specific operating days — verify the market is open on ${dayOfWeekName} before including it.
 - If you are unsure whether a venue is open on ${dayOfWeekName}, set closedRisk: true and suggest an alternative.
+${(() => {
+  // Inject known venue hours from verified_venues cache
+  if (context.venueHoursCache && context.venueHoursCache.length > 0) {
+    const dayIdx = dateObj.getDay();
+    const DAY_N = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dn = DAY_N[dayIdx];
+    const relevantHours = context.venueHoursCache
+      .map(v => {
+        const entry = v.opening_hours?.find(h => h.toLowerCase().startsWith(dn.toLowerCase()));
+        return entry ? `  • ${v.name}: ${entry}` : null;
+      })
+      .filter(Boolean)
+      .slice(0, 40); // Limit to avoid prompt bloat
+    if (relevantHours.length > 0) {
+      return `\n📋 KNOWN VENUE HOURS FOR ${dayOfWeekName.toUpperCase()} (from verified data — MUST RESPECT):\n${relevantHours.join('\n')}\nCONSTRAINT: If you include any venue listed above, schedule it WITHIN the hours shown. Violations = GENERATION FAILURE.`;
+    }
+  }
+  return '';
+})()}
 
 🌐 LANGUAGE — HARD RULE:
 - ALL text output (titles, descriptions, tips, addresses) MUST be in clean, correctly spelled English.
@@ -7783,6 +7805,34 @@ ${'='.repeat(60)}
       // Phase 2 Fix: Removed unifiedDNAContext - all traveler data now comes from generationHierarchy via unified profile
       const preferenceContext = generationHierarchy + '\n\n' + interestOverridePrompt + '\n\n' + tripVibePrompt + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + tripLearningsContext + recentlyUsedContext + localEventsContext + hiddenGemsContext + voyancePicksContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + geographicPrompt + userResearchPrompt;
 
+      // STAGE 1.9999: Pre-fetch known venue hours from verified_venues cache
+      try {
+        const destForCache = context.destination.toLowerCase().trim();
+        const cacheResp = await fetch(
+          `${supabaseUrl}/rest/v1/verified_venues?destination=ilike.%25${encodeURIComponent(destForCache)}%25&opening_hours=not.is.null&select=name,opening_hours&limit=60`,
+          {
+            headers: {
+              'Authorization': `Bearer ${supabaseKey}`,
+              'apikey': supabaseKey,
+            }
+          }
+        );
+        if (cacheResp.ok) {
+          const venueRows = await cacheResp.json();
+          if (venueRows && venueRows.length > 0) {
+            context.venueHoursCache = venueRows.map((v: any) => ({
+              name: v.name,
+              opening_hours: v.opening_hours,
+            }));
+            console.log(`[Stage 1.9999] ✓ Pre-fetched ${context.venueHoursCache!.length} venue hours for "${context.destination}"`);
+          } else {
+            console.log(`[Stage 1.9999] No cached venue hours found for "${context.destination}"`);
+          }
+        }
+      } catch (e) {
+        console.warn('[Stage 1.9999] Venue hours pre-fetch failed (non-blocking):', e);
+      }
+
       // STAGE 2: AI Generation (batch with validation and retry)
       let aiResult;
       try {
@@ -8129,7 +8179,7 @@ ${'='.repeat(60)}
             const activity = day.activities.find((a: StrictActivity) => a.id === violation.activityId);
             if (!activity) continue;
             
-            // Try to auto-fix: adjust startTime to venue opening time
+            // Try to auto-fix: adjust startTime based on venue hours
             const openingHours = (activity as any).openingHours as string[] | undefined;
             if (openingHours && activity.startTime) {
               const startDate = new Date(context.startDate);
@@ -8150,7 +8200,16 @@ ${'='.repeat(60)}
                   continue;
                 }
                 
-                // Try to extract opening time and shift the activity
+                // Extract ALL time ranges for this day (handles split hours like lunch + dinner)
+                const { extractTimeRanges: extractRanges } = await import('./truth-anchors.ts');
+                // We need to use the function from truth-anchors if available, otherwise parse inline
+                const rangeMatch12h = entryLower.match(/(\d{1,2}):(\d{2})\s*(am|pm)\s*[–\-−to]+\s*(\d{1,2}):(\d{2})\s*(am|pm)/gi);
+                const rangeMatch24h = entryLower.match(/(\d{1,2}):(\d{2})\s*[–\-−to]+\s*(\d{1,2}):(\d{2})/g);
+                
+                // Parse opening and closing times
+                let venueOpenMins = -1;
+                let venueCloseMins = -1;
+                
                 const timeMatch = entryLower.match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
                 if (timeMatch) {
                   let openHour = parseInt(timeMatch[1]);
@@ -8158,26 +8217,59 @@ ${'='.repeat(60)}
                   const period = timeMatch[3]?.toUpperCase();
                   if (period === 'PM' && openHour !== 12) openHour += 12;
                   if (period === 'AM' && openHour === 12) openHour = 0;
-                  
-                  // Add 10 min buffer for entry/queuing
-                  const openMins = openHour * 60 + openMin + 10;
-                  const newStartTime = `${Math.floor(openMins / 60).toString().padStart(2, '0')}:${(openMins % 60).toString().padStart(2, '0')}`;
-                  
+                  venueOpenMins = openHour * 60 + openMin;
+                }
+                
+                // Extract closing time (second time in the range)
+                const closeMatch = entryLower.match(/[–\-−to]+\s*(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+                if (closeMatch) {
+                  let closeHour = parseInt(closeMatch[1]);
+                  const closeMin = parseInt(closeMatch[2]);
+                  const closePeriod = closeMatch[3]?.toUpperCase();
+                  if (closePeriod === 'PM' && closeHour !== 12) closeHour += 12;
+                  if (closePeriod === 'AM' && closeHour === 12) closeHour = 0;
+                  venueCloseMins = closeHour * 60 + closeMin;
+                  // Handle midnight: "11:00 PM – 12:00 AM" → close = 1440
+                  if (venueCloseMins === 0) venueCloseMins = 1440;
+                }
+                
+                if (venueOpenMins >= 0 && venueCloseMins > 0) {
                   const oldStartTime = activity.startTime;
-                  
-                  // Only fix if the new time is after current (i.e., venue opens later than scheduled)
                   const oldMins = parseInt(oldStartTime.split(':')[0]) * 60 + parseInt(oldStartTime.split(':')[1]);
-                  if (openMins > oldMins) {
-                    // Calculate duration to preserve it
+                  const duration = activity.endTime 
+                    ? (parseInt(activity.endTime.split(':')[0]) * 60 + parseInt(activity.endTime.split(':')[1])) - oldMins
+                    : 60; // default 1 hour
+                  
+                  let newStartMins = -1;
+                  
+                  // Case A: Scheduled BEFORE venue opens → shift to opening + 10 min buffer
+                  if (oldMins < venueOpenMins) {
+                    newStartMins = venueOpenMins + 10;
+                  }
+                  // Case B: Scheduled AFTER venue closes (or too close to closing) → shift earlier
+                  else if (oldMins >= venueCloseMins || (oldMins + duration) > venueCloseMins) {
+                    // Place activity so it ends 15 min before closing
+                    const latestStart = venueCloseMins - duration - 15;
+                    if (latestStart >= venueOpenMins + 10) {
+                      newStartMins = latestStart;
+                    } else {
+                      // Activity duration doesn't fit in opening window — can't fix
+                      (activity as any).closedRisk = true;
+                      (activity as any).closedRiskReason = `${dayName}: Open ${Math.floor(venueOpenMins / 60).toString().padStart(2, '0')}:${(venueOpenMins % 60).toString().padStart(2, '0')}–${Math.floor(venueCloseMins / 60).toString().padStart(2, '0')}:${(venueCloseMins % 60).toString().padStart(2, '0')}, activity duration (${duration}min) doesn't fit.`;
+                      console.warn(`  - Day ${violation.dayNumber}: "${violation.activityTitle}" — duration ${duration}min doesn't fit in venue hours, cannot auto-fix`);
+                      continue;
+                    }
+                  }
+                  
+                  if (newStartMins >= 0 && newStartMins !== oldMins) {
+                    const newStartTime = `${Math.floor(newStartMins / 60).toString().padStart(2, '0')}:${(newStartMins % 60).toString().padStart(2, '0')}`;
+                    const newEndMins = newStartMins + duration;
+                    activity.startTime = newStartTime;
                     if (activity.endTime) {
-                      const endMins = parseInt(activity.endTime.split(':')[0]) * 60 + parseInt(activity.endTime.split(':')[1]);
-                      const duration = endMins - oldMins;
-                      const newEndMins = openMins + duration;
                       activity.endTime = `${Math.floor(newEndMins / 60).toString().padStart(2, '0')}:${(newEndMins % 60).toString().padStart(2, '0')}`;
                     }
-                    activity.startTime = newStartTime;
                     fixedCount++;
-                    console.log(`  ✓ Day ${violation.dayNumber}: "${violation.activityTitle}" shifted ${oldStartTime} → ${newStartTime} (venue opens at ${openHour.toString().padStart(2, '0')}:${openMin.toString().padStart(2, '0')})`);
+                    console.log(`  ✓ Day ${violation.dayNumber}: "${violation.activityTitle}" shifted ${oldStartTime} → ${newStartTime} (venue hours: ${Math.floor(venueOpenMins / 60).toString().padStart(2, '0')}:${(venueOpenMins % 60).toString().padStart(2, '0')}–${Math.floor(venueCloseMins / 60).toString().padStart(2, '0')}:${(venueCloseMins % 60).toString().padStart(2, '0')})`);
                     continue;
                   }
                 }
