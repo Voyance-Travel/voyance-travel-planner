@@ -6207,70 +6207,84 @@ async function enrichActivity(
   // Determine if this activity should get Viator matching
   const shouldSearchViator = isBookableActivity(activity) && !(enriched as any).viatorProductCode;
 
-  // Run venue verification (with dual-AI + caching), photo fetch, and Viator search in parallel
-  const [venueData, photoResult, viatorMatch] = await Promise.all([
-    // Verify venue with Dual-AI pipeline (cache → Google Places → semantic match)
-    verifyVenueWithDualAI(activity, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY),
-    // Fetch real venue photo using tiered approach
-    !enriched.photos?.length 
-      ? fetchActivityImage(activity.title, activity.category || 'sightseeing', destination, supabaseUrl, supabaseKey)
-      : Promise.resolve(null),
-    // Search for bookable Viator product
-    shouldSearchViator
-      ? searchViatorForActivity(activity.title, destination, activity.category || 'sightseeing', supabaseUrl, supabaseKey)
-      : Promise.resolve(null),
-  ]);
+  // CRITICAL FIX: Add a per-activity timeout to prevent one slow enrichment from killing the whole request.
+  // Supabase edge functions have a hard ~150s wall-clock limit; we cap each activity at 10s.
+  const ENRICHMENT_TIMEOUT_MS = 10_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ENRICHMENT_TIMEOUT_MS);
 
-  // Apply Viator booking data if found
-  if (viatorMatch) {
-    (enriched as any).viatorProductCode = viatorMatch.productCode;
-    (enriched as any).bookingUrl = viatorMatch.bookingUrl;
-    if (viatorMatch.quotePriceCents) {
-      (enriched as any).quotePriceCents = viatorMatch.quotePriceCents;
-    }
-    enriched.bookingRequired = true;
-  }
+  try {
+    // Run venue verification, photo fetch, and Viator search in parallel — with abort signal
+    const [venueData, photoResult, viatorMatch] = await Promise.all([
+      verifyVenueWithDualAI(activity, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY)
+        .catch(e => { console.log(`[Stage 4] Venue verify timeout/error for "${activity.title}":`, e.message); return null; }),
+      !enriched.photos?.length 
+        ? fetchActivityImage(activity.title, activity.category || 'sightseeing', destination, supabaseUrl, supabaseKey)
+            .catch(e => { console.log(`[Stage 4] Image fetch timeout/error for "${activity.title}":`, e.message); return null; })
+        : Promise.resolve(null),
+      shouldSearchViator
+        ? searchViatorForActivity(activity.title, destination, activity.category || 'sightseeing', supabaseUrl, supabaseKey)
+            .catch(e => { console.log(`[Stage 4] Viator search timeout/error for "${activity.title}":`, e.message); return null; })
+        : Promise.resolve(null),
+    ]);
 
-  // Apply venue verification data (coordinates, ratings, opening hours, etc.)
-  if (venueData) {
-    if (venueData.coordinates) {
-      enriched.location = {
-        ...enriched.location,
-        coordinates: venueData.coordinates,
-      };
-      if (venueData.formattedAddress) {
-        enriched.location.address = venueData.formattedAddress;
+    clearTimeout(timer);
+
+    // Apply Viator booking data if found
+    if (viatorMatch) {
+      (enriched as any).viatorProductCode = viatorMatch.productCode;
+      (enriched as any).bookingUrl = viatorMatch.bookingUrl;
+      if (viatorMatch.quotePriceCents) {
+        (enriched as any).quotePriceCents = viatorMatch.quotePriceCents;
       }
+      enriched.bookingRequired = true;
     }
-    if (venueData.rating) {
-      enriched.rating = venueData.rating;
-    }
-    if (venueData.priceLevel !== undefined) {
-      enriched.priceLevel = venueData.priceLevel;
-    }
-    if (venueData.openingHours) {
-      enriched.openingHours = venueData.openingHours;
-    }
-    if (venueData.website) {
-      enriched.website = venueData.website;
-    }
-    if (venueData.googleMapsUrl) {
-      enriched.googleMapsUrl = venueData.googleMapsUrl;
-    }
-    enriched.verified = {
-      isValid: venueData.isValid,
-      confidence: venueData.confidence,
-      placeId: venueData.placeId,
-    };
-  }
 
-  // Apply photo data
-  if (photoResult) {
-    enriched.photos = [{
-      url: photoResult.url,
-      alt: `${activity.title} in ${destination}`,
-      photographer: photoResult.attribution || `Source: ${photoResult.source}`,
-    }];
+    // Apply venue verification data (coordinates, ratings, opening hours, etc.)
+    if (venueData) {
+      if (venueData.coordinates) {
+        enriched.location = {
+          ...enriched.location,
+          coordinates: venueData.coordinates,
+        };
+        if (venueData.formattedAddress) {
+          enriched.location.address = venueData.formattedAddress;
+        }
+      }
+      if (venueData.rating) {
+        enriched.rating = venueData.rating;
+      }
+      if (venueData.priceLevel !== undefined) {
+        enriched.priceLevel = venueData.priceLevel;
+      }
+      if (venueData.openingHours) {
+        enriched.openingHours = venueData.openingHours;
+      }
+      if (venueData.website) {
+        enriched.website = venueData.website;
+      }
+      if (venueData.googleMapsUrl) {
+        enriched.googleMapsUrl = venueData.googleMapsUrl;
+      }
+      enriched.verified = {
+        isValid: venueData.isValid,
+        confidence: venueData.confidence,
+        placeId: venueData.placeId,
+      };
+    }
+
+    // Apply photo data
+    if (photoResult) {
+      enriched.photos = [{
+        url: photoResult.url,
+        alt: `${activity.title} in ${destination}`,
+        photographer: photoResult.attribution || `Source: ${photoResult.source}`,
+      }];
+    }
+  } catch (e) {
+    clearTimeout(timer);
+    // Timeout or unexpected error — return activity with minimal enrichment
+    console.warn(`[Stage 4] Enrichment aborted for "${activity.title}" (${e instanceof Error ? e.message : e})`);
   }
 
   // Set verification confidence based on what we got
