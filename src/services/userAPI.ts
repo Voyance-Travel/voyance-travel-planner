@@ -5,7 +5,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
-import { parseLocalDate } from '@/utils/dateUtils';
+import { parseLocalDate, getLocalToday } from '@/utils/dateUtils';
 import { useQuery } from '@tanstack/react-query';
 
 // ============================================================================
@@ -291,7 +291,7 @@ export async function getNextTrip(): Promise<TripCard | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
   
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalToday();
   
   const { data: trip } = await supabase
     .from('trips')

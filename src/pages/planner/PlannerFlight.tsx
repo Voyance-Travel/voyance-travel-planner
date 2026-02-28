@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { addDays } from '@/utils/dateUtils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plane, 
@@ -253,7 +254,7 @@ export default function PlannerFlight() {
   const flightParams: FlightSearchParams = useMemo(() => ({
     origin: searchParams.get('origin') || 'JFK',
     destination: searchParams.get('destination') || 'CDG',
-    departureDate: searchParams.get('departureDate') || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    departureDate: searchParams.get('departureDate') || addDays(new Date(), 30),
     returnDate: searchParams.get('returnDate') || undefined,
     passengers: parseInt(searchParams.get('passengers') || '1'),
     class: (searchParams.get('class') as 'economy' | 'business') || 'economy',

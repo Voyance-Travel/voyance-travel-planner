@@ -94,7 +94,10 @@ export function useBulkUnlock() {
         try {
           const dateObj = parseLocalDate(params.startDate);
           dateObj.setDate(dateObj.getDate() + dayNumber - 1);
-          const dateStr = dateObj.toISOString().split('T')[0];
+          const y = dateObj.getFullYear();
+          const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+          const d = String(dateObj.getDate()).padStart(2, '0');
+          const dateStr = `${y}-${m}-${d}`;
 
           await supabase.functions.invoke('generate-itinerary', {
             body: {

@@ -76,7 +76,7 @@ export default function TripSetup({ formData, updateFormData, onContinue }: Trip
           </Label>
           <Input
             id="name"
-            placeholder="Summer Adventure 2024"
+            placeholder="Summer Adventure 2026"
             value={formData.name || ''}
             onChange={(e) => updateFormData({ name: e.target.value })}
             className="h-12"

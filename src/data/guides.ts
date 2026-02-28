@@ -585,16 +585,16 @@ The best hidden gems aren't specific locations but moments of connection—when 
     relatedGuides: ["travel-like-a-local", "experience-attractions-like-a-local"]
   },
   {
-    slug: "best-time-to-book-2025",
-    title: "Best Time to Book for 2025",
+    slug: "best-time-to-book-2026",
+    title: "Best Time to Book for 2026",
     subtitle: "Strategic timing to secure the best deals and availability",
     category: "Travel Tips",
     readTime: "4 min read",
     coverImage: toSiteImageUrlFromPhotoId("photo-1506905925346-21bda4d32df4"),
-    summary: "A strategic guide to timing your 2025 travel bookings for maximum savings and availability, with month-by-month recommendations for popular destinations.",
-    content: `# Best Time to Book for 2025
+    summary: "A strategic guide to timing your 2026 travel bookings for maximum savings and availability, with month-by-month recommendations for popular destinations.",
+    content: `# Best Time to Book for 2026
 
-Timing is everything when it comes to travel planning. Knowing exactly when to book can save you hundreds, if not thousands, on your 2025 adventures while ensuring you don't miss out on peak experiences.
+Timing is everything when it comes to travel planning. Knowing exactly when to book can save you hundreds, if not thousands, on your 2026 adventures while ensuring you don't miss out on peak experiences.
 
 ## General Booking Windows
 
@@ -603,7 +603,7 @@ Timing is everything when it comes to travel planning. Knowing exactly when to b
 - **Tours & Experiences:** 2-4 weeks for local activities; 2-3 months for limited-capacity tours
 - **Cruises:** 6-12 months for best cabin selection and early booking discounts
 
-## Month-by-Month Strategy for 2025
+## Month-by-Month Strategy for 2026
 
 ### January – February
 **Book now for:** Summer European vacations, especially Mediterranean coastlines and popular cities like Paris, Rome, and Barcelona. Early booking discounts are substantial.
@@ -623,17 +623,17 @@ Timing is everything when it comes to travel planning. Knowing exactly when to b
 ### July – August
 **Book now for:** Thanksgiving and Christmas/New Year's travel. These periods see the highest prices and demand of the year.
 
-**Start planning:** Spring break 2026 destinations, especially for family-friendly resorts.
+**Start planning:** Spring break 2027 destinations, especially for family-friendly resorts.
 
 ### September – October
 **Book now for:** Winter ski vacations and tropical escapes during peak winter months.
 
-**Start planning:** Cherry blossom season in Japan (March-April 2026), which requires booking 6+ months ahead.
+**Start planning:** Cherry blossom season in Japan (March-April 2027), which requires booking 6+ months ahead.
 
 ### November – December
-**Book now for:** Spring 2026 trips, especially during cherry blossom season in Japan or tulip season in the Netherlands.
+**Book now for:** Spring 2027 trips, especially during cherry blossom season in Japan or tulip season in the Netherlands.
 
-**Start planning:** Summer 2026 once airlines release their full schedules (typically 330 days in advance).
+**Start planning:** Summer 2027 once airlines release their full schedules (typically 330 days in advance).
 
 ## Money-Saving Booking Strategies
 
@@ -647,7 +647,7 @@ Timing is everything when it comes to travel planning. Knowing exactly when to b
 
 5. **Monitor exchange rates** if traveling internationally, as favorable currency shifts can effectively discount your entire trip
 
-## Destination-Specific Tips for 2025
+## Destination-Specific Tips for 2026
 
 - **Japan:** Book 6+ months ahead for cherry blossom season (late March through April)
 - **European Summer:** Book 4-6 months ahead, especially for coastal destinations
@@ -658,7 +658,7 @@ Timing is everything when it comes to travel planning. Knowing exactly when to b
 Remember that while these guidelines offer optimal booking windows, travel deals can emerge at any time. The most strategic approach is to start planning early, set alerts, and be ready to book when the right opportunity presents itself.`,
     datePublished: "2024-05-15T08:00:00Z",
     featured: true,
-    tags: ["booking strategy", "travel planning", "budget travel", "2025 travel"],
+    tags: ["booking strategy", "travel planning", "budget travel", "2026 travel"],
     author: "Voyance Editorial Team",
     relatedGuides: ["smart-splurges-vs-save-picks", "weather-proofing-your-trip"]
   }

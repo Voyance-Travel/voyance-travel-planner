@@ -74,9 +74,12 @@ export const getDaysBetween = (start: string | Date, end: string | Date): number
  * Add days to a date
  */
 export const addDays = (date: string | Date, days: number): string => {
-  const d = typeof date === 'string' ? new Date(date) : new Date(date);
+  const d = typeof date === 'string' ? parseLocalDate(date) : new Date(date);
   d.setDate(d.getDate() + days);
-  return d.toISOString().split('T')[0];
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 /**
