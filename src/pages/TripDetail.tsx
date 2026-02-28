@@ -1635,6 +1635,23 @@ export default function TripDetail() {
           endDate={effectiveEndDate}
           isLocalTrip={trip.user_id === 'local'}
           days={parseAssistantDays(trip.itinerary_data, trip.start_date)}
+          blendedDna={(() => {
+            const bd = (trip as any).blended_dna;
+            if (bd && typeof bd === 'object' && bd.isBlended) {
+              return {
+                blendedTraits: bd.blendedTraits || bd.blended_traits || {},
+                travelerProfiles: (bd.travelerProfiles || bd.travelers || []).map((t: any) => ({
+                  userId: t.userId || t.user_id || '',
+                  name: t.name || '',
+                  archetypeId: t.archetypeId || t.archetype || '',
+                  isOwner: t.isOwner ?? false,
+                  weight: t.weight ?? 0,
+                })),
+                isBlended: true,
+              };
+            }
+            return undefined;
+          })()}
           onItineraryUpdate={(updatedDays) => {
             // Refresh trip data to reflect changes - serialize for Json compatibility
             setTrip(prev => prev ? {
