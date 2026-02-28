@@ -647,17 +647,21 @@ export function ItineraryAssistant({
                 maxLength={MAX_MESSAGE_LENGTH}
                 className="flex-1"
               />
-              {micSupported && (
-                <Button
-                  type="button"
-                  size="icon"
-                  variant={isListening ? "destructive" : "outline"}
-                  onClick={toggleListening}
-                  title={isListening ? "Stop listening" : "Voice input"}
-                >
-                  {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                </Button>
-              )}
+              <Button
+                type="button"
+                size="icon"
+                variant={isListening ? "destructive" : "outline"}
+                onClick={() => {
+                  if (!micSupported) {
+                    toast.error("Voice input is not supported in this browser. Try Chrome or Edge.");
+                    return;
+                  }
+                  toggleListening();
+                }}
+                title={isListening ? "Stop listening" : "Voice input"}
+              >
+                {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+              </Button>
               <Button 
                 type="submit" 
                 size="icon"

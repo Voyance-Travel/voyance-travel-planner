@@ -311,18 +311,22 @@ export function InlineModifier({
                   className="flex-1"
                   autoFocus
                 />
-                {micSupported && (
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant={isListening ? "destructive" : "outline"}
-                    onClick={toggleListening}
-                    title={isListening ? "Stop listening" : "Voice input"}
-                    className="shrink-0"
-                  >
-                    {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                  </Button>
-                )}
+                <Button
+                  type="button"
+                  size="icon"
+                  variant={isListening ? "destructive" : "outline"}
+                  onClick={() => {
+                    if (!micSupported) {
+                      toast.error("Voice input is not supported in this browser. Try Chrome or Edge.");
+                      return;
+                    }
+                    toggleListening();
+                  }}
+                  title={isListening ? "Stop listening" : "Voice input"}
+                  className="shrink-0"
+                >
+                  {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                </Button>
                 <Button
                   onClick={handleSubmit}
                   disabled={isProcessing || !input.trim()}

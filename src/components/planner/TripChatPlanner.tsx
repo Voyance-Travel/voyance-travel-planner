@@ -11,6 +11,7 @@ import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import { supabase } from '@/integrations/supabase/client';
 import { sanitizeAIOutput } from '@/utils/textSanitizer';
@@ -386,18 +387,22 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
               disabled={isStreaming}
             />
             <div className="absolute right-1.5 bottom-1.5 flex items-center gap-0.5">
-              {micSupported && (
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  className={cn("h-7 w-7", isListening && "text-destructive")}
-                  onClick={toggleListening}
-                  title={isListening ? "Stop listening" : "Voice input"}
-                >
-                  {isListening ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
-                </Button>
-              )}
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className={cn("h-7 w-7", isListening && "text-destructive")}
+                onClick={() => {
+                  if (!micSupported) {
+                    toast.error("Voice input is not supported in this browser. Try Chrome or Edge.");
+                    return;
+                  }
+                  toggleListening();
+                }}
+                title={isListening ? "Stop listening" : "Voice input"}
+              >
+                {isListening ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+              </Button>
               <Button
                 type="button"
                 size="icon"
