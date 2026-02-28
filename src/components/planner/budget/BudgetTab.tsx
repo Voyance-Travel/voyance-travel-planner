@@ -38,6 +38,7 @@ import { cn } from '@/lib/utils';
 import { useTripBudget } from '@/hooks/useTripBudget';
 import { BudgetSetupDialog } from './BudgetSetupDialog';
 import { BudgetWarning } from './BudgetWarning';
+import { BudgetCoach, type BudgetSuggestion } from './BudgetCoach';
 import { useTripMembers } from '@/services/tripBudgetAPI';
 import { useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import type { BudgetCategory } from '@/services/tripBudgetService';
@@ -65,10 +66,14 @@ interface BudgetTabProps {
   itineraryDays?: ItineraryDay[];
   /** Called when a planned budget entry is removed so the linked activity can be removed from the itinerary */
   onActivityRemove?: (activityId: string) => void;
+  /** Called when the Budget Coach applies a swap suggestion */
+  onApplyBudgetSwap?: (suggestion: BudgetSuggestion) => void;
   /** Whether hotel selection exists */
   hasHotel?: boolean;
   /** Whether flight selection exists */
   hasFlight?: boolean;
+  /** Trip destination for AI context */
+  destination?: string;
 }
 
 const categoryIcons: Record<BudgetCategory, React.ReactNode> = {
@@ -98,7 +103,7 @@ const categoryColors: Record<BudgetCategory, string> = {
   misc: 'bg-slate-500',
 };
 
-export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, hasHotel, hasFlight }: BudgetTabProps) {
+export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, onApplyBudgetSwap, hasHotel, hasFlight, destination }: BudgetTabProps) {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
   const syncAttempted = useRef(false);
   const { data: rawTripMembers = [] } = useTripMembers(tripId);
@@ -279,6 +284,19 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       {/* Over-budget Warning Banner */}
       {warningLevel !== 'none' && summary && (
         <BudgetWarning summary={summary} />
+      )}
+
+      {/* Budget Coach — AI suggestions when over budget */}
+      {hasBudget && itineraryDays && itineraryDays.length > 0 && summary && (
+        <BudgetCoach
+          tripId={tripId}
+          budgetTargetCents={summary.budgetTotalCents}
+          currentTotalCents={summary.totalCommittedCents + summary.plannedTotalCents}
+          currency={settings?.budget_currency || 'USD'}
+          destination={destination}
+          itineraryDays={itineraryDays}
+          onApplySuggestion={onApplyBudgetSwap}
+        />
       )}
 
       {/* Missing items warning */}

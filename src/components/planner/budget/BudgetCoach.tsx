@@ -1,0 +1,482 @@
+/**
+ * BudgetCoach — AI-powered cost-cutting suggestions panel.
+ *
+ * When the user's itinerary exceeds their budget target this component
+ * fetches swap suggestions from the budget-coach edge function and
+ * renders them with one-tap "Apply" buttons.
+ */
+
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Lightbulb,
+  Scissors,
+  ArrowRight,
+  Check,
+  Loader2,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle,
+  Sparkles,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+
+// ─── Types ──────────────────────────────────────────────────────
+export interface BudgetSuggestion {
+  current_item: string;
+  current_cost: number; // cents
+  suggested_swap: string;
+  new_cost: number; // cents
+  savings: number; // cents
+  reason: string;
+  day_number: number;
+  activity_id: string;
+}
+
+interface ItineraryActivity {
+  id: string;
+  title?: string;
+  name?: string;
+  category?: string;
+  type?: string;
+  cost?: { amount: number; currency: string } | number;
+  description?: string;
+}
+
+interface ItineraryDay {
+  dayNumber: number;
+  date?: string;
+  activities: ItineraryActivity[];
+}
+
+interface BudgetCoachProps {
+  tripId: string;
+  budgetTargetCents: number;
+  currentTotalCents: number;
+  currency: string;
+  destination?: string;
+  itineraryDays: ItineraryDay[];
+  /** Called when the user applies a suggestion — parent must update the itinerary */
+  onApplySuggestion?: (suggestion: BudgetSuggestion) => void;
+  className?: string;
+}
+
+// Simple in-memory cache keyed by tripId
+const suggestionsCache = new Map<
+  string,
+  { suggestions: BudgetSuggestion[]; itineraryHash: string; ts: number }
+>();
+
+function hashItinerary(days: ItineraryDay[]): string {
+  // Quick content-based hash so we know when to invalidate
+  return days
+    .map(
+      (d) =>
+        `${d.dayNumber}:${d.activities.map((a) => a.id).join(',')}`
+    )
+    .join('|');
+}
+
+// ─── Component ──────────────────────────────────────────────────
+export function BudgetCoach({
+  tripId,
+  budgetTargetCents,
+  currentTotalCents,
+  currency,
+  destination,
+  itineraryDays,
+  onApplySuggestion,
+  className,
+}: BudgetCoachProps) {
+  const [suggestions, setSuggestions] = useState<BudgetSuggestion[]>([]);
+  const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
+  const [isLoading, setIsLoading] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const fetchedRef = useRef(false);
+
+  const gapCents = currentTotalCents - budgetTargetCents;
+  const isOverBudget = gapCents > 0;
+
+  const formatCurrency = useCallback(
+    (cents: number) => {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(cents / 100);
+    },
+    [currency]
+  );
+
+  // Build the payload activities in the format the edge function expects
+  const buildPayloadDays = useCallback(() => {
+    return itineraryDays.map((day) => ({
+      dayNumber: day.dayNumber,
+      date: day.date,
+      activities: day.activities.map((a) => {
+        let costCents = 0;
+        if (typeof a.cost === 'number') {
+          costCents = a.cost;
+        } else if (a.cost && typeof a.cost === 'object') {
+          costCents = a.cost.amount;
+        }
+        return {
+          id: a.id,
+          title: a.title || a.name || 'Activity',
+          category: a.category || a.type || 'activity',
+          cost: costCents,
+          currency,
+          day_number: day.dayNumber,
+          description: a.description,
+        };
+      }),
+    }));
+  }, [itineraryDays, currency]);
+
+  const fetchSuggestions = useCallback(
+    async (force = false) => {
+      if (!isOverBudget) return;
+
+      const currentHash = hashItinerary(itineraryDays);
+      const cached = suggestionsCache.get(tripId);
+      if (
+        !force &&
+        cached &&
+        cached.itineraryHash === currentHash &&
+        Date.now() - cached.ts < 5 * 60 * 1000 // 5min TTL
+      ) {
+        setSuggestions(cached.suggestions);
+        return;
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const { data, error: fnError } = await supabase.functions.invoke(
+          'budget-coach',
+          {
+            body: {
+              itinerary_days: buildPayloadDays(),
+              budget_target_cents: budgetTargetCents,
+              current_total_cents: currentTotalCents,
+              currency,
+              destination,
+            },
+          }
+        );
+
+        if (fnError) throw fnError;
+        if (data?.error) throw new Error(data.error);
+
+        const fetched: BudgetSuggestion[] = data?.suggestions || [];
+        setSuggestions(fetched);
+        suggestionsCache.set(tripId, {
+          suggestions: fetched,
+          itineraryHash: currentHash,
+          ts: Date.now(),
+        });
+      } catch (e: any) {
+        console.error('[BudgetCoach] fetch error:', e);
+        setError(e?.message || 'Failed to load suggestions');
+        toast.error('Failed to load budget suggestions');
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [
+      isOverBudget,
+      tripId,
+      itineraryDays,
+      buildPayloadDays,
+      budgetTargetCents,
+      currentTotalCents,
+      currency,
+      destination,
+    ]
+  );
+
+  // Auto-fetch on mount if over budget
+  useEffect(() => {
+    if (isOverBudget && !fetchedRef.current && itineraryDays.length > 0) {
+      fetchedRef.current = true;
+      fetchSuggestions();
+    }
+  }, [isOverBudget, itineraryDays.length, fetchSuggestions]);
+
+  // ─── On-target state ──────────────────────────────────────────
+  if (!isOverBudget) {
+    return (
+      <Card className={cn('border-emerald-200 dark:border-emerald-800', className)}>
+        <CardContent className="py-4">
+          <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+            <CheckCircle className="h-5 w-5" />
+            <span className="font-medium">On target</span>
+            <span className="text-muted-foreground text-sm">
+              — You're within your {formatCurrency(budgetTargetCents)} budget
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // ─── Applied savings calc ─────────────────────────────────────
+  const appliedSavings = suggestions
+    .filter((s) => appliedIds.has(s.activity_id))
+    .reduce((sum, s) => sum + s.savings, 0);
+
+  const remainingGap = gapCents - appliedSavings;
+  const totalPotentialSavings = suggestions.reduce((sum, s) => sum + s.savings, 0);
+  const isNowOnTarget = remainingGap <= 0;
+
+  const handleApply = (suggestion: BudgetSuggestion) => {
+    setAppliedIds((prev) => new Set(prev).add(suggestion.activity_id));
+    onApplySuggestion?.(suggestion);
+    if (remainingGap - suggestion.savings <= 0) {
+      toast.success("You're on target! Budget balanced.");
+    } else {
+      toast.success(`Saved ${formatCurrency(suggestion.savings)}`);
+    }
+  };
+
+  return (
+    <Card className={cn('border-primary/30', className)}>
+      <CardHeader className="pb-3">
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex items-center justify-between w-full text-left"
+        >
+          <CardTitle className="text-base font-medium flex items-center gap-2">
+            <Lightbulb className="h-4 w-4 text-primary" />
+            Budget Coach
+            {isNowOnTarget && (
+              <Badge variant="secondary" className="text-emerald-600 dark:text-emerald-400 ml-2">
+                ✅ On target
+              </Badge>
+            )}
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            {!isLoading && suggestions.length > 0 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  fetchSuggestions(true);
+                }}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+              </Button>
+            )}
+            {isExpanded ? (
+              <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            )}
+          </div>
+        </button>
+        {!isNowOnTarget && (
+          <p className="text-sm text-muted-foreground mt-1">
+            You're {formatCurrency(gapCents)} over budget. Here's how to get on target:
+          </p>
+        )}
+      </CardHeader>
+
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <CardContent className="space-y-3 pt-0">
+              {/* Loading state */}
+              {isLoading && (
+                <div className="flex items-center justify-center py-8 gap-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  <span className="text-sm text-muted-foreground">
+                    Analyzing your itinerary for savings...
+                  </span>
+                </div>
+              )}
+
+              {/* Error state */}
+              {error && !isLoading && (
+                <div className="text-center py-6 space-y-3">
+                  <p className="text-sm text-destructive">{error}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchSuggestions(true)}
+                    className="gap-1.5"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Retry
+                  </Button>
+                </div>
+              )}
+
+              {/* Suggestions */}
+              {!isLoading && !error && suggestions.length > 0 && (
+                <>
+                  {suggestions.map((s, i) => {
+                    const isApplied = appliedIds.has(s.activity_id);
+                    // Once on target, collapse remaining unapplied
+                    if (isNowOnTarget && !isApplied) return null;
+
+                    return (
+                      <motion.div
+                        key={`${s.activity_id}-${i}`}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                        className={cn(
+                          'flex items-start gap-3 p-3 rounded-lg border transition-colors',
+                          isApplied
+                            ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
+                            : 'bg-card border-border hover:border-primary/30'
+                        )}
+                      >
+                        {/* Number */}
+                        <div
+                          className={cn(
+                            'flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold',
+                            isApplied
+                              ? 'bg-emerald-500 text-white'
+                              : 'bg-primary/10 text-primary'
+                          )}
+                        >
+                          {isApplied ? <Check className="h-3.5 w-3.5" /> : i + 1}
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <div className="flex items-center gap-1.5 flex-wrap text-sm">
+                            <span className="flex items-center gap-1 text-muted-foreground">
+                              <Scissors className="h-3 w-3" />
+                              {s.current_item}
+                              <span className="font-medium text-foreground">
+                                ({formatCurrency(s.current_cost)})
+                              </span>
+                            </span>
+                            <ArrowRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                            <span className="font-medium text-foreground">
+                              {s.suggested_swap}
+                              <span className="text-primary ml-1">
+                                ({formatCurrency(s.new_cost)})
+                              </span>
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">{s.reason}</p>
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant="secondary"
+                              className="text-xs text-emerald-600 dark:text-emerald-400"
+                            >
+                              Save {formatCurrency(s.savings)}
+                            </Badge>
+                            <span className="text-[10px] text-muted-foreground">
+                              Day {s.day_number}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Apply button */}
+                        <Button
+                          variant={isApplied ? 'ghost' : 'default'}
+                          size="sm"
+                          disabled={isApplied}
+                          onClick={() => handleApply(s)}
+                          className={cn(
+                            'flex-shrink-0',
+                            isApplied && 'text-emerald-600 dark:text-emerald-400'
+                          )}
+                        >
+                          {isApplied ? (
+                            <>
+                              <Check className="h-3.5 w-3.5 mr-1" />
+                              Applied
+                            </>
+                          ) : (
+                            'Apply'
+                          )}
+                        </Button>
+                      </motion.div>
+                    );
+                  })}
+
+                  {/* Running total */}
+                  <div
+                    className={cn(
+                      'p-3 rounded-lg text-sm font-medium flex items-center justify-between',
+                      isNowOnTarget
+                        ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-muted text-foreground'
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4" />
+                      <span>
+                        Total potential savings: {formatCurrency(totalPotentialSavings)}
+                      </span>
+                    </div>
+                    {isNowOnTarget ? (
+                      <span className="flex items-center gap-1">
+                        <CheckCircle className="h-4 w-4" />
+                        You're on target!
+                      </span>
+                    ) : appliedSavings > 0 ? (
+                      <span>
+                        Applied: {formatCurrency(appliedSavings)} — still{' '}
+                        {formatCurrency(remainingGap)} over
+                      </span>
+                    ) : totalPotentialSavings >= gapCents ? (
+                      <span className="text-emerald-600 dark:text-emerald-400">
+                        ✅ Enough to hit your budget!
+                      </span>
+                    ) : (
+                      <span className="text-amber-600 dark:text-amber-400">
+                        Still {formatCurrency(gapCents - totalPotentialSavings)} over
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* Empty state */}
+              {!isLoading && !error && suggestions.length === 0 && (
+                <div className="text-center py-6">
+                  <p className="text-sm text-muted-foreground">
+                    No suggestions available yet.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 gap-1.5"
+                    onClick={() => fetchSuggestions(true)}
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Get Suggestions
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </Card>
+  );
+}
+
+export default BudgetCoach;
