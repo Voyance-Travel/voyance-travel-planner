@@ -411,6 +411,7 @@ serve(async (req) => {
       };
 
       const originalAction = metadata?.originalAction as string | undefined;
+      const pendingChargeId = metadata?.pendingChargeId as string | undefined;
       // Support dynamic refund amounts (e.g. trip_generation) via creditsAmount param
       const fixedRefund = originalAction ? (REFUNDABLE_COSTS[originalAction] ?? 0) : 0;
       const dynamicRefund = (typeof creditsAmount === 'number' && creditsAmount > 0) ? creditsAmount : 0;
@@ -422,6 +423,32 @@ serve(async (req) => {
           JSON.stringify({ error: 'No refund amount recognized for originalAction', originalAction }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
+      }
+
+      // ── Idempotency check: prevent double refunds for the same pending charge ──
+      if (pendingChargeId) {
+        const { data: existingRefund } = await supabaseAdmin
+          .from('credit_ledger')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('transaction_type', 'refund')
+          .contains('metadata', { pendingChargeId })
+          .limit(1);
+
+        if (existingRefund && existingRefund.length > 0) {
+          console.log(`[spend-credits] REFUND: Idempotent hit — refund already issued for pendingChargeId ${pendingChargeId}`);
+          const balance = await syncBalanceCache(supabaseAdmin, user.id);
+          return new Response(
+            JSON.stringify({
+              success: true,
+              refunded: refundAmount,
+              action: 'REFUND',
+              idempotent: true,
+              newBalance: { total: balance.total, purchased: balance.purchased, free: balance.free },
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       }
 
       // Add credits back via a new credit_purchases row (simplest safe approach — no expiry)
@@ -460,8 +487,25 @@ serve(async (req) => {
           reason: metadata?.reason || 'enrichment_failed',
           originalAction,
           tripId: tripId || null,
+          pendingChargeId: pendingChargeId || null,
         },
       });
+
+      // Atomically mark the pending charge as refunded
+      if (pendingChargeId) {
+        const { error: pcRefundErr } = await supabaseAdmin
+          .from('pending_credit_charges')
+          .update({
+            status: 'refunded',
+            resolved_at: new Date().toISOString(),
+            resolution_note: `Refunded via spend-credits REFUND path`,
+          })
+          .eq('id', pendingChargeId);
+
+        if (pcRefundErr) {
+          console.error(`[spend-credits] REFUND: Failed to mark pending charge ${pendingChargeId} as refunded:`, pcRefundErr);
+        }
+      }
 
       // Sync the balance cache so the UI immediately reflects the restored credits
       const balance = await syncBalanceCache(supabaseAdmin, user.id);

@@ -4287,19 +4287,33 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
     }
     
     // Check each activity in current day against trip-wide history
+    // Logistical/downtime patterns are excluded from duplicate checks entirely
+    const LOGISTICAL_PATTERNS = /\b(free time|relax|reset|freshen|check.?in|check.?out|transfer|transit|break|settle|unpack|pack|depart|arrival|airport|taxi|uber|rideshare|metro|bus|train)\b/i;
+
     for (const act of day.activities) {
       const actConcept = extractConcept(normalizeText(act.title || ''));
       const actType = getExperienceType(act);
+      const actTitle = (act.title || '').toLowerCase();
       
-      // Skip logistics - those can repeat (transfers, check-ins, etc.)
+      // Skip logistics/dining/accommodation - those can repeat (transfers, check-ins, meals, etc.)
       if (actType === 'transport' || actType === 'accommodation' || actType === 'dining') {
         continue;
       }
       
-      // STRICT: No activity should repeat if concept matches too closely
+      // Skip logistical/downtime activities from trip-wide duplicate checks
+      if (LOGISTICAL_PATTERNS.test(actTitle)) {
+        continue;
+      }
+
+      // Trip-wide concept similarity: HARD error only for culinary_class and wine_tasting;
+      // everything else is a WARNING (quality guidance, not a generation-blocking failure)
       for (const prevConcept of previousConcepts) {
         if (conceptSimilarity(actConcept, prevConcept)) {
-          errors.push(`TRIP-WIDE DUPLICATE: "${act.title}" is too similar to an activity from a previous day. Each activity type should only appear ONCE across the entire trip.`);
+          if (actType === 'culinary_class' || actType === 'wine_tasting') {
+            errors.push(`TRIP-WIDE DUPLICATE: "${act.title}" is too similar to an activity from a previous day.`);
+          } else {
+            warnings.push(`Trip-wide similarity: "${act.title}" resembles a previous day's activity. Consider more variety.`);
+          }
           break;
         }
       }

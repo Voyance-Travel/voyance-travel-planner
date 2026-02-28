@@ -185,6 +185,19 @@ async function runGenerationInBackground(
       const errText = await generateResponse.text();
       console.error(`[enrich-manual-trip:bg] generate-itinerary returned ${generateResponse.status}: ${errText}`);
 
+      // Try to extract the actual error message from the response body
+      let detailedError = `Generation failed: ${generateResponse.status}`;
+      try {
+        const errJson = JSON.parse(errText);
+        if (errJson.error) detailedError = errJson.error;
+        else if (errJson.message) detailedError = errJson.message;
+      } catch {
+        // If not JSON, use truncated text
+        if (errText && errText.length > 0) {
+          detailedError = errText.length > 300 ? errText.substring(0, 300) + '…' : errText;
+        }
+      }
+
       const isGatewayTimeout = [408, 504, 524].includes(generateResponse.status);
       if (isGatewayTimeout) {
         console.warn(`[enrich-manual-trip:bg] Timeout status ${generateResponse.status} — checking if generation completed anyway...`);
@@ -202,10 +215,10 @@ async function runGenerationInBackground(
             totalActivities: 0,
           };
         } else {
-          throw new Error(`Generation failed: ${generateResponse.status}`);
+          throw new Error(detailedError);
         }
       } else {
-        throw new Error(`Generation failed: ${generateResponse.status}`);
+        throw new Error(detailedError);
       }
     }
 
@@ -293,7 +306,7 @@ async function runGenerationInBackground(
       smartFinishStatus: "success",
       smartFinishQualityWarnings: qualityIssues.length > 0 ? qualityIssues : undefined,
     };
-    await supabase
+    const { error: metaSuccessErr } = await supabase
       .from("trips")
       .update({
         metadata: completedMeta,
@@ -302,9 +315,13 @@ async function runGenerationInBackground(
       })
       .eq("id", tripId);
 
+    if (metaSuccessErr) {
+      console.error(`[enrich-manual-trip:bg] Failed to write success metadata:`, metaSuccessErr);
+    }
+
     // Mark pending charge as completed
     if (pendingChargeId) {
-      await supabase
+      const { error: pcErr } = await supabase
         .from("pending_credit_charges")
         .update({
           status: "completed",
@@ -314,10 +331,17 @@ async function runGenerationInBackground(
             : "Smart Finish succeeded",
         })
         .eq("id", pendingChargeId);
+
+      if (pcErr) {
+        console.error(`[enrich-manual-trip:bg] Failed to mark pending charge ${pendingChargeId} as completed:`, pcErr);
+      }
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[enrich-manual-trip:bg] Background generation FAILED:`, msg);
+
+    // Create a user-safe error message (truncate internal details)
+    const userSafeError = msg.length > 200 ? msg.substring(0, 200) + '…' : msg;
 
     // Mark failure in metadata so client can detect it
     const failedMeta = {
@@ -325,19 +349,29 @@ async function runGenerationInBackground(
       smartFinishCompleted: false,
       smartFinishFailed: true,
       smartFinishFailedAt: new Date().toISOString(),
-      smartFinishError: msg,
+      smartFinishError: userSafeError,
+      smartFinishErrorFull: msg.substring(0, 1000), // full diagnostic (truncated)
+      smartFinishStatus: "failed",
     };
-    await supabase
+    const { error: metaFailErr } = await supabase
       .from("trips")
       .update({ metadata: failedMeta })
       .eq("id", tripId);
 
+    if (metaFailErr) {
+      console.error(`[enrich-manual-trip:bg] CRITICAL: Failed to write failure metadata:`, metaFailErr);
+    }
+
     // Mark pending charge as failed
     if (pendingChargeId) {
-      await supabase
+      const { error: pcFailErr } = await supabase
         .from("pending_credit_charges")
-        .update({ status: "failed", resolved_at: new Date().toISOString(), resolution_note: `Smart Finish failed: ${msg}` })
+        .update({ status: "failed", resolved_at: new Date().toISOString(), resolution_note: `Smart Finish failed: ${userSafeError}` })
         .eq("id", pendingChargeId);
+
+      if (pcFailErr) {
+        console.error(`[enrich-manual-trip:bg] Failed to mark pending charge ${pendingChargeId} as failed:`, pcFailErr);
+      }
     }
   }
 }
