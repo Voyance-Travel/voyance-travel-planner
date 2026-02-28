@@ -15,7 +15,8 @@ import {
   Gem,
   Info,
   Settings2,
-  Rocket
+  Rocket,
+  Share2
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
@@ -204,6 +205,32 @@ function ArchetypeHeroCard({
               <RefreshCw className="h-3 w-3 mr-1" />
               Retake
             </Link>
+          </Button>
+
+          <span className="text-background/15 hidden sm:inline">|</span>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="px-0 h-auto py-0 text-xs text-background/30 hover:text-background hover:bg-transparent"
+            onClick={async () => {
+              const shareText = `I'm a ${narrative.name}! "${narrative.hookLine}" — Discover your Travel DNA on Voyance`;
+              const shareUrl = `${window.location.origin}/archetypes`;
+              
+              if (navigator.share) {
+                try {
+                  await navigator.share({ title: `My Travel DNA: ${narrative.name}`, text: shareText, url: shareUrl });
+                } catch (e) {
+                  // User cancelled share
+                }
+              } else {
+                await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`);
+                const { toast } = await import('sonner');
+                toast.success('Copied to clipboard!', { description: 'Share your Travel DNA with friends' });
+              }
+            }}
+          >
+            <Share2 className="h-3 w-3 mr-1" />
+            Share
           </Button>
         </motion.div>
       </div>
