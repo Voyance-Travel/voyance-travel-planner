@@ -98,7 +98,6 @@ import RestaurantSearchDrawer from '@/components/restaurants/RestaurantSearchDra
 import { ItineraryOnboardingTour } from './ItineraryOnboardingTour';
 import ShareGuideSheet from '@/components/sharing/ShareGuideSheet';
 import { preloadAirportCodes, getAirportDisplaySync } from '@/services/locationSearchAPI';
-import { DayActionToolbar } from './DayActionToolbar';
 // InlineModifier removed — redundant with TripChat
 import type { ItineraryDay } from '@/services/itineraryActionExecutor';
 import { ItineraryValueHeader } from './ItineraryValueHeader';
@@ -3871,22 +3870,6 @@ export function EditorialItinerary({
                   );
                 })()}
 
-                {/* Day Action Toolbar — directly after day activities */}
-                {days[selectedDayIndex] && (() => {
-                  const selectedDay = days[selectedDayIndex];
-                  const dayTotalCost = getDayTotalCost(selectedDay.activities, travelers, budgetTier, destination, destinationCountry);
-                  return (
-                    <DayActionToolbar
-                      onAdd={() => setAddActivityModal({ dayIndex: selectedDayIndex })}
-                      onDiscover={() => setDiscoverDrawerOpen(true)}
-                      onImport={() => setImportModal({ dayIndex: selectedDayIndex })}
-                      onRefreshDay={() => handleRefreshDay(selectedDayIndex)}
-                      isRefreshing={refreshingDayNumber === selectedDay.dayNumber}
-                      dayTotal={`Day Total: ${formatCurrency(displayCost(dayTotalCost), tripCurrency)}${travelers > 1 ? '/pp' : ''}`}
-                      isEditable={effectiveIsEditable}
-                    />
-                  );
-                })()}
               </div>
             )}
             
@@ -5100,7 +5083,7 @@ export function EditorialItinerary({
          tripId={tripId}
       />
 
-      {/* DayActionToolbar moved inside itinerary tab content above */}
+      
     </div>
   );
 }
@@ -6780,7 +6763,7 @@ function DayCard({
                   )}
                 </div>
               ) : (
-                <div className="flex items-center justify-between text-sm">
+                <div className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-6 text-muted-foreground">
                     {day.estimatedWalkingTime && (
                       <span className="flex items-center gap-1.5">
@@ -6795,10 +6778,63 @@ function DayCard({
                       </span>
                     )}
                   </div>
-                  {/* Day total inline badge — toolbar actions moved to fixed bottom DayActionToolbar */}
-                  <span className="font-medium text-foreground px-3 py-1 rounded-full bg-primary/10 text-primary">
-                    Day Total: {formatCurrency(displayCost(totalCost), tripCurrency)}{travelers > 1 ? '/pp' : ''}
-                  </span>
+
+                  <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap sm:gap-2">
+                    {isEditable && (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onAddActivity()}
+                          className="h-8 gap-1.5 px-2.5 sm:px-3"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          <span className="hidden md:inline">Add</span>
+                        </Button>
+
+                        {onDiscover && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={onDiscover}
+                            className="h-8 gap-1.5 px-2.5 sm:px-3"
+                          >
+                            <Compass className="h-3.5 w-3.5" />
+                            <span className="hidden md:inline">Discover</span>
+                          </Button>
+                        )}
+
+                        {onImportActivities && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={onImportActivities}
+                            className="h-8 gap-1.5 px-2.5 sm:px-3"
+                          >
+                            <ClipboardPaste className="h-3.5 w-3.5" />
+                            <span className="hidden md:inline">Import</span>
+                          </Button>
+                        )}
+
+                        {onRefreshDay && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={onRefreshDay}
+                            disabled={isRefreshingDay}
+                            className="h-8 gap-1.5 px-2.5 sm:px-3"
+                          >
+                            <RefreshCw className={cn("h-3.5 w-3.5", isRefreshingDay && "animate-spin")} />
+                            <span className="hidden md:inline">{isRefreshingDay ? 'Refreshing…' : 'Refresh'}</span>
+                          </Button>
+                        )}
+                      </>
+                    )}
+
+                    <span className="font-medium text-foreground px-3 py-1 rounded-full bg-primary/10 text-primary">
+                      Day Total: {formatCurrency(displayCost(totalCost), tripCurrency)}{travelers > 1 ? '/pp' : ''}
+                    </span>
+                  </div>
                 </div>
               )}
 
