@@ -4536,8 +4536,8 @@ async function generateSingleDayWithRetry(
       // Now uses DB-driven data with freshness-based Perplexity enrichment
       const authenticityScore = context.travelerDNA?.traits?.authenticity || 0;
       // Resolve isFirstTimeVisitor per-city for multi-city trips
-      const dayCity = context.multiCityDayMap?.[dayNumber - 1];
-      const currentCityName = dayCity?.cityName || context.destination;
+      const dayCityForVisitor = context.multiCityDayMap?.[dayNumber - 1];
+      const currentCityName = dayCityForVisitor?.cityName || context.destination;
       const isFirstTimeVisitor = context.firstTimePerCity
         ? (context.firstTimePerCity[currentCityName] ?? context.isFirstTimeVisitor ?? true)
         : (context.isFirstTimeVisitor ?? true);

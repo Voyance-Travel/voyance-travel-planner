@@ -164,7 +164,7 @@ export default function FullItinerary({
           variant={activeTab === 'details' ? 'default' : 'outline'}
           onClick={() => setActiveTab('details')}
         >
-          Flight & Hotel Details
+          Transportation & Hotel
         </Button>
       </div>
 
@@ -187,7 +187,7 @@ export default function FullItinerary({
           ))}
         </div>
       ) : (
-        /* Flight & Hotel Details */
+        /* Transportation & Hotel Details */
         <div className="space-y-6">
           {/* Flight Info */}
           {(() => {
@@ -205,10 +205,10 @@ export default function FullItinerary({
                 <div className="bg-primary/10 px-6 py-4 border-b border-border">
                   <h3 className="font-semibold flex items-center gap-2">
                     <Plane className="h-5 w-5" />
-                    Flight Details
+                    Transportation
                     {allLegs.length > 0 && (
                       <Badge variant="secondary" className="ml-2 text-xs">
-                        {allLegs.length} flight{allLegs.length !== 1 ? 's' : ''}
+                        {allLegs.length} segment{allLegs.length !== 1 ? 's' : ''}
                       </Badge>
                     )}
                   </h3>

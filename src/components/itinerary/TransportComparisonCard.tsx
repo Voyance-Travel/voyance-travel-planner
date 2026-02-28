@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Train, Plane, Bus, Car, Ship, ArrowRight, Clock, Wallet, Star, MapPin, Lightbulb, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { Train, Plane, Bus, Car, Ship, ArrowRight, Clock, Wallet, Star, MapPin, Lightbulb, Check, ChevronDown, ChevronUp, ExternalLink, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -20,6 +20,7 @@ interface TransportComparisonCardProps {
   options: TransportOption[];
   selectedId?: string;
   onSelect?: (optionId: string) => void;
+  onAddCustom?: () => void;
   className?: string;
 }
 
@@ -58,6 +59,7 @@ export function TransportComparisonCard({
   options,
   selectedId,
   onSelect,
+  onAddCustom,
   className,
 }: TransportComparisonCardProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -258,6 +260,20 @@ export function TransportComparisonCard({
                         </div>
                       )}
 
+                      {/* Booking link */}
+                      {option.bookingUrl && (
+                        <a
+                          href={option.bookingUrl.startsWith('http') ? option.bookingUrl : `https://${option.bookingUrl}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
+                        >
+                          Book at {option.bookingWebsite || option.bookingUrl.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+
                       {/* Cost breakdown */}
                       {!option.cost.includesTransfers && (
                         <p className="text-[10px] text-muted-foreground italic">
@@ -273,8 +289,21 @@ export function TransportComparisonCard({
         })}
       </div>
 
+      {/* Add your own transport */}
+      {onAddCustom && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full text-xs border-dashed"
+          onClick={onAddCustom}
+        >
+          <Plus className="h-3.5 w-3.5 mr-1.5" />
+          Add your own transport
+        </Button>
+      )}
+
       <p className="text-[10px] text-muted-foreground/60 px-1 italic">
-        Prices are estimates - verify current fares before booking
+        Prices are estimates — book externally, then paste your confirmation back here
       </p>
     </div>
   );
