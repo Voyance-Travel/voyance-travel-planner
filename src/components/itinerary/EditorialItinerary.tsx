@@ -3846,6 +3846,23 @@ export function EditorialItinerary({
                     </>
                   );
                 })()}
+
+                {/* Day Action Toolbar — directly after day activities */}
+                {days[selectedDayIndex] && (() => {
+                  const selectedDay = days[selectedDayIndex];
+                  const dayTotalCost = getDayTotalCost(selectedDay.activities, travelers, budgetTier, destination, destinationCountry);
+                  return (
+                    <DayActionToolbar
+                      onAdd={() => setAddActivityModal({ dayIndex: selectedDayIndex })}
+                      onDiscover={() => setDiscoverDrawerOpen(true)}
+                      onImport={() => setImportModal({ dayIndex: selectedDayIndex })}
+                      onRefreshDay={() => handleRefreshDay(selectedDayIndex)}
+                      isRefreshing={refreshingDayNumber === selectedDay.dayNumber}
+                      dayTotal={`Day Total: ${formatCurrency(displayCost(dayTotalCost), tripCurrency)}${travelers > 1 ? '/pp' : ''}`}
+                      isEditable={effectiveIsEditable}
+                    />
+                  );
+                })()}
               </div>
             )}
             
@@ -3878,22 +3895,6 @@ export function EditorialItinerary({
               </div>
             )}
 
-            {/* Day Action Toolbar — inside itinerary tab content */}
-            {days[selectedDayIndex] && (() => {
-              const selectedDay = days[selectedDayIndex];
-              const dayTotalCost = getDayTotalCost(selectedDay.activities, travelers, budgetTier, destination, destinationCountry);
-              return (
-                <DayActionToolbar
-                  onAdd={() => setAddActivityModal({ dayIndex: selectedDayIndex })}
-                  onDiscover={() => setDiscoverDrawerOpen(true)}
-                  onImport={() => setImportModal({ dayIndex: selectedDayIndex })}
-                  onRefreshDay={() => handleRefreshDay(selectedDayIndex)}
-                  isRefreshing={refreshingDayNumber === selectedDay.dayNumber}
-                  dayTotal={`Day Total: ${formatCurrency(displayCost(dayTotalCost), tripCurrency)}${travelers > 1 ? '/pp' : ''}`}
-                  isEditable={effectiveIsEditable}
-                />
-              );
-            })()}
           </motion.div>
         )}
 
