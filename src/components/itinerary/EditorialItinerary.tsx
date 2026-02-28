@@ -57,6 +57,7 @@ import type { ActivityType, ItineraryActivity, WeatherCondition, DayItinerary } 
 import { convertFrontendDayToBackend, convertFrontendActivityToBackend } from '@/types/itinerary';
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 import { parseEditorialDays } from '@/utils/itineraryParser';
 
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
@@ -7250,14 +7251,25 @@ function ActivityRow({
                 !canViewPremium && "blur-md pointer-events-none"
               )}
               loading="lazy"
-              onError={() => setThumbnailError(true)}
+              onError={(e) => {
+                // Fall back to static type-based image instead of going blank
+                const fallback = getActivityFallbackImage(activityType, activityTitle);
+                if (e.currentTarget.src !== fallback) {
+                  e.currentTarget.src = fallback;
+                } else {
+                  setThumbnailError(true);
+                }
+              }}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover/activity:opacity-100 transition-opacity" />
           </>
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-secondary/50 to-secondary/20 text-primary/50">
-            {style.icon}
-          </div>
+          <img
+            src={getActivityFallbackImage(activityType, activityTitle)}
+            alt={activityTitle}
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
         )}
       </div>
 
