@@ -910,6 +910,7 @@ function FlightHotelStep({
   isSubmitting,
   isMultiCity,
   multiCityDestinations,
+  multiCityTransports,
   transportSelections,
   onTransportSelect,
 }: {
@@ -940,6 +941,7 @@ function FlightHotelStep({
   isSubmitting: boolean;
   isMultiCity?: boolean;
   multiCityDestinations?: TripDestination[];
+  multiCityTransports?: InterCityTransport[];
   transportSelections?: Record<number, { optionId: string; option: TransportOption }>;
   onTransportSelect?: (transitionIndex: number, option: TransportOption) => void;
 }) {
@@ -1034,9 +1036,23 @@ function FlightHotelStep({
               destinations={multiCityDestinations}
               startDate={startDate}
               endDate={endDate}
-              transportSelections={transportSelections ? Object.fromEntries(
-                Object.entries(transportSelections).map(([k, v]) => [k, { type: (v.option?.mode || 'flight') as any }])
-              ) : undefined}
+              transportSelections={(() => {
+                type LT = 'flight' | 'train' | 'bus' | 'car' | 'ferry';
+                const fromSelections: Record<number, { type: LT }> = {};
+                if (transportSelections) {
+                  Object.entries(transportSelections).forEach(([k, v]) => {
+                    fromSelections[Number(k)] = { type: (v.option?.mode || 'flight') as LT };
+                  });
+                }
+                const merged: Record<number, { type: LT }> = {};
+                (multiCityTransports || []).forEach((t, i) => {
+                  merged[i] = { type: (fromSelections[i]?.type || t.type || 'flight') as LT };
+                });
+                Object.entries(fromSelections).forEach(([k, v]) => {
+                  if (!(Number(k) in merged)) merged[Number(k)] = v;
+                });
+                return Object.keys(merged).length > 0 ? merged : undefined;
+              })()}
               onLegsChange={handleMultiLegsChange}
               onOpenImport={() => setShowImportModal(true)}
               initialOutbound={outboundFlight}
@@ -2230,6 +2246,7 @@ export default function Start() {
                     isSubmitting={isSubmitting}
                     isMultiCity={isMultiCity}
                     multiCityDestinations={multiCityDestinations}
+                    multiCityTransports={multiCityTransports}
                     transportSelections={transportSelections}
                     onTransportSelect={handleTransportSelect}
                   />
