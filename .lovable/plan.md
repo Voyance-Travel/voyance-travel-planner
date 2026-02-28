@@ -1,78 +1,137 @@
 
-# Fix Flight Intelligence Field Name Mismatch
 
-## Root Cause
+# Fix Flight Import → Step 2 Mapping & Missing Leg Communication
 
-The LLM returns intelligence data with **inconsistent field names** (snake_case vs camelCase, different key names entirely). The frontend expects specific camelCase fields like `destinationSchedule` and `missingLegs`, but the AI returns `destination_availability` and `missing_legs`. This means:
+## Problem Summary
 
-- `intelligence.destinationSchedule` is `[]` (empty) -- destinations never render
-- `intelligence.missingLegs` is `[]` (empty) -- the Mallorca-to-Madrid warning never shows
-- `intelligence.route.display` is undefined -- the smart route chain falls back to raw airport codes
-- The BOS-to-ATL return leg shows in raw segments but is never labeled properly in the analysis
+When a user imports 4 flight segments (ATL->MAD->PMI, MAD->BOS->ATL), the Step 2 page has three issues:
 
-The AI actually **does detect** the missing PMI-to-MAD leg and classifies segments correctly -- the data is just stored under wrong keys.
+1. **Positional mapping drops flights**: The editor creates 3 slots (Outbound, Mallorca->Madrid, Return) but receives 4 legs. The 4th leg (BOS->ATL) is silently dropped.
+2. **Classification data is lost**: The `ManualFlightEntry` type doesn't carry `classification` (OUTBOUND, RETURN, CONNECTION, etc.) from the parser, so the editor can't intelligently group connecting flights.
+3. **Missing legs don't reach Transport section**: Intelligence detects PMI->MAD is missing, but this never flows to the "Transportation Between Cities" section, which still shows its default comparison options as if nothing is booked or missing.
+
+---
 
 ## Solution
 
-Add a **server-side normalization layer** in `parse-booking-confirmation/index.ts` that remaps whatever the AI returns into the canonical schema. This is more reliable than trying to force the LLM to use exact field names.
+### 1. Extend `ManualFlightEntry` with classification metadata
 
----
+**File**: `src/components/itinerary/AddBookingInline.tsx`
 
-## Changes
+Add optional fields to `ManualFlightEntry`:
+- `classification?: 'OUTBOUND' | 'RETURN' | 'CONNECTION' | 'INTER_DESTINATION'`
+- `connectionGroup?: number`
 
-### File: `supabase/functions/parse-booking-confirmation/index.ts`
+This lets the parser's classification survive through the import pipeline.
 
-Add a `normalizeIntelligence()` function after the AI response is parsed (after line 281) that:
+### 2. Carry classification through the FlightImportModal
 
-1. **Normalizes `destinationSchedule`**: Checks for `destination_availability`, `destination_schedule`, or `destinationSchedule` -- whichever exists, maps it into the canonical `destinationSchedule` array with camelCase fields (`availableFrom`, `availableUntil`, `fullDays`, `isFirstDestination`, `isLastDestination`)
+**File**: `src/components/itinerary/FlightImportModal.tsx`
 
-2. **Normalizes `missingLegs`**: Checks for `missing_legs` or `missingLegs` -- maps to canonical `missingLegs` array with `fromCity` (not `from_city`), `toCity` (not `to_city`), `suggestedDateRange`, `priority`
+In `handleConfirmImport()` (line 246), include `classification` and `connectionGroup` when mapping `parsedSegments` to `ManualFlightEntry[]`:
 
-3. **Normalizes `route`**: If `route` is empty but `route_summary` exists, sets `route.display = route_summary`. Also checks for `route_display` or `routeDisplay` variants
-
-4. **Normalizes `layovers`**: Remaps `arrival`/`departure` to `arrivalTime`/`departureTime` if needed
-
-5. **Normalizes `warnings`**: If the AI returns plain strings instead of objects, wraps each into `{ type: 'GENERAL', message: string, severity: 'WARNING' }`
-
-6. **Normalizes `summary`**: Checks for `summary` or `route_summary` and ensures it's a string
-
-This function runs **before** the response is sent, ensuring the frontend always gets the expected schema regardless of LLM output variation.
-
-### Prompt Enhancement (same file)
-
-Also tighten the prompt to explicitly specify the exact JSON structure with camelCase field names and provide an example output. This reduces (but doesn't eliminate) the need for normalization. Specifically:
-
-- Add a concrete JSON example in the Phase 2 instructions showing the exact keys: `destinationSchedule` (not `destination_availability`), `missingLegs` (not `missing_legs`), `route.display` (not `route_summary`)
-- Emphasize "Use EXACTLY these camelCase field names"
-
-### Deploy
-
-Redeploy the `parse-booking-confirmation` edge function.
-
----
-
-## Technical Details
-
-The normalization function will look like this (pseudocode):
-
-```text
-function normalizeIntelligence(raw: any): FlightIntelligence {
-  // 1. destinationSchedule: check raw.destinationSchedule || raw.destination_availability || raw.destination_schedule
-  // 2. For each entry: map airport_code -> airport, from_city -> fromCity, etc.
-  // 3. missingLegs: check raw.missingLegs || raw.missing_legs
-  // 4. For each: from_city -> fromCity, to_city -> toCity
-  // 5. route: if raw.route is empty object, try raw.route_summary or raw.routeDisplay
-  // 6. layovers: normalize arrivalTime/departureTime field names
-  // 7. warnings: wrap strings into objects
-  // 8. summary: raw.summary || raw.route_summary fallback
-}
+```
+classification: seg.classification,
+connectionGroup: seg.connectionGroup,
 ```
 
-This is applied at line ~324 (before building the response) so `intelligence` is always canonical before it reaches the frontend.
+### 3. Smart leg-to-slot mapping in MultiLegFlightEditor
 
-## Why This Approach
+**File**: `src/components/planner/flight/MultiLegFlightEditor.tsx`
 
-- LLMs are unreliable at following exact field naming conventions -- normalization is the only robust defense
-- The prompt improvements help reduce normalization work but cannot guarantee it
-- Zero frontend changes needed -- the existing UI code already handles the canonical schema correctly
-- Backward compatible -- trips without intelligence still work fine
+Replace the positional mapping in the import rehydration effect (line 317-358) with classification-aware matching:
+
+- **OUTBOUND + its CONNECTIONs** -> group into the outbound slot (use the first leg's departure, last leg's arrival)
+- **RETURN + its CONNECTIONs** -> group into the return slot (use the first leg's departure, last leg's arrival)
+- **INTER_DESTINATION** -> match to the intercity slot by comparing airport codes to `suggestedFrom`/`suggestedTo`
+- **Fallback**: If no classification, fall back to airport-code matching (leg's departureAirport matches slot's suggestedFrom or arrivalAirport matches slot's suggestedTo)
+
+For grouped connections (e.g., ATL->MAD + MAD->PMI as outbound):
+- Store the primary leg (ATL->MAD) in the slot's `flight` field
+- Store the connecting leg (MAD->PMI) in a new optional `connectionLegs` array on `FlightLegSlot`
+- The slot header shows the full route: "ATL -> MAD -> PMI" instead of just one segment
+- Both legs are preserved for the trip insert
+
+### 4. Add `connectionLegs` to FlightLegSlot
+
+**File**: `src/components/planner/flight/MultiLegFlightEditor.tsx`
+
+Add to the `FlightLegSlot` interface:
+```
+connectionLegs?: ManualFlightEntry[]  // Additional connecting flights grouped with this slot
+```
+
+Update the slot UI to show "via MAD" or similar when connection legs exist.
+
+### 5. Pass intelligence `missingLegs` to InterCityTransportComparison
+
+**File**: `src/pages/Start.tsx`
+
+- Thread `flightIntelligence` state down to the `FlightHotelStep` component (it's already available via `onIntelligenceCapture`)
+- Add a `missingLegs` prop to `InterCityTransportComparison`
+- When a transition matches a missing leg (fromCity/toCity), show an amber "Not yet booked" badge and a "Book this" prompt instead of the default AI comparison options
+
+### 6. Mark booked transitions in InterCityTransportComparison
+
+**File**: `src/components/planner/InterCityTransportComparison.tsx`
+
+Add support for:
+- `missingLegs?: Array<{ fromCity: string; toCity: string; suggestedDateRange?: { earliest: string; latest: string } }>`
+- `bookedTransitions?: Record<number, { type: string; details: string }>` (transitions that already have imported flight data)
+
+For each transition:
+- If it matches a `missingLeg`: Show amber warning card with "Need flight from X to Y" + suggested booking dates
+- If it has booked data: Show a green "Booked" badge instead of comparison options
+- Otherwise: Show the normal AI comparison options
+
+---
+
+## Technical Flow After Changes
+
+```text
+User pastes confirmation
+       |
+       v
+parse-booking-confirmation (edge function)
+  -> Returns segments WITH classification + intelligence WITH missingLegs
+       |
+       v
+FlightImportModal
+  -> Maps segments to ManualFlightEntry[] WITH classification
+  -> Passes intelligence via onIntelligence callback
+       |
+       v
+handleImportAllLegs (Start.tsx)
+  -> Stores legs in state
+  -> Stores intelligence in flightIntelligence state
+       |
+       v
+MultiLegFlightEditor
+  -> Groups OUTBOUND+CONNECTION legs into outbound slot
+  -> Groups RETURN+CONNECTION legs into return slot  
+  -> Matches INTER_DESTINATION to intercity slots by airport code
+  -> Shows full route per slot (e.g., "ATL -> MAD -> PMI")
+       |
+       v
+InterCityTransportComparison
+  -> Reads missingLegs from intelligence
+  -> Shows "Not yet booked" warning for Mallorca->Madrid transition
+  -> Shows "Booked" badge for transitions with imported data
+```
+
+## Files to Change
+
+1. `src/components/itinerary/AddBookingInline.tsx` -- Add `classification` and `connectionGroup` to `ManualFlightEntry`
+2. `src/components/itinerary/FlightImportModal.tsx` -- Pass classification through in `handleConfirmImport`
+3. `src/components/planner/flight/MultiLegFlightEditor.tsx` -- Smart grouping logic, `connectionLegs` on slots, updated UI
+4. `src/pages/Start.tsx` -- Thread `flightIntelligence` to `InterCityTransportComparison`, pass missing legs
+5. `src/components/planner/InterCityTransportComparison.tsx` -- Handle `missingLegs` and `bookedTransitions` props
+
+## Sequencing
+
+1. Extend `ManualFlightEntry` with classification fields
+2. Update `FlightImportModal` to carry classification through
+3. Rewrite import mapping in `MultiLegFlightEditor` with smart grouping
+4. Thread intelligence to `InterCityTransportComparison`
+5. Add missing leg warnings and booked badges to transport comparison UI
+
