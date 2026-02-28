@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MapPin, Clock, Coffee, Utensils, Camera, 
-  Footprints, ChevronDown, ChevronUp, Info, Lock
+  Footprints, ChevronDown, ChevronUp, Info, Lock, CheckCircle2
 } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';

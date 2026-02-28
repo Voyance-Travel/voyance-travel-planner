@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Clock, MapPin, DollarSign, Lock, LockOpen, ExternalLink, Target, Landmark, UtensilsCrossed, Building2, Plane, Bus, Coffee, Moon, Leaf, Mountain, Palette, Heart, ShoppingBag } from 'lucide-react';
+import { Clock, MapPin, DollarSign, Lock, LockOpen, ExternalLink, Target, Landmark, UtensilsCrossed, Building2, Plane, Bus, Coffee, Moon, Leaf, Mountain, Palette, Heart, ShoppingBag, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { getActivityIconName, getActivityColor, formatDuration } from '@/utils/plannerUtils';
@@ -132,12 +132,20 @@ const TripActivityCard: React.FC<TripActivityCardProps> = ({
             )}
           </div>
 
-          {/* Category Badge */}
-          {activity.category && (
-            <Badge className={`mt-2 ${categoryColor}`}>
-              {activity.category}
-            </Badge>
-          )}
+          {/* Category & Reservation Badges */}
+          <div className="flex flex-wrap items-center gap-2 mt-2">
+            {activity.category && (
+              <Badge className={categoryColor}>
+                {activity.category}
+              </Badge>
+            )}
+            {activity.reservationMade && (
+              <Badge variant="default" className="bg-emerald-500/15 text-emerald-600 border-emerald-500/20 dark:text-emerald-400">
+                <CheckCircle2 className="w-3 h-3 mr-1" />
+                Reserved
+              </Badge>
+            )}
+          </div>
 
           {/* Actions */}
           <div className="flex items-center gap-2 mt-3">

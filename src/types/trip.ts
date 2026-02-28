@@ -24,6 +24,8 @@ export interface TripActivity {
   isLocked?: boolean;
   bookingRequired?: boolean;
   bookingUrl?: string;
+  reservationMade?: boolean;
+  confirmationNumber?: string;
 }
 
 export interface ItineraryDay {

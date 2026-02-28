@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Edit3, Link2 } from 'lucide-react';
+import { Edit3, Link2, CheckCircle2 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 
 interface EditableActivity {
@@ -39,6 +40,7 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
   const [endTime, setEndTime] = useState('13:00');
   const [cost, setCost] = useState('0');
   const [website, setWebsite] = useState('');
+  const [reservationMade, setReservationMade] = useState(false);
   const [locationName, setLocationName] = useState('');
   const [locationAddress, setLocationAddress] = useState('');
 
@@ -51,6 +53,7 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
       setEndTime(activity.endTime || '13:00');
       setCost(String(activity.cost?.amount ?? 0));
       setWebsite(activity.website || activity.bookingUrl || '');
+      setReservationMade(activity.reservationMade ?? false);
       setLocationName(activity.location?.name || '');
       setLocationAddress(activity.location?.address || '');
     }
@@ -70,6 +73,7 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
       endTime,
       cost: { amount: costNum, currency },
       website: website.trim() || undefined,
+      reservationMade,
       location: {
         name: locationName,
         address: locationAddress,
@@ -148,6 +152,19 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
               <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://..." className="pl-9" />
             </div>
+          </div>
+
+          {/* Reservation confirmation */}
+          <div className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg">
+            <Checkbox 
+              id="reservation-made" 
+              checked={reservationMade} 
+              onCheckedChange={(checked) => setReservationMade(checked === true)} 
+            />
+            <label htmlFor="reservation-made" className="text-sm font-medium flex items-center gap-2 cursor-pointer">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              Reservation / Tickets Confirmed
+            </label>
           </div>
 
           {/* Description */}
