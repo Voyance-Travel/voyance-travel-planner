@@ -48,7 +48,7 @@ export function normalizeUnsplashUrl(url?: string | null): string {
   const value = url.trim();
   if (!value) return PLACEHOLDER_TRAVEL_SRC;
 
-  // Already an internal or local asset
+  // Already an internal, local, or data asset — pass through
   if (
     value.startsWith('/') ||
     value.startsWith('data:') ||
@@ -57,6 +57,15 @@ export function normalizeUnsplashUrl(url?: string | null): string {
     return value;
   }
 
+  // Direct Unsplash CDN URLs (images.unsplash.com/photo-*) are valid and
+  // should NOT be rewritten to site-images bucket. These are the curated
+  // destination images that work perfectly from Unsplash CDN.
+  if (/^https:\/\/images\.unsplash\.com\/photo-/i.test(value)) {
+    return value;
+  }
+
+  // Only rewrite legacy source.unsplash.com or bare photo-id references
+  // to our internal bucket
   if (isUnsplashUrl(value) || /photo-[a-z0-9-]+/i.test(value)) {
     const photoId = extractPhotoId(value);
     return toSiteImageUrlFromPhotoId(photoId);
