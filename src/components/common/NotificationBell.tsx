@@ -221,6 +221,9 @@ export function NotificationBell() {
     // Navigate to trip
     if (notification.type === 'feedback_prompt' && notification.activityId) {
       navigate(`/trip/${notification.tripId}?activity=${notification.activityId}`);
+    } else if (notification.type === 'member_joined') {
+      // Prompt group unlock when owner clicks a member_joined notification
+      navigate(`/trip/${notification.tripId}?groupUnlock=true`);
     } else {
       navigate(`/trip/${notification.tripId}`);
     }
