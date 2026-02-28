@@ -1946,11 +1946,15 @@ export function buildFlightIntelligencePrompt(intelligence: unknown): string {
   const missingLegs = intel.missingLegs as Array<Record<string, unknown>> | undefined;
   if (missingLegs && missingLegs.length > 0) {
     const missingLines: string[] = [];
-    missingLines.push(`\n${'='.repeat(60)}\n⚠️ MISSING LEG HANDLING\n${'='.repeat(60)}`);
+    missingLines.push(`\n${'='.repeat(60)}\n⚠️ MISSING LEG HANDLING — CRITICAL\n${'='.repeat(60)}`);
     for (const leg of missingLegs) {
       missingLines.push(`The traveler still needs to book a flight from ${leg.fromCity} (${leg.from}) to ${leg.toCity} (${leg.to}).`);
       missingLines.push(`Reason: ${leg.reason}`);
-      missingLines.push(`Leave the travel day between these cities flexible — do not over-schedule it. Add a note on that day: "Travel day — flight not yet booked."`);
+      missingLines.push(`DO NOT create or fabricate flight activity cards for this leg. Instead:`);
+      missingLines.push(`- Add a "Travel Day" note: "Flight not yet booked — ${leg.fromCity} to ${leg.toCity}"`);
+      missingLines.push(`- Show a warning banner, not a fake flight card`);
+      missingLines.push(`- Keep the travel day flexible with minimal scheduling`);
+      missingLines.push(`- Do NOT invent flight numbers, times, or airlines for this leg`);
     }
     sections.push(missingLines.join('\n'));
   }

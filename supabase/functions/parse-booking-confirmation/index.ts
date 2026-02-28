@@ -1,5 +1,13 @@
 // Parse booking confirmation using AI — extracts ALL flight segments + intelligent analysis
 
+/** Convert "HH:MM" or "H:MM" time string to minutes since midnight. Returns null if invalid. */
+function timeToMinutes(time?: string): number | null {
+  if (!time) return null;
+  const match = time.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
@@ -359,6 +367,32 @@ ${confirmationText}`;
     if (parsedBooking.segments) {
       parsedBooking.segment_count = parsedBooking.segments.length;
       parsedBooking.is_multi_segment = parsedBooking.segments.length > 1;
+    }
+
+    // --- SERVER-SIDE LAYOVER VALIDATION ---
+    // Deterministic post-processing: if two consecutive segments share an airport
+    // with < 6 hours gap, classify as a layover connection even if the AI missed it.
+    if (parsedBooking.segments && parsedBooking.segments.length > 1) {
+      for (let i = 0; i < parsedBooking.segments.length - 1; i++) {
+        const current = parsedBooking.segments[i];
+        const next = parsedBooking.segments[i + 1];
+        if (current.destination_code && next.origin_code &&
+            current.destination_code === next.origin_code) {
+          const arrivalMins = timeToMinutes(current.end_time);
+          const departureMins = timeToMinutes(next.start_time);
+          if (arrivalMins !== null && departureMins !== null) {
+            const sameDay = current.end_date === next.start_date;
+            const gap = sameDay ? departureMins - arrivalMins : (departureMins + 1440) - arrivalMins;
+            if (gap > 0 && gap < 360) { // Under 6 hours = layover
+              current.isLayoverArrival = true;
+              const group = current.connectionGroup || next.connectionGroup || (i + 1);
+              current.connectionGroup = group;
+              next.connectionGroup = group;
+              console.log(`[LayoverValidation] ${current.destination_code} is a layover (${gap} min gap between segments ${i} and ${i+1})`);
+            }
+          }
+        }
+      }
     }
 
     // Normalize intelligence fields — remap snake_case / variant keys to canonical camelCase
