@@ -1,5 +1,5 @@
 /**
- * DayActionToolbar — Fixed bottom toolbar for itinerary day actions.
+ * DayActionToolbar — Inline toolbar for itinerary day actions.
  * Appears on ALL itinerary views across all creation flows.
  * Actions: Add, Discover, Import, Refresh Day, Day Total.
  */
@@ -38,7 +38,7 @@ export function DayActionToolbar({
       animate={{ y: 0, opacity: 1 }}
       transition={{ type: 'spring', damping: 25, stiffness: 300 }}
       className={cn(
-        'sticky bottom-0 left-0 right-0 z-40',
+        'relative w-full',
         className
       )}
     >
