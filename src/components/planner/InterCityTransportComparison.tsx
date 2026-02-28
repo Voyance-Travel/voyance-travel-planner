@@ -24,6 +24,16 @@ export interface CityTransition {
   index: number; // position in the route (0-based)
 }
 
+export interface MissingLeg {
+  from?: string;
+  fromCity?: string;
+  to?: string;
+  toCity?: string;
+  reason?: string;
+  suggestedDateRange?: { earliest?: string; latest?: string };
+  priority?: string;
+}
+
 interface InterCityTransportComparisonProps {
   transitions: CityTransition[];
   travelers: number;
@@ -35,6 +45,8 @@ interface InterCityTransportComparisonProps {
   onSelect?: (transitionIndex: number, option: TransportOption) => void;
   /** Selections map: transitionIndex → selected option id */
   selections?: Record<number, string>;
+  /** Missing legs from flight intelligence */
+  missingLegs?: MissingLeg[];
   className?: string;
 }
 
@@ -184,9 +196,23 @@ export function InterCityTransportComparison({
   currency,
   onSelect,
   selections = {},
+  missingLegs,
   className,
 }: InterCityTransportComparisonProps) {
   if (transitions.length === 0) return null;
+
+  // Check if a transition matches a missing leg
+  const findMissingLeg = (transition: CityTransition) => {
+    if (!missingLegs || missingLegs.length === 0) return undefined;
+    return missingLegs.find(leg => {
+      const legFrom = (leg.fromCity || leg.from || '').toLowerCase();
+      const legTo = (leg.toCity || leg.to || '').toLowerCase();
+      const tFrom = transition.fromCity.toLowerCase();
+      const tTo = transition.toCity.toLowerCase();
+      return (tFrom.includes(legFrom) || legFrom.includes(tFrom)) &&
+             (tTo.includes(legTo) || legTo.includes(tTo));
+    });
+  };
 
   return (
     <div className={cn('space-y-3', className)}>
@@ -197,19 +223,50 @@ export function InterCityTransportComparison({
         </span>
       </div>
 
-      {transitions.map((transition) => (
-        <TransitionComparison
-          key={`${transition.fromCity}-${transition.toCity}`}
-          transition={transition}
-          travelers={travelers}
-          archetype={archetype}
-          budgetTier={budgetTier}
-          travelDate={travelDate}
-          currency={currency}
-          selectedId={selections[transition.index]}
-          onSelect={(option) => onSelect?.(transition.index, option)}
-        />
-      ))}
+      {transitions.map((transition) => {
+        const missing = findMissingLeg(transition);
+        return (
+          <div key={`${transition.fromCity}-${transition.toCity}`}>
+            {missing && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-2 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-3"
+              >
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                      ⚠️ Not yet booked: {transition.fromCity} → {transition.toCity}
+                    </p>
+                    {missing.reason && (
+                      <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">{missing.reason}</p>
+                    )}
+                    {missing.suggestedDateRange && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                        Suggested booking window: {missing.suggestedDateRange.earliest} – {missing.suggestedDateRange.latest}
+                      </p>
+                    )}
+                    <Badge variant="outline" className="mt-1.5 text-[10px] border-amber-400 text-amber-700 dark:text-amber-300">
+                      {missing.priority === 'CRITICAL' ? '🔴 Critical' : '🟡 Needs booking'}
+                    </Badge>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+            <TransitionComparison
+              transition={transition}
+              travelers={travelers}
+              archetype={archetype}
+              budgetTier={budgetTier}
+              travelDate={travelDate}
+              currency={currency}
+              selectedId={selections[transition.index]}
+              onSelect={(option) => onSelect?.(transition.index, option)}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

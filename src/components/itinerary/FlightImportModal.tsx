@@ -252,6 +252,8 @@ export function FlightImportModal({
       arrivalTime: seg.arrivalTime || '',
       departureDate: seg.departureDate || '',
       price: seg.price,
+      classification: seg.classification,
+      connectionGroup: seg.connectionGroup ?? undefined,
     }));
 
     // Pass intelligence data back

@@ -950,6 +950,7 @@ function FlightHotelStep({
   transportSelections,
   onTransportSelect,
   onIntelligenceCapture,
+  flightIntelligence,
 }: {
   destination: string;
   startDate: string;
@@ -987,6 +988,7 @@ function FlightHotelStep({
   transportSelections?: Record<number, { optionId: string; option: TransportOption }>;
   onTransportSelect?: (transitionIndex: number, option: TransportOption) => void;
   onIntelligenceCapture?: (intel: Record<string, unknown>) => void;
+  flightIntelligence?: Record<string, unknown> | null;
 }) {
   const navigate = useNavigate();
   const hasExistingFlightData = !!(outboundFlight.departureAirport || outboundFlight.arrivalTime || outboundFlight.airline);
@@ -1549,6 +1551,7 @@ function FlightHotelStep({
               selections={Object.fromEntries(
                 Object.entries(transportSelections || {}).map(([k, v]) => [k, v.optionId])
               )}
+              missingLegs={(flightIntelligence?.missingLegs as Array<{ from?: string; fromCity?: string; to?: string; toCity?: string; suggestedDateRange?: { earliest?: string; latest?: string }; priority?: string }>) || undefined}
             />
           </div>
         )}
@@ -2566,6 +2569,7 @@ export default function Start() {
                     transportSelections={transportSelections}
                     onTransportSelect={handleTransportSelect}
                     onIntelligenceCapture={(intel) => setFlightIntelligence(intel)}
+                    flightIntelligence={flightIntelligence}
                   />
                 )}
               </AnimatePresence>

@@ -52,6 +52,8 @@ export interface ManualFlightEntry {
   baggageInfo?: string;
   boardingPassUrl?: string;
   frequentFlyerNumber?: string;
+  classification?: 'OUTBOUND' | 'RETURN' | 'CONNECTION' | 'INTER_DESTINATION';
+  connectionGroup?: number;
 }
 
 export interface ManualHotelEntry {
