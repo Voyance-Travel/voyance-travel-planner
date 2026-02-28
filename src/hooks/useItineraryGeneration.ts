@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { reportConnectionFailure, resetConnectionFailures } from '@/components/common/ConnectionRecoveryBanner';
 import { resubscribeAll } from '@/lib/realtimeSubscriptionManager';
+import { guardedRefreshSession } from '@/lib/authSessionGuard';
 import { getTripCities } from '@/services/tripCitiesService';
 
 // =============================================================================
@@ -269,14 +270,12 @@ export function useItineraryGeneration() {
         // Proactively clean up Supabase channels to prevent cascade
         try {
           supabase.removeAllChannels();
-          await supabase.auth.refreshSession();
+          await guardedRefreshSession();
           resubscribeAll();
           resetConnectionFailures();
         } catch (cleanupErr) {
           console.warn('[useItineraryGeneration] Post-failure cleanup failed:', cleanupErr);
           reportConnectionFailure();
-          reportConnectionFailure();
-          reportConnectionFailure(); // Trigger banner immediately
         }
       }
       

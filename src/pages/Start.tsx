@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { toSiteImageUrlFromPhotoId } from '@/utils/unsplash';
 
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -1072,9 +1072,17 @@ function FlightHotelStep({
     }
   };
 
-  // Handler for multi-leg editor changes — syncs back to parent state
+  // Handler for multi-leg editor changes — syncs back to parent state (idempotent)
+  const lastMultiLegSig = useRef<string>('');
   const handleMultiLegsChange = (legs: ManualFlightEntry[]) => {
     const normalizedLegs = normalizeLegs(legs);
+
+    // Build a signature to skip no-op updates
+    const makeKey = (l: ManualFlightEntry) => [l.airline,l.flightNumber,l.departureAirport,l.arrivalAirport,l.departureTime,l.arrivalTime,l.departureDate,l.price].join('|');
+    const sig = normalizedLegs.map(makeKey).join('||');
+    if (sig === lastMultiLegSig.current) return;
+    lastMultiLegSig.current = sig;
+
     if (normalizedLegs.length > 0) {
       setOutboundFlight(normalizedLegs[0]);
     }

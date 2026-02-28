@@ -236,6 +236,8 @@ export default function MultiLegFlightEditor({
   const [initialized, setInitialized] = useState(false);
   const lastAppliedNonce = useRef<number>(0);
   const onLegsChangeRef = useRef(onLegsChange);
+  /** Stable signature of last emitted legs — prevents redundant parent updates */
+  const lastEmittedSignature = useRef<string>('');
 
   useEffect(() => {
     onLegsChangeRef.current = onLegsChange;
@@ -514,7 +516,11 @@ export default function MultiLegFlightEditor({
 
       if (changed) {
         const emittedLegs = uniqueMeaningfulLegs(next.map((s) => s.flight));
-        onLegsChangeRef.current(emittedLegs);
+        const sig = emittedLegs.map(l => [l.airline,l.flightNumber,l.departureAirport,l.arrivalAirport,l.departureTime,l.arrivalTime,l.departureDate,l.price].join('|')).join('||');
+        if (sig !== lastEmittedSignature.current) {
+          lastEmittedSignature.current = sig;
+          onLegsChangeRef.current(emittedLegs);
+        }
       }
 
       return changed ? next : prev;
@@ -524,6 +530,9 @@ export default function MultiLegFlightEditor({
   // Sync changes to parent — emit all legs (including non-flight) so data isn't lost
   const syncToParent = useCallback((updatedSlots: FlightLegSlot[]) => {
     const allLegs = uniqueMeaningfulLegs(updatedSlots.map(s => s.flight));
+    const sig = allLegs.map(l => [l.airline,l.flightNumber,l.departureAirport,l.arrivalAirport,l.departureTime,l.arrivalTime,l.departureDate,l.price].join('|')).join('||');
+    if (sig === lastEmittedSignature.current) return;
+    lastEmittedSignature.current = sig;
     onLegsChangeRef.current(allLegs);
   }, []);
 
