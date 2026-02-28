@@ -176,8 +176,9 @@ export function PaymentsTab({
     return merged;
   }, [rawTripMembers, collaborators, ownerId, ownerName, tripId]);
 
-  // Fetch payments
-  const fetchPayments = useCallback(async () => {
+  // Fetch payments — with optional delay for DB write consistency
+  const fetchPayments = useCallback(async (delayMs = 0) => {
+    if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
     const result = await getTripPayments(tripId);
     if (result.success) {
       setPayments(result.payments || []);
@@ -492,7 +493,7 @@ export function PaymentsTab({
       setMarkPaidModal(null);
       setExternalRef('');
       setSelectedMemberId('');
-      fetchPayments();
+      await fetchPayments(150);
     } catch (err) {
       console.error('Error marking paid:', err);
       toast.error('Failed to update');
@@ -540,7 +541,7 @@ export function PaymentsTab({
       setNewExpenseName('');
       setNewExpenseAmount('');
       setNewExpenseType('flight');
-      fetchPayments();
+      await fetchPayments(150);
     } catch (err) {
       console.error('Error adding expense:', err);
       toast.error('Failed to add expense');
@@ -567,7 +568,7 @@ export function PaymentsTab({
       if (error) throw error;
 
       toast.success('Payment unmarked');
-      fetchPayments();
+      await fetchPayments(150);
     } catch (err) {
       console.error('Error unmarking payment:', err);
       toast.error('Failed to update');
@@ -702,7 +703,7 @@ export function PaymentsTab({
       setAssigningItem(null);
       setAssignMemberId('');
       setAssignMemberIds([]);
-      fetchPayments();
+      await fetchPayments(150);
     } catch (err) {
       console.error('Error assigning member:', err);
       toast.error(`Failed to assign: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -1266,7 +1267,7 @@ export function PaymentsTab({
                                   if (error) console.error('Failed to assign item:', item.name, error);
                                 }
                                 toast.success(`Split ${unassigned.items.length} items evenly among ${resolvedIds.length} members`);
-                                fetchPayments();
+                                await fetchPayments(200);
                               } catch (err) {
                                 console.error('Error splitting all:', err);
                                 toast.error('Failed to split items');
