@@ -64,8 +64,11 @@ export async function getCachedPhotoUrl(
   // Download the photo from Google
   try {
     console.log(`[PhotoStorage] Downloading: ${entityType}/${sanitizedId}`);
+    
+    // Follow redirects (Google Places API redirects to actual image)
     const photoResponse = await fetch(googlePhotoUrl, {
-      headers: { 'Accept': 'image/*' }
+      headers: { 'Accept': 'image/*' },
+      redirect: 'follow',
     });
     
     if (!photoResponse.ok) {
@@ -73,19 +76,32 @@ export async function getCachedPhotoUrl(
       return { url: googlePhotoUrl, cached: false, cacheHit: false, source: 'direct' };
     }
     
-    const photoBlob = await photoResponse.blob();
+    // Read as ArrayBuffer for reliable binary handling
+    const arrayBuffer = await photoResponse.arrayBuffer();
+    const uint8 = new Uint8Array(arrayBuffer);
     
-    // Validate it's actually an image
-    if (!photoBlob.type.startsWith('image/')) {
-      console.error(`[PhotoStorage] Not an image: ${photoBlob.type}`);
-      return { url: googlePhotoUrl, cached: false, cacheHit: false, source: 'direct' };
+    // Validate it's actually an image by checking magic bytes
+    const isJpeg = uint8[0] === 0xFF && uint8[1] === 0xD8;
+    const isPng = uint8[0] === 0x89 && uint8[1] === 0x50 && uint8[2] === 0x4E && uint8[3] === 0x47;
+    const isWebp = uint8[0] === 0x52 && uint8[1] === 0x49 && uint8[2] === 0x46 && uint8[3] === 0x46;
+    
+    if (!isJpeg && !isPng && !isWebp) {
+      // Check if it's actually HTML (error page)
+      const firstBytes = new TextDecoder().decode(uint8.slice(0, 100));
+      if (firstBytes.includes('<!DOCTYPE') || firstBytes.includes('<html') || firstBytes.includes('error')) {
+        console.error(`[PhotoStorage] Downloaded content is HTML/error, not an image`);
+        return { url: googlePhotoUrl, cached: false, cacheHit: false, source: 'direct' };
+      }
+      console.warn(`[PhotoStorage] Unknown image format, proceeding anyway`);
     }
+    
+    const contentType = isJpeg ? 'image/jpeg' : isPng ? 'image/png' : isWebp ? 'image/webp' : 'image/jpeg';
     
     // Upload to Supabase Storage
     const { error: uploadError } = await supabase.storage
       .from(BUCKET_NAME)
-      .upload(storagePath, photoBlob, {
-        contentType: photoBlob.type,
+      .upload(storagePath, uint8, {
+        contentType,
         upsert: true,
         cacheControl: '31536000', // 1 year cache
       });
