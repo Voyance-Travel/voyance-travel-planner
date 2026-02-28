@@ -4846,11 +4846,29 @@ export function EditorialItinerary({
               transportCostCents: data.transportCostCents,
               currency: data.currency,
             }, {
-              onSuccess: () => {
+              onSuccess: async () => {
                 setTransportEditorOpen(false);
                 setTransportEditorCity(null);
                 toast.success('Transport details saved');
                 onBookingAdded?.();
+
+                // Cascade transport changes to itinerary
+                try {
+                  const { runCascadeAndPersist } = await import('@/services/cascadeTransportToItinerary');
+                  const { data: tripData } = await supabase
+                    .from('trips')
+                    .select('itinerary_data, flight_selection')
+                    .eq('id', tripId)
+                    .single();
+                  const itDays = (tripData?.itinerary_data as any)?.days;
+                  if (itDays?.length) {
+                    const { getTripCities } = await import('@/services/tripCitiesService');
+                    const cities = await getTripCities(tripId);
+                    await runCascadeAndPersist(tripId, itDays, tripData?.flight_selection, cities);
+                  }
+                } catch (cascadeErr) {
+                  console.warn('[cascade] Inter-city transport cascade skipped:', cascadeErr);
+                }
               },
               onError: (err) => {
                 toast.error('Failed to save transport details');

@@ -276,6 +276,28 @@ export function AddFlightInline({
       toast.success(legObjs.length > 1 ? `${legObjs.length} flight legs saved!` : 'Flight details saved!');
       setShowManualEntry(false);
       onFlightAdded?.();
+
+      // Cascade transport changes to itinerary
+      try {
+        const { runCascadeAndPersist } = await import('@/services/cascadeTransportToItinerary');
+        const { data: tripData } = await supabase
+          .from('trips')
+          .select('itinerary_data, is_multi_city')
+          .eq('id', tripId)
+          .single();
+        const itDays = (tripData?.itinerary_data as any)?.days;
+        if (itDays?.length) {
+          if (tripData?.is_multi_city) {
+            const { getTripCities } = await import('@/services/tripCitiesService');
+            const cities = await getTripCities(tripId);
+            await runCascadeAndPersist(tripId, itDays, flightSelection, cities);
+          } else {
+            await runCascadeAndPersist(tripId, itDays, flightSelection);
+          }
+        }
+      } catch (cascadeErr) {
+        console.warn('[cascade] Flight cascade skipped:', cascadeErr);
+      }
     } catch (err) {
       console.error('Failed to save flight:', err);
       toast.error('Failed to save flight details');
