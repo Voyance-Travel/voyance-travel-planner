@@ -8446,7 +8446,8 @@ ${'='.repeat(60)}
     // ==========================================================================
     if (action === 'generate-day' || action === 'regenerate-day') {
       // Extract params BUT NOT userId from request body
-      const { tripId, dayNumber, totalDays, destination, destinationCountry, date, travelers, tripType, budgetTier, preferences, previousDayActivities, keepActivities, currentActivities } = params;
+      const { tripId, dayNumber, totalDays, destination, destinationCountry, date, travelers, tripType, budgetTier, preferences, previousDayActivities, keepActivities, currentActivities,
+        isMultiCity: paramIsMultiCity, isTransitionDay: paramIsTransitionDay, transitionFrom: paramTransitionFrom, transitionTo: paramTransitionTo, transitionMode: paramTransitionMode } = params;
       
       // PHASE 2 FIX: Use authenticated user ID as the canonical source of truth
       // This is the critical fix - frontend calls often omit userId, but auth token is always present
@@ -8476,6 +8477,58 @@ ${'='.repeat(60)}
         console.log(`[generate-day] ✓ Using authenticated userId: ${userId} (no tripId to verify)`);
       }
 
+
+      // =======================================================================
+      // TRANSITION DAY RESOLVER: Determine if this day is a transition day
+      // Uses explicit params from frontend, or resolves from trip_cities DB
+      // =======================================================================
+      let resolvedIsTransitionDay = !!paramIsTransitionDay;
+      let resolvedTransitionFrom = paramTransitionFrom || '';
+      let resolvedTransitionTo = paramTransitionTo || '';
+      let resolvedTransportMode = paramTransitionMode || '';
+      let resolvedIsMultiCity = !!paramIsMultiCity;
+      let resolvedDestination = destination;
+      let resolvedCountry = destinationCountry;
+
+      // If we have a tripId, try to resolve transition context from trip_cities
+      if (tripId && !resolvedIsTransitionDay) {
+        try {
+          const { data: tripCities } = await supabase
+            .from('trip_cities')
+            .select('city_name, country, city_order, nights, days_total, transition_day_mode, transport_type')
+            .eq('trip_id', tripId)
+            .order('city_order', { ascending: true });
+
+          if (tripCities && tripCities.length > 1) {
+            resolvedIsMultiCity = true;
+            let dayCounter = 0;
+            for (const city of tripCities) {
+              const cityNights = (city as any).nights || (city as any).days_total || 1;
+              for (let n = 0; n < cityNights; n++) {
+                dayCounter++;
+                if (dayCounter === dayNumber) {
+                  resolvedDestination = city.city_name || destination;
+                  resolvedCountry = (city as any).country || destinationCountry;
+                  if (n === 0 && city.city_order > 0 && (city as any).transition_day_mode !== 'skip') {
+                    resolvedIsTransitionDay = true;
+                    const prevCity = tripCities.find((c: any) => c.city_order === city.city_order - 1);
+                    resolvedTransitionFrom = prevCity?.city_name || '';
+                    resolvedTransitionTo = city.city_name || '';
+                    resolvedTransportMode = (city as any).transport_type || 'train';
+                  }
+                  break;
+                }
+              }
+              if (dayCounter >= dayNumber) break;
+            }
+            console.log(`[generate-day] Transition resolver: day=${dayNumber}, isTransition=${resolvedIsTransitionDay}, from=${resolvedTransitionFrom}, to=${resolvedTransitionTo}, mode=${resolvedTransportMode}`);
+          }
+        } catch (e) {
+          console.warn('[generate-day] Could not resolve transition context from trip_cities:', e);
+        }
+      } else if (resolvedIsTransitionDay) {
+        console.log(`[generate-day] Using explicit transition params: from=${resolvedTransitionFrom}, to=${resolvedTransitionTo}, mode=${resolvedTransportMode}`);
+      }
 
       // =======================================================================
       // STEP 1: LOAD LOCKED ACTIVITIES **BEFORE** AI CALL
@@ -9456,7 +9509,37 @@ ${hotelNameForDay ? `\nHOTEL: ${hotelNameForDay}${hotelNeighborhood ? ` (${hotel
 Start and end the day near the hotel when practical.`;
       }
 
-      // ==========================================================================
+      // =======================================================================
+      // TRANSITION DAY OVERRIDE: Replace timing instructions for transition days
+      // This is the critical fix that prevents "teleporting" between cities
+      // =======================================================================
+      let transitionDayPromptBlock = '';
+      if (resolvedIsTransitionDay && resolvedTransitionFrom && resolvedTransitionTo) {
+        console.log(`[generate-day] 🚆 TRANSITION DAY DETECTED: ${resolvedTransitionFrom} → ${resolvedTransitionTo} via ${resolvedTransportMode}`);
+        
+        // Use the existing robust transition prompt builder
+        transitionDayPromptBlock = buildTransitionDayPrompt({
+          transitionFrom: resolvedTransitionFrom,
+          transitionFromCountry: resolvedCountry,
+          transitionTo: resolvedTransitionTo,
+          transitionToCountry: resolvedCountry,
+          transportType: resolvedTransportMode || 'train',
+          travelers: travelers || 1,
+          budgetTier: budgetTier || 'moderate',
+          currency: 'USD',
+        });
+        
+        // Override timing instructions completely for transition days
+        timingInstructions = `
+CRITICAL TRANSITION DAY INSTRUCTIONS — THIS IS A TRAVEL DAY, NOT AN EXPLORATION DAY:
+${transitionDayPromptBlock}
+
+FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
+        
+        console.log(`[generate-day] Transition prompt injected: ${transitionDayPromptBlock.length} chars`);
+      }
+
+
       // PHASE 2 FIX: Use Unified Profile Loader (Single Source of Truth)
       // This replaces 100+ lines of manual archetype/trait resolution with bugs
       // ==========================================================================
@@ -10126,7 +10209,122 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
         generatedDay.activities = normalizedActivities;
 
-        // Ensure day has a title
+        // =======================================================================
+        // TRANSITION DAY POST-GENERATION GUARD: Ensure inter-city travel exists
+        // If AI omitted the travel activity, inject deterministic fallback
+        // =======================================================================
+        if (resolvedIsTransitionDay && resolvedTransitionFrom && resolvedTransitionTo) {
+          const hasInterCityTravel = normalizedActivities.some((act: { title?: string; category?: string; description?: string }) => {
+            const t = (act.title || '').toLowerCase();
+            const d = (act.description || '').toLowerCase();
+            const fromLower = resolvedTransitionFrom.toLowerCase();
+            const toLower = resolvedTransitionTo.toLowerCase();
+            const isTransport = act.category === 'transport' || act.category === 'transportation';
+            const mentionsBothCities = (t.includes(fromLower) || d.includes(fromLower)) && (t.includes(toLower) || d.includes(toLower));
+            const mentionsMode = t.includes(resolvedTransportMode) || d.includes(resolvedTransportMode) || t.includes('travel') || t.includes('transfer');
+            return isTransport && (mentionsBothCities || mentionsMode);
+          });
+
+          if (!hasInterCityTravel) {
+            console.warn(`[generate-day] ⚠️ TELEPORTING DETECTED! No inter-city travel found for ${resolvedTransitionFrom} → ${resolvedTransitionTo}. Injecting fallback transport blocks.`);
+            
+            const modeLabel = resolvedTransportMode.charAt(0).toUpperCase() + resolvedTransportMode.slice(1);
+            const fallbackTransport = [
+              {
+                id: `day${dayNumber}-checkout-${Date.now()}`,
+                title: `Hotel Checkout – ${resolvedTransitionFrom}`,
+                name: `Hotel Checkout – ${resolvedTransitionFrom}`,
+                category: 'accommodation',
+                startTime: '09:00',
+                endTime: '09:30',
+                description: `Check out of hotel in ${resolvedTransitionFrom} and prepare for travel day`,
+                location: { name: `Hotel in ${resolvedTransitionFrom}`, address: resolvedTransitionFrom },
+                cost: { amount: 0, currency: 'USD' },
+                isLocked: false,
+                durationMinutes: 30,
+              },
+              {
+                id: `day${dayNumber}-transfer-depart-${Date.now()}`,
+                title: `Transfer to ${modeLabel} Station`,
+                name: `Transfer to ${modeLabel} Station`,
+                category: 'transport',
+                startTime: '09:30',
+                endTime: '10:15',
+                description: `Travel to ${resolvedTransportMode === 'flight' ? 'airport' : 'station'} in ${resolvedTransitionFrom}`,
+                location: { name: `${modeLabel} Station`, address: resolvedTransitionFrom },
+                cost: { amount: 15, currency: 'USD', basis: 'flat' },
+                isLocked: false,
+                durationMinutes: 45,
+              },
+              {
+                id: `day${dayNumber}-intercity-${Date.now()}`,
+                title: `${modeLabel} – ${resolvedTransitionFrom} to ${resolvedTransitionTo}`,
+                name: `${modeLabel} – ${resolvedTransitionFrom} to ${resolvedTransitionTo}`,
+                category: 'transport',
+                startTime: '10:30',
+                endTime: '13:30',
+                description: `Inter-city ${resolvedTransportMode} travel from ${resolvedTransitionFrom} to ${resolvedTransitionTo}. Duration varies by route and operator.`,
+                location: { name: `${resolvedTransitionFrom} → ${resolvedTransitionTo}`, address: '' },
+                cost: { amount: 50, currency: 'USD', basis: 'per_person' },
+                isLocked: false,
+                durationMinutes: 180,
+              },
+              {
+                id: `day${dayNumber}-transfer-arrive-${Date.now()}`,
+                title: `Transfer to Hotel – ${resolvedTransitionTo}`,
+                name: `Transfer to Hotel – ${resolvedTransitionTo}`,
+                category: 'transport',
+                startTime: '13:30',
+                endTime: '14:15',
+                description: `Travel from ${resolvedTransportMode === 'flight' ? 'airport' : 'station'} to hotel in ${resolvedTransitionTo}`,
+                location: { name: `Hotel in ${resolvedTransitionTo}`, address: resolvedTransitionTo },
+                cost: { amount: 15, currency: 'USD', basis: 'flat' },
+                isLocked: false,
+                durationMinutes: 45,
+              },
+              {
+                id: `day${dayNumber}-checkin-${Date.now()}`,
+                title: `Hotel Check-in – ${resolvedTransitionTo}`,
+                name: `Hotel Check-in – ${resolvedTransitionTo}`,
+                category: 'accommodation',
+                startTime: '14:15',
+                endTime: '15:00',
+                description: `Check in to hotel in ${resolvedTransitionTo}, freshen up and rest after travel`,
+                location: { name: `Hotel in ${resolvedTransitionTo}`, address: resolvedTransitionTo },
+                cost: { amount: 0, currency: 'USD' },
+                isLocked: false,
+                durationMinutes: 45,
+              },
+            ];
+
+            // Prepend travel blocks, keep evening activities from AI
+            const eveningActivities = normalizedActivities.filter((act: { startTime?: string }) => {
+              const mins = parseTimeToMinutes(act.startTime || '00:00');
+              return mins !== null && mins >= 15 * 60; // 3pm or later
+            });
+            
+            generatedDay.activities = [...fallbackTransport, ...eveningActivities];
+            normalizedActivities = generatedDay.activities;
+            console.log(`[generate-day] Injected ${fallbackTransport.length} fallback travel blocks + ${eveningActivities.length} evening activities`);
+          } else {
+            console.log(`[generate-day] ✓ Transition day has inter-city travel activity`);
+          }
+
+          // Persist transition metadata on the generated day
+          generatedDay.city = resolvedTransitionTo;
+          generatedDay.country = resolvedCountry;
+          generatedDay.isTransitionDay = true;
+          generatedDay.transitionFrom = resolvedTransitionFrom;
+          generatedDay.transitionTo = resolvedTransitionTo;
+          generatedDay.transportType = resolvedTransportMode;
+          generatedDay.title = generatedDay.title || `${resolvedTransitionFrom} → ${resolvedTransitionTo} (Travel Day)`;
+        } else if (resolvedIsMultiCity) {
+          // Even for non-transition days in multi-city, persist city metadata
+          generatedDay.city = resolvedDestination;
+          generatedDay.country = resolvedCountry;
+          generatedDay.isTransitionDay = false;
+        }
+
         generatedDay.title = generatedDay.title || generatedDay.theme || `Day ${dayNumber}`;
 
         // =======================================================================
@@ -10312,6 +10510,11 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                   title: generatedDay.title,
                   theme: generatedDay.theme,
                   narrative: generatedDay.narrative,
+                  isTransitionDay: resolvedIsTransitionDay || undefined,
+                  transitionFrom: resolvedTransitionFrom || undefined,
+                  transitionTo: resolvedTransitionTo || undefined,
+                  transportType: resolvedTransportMode || undefined,
+                  city: resolvedDestination || undefined,
                 },
                 created_by_action: action === 'regenerate-day' ? 'regenerate' : 'generate',
                 dna_snapshot: versionDnaSnapshot,

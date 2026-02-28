@@ -382,6 +382,10 @@ export function useItineraryGeneration() {
             break;
           }
           try {
+            if (cityInfo?.isTransitionDay) {
+              console.log(`[useItineraryGeneration] 🚆 Day ${dayNum} is TRANSITION: ${cityInfo.transitionFrom} → ${cityInfo.transitionTo} via ${cityInfo.transportType}`);
+            }
+            
             const invokePromise = supabase.functions.invoke('generate-itinerary', {
               body: {
                 action: 'generate-day',

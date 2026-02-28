@@ -138,10 +138,10 @@ const sampleItineraries = [
 ];
 
 // Progress Step Indicator
-function StepIndicator({ currentStep }: { currentStep: number }) {
+function StepIndicator({ currentStep, isMultiCity }: { currentStep: number; isMultiCity?: boolean }) {
   const steps = [
     { label: 'Trip Details', step: 1 },
-    { label: 'Flight & Hotel', step: 2 },
+    { label: isMultiCity ? 'Transportation & Hotel' : 'Flight & Hotel', step: 2 },
   ];
 
   return (
@@ -1012,7 +1012,7 @@ function FlightHotelStep({
     >
       <div className="text-center mb-6">
         <h2 className="text-2xl md:text-3xl font-serif font-semibold text-foreground mb-2">
-          Flight & Hotel
+          {isMultiCity ? 'Transportation & Hotel' : 'Flight & Hotel'}
         </h2>
         <p className="text-muted-foreground">
           Add your travel details for a complete itinerary (both optional)
@@ -1025,7 +1025,7 @@ function FlightHotelStep({
           <div className="flex items-center gap-2">
             <Plane className="h-4 w-4 text-muted-foreground" />
             <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-              Flight Details
+              {isMultiCity ? 'Transportation Details' : 'Flight Details'}
               <span className="text-muted-foreground/60 ml-1">(optional)</span>
             </label>
           </div>
@@ -2003,7 +2003,7 @@ export default function Start() {
       <section className="min-h-screen py-8 px-4">
         <div className="max-w-5xl mx-auto">
           {/* Progress Indicator */}
-          <StepIndicator currentStep={currentStep} />
+          <StepIndicator currentStep={currentStep} isMultiCity={isMultiCity} />
 
           {/* Main content with sidebar */}
           <div className="flex gap-12">
