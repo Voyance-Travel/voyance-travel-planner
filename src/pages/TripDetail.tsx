@@ -85,6 +85,7 @@ export default function TripDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showGenerator, setShowGenerator] = useState(false);
+  const [navigateToSection, setNavigateToSection] = useState<string | null>(null);
   const [autoStartGeneration, setAutoStartGeneration] = useState(false);
   const [isSyncingTrip, setIsSyncingTrip] = useState(false);
   const [paymentsRefreshKey, setPaymentsRefreshKey] = useState(0);
@@ -1404,12 +1405,17 @@ export default function TripDetail() {
                     hasInterCityTransport={editorDays.some((d: any) => d.isTransitionDay)}
                     className="mb-4"
                     onAction={(action, ctx) => {
-                      if (action === 'add_flights' || action === 'add_hotel') {
-                        // Scroll to booking section
-                        const el = document.querySelector('[data-section="bookings"]');
-                        el?.scrollIntoView({ behavior: 'smooth' });
+                      if (action === 'add_flights') {
+                        setNavigateToSection('flights');
+                        // Reset after navigation so it can be triggered again
+                        setTimeout(() => setNavigateToSection(null), 500);
+                      } else if (action === 'add_hotel') {
+                        setNavigateToSection('hotels');
+                        setTimeout(() => setNavigateToSection(null), 500);
+                      } else if (action === 'add_intercity') {
+                        setNavigateToSection('hotels');
+                        setTimeout(() => setNavigateToSection(null), 500);
                       } else if (action === 'generate_day' || action === 'refresh_day') {
-                        // Could trigger day-level generation
                         toast.info(`Use the day toolbar to ${action === 'generate_day' ? 'generate' : 'refresh'} Day ${ctx?.dayNumber || ''}`);
                       } else if (action === 'generate_missing_days' || action === 'generate_all') {
                         setShowGenerator(true);
@@ -1457,6 +1463,7 @@ export default function TripDetail() {
                       : undefined
                   }
                   initialItineraryData={(trip.itinerary_data as Record<string, unknown>) || null}
+                  navigateToSection={navigateToSection}
                   parsedMetadata={(() => {
                     const meta = (trip.itinerary_data as any)?.metadata;
                     if (meta?.source === 'manual_paste') return meta;
