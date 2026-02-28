@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Edit3 } from 'lucide-react';
+import { Edit3, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface EditableActivity {
@@ -38,6 +38,7 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
   const [startTime, setStartTime] = useState('12:00');
   const [endTime, setEndTime] = useState('13:00');
   const [cost, setCost] = useState('0');
+  const [website, setWebsite] = useState('');
   const [locationName, setLocationName] = useState('');
   const [locationAddress, setLocationAddress] = useState('');
 
@@ -49,6 +50,7 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
       setStartTime(activity.startTime || activity.time || '12:00');
       setEndTime(activity.endTime || '13:00');
       setCost(String(activity.cost?.amount ?? 0));
+      setWebsite(activity.website || activity.bookingUrl || '');
       setLocationName(activity.location?.name || '');
       setLocationAddress(activity.location?.address || '');
     }
@@ -67,6 +69,7 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
       startTime,
       endTime,
       cost: { amount: costNum, currency },
+      website: website.trim() || undefined,
       location: {
         name: locationName,
         address: locationAddress,
@@ -136,6 +139,15 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
           <div>
             <label className="text-sm font-medium mb-1 block">Cost ({currency})</label>
             <Input type="number" min="0" value={cost} onChange={(e) => { const v = e.target.value; if (v === '' || parseFloat(v) >= 0) setCost(v); }} placeholder="0" />
+          </div>
+
+          {/* Website / Link */}
+          <div>
+            <label className="text-sm font-medium mb-1 block">Website / Link</label>
+            <div className="relative">
+              <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://..." className="pl-9" />
+            </div>
           </div>
 
           {/* Description */}
