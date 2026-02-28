@@ -2938,16 +2938,24 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
           .order('city_order', { ascending: true });
         
         if (tripCities && tripCities.length > 0) {
-          const citiesWithHotels = tripCities.filter((c: any) => c.hotel_selection?.name);
+          // hotel_selection in trip_cities can be an array [{name:...}] or an object {name:...}
+          const extractHotel = (hs: any): any | null => {
+            if (Array.isArray(hs) && hs.length > 0) return hs[0];
+            if (hs && typeof hs === 'object' && hs.name) return hs;
+            return null;
+          };
+          const citiesWithHotels = tripCities
+            .map((c: any) => ({ ...c, _hotel: extractHotel(c.hotel_selection) }))
+            .filter((c: any) => c._hotel?.name);
           if (citiesWithHotels.length > 0) {
             // Use first city's hotel as primary context
-            hotel = citiesWithHotels[0].hotel_selection as HotelInfo;
+            hotel = citiesWithHotels[0]._hotel as HotelInfo;
             console.log(`[FlightHotel] Parsed hotel from trip_cities (${citiesWithHotels[0].city_name}): ${hotel?.name || 'No name'}`);
             
             // Add multi-hotel summary if multiple cities have hotels
             if (citiesWithHotels.length > 1) {
               const hotelSummary = citiesWithHotels.map((c: any) => 
-                `• ${c.city_name}: ${c.hotel_selection.name}${c.hotel_selection.address ? ` (${c.hotel_selection.address})` : ''}`
+                `• ${c.city_name}: ${c._hotel.name}${c._hotel.address ? ` (${c._hotel.address})` : ''}`
               ).join('\n');
               sections.push(`\n${'='.repeat(40)}\n🏨 PER-CITY ACCOMMODATIONS\n${'='.repeat(40)}\n${hotelSummary}\n⚠️ Each city has its own hotel. Use the correct hotel as the daily base for that city's days.`);
             }
