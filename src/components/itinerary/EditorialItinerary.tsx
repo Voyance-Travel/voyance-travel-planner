@@ -413,6 +413,8 @@ export interface EditorialItineraryProps {
   parsedMetadata?: { accommodationNotes?: string[]; practicalTips?: string[]; unparsed?: string[]; source?: string };
   /** Called whenever the local days state changes (swaps, locks, reorders, etc.) so parent can stay in sync */
   onDaysChange?: (days: EditorialDay[]) => void;
+  /** Expose a way for parent to programmatically switch to the details tab and scroll to a section */
+  navigateToSection?: string | null;
   /** Raw itinerary_data object so we can restore optionSelections on page load */
   initialItineraryData?: Record<string, unknown> | null;
 }
@@ -1086,6 +1088,7 @@ export function EditorialItinerary({
   onUnlockComplete,
   parsedMetadata,
   onDaysChange,
+  navigateToSection,
   initialItineraryData,
 }: EditorialItineraryProps) {
   const queryClient = useQueryClient();
@@ -1229,6 +1232,19 @@ export function EditorialItinerary({
     () => (initialItineraryData?.optionSelections as Record<string, string>) || {}
   );
   const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'payments' | 'details' | 'needtoknow' | 'collab'>('itinerary');
+
+  // Navigate to a section when parent requests it (e.g., from TripHealthPanel quick-fix buttons)
+  useEffect(() => {
+    if (!navigateToSection) return;
+    // Switch to details tab first
+    setActiveTab('details');
+    // After tab renders, scroll to the target section
+    const timer = setTimeout(() => {
+      const el = document.querySelector(`[data-section="${navigateToSection}"]`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [navigateToSection]);
   const [selectedDayIndex, setSelectedDayIndex] = useState(() => {
     // Auto-select "Today" if trip is active
     const todayIndex = initialDays.findIndex(d => {
@@ -3921,7 +3937,7 @@ export function EditorialItinerary({
 
 
             {/* FLIGHT SECTION - Editorial Style */}
-            <section className="space-y-5">
+            <section className="space-y-5" data-section="flights">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/10">
@@ -4120,7 +4136,7 @@ export function EditorialItinerary({
             </section>
 
             {/* HOTEL SECTION - Editorial Style (Multi-hotel aware) */}
-            <section className="space-y-5">
+            <section className="space-y-5" data-section="hotels">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/10">

@@ -373,7 +373,16 @@ export function TripHealthPanel({
               <div className="space-y-1.5">
                 {checklist.map((item) => (
                   <div key={item.id} className="flex items-center justify-between group">
-                    <div className="flex items-center gap-2.5 min-w-0">
+                    <button
+                      type="button"
+                      className="flex items-center gap-2.5 min-w-0 hover:opacity-80 transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (item.fixAction && onAction) {
+                          onAction(item.fixAction, {});
+                        }
+                      }}
+                    >
                       {item.done ? (
                         <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
                       ) : (
@@ -386,7 +395,7 @@ export function TripHealthPanel({
                       )}>
                         {item.label}
                       </span>
-                    </div>
+                    </button>
                     {!item.done && item.fixLabel && onAction && (
                       <Button
                         variant="ghost"
