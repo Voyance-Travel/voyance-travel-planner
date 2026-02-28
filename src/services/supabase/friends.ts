@@ -117,6 +117,15 @@ export async function sendFriendRequest(handle: string): Promise<{ success: bool
       if (error) throw error;
       return { success: true, status: 'accepted' };
     }
+    // If previously declined, allow resending by updating to pending
+    if (existing.status === 'declined') {
+      const { error } = await supabase
+        .from('friendships')
+        .update({ status: 'pending', requester_id: currentUserId, addressee_id: targetProfile.id })
+        .eq('id', existing.id);
+      if (error) throw error;
+      return { success: true, status: 'pending' };
+    }
   }
 
   // Create new friend request
@@ -169,6 +178,15 @@ export async function sendFriendRequestByEmail(email: string): Promise<{ success
         .eq('id', existing.id);
       if (error) throw error;
       return { success: true, status: 'accepted' };
+    }
+    // If previously declined, allow resending by updating to pending
+    if (existing.status === 'declined') {
+      const { error } = await supabase
+        .from('friendships')
+        .update({ status: 'pending', requester_id: currentUserId, addressee_id: targetUserId })
+        .eq('id', existing.id);
+      if (error) throw error;
+      return { success: true, status: 'pending' };
     }
   }
 
