@@ -180,7 +180,7 @@ Your trips will have structure without rigidity. Suggestions instead of schedule
 
   social_butterfly: {
     id: 'social_butterfly',
-    name: 'The Connection Curator',
+    name: 'The Social Butterfly',
     category: 'CONNECTOR',
     revealParagraph: `For you, travel is a team sport.
 
@@ -304,7 +304,7 @@ Your trips will reflect your values. We'll prioritize locally-owned, community-p
 
   bucket_list_conqueror: {
     id: 'bucket_list_conqueror',
-    name: 'The Milestone Voyager',
+    name: 'The Bucket List Conqueror',
     category: 'ACHIEVER',
     revealParagraph: `You have a list. And you're working through it.
 
@@ -676,7 +676,7 @@ Your trips will align with your values. Locally-owned, environmentally-conscious
 
   gap_year_graduate: {
     id: 'gap_year_graduate',
-    name: 'The Horizon Chaser',
+    name: 'The Gap Year Graduate',
     category: 'TRANSFORMER',
     revealParagraph: `You'll sleep on a bad mattress if it means another week on the road.
 
@@ -766,7 +766,7 @@ Your trips will feed your curiosity. Historical context, local expertise, the st
 
   healing_journeyer: {
     id: 'healing_journeyer',
-    name: 'The Restoration Seeker',
+    name: 'The Healing Journeyer',
     category: 'TRANSFORMER',
     revealParagraph: `Travel has been medicine for you.
 

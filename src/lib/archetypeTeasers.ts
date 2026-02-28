@@ -182,7 +182,7 @@ export const ARCHETYPE_TEASERS: Record<string, ArchetypeTeaser> = {
     ],
   },
   social_butterfly: {
-    name: "Connection Curator",
+    name: "Social Butterfly",
     oneLiner: "Travel is better with people. Especially ones you haven't met yet.",
     typicalTrip: [
       "Solo hotel room",

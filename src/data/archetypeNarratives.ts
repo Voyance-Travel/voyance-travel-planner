@@ -490,7 +490,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   escape_artist: {
     id: 'escape_artist',
-    name: 'The Reset Traveler',
+    name: 'The Escape Artist',
     category: 'RESTORER',
     hookLine: "Sometimes you need to leave to find yourself.",
     coreDescription: "Travel is your reset button. When life gets heavy, you get going. You understand that sometimes the best way forward is miles away from where you are.",
@@ -565,7 +565,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   social_butterfly: {
     id: 'social_butterfly',
-    name: 'The Connection Curator',
+    name: 'The Social Butterfly',
     category: 'CONNECTOR',
     hookLine: "Every stranger is a friend you haven't met.",
     coreDescription: "Your trips are measured in friendships made, not miles traveled. You collect people, not passport stamps. Hostels, group tours, and communal tables are your natural habitat.",
@@ -615,7 +615,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   bucket_list_conqueror: {
     id: 'bucket_list_conqueror',
-    name: 'The Milestone Voyager',
+    name: 'The Bucket List Conqueror',
     category: 'ACHIEVER',
     hookLine: "Life is a checklist of wonders.",
     coreDescription: "You have a list, and you're checking it twice. From the Northern Lights to Machu Picchu, you approach travel with purpose. Every trip brings you closer to seeing it all.",
@@ -790,7 +790,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   gap_year_graduate: {
     id: 'gap_year_graduate',
-    name: 'The Horizon Chaser',
+    name: 'The Gap Year Graduate',
     category: 'TRANSFORMER',
     hookLine: "The world is the ultimate classroom.",
     coreDescription: "Travel shaped who you are. Those months of backpacking, teaching, or volunteering taught you more than any degree. You carry that transformative spirit into every journey.",
@@ -865,7 +865,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   healing_journeyer: {
     id: 'healing_journeyer',
-    name: 'The Restoration Seeker',
+    name: 'The Healing Journeyer',
     category: 'TRANSFORMER',
     hookLine: "Travel is the medicine for the soul.",
     coreDescription: "You travel to heal. Whether grief, burnout, or life transition, the road has been your path to recovery. You understand that sometimes the best way through is away.",
