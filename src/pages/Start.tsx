@@ -625,7 +625,7 @@ function TripDetailsStep({
             Travelers
           </label>
           <div className="flex items-center gap-2 flex-wrap">
-            {[1, 2, 3, 4, 5, 6, 8, 10].map((num) => (
+            {[1, 2, 3, 4].map((num) => (
               <button
                 key={num}
                 type="button"
@@ -647,6 +647,42 @@ function TripDetailsStep({
                 {num}
               </button>
             ))}
+            {/* Stepper for 5+ */}
+            <div className={cn(
+              'flex items-center rounded-lg border-2 transition-all overflow-hidden',
+              travelers >= 5 ? 'border-primary' : 'border-border'
+            )}>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = Math.max(5, travelers - 1);
+                  setTravelers(next);
+                  if (next === 1 && tripType !== 'solo') setTripType('solo');
+                  else if (next > 1 && tripType === 'solo') setTripType('leisure');
+                }}
+                disabled={travelers <= 5}
+                className="w-9 h-11 sm:w-10 sm:h-12 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+              >
+                −
+              </button>
+              <span className={cn(
+                'w-9 sm:w-10 text-center text-sm font-medium tabular-nums',
+                travelers >= 5 ? 'text-primary' : 'text-muted-foreground'
+              )}>
+                {travelers >= 5 ? travelers : '5+'}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = travelers >= 5 ? travelers + 1 : 5;
+                  setTravelers(Math.min(20, next));
+                  if (tripType === 'solo') setTripType('leisure');
+                }}
+                className="w-9 h-11 sm:w-10 sm:h-12 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+              >
+                +
+              </button>
+            </div>
         </div>
 
         {/* Link Friends */}
