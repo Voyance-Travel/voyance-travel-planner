@@ -836,32 +836,36 @@ function optimizeDayRoute(activities: Activity[]): { activities: Activity[]; cha
 
   const unlocked = activities.filter(act => !act.isLocked);
 
-  // If ≤1 unlocked activities or no coordinates, return as-is
+  // If ≤1 unlocked activities, nothing to optimize
   if (unlocked.length <= 1) return { activities, changed: false };
 
-  const hasCoords = unlocked.every(a => getCoordinates(a.location) !== null);
-  if (!hasCoords) {
-    console.log("[optimize-itinerary] Missing coordinates, skipping route optimization");
+  // Split unlocked into those with and without coordinates
+  const withCoords = unlocked.filter(a => getCoordinates(a.location) !== null);
+  const withoutCoords = unlocked.filter(a => getCoordinates(a.location) === null);
+
+  if (withCoords.length <= 1) {
+    console.log(`[optimize-itinerary] Only ${withCoords.length} activities have coordinates (${withoutCoords.length} missing), skipping route optimization`);
     return { activities, changed: false };
   }
 
-  // Build distance matrix for unlocked activities
-  const distMatrix = buildDistanceMatrix(unlocked);
+  console.log(`[optimize-itinerary] Optimizing ${withCoords.length} activities with coords (${withoutCoords.length} without coords will stay in place)`);
 
-  // Nearest Neighbor TSP
+  // Build distance matrix for activities WITH coordinates only
+  const distMatrix = buildDistanceMatrix(withCoords);
+
+  // Nearest Neighbor TSP on the coord-having subset
   const optimizedIndices: number[] = [];
   const visited = new Set<number>();
 
-  // Start from first activity
   let current = 0;
   visited.add(current);
   optimizedIndices.push(current);
 
-  while (visited.size < unlocked.length) {
+  while (visited.size < withCoords.length) {
     let nearestIdx = -1;
     let nearestDist = Infinity;
 
-    for (let i = 0; i < unlocked.length; i++) {
+    for (let i = 0; i < withCoords.length; i++) {
       if (!visited.has(i) && distMatrix[current][i] < nearestDist) {
         nearestDist = distMatrix[current][i];
         nearestIdx = i;
@@ -878,15 +882,15 @@ function optimizeDayRoute(activities: Activity[]): { activities: Activity[]; cha
   }
 
   // Check if the order actually changed
-  const originalOrder = unlocked.map((_, i) => i);
+  const originalOrder = withCoords.map((_, i) => i);
   const orderChanged = optimizedIndices.some((val, idx) => val !== originalOrder[idx]);
 
-  const optimized = optimizedIndices.map(i => unlocked[i]);
+  const optimizedWithCoords = optimizedIndices.map(i => withCoords[i]);
 
   // Calculate improvement
   let originalDist = 0;
   let optimizedDist = 0;
-  for (let i = 1; i < unlocked.length; i++) {
+  for (let i = 1; i < withCoords.length; i++) {
     originalDist += distMatrix[i - 1][i];
   }
   for (let i = 1; i < optimizedIndices.length; i++) {
@@ -895,21 +899,34 @@ function optimizeDayRoute(activities: Activity[]): { activities: Activity[]; cha
   const improvement = originalDist > 0 ? ((originalDist - optimizedDist) / originalDist * 100).toFixed(1) : '0';
   console.log(`[optimize-itinerary] Route optimized: ${improvement}% distance reduction, order changed: ${orderChanged}`);
 
+  // Reconstruct the unlocked list: optimized-with-coords + without-coords in their original relative positions
+  // Strategy: Build a new unlocked array where coord-having activities are replaced by optimized order,
+  // and coord-less activities stay at their original positions among unlocked items.
+  const newUnlocked: Activity[] = [];
+  let coordIdx = 0;
+  for (const act of unlocked) {
+    if (getCoordinates(act.location) !== null) {
+      newUnlocked.push(optimizedWithCoords[coordIdx++]);
+    } else {
+      newUnlocked.push(act);
+    }
+  }
+
   // Merge locked activities back at their original positions
   const result: Activity[] = [];
-  let optimizedIdx = 0;
+  let unlockedIdx = 0;
 
   for (let i = 0; i < activities.length; i++) {
     const lockedItem = lockedWithIndex.find(l => l.idx === i);
     if (lockedItem) {
       result.push(lockedItem.act);
-    } else if (optimizedIdx < optimized.length) {
-      result.push(optimized[optimizedIdx++]);
+    } else if (unlockedIdx < newUnlocked.length) {
+      result.push(newUnlocked[unlockedIdx++]);
     }
   }
 
-  while (optimizedIdx < optimized.length) {
-    result.push(optimized[optimizedIdx++]);
+  while (unlockedIdx < newUnlocked.length) {
+    result.push(newUnlocked[unlockedIdx++]);
   }
 
   return { activities: result, changed: orderChanged };
@@ -1727,7 +1744,7 @@ serve(async (req) => {
       if (enableGeocoding) {
         for (let i = 0; i < activities.length; i++) {
           const act = activities[i];
-          if (!act.location?.lat && act.location?.address) {
+          if (!getCoordinates(act.location) && act.location?.address) {
             const geo = await geocodeAddress(act.location.address, destination, supabase);
             if (geo) {
               activities[i] = {
