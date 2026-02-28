@@ -291,8 +291,8 @@ export function FlightDetailsModal({
         <DialogContent className="sm:max-w-[480px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Plane className="h-5 w-5 text-primary" />
-              Flight & Transportation Details
+              <ArrowRight className="h-5 w-5 text-primary" />
+              Transportation Details
             </DialogTitle>
             <DialogDescription>
               Arrival times help plan your first day, departure times help plan your last day
@@ -309,7 +309,7 @@ export function FlightDetailsModal({
               onClick={() => setShowImportModal(true)}
             >
               <Clipboard className="h-3.5 w-3.5 mr-2" />
-              Paste from airline confirmation
+              Paste booking confirmation
             </Button>
 
             {/* Outbound Flight */}
@@ -620,7 +620,7 @@ export function FlightDetailsModal({
               Cancel
             </Button>
             <Button onClick={handleSave} disabled={!canSave}>
-              Save Flight Details
+              Save Transportation Details
             </Button>
           </DialogFooter>
         </DialogContent>

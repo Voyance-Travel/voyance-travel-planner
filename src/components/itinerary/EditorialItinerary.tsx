@@ -234,6 +234,7 @@ export interface TransportOption {
   id: string;
   mode: 'train' | 'flight' | 'bus' | 'car' | 'ferry';
   operator: string;
+  emoji?: string;
   inTransitDuration: string;
   doorToDoorDuration: string;
   cost: {
@@ -247,6 +248,8 @@ export interface TransportOption {
   pros: string[];
   cons: string[];
   bookingTip?: string;
+  bookingUrl?: string;
+  bookingWebsite?: string;
   scenicOpportunities?: string[];
   isRecommended: boolean;
   recommendationReason?: string;

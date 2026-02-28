@@ -193,7 +193,7 @@ export function InterCityTransportComparison({
       <div className="flex items-center gap-2 px-1">
         <ArrowRightLeft className="h-4 w-4 text-primary" />
         <span className="text-xs tracking-[0.12em] uppercase text-muted-foreground font-medium">
-          How are you getting between cities?
+          Transportation between cities
         </span>
       </div>
 

@@ -100,6 +100,7 @@ Return a JSON object with this exact structure:
       "id": "unique_string",
       "mode": "train" | "flight" | "bus" | "car" | "ferry",
       "operator": "Real operator name (e.g. Eurostar, EasyJet, FlixBus)",
+      "emoji": "🚂 or ✈️ or 🚌 or 🚗 or ⛴️",
       "inTransitDuration": "Just travel time (e.g. 2h 15m)",
       "doorToDoorDuration": "TOTAL including transfers (e.g. 4h 30m)",
       "cost": {
@@ -113,6 +114,8 @@ Return a JSON object with this exact structure:
       "pros": ["2-4 genuine advantages"],
       "cons": ["2-3 genuine disadvantages"],
       "bookingTip": "Actionable booking tip",
+      "bookingUrl": "https://real-booking-website.com (e.g. trenitalia.com, flixbus.com, easyjet.com, rentalcars.com)",
+      "bookingWebsite": "Human-readable name (e.g. Trenitalia, FlixBus, EasyJet)",
       "scenicOpportunities": ["What you'll see en route"],
       "isRecommended": boolean,
       "recommendationReason": "1-2 sentences why (only for recommended option)"
@@ -126,6 +129,7 @@ RULES:
 - Costs must be realistic for this route. Include ALL hidden costs (baggage, transfers, parking, tolls, fuel).
 - Door-to-door time MUST include transfers, check-in, security, boarding — a 1h15m flight is 4-5h door-to-door.
 - Use REAL operator names, station names, and airport names.
+- bookingUrl MUST be real, working booking websites relevant to the operator/route.
 - Exactly ONE option should have isRecommended: true.
 - ALL costs in ${currency}.
 - Return ONLY valid JSON, no markdown, no explanation.`;
@@ -136,7 +140,7 @@ RULES:
       throw new Error("LOVABLE_API_KEY not configured");
     }
 
-    const aiResponse = await fetch("https://ai-gateway.lovable.dev/api/chat/completions", {
+    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
