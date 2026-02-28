@@ -828,7 +828,7 @@ function buildDistanceMatrix(activities: Activity[]): number[][] {
   return matrix;
 }
 
-function optimizeDayRoute(activities: Activity[]): Activity[] {
+function optimizeDayRoute(activities: Activity[]): { activities: Activity[]; changed: boolean } {
   // Identify locked activities (meals, specific timed events)
   const lockedWithIndex = activities
     .map((act, idx) => ({ act, idx, isLocked: act.isLocked || false }))
@@ -837,12 +837,12 @@ function optimizeDayRoute(activities: Activity[]): Activity[] {
   const unlocked = activities.filter(act => !act.isLocked);
 
   // If ≤1 unlocked activities or no coordinates, return as-is
-  if (unlocked.length <= 1) return activities;
+  if (unlocked.length <= 1) return { activities, changed: false };
 
   const hasCoords = unlocked.every(a => getCoordinates(a.location) !== null);
   if (!hasCoords) {
     console.log("[optimize-itinerary] Missing coordinates, skipping route optimization");
-    return activities;
+    return { activities, changed: false };
   }
 
   // Build distance matrix for unlocked activities
@@ -877,6 +877,10 @@ function optimizeDayRoute(activities: Activity[]): Activity[] {
     }
   }
 
+  // Check if the order actually changed
+  const originalOrder = unlocked.map((_, i) => i);
+  const orderChanged = optimizedIndices.some((val, idx) => val !== originalOrder[idx]);
+
   const optimized = optimizedIndices.map(i => unlocked[i]);
 
   // Calculate improvement
@@ -889,7 +893,7 @@ function optimizeDayRoute(activities: Activity[]): Activity[] {
     optimizedDist += distMatrix[optimizedIndices[i - 1]][optimizedIndices[i]];
   }
   const improvement = originalDist > 0 ? ((originalDist - optimizedDist) / originalDist * 100).toFixed(1) : '0';
-  console.log(`[optimize-itinerary] Route optimized: ${improvement}% distance reduction`);
+  console.log(`[optimize-itinerary] Route optimized: ${improvement}% distance reduction, order changed: ${orderChanged}`);
 
   // Merge locked activities back at their original positions
   const result: Activity[] = [];
@@ -908,7 +912,7 @@ function optimizeDayRoute(activities: Activity[]): Activity[] {
     result.push(optimized[optimizedIdx++]);
   }
 
-  return result;
+  return { activities: result, changed: orderChanged };
 }
 
 // =============================================================================
@@ -1651,6 +1655,7 @@ serve(async (req) => {
 
     const optimizedDays: Day[] = [];
     let totalActivitiesOptimized = 0;
+    let routesChanged = 0;
     let transportCalculated = 0;
     let costsLookedUp = 0;
     let gapsInserted = 0;
@@ -1766,8 +1771,10 @@ serve(async (req) => {
       // Step 6: Route optimization
       if (enableRouteOptimization && activities.length > 2) {
         console.log(`[optimize-itinerary] Day ${day.dayNumber}: Optimizing route for ${activities.length} activities`);
-        activities = optimizeDayRoute(activities);
+        const routeResult = optimizeDayRoute(activities);
+        activities = routeResult.activities;
         totalActivitiesOptimized += activities.length;
+        if (routeResult.changed) routesChanged++;
       }
 
       // Step 7: Calculate transportation between activities
@@ -2167,6 +2174,7 @@ serve(async (req) => {
     const budgetBreakdown = calculateBudgetBreakdown(optimizedDays);
 
     console.log(`[optimize-itinerary] Complete:
+      - Routes changed: ${routesChanged} days reordered
       - Route optimized: ${totalActivitiesOptimized} activities
       - Transport calculated: ${transportCalculated} legs
       - Costs looked up: ${costsLookedUp}
@@ -2204,6 +2212,7 @@ serve(async (req) => {
           minGapMinutes,
           stats: {
             activitiesOptimized: totalActivitiesOptimized,
+            routesChanged,
             transportCalculated,
             costsLookedUp,
             tagsGenerated,
@@ -2244,6 +2253,7 @@ serve(async (req) => {
           minGapMinutes,
           stats: {
             activitiesOptimized: totalActivitiesOptimized,
+            routesChanged,
             transportCalculated,
             costsLookedUp,
             tagsGenerated,
