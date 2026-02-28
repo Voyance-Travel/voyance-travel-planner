@@ -949,8 +949,9 @@ function FlightHotelStep({
   onTransportSelect?: (transitionIndex: number, option: TransportOption) => void;
 }) {
   const navigate = useNavigate();
-  const [showFlightSection, setShowFlightSection] = useState(false);
-  const [showFlightDetails, setShowFlightDetails] = useState(false);
+  const hasExistingFlightData = !!(outboundFlight.departureAirport || outboundFlight.arrivalTime || outboundFlight.airline);
+  const [showFlightSection, setShowFlightSection] = useState(hasExistingFlightData);
+  const [showFlightDetails, setShowFlightDetails] = useState(hasExistingFlightData);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showHotelModal, setShowHotelModal] = useState(false);
   const [editingHotelIndex, setEditingHotelIndex] = useState<number | null>(null); // for split-stay editing
