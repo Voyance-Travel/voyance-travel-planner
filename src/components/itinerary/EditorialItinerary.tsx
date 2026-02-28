@@ -1563,6 +1563,8 @@ export function EditorialItinerary({
     }
   }, [tripId]);
 
+  // (groupUnlock URL param handled after tripPermission is available — see below)
+
   // AI features are locked for manual/imported trips until Smart Finish is purchased
   const aiLocked = isManualMode && !smartFinishPurchased;
 
@@ -1729,7 +1731,29 @@ export function EditorialItinerary({
   );
   const guestMustPropose = !effectiveIsPreview && isEditable && permissionResolved && !tripPermission?.isOwner && tripPermission?.canEdit && isPropose;
 
-  // Build collaborator color map for activity attribution (only for group trips)
+  // Handle ?groupUnlock=true URL param (e.g., from member_joined notification)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('groupUnlock') === 'true' && tripPermission?.isOwner) {
+      // Remove param to prevent re-triggering
+      const url = new URL(window.location.href);
+      url.searchParams.delete('groupUnlock');
+      window.history.replaceState({}, '', url.toString());
+      
+      // Check if budget already exists before prompting
+      supabase
+        .from('group_budgets')
+        .select('id')
+        .eq('trip_id', tripId)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (!data) {
+            setTimeout(() => setShowGroupUnlockModal(true), 500);
+          }
+        });
+    }
+  }, [tripId, tripPermission?.isOwner]);
+
   const collaboratorColorMap = useMemo(() => {
     // Merge collaborators (trip_collaborators) with tripMembers (trip_members)
     const allParticipantIds = new Set<string>();
@@ -3071,6 +3095,18 @@ export function EditorialItinerary({
       setInviteCopied(true);
       setTimeout(() => setInviteCopied(false), 2000);
       toast.success('Invite link copied!');
+
+      // Prompt group unlock if no budget exists yet
+      const { data: existingBudget } = await supabase
+        .from('group_budgets')
+        .select('id')
+        .eq('trip_id', tripId)
+        .maybeSingle();
+      
+      if (!existingBudget) {
+        // Delay slightly so the copy toast doesn't overlap
+        setTimeout(() => setShowGroupUnlockModal(true), 600);
+      }
 
       // Grant first_share bonus (fire-and-forget)
       if (!hasClaimedBonus('first_share')) {
