@@ -1,12 +1,11 @@
 /**
- * Consumer PDF Generator
- * 
- * Uses html2canvas to capture the rendered itinerary DOM,
- * then slices it into A4 pages via jsPDF.
+ * Consumer PDF Generator — Editorial Design
+ *
+ * Native jsPDF drawing for selectable text, precise page breaks,
+ * and a premium editorial travel document aesthetic.
  */
 
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import { format } from 'date-fns';
 import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
 
@@ -17,7 +16,6 @@ export interface ConsumerTripPdfData {
   endDate: string;
   travelers: number;
   days?: EditorialDay[];
-  /** Day numbers that are unlocked (viewable). If provided, locked days are redacted. */
   unlockedDayNumbers?: Set<number>;
   flight?: {
     airline: string;
@@ -34,114 +32,278 @@ export interface ConsumerTripPdfData {
   };
 }
 
-const fmtDateLong = (s: string) => {
-  try { return format(new Date(s), 'EEEE, MMMM d, yyyy'); } catch { return s; }
+// ── Color palette (RGB) ──────────────────────────────────────
+const C = {
+  cream:    [250, 248, 243] as [number, number, number],
+  gold:     [184, 151, 106] as [number, number, number],
+  charcoal: [61,  52,  36]  as [number, number, number],
+  body:     [85,  85,  85]  as [number, number, number],
+  muted:    [153, 153, 153] as [number, number, number],
+  white:    [255, 255, 255] as [number, number, number],
+  lockGray: [156, 163, 175] as [number, number, number],
+  cardBg:   [245, 243, 238] as [number, number, number],
+  tipBg:    [252, 250, 246] as [number, number, number],
+  separator:[230, 225, 215] as [number, number, number],
 };
 
-const fmtDate = (s: string) => {
-  try { return format(new Date(s), 'EEE, MMM d'); } catch { return s; }
-};
+// ── Layout constants ─────────────────────────────────────────
+const PW = 210;           // A4 width mm
+const PH = 297;           // A4 height mm
+const M  = 22;            // side margin
+const CW = PW - M * 2;   // content width
+const HEADER_Y = 16;
+const CONTENT_TOP = 28;
+const PAGE_BOTTOM = PH - 18;
 
-/**
- * Build an off-screen HTML element that represents a clean, print-ready itinerary,
- * render it to canvas, and output as a paginated PDF.
- */
+// ── Date helpers ─────────────────────────────────────────────
+const fmtLong = (s: string) => { try { return format(new Date(s), 'EEEE, MMMM d, yyyy'); } catch { return s; } };
+const fmtShort = (s: string) => { try { return format(new Date(s), 'EEE, MMM d'); } catch { return s; } };
+
+// ── Main export ──────────────────────────────────────────────
 export async function generateConsumerTripPdf(data: ConsumerTripPdfData): Promise<void> {
-  // Build a temporary container with inline styles (no CSS dependencies)
-  const container = document.createElement('div');
-  container.style.cssText = `
-    position: fixed; top: -99999px; left: -99999px;
-    width: 794px; /* A4 at 96dpi */
-    background: white;
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    color: #1a1a2e;
-    padding: 0;
-    z-index: -1;
-  `;
+  const pdf = new jsPDF('p', 'mm', 'a4');
+  let pageNum = 0;
 
-  const accentColor = '#4f46e5';
-  const mutedColor = '#888';
-  const bodyColor = '#333';
+  // ── Helpers ──────────────────────────────────────────────
+  const setFont = (style: 'normal' | 'bold' | 'italic' | 'bolditalic', size: number, color: [number, number, number] = C.charcoal) => {
+    pdf.setFont('helvetica', style);
+    pdf.setFontSize(size);
+    pdf.setTextColor(...color);
+  };
 
-  // ── COVER ──────────────────────────────────────────────────────
-  let coverHtml = `
-    <div style="padding: 60px 50px 40px; text-align: center; min-height: 600px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-      <div style="width: 100%; height: 4px; background: ${accentColor}; margin-bottom: 60px; border-radius: 2px;"></div>
-      <h1 style="font-size: 38px; font-weight: 700; margin: 0 0 12px; color: #1a1a2e; letter-spacing: -0.5px;">${escapeHtml(data.destination)}</h1>
-  `;
+  const drawCreamBg = () => {
+    pdf.setFillColor(...C.cream);
+    pdf.rect(0, 0, PW, PH, 'F');
+  };
 
-  if (data.tripName && data.tripName !== data.destination && !data.tripName.includes(data.destination)) {
-    coverHtml += `<p style="font-size: 16px; color: ${mutedColor}; margin: 0 0 8px;">${escapeHtml(data.tripName)}</p>`;
+  const drawPageHeader = () => {
+    pageNum++;
+    // "VOYANCE" wordmark top-left
+    setFont('bold', 8, C.gold);
+    pdf.text('VOYANCE', M, HEADER_Y);
+    // Page number top-right
+    setFont('normal', 8, C.muted);
+    pdf.text(`${pageNum}`, PW - M, HEADER_Y, { align: 'right' });
+    // Gold rule
+    pdf.setDrawColor(...C.gold);
+    pdf.setLineWidth(0.3);
+    pdf.line(M, HEADER_Y + 3, PW - M, HEADER_Y + 3);
+  };
+
+  const drawPageFooter = () => {
+    const fy = PH - 10;
+    pdf.setDrawColor(...C.gold);
+    pdf.setLineWidth(0.2);
+    pdf.line(M, fy - 2, PW - M, fy - 2);
+    setFont('normal', 7, C.muted);
+    pdf.text('Generated by Voyance  \u00B7  travelwithvoyance.com', PW / 2, fy, { align: 'center' });
+  };
+
+  const newContentPage = (): number => {
+    pdf.addPage();
+    drawCreamBg();
+    drawPageHeader();
+    drawPageFooter();
+    return CONTENT_TOP;
+  };
+
+  const checkBreak = (y: number, needed: number): number => {
+    if (y + needed > PAGE_BOTTOM) {
+      return newContentPage();
+    }
+    return y;
+  };
+
+  const wrapText = (text: string, maxW: number, size: number, style: 'normal' | 'bold' | 'italic' = 'normal'): string[] => {
+    pdf.setFont('helvetica', style);
+    pdf.setFontSize(size);
+    return pdf.splitTextToSize(text, maxW);
+  };
+
+  // ════════════════════════════════════════════════════════
+  // COVER PAGE
+  // ════════════════════════════════════════════════════════
+  drawCreamBg();
+  pageNum++;
+
+  let y = 55;
+
+  // Top gold rule + diamond
+  pdf.setDrawColor(...C.gold);
+  pdf.setLineWidth(0.4);
+  const diamondX = PW / 2;
+  pdf.line(M + 10, y, diamondX - 8, y);
+  pdf.line(diamondX + 8, y, PW - M - 10, y);
+  // Diamond shape
+  pdf.setFillColor(...C.gold);
+  const ds = 2.5;
+  pdf.triangle(diamondX, y - ds, diamondX + ds, y, diamondX, y + ds, 'F');
+  pdf.triangle(diamondX, y - ds, diamondX - ds, y, diamondX, y + ds, 'F');
+
+  y += 12;
+
+  // "V O Y A N C E" wordmark
+  setFont('bold', 14, C.gold);
+  pdf.text('V  O  Y  A  N  C  E', PW / 2, y, { align: 'center' });
+
+  y += 30;
+
+  // Destination name
+  setFont('bold', 32, C.charcoal);
+  const destLines = wrapText(data.destination.toUpperCase(), CW - 20, 32, 'bold');
+  for (const line of destLines) {
+    pdf.text(line, PW / 2, y, { align: 'center' });
+    y += 14;
   }
 
-  coverHtml += `
-      <p style="font-size: 14px; color: ${bodyColor}; margin: 16px 0 6px;">${fmtDateLong(data.startDate)} &ndash; ${fmtDateLong(data.endDate)}</p>
-      <p style="font-size: 13px; color: ${mutedColor}; margin: 0 0 30px;">${data.travelers} traveler${data.travelers !== 1 ? 's' : ''}</p>
-      <div style="width: 40px; height: 1px; background: #ccc; margin: 0 auto 30px;"></div>
-  `;
+  // Gold accent line
+  y += 4;
+  pdf.setDrawColor(...C.gold);
+  pdf.setLineWidth(0.6);
+  pdf.line(PW / 2 - 20, y, PW / 2 + 20, y);
 
-  // Quick reference
-  if (data.flight || data.hotel) {
-    coverHtml += `<div style="background: #f5f6f8; border-radius: 8px; padding: 20px 28px; text-align: left; max-width: 500px; width: 100%;">`;
-    if (data.flight) {
-      coverHtml += `
-        <p style="font-size: 10px; font-weight: 700; color: ${mutedColor}; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 4px;">Flight</p>
-        <p style="font-size: 13px; color: #1a1a2e; margin: 0 0 2px;">${escapeHtml(data.flight.airline)} &middot; ${escapeHtml(data.flight.departureAirport)} &rarr; ${escapeHtml(data.flight.arrivalAirport)}</p>
-        <p style="font-size: 12px; color: ${mutedColor}; margin: 0 0 14px;">Departs ${escapeHtml(data.flight.departure)} &middot; Arrives ${escapeHtml(data.flight.arrival)}</p>
-      `;
+  y += 14;
+
+  // Dates
+  setFont('normal', 10, C.body);
+  pdf.text(`${fmtLong(data.startDate)}  \u2013  ${fmtLong(data.endDate)}`, PW / 2, y, { align: 'center' });
+  y += 7;
+
+  // Travelers & days
+  const dayCount = data.days?.length || 0;
+  const metaStr = `${data.travelers} traveler${data.travelers !== 1 ? 's' : ''}${dayCount > 0 ? `  \u00B7  ${dayCount} days` : ''}`;
+  setFont('normal', 9, C.muted);
+  pdf.text(metaStr, PW / 2, y, { align: 'center' });
+
+  y += 20;
+
+  // ── Accommodation card ───────────────────────────────
+  const drawInfoCard = (label: string, lines: string[], startY: number): number => {
+    const cardH = 28 + lines.length * 5;
+    const cardX = M + 20;
+    const cardW = CW - 40;
+
+    pdf.setFillColor(...C.cardBg);
+    pdf.roundedRect(cardX, startY, cardW, cardH, 3, 3, 'F');
+
+    setFont('bold', 7, C.gold);
+    pdf.text(label, cardX + 10, startY + 10);
+
+    setFont('bold', 11, C.charcoal);
+    pdf.text(lines[0] || '', cardX + 10, startY + 18);
+
+    for (let i = 1; i < lines.length; i++) {
+      setFont('normal', 9, C.body);
+      pdf.text(lines[i], cardX + 10, startY + 18 + i * 6);
     }
-    if (data.hotel) {
-      coverHtml += `
-        <p style="font-size: 10px; font-weight: 700; color: ${mutedColor}; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 4px;">Hotel</p>
-        <p style="font-size: 13px; color: #1a1a2e; margin: 0 0 2px;">${escapeHtml(data.hotel.name)} &middot; ${escapeHtml(data.hotel.neighborhood)}</p>
-        <p style="font-size: 12px; color: ${mutedColor}; margin: 0;">${escapeHtml(data.hotel.checkIn)} &ndash; ${escapeHtml(data.hotel.checkOut)}</p>
-      `;
-    }
-    coverHtml += `</div>`;
+
+    return startY + cardH + 8;
+  };
+
+  if (data.hotel) {
+    y = drawInfoCard('ACCOMMODATION', [
+      data.hotel.name,
+      `${data.hotel.neighborhood}`,
+      `Check-in: ${data.hotel.checkIn}  \u00B7  Check-out: ${data.hotel.checkOut}`,
+    ], y);
   }
 
-  coverHtml += `
-      <p style="font-size: 10px; color: #aaa; margin-top: 50px;">Generated by Voyance &middot; travelwithvoyance.com</p>
-    </div>
-  `;
+  if (data.flight) {
+    y = drawInfoCard('FLIGHT', [
+      data.flight.airline,
+      `${data.flight.departureAirport}  \u2192  ${data.flight.arrivalAirport}`,
+      `Departs ${data.flight.departure}  \u00B7  Arrives ${data.flight.arrival}`,
+    ], y);
+  }
 
-  // ── ITINERARY DAYS ─────────────────────────────────────────────
-  let daysHtml = '';
+  // Cover footer ornament
+  const footY = PH - 30;
+  pdf.setDrawColor(...C.gold);
+  pdf.setLineWidth(0.3);
+  pdf.line(M + 30, footY, diamondX - 6, footY);
+  pdf.line(diamondX + 6, footY, PW - M - 30, footY);
+  pdf.setFillColor(...C.gold);
+  pdf.triangle(diamondX, footY - 2, diamondX + 2, footY, diamondX, footY + 2, 'F');
+  pdf.triangle(diamondX, footY - 2, diamondX - 2, footY, diamondX, footY + 2, 'F');
+
+  setFont('normal', 7, C.muted);
+  pdf.text('Generated by Voyance  \u00B7  travelwithvoyance.com', PW / 2, footY + 8, { align: 'center' });
+
+  // ════════════════════════════════════════════════════════
+  // ITINERARY PAGES
+  // ════════════════════════════════════════════════════════
   if (data.days && data.days.length > 0) {
-    daysHtml += `
-      <div style="padding: 40px 50px;">
-        <h2 style="font-size: 22px; font-weight: 700; color: #1a1a2e; margin: 0 0 8px;">Your Itinerary</h2>
-        <div style="width: 100%; height: 2px; background: ${accentColor}; margin-bottom: 30px; border-radius: 1px;"></div>
-    `;
+    y = newContentPage();
+
+    // Section heading
+    setFont('bold', 20, C.charcoal);
+    pdf.text('Your Itinerary', M, y + 4);
+    y += 8;
+    pdf.setDrawColor(...C.gold);
+    pdf.setLineWidth(0.5);
+    pdf.line(M, y, PW - M, y);
+    y += 10;
 
     for (const day of data.days) {
-      const dateStr = day.date ? fmtDate(day.date) : '';
+      const isDayLocked = data.unlockedDayNumbers != null && !data.unlockedDayNumbers.has(day.dayNumber);
+      const dateStr = day.date ? fmtShort(day.date) : '';
       const theme = day.title || day.theme || '';
 
-      // Check if this day is locked (not unlocked)
-      const isDayLocked = data.unlockedDayNumbers && !data.unlockedDayNumbers.has(day.dayNumber);
+      // Estimate day height for page break
+      const dayHeaderH = 14;
+      let estDayH = dayHeaderH;
+      if (isDayLocked) {
+        estDayH += 30;
+      } else if (day.activities && day.activities.length > 0) {
+        estDayH += 20; // min for first activity
+      } else {
+        estDayH += 12;
+      }
+      y = checkBreak(y, Math.min(estDayH, 50));
 
-      daysHtml += `
-        <div style="margin-bottom: 28px;">
-          <div style="background: ${isDayLocked ? '#9ca3af' : accentColor}; color: white; border-radius: 6px; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-            <div>
-              <span style="font-weight: 700; font-size: 14px; margin-right: 16px;">Day ${day.dayNumber}</span>
-              <span style="font-size: 13px; opacity: 0.9;">${escapeHtml(theme)}</span>
-            </div>
-            <span style="font-size: 12px; opacity: 0.85;">${escapeHtml(dateStr)}</span>
-          </div>
-      `;
+      // ── Day header ──────────────────────────────────
+      const headerColor = isDayLocked ? C.lockGray : C.charcoal;
+      pdf.setFillColor(...headerColor);
+      pdf.roundedRect(M, y, CW, 10, 2, 2, 'F');
+
+      setFont('bold', 11, C.white);
+      pdf.text(`Day ${day.dayNumber}`, M + 6, y + 7);
+
+      if (theme) {
+        setFont('normal', 9, C.white);
+        const themeMaxW = CW - 80;
+        const truncTheme = theme.length > 40 ? theme.substring(0, 37) + '...' : theme;
+        pdf.text(truncTheme, M + 30, y + 7);
+      }
+
+      if (dateStr) {
+        setFont('normal', 9, C.white);
+        pdf.text(dateStr, PW - M - 6, y + 7, { align: 'right' });
+      }
+
+      y += 14;
 
       if (isDayLocked) {
-        // Locked day — show redacted placeholder
-        daysHtml += `
-          <div style="padding: 20px 16px; text-align: center; background: #f9fafb; border: 1px dashed #d1d5db; border-radius: 6px;">
-            <p style="font-size: 13px; font-weight: 600; color: #6b7280; margin: 0 0 6px;">🔒 Day ${day.dayNumber} is locked</p>
-            <p style="font-size: 11px; color: #9ca3af; margin: 0;">Unlock this day at travelwithvoyance.com to see full details</p>
-          </div>
-        `;
+        // ── Locked day placeholder ──────────────────
+        y = checkBreak(y, 24);
+        pdf.setDrawColor(...C.lockGray);
+        pdf.setLineWidth(0.4);
+        // Dashed border
+        const dashRect = { x: M + 4, y: y, w: CW - 8, h: 20 };
+        pdf.setLineDashPattern([2, 2], 0);
+        pdf.rect(dashRect.x, dashRect.y, dashRect.w, dashRect.h);
+        pdf.setLineDashPattern([], 0);
+
+        setFont('bold', 10, C.lockGray);
+        pdf.text(`Day ${day.dayNumber} is locked`, PW / 2, y + 9, { align: 'center' });
+        setFont('normal', 8, C.muted);
+        pdf.text('Unlock this day at travelwithvoyance.com to see full details', PW / 2, y + 15, { align: 'center' });
+
+        y += 28;
       } else if (day.activities && day.activities.length > 0) {
-        for (const act of day.activities) {
+        // ── Activities ──────────────────────────────
+        for (let ai = 0; ai < day.activities.length; ai++) {
+          const act = day.activities[ai];
           const timeStr = act.startTime || act.time || '';
           const locationName = act.location?.name || act.location?.address || '';
           const metaParts: string[] = [];
@@ -149,99 +311,109 @@ export async function generateConsumerTripPdf(data: ConsumerTripPdfData): Promis
           if (act.duration) metaParts.push(act.duration);
           if (act.cost?.amount) metaParts.push(`${act.cost.currency || '$'}${act.cost.amount}`);
 
-          daysHtml += `
-            <div style="display: flex; gap: 12px; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #f0f0f3;">
-              <div style="width: 50px; flex-shrink: 0; text-align: right;">
-                ${timeStr ? `<span style="font-size: 12px; font-weight: 700; color: ${accentColor};">${escapeHtml(timeStr)}</span>` : ''}
-              </div>
-              <div style="flex: 1; min-width: 0;">
-                <p style="font-size: 13px; font-weight: 700; color: #1a1a2e; margin: 0 0 3px;">${escapeHtml(act.title)}</p>
-                ${act.description ? `<p style="font-size: 11px; color: ${bodyColor}; margin: 0 0 4px; line-height: 1.5;">${escapeHtml(act.description)}</p>` : ''}
-                ${metaParts.length > 0 ? `<p style="font-size: 10px; color: ${mutedColor}; margin: 0 0 2px;">${metaParts.map(escapeHtml).join(' &middot; ')}</p>` : ''}
-                ${act.tips ? `<p style="font-size: 10px; color: ${accentColor}; margin: 2px 0 0; font-style: italic;">Tip: ${escapeHtml(act.tips)}</p>` : ''}
-              </div>
-            </div>
-          `;
+          // Estimate activity height
+          const descLines = act.description ? wrapText(act.description, CW - 30, 9) : [];
+          const tipLines = act.tips ? wrapText(`Tip: ${act.tips}`, CW - 36, 8.5, 'italic') : [];
+          let actH = 8; // title
+          actH += descLines.length * 4;
+          if (metaParts.length > 0) actH += 5;
+          if (tipLines.length > 0) actH += tipLines.length * 3.5 + 4;
+          actH += 6; // separator + spacing
+
+          y = checkBreak(y, actH);
+
+          const leftCol = 20; // time column width
+
+          // Time
+          if (timeStr) {
+            setFont('bold', 10, C.gold);
+            pdf.text(timeStr, M + 2, y + 4);
+          }
+
+          // Title
+          setFont('bold', 11, C.charcoal);
+          pdf.text(act.title, M + leftCol, y + 4);
+          y += 8;
+
+          // Description
+          if (descLines.length > 0) {
+            setFont('normal', 9, C.body);
+            for (const line of descLines) {
+              pdf.text(line, M + leftCol, y);
+              y += 4;
+            }
+            y += 1;
+          }
+
+          // Meta line
+          if (metaParts.length > 0) {
+            setFont('normal', 8, C.muted);
+            pdf.text(metaParts.join('  \u00B7  '), M + leftCol, y);
+            y += 5;
+          }
+
+          // Tip box
+          if (tipLines.length > 0) {
+            y += 1;
+            const tipStartY = y;
+            // Gold left border
+            pdf.setDrawColor(...C.gold);
+            pdf.setLineWidth(0.8);
+            pdf.line(M + leftCol, tipStartY - 1, M + leftCol, tipStartY + tipLines.length * 3.5 + 1);
+
+            setFont('italic', 8.5, C.gold);
+            for (const line of tipLines) {
+              pdf.text(line, M + leftCol + 4, y);
+              y += 3.5;
+            }
+            y += 2;
+          }
+
+          // Separator line (except last activity)
+          if (ai < day.activities.length - 1) {
+            y += 2;
+            pdf.setDrawColor(...C.separator);
+            pdf.setLineWidth(0.15);
+            pdf.line(M + leftCol, y, PW - M, y);
+            y += 4;
+          } else {
+            y += 4;
+          }
         }
       } else {
-        daysHtml += `<p style="font-size: 12px; color: ${mutedColor}; padding-left: 62px;">Free day — explore at your own pace</p>`;
+        // No activities
+        setFont('normal', 9, C.muted);
+        pdf.text('Free day \u2014 explore at your own pace', M + 6, y + 2);
+        y += 10;
       }
 
-      daysHtml += `</div>`; // close day
+      y += 6; // gap between days
     }
-
-    daysHtml += `</div>`; // close itinerary section
   }
 
-  // ── NOTES PAGE ─────────────────────────────────────────────────
-  let notesHtml = `
-    <div style="padding: 40px 50px; min-height: 500px;">
-      <h2 style="font-size: 20px; font-weight: 700; color: #1a1a2e; margin: 0 0 12px;">Notes</h2>
-      <div style="width: 100%; height: 1px; background: #ddd; margin-bottom: 16px;"></div>
-  `;
+  // ════════════════════════════════════════════════════════
+  // NOTES PAGE
+  // ════════════════════════════════════════════════════════
+  y = newContentPage();
+
+  setFont('bold', 18, C.charcoal);
+  pdf.text('Notes', M, y + 4);
+  y += 10;
+  pdf.setDrawColor(...C.gold);
+  pdf.setLineWidth(0.3);
+  pdf.line(M, y, PW - M, y);
+  y += 14;
+
+  // Ruled lines
+  pdf.setDrawColor(...C.separator);
+  pdf.setLineWidth(0.1);
   for (let i = 0; i < 22; i++) {
-    notesHtml += `<div style="width: 100%; height: 1px; background: #f0f0f3; margin-bottom: 22px;"></div>`;
+    if (y > PAGE_BOTTOM - 5) break;
+    pdf.line(M, y, PW - M, y);
+    y += 11;
   }
-  notesHtml += `</div>`;
 
-  container.innerHTML = coverHtml + daysHtml + notesHtml;
-  document.body.appendChild(container);
-
-  try {
-    // Render to canvas at 2x for quality
-    const canvas = await html2canvas(container, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-      width: 794,
-      windowWidth: 794,
-    });
-
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const pdfW = pdf.internal.pageSize.getWidth();   // 210
-    const pdfH = pdf.internal.pageSize.getHeight();   // 297
-
-    const imgW = pdfW - 10; // 5mm margin each side
-    const imgH = (canvas.height * imgW) / canvas.width;
-
-    let heightLeft = imgH;
-    let position = 5; // top margin
-
-    // First page
-    pdf.addImage(imgData, 'PNG', 5, position, imgW, imgH);
-    heightLeft -= (pdfH - 10);
-
-    // Subsequent pages
-    while (heightLeft > 0) {
-      pdf.addPage();
-      position = -(imgH - heightLeft) + 5;
-      pdf.addImage(imgData, 'PNG', 5, position, imgW, imgH);
-      heightLeft -= (pdfH - 10);
-    }
-
-    // Add page numbers
-    const totalPages = pdf.getNumberOfPages();
-    for (let i = 1; i <= totalPages; i++) {
-      pdf.setPage(i);
-      pdf.setFontSize(8);
-      pdf.setTextColor(170, 170, 170);
-      pdf.text('Voyance', 10, pdfH - 6);
-      pdf.text(`${i} / ${totalPages}`, pdfW - 10, pdfH - 6, { align: 'right' });
-    }
-
-    const safeName = (data.tripName || data.destination).replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-    pdf.save(`${safeName}-itinerary.pdf`);
-  } finally {
-    document.body.removeChild(container);
-  }
-}
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  // ── Save ───────────────────────────────────────────────
+  const safeName = (data.tripName || data.destination).replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  pdf.save(`${safeName}-itinerary.pdf`);
 }
