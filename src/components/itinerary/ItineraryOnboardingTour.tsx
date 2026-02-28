@@ -129,7 +129,9 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
   const [isVisible, setIsVisible] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [highlightRect, setHighlightRect] = useState<DOMRect | null>(null);
+  const [shouldShowWhenAllowed, setShouldShowWhenAllowed] = useState(false);
   const { requestPopup, closePopup } = usePopupCoordination();
+  const activePopup = usePopupCoordination(state => state.activePopup);
   const { user } = useAuth();
 
   // Show tour only once per user — check localStorage (fast) then DB (durable)
@@ -151,19 +153,24 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
         return;
       }
 
-      // Neither localStorage nor DB says completed — show tour
-      const timer = setTimeout(() => {
-        if (cancelled) return;
-        const allowed = requestPopup('itinerary_tour');
-        if (allowed) setIsVisible(true);
-      }, 1000);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      cancelled = false; // keep ref for cleanup
-      return () => clearTimeout(timer);
+      // Neither localStorage nor DB says completed — mark as ready to show
+      setShouldShowWhenAllowed(true);
     })();
 
     return () => { cancelled = true; };
-  }, [user, requestPopup]);
+  }, [user]);
+
+  // Try to acquire the popup slot whenever we should show and the active popup changes
+  useEffect(() => {
+    if (!shouldShowWhenAllowed || isVisible) return;
+
+    const timer = setTimeout(() => {
+      const allowed = requestPopup('itinerary_tour');
+      if (allowed) setIsVisible(true);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [shouldShowWhenAllowed, isVisible, activePopup, requestPopup]);
 
   // Update highlight position when step changes
   useEffect(() => {
