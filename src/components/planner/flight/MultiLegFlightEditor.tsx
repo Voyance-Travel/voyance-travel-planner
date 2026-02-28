@@ -101,6 +101,32 @@ function nextSlotId() {
   return `leg-slot-${++slotIdCounter}`;
 }
 
+function hasFlightContent(f?: ManualFlightEntry): boolean {
+  if (!f) return false;
+  return Boolean(
+    f.airline ||
+    f.flightNumber ||
+    f.departureAirport ||
+    f.arrivalAirport ||
+    f.departureTime ||
+    f.arrivalTime ||
+    f.price
+  );
+}
+
+function isSameFlightEntry(a: ManualFlightEntry, b: ManualFlightEntry): boolean {
+  return (
+    (a.airline || '') === (b.airline || '') &&
+    (a.flightNumber || '') === (b.flightNumber || '') &&
+    (a.departureAirport || '') === (b.departureAirport || '') &&
+    (a.arrivalAirport || '') === (b.arrivalAirport || '') &&
+    (a.departureTime || '') === (b.departureTime || '') &&
+    (a.arrivalTime || '') === (b.arrivalTime || '') &&
+    (a.departureDate || '') === (b.departureDate || '') &&
+    Number(a.price || 0) === Number(b.price || 0)
+  );
+}
+
 /**
  * Generate leg slots from destinations array.
  * For destinations [London, Paris, Rome], generates:
@@ -235,6 +261,48 @@ export default function MultiLegFlightEditor({
       return changed ? updated : prev;
     });
   }, [initialized, transportSelections]);
+
+  // Rehydrate slots when parent receives imported/loaded legs after initial mount
+  useEffect(() => {
+    if (!initialized) return;
+
+    const incomingLegs: ManualFlightEntry[] = [
+      ...(hasFlightContent(initialOutbound) ? [initialOutbound!] : []),
+      ...((initialAdditionalLegs || []).filter(hasFlightContent)),
+      ...(hasFlightContent(initialReturn) ? [initialReturn!] : []),
+    ];
+
+    if (incomingLegs.length === 0) return;
+
+    setSlots((prev) => {
+      const flightSlotIndexes = prev
+        .map((slot, idx) => ({ slot, idx }))
+        .filter(({ slot }) => slot.transportType === 'flight')
+        .map(({ idx }) => idx);
+
+      if (flightSlotIndexes.length === 0) return prev;
+
+      const next = [...prev];
+      let changed = false;
+
+      incomingLegs.slice(0, flightSlotIndexes.length).forEach((leg, i) => {
+        const slotIndex = flightSlotIndexes[i];
+        const current = next[slotIndex].flight;
+        if (!isSameFlightEntry(current, leg)) {
+          next[slotIndex] = {
+            ...next[slotIndex],
+            flight: {
+              ...current,
+              ...leg,
+            },
+          };
+          changed = true;
+        }
+      });
+
+      return changed ? next : prev;
+    });
+  }, [initialized, initialOutbound, initialAdditionalLegs, initialReturn]);
 
   // Sync changes to parent
   const syncToParent = useCallback((updatedSlots: FlightLegSlot[]) => {
