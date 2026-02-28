@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { formatEnumDisplay, formatWeatherCondition } from '@/utils/textFormatting';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
@@ -542,53 +543,88 @@ function ActivityCard({
                 className="flex items-center gap-1"
               >
                 {onLock && (
-                  <button
-                    onClick={() => onLock(dayIndex, activity.id, !activity.isLocked)}
-                    className="p-1 hover:bg-white/50 rounded"
-                    title={activity.isLocked ? 'Unlock activity' : 'Lock activity'}
-                  >
-                    {activity.isLocked ? (
-                      <Lock className="h-3.5 w-3.5" />
-                    ) : (
-                      <Unlock className="h-3.5 w-3.5" />
-                    )}
-                  </button>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => onLock(dayIndex, activity.id, !activity.isLocked)}
+                        className="p-1 hover:bg-white/50 rounded"
+                        aria-label={activity.isLocked ? 'Unlock Activity' : 'Lock Activity'}
+                      >
+                        {activity.isLocked ? (
+                          <Lock className="h-3.5 w-3.5" />
+                        ) : (
+                          <Unlock className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <span className="text-xs font-medium">{activity.isLocked ? 'Unlock Activity' : 'Lock Activity'}</span>
+                    </TooltipContent>
+                  </Tooltip>
                 )}
                 {onEdit && (
-                  <button
-                    onClick={() => onEdit(dayIndex, activity.id)}
-                    className="p-1 hover:bg-white/50 rounded"
-                    title="Edit activity"
-                  >
-                    <Edit2 className="h-3.5 w-3.5" />
-                  </button>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => onEdit(dayIndex, activity.id)}
+                        className="p-1 hover:bg-white/50 rounded"
+                        aria-label="Edit Activity"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <span className="text-xs font-medium">Edit Activity</span>
+                    </TooltipContent>
+                  </Tooltip>
                 )}
                 {onMove && activityIndex > 0 && (
-                  <button
-                    onClick={() => onMove(dayIndex, activity.id, 'up')}
-                    className="p-1 hover:bg-white/50 rounded"
-                    title="Move up"
-                  >
-                    <ArrowUp className="h-3.5 w-3.5" />
-                  </button>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => onMove(dayIndex, activity.id, 'up')}
+                        className="p-1 hover:bg-white/50 rounded"
+                        aria-label="Move Up"
+                      >
+                        <ArrowUp className="h-3.5 w-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <span className="text-xs font-medium">Move Up</span>
+                    </TooltipContent>
+                  </Tooltip>
                 )}
                 {onMove && activityIndex < totalActivities - 1 && (
-                  <button
-                    onClick={() => onMove(dayIndex, activity.id, 'down')}
-                    className="p-1 hover:bg-white/50 rounded"
-                    title="Move down"
-                  >
-                    <ArrowDown className="h-3.5 w-3.5" />
-                  </button>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => onMove(dayIndex, activity.id, 'down')}
+                        className="p-1 hover:bg-white/50 rounded"
+                        aria-label="Move Down"
+                      >
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <span className="text-xs font-medium">Move Down</span>
+                    </TooltipContent>
+                  </Tooltip>
                 )}
                 {onRemove && (
-                  <button
-                    onClick={() => onRemove(dayIndex, activity.id)}
-                    className="p-1 hover:bg-white/50 rounded text-red-600"
-                    title="Remove activity"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => onRemove(dayIndex, activity.id)}
+                        className="p-1 hover:bg-white/50 rounded text-red-600"
+                        aria-label="Remove Activity"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <span className="text-xs font-medium">Remove Activity</span>
+                    </TooltipContent>
+                  </Tooltip>
                 )}
               </motion.div>
             )}

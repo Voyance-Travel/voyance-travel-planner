@@ -11,6 +11,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { MessageCircle, X, Send, Loader2, ArrowLeftRight, Gauge, Filter, RefreshCw, Check, ThumbsDown, Settings2, Coins, Pencil, TrendingDown, TrendingUp, Minus, Plus, Mic, MicOff } from 'lucide-react';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -458,17 +459,26 @@ export function ItineraryAssistant({
   return (
     <>
       {/* Floating Action Button */}
-      <Button
-        onClick={() => setIsOpen(true)}
-        className={cn(
-          "fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-50",
-          "bg-primary hover:bg-primary/90 transition-all",
-          isOpen && "hidden"
-        )}
-        size="icon"
-      >
-        <MessageCircle className="h-6 w-6" />
-      </Button>
+      <Tooltip delayDuration={200}>
+        <TooltipTrigger asChild>
+          <Button
+            onClick={() => setIsOpen(true)}
+            className={cn(
+              "fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-50",
+              "bg-primary hover:bg-primary/90 transition-all",
+              isOpen && "hidden"
+            )}
+            size="icon"
+            aria-label="Trip Assistant"
+            data-tour="chat-bubble"
+          >
+            <MessageCircle className="h-6 w-6" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="left">
+          <span className="text-xs font-medium">Trip Assistant</span>
+        </TooltipContent>
+      </Tooltip>
 
       {/* Chat Sheet */}
       <Sheet open={isOpen} onOpenChange={setIsOpen}>

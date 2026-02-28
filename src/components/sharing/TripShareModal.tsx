@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { FirstUseHint } from '@/components/itinerary/FirstUseHint';
 
 interface TripShareModalProps {
   isOpen: boolean;
@@ -147,6 +148,11 @@ export function TripShareModal({
         </DialogHeader>
 
         <div className="space-y-6 py-2">
+          {/* First-use hint */}
+          <FirstUseHint
+            hintKey="share_hint_shown"
+            message="New: You can choose how guests interact — let them edit freely, or use Propose & Vote so you stay in control."
+          />
           {/* Referral Bonus Banner */}
           <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20">
             <div className="p-2 rounded-full bg-primary/20">

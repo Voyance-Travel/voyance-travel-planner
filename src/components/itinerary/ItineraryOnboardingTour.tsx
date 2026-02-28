@@ -14,7 +14,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, ChevronRight, ChevronLeft, Lock, MoreHorizontal, 
   RefreshCw, Save, Calendar, Sparkles, ArrowRightLeft,
-  Route, Globe, Share2, MapPin, MessageSquare
+  Route, Globe, Share2, MapPin, MessageSquare, HeartPulse,
+  Wallet
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -30,90 +31,59 @@ interface TourStep {
 
 const TOUR_STEPS: TourStep[] = [
   {
-    id: 'welcome',
-    title: 'Welcome to Your Itinerary! ✨',
-    description: 'This is your personalized travel plan, powered by AI and tailored to your Travel DNA. Let me show you how to make it perfect.',
+    id: 'trip-at-a-glance',
+    title: 'Your Trip at a Glance',
+    description: 'We analyzed your destination and baked intelligence into every activity — hidden gems, timing tricks, and local picks. This summary shows what we found.',
     icon: <Sparkles className="h-5 w-5" />,
-    position: 'center',
-  },
-  {
-    id: 'day-picker',
-    title: 'Navigate Between Days',
-    description: 'Use the day picker to jump between different days of your trip. Today\'s date is highlighted for easy reference.',
-    icon: <Calendar className="h-5 w-5" />,
-    selector: '[data-tour="day-picker"]',
+    selector: '[data-tour="value-header"]',
     position: 'bottom',
   },
   {
-    id: 'transit-routes',
-    title: 'Routes & Transit Between Stops',
-    description: 'Between every activity you\'ll see transit badges showing walking time, metro lines, taxi costs, and step-by-step directions. We optimize your route so you spend less time commuting and more time experiencing.',
-    icon: <MapPin className="h-5 w-5" />,
-    selector: '[data-tour="transit-badge"]',
-    position: 'bottom',
+    id: 'trip-health',
+    title: 'Trip Health & Status',
+    description: 'Your Health Score tracks how trip-ready you are. Add flights, hotels, and resolve issues to hit 100%. Tap the score to see what needs attention.',
+    icon: <HeartPulse className="h-5 w-5" />,
+    selector: '[data-tour="health-score"]',
+    position: 'right',
   },
   {
-    id: 'optimize',
-    title: 'AI Route Optimization',
-    description: 'Click Optimize to intelligently reorder your day\'s activities, minimizing travel time between stops. Typically saving ~30 minutes per day with smarter sequencing.',
-    icon: <Route className="h-5 w-5" />,
-    selector: '[data-tour="optimize-button"]',
-    position: 'bottom',
-  },
-  {
-    id: 'find-alternative',
-    title: 'AI-Powered Alternatives',
-    description: 'Don\'t love a suggestion? Click "Find Alternative" and our AI instantly swaps it for something that matches your travel style, pace, and budget. No generic replacements.',
-    icon: <ArrowRightLeft className="h-5 w-5" />,
-    selector: '[data-tour="find-alternative"]',
-    position: 'left',
-  },
-  {
-    id: 'regenerate',
-    title: 'Regenerate Entire Days',
-    description: 'Want a completely fresh take? Hit "Regenerate" to get an entirely new set of AI-curated activities for any day. Locked activities stay put, everything else gets reimagined.',
-    icon: <RefreshCw className="h-5 w-5" />,
-    selector: '[data-tour="regenerate-button"]',
-    position: 'bottom',
-  },
-  {
-    id: 'lock-activity',
-    title: 'Lock Your Favorites',
-    description: 'Love an activity? Lock it down. Locked activities are protected when you regenerate or optimize. They\'ll never be moved or replaced.',
-    icon: <Lock className="h-5 w-5" />,
-    selector: '[data-tour="lock-button"]',
-    position: 'left',
-  },
-  {
-    id: 'more-actions',
-    title: 'Move, Reorder & Customize',
-    description: 'Use the ⋯ menu to move activities between days, reorder within a day, or remove them entirely. You\'re in full control of your itinerary.',
-    icon: <MoreHorizontal className="h-5 w-5" />,
-    selector: '[data-tour="more-actions"]',
-    position: 'left',
-  },
-  {
-    id: 'currency',
-    title: 'Local Currency Toggle',
-    description: 'Switch between local currency and USD to see real costs in the format you prefer. Great for on-the-ground budgeting.',
-    icon: <Globe className="h-5 w-5" />,
-    selector: '[data-tour="currency-toggle"]',
-    position: 'bottom',
-  },
-  {
-    id: 'share',
-    title: 'Share With Travel Companions',
-    description: 'Send your itinerary to friends, family, or your travel group. They can view the full plan and collaborate on changes.',
+    id: 'trip-actions',
+    title: 'Share, Optimize & Export',
+    description: 'Share your trip with companions — they can propose changes or edit directly. Optimize lets AI improve flow and timing. Export creates a beautiful PDF.',
     icon: <Share2 className="h-5 w-5" />,
-    selector: '[data-tour="share-button"]',
+    selector: '[data-tour="trip-actions"]',
+    position: 'top',
+  },
+  {
+    id: 'day-header',
+    title: 'Your Day, Your Way',
+    description: 'Each day is a block you control. See the cost, view routes on a map, lock the day to protect it from changes, or regenerate it for fresh ideas.',
+    icon: <Calendar className="h-5 w-5" />,
+    selector: '[data-tour="day-header"]',
     position: 'bottom',
   },
   {
-    id: 'save',
-    title: 'Save Your Changes',
-    description: 'Your edits are tracked automatically, but hit Save to make them permanent. You can always come back and refine later.',
-    icon: <Save className="h-5 w-5" />,
-    selector: '[data-tour="save-button"]',
+    id: 'activity-card',
+    title: 'Customize Any Activity',
+    description: 'Every activity can be swapped, moved, edited, or removed. Tap the ⋯ menu for options, or lock an activity to keep it safe. You get 3 free swaps per trip.',
+    icon: <ArrowRightLeft className="h-5 w-5" />,
+    selector: '[data-tour="activity-card"]',
+    position: 'right',
+  },
+  {
+    id: 'chat-bubble',
+    title: 'Your AI Trip Assistant',
+    description: "Tell the assistant what you want — 'Make Day 3 more relaxed' or 'Add more food options.' It'll suggest changes you can approve before they're applied. 5 free messages included.",
+    icon: <MessageSquare className="h-5 w-5" />,
+    selector: '[data-tour="chat-bubble"]',
+    position: 'left',
+  },
+  {
+    id: 'tab-bar',
+    title: 'Beyond the Itinerary',
+    description: "There's more here: set a Budget and track spending, split costs in Payments, see weather and logistics in Trip Details, and check visa/safety info in Need to Know.",
+    icon: <Wallet className="h-5 w-5" />,
+    selector: '[data-tour="tab-bar"]',
     position: 'bottom',
   },
 ];
@@ -127,6 +97,7 @@ interface ItineraryOnboardingTourProps {
 
 export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboardingTourProps) {
   const [isVisible, setIsVisible] = useState(false);
+  const [showBanner, setShowBanner] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [highlightRect, setHighlightRect] = useState<DOMRect | null>(null);
   const [shouldShowWhenAllowed, setShouldShowWhenAllowed] = useState(false);
@@ -160,18 +131,23 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
     return () => { cancelled = true; };
   }, [user]);
 
-  // Try to acquire the popup slot once when ready — don't re-trigger on every popup change
+  // Show entry banner instead of auto-starting tour
   useEffect(() => {
-    if (!shouldShowWhenAllowed || isVisible) return;
+    if (!shouldShowWhenAllowed || isVisible || showBanner) return;
 
     const timer = setTimeout(() => {
       const allowed = requestPopup('itinerary_tour');
-      if (allowed) setIsVisible(true);
+      if (allowed) setShowBanner(true);
     }, 1500);
 
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shouldShowWhenAllowed]);
+
+  const startTour = useCallback(() => {
+    setShowBanner(false);
+    setIsVisible(true);
+  }, []);
 
   // Update highlight position when step changes
   useEffect(() => {
@@ -254,8 +230,33 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
   }, [onComplete, closePopup, user]);
 
   const handleSkip = useCallback(() => {
+    setShowBanner(false);
     handleComplete();
   }, [handleComplete]);
+
+  // Entry banner
+  if (showBanner && !isVisible) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        className="mb-4 flex items-center justify-between gap-3 px-4 py-3 rounded-lg bg-primary/5 border border-primary/20"
+      >
+        <span className="text-sm text-foreground">
+          First time here? Take a quick tour to see what you can do.
+        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          <button onClick={handleSkip} className="text-xs text-muted-foreground hover:text-foreground">
+            Skip
+          </button>
+          <Button size="sm" onClick={startTour} className="h-7 text-xs">
+            Show me
+          </Button>
+        </div>
+      </motion.div>
+    );
+  }
 
   if (!isVisible) return null;
 
