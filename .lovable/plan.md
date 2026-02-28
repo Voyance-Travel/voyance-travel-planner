@@ -1,52 +1,77 @@
 
-# Fix: Sent Friend Requests Not Showing
+Issue summary in plain language:
+- The warning means the authentication system is getting too many overlapping token operations (read/refresh) and one lock is timing out, so the SDK force-recovers.
+- This is usually not the first bug; it is a symptom of a loop/churn elsewhere.
+- In your case, the timing matches the flight import flow, and there are still two likely churn sources:
+  1) repeated parent/child leg-sync updates in the multi-leg editor path,
+  2) aggressive “connection recovery” refresh logic that can call session refresh during failure cascades.
 
-## Root Cause
+Do I know what the issue is?
+- Yes: we have an auth lock contention cascade caused by repeated state/update cycles plus unthrottled recovery/auth calls.  
+- Secondary user-visible symptom (“it keeps adding flights”) is consistent with repeated re-application/sync churn in the import-to-editor state bridge.
 
-The `getOutgoingRequests` function in `src/services/supabase/friends.ts` queries the `profiles_friends` view to get addressee info. However, this view is defined as:
+Implementation plan (what I will change next):
 
-```sql
-SELECT id, handle, display_name, avatar_url, bio
-FROM profiles
-WHERE handle IS NOT NULL
-```
+1) Add a single-flight auth operation guard (global dedupe)
+- Create a small auth utility wrapper for session operations:
+  - dedupe concurrent `getSession`/`refreshSession` calls,
+  - enforce a short cooldown between forced refreshes,
+  - return the in-flight promise instead of starting a new auth operation.
+- Replace direct `supabase.auth.refreshSession()` calls in:
+  - `src/components/common/ConnectionRecoveryBanner.tsx`
+  - `src/hooks/useItineraryGeneration.ts`
+- Goal: stop lock contention from overlapping refresh attempts during error storms.
 
-The `WHERE handle IS NOT NULL` filter **excludes users who haven't set a handle**. In the current database, the user you sent a request to (Clinton Brooks) has no handle set, so the join returns no matching row, and the entire outgoing request row is silently dropped from results.
+2) Throttle connection-failure escalation
+- In `ConnectionRecoveryBanner` module-level failure reporting:
+  - add time-based throttle/debounce for `reportConnectionFailure`,
+  - cap increments per window so one failing sequence doesn’t spam-recover path.
+- Ensure stale-channel callback registration cannot multiply effect behavior.
+- Goal: prevent repeated “recover/re-fetch/recover” loops.
 
-## Fix
+3) Stop redundant leg sync emissions (core flight import stabilization)
+- In `MultiLegFlightEditor.tsx`:
+  - compute a stable signature/hash of emitted meaningful legs,
+  - only call `onLegsChange` when signature actually changes,
+  - avoid emitting from internal slot updates that are equivalent after normalization.
+- Keep import nonce behavior, but make import application idempotent:
+  - if same import payload + same nonce already materialized, no emit/no slot mutation.
+- Goal: prevent parent-state churn that re-triggers hydration/import pathways.
 
-**File: `src/services/supabase/friends.ts` (line 348-354)**
+4) Make parent state updates in `Start.tsx` idempotent
+- In `handleMultiLegsChange` and import handlers:
+  - compare incoming normalized legs to current state before `setOutboundFlight/setReturnFlight/setAdditionalLegs`,
+  - skip state setters when values are unchanged.
+- Goal: remove state-write loops from parent side.
 
-Change the `getOutgoingRequests` query to use the `profiles` table directly instead of the `profiles_friends` view. The RLS SELECT policy on `friendships` already allows the requester to see their own rows, and the profiles table allows reading basic public info (display_name, avatar_url) for any user.
+5) Add targeted diagnostics (temporary, removable)
+- Add guarded `console.debug` traces (behind a simple flag) around:
+  - auth refresh attempts,
+  - leg emission signatures,
+  - import nonce apply/skip decisions.
+- This gives immediate proof the loop is broken without guessing.
 
-```typescript
-const { data, error } = await supabase
-  .from('friendships')
-  .select(`
-    id,
-    created_at,
-    addressee:profiles!friendships_addressee_id_fkey(id, handle, display_name, avatar_url)
-  `)
-  .eq('requester_id', currentUserId)
-  .eq('status', 'pending');
-```
+6) Validation checklist after implementation
+- Reproduce with the same confirmation text that previously exploded leg count.
+- Confirm:
+  - imported flights stay at expected count (e.g., 4 stays 4),
+  - no repeated auth lock warnings flood the console,
+  - no hidden regressions for manual “Add another flight”, return flight toggle, and re-import.
+- Also verify end-to-end on quiz/start flow transition, since your current route context includes `/quiz`.
 
-This removes the dependency on `profiles_friends` and ensures all pending outgoing requests appear regardless of whether the addressee has set a handle.
+Technical notes:
+- The lock warning itself is from the auth client’s storage lock fallback behavior; it appears when lock holders don’t resolve fast enough under churn.
+- We should not silence the warning; we should remove the churn causing it.
+- The fix is architectural (idempotence + dedupe + throttling), not just another dedupe filter in one callback.
 
-## Additional Check
+Files expected to be touched:
+- `src/components/planner/flight/MultiLegFlightEditor.tsx`
+- `src/pages/Start.tsx`
+- `src/components/common/ConnectionRecoveryBanner.tsx`
+- `src/hooks/useItineraryGeneration.ts`
+- (new) `src/lib/authSessionGuard.ts` (or similar shared utility)
 
-If the `profiles` table RLS blocks this join (which previously caused the issue that led to using `profiles_friends`), we will instead modify the `profiles_friends` view to remove the `WHERE handle IS NOT NULL` filter, since that filter is the actual bug. The view would become:
-
-```sql
-CREATE OR REPLACE VIEW public.profiles_friends AS
-SELECT id, handle, display_name, avatar_url, bio
-FROM profiles;
-```
-
-This is a one-line SQL migration and is the safer fix if `profiles` table RLS is restrictive.
-
-## Technical Details
-
-- **File changed**: `src/services/supabase/friends.ts` -- update `getOutgoingRequests` query
-- **Possible migration**: Update `profiles_friends` view to remove `WHERE handle IS NOT NULL`
-- No other files need changes; the UI in `FriendsSection.tsx` already handles nullable handles gracefully
+Risk management:
+- Keep behavior backwards compatible for single-city imports and manual edits.
+- Avoid touching generated backend client files.
+- Keep changes isolated so we can rollback specific layers if needed.
