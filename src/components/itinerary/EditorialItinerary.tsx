@@ -3844,6 +3844,7 @@ export function EditorialItinerary({
             itineraryDays={days}
             hasHotel={!!(hotelSelection?.pricePerNight || hotelSelection?.name)}
             hasFlight={hasFlightData}
+            destination={destination}
             onActivityRemove={(activityId) => {
               // Remove the activity from itinerary days when deleted from budget
               setDays(prev => {
@@ -3856,6 +3857,32 @@ export function EditorialItinerary({
               });
               setHasChanges(true);
               toast.success('Activity removed from itinerary');
+            }}
+            onApplyBudgetSwap={(suggestion) => {
+              // Apply the Budget Coach swap: replace activity cost, name, description
+              setDays(prev => {
+                const updated = prev.map(day => {
+                  if (day.dayNumber !== suggestion.day_number) return day;
+                  return {
+                    ...day,
+                    activities: day.activities.map(act => {
+                      if (act.id !== suggestion.activity_id) return act;
+                      return {
+                        ...act,
+                        title: suggestion.suggested_swap,
+                        name: suggestion.suggested_swap,
+                        description: suggestion.reason,
+                        cost: typeof act.cost === 'object' && act.cost !== null
+                          ? { ...(act.cost as any), amount: suggestion.new_cost }
+                          : suggestion.new_cost,
+                      };
+                    }),
+                  };
+                });
+                syncBudgetFromDays(updated);
+                return updated;
+              });
+              setHasChanges(true);
             }}
           />
         )}
