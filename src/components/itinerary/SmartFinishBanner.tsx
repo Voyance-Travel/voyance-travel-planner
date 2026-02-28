@@ -73,6 +73,8 @@ export function SmartFinishBanner({
   const [hasAnalyzed, setHasAnalyzed] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [enrichmentFailed, setEnrichmentFailed] = useState(false);
+  const [failureReason, setFailureReason] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const spendCredits = useSpendCredits();
   const { data: creditData } = useCredits();
@@ -164,8 +166,9 @@ export function SmartFinishBanner({
       }
 
       if (meta.smartFinishFailed === true) {
-        console.error(`[SmartFinish ${source}] Backend reported failure: ${meta.smartFinishError}`);
-        return { success: false };
+        const errorMsg = (meta.smartFinishError as string) || 'Generation failed';
+        console.error(`[SmartFinish ${source}] Backend reported failure: ${errorMsg}`);
+        return { success: false, data: { error: errorMsg } };
       }
     }
 
@@ -178,6 +181,11 @@ export function SmartFinishBanner({
    * Issues guaranteed refund if generation fails.
    */
   const callEnrichWithGuaranteedRefund = async (source: string): Promise<{ success: boolean; data?: any }> => {
+    if (isGenerating) {
+      toast.info('Smart Finish is already running. Please wait…');
+      return { success: false };
+    }
+    setIsGenerating(true);
     try {
       // Kick off — returns immediately with status: "generating"
       const { data, error } = await supabase.functions.invoke('enrich-manual-trip', {
@@ -189,14 +197,15 @@ export function SmartFinishBanner({
         console.error(`[SmartFinish ${source}] Kickoff failed:`, errorMsg);
         // Still check if backend completed despite the error
         const recovered = await pollForCompletion(source, 8, 3000);
-        if (recovered.success) return recovered;
+        if (recovered.success) { setIsGenerating(false); return recovered; }
 
-        await issueGuaranteedRefund(source);
+        await issueGuaranteedRefund(source, errorMsg);
         return { success: false };
       }
 
       // If already completed (idempotent re-call)
       if (data.status === 'completed' || data.alreadyCompleted) {
+        setIsGenerating(false);
         return { success: true, data };
       }
 
@@ -204,23 +213,41 @@ export function SmartFinishBanner({
       const result = await pollForCompletion(source);
 
       if (!result.success) {
-        await issueGuaranteedRefund(source);
+        const errorDetail = result.data?.error || undefined;
+        await issueGuaranteedRefund(source, errorDetail);
         return { success: false };
       }
 
+      setIsGenerating(false);
       return result;
     } catch (err: unknown) {
       console.error(`[SmartFinish ${source}] Exception:`, err);
       const recovered = await pollForCompletion(source, 8, 3000);
-      if (recovered.success) return recovered;
+      if (recovered.success) { setIsGenerating(false); return recovered; }
 
-      await issueGuaranteedRefund(source);
+      await issueGuaranteedRefund(source, err instanceof Error ? err.message : String(err));
       return { success: false };
     }
   };
 
-  const issueGuaranteedRefund = async (source: string) => {
+  const issueGuaranteedRefund = async (source: string, errorDetail?: string) => {
     console.log(`[SmartFinish ${source}] Enrichment not confirmed — issuing guaranteed refund`);
+    
+    // Humanize the error for the user
+    let humanError = 'The enrichment process encountered an issue.';
+    if (errorDetail) {
+      if (errorDetail.includes('timeout') || errorDetail.includes('504') || errorDetail.includes('408')) {
+        humanError = 'The server took too long to respond. This is usually temporary.';
+      } else if (errorDetail.includes('DUPLICATE') || errorDetail.includes('VARIETY')) {
+        humanError = 'A quality validation issue occurred. This has been softened for retry.';
+      } else if (errorDetail.includes('rate') || errorDetail.includes('limit')) {
+        humanError = 'AI service rate limit reached. Please wait a moment before retrying.';
+      } else if (errorDetail.length < 150) {
+        humanError = errorDetail;
+      }
+    }
+    setFailureReason(humanError);
+
     try {
       const { data: refundData, error: refundError } = await supabase.functions.invoke('spend-credits', {
         body: {
@@ -236,7 +263,7 @@ export function SmartFinishBanner({
       } else {
         console.log(`[SmartFinish ${source}] Guaranteed refund OK: +${refundData.refunded} credits`);
         toast.error('Enrichment failed — your credits have been refunded.', {
-          description: 'You can retry again.',
+          description: humanError,
           duration: 6000,
         });
       }
@@ -252,6 +279,7 @@ export function SmartFinishBanner({
       .eq('id', tripId);
 
     setEnrichmentFailed(true);
+    setIsGenerating(false);
     queryClient.invalidateQueries({ queryKey: ['credits'] });
     queryClient.invalidateQueries({ queryKey: ['entitlements'] });
   };
@@ -396,7 +424,9 @@ export function SmartFinishBanner({
               </h3>
               <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
                 {enrichmentFailed
-                  ? 'Your credits were refunded. Click below to try enriching your itinerary again.'
+                  ? failureReason 
+                    ? `Your credits were refunded. ${failureReason}`
+                    : 'Your credits were refunded. Click below to try enriching your itinerary again.'
                   : 'Smart Finish adds insider tips, timing hacks, route optimization, and DNA-matched fixes to your itinerary.'}
               </p>
 
@@ -441,7 +471,7 @@ export function SmartFinishBanner({
             {enrichmentFailed ? (
               <Button
                 onClick={handleRetryEnrichment}
-                disabled={isPurchasing}
+                disabled={isPurchasing || isGenerating}
                 className="w-full sm:w-auto gap-2 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white border-0 shadow-md shadow-red-500/20 font-semibold"
                 size="lg"
               >
@@ -455,7 +485,7 @@ export function SmartFinishBanner({
             ) : (
               <Button
                 onClick={handlePurchase}
-                disabled={isPurchasing}
+                disabled={isPurchasing || isGenerating}
                 className="w-full sm:w-auto gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 shadow-md shadow-amber-500/20 font-semibold"
                 size="lg"
               >
