@@ -669,7 +669,7 @@ function TripDetailsStep({
                 'w-9 sm:w-10 text-center text-sm font-medium tabular-nums',
                 travelers >= 5 ? 'text-primary' : 'text-muted-foreground'
               )}>
-                {travelers >= 5 ? travelers : '5+'}
+                {travelers >= 5 ? travelers : '5'}
               </span>
               <button
                 type="button"
