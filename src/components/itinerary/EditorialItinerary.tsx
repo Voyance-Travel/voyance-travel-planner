@@ -3240,7 +3240,7 @@ export function EditorialItinerary({
             setTimeout(updateFade, 100);
           }}
         >
-          <div className="flex gap-1 min-w-max">
+          <div className="flex gap-1 min-w-max" data-tour="tab-bar">
             {[
               { id: 'itinerary', label: 'Itinerary', fullLabel: 'Day-by-Day Itinerary', icon: <Calendar className="h-4 w-4" /> },
               { id: 'budget', label: 'Budget', fullLabel: 'Budget', icon: <Wallet className="h-4 w-4" /> },
@@ -3328,20 +3328,28 @@ export function EditorialItinerary({
                   <span className="text-2xl font-bold text-foreground">{formatCurrency(displayCost(totalCost), tripCurrency)}</span>
                 </div>
                 {localCurrency !== 'USD' && (
-                  <button
-                    onClick={() => setShowLocalCurrency((v) => !v)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-secondary/50 border border-border text-xs font-medium hover:bg-secondary transition-colors"
-                    title={`Switch to ${showLocalCurrency ? 'USD' : localCurrency}`}
-                  >
-                    <span className={showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>{localCurrency}</span>
-                    <span className="text-muted-foreground/50">↔</span>
-                    <span className={!showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>USD</span>
-                  </button>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => setShowLocalCurrency((v) => !v)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-secondary/50 border border-border text-xs font-medium hover:bg-secondary transition-colors"
+                        aria-label="Switch Currency"
+                        data-tour="currency-toggle"
+                      >
+                        <span className={showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>{localCurrency}</span>
+                        <span className="text-muted-foreground/50">↔</span>
+                        <span className={!showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>USD</span>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <span className="text-xs font-medium">Switch Currency</span>
+                    </TooltipContent>
+                  </Tooltip>
                 )}
               </div>
 
               {/* Action Buttons */}
-              <div className="px-6 py-4 flex items-center justify-center gap-3 flex-wrap">
+              <div className="px-6 py-4 flex items-center justify-center gap-3 flex-wrap" data-tour="trip-actions">
                 <Button 
                   variant="outline" 
                   size="sm"
@@ -6617,9 +6625,16 @@ function DayCard({
                   Planned
                 </Badge>
               )}
-            <Badge variant="outline" className="text-xs sm:text-sm font-semibold border-primary/30 bg-primary/5 text-primary shrink-0">
-              {totalCost > 0 ? `${formatCurrency(displayCost(totalCost), tripCurrency)}${travelers > 1 ? '/pp' : ''}` : 'Free'}
-            </Badge>
+            <Tooltip delayDuration={200}>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="text-xs sm:text-sm font-semibold border-primary/30 bg-primary/5 text-primary shrink-0 cursor-default">
+                  {totalCost > 0 ? `${formatCurrency(displayCost(totalCost), tripCurrency)}${travelers > 1 ? '/pp' : ''}` : 'Free'}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <span className="text-xs font-medium">Day Cost Estimate</span>
+              </TooltipContent>
+            </Tooltip>
             {day.weather && (
               <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full bg-secondary/50 text-xs sm:text-sm shrink-0">
                 {weatherIcons[day.weather.condition?.toLowerCase() || 'sunny']}
@@ -6628,58 +6643,86 @@ function DayCard({
             )}
             {/* Transport Details Toggle - hidden for preview/locked days */}
             {!dayIsPreview && (
-            <Button
-              variant={showTransportDetails ? "default" : "outline"}
-              size="sm"
-              onClick={() => setShowTransportDetails(prev => !prev)}
-              className={cn(
-                "h-7 sm:h-8 gap-1 sm:gap-1.5 text-xs font-medium transition-all shrink-0 px-2 sm:px-3",
-                showTransportDetails 
-                  ? "bg-primary text-primary-foreground" 
-                  : "border-primary/30 hover:bg-primary/10 hover:border-primary/50"
-              )}
-              title={showTransportDetails ? 'Hide route details' : 'Show route details'}
-            >
-              <Route className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
-              <span className="hidden sm:inline">{showTransportDetails ? 'Hide Routes' : 'Show Routes'}</span>
-            </Button>
+            <Tooltip delayDuration={200}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={showTransportDetails ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setShowTransportDetails(prev => !prev)}
+                  className={cn(
+                    "h-7 sm:h-8 gap-1 sm:gap-1.5 text-xs font-medium transition-all shrink-0 px-2 sm:px-3",
+                    showTransportDetails 
+                      ? "bg-primary text-primary-foreground" 
+                      : "border-primary/30 hover:bg-primary/10 hover:border-primary/50"
+                  )}
+                  aria-label={showTransportDetails ? 'Hide Routes' : 'Show Routes'}
+                >
+                  <Route className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
+                  <span className="hidden sm:inline">{showTransportDetails ? 'Hide Routes' : 'Show Routes'}</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <span className="text-xs font-medium">{showTransportDetails ? 'Hide Routes' : 'Show Routes'}</span>
+              </TooltipContent>
+            </Tooltip>
             )}
             {isEditable && (
               <>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => onDayLock(dayIndex)}
-                  className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-primary/10 shrink-0"
-                  title={allLocked ? 'Unlock Day' : 'Lock Day'}
-                >
-                  {allLocked ? <Lock className="h-3.5 sm:h-4 w-3.5 sm:w-4 text-primary" /> : <Unlock className="h-3.5 sm:h-4 w-3.5 sm:w-4" />}
-                </Button>
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onDayLock(dayIndex)}
+                      className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-primary/10 shrink-0"
+                      aria-label={allLocked ? 'Unlock Day' : 'Lock Day'}
+                    >
+                      {allLocked ? <Lock className="h-3.5 sm:h-4 w-3.5 sm:w-4 text-primary" /> : <Unlock className="h-3.5 sm:h-4 w-3.5 sm:w-4" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <span className="text-xs font-medium">{allLocked ? 'Unlock Day' : 'Lock Day'}</span>
+                  </TooltipContent>
+                </Tooltip>
                 {!aiLocked && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={onDayRegenerate}
-                  disabled={isRegenerating}
-                  className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-accent/10 shrink-0"
-                  title="Regenerate Day"
-                  data-tour="regenerate-button"
-                >
-                  <RefreshCw className={cn("h-3.5 sm:h-4 w-3.5 sm:w-4", isRegenerating && "animate-spin text-accent")} />
-                </Button>
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={onDayRegenerate}
+                      disabled={isRegenerating}
+                      className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-accent/10 shrink-0"
+                      aria-label="Regenerate Day"
+                      data-tour="regenerate-button"
+                    >
+                      <RefreshCw className={cn("h-3.5 sm:h-4 w-3.5 sm:w-4", isRegenerating && "animate-spin text-accent")} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <span className="text-xs font-medium">Regenerate Day</span>
+                  </TooltipContent>
+                </Tooltip>
                 )}
                 {/* Save to Library button removed - agent features disabled */}
               </>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onToggle}
-              className="h-7 w-7 sm:h-8 sm:w-8 shrink-0"
-              title={isExpanded ? 'Collapse' : 'Expand'}
-            >
-              {isExpanded ? <ChevronUp className="h-3.5 sm:h-4 w-3.5 sm:w-4" /> : <ChevronDown className="h-3.5 sm:h-4 w-3.5 sm:w-4" />}
-            </Button>
+            <Tooltip delayDuration={200}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onToggle}
+                  className="h-7 w-7 sm:h-8 sm:w-8 shrink-0"
+                  aria-label={isExpanded ? 'Collapse Day' : 'Expand Day'}
+                >
+                  {isExpanded ? <ChevronUp className="h-3.5 sm:h-4 w-3.5 sm:w-4" /> : <ChevronDown className="h-3.5 sm:h-4 w-3.5 sm:w-4" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <span className="text-xs font-medium">{isExpanded ? 'Collapse Day' : 'Expand Day'}</span>
+              </TooltipContent>
+            </Tooltip>
           </div>
         </div>
       </div>
@@ -7581,32 +7624,46 @@ function ActivityRow({
             {isEditable && !isPreview && (
               <div className="flex items-center gap-0.5">
                 {/* Lock button */}
-                <button
-                  onClick={() => onLock(dayIndex, activity.id)}
-                  className={cn(
-                    "p-1.5 rounded transition-colors",
-                    activity.isLocked
-                      ? "bg-primary/10 text-primary"
-                      : "hover:bg-secondary text-muted-foreground"
-                  )}
-                  title={activity.isLocked ? "Unlock to edit" : "Lock"}
-                  data-tour="lock-button"
-                >
-                  {activity.isLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
-                </button>
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => onLock(dayIndex, activity.id)}
+                      className={cn(
+                        "p-1.5 rounded transition-colors",
+                        activity.isLocked
+                          ? "bg-primary/10 text-primary"
+                          : "hover:bg-secondary text-muted-foreground"
+                      )}
+                      aria-label={activity.isLocked ? "Unlock Activity" : "Lock Activity"}
+                      data-tour="lock-button"
+                    >
+                      {activity.isLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <span className="text-xs font-medium">{activity.isLocked ? 'Unlock Activity' : 'Lock Activity'}</span>
+                  </TooltipContent>
+                </Tooltip>
                 
                 {/* Overflow menu - all edit actions consolidated here */}
                 {!activity.isLocked && (
                   <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        className="p-1.5 rounded transition-colors hover:bg-secondary text-muted-foreground"
-                        aria-label="More actions"
-                        data-tour="more-actions"
-                      >
-                        <MoreHorizontal className="h-3.5 w-3.5" />
-                      </button>
-                    </DropdownMenuTrigger>
+                    <Tooltip delayDuration={200}>
+                      <TooltipTrigger asChild>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            className="p-1.5 rounded transition-colors hover:bg-secondary text-muted-foreground"
+                            aria-label="More Options"
+                            data-tour="more-actions"
+                          >
+                            <MoreHorizontal className="h-3.5 w-3.5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        <span className="text-xs font-medium">More Options</span>
+                      </TooltipContent>
+                    </Tooltip>
                     <DropdownMenuContent align="end" className="bg-background border shadow-lg z-50 min-w-[160px]">
                       {onSwap && canViewPremium && (
                         <>

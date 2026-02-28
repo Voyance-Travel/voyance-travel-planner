@@ -17,6 +17,14 @@ export interface OnboardingState {
   welcome_shown_at?: string;
   onboarding_nudge_shown?: boolean;
   onboarding_nudge_shown_at?: string;
+  // Tier 3: Contextual first-use hints
+  share_hint_shown?: boolean;
+  budget_hint_shown?: boolean;
+  payments_hint_shown?: boolean;
+  swap_hint_shown?: boolean;
+  lock_hint_shown?: boolean;
+  optimize_nudge_shown?: boolean;
+  sections_nudge_shown?: boolean;
 }
 
 /**

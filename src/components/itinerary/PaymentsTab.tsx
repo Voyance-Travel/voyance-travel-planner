@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { estimateCostSync } from '@/lib/cost-estimation';
 import { motion, AnimatePresence } from 'framer-motion';
+import { FirstUseHint } from './FirstUseHint';
 import { 
   Plane, Hotel, Camera, Check, CreditCard, ExternalLink, 
   CheckCircle2, Users, ChevronDown, Receipt,
@@ -876,6 +877,10 @@ export function PaymentsTab({
       animate={{ opacity: 1, y: 0 }}
       className="space-y-6"
     >
+      <FirstUseHint
+        hintKey="payments_hint_shown"
+        message="Track what you've paid vs. what's remaining. Use Split Bill to divide costs between travelers."
+      />
       {/* Progress Header */}
       <div className="bg-gradient-to-r from-primary/5 via-background to-accent/5 rounded-xl p-5">
         <div className="flex items-center justify-between mb-4">
