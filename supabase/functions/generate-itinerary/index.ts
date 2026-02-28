@@ -9308,6 +9308,78 @@ Add your flight and hotel details for a more complete last day.`;
         }
       }
 
+      // ==========================================================================
+      // TRANSPORT PREFERENCES: Fetch from DB + merge with request body
+      // ==========================================================================
+      let transportPreferencePrompt = '';
+      const transportModesFromRequest = preferences?.transportationModes as string[] | undefined;
+      const primaryTransportFromRequest = preferences?.primaryTransport as string | undefined;
+      const hasRentalCarFromRequest = preferences?.hasRentalCar as boolean | undefined;
+      
+      let resolvedTransportModes: string[] = transportModesFromRequest || [];
+      let resolvedPrimaryTransport: string | undefined = primaryTransportFromRequest;
+      let resolvedHasRentalCar: boolean = hasRentalCarFromRequest || false;
+      
+      // If not provided in request, fetch from DB
+      if (resolvedTransportModes.length === 0 && tripId) {
+        try {
+          const { data: tripTransport } = await supabase
+            .from('trips')
+            .select('transportation_preferences')
+            .eq('id', tripId)
+            .single();
+          
+          if (tripTransport?.transportation_preferences) {
+            const tp = tripTransport.transportation_preferences as any;
+            if (Array.isArray(tp)) {
+              // Multi-city format: array of { type, fromCity, toCity, ... }
+              resolvedTransportModes = tp.map((t: any) => t.type || t.mode).filter(Boolean);
+            } else if (tp.modes) {
+              // Single-city format: { modes: string[], primaryMode?: string }
+              resolvedTransportModes = tp.modes;
+              resolvedPrimaryTransport = tp.primaryMode;
+              resolvedHasRentalCar = tp.modes?.includes('rental_car') || false;
+            }
+          }
+        } catch (e) {
+          console.warn('[generate-day] Could not fetch transport preferences:', e);
+        }
+      }
+      
+      if (resolvedTransportModes.length > 0) {
+        const modeLabels: Record<string, string> = {
+          'walking': 'Walking',
+          'public_transit': 'Public transit (metro, bus, tram)',
+          'rideshare': 'Rideshare/Taxi (Uber, Lyft, local taxi)',
+          'rental_car': 'Rental car (driving)',
+          'train': 'Train',
+          'bus': 'Bus',
+          'car': 'Car',
+          'ferry': 'Ferry',
+          'flight': 'Flight',
+        };
+        const modeList = resolvedTransportModes.map(m => modeLabels[m] || m).join(', ');
+        const primary = resolvedPrimaryTransport ? (modeLabels[resolvedPrimaryTransport] || resolvedPrimaryTransport) : null;
+        
+        transportPreferencePrompt = `
+${'='.repeat(70)}
+🚗 USER TRANSPORT PREFERENCES — MUST RESPECT
+${'='.repeat(70)}
+The traveler has explicitly selected these transport modes: ${modeList}
+${primary ? `Primary mode: ${primary}` : ''}
+${resolvedHasRentalCar ? 'The traveler HAS a rental car — suggest driving with parking info, NOT public transit for longer distances.' : ''}
+
+RULES:
+- ONLY suggest transport modes the user selected
+- ${resolvedTransportModes.includes('walking') ? 'Walking: suggest for distances under 15-20 min walk' : 'DO NOT suggest walking as primary transit (brief walks within a venue area are OK)'}
+- ${resolvedTransportModes.includes('public_transit') ? 'Public transit: include specific line/route numbers, station names, and fares' : 'DO NOT suggest metro/bus/tram unless the user selected public transit'}
+- ${resolvedTransportModes.includes('rideshare') ? 'Rideshare/Taxi: include estimated fare and ride duration' : 'DO NOT suggest Uber/Lyft/taxi unless the user selected rideshare'}
+- ${resolvedHasRentalCar ? 'Rental car: suggest driving routes, include parking info and costs at each venue' : 'DO NOT suggest driving/rental car unless the user selected it'}
+- NEVER suggest a transport mode the user did NOT select
+`;
+        console.log(`[generate-day] Transport preferences injected: ${resolvedTransportModes.join(', ')}${primary ? ` (primary: ${primary})` : ''}`);
+      }
+
       // Build system prompt with day-specific timing constraints EMBEDDED
       let timingInstructions = '';
       if (isFirstDay && dayConstraints) {
@@ -9337,7 +9409,7 @@ This day must be a COMPLETE itinerary from morning to night. Every hour accounte
 REQUIRED DAY STRUCTURE:
 1. BREAKFAST (category: "dining") — Near hotel, real restaurant name, ~price, walking distance
 2. TRANSIT between every pair of consecutive activities (category: "transport")
-   - Include mode (walk/taxi/metro/bus), duration, cost, route details
+   - Include mode (${resolvedTransportModes.length > 0 ? resolvedTransportModes.join('/') : 'walk/taxi/metro/bus'}), duration, cost, route details
    - 10+ minute walks or any paid transit = separate activity entry
 3. MORNING ACTIVITIES — At least 1 paid + 1 free activity
 4. LUNCH (category: "dining") — Restaurant near previous location, ~price, 1 alternative in tips
@@ -9355,7 +9427,7 @@ MEAL RULES:
 
 TRANSIT RULES:
 - Between EVERY pair of consecutive stops, include transit info
-- For walks >10 min: create a separate transport activity entry
+${resolvedTransportModes.length > 0 ? `- USER'S PREFERRED MODES: ${resolvedTransportModes.join(', ')} — use ONLY these modes` : '- For walks >10 min: create a separate transport activity entry'}
 - For walks <5 min: note in the tips of the preceding activity
 - Always include: mode, duration, cost (free for walking), and route/line for public transit
 
@@ -9555,6 +9627,8 @@ Rules:
 ${generationHierarchy}
 
 ${tripTypePrompt}
+
+${transportPreferencePrompt}
 
 ${timingInstructions}
 ${lockedSlotsInstruction}
