@@ -57,6 +57,7 @@ import type { ActivityType, ItineraryActivity, WeatherCondition, DayItinerary } 
 import { convertFrontendDayToBackend, convertFrontendActivityToBackend } from '@/types/itinerary';
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { parseEditorialDays } from '@/utils/itineraryParser';
 
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
 import { useRefreshDay, type RefreshResult, type ProposedChange } from '@/hooks/useRefreshDay';
@@ -1454,6 +1455,26 @@ export function EditorialItinerary({
     || creationSource === 'manual_paste'
     || creationSource === 'manual';
   
+  // Refetch itinerary data from DB and update local days state (no page reload needed)
+  const refetchItineraryFromDb = useCallback(async () => {
+    try {
+      const { data: tripData } = await supabase
+        .from('trips')
+        .select('itinerary_data, start_date')
+        .eq('id', tripId)
+        .maybeSingle();
+      if (tripData?.itinerary_data) {
+        const freshDays = parseEditorialDays(tripData.itinerary_data, tripData.start_date) as EditorialDay[];
+        if (freshDays.length > 0) {
+          setDays(freshDays);
+          console.log(`[EditorialItinerary] Refetched ${freshDays.length} days from DB`);
+        }
+      }
+    } catch (err) {
+      console.error('[EditorialItinerary] Failed to refetch itinerary:', err);
+    }
+  }, [tripId, setDays]);
+
   // Smart Finish state — check URL params for post-purchase return
   const [smartFinishPurchased, setSmartFinishPurchased] = useState(false);
   useEffect(() => {
@@ -1503,7 +1524,7 @@ export function EditorialItinerary({
             if (meta.smartFinishCompleted === true) {
               setSmartFinishPurchased(true);
               toast.success('Your itinerary has been enriched with DNA-matched activities!');
-              window.location.reload();
+              await refetchItineraryFromDb();
               return;
             }
             if (meta.smartFinishFailed === true) {
@@ -3351,7 +3372,10 @@ export function EditorialItinerary({
                 tripId={tripId}
                 isManualMode={isManualMode}
                 smartFinishPurchased={smartFinishPurchased}
-                onPurchaseComplete={() => setSmartFinishPurchased(true)}
+                onPurchaseComplete={async () => {
+                  setSmartFinishPurchased(true);
+                  await refetchItineraryFromDb();
+                }}
               />
             )}
 
