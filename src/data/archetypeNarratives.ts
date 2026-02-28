@@ -490,7 +490,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   escape_artist: {
     id: 'escape_artist',
-    name: 'The Escape Artist',
+    name: 'The Reset Traveler',
     category: 'RESTORER',
     hookLine: "Sometimes you need to leave to find yourself.",
     coreDescription: "Travel is your reset button. When life gets heavy, you get going. You understand that sometimes the best way forward is miles away from where you are.",
@@ -565,7 +565,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   social_butterfly: {
     id: 'social_butterfly',
-    name: 'The Social Butterfly',
+    name: 'The Connection Curator',
     category: 'CONNECTOR',
     hookLine: "Every stranger is a friend you haven't met.",
     coreDescription: "Your trips are measured in friendships made, not miles traveled. You collect people, not passport stamps. Hostels, group tours, and communal tables are your natural habitat.",
@@ -615,7 +615,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   bucket_list_conqueror: {
     id: 'bucket_list_conqueror',
-    name: 'The Bucket List Conqueror',
+    name: 'The Milestone Voyager',
     category: 'ACHIEVER',
     hookLine: "Life is a checklist of wonders.",
     coreDescription: "You have a list, and you're checking it twice. From the Northern Lights to Machu Picchu, you approach travel with purpose. Every trip brings you closer to seeing it all.",
@@ -665,7 +665,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   status_seeker: {
     id: 'status_seeker',
-    name: 'The Status Seeker',
+    name: 'The Prestige Traveler',
     category: 'ACHIEVER',
     hookLine: "First class isn't a seat, it's a lifestyle.",
     coreDescription: "You've earned the right to travel in style. Elite status, private experiences, and VIP access are your rewards for hard work. Travel is both pleasure and proof of success.",
@@ -790,7 +790,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   gap_year_graduate: {
     id: 'gap_year_graduate',
-    name: 'The Gap Year Graduate',
+    name: 'The Horizon Chaser',
     category: 'TRANSFORMER',
     hookLine: "The world is the ultimate classroom.",
     coreDescription: "Travel shaped who you are. Those months of backpacking, teaching, or volunteering taught you more than any degree. You carry that transformative spirit into every journey.",
@@ -815,7 +815,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   midlife_explorer: {
     id: 'midlife_explorer',
-    name: 'The Midlife Explorer',
+    name: 'The Renaissance Voyager',
     category: 'TRANSFORMER',
     hookLine: "It's never too late to become who you were meant to be.",
     coreDescription: "You're rewriting your travel story. Life experience has taught you what matters, and now you're going after it. These trips aren't escapes. They're homecomings to your true self.",
@@ -865,7 +865,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   healing_journeyer: {
     id: 'healing_journeyer',
-    name: 'The Healing Journeyer',
+    name: 'The Restoration Seeker',
     category: 'TRANSFORMER',
     hookLine: "Travel is the medicine for the soul.",
     coreDescription: "You travel to heal. Whether grief, burnout, or life transition, the road has been your path to recovery. You understand that sometimes the best way through is away.",
@@ -890,7 +890,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   retirement_ranger: {
     id: 'retirement_ranger',
-    name: 'The Retirement Ranger',
+    name: 'The Boundless Explorer',
     category: 'TRANSFORMER',
     hookLine: "Finally free to explore without limits.",
     coreDescription: "The calendar is yours now. No more vacation days to hoard, no more rushed weekend trips. You've earned the right to travel slow, go far, and stay as long as you like.",

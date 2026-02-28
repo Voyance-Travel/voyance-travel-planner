@@ -45,7 +45,7 @@ const FEATURED_ARCHETYPES = [
   },
   {
     id: 'social_butterfly',
-    name: 'Social Butterfly',
+    name: 'Connection Curator',
     tagline: 'You collect friends, not souvenirs',
     icon: Heart,
     category: 'CONNECTOR',
@@ -57,7 +57,7 @@ const FEATURED_ARCHETYPES = [
   },
   {
     id: 'bucket_list_conqueror',
-    name: 'Bucket List Conqueror',
+    name: 'Milestone Voyager',
     tagline: 'Sleep when you are home',
     icon: Mountain,
     category: 'ACHIEVER',

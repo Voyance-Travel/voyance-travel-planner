@@ -180,7 +180,7 @@ Your trips will have structure without rigidity. Suggestions instead of schedule
 
   social_butterfly: {
     id: 'social_butterfly',
-    name: 'The Social Butterfly',
+    name: 'The Connection Curator',
     category: 'CONNECTOR',
     revealParagraph: `For you, travel is a team sport.
 
@@ -304,7 +304,7 @@ Your trips will reflect your values. We'll prioritize locally-owned, community-p
 
   bucket_list_conqueror: {
     id: 'bucket_list_conqueror',
-    name: 'The Bucket List Conqueror',
+    name: 'The Milestone Voyager',
     category: 'ACHIEVER',
     revealParagraph: `You have a list. And you're working through it.
 
@@ -394,7 +394,7 @@ Your trips will feed your focus. We'll build around your interest, not despite i
 
   status_seeker: {
     id: 'status_seeker',
-    name: 'The Status Seeker',
+    name: 'The Prestige Traveler',
     category: 'ACHIEVER',
     revealParagraph: `You want the experiences that aren't available to everyone.
 
@@ -676,7 +676,7 @@ Your trips will align with your values. Locally-owned, environmentally-conscious
 
   gap_year_graduate: {
     id: 'gap_year_graduate',
-    name: 'The Gap Year Graduate',
+    name: 'The Horizon Chaser',
     category: 'TRANSFORMER',
     revealParagraph: `You'll sleep on a bad mattress if it means another week on the road.
 
@@ -706,7 +706,7 @@ Your trips will maximize experience per dollar. We'll find the places where budg
 
   midlife_explorer: {
     id: 'midlife_explorer',
-    name: 'The Midlife Explorer',
+    name: 'The Renaissance Voyager',
     category: 'TRANSFORMER',
     revealParagraph: `You've reached the point where you know what you want, and you're done apologizing for it.
 
@@ -766,7 +766,7 @@ Your trips will feed your curiosity. Historical context, local expertise, the st
 
   healing_journeyer: {
     id: 'healing_journeyer',
-    name: 'The Healing Journeyer',
+    name: 'The Restoration Seeker',
     category: 'TRANSFORMER',
     revealParagraph: `Travel has been medicine for you.
 
@@ -796,7 +796,7 @@ Your trips will be gentle where they need to be and restorative by design. We'll
 
   retirement_ranger: {
     id: 'retirement_ranger',
-    name: 'The Retirement Ranger',
+    name: 'The Boundless Explorer',
     category: 'TRANSFORMER',
     revealParagraph: `You've been waiting for this.
 

@@ -15,16 +15,16 @@ const ARCHETYPES = [
   { id: 'digital_explorer', name: 'The Digital Explorer', category: 'EXPLORER', traits: ['remote-work', 'flexible', 'wifi-essential', 'long-stays'] },
   { id: 'flexible_wanderer', name: 'The Flexible Wanderer', category: 'EXPLORER', traits: ['spontaneous', 'no-plans', 'go-with-flow', 'discovery'] },
   // CONNECTOR
-  { id: 'social_butterfly', name: 'The Social Butterfly', category: 'CONNECTOR', traits: ['group-travel', 'meeting-people', 'social-activities', 'extroverted'] },
+  { id: 'social_butterfly', name: 'The Connection Curator', category: 'CONNECTOR', traits: ['group-travel', 'meeting-people', 'social-activities', 'extroverted'] },
   { id: 'family_architect', name: 'The Family Architect', category: 'CONNECTOR', traits: ['kid-friendly', 'multi-generational', 'educational', 'safe'] },
   { id: 'romantic_curator', name: 'The Romantic Curator', category: 'CONNECTOR', traits: ['couples', 'romantic-dinners', 'intimate', 'special-occasions'] },
   { id: 'community_builder', name: 'The Community Builder', category: 'CONNECTOR', traits: ['voluntourism', 'local-connections', 'meaningful', 'giving-back'] },
   { id: 'story_seeker', name: 'The Story Seeker', category: 'CONNECTOR', traits: ['conversations', 'local-stories', 'people-watching', 'authentic-encounters'] },
   // ACHIEVER
-  { id: 'bucket_list_conqueror', name: 'The Bucket List Conqueror', category: 'ACHIEVER', traits: ['must-see-attractions', 'iconic-experiences', 'checking-off', 'ambitious'] },
+  { id: 'bucket_list_conqueror', name: 'The Milestone Voyager', category: 'ACHIEVER', traits: ['must-see-attractions', 'iconic-experiences', 'checking-off', 'ambitious'] },
   { id: 'adrenaline_architect', name: 'The Adrenaline Architect', category: 'ACHIEVER', traits: ['extreme-sports', 'thrill-seeking', 'adventure', 'physical-challenges'] },
   { id: 'collection_curator', name: 'The Collection Curator', category: 'ACHIEVER', traits: ['wine-regions', 'art-collecting', 'themed-trips', 'connoisseur'] },
-  { id: 'status_seeker', name: 'The Status Seeker', category: 'ACHIEVER', traits: ['exclusive-access', 'vip-experiences', 'instagram-worthy', 'prestigious'] },
+  { id: 'status_seeker', name: 'The Prestige Traveler', category: 'ACHIEVER', traits: ['exclusive-access', 'vip-experiences', 'instagram-worthy', 'prestigious'] },
   // RESTORER
   { id: 'zen_seeker', name: 'The Zen Seeker', category: 'RESTORER', traits: ['wellness', 'meditation', 'yoga', 'spiritual'] },
   { id: 'retreat_regular', name: 'The Retreat Regular', category: 'RESTORER', traits: ['spa-resorts', 'all-inclusive', 'pampering', 'relaxation'] },
@@ -36,10 +36,10 @@ const ARCHETYPES = [
   { id: 'luxury_luminary', name: 'The Luxury Luminary', category: 'CURATOR', traits: ['five-star', 'michelin', 'private-tours', 'premium'] },
   // TRANSFORMER
   { id: 'eco_ethicist', name: 'The Eco Ethicist', category: 'TRANSFORMER', traits: ['sustainable', 'eco-lodges', 'conservation', 'low-impact'] },
-  { id: 'gap_year_graduate', name: 'The Gap Year Graduate', category: 'TRANSFORMER', traits: ['backpacking', 'hostels', 'budget', 'youth'] },
-  { id: 'midlife_explorer', name: 'The Midlife Explorer', category: 'TRANSFORMER', traits: ['bucket-list', 'new-experiences', 'rediscovery', 'adventure-lite'] },
+  { id: 'gap_year_graduate', name: 'The Horizon Chaser', category: 'TRANSFORMER', traits: ['backpacking', 'hostels', 'budget', 'youth'] },
+  { id: 'midlife_explorer', name: 'The Renaissance Voyager', category: 'TRANSFORMER', traits: ['bucket-list', 'new-experiences', 'rediscovery', 'adventure-lite'] },
   { id: 'sabbatical_scholar', name: 'The Sabbatical Scholar', category: 'TRANSFORMER', traits: ['learning', 'courses', 'deep-dive', 'extended-stays'] },
-  { id: 'healing_journeyer', name: 'The Healing Journeyer', category: 'TRANSFORMER', traits: ['recovery', 'therapeutic', 'nature-healing', 'restorative'] },
+  { id: 'healing_journeyer', name: 'The Restoration Seeker', category: 'TRANSFORMER', traits: ['recovery', 'therapeutic', 'nature-healing', 'restorative'] },
   { id: 'balanced_story_collector', name: 'The Balanced Story Collector', category: 'EXPLORER', traits: ['variety', 'balanced', 'mix-of-everything', 'adaptable'] },
 ];
 
