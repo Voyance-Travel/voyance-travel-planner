@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MapPin, Calendar as CalendarIcon, Users, Loader2, DollarSign, 
   Sparkles, ChevronDown, ChevronUp, PartyPopper, ArrowRight, Check, Clock,
-  Eye, Gem, Utensils, Building2, Plane, Upload, Hotel, Search, PenLine, Globe, Star, Route, UserPlus, MessageSquareText
+  Eye, Gem, Utensils, Building2, Plane, Upload, Hotel, Search, PenLine, Globe, Star, Route, UserPlus, MessageSquareText, Plus
 } from 'lucide-react';
 import { addDays as addDaysUtil } from 'date-fns';
 import MultiCitySelector from '@/components/planner/MultiCitySelector';
@@ -66,6 +66,8 @@ interface ManualHotelEntry {
   neighborhood?: string;
   checkInTime?: string;
   checkOutTime?: string;
+  checkInDate?: string;
+  checkOutDate?: string;
   pricePerNight?: number;
   includeInBudget?: boolean;
 }
@@ -922,6 +924,8 @@ function FlightHotelStep({
    setHotelChoice,
    manualHotel,
    setManualHotel,
+   manualHotelList,
+   setManualHotelList,
    manualHotels,
    setManualHotels,
   isFirstTimeVisitor,
@@ -955,6 +959,8 @@ function FlightHotelStep({
   setHotelChoice: (c: 'skip' | 'own') => void;
   manualHotel: ManualHotelEntry;
   setManualHotel: (h: ManualHotelEntry) => void;
+  manualHotelList: ManualHotelEntry[];
+  setManualHotelList: (h: ManualHotelEntry[]) => void;
   manualHotels: Record<string, ManualHotelEntry>;
   setManualHotels: (h: Record<string, ManualHotelEntry>) => void;
   isFirstTimeVisitor: boolean;
@@ -977,6 +983,7 @@ function FlightHotelStep({
   const [showFlightDetails, setShowFlightDetails] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showHotelModal, setShowHotelModal] = useState(false);
+  const [editingHotelIndex, setEditingHotelIndex] = useState<number | null>(null); // for split-stay editing
   const [editingHotelCity, setEditingHotelCity] = useState<string | null>(null);
 
   const handleImportFlight = (outbound: ManualFlightEntry, returnFlightData?: ManualFlightEntry) => {
@@ -1350,7 +1357,7 @@ function FlightHotelStep({
               </div>
             </>
           ) : (
-            /* Single city: existing hotel choice */
+            /* Single city: support multiple hotels (split stays) */
             <>
               <div className="grid grid-cols-2 gap-3">
                 {/* I have my own */}
@@ -1359,7 +1366,12 @@ function FlightHotelStep({
                   onClick={() => {
                     setHotelChoice('own');
                     setEditingHotelCity(null);
-                    setShowHotelModal(true);
+                    setEditingHotelIndex(manualHotelList.length === 0 ? null : manualHotelList.length);
+                    // If no hotels yet, open modal for first hotel
+                    if (manualHotelList.length === 0 && !manualHotel.name) {
+                      setEditingHotelIndex(null);
+                      setShowHotelModal(true);
+                    }
                   }}
                   className={cn(
                     'p-4 rounded-xl border-2 text-center transition-all',
@@ -1390,29 +1402,104 @@ function FlightHotelStep({
                 </button>
               </div>
 
-              {/* Show entered hotel info */}
-              {hotelChoice === 'own' && manualHotel.name && (
-                <div className="p-3 rounded-lg border border-border bg-card flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Hotel className="h-5 w-5 text-primary" />
-                    <div>
-                      <div className="font-medium text-sm">{manualHotel.name}</div>
-                      {manualHotel.address && (
-                        <div className="text-xs text-muted-foreground">{manualHotel.address}</div>
-                      )}
-                      {manualHotel.pricePerNight && manualHotel.pricePerNight > 0 && (
-                        <div className="text-xs text-muted-foreground">
-                          ${manualHotel.pricePerNight} total
-                          {manualHotel.includeInBudget && (
-                            <span className="ml-1 text-primary">· In budget</span>
+              {/* Show entered hotels */}
+              {hotelChoice === 'own' && (
+                <div className="space-y-2">
+                  {/* Legacy single hotel (backward compat) */}
+                  {manualHotel.name && manualHotelList.length === 0 && (
+                    <div className="p-3 rounded-lg border border-border bg-card flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Hotel className="h-5 w-5 text-primary" />
+                        <div>
+                          <div className="font-medium text-sm">{manualHotel.name}</div>
+                          {manualHotel.address && (
+                            <div className="text-xs text-muted-foreground">{manualHotel.address}</div>
+                          )}
+                          {manualHotel.pricePerNight && manualHotel.pricePerNight > 0 && (
+                            <div className="text-xs text-muted-foreground">
+                              ${manualHotel.pricePerNight} total
+                              {manualHotel.includeInBudget && (
+                                <span className="ml-1 text-primary">· In budget</span>
+                              )}
+                            </div>
                           )}
                         </div>
-                      )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => { 
+                          // Migrate to list
+                          setManualHotelList([manualHotel]);
+                          setManualHotel({ name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00' });
+                          setEditingHotelIndex(0);
+                          setEditingHotelCity(null);
+                          setShowHotelModal(true);
+                        }}>
+                          Edit
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                  <Button variant="ghost" size="sm" onClick={() => { setEditingHotelCity(null); setShowHotelModal(true); }}>
-                    Edit
-                  </Button>
+                  )}
+
+                  {/* Multi-hotel list */}
+                  {manualHotelList.map((hotel, idx) => (
+                    <div key={idx} className="p-3 rounded-lg border border-border bg-card flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Hotel className="h-5 w-5 text-primary" />
+                        <div>
+                          <div className="font-medium text-sm">{hotel.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {hotel.checkInDate && hotel.checkOutDate
+                              ? `${new Date(hotel.checkInDate + 'T00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} → ${new Date(hotel.checkOutDate + 'T00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                              : hotel.address || ''}
+                          </div>
+                          {hotel.pricePerNight && hotel.pricePerNight > 0 && (
+                            <div className="text-xs text-muted-foreground">
+                              ${hotel.pricePerNight} total
+                              {hotel.includeInBudget && (
+                                <span className="ml-1 text-primary">· In budget</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => { 
+                          setEditingHotelIndex(idx);
+                          setEditingHotelCity(null);
+                          setShowHotelModal(true);
+                        }}>
+                          Edit
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => {
+                          setManualHotelList(manualHotelList.filter((_, i) => i !== idx));
+                        }}>
+                          ×
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Add another hotel button */}
+                  {(manualHotel.name || manualHotelList.length > 0) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => {
+                        // If still using legacy single hotel, migrate first
+                        if (manualHotel.name && manualHotelList.length === 0) {
+                          setManualHotelList([manualHotel]);
+                          setManualHotel({ name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00' });
+                        }
+                        setEditingHotelIndex(null); // null = new hotel
+                        setEditingHotelCity(null);
+                        setShowHotelModal(true);
+                      }}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add another hotel (split stay)
+                    </Button>
+                  )}
                 </div>
               )}
             </>
@@ -1563,15 +1650,25 @@ Example: "We love local food markets, sunset viewpoints, and avoiding tourist cr
         tripEndDate={endDate}
       />
 
-      {/* Manual Hotel Entry Modal — city-aware for multi-city */}
+      {/* Manual Hotel Entry Modal — city-aware for multi-city, index-aware for split stays */}
       {(() => {
         // Determine which hotel entry to edit
+        const isListMode = !editingHotelCity && (manualHotelList.length > 0 || editingHotelIndex !== null);
         const currentHotel = editingHotelCity
           ? (manualHotels[editingHotelCity] || { name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00' })
-          : manualHotel;
+          : isListMode && editingHotelIndex !== null && manualHotelList[editingHotelIndex]
+            ? manualHotelList[editingHotelIndex]
+            : (isListMode ? { name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00', checkInDate: startDate, checkOutDate: endDate } as ManualHotelEntry : manualHotel);
         const setCurrentHotel = (h: ManualHotelEntry) => {
           if (editingHotelCity) {
             setManualHotels({ ...manualHotels, [editingHotelCity]: h });
+          } else if (isListMode) {
+            if (editingHotelIndex !== null && editingHotelIndex < manualHotelList.length) {
+              const updated = [...manualHotelList];
+              updated[editingHotelIndex] = h;
+              setManualHotelList(updated);
+            }
+            // For new hotels, we store temporarily via the modal save handler
           } else {
             setManualHotel(h);
           }
@@ -1646,6 +1743,32 @@ Example: "We love local food markets, sunset viewpoints, and avoiding tourist cr
                   </div>
                 </div>
 
+                {/* Stay Dates — shown for split stays */}
+                {isListMode && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">Check-in Date</Label>
+                      <Input
+                        type="date"
+                        value={currentHotel.checkInDate || startDate}
+                        min={startDate}
+                        max={endDate}
+                        onChange={(e) => setCurrentHotel({ ...currentHotel, checkInDate: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Check-out Date</Label>
+                      <Input
+                        type="date"
+                        value={currentHotel.checkOutDate || endDate}
+                        min={currentHotel.checkInDate || startDate}
+                        max={endDate}
+                        onChange={(e) => setCurrentHotel({ ...currentHotel, checkOutDate: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {/* Price & Budget Inclusion */}
                 <div className="space-y-3 pt-3 border-t border-border">
                   <div>
@@ -1689,6 +1812,24 @@ Example: "We love local food markets, sunset viewpoints, and avoiding tourist cr
                     // Save to the correct state
                     if (editingHotelCity) {
                       setManualHotels({ ...manualHotels, [editingHotelCity]: currentHotel });
+                      setHotelChoice('own');
+                    } else if (isListMode) {
+                      if (editingHotelIndex !== null && editingHotelIndex < manualHotelList.length) {
+                        // Update existing
+                        const updated = [...manualHotelList];
+                        updated[editingHotelIndex] = currentHotel;
+                        setManualHotelList(updated);
+                      } else {
+                        // Add new
+                        setManualHotelList([...manualHotelList, {
+                          ...currentHotel,
+                          checkInDate: currentHotel.checkInDate || startDate,
+                          checkOutDate: currentHotel.checkOutDate || endDate,
+                        }]);
+                      }
+                      setHotelChoice('own');
+                    } else {
+                      setManualHotel(currentHotel);
                       setHotelChoice('own');
                     }
                     setShowHotelModal(false);
@@ -1788,6 +1929,8 @@ export default function Start() {
     checkInTime: '15:00',
     checkOutTime: '11:00',
   });
+  // Multi-hotel list for single-city split stays
+  const [manualHotelList, setManualHotelList] = useState<ManualHotelEntry[]>([]);
   const [manualHotels, setManualHotels] = useState<Record<string, ManualHotelEntry>>({});
 
   // Personalization state
@@ -2343,6 +2486,8 @@ export default function Start() {
                     setIsFirstTimeVisitor={setIsFirstTimeVisitor}
                     firstTimePerCity={firstTimePerCity}
                     setFirstTimePerCity={setFirstTimePerCity}
+                    manualHotelList={manualHotelList}
+                    setManualHotelList={setManualHotelList}
                     manualHotels={manualHotels}
                     setManualHotels={setManualHotels}
                     mustDoActivities={mustDoActivities}
