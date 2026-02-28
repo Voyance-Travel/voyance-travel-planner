@@ -1874,3 +1874,94 @@ The NEXT DAY (Day ${transitionTo} Day 1) is a FULL day — schedule normally fro
 `;
 
 }
+
+// =============================================================================
+// FLIGHT INTELLIGENCE PROMPT BUILDER
+// =============================================================================
+
+/**
+ * Build a prompt section from flight intelligence data (layovers, availability windows, missing legs).
+ * Returns empty string if no intelligence data is available (backward compatible).
+ */
+export function buildFlightIntelligencePrompt(intelligence: unknown): string {
+  if (!intelligence || typeof intelligence !== 'object') {
+    return '';
+  }
+
+  const intel = intelligence as Record<string, unknown>;
+  const sections: string[] = [];
+
+  // --- Route display ---
+  const route = intel.route as Record<string, unknown> | undefined;
+  if (route?.display) {
+    sections.push(`${'='.repeat(60)}\n🛫 FLIGHT INTELLIGENCE — ROUTE\n${'='.repeat(60)}\nRoute: ${route.display}`);
+  }
+
+  // --- FLIGHT-AWARE SCHEDULING ---
+  const schedule = intel.destinationSchedule as Array<Record<string, unknown>> | undefined;
+  if (schedule && schedule.length > 0) {
+    const scheduleLines: string[] = [];
+    scheduleLines.push(`\n${'='.repeat(60)}\n⏰ FLIGHT-AWARE SCHEDULING\n${'='.repeat(60)}`);
+    for (const dest of schedule) {
+      scheduleLines.push(`\n📍 ${dest.city} (${dest.airport}):`);
+      if (dest.availableFrom) {
+        scheduleLines.push(`   - Available FROM: ${dest.availableFrom}`);
+        scheduleLines.push(`   - Do NOT schedule activities before this time.`);
+      }
+      if (dest.availableUntil) {
+        scheduleLines.push(`   - Available UNTIL: ${dest.availableUntil}`);
+        scheduleLines.push(`   - Do NOT schedule activities after this time.`);
+      }
+      if (dest.fullDays) {
+        scheduleLines.push(`   - Plan ${dest.fullDays} days of activities.`);
+      }
+      if (dest.isFirstDestination) {
+        scheduleLines.push(`   - ⚡ FIRST DESTINATION — lighter schedule on arrival day (2-3 activities max, afternoon/evening only). The traveler just arrived and may be tired.`);
+      }
+      if (dest.isLastDestination && dest.availableUntil) {
+        scheduleLines.push(`   - ⚡ LAST DESTINATION — final day activities MUST end by ${dest.availableUntil} for airport transit.`);
+      }
+      const notes = dest.notes as string[] | undefined;
+      if (notes && notes.length > 0) {
+        for (const note of notes) {
+          scheduleLines.push(`   - Note: ${note}`);
+        }
+      }
+    }
+    sections.push(scheduleLines.join('\n'));
+  }
+
+  // --- LAYOVER EXCLUSIONS ---
+  const layovers = intel.layovers as Array<Record<string, unknown>> | undefined;
+  if (layovers && layovers.length > 0) {
+    const layoverLines: string[] = [];
+    layoverLines.push(`\n${'='.repeat(60)}\n🚫 LAYOVER EXCLUSIONS\n${'='.repeat(60)}`);
+    for (const layover of layovers) {
+      layoverLines.push(`Do NOT schedule any activities, meals, or sightseeing in ${layover.city} during the ${layover.duration} layover at ${layover.airport} (${layover.arrivalTime} → ${layover.departureTime}). The traveler will be in the airport.`);
+    }
+    sections.push(layoverLines.join('\n'));
+  }
+
+  // --- MISSING LEG HANDLING ---
+  const missingLegs = intel.missingLegs as Array<Record<string, unknown>> | undefined;
+  if (missingLegs && missingLegs.length > 0) {
+    const missingLines: string[] = [];
+    missingLines.push(`\n${'='.repeat(60)}\n⚠️ MISSING LEG HANDLING\n${'='.repeat(60)}`);
+    for (const leg of missingLegs) {
+      missingLines.push(`The traveler still needs to book a flight from ${leg.fromCity} (${leg.from}) to ${leg.toCity} (${leg.to}).`);
+      missingLines.push(`Reason: ${leg.reason}`);
+      missingLines.push(`Leave the travel day between these cities flexible — do not over-schedule it. Add a note on that day: "Travel day — flight not yet booked."`);
+    }
+    sections.push(missingLines.join('\n'));
+  }
+
+  // --- TRAVEL INTEL COVERAGE ---
+  if (schedule && schedule.length > 0) {
+    const cities = schedule.map(d => d.city as string).filter(Boolean);
+    if (cities.length > 0) {
+      sections.push(`\n${'='.repeat(60)}\n🌍 TRAVEL INTEL COVERAGE\n${'='.repeat(60)}\nGenerate Travel Intel for ALL of these destination cities: ${cities.join(', ')}\nDo NOT skip any destination. Do NOT generate Travel Intel for layover-only cities.`);
+    }
+  }
+
+  return sections.length > 0 ? sections.join('\n\n') : '';
+}

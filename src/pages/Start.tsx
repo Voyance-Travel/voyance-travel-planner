@@ -949,6 +949,7 @@ function FlightHotelStep({
   setMultiCityTransports,
   transportSelections,
   onTransportSelect,
+  onIntelligenceCapture,
 }: {
   destination: string;
   startDate: string;
@@ -985,6 +986,7 @@ function FlightHotelStep({
   setMultiCityTransports?: (transports: InterCityTransport[]) => void;
   transportSelections?: Record<number, { optionId: string; option: TransportOption }>;
   onTransportSelect?: (transitionIndex: number, option: TransportOption) => void;
+  onIntelligenceCapture?: (intel: Record<string, unknown>) => void;
 }) {
   const navigate = useNavigate();
   const hasExistingFlightData = !!(outboundFlight.departureAirport || outboundFlight.arrivalTime || outboundFlight.airline);
@@ -1670,7 +1672,7 @@ Example: "We love local food markets, sunset viewpoints, and avoiding tourist cr
         onOpenChange={setShowImportModal}
         onImport={handleImportFlight}
         onImportLegs={handleImportAllLegs}
-        onIntelligence={(intel) => setFlightIntelligence(intel as Record<string, unknown>)}
+        onIntelligence={(intel) => onIntelligenceCapture?.(intel as Record<string, unknown>)}
         tripStartDate={startDate}
         tripEndDate={endDate}
         destinations={isMultiCity ? multiCityDestinations.map(d => d.city) : destination ? [destination] : undefined}
@@ -2156,6 +2158,7 @@ export default function Start() {
           flight_selection: flightSelection as any,
           hotel_selection: hotelSelection,
           budget_include_hotel: includeHotelInBudget || false,
+          flight_intelligence: (flightIntelligence || null) as any,
           is_multi_city: isMultiCity || null,
           destinations: isMultiCity ? multiCityDestinations as any : null,
           transportation_preferences: isMultiCity && multiCityTransports.length > 0 ? multiCityTransports as any : null,
@@ -2562,6 +2565,7 @@ export default function Start() {
                     setMultiCityTransports={setMultiCityTransports}
                     transportSelections={transportSelections}
                     onTransportSelect={handleTransportSelect}
+                    onIntelligenceCapture={(intel) => setFlightIntelligence(intel)}
                   />
                 )}
               </AnimatePresence>
