@@ -1437,7 +1437,14 @@ export default function TripDetail() {
                     days={editorDays}
                     totalDaysExpected={editorDays.length}
                     hasFlights={!!trip.flight_selection}
-                    hasHotel={!!trip.hotel_selection}
+                    hasHotel={
+                      !!trip.hotel_selection || 
+                      (tripCities.length > 0 && tripCities.every(c => {
+                        const h = c.hotel_selection as any;
+                        const hotel = Array.isArray(h) && h.length > 0 ? h[0] : h;
+                        return !!hotel?.name;
+                      }))
+                    }
                     isMultiCity={!!(trip as any).is_multi_city || tripCities.length > 1}
                     hasInterCityTransport={editorDays.some((d: any) => d.isTransitionDay)}
                     className="mb-4"
