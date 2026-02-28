@@ -307,6 +307,16 @@ Be concise. Assume US passport holder. JSON only, no markdown.`
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content;
     
+    // Track Perplexity cost (was previously untracked — LEAK 5 fix)
+    try {
+      const advisoryCostTracker = trackCost('quick_preview_advisory', 'perplexity/sonar');
+      advisoryCostTracker.recordPerplexity(1);
+      advisoryCostTracker.recordAiUsage(data, 'perplexity/sonar');
+      await advisoryCostTracker.save();
+    } catch (costErr) {
+      console.warn('Cost tracking failed for advisory:', costErr);
+    }
+    
     if (!content) return undefined;
 
     const jsonMatch = content.match(/\{[\s\S]*\}/);

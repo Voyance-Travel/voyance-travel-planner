@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { buildCacheKey, getCached, setCache, TTL } from "../_shared/perplexity-cache.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,6 +20,17 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ success: false, error: 'Restaurant name and destination are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check cache first (30-day TTL for restaurant URLs)
+    const cacheKey = buildCacheKey('restaurant-url', restaurantName, destination);
+    const cached = await getCached<{ url: string | null }>(cacheKey);
+    if (cached) {
+      console.log(`[lookup-restaurant-url] Cache HIT for "${restaurantName}" in ${destination}`);
+      return new Response(
+        JSON.stringify({ success: true, url: cached.url, cached: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -75,28 +87,24 @@ RULES:
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content?.trim() || '';
     
-    // Track Perplexity API call
     costTracker.recordPerplexity(1);
     costTracker.recordAiUsage(data, 'perplexity/sonar');
     await costTracker.save();
     
     console.log('[lookup-restaurant-url] Perplexity response:', content);
 
-    // Validate it looks like a URL
-    if (content === 'NOT_FOUND' || content.toLowerCase().includes('not_found') || !content.startsWith('http')) {
-      console.log('[lookup-restaurant-url] No URL found, returning fallback');
-      return new Response(
-        JSON.stringify({ success: true, url: null, fallback: true }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    let cleanUrl: string | null = null;
+
+    if (content !== 'NOT_FOUND' && !content.toLowerCase().includes('not_found') && content.startsWith('http')) {
+      const urlMatch = content.match(/https?:\/\/[^\s"'<>]+/);
+      cleanUrl = urlMatch ? urlMatch[0].replace(/[.,;:!?\s]+$/, '') : null;
     }
 
-    // Extract just the URL if there's extra text
-    const urlMatch = content.match(/https?:\/\/[^\s"'<>]+/);
-    const cleanUrl = urlMatch ? urlMatch[0].replace(/[.,;:!?\s]+$/, '') : null;
+    // Cache result (even null) for 30 days
+    await setCache(cacheKey, 'restaurant_url', { url: cleanUrl }, TTL.THIRTY_DAYS);
 
     if (!cleanUrl) {
-      console.log('[lookup-restaurant-url] Could not extract valid URL from response');
+      console.log('[lookup-restaurant-url] No URL found, returning fallback');
       return new Response(
         JSON.stringify({ success: true, url: null, fallback: true }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

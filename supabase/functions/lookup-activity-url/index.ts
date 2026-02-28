@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { buildCacheKey, getCached, setCache, TTL } from "../_shared/perplexity-cache.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,6 +21,16 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ success: false, error: 'Activity name and destination are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check cache first (30-day TTL for booking URLs)
+    const cacheKey = buildCacheKey('activity-url', activityName, destination, activityType);
+    const cached = await getCached<{ url: string | null }>(cacheKey);
+    if (cached) {
+      return new Response(
+        JSON.stringify({ success: true, url: cached.url, cached: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -83,26 +94,22 @@ RULES:
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content?.trim() || '';
     
-    // Track cost
     costTracker.recordPerplexity(1);
     costTracker.recordAiUsage(data, 'perplexity/sonar');
     await costTracker.save();
     
     console.log('Perplexity response:', content);
 
-    // Validate it looks like a URL
-    if (content === 'NOT_FOUND' || !content.startsWith('http')) {
-      return new Response(
-        JSON.stringify({ success: true, url: null }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    let url: string | null = null;
+    if (content !== 'NOT_FOUND' && content.startsWith('http')) {
+      url = content.replace(/[.,;:!?\s]+$/, '');
     }
 
-    // Clean up the URL
-    const cleanUrl = content.replace(/[.,;:!?\s]+$/, '');
+    // Cache result (even null) for 30 days
+    await setCache(cacheKey, 'activity_url', { url }, TTL.THIRTY_DAYS);
 
     return new Response(
-      JSON.stringify({ success: true, url: cleanUrl }),
+      JSON.stringify({ success: true, url }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
