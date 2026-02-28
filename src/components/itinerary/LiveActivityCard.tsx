@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { ActivityFeedbackModal } from './ActivityFeedbackModal';
+import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 import { useActivityFeedback, type FeedbackRating } from '@/services/activityFeedbackAPI';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 
@@ -134,18 +135,20 @@ export function LiveActivityCard({
         {/* Activity Content */}
         <div className="flex gap-4">
           {/* Image */}
-          {activity.imageUrl && (
+          {(activity.imageUrl || true) && (
             <div className="hidden sm:block w-20 h-20 rounded-lg overflow-hidden flex-shrink-0">
               <img
-                src={activity.imageUrl}
+                src={activity.imageUrl || getActivityFallbackImage(activity.type, activity.name)}
                 alt={activity.name}
                 className={cn(
                   'w-full h-full object-cover',
                   isCompleted && 'grayscale opacity-60'
                 )}
                 onError={(e) => {
-                  // Hide broken images gracefully
-                  (e.currentTarget.parentElement as HTMLElement).style.display = 'none';
+                  const fallback = getActivityFallbackImage(activity.type, activity.name);
+                  if (e.currentTarget.src !== fallback) {
+                    e.currentTarget.src = fallback;
+                  }
                 }}
               />
             </div>
