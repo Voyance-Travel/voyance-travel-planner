@@ -84,6 +84,7 @@ import { CreditQuickBuy } from '@/components/checkout/CreditQuickBuy';
 import { AddFlightInline, AddHotelInline } from './AddBookingInline';
 import { TripCollaboratorsPanel } from './TripCollaboratorsPanel';
 import { GroupUnlockModal } from '@/components/modals/GroupUnlockModal';
+import { GroupBudgetDisplay } from './GroupBudgetDisplay';
 import { GuestDNABanner } from './GuestDNABanner';
 import { type CollaboratorAttribution, getCollaboratorColor, buildCollaboratorColorMap } from '@/utils/collaboratorAttribution';
 import { useTripPermission, useTripCollaborators } from '@/services/tripCollaboratorsAPI';
@@ -1376,6 +1377,7 @@ export function EditorialItinerary({
   const [showShareModal, setShowShareModal] = useState(false);
   const [showShareGuideSheet, setShowShareGuideSheet] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
+  const [showGroupUnlockModal, setShowGroupUnlockModal] = useState(false);
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
   const [showLocalCurrency, setShowLocalCurrency] = useState(true); // Currency display preference
@@ -4945,13 +4947,22 @@ export function EditorialItinerary({
                   action: {
                     label: 'Regenerate',
                     onClick: () => {
-                      // Trigger regeneration of day 1 as a starting point
                       if (onRegenerateDay) onRegenerateDay(1);
                     },
                   },
                   duration: 10000,
                 });
+                // Prompt group unlock if owner doesn't have a group budget yet
+                if (tripPermission?.isOwner) {
+                  setShowGroupUnlockModal(true);
+                }
               }}
+            />
+
+            {/* Group Budget Pool Display */}
+            <GroupBudgetDisplay
+              tripId={tripId}
+              onTopUp={() => setShowGroupUnlockModal(true)}
             />
 
             {/* Guest Edit Mode Toggle - only for owner */}
@@ -5059,6 +5070,15 @@ export function EditorialItinerary({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Group Unlock Modal */}
+      <GroupUnlockModal
+        isOpen={showGroupUnlockModal}
+        onClose={() => setShowGroupUnlockModal(false)}
+        tripId={tripId}
+        collaboratorCount={collaborators.length}
+        creditsAvailable={totalCredits}
+      />
 
       {/* Share Guide Sheet - Email, SMS, Social */}
       <ShareGuideSheet
