@@ -88,6 +88,7 @@ interface FriendRequest {
   requester_id: string;
   created_at: string;
   requesterName: string;
+  requesterHandle?: string;
   requesterAvatar?: string;
 }
 
@@ -111,22 +112,29 @@ function usePendingFriendRequests(userId: string | null) {
       if (!data || data.length === 0) return [];
       
       const requesterIds = data.map(r => r.requester_id);
+      // Query profiles directly (not profiles_friends view) because the requester
+      // may not have a handle set yet, and the view filters WHERE handle IS NOT NULL.
+      // RLS on profiles already allows viewing pending friend request senders.
       const { data: profiles } = await supabase
-        .from('profiles_friends')
-        .select('id, display_name, avatar_url')
+        .from('profiles')
+        .select('id, display_name, handle, avatar_url')
         .in('id', requesterIds);
       
       const profileMap = new Map(
         (profiles || []).map(p => [p.id, p])
       );
       
-      return data.map(r => ({
-        id: r.id,
-        requester_id: r.requester_id,
-        created_at: r.created_at,
-        requesterName: profileMap.get(r.requester_id)?.display_name || 'Someone',
-        requesterAvatar: profileMap.get(r.requester_id)?.avatar_url || undefined,
-      }));
+      return data.map(r => {
+        const profile = profileMap.get(r.requester_id);
+        return {
+          id: r.id,
+          requester_id: r.requester_id,
+          created_at: r.created_at,
+          requesterName: profile?.display_name || 'Someone',
+          requesterHandle: profile?.handle || undefined,
+          requesterAvatar: profile?.avatar_url || undefined,
+        };
+      });
     },
     enabled: !!userId,
     refetchInterval: 60000,
@@ -331,10 +339,10 @@ export function NotificationBell() {
                     
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium line-clamp-1">
-                        Friend Request
+                        Friend Request from {request.requesterName}
                       </p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        <span className="font-medium text-foreground">{request.requesterName}</span> wants to connect
+                        <span className="font-medium text-foreground">{request.requesterName}</span>{request.requesterHandle ? ` (@${request.requesterHandle})` : ''} wants to connect
                       </p>
                       
                       <div className="flex items-center gap-2 mt-2">
