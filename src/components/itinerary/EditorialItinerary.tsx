@@ -2462,22 +2462,42 @@ export function EditorialItinerary({
       if (error) throw error;
 
       if (data?.days) {
-        // Update days with optimized data — match by dayNumber since we only sent unlocked days
-        setDays(prev => prev.map((day) => {
-          const optimizedDay = data.days.find((od: any) => od.dayNumber === day.dayNumber);
-          if (!optimizedDay) return day;
-          return {
-            ...day,
-            activities: optimizedDay.activities.map((optAct: EditorialActivity, actIdx: number) => ({
-              ...day.activities[actIdx],
-              ...optAct,
-            })),
-          };
-        }));
-        setHasChanges(true);
-        
-        const meta = data.metadata || {};
-        toast.success(`Optimized! ${meta.transportCalculated || 0} routes calculated, ${meta.costsLookedUp || 0} prices updated`);
+        const meta = data.metadata?.stats || {};
+        const hasChanges = (meta.routesChanged || 0) > 0 || (meta.transportCalculated || 0) > 0 || (meta.costsLookedUp || 0) > 0;
+
+        // If no meaningful changes occurred, refund the credits
+        if (!hasChanges && !routeOptCost.isFirstTrip && routeOptCost.cost > 0) {
+          try {
+            await supabase.functions.invoke('spend-credits', {
+              body: {
+                action: 'REFUND',
+                tripId,
+                creditsAmount: routeOptCost.cost,
+                metadata: { reason: 'zero_optimization_changes' },
+              },
+            });
+            // Invalidate credit caches
+            toast.info('No changes needed — your itinerary is already optimized! Credits refunded.', { duration: 4000 });
+          } catch (refundErr) {
+            console.error('Failed to refund optimization credits:', refundErr);
+          }
+        } else {
+          // Update days with optimized data — match by dayNumber since we only sent unlocked days
+          setDays(prev => prev.map((day) => {
+            const optimizedDay = data.days.find((od: any) => od.dayNumber === day.dayNumber);
+            if (!optimizedDay) return day;
+            return {
+              ...day,
+              activities: optimizedDay.activities.map((optAct: EditorialActivity, actIdx: number) => ({
+                ...day.activities[actIdx],
+                ...optAct,
+              })),
+            };
+          }));
+          setHasChanges(true);
+          
+          toast.success(`Optimized! ${meta.routesChanged || 0} routes reordered, ${meta.transportCalculated || 0} transit legs calculated`);
+        }
       }
     } catch (err) {
       console.error('Optimize error:', err);
