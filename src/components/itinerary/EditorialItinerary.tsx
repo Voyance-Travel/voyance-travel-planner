@@ -306,6 +306,8 @@ export interface FlightLegDisplay {
   baggageInfo?: string;
   boardingPassUrl?: string;
   frequentFlyerNumber?: string;
+  isDestinationArrival?: boolean;
+  isDestinationDeparture?: boolean;
 }
 
 export interface FlightSelection {
@@ -2012,6 +2014,70 @@ export function EditorialItinerary({
       setAirportCacheReady(true);
     }
   }, [allFlightLegs]);
+
+  // Handler to mark a flight leg as destination arrival or departure
+  const handleMarkFlightLeg = useCallback(async (legIndex: number, field: 'isDestinationArrival' | 'isDestinationDeparture') => {
+    if (!flightSelection || allFlightLegs.length < 2) return;
+    
+    // Build updated legs array: toggle the flag on the selected leg, clear it on others
+    const updatedLegs = allFlightLegs.map((leg, i) => {
+      const isTarget = i === legIndex;
+      const currentValue = !!(leg as any)[field];
+      return {
+        ...leg,
+        [field]: isTarget ? !currentValue : false,
+      };
+    });
+
+    // Build the updated flight_selection with both legs[] and backward-compat fields
+    const updatedSelection: Record<string, unknown> = {
+      ...flightSelection,
+      legs: updatedLegs,
+    };
+
+    // Update backward-compat departure/return fields
+    const destArrivalLeg = updatedLegs.find(l => l.isDestinationArrival) || updatedLegs[0];
+    if (destArrivalLeg) {
+      updatedSelection.departure = {
+        airline: destArrivalLeg.airline,
+        flightNumber: destArrivalLeg.flightNumber,
+        departure: destArrivalLeg.departure,
+        arrival: destArrivalLeg.arrival,
+        price: destArrivalLeg.price,
+        cabinClass: destArrivalLeg.cabinClass,
+      };
+    }
+    if (updatedLegs.length >= 2) {
+      const lastLeg = updatedLegs[updatedLegs.length - 1];
+      updatedSelection.return = {
+        airline: lastLeg.airline,
+        flightNumber: lastLeg.flightNumber,
+        departure: lastLeg.departure,
+        arrival: lastLeg.arrival,
+        price: lastLeg.price,
+        cabinClass: lastLeg.cabinClass,
+      };
+    }
+
+    // Persist to DB
+    const { error } = await supabase
+      .from('trips')
+      .update({ flight_selection: updatedSelection as any })
+      .eq('id', tripId);
+
+    if (error) {
+      console.error('Failed to update flight leg marker:', error);
+      toast.error('Failed to update flight leg marker');
+      return;
+    }
+
+    toast.success(field === 'isDestinationArrival' 
+      ? 'Destination arrival leg updated' 
+      : 'Destination departure leg updated');
+
+    // Refresh parent state
+    onBookingAdded?.();
+  }, [flightSelection, allFlightLegs, tripId, onBookingAdded]);
 
   // Helper to find payment for an item
   const getPaymentForItem = useCallback((itemType: 'flight' | 'hotel' | 'activity', itemId: string): TripPayment | undefined => {
@@ -4200,6 +4266,38 @@ export function EditorialItinerary({
                                     )}
                                   </div>
                                 )}
+                              </div>
+                            )}
+
+                            {/* Destination leg markers — only for multi-leg trips */}
+                            {allFlightLegs.length > 1 && (
+                              <div className="mt-3 pt-3 border-t border-border/50 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); handleMarkFlightLeg(idx, 'isDestinationArrival'); }}
+                                  className={cn(
+                                    "inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md border transition-colors",
+                                    (leg as any).isDestinationArrival
+                                      ? "bg-primary/10 border-primary/30 text-primary font-medium"
+                                      : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                                  )}
+                                >
+                                  <MapPin className="h-3 w-3" />
+                                  {(leg as any).isDestinationArrival ? '✓ Destination arrival' : 'Mark as destination arrival'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); handleMarkFlightLeg(idx, 'isDestinationDeparture'); }}
+                                  className={cn(
+                                    "inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md border transition-colors",
+                                    (leg as any).isDestinationDeparture
+                                      ? "bg-accent/10 border-accent/30 text-accent font-medium"
+                                      : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                                  )}
+                                >
+                                  <Plane className="h-3 w-3" />
+                                  {(leg as any).isDestinationDeparture ? '✓ Destination departure' : 'Mark as destination departure'}
+                                </button>
                               </div>
                             )}
                           </div>
