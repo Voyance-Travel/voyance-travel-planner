@@ -18,14 +18,12 @@ import { RefreshCw, WifiOff } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
-import { resubscribeAll, onStaleConnection } from '@/lib/realtimeSubscriptionManager';
+import { resubscribeAll, onStaleConnection, teardownAllSubscriptions } from '@/lib/realtimeSubscriptionManager';
 import { guardedRefreshSession } from '@/lib/authSessionGuard';
 import { toast } from 'sonner';
 
-/** How many consecutive fetch failures (credits, entitlements, etc.) before we show the banner */
+/** Failure counter threshold used for auto-dismiss heuristics */
 const FAILURE_THRESHOLD = 6;
-/** Once we detect trouble, how long to wait before showing the banner (avoids flash on transient blips) */
-const DEBOUNCE_MS = 8_000;
 /** Minimum ms between reportConnectionFailure increments */
 const FAILURE_THROTTLE_MS = 3_000;
 /** Max failures per throttle window */
@@ -67,46 +65,20 @@ export function getConnectionFailureCount() {
   return _globalFailureCount;
 }
 
-function useConnectionFailureCount() {
-  const [count, setCount] = useState(_globalFailureCount);
-  useEffect(() => {
-    const handler = () => setCount(_globalFailureCount);
-    _listeners.push(handler);
-    return () => {
-      _listeners = _listeners.filter(fn => fn !== handler);
-    };
-  }, []);
-  return count;
-}
 
 export function ConnectionRecoveryBanner() {
-  const failureCount = useConnectionFailureCount();
   const queryClient = useQueryClient();
   const [showBanner, setShowBanner] = useState(false);
   const [isRecovering, setIsRecovering] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Register stale-channel detection to trigger recovery banner
+  // Trigger banner only when realtime auto-recovery exhausts retries
   useEffect(() => {
     onStaleConnection(() => {
       reportConnectionFailure();
+      setShowBanner(true);
     });
   }, []);
-
-  // Show banner after sustained failures
-  useEffect(() => {
-    if (failureCount >= FAILURE_THRESHOLD && !showBanner) {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => setShowBanner(true), DEBOUNCE_MS);
-    }
-    if (failureCount === 0 && showBanner) {
-      setShowBanner(false);
-    }
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [failureCount, showBanner]);
 
   // Auto-dismiss after a period if the user doesn't interact
   useEffect(() => {
@@ -128,7 +100,8 @@ export function ConnectionRecoveryBanner() {
   const handleRecover = useCallback(async () => {
     setIsRecovering(true);
     try {
-      // 1. Tear down all Realtime channels to stop failing reconnect loops
+      // 1. Tear down managed subscriptions and clear all Realtime channels
+      teardownAllSubscriptions();
       supabase.removeAllChannels();
 
       // 2. Force-refresh the auth session to clear any stale/locked tokens (deduplicated)
