@@ -1315,19 +1315,21 @@
       "name": "Urban Nomad",
       "category": "EXPLORER",
       "required": {
-        "nature_orientation": { "max": 0.3 },
-        "novelty_seeking": { "min": 0.5 }
+        "nature_orientation": { "max": 0.25 },
+        "novelty_seeking": { "min": 0.6 },
+        "pace": { "min": 0.5 }
       },
       "boosters": {
-        "novelty_seeking": 1.2,
-        "pace": 1.0,
-        "flexibility": 0.8,
-        "social_energy": 0.6
+        "novelty_seeking": 1.0,
+        "pace": 0.7,
+        "flexibility": 0.5,
+        "social_energy": 0.4
       },
       "penalties": {
-        "nature_orientation": { "above": 0.5, "weight": -1.5 },
-        "restoration_need": { "above": 0.7, "weight": -0.8 },
-        "spirituality": { "above": 0.6, "weight": -0.5 }
+        "nature_orientation": { "above": 0.4, "weight": -2.0 },
+        "restoration_need": { "above": 0.6, "weight": -1.0 },
+        "spirituality": { "above": 0.5, "weight": -0.8 },
+        "planning": { "above": 0.7, "weight": -0.5 }
       }
     },
     "wilderness_pioneer": {
