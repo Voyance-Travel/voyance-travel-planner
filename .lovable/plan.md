@@ -1,31 +1,27 @@
 
 
-# Confirm & Harden the Share & Manage Dialog
+# Allow Re-joining After Leaving a Trip (Simple MVP)
 
-## What's Actually Happening
+## How It Works
 
-After thorough code review, the full **Share & Manage Trip** dialog is **still intact** in `EditorialItinerary.tsx`. It includes:
+The invite link system already supports multi-use tokens and re-joining. The `accept_trip_invite` database function handles users who were previously on a trip -- it uses `ON CONFLICT DO UPDATE` so clicking the same invite link again will re-add them. No new tables needed.
 
-- **Owner display** (your name, email, avatar with crown icon)
-- **TripCollaboratorsPanel** (see all members, DNA compatibility, add friends)
-- **GroupBudgetDisplay** (group credit pool, top-up button)
-- **Guest Permissions** (Edit Freely vs Propose & Vote toggle)
-- **Invite Link** (generate/copy link)
-- **Share to Social** (email, text, social media)
+The only missing piece is giving collaborators a way to **leave** a trip themselves, and making it clear to owners they can re-send the invite link.
 
-The screenshot you shared is from your **production site** (`travelwithvoyance.com`), which appears to be running an older deployment. The **preview** version has the full dialog working correctly. Once you publish/deploy the latest code, the full Share & Manage dialog will be back.
+## Changes
 
-## Cleanup to Prevent Future Confusion
+### 1. Add "Leave Trip" button for non-owner collaborators
 
-There's a separate lightweight "Share Your Trip" modal (`TripShareModal`) that only has social sharing buttons (Copy, WhatsApp, Twitter, Email). It exists as a standalone component but is **not** wired to any button on the itinerary page. To prevent any future mix-up:
+In `TripCollaboratorsPanel.tsx`, add a "Leave Trip" button visible to non-owner members. When clicked:
+- Show a confirmation dialog ("Are you sure you want to leave this trip? The owner can send you the invite link to rejoin.")
+- Call `removeTripCollaborator` with their own collaborator ID
+- Redirect to the dashboard after leaving
 
-### Change 1: Update ItineraryUtilityBar to use the full dialog
+### 2. Show a toast hint to owners when removing someone
 
-The `ItineraryUtilityBar` component (currently unused but exported) has its own Share button that opens the lightweight `TripShareModal`. Update it to accept an `onShareClick` callback instead, so if it's ever used, it routes to the correct full dialog.
+When an owner removes a collaborator, show a toast like: "Member removed. You can re-send the invite link to let them rejoin."
 
-### Change 2: Verify GroupUnlockModal Stripe wiring
-
-Confirm the `GroupUnlockModal` (group pricing packs) correctly passes `tripId` and `tier` metadata through to the Stripe checkout flow so purchased credits land on the right trip.
+This reminds the owner that the existing invite link (already in the Share dialog) is all they need.
 
 ---
 
@@ -33,7 +29,11 @@ Confirm the `GroupUnlockModal` (group pricing packs) correctly passes `tripId` a
 
 | File | Change |
 |------|--------|
-| `src/components/itinerary/ItineraryUtilityBar.tsx` | Replace internal `TripShareModal` with an `onShareClick` callback prop so it always delegates to the parent's full dialog |
+| `src/components/itinerary/TripCollaboratorsPanel.tsx` | Add "Leave Trip" button for non-owners with confirmation dialog; update owner remove toast to hint about re-inviting |
 
-No changes needed to `EditorialItinerary.tsx` -- the full Share & Manage dialog is already there and working. The fix is simply deploying the latest code to production.
+### How re-joining works (already built)
+- Owner copies invite link from Share dialog (already exists)
+- Sends it to the person who left
+- Person clicks link, `accept_trip_invite` runs, re-adds them via `ON CONFLICT DO UPDATE`
+- No new database tables, functions, or edge functions needed
 
