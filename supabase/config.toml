@@ -254,3 +254,63 @@ verify_jwt = false
 
 [functions.budget-coach]
 verify_jwt = false
+
+[functions.refresh-day]
+verify_jwt = false
+
+[functions.trip-chat]
+verify_jwt = false
+
+[functions.trip-suggestions]
+verify_jwt = false
+
+[functions.discover-proactive]
+verify_jwt = false
+
+[functions.dna-feedback-chat]
+verify_jwt = false
+
+[functions.mid-trip-dna]
+verify_jwt = false
+
+[functions.suggest-hotel-swaps]
+verify_jwt = false
+
+[functions.transit-estimate]
+verify_jwt = false
+
+[functions.compare-transport]
+verify_jwt = false
+
+[functions.generate-skip-list]
+verify_jwt = false
+
+[functions.purchase-group-unlock]
+verify_jwt = false
+
+[functions.topup-group-budget]
+verify_jwt = false
+
+[functions.spend-group-credits]
+verify_jwt = false
+
+[functions.discover-hidden-gems]
+verify_jwt = false
+
+[functions.chat-trip-planner]
+verify_jwt = false
+
+[functions.mystery-trip-logistics]
+verify_jwt = false
+
+[functions.backfill-activity-costs]
+verify_jwt = false
+
+[functions.backfill-destination-images]
+verify_jwt = false
+
+[functions.cache-destination-image]
+verify_jwt = false
+
+[functions.migrate-site-images]
+verify_jwt = false
