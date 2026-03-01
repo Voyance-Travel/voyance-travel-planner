@@ -2583,86 +2583,159 @@ export function EditorialItinerary({
     }
   }, [days, tripId, onSave]);
 
-  // Full itinerary regeneration — preserves flights/hotels/qualifiers, replaces schedule + pricing
+  // Full itinerary regeneration — now uses day-by-day pattern matching original generation
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
   const [isRepairingPricing, setIsRepairingPricing] = useState(false);
+  const [regenerationProgress, setRegenerationProgress] = useState(0);
 
   // Cost = 30 credits/day (half the 60/day generation rate)
   const regenerationCost = useMemo(() => Math.ceil((days.length || 1) * 30), [days.length]);
 
   const handleRegenerateItinerary = useCallback(async () => {
     setIsRegenerating(true);
+    setRegenerationProgress(0);
+    const totalDays = days.length;
+
     try {
       // 1. Charge credits first — OutOfCreditsModal pops automatically on insufficient
       await spendCredits.mutateAsync({
         action: 'REGENERATE_TRIP',
         tripId,
         creditsAmount: regenerationCost,
-        metadata: { dayCount: days.length },
+        metadata: { dayCount: totalDays },
       });
 
-      // 2. Invoke generate-itinerary
-      const { data, error } = await supabase.functions.invoke('generate-itinerary', {
-        body: { action: 'generate-full', tripId, userId: user?.id },
-      });
+      // 2. Day-by-day generation (matching original progressive pattern)
+      const generatedDays: EditorialDay[] = [];
+      const previousActivities: string[] = [];
+      const MAX_RETRIES = 4;
+      const BACKOFF_DELAYS = [3000, 8000, 15000, 30000];
 
-      if (error) {
-        // Check for 504 timeout — poll DB for completion
-        const is504 = error.message?.includes('504') || error.message?.includes('timeout') || error.message?.includes('FunctionsFetchError');
-        if (is504) {
-          console.log('[EditorialItinerary] Regeneration 504 — polling for completion...');
-          const success = await pollForRegenerationCompletion();
-          if (success) {
-            await refetchItineraryFromDb();
-            toast.success('Itinerary regenerated! Flights, hotels, and trip settings preserved.');
-            return;
+      for (let dayNum = 1; dayNum <= totalDays; dayNum++) {
+        setRegenerationProgress(Math.round(((dayNum - 1) / totalDays) * 100));
+
+        const dayDate = new Date(startDate);
+        dayDate.setDate(dayDate.getDate() + dayNum - 1);
+        const formattedDate = dayDate.toISOString().split('T')[0];
+
+        let lastError: Error | null = null;
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            const invokePromise = supabase.functions.invoke('generate-itinerary', {
+              body: {
+                action: 'generate-day',
+                tripId,
+                dayNumber: dayNum,
+                totalDays,
+                destination,
+                destinationCountry,
+                date: formattedDate,
+                travelers,
+                tripType,
+                budgetTier,
+                userId: user?.id,
+                previousDayActivities: previousActivities,
+              },
+            });
+
+            // 120-second timeout per day
+            const timeoutPromise = new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('__TIMEOUT__')), 120_000)
+            );
+
+            const { data, error } = await Promise.race([invokePromise, timeoutPromise]);
+
+            if (error) {
+              const errMsg = error.message || String(error);
+              if (errMsg.includes('Rate limit') || errMsg.includes('credits') || errMsg.includes('Credits')) {
+                throw new Error(errMsg);
+              }
+              throw new Error(errMsg);
+            }
+
+            if (data?.error) {
+              if (data.error.includes('Rate limit') || data.error.includes('credits')) throw new Error(data.error);
+              throw new Error(data.error);
+            }
+
+            if (!data?.day) {
+              throw new Error(`No itinerary data returned for day ${dayNum}`);
+            }
+
+            const generatedDay = data.day as EditorialDay;
+            generatedDays.push(generatedDay);
+
+            // Track activities for context
+            (generatedDay.activities || []).forEach((act: any) => {
+              previousActivities.push(act.title || act.name || '');
+            });
+
+            // Update UI progressively
+            setDays([...generatedDays]);
+
+            // Auto-save after each day
+            try {
+              await supabase.functions.invoke('generate-itinerary', {
+                body: {
+                  action: 'save-itinerary',
+                  tripId,
+                  itinerary: {
+                    days: generatedDays,
+                    status: generatedDays.length < totalDays ? 'generating' : 'ready',
+                    generatedAt: new Date().toISOString(),
+                  },
+                },
+              });
+            } catch (saveErr) {
+              console.warn(`[Regeneration] Partial save after day ${dayNum} failed (non-blocking):`, saveErr);
+            }
+
+            lastError = null;
+            break; // Success
+          } catch (dayErr) {
+            lastError = dayErr instanceof Error ? dayErr : new Error(String(dayErr));
+            const msg = lastError.message;
+
+            if (msg.includes('Rate limit') || msg.includes('credits') || msg.includes('Credits')) throw lastError;
+
+            if (attempt < MAX_RETRIES) {
+              const delay = BACKOFF_DELAYS[attempt] || 10000;
+              console.warn(`[Regeneration] Day ${dayNum} attempt ${attempt + 1} failed, retrying in ${delay / 1000}s`);
+              if (attempt >= 1) {
+                toast.info(`Day ${dayNum} is taking longer than usual — retrying automatically...`, { duration: 3000 });
+              }
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
           }
         }
-        throw error;
+
+        if (lastError) {
+          const savedMsg = generatedDays.length > 0
+            ? ` Days 1-${generatedDays.length} have been saved.`
+            : '';
+          throw new Error(`Day ${dayNum} couldn't be generated after ${MAX_RETRIES + 1} attempts.${savedMsg}`);
+        }
+
+        // Brief pause between days
+        if (dayNum < totalDays) {
+          await new Promise(resolve => setTimeout(resolve, 800));
+        }
       }
 
+      setRegenerationProgress(100);
       await refetchItineraryFromDb();
       toast.success('Itinerary regenerated! Flights, hotels, and trip settings preserved.');
     } catch (err: any) {
       console.error('[EditorialItinerary] Regeneration failed:', err);
-      // Don't show error toast for insufficient credits — modal handles it
       if (!err?.message?.startsWith('Not enough credits')) {
-        toast.error('Failed to regenerate itinerary. Please try again.');
+        toast.error(err?.message || 'Failed to regenerate itinerary. Please try again.');
       }
     } finally {
       setIsRegenerating(false);
+      setRegenerationProgress(0);
     }
-  }, [tripId, user?.id, refetchItineraryFromDb, regenerationCost, days.length, spendCredits]);
-
-  // Poll DB for regeneration completion after a 504 timeout
-  const pollForRegenerationCompletion = useCallback(async (): Promise<boolean> => {
-    const maxChecks = 18; // 18 × 5s = 90 seconds
-    const intervalMs = 5000;
-    // Get baseline updated_at
-    const { data: baseline } = await supabase
-      .from('trips')
-      .select('updated_at')
-      .eq('id', tripId)
-      .maybeSingle();
-    const baselineTime = baseline?.updated_at ? new Date(baseline.updated_at).getTime() : Date.now();
-
-    for (let i = 1; i <= maxChecks; i++) {
-      await new Promise(r => setTimeout(r, intervalMs));
-      const { data: trip } = await supabase
-        .from('trips')
-        .select('updated_at, itinerary_data')
-        .eq('id', tripId)
-        .maybeSingle();
-
-      if (trip?.updated_at && new Date(trip.updated_at).getTime() > baselineTime) {
-        console.log(`[EditorialItinerary] Regeneration completed after ${i * 5}s polling`);
-        return true;
-      }
-    }
-    console.error('[EditorialItinerary] Regeneration polling timed out after 90s');
-    return false;
-  }, [tripId]);
+  }, [tripId, user?.id, refetchItineraryFromDb, regenerationCost, days.length, spendCredits, startDate, destination, destinationCountry, travelers, tripType, budgetTier]);
 
   const handleRepairPricing = useCallback(async () => {
     setIsRepairingPricing(true);
