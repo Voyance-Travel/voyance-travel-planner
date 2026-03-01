@@ -40,6 +40,11 @@ export interface ItineraryContext {
       isLocked?: boolean;
     }>;
   }>;
+  accommodationInfo?: {
+    name: string;
+    neighborhood?: string;
+    city?: string;
+  };
   blendedDna?: {
     blendedTraits: Record<string, number>;
     travelerProfiles: Array<{ userId: string; name: string; archetypeId: string; isOwner: boolean; weight: number }>;

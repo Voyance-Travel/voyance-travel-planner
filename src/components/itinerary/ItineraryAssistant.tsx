@@ -54,6 +54,11 @@ interface ItineraryAssistantProps {
   days: ItineraryDay[];
   isLocalTrip?: boolean;
   onItineraryUpdate?: (updatedDays: ItineraryDay[]) => void;
+  accommodationInfo?: {
+    name: string;
+    neighborhood?: string;
+    city?: string;
+  };
   blendedDna?: {
     blendedTraits: Record<string, number>;
     travelerProfiles: Array<{ userId: string; name: string; archetypeId: string; isOwner: boolean; weight: number }>;
@@ -69,6 +74,7 @@ export function ItineraryAssistant({
   days,
   isLocalTrip = false,
   onItineraryUpdate,
+  accommodationInfo,
   blendedDna,
 }: ItineraryAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -119,6 +125,7 @@ export function ItineraryAssistant({
         isLocked: a.isLocked,
       })),
     })),
+    accommodationInfo,
     blendedDna,
   };
 
