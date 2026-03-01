@@ -1,37 +1,22 @@
 
-# Fix: Hotel Check-In/Check-Out Time Not Updating
 
-## The Bug
+# Fix: Ensure All Shareable Links Use Public URLs
 
-When you edit a hotel and change the check-in time (e.g., from 3:00 PM to 9:00 AM), clicking "Update Hotel" saves the new time to the database but the Edit Hotel dialog is initialized with the **wrong fields**.
+## Findings
 
-In `EditorialItinerary.tsx` line 5246-5247, the existing hotel data is passed like this:
+After auditing the entire codebase, almost everything is correct. The `getAppUrl()` utility already handles URL normalization for shareable links (invites, referrals, agency shares, quiz invites, archetype shares, intake links).
 
-```
-checkInTime: hotelSelection.checkIn || '15:00',
-checkOutTime: hotelSelection.checkOut || '11:00',
-```
+The `window.location.origin` usages for auth flows (OAuth redirects, password resets, email confirmations) are intentionally correct -- those must match the browser's actual origin.
 
-But `hotelSelection.checkIn` and `hotelSelection.checkOut` are **date strings** (like `2026-04-15`), not time strings. The correct fields are `hotelSelection.checkInTime` and `hotelSelection.checkOutTime`.
+**One issue found:**
 
-This means:
-- The edit form always shows `15:00` / `11:00` (the fallback defaults) since the date string gets treated as truthy but isn't a valid time
-- When you save, even though the time is correct in the form, the next time you open the dialog it reverts to defaults
+`src/pages/GuideDetail.tsx` (line 189) uses `window.location.href` directly for the guide share URL. If someone shares a guide from the preview environment, it will generate a private/preview URL instead of the public one.
 
 ## Fix
 
-**File: `src/components/itinerary/EditorialItinerary.tsx`** (lines 5246-5247)
+| File | Change |
+|------|--------|
+| `src/pages/GuideDetail.tsx` | Import `getAppUrl` and replace `window.location.href` with `` `${getAppUrl()}/guides/${slug}` `` |
 
-Change:
-```
-checkInTime: hotelSelection.checkIn || '15:00',
-checkOutTime: hotelSelection.checkOut || '11:00',
-```
+This is a one-line fix to ensure guide share links always point to the public site.
 
-To:
-```
-checkInTime: hotelSelection.checkInTime || '15:00',
-checkOutTime: hotelSelection.checkOutTime || '11:00',
-```
-
-This is a two-character fix (adding `Time` to each field name) that correctly reads the saved check-in and check-out times.
