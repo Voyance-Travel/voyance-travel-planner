@@ -9,6 +9,7 @@
  */
 
 import { useState } from 'react';
+import { getAppUrl } from '@/utils/getAppUrl';
 import {
   Calendar,
   Clock,
@@ -106,7 +107,7 @@ export default function TripCockpit({
   const itineraryDaysCount = trip.itinerary_data?.days?.length || 0;
 
   const shareUrl = trip.share_token 
-    ? `${window.location.origin}/share/${trip.share_token}`
+    ? `${getAppUrl()}/share/${trip.share_token}`
     : null;
 
   const handleCopyLink = () => {
