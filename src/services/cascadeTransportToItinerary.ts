@@ -409,12 +409,32 @@ export async function cascadeAllTransport(
     const markedDeparture = legs.find((l: any) => l.isDestinationDeparture);
     const returnLeg = markedDeparture || (legs.length >= 2 ? legs[legs.length - 1] : flightSelection.return);
 
+    // ─── Cross-day flight detection ───
+    // If outbound departs on one date and arrives on a later date,
+    // Day 1 is a departure travel day — cascade arrival to Day 2 instead.
+    const outboundDepartDate = outbound?.departure?.date as string | undefined;
+    const outboundArriveDate = outbound?.arrival?.date as string | undefined;
+    const isCrossDayFlight = outboundDepartDate && outboundArriveDate
+      && outboundArriveDate.substring(0, 10) > outboundDepartDate.substring(0, 10);
+
     // Outbound arrival
     if (outbound?.arrival?.time) {
-      const result = cascadeArrivalDay(updatedDays, outbound.arrival.time, 'flight');
-      if (result.changed) {
-        updatedDays = result.updatedDays;
-        allChanges.push(...result.changes);
+      if (isCrossDayFlight && updatedDays.length >= 2) {
+        // Cross-day: skip Day 1 (travel day), apply arrival cascade to Day 2
+        console.log('[cascade] Cross-day flight detected — applying arrival cascade to Day 2');
+        const day2Only = [updatedDays[1]];
+        const result = cascadeArrivalDay(day2Only, outbound.arrival.time, 'flight');
+        if (result.changed) {
+          updatedDays[1] = result.updatedDays[0];
+          allChanges.push(...result.changes);
+        }
+      } else {
+        // Same-day: apply to Day 1 as usual
+        const result = cascadeArrivalDay(updatedDays, outbound.arrival.time, 'flight');
+        if (result.changed) {
+          updatedDays = result.updatedDays;
+          allChanges.push(...result.changes);
+        }
       }
     }
 
@@ -439,10 +459,27 @@ export async function cascadeAllTransport(
     const inboundType = inboundLeg?.arrival?.time ? 'flight' : (firstCity?.transport_type || 'flight');
 
     if (inboundArrivalTime) {
-      const result = cascadeArrivalDay(updatedDays, inboundArrivalTime, inboundType);
-      if (result.changed) {
-        updatedDays = result.updatedDays;
-        allChanges.push(...result.changes);
+      // Check for cross-day flight in multi-city too
+      const inboundDepartDate = inboundLeg?.departure?.date as string | undefined;
+      const inboundArriveDate = inboundLeg?.arrival?.date as string | undefined;
+      const isCrossDayInbound = inboundDepartDate && inboundArriveDate
+        && inboundArriveDate.substring(0, 10) > inboundDepartDate.substring(0, 10);
+
+      if (isCrossDayInbound && updatedDays.length >= 2) {
+        // Cross-day: apply arrival cascade to Day 2
+        console.log('[cascade] Multi-city cross-day inbound — applying arrival cascade to Day 2');
+        const day2Only = [updatedDays[1]];
+        const result = cascadeArrivalDay(day2Only, inboundArrivalTime, inboundType);
+        if (result.changed) {
+          updatedDays[1] = result.updatedDays[0];
+          allChanges.push(...result.changes);
+        }
+      } else {
+        const result = cascadeArrivalDay(updatedDays, inboundArrivalTime, inboundType);
+        if (result.changed) {
+          updatedDays = result.updatedDays;
+          allChanges.push(...result.changes);
+        }
       }
     }
 

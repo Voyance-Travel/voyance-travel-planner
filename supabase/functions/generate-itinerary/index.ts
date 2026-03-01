@@ -7278,8 +7278,17 @@ serve(async (req) => {
       context.flightData = promptFlightData;
       context.hotelData = promptHotelData;
       
+      // ─── Cross-day flight detection ───
+      // If the outbound flight arrives on a date AFTER the trip start_date,
+      // Day 1 is a departure/travel day. Log this for debugging.
+      if (promptFlightData.arrivalDate && promptFlightData.departureDate
+          && promptFlightData.arrivalDate > promptFlightData.departureDate) {
+        console.log(`[Stage 1.4.5] ✈️ CROSS-DAY FLIGHT DETECTED: departs ${promptFlightData.departureDate}, arrives ${promptFlightData.arrivalDate}`);
+        console.log(`[Stage 1.4.5] Day 1 will be a DEPARTURE TRAVEL DAY (no destination activities)`);
+      }
+      
       console.log(
-        `[Stage 1.4.5] DNA injected: primary=${promptTravelerDNA.primaryArchetype || 'none'}, secondary=${promptTravelerDNA.secondaryArchetype || 'none'}, tripBudgetTier=${context.budgetTier || 'none'}, pace=${promptTravelerDNA.traits.pace}, flight=${promptFlightData.hasOutboundFlight}, hotel=${promptHotelData.hasHotel}`
+        `[Stage 1.4.5] DNA injected: primary=${promptTravelerDNA.primaryArchetype || 'none'}, secondary=${promptTravelerDNA.secondaryArchetype || 'none'}, tripBudgetTier=${context.budgetTier || 'none'}, pace=${promptTravelerDNA.traits.pace}, flight=${promptFlightData.hasOutboundFlight}, hotel=${promptHotelData.hasHotel}, arrivalDate=${promptFlightData.arrivalDate || 'none'}, departureDate=${promptFlightData.departureDate || 'none'}`
       );
       
       // =======================================================================

@@ -1451,13 +1451,24 @@ export function buildDayPrompt(
   const isFirstDay = dayNumber === 1;
   const isLastDay = dayNumber === tripContext.totalDays;
   
+  // ─── Cross-day flight detection ───
+  // If outbound flight departs on startDate but arrives on a later date,
+  // Day 1 is a departure/travel day (not a destination day).
+  const isDepartureTravelDay = isFirstDay
+    && flight.hasOutboundFlight
+    && flight.arrivalDate
+    && flight.departureDate
+    && flight.arrivalDate > flight.departureDate;
+  
   // Build the full persona manuscript (same for all days)
   const personaPrompt = buildPersonaManuscript(dna, tripContext);
   
   // Build day-specific constraints
   let dayConstraints: DayConstraints;
   
-  if (isFirstDay) {
+  if (isDepartureTravelDay) {
+    dayConstraints = buildOutboundTravelDayPrompt(flight, hotel, dna, tripContext);
+  } else if (isFirstDay) {
     dayConstraints = buildArrivalDayPrompt(flight, hotel, dna, tripContext);
   } else if (isLastDay) {
     dayConstraints = buildDepartureDayPrompt(flight, hotel, dna, tripContext, dayNumber);
@@ -1466,6 +1477,66 @@ export function buildDayPrompt(
   }
   
   return { personaPrompt, dayConstraints };
+}
+
+/**
+ * Build constraints for a DEPARTURE TRAVEL DAY (Day 1 when flight arrives next day).
+ * The traveler departs from their home city — no destination activities.
+ * Activities: morning prep, travel to airport, boarding, in-flight rest.
+ */
+export function buildOutboundTravelDayPrompt(
+  flight: FlightData,
+  hotel: HotelData,
+  dna: TravelerDNA,
+  tripContext: TripContext
+): DayConstraints {
+  const lines: string[] = [];
+  lines.push(`${'='.repeat(60)}`);
+  lines.push(`✈️ DAY 1 — DEPARTURE / TRAVEL DAY (NOT AT DESTINATION YET)`);
+  lines.push(`${'='.repeat(60)}`);
+  lines.push('');
+  lines.push(`⚠️ CRITICAL: The traveler is NOT in ${tripContext.destination} today.`);
+  lines.push(`They depart from their home city and will arrive at the destination TOMORROW.`);
+  lines.push('');
+  
+  if (flight.departureTime24) {
+    lines.push(`✈️ OUTBOUND FLIGHT DEPARTS: ${flight.departureTime24}`);
+  }
+  if (flight.departureAirport) {
+    lines.push(`   From: ${flight.departureAirport}`);
+  }
+  if (flight.arrivalDate) {
+    lines.push(`   Arrives at destination: ${flight.arrivalDate}`);
+  }
+  lines.push('');
+  
+  lines.push(`📋 MANDATORY STRUCTURE FOR THIS DAY:`);
+  lines.push(`   1. Morning: Pack, prepare for trip, finalize travel essentials`);
+  lines.push(`   2. Travel to airport (allow 2+ hours before departure)`);
+  lines.push(`   3. Airport check-in, security, boarding`);
+  lines.push(`   4. In-flight (rest, entertainment, meals on board)`);
+  lines.push('');
+  lines.push(`🚫 DO NOT generate activities at ${tripContext.destination}.`);
+  lines.push(`🚫 DO NOT schedule sightseeing, restaurants, or tours.`);
+  lines.push(`🚫 ALL activities must be at the DEPARTURE city, NOT the destination.`);
+  lines.push('');
+  lines.push(`Use the traveler's home/departure city for all location references.`);
+  lines.push(`Category for activities: "transit", "preparation"`);
+  
+  return {
+    dayNumber: 1,
+    date: tripContext.startDate,
+    isFirstDay: true,
+    isLastDay: false,
+    earliestStartTime: '08:00',
+    latestEndTime: '23:59',
+    requiredSequence: ['pack_and_prepare', 'travel_to_airport', 'airport_checkin', 'board_flight', 'in_flight'],
+    maxActivities: 6,
+    minDowntimeMinutes: 0,
+    energyLevel: 'moderate',
+    activityTypes: ['transit', 'preparation'],
+    constraints: lines.join('\n'),
+  };
 }
 
 /**
@@ -1482,12 +1553,22 @@ export function extractFlightData(rawFlightSelection: unknown): FlightData {
   // Handle multiple payload structures
   const nestedDeparture = flightSelection.departure as Record<string, unknown> | undefined;
   const nestedReturn = flightSelection.return as Record<string, unknown> | undefined;
+  const legs = Array.isArray(flightSelection.legs) ? flightSelection.legs as Array<Record<string, unknown>> : [];
   
-  // Outbound arrival time
+  // ─── Legs-based extraction (preferred) ───
+  // Find destination arrival leg (user-marked or heuristic)
+  const destArrivalLeg = legs.find((l: any) => l.isDestinationArrival)
+    || (legs.length === 2 ? legs[0] : legs.length >= 3 ? legs[legs.length - 2] : legs[0]);
+  // Find destination departure leg (user-marked or last leg)
+  const destDepartureLeg = legs.find((l: any) => l.isDestinationDeparture)
+    || (legs.length >= 2 ? legs[legs.length - 1] : undefined);
+  
+  // Outbound arrival time — prefer legs, fallback to legacy
+  const legArrivalTime = (destArrivalLeg?.arrival as Record<string, unknown>)?.time as string | undefined;
   const manualArrival = (nestedDeparture?.arrival as Record<string, unknown>)?.time as string | undefined;
   const searchArrival = nestedDeparture?.arrivalTime as string | undefined;
   const flatArrival = flightSelection.arrivalTime as string | undefined;
-  const arrivalTime = manualArrival || searchArrival || flatArrival;
+  const arrivalTime = legArrivalTime || manualArrival || searchArrival || flatArrival;
   
   if (arrivalTime) {
     result.hasOutboundFlight = true;
@@ -1497,11 +1578,29 @@ export function extractFlightData(rawFlightSelection: unknown): FlightData {
     }
   }
   
-  // Return departure time
+  // ─── Extract arrival DATE (new: for cross-day flight detection) ───
+  // Priority: legs[].arrival.date > departure.arrival.date > parse from ISO datetime
+  const legArrivalDate = (destArrivalLeg?.arrival as Record<string, unknown>)?.date as string | undefined;
+  const nestedArrivalDate = (nestedDeparture?.arrival as Record<string, unknown>)?.date as string | undefined;
+  const rawArrivalDate = legArrivalDate || nestedArrivalDate;
+  if (rawArrivalDate && /^\d{4}-\d{2}-\d{2}/.test(rawArrivalDate)) {
+    result.arrivalDate = rawArrivalDate.substring(0, 10); // normalize to YYYY-MM-DD
+  }
+  
+  // ─── Extract departure DATE for outbound flight ───
+  const legDepartureDate = (destArrivalLeg?.departure as Record<string, unknown>)?.date as string | undefined;
+  const nestedDepartureDate = (nestedDeparture?.departure as Record<string, unknown>)?.date as string | undefined;
+  const rawDepartureDate = legDepartureDate || nestedDepartureDate;
+  if (rawDepartureDate && /^\d{4}-\d{2}-\d{2}/.test(rawDepartureDate)) {
+    result.departureDate = rawDepartureDate.substring(0, 10);
+  }
+  
+  // Return departure time — prefer legs, fallback to legacy
+  const legReturnDepTime = (destDepartureLeg?.departure as Record<string, unknown>)?.time as string | undefined;
   const manualReturnDep = (nestedReturn?.departure as Record<string, unknown>)?.time as string | undefined;
   const searchReturnDep = nestedReturn?.departureTime as string | undefined;
   const flatReturnDep = flightSelection.returnDepartureTime as string | undefined;
-  const departureTime = manualReturnDep || searchReturnDep || flatReturnDep;
+  const departureTime = legReturnDepTime || manualReturnDep || searchReturnDep || flatReturnDep;
   
   if (departureTime) {
     result.hasReturnFlight = true;
@@ -1511,9 +1610,11 @@ export function extractFlightData(rawFlightSelection: unknown): FlightData {
     }
   }
   
-  // Airport codes
-  result.departureAirport = flightSelection.departureAirport as string | undefined;
-  result.arrivalAirport = flightSelection.arrivalAirport as string | undefined;
+  // Airport codes — prefer legs, fallback to flat fields
+  result.departureAirport = (destArrivalLeg?.departure as Record<string, unknown>)?.airport as string
+    || flightSelection.departureAirport as string | undefined;
+  result.arrivalAirport = (destArrivalLeg?.arrival as Record<string, unknown>)?.airport as string
+    || flightSelection.arrivalAirport as string | undefined;
   
   return result;
 }
