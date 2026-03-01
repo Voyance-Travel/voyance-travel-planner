@@ -296,7 +296,7 @@ export interface FlightLegDisplay {
   airlineCode?: string;
   flightNumber?: string;
   departure?: { time?: string; airport?: string; date?: string };
-  arrival?: { time?: string; airport?: string };
+  arrival?: { time?: string; airport?: string; date?: string };
   price?: number;
   cabinClass?: string;
   seat?: string;
@@ -3669,15 +3669,27 @@ export function EditorialItinerary({
               </div>
             )}
 
-            {/* Flight Sync Warning - Show if flight times don't match Day 1 */}
-            {destinationArrivalLeg?.arrival?.time && days[0]?.activities?.[0] && (
-              <FlightSyncWarning
-                flightArrivalTime={destinationArrivalLeg.arrival.time}
-                day1FirstActivity={days[0].activities[0]}
-                onSyncDay1={() => handleDayRegenerate(0)}
-                isRegenerating={regeneratingDay === days[0]?.dayNumber}
-              />
-            )}
+            {/* Flight Sync Warning - Show if flight times don't match arrival day */}
+            {destinationArrivalLeg?.arrival?.time && (() => {
+              // Detect cross-day (overnight) flight
+              const outboundLeg = destinationArrivalLeg;
+              const isCrossDayFlight = outboundLeg?.departure?.date && outboundLeg?.arrival?.date
+                && outboundLeg.arrival.date.substring(0, 10) > outboundLeg.departure.date.substring(0, 10);
+              const arrivalDayIndex = isCrossDayFlight ? 1 : 0;
+              const arrivalDay = days[arrivalDayIndex];
+              
+              if (arrivalDay?.activities?.[0]) {
+                return (
+                  <FlightSyncWarning
+                    flightArrivalTime={destinationArrivalLeg.arrival.time}
+                    day1FirstActivity={arrivalDay.activities[0]}
+                    onSyncDay1={() => handleDayRegenerate(arrivalDayIndex)}
+                    isRegenerating={regeneratingDay === arrivalDay?.dayNumber}
+                  />
+                );
+              }
+              return null;
+            })()}
 
 
 
@@ -3876,8 +3888,65 @@ export function EditorialItinerary({
                   const selectedDay = days[selectedDayIndex];
                   const dayDate = selectedDay?.date;
                   
-                  // Day 1 always gets a game plan (original behavior)
+                  // Detect cross-day (overnight) outbound flight
+                  const outboundLeg = destinationArrivalLeg || (allFlightLegs.length > 0 ? allFlightLegs[0] : undefined);
+                  const isCrossDayFlight = outboundLeg?.departure?.date && outboundLeg?.arrival?.date
+                    && outboundLeg.arrival.date.substring(0, 10) > outboundLeg.departure.date.substring(0, 10);
+                  
+                  // Day 1: For cross-day flights, show DEPARTURE plan instead of arrival
                   if (selectedDayIndex === 0) {
+                    if (isCrossDayFlight && outboundLeg) {
+                      // Departure Day plan
+                      const depTime = outboundLeg.departure?.time || '';
+                      const depAirport = outboundLeg.departure?.airport || '';
+                      const arrTime = outboundLeg.arrival?.time || '';
+                      const arrAirport = outboundLeg.arrival?.airport || '';
+                      const arrDate = outboundLeg.arrival?.date || '';
+                      // Recommend arriving 2.5h before for international flights
+                      let recommendedAirportTime = '';
+                      if (depTime) {
+                        const [hh, mm] = depTime.split(':').map(Number);
+                        if (!isNaN(hh) && !isNaN(mm)) {
+                          const totalMin = hh * 60 + mm - 150; // 2.5h before
+                          const rh = Math.floor((totalMin + 1440) % 1440 / 60);
+                          const rm = (totalMin + 1440) % 1440 % 60;
+                          recommendedAirportTime = `${rh.toString().padStart(2, '0')}:${rm.toString().padStart(2, '0')}`;
+                        }
+                      }
+                      const formattedArrDate = arrDate ? (() => {
+                        try { return new Date(arrDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); } catch { return arrDate; }
+                      })() : '';
+                      
+                      return (
+                        <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-5 space-y-3">
+                          <div className="flex items-center gap-2">
+                            <Plane className="h-5 w-5 text-primary" />
+                            <h3 className="text-base font-semibold text-foreground">Departure Day</h3>
+                          </div>
+                          <div className="space-y-2 text-sm text-muted-foreground">
+                            {recommendedAirportTime && (
+                              <p>🚗 Head to the airport by <span className="font-semibold text-foreground">{recommendedAirportTime}</span></p>
+                            )}
+                            <p>✈️ <span className="font-medium text-foreground">{outboundLeg.airline || ''} {outboundLeg.flightNumber || ''}</span> departs at <span className="font-semibold text-foreground">{depTime}</span> from {depAirport}</p>
+                            <p>🌙 Overnight flight — you'll arrive {formattedArrDate ? `on ${formattedArrDate} ` : ''}at <span className="font-semibold text-foreground">{arrTime}</span> ({arrAirport})</p>
+                          </div>
+                        </div>
+                      );
+                    }
+                    // Same-day arrival: show normal ArrivalGamePlan
+                    return (
+                      <ArrivalGamePlan
+                        flightSelection={flightSelection}
+                        hotelSelection={hotelSelection}
+                        allHotels={allHotels}
+                        destination={destination}
+                        onNavigateToBookings={() => setActiveTab('details')}
+                      />
+                    );
+                  }
+                  
+                  // Day 2: For cross-day flights, show the arrival game plan here
+                  if (selectedDayIndex === 1 && isCrossDayFlight) {
                     return (
                       <ArrivalGamePlan
                         flightSelection={flightSelection}
@@ -3895,7 +3964,6 @@ export function EditorialItinerary({
                       idx > 0 && ch.checkInDate && dayDate === ch.checkInDate
                     );
                     if (arrivingCity) {
-                      // Find the flight leg arriving at this city, if any
                       const legs = flightSelection?.legs;
                       const arrivalLeg = legs?.find(l => {
                         const arrAirport = (l.arrival?.airport || '').toLowerCase();
