@@ -53,7 +53,34 @@ export function GroupBudgetDisplay({ tripId, onTopUp, className }: GroupBudgetDi
     staleTime: 30_000,
   });
 
-  if (isLoading || !budget) return null;
+  // Still loading
+  if (isLoading) return null;
+
+  // No budget yet — show purchase prompt for owner
+  if (!budget) {
+    if (!user || !onTopUp) return null;
+    return (
+      <div className={cn('rounded-lg border border-dashed border-border bg-card/50 p-4 space-y-2', className)}>
+        <div className="flex items-center gap-2">
+          <Users className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium text-foreground">Group Credits</span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Fund a shared credit pool so your group can swap activities, get AI tips, and personalize the trip.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full gap-1.5"
+          onClick={onTopUp}
+        >
+          <Plus className="h-3 w-3" />
+          <Coins className="h-3 w-3" />
+          Purchase group credits
+        </Button>
+      </div>
+    );
+  }
 
   const pct = budget.initial_credits > 0
     ? Math.max(0, Math.min(100, (budget.remaining_credits / budget.initial_credits) * 100))
