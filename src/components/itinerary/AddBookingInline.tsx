@@ -26,6 +26,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { AirportAutocomplete } from '@/components/common/AirportAutocomplete';
 import { enrichHotel } from '@/services/hotelAPI';
+import { HotelAutocomplete } from '@/components/common/HotelAutocomplete';
 import { cn } from '@/lib/utils';
 import { FlightImportModal } from './FlightImportModal';
 import { FindMyHotelsDrawer } from './FindMyHotelsDrawer';
@@ -950,11 +951,24 @@ export function AddHotelInline({
 
             <div>
               <Label>{accomLabel} Name *</Label>
-              <Input
-                placeholder={accomType === 'airbnb' ? 'e.g. Cozy French Quarter Loft' : accomType === 'rental' ? 'e.g. Beachfront Villa' : 'e.g. The Ritz Paris'}
-                value={hotelData.name}
-                onChange={(e) => setHotelData(prev => ({ ...prev, name: e.target.value }))}
-              />
+              {(accomType === 'hotel' || accomType === 'hostel') ? (
+                <HotelAutocomplete
+                  value={hotelData.name}
+                  onChange={(hotel) => setHotelData(prev => ({
+                    ...prev,
+                    name: hotel.name,
+                    address: hotel.address || prev.address,
+                  }))}
+                  destination={destination}
+                  placeholder={accomType === 'hostel' ? 'e.g. Generator Hostel' : 'e.g. The Ritz Paris'}
+                />
+              ) : (
+                <Input
+                  placeholder={accomType === 'airbnb' ? 'e.g. Cozy French Quarter Loft' : 'e.g. Beachfront Villa'}
+                  value={hotelData.name}
+                  onChange={(e) => setHotelData(prev => ({ ...prev, name: e.target.value }))}
+                />
+              )}
             </div>
             
             {/* Check-in / Check-out Date Pickers */}
