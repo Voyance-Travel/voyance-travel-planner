@@ -11,10 +11,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-const TIER_CONFIG: Record<string, { credits: number; maxTravelers: number }> = {
-  small:  { credits: 150, maxTravelers: 3 },
-  medium: { credits: 300, maxTravelers: 8 },
-  large:  { credits: 500, maxTravelers: 99 },
+const TIER_CONFIG: Record<string, { credits: number; maxTravelers: number; caps: Record<string, number> }> = {
+  small:  { credits: 150, maxTravelers: 3, caps: { swap_activity: 15, regenerate_day: 8, ai_message: 30, restaurant_rec: 10, add_activity: 10 } },
+  medium: { credits: 300, maxTravelers: 8, caps: { swap_activity: 25, regenerate_day: 12, ai_message: 50, restaurant_rec: 15, add_activity: 15 } },
+  large:  { credits: 500, maxTravelers: 99, caps: { swap_activity: 50, regenerate_day: 20, ai_message: 100, restaurant_rec: 25, add_activity: 30 } },
 };
 
 serve(async (req) => {
@@ -112,6 +112,23 @@ serve(async (req) => {
     }).select('id').single();
 
     if (budgetError) throw budgetError;
+
+    // Create group_unlocks row (used by spend-credits for collaborator free caps)
+    const emptyUsage: Record<string, number> = {};
+    for (const key of Object.keys(config.caps)) {
+      emptyUsage[key] = 0;
+    }
+    const { error: unlockError } = await supabaseAdmin.from('group_unlocks').insert({
+      trip_id: tripId,
+      purchased_by: user.id,
+      tier,
+      caps: config.caps,
+      usage: emptyUsage,
+    });
+    if (unlockError) {
+      console.error('[purchase-group-unlock] Failed to create group_unlocks row:', unlockError);
+      // Non-fatal — budget was already created
+    }
 
     // Log to credit_ledger
     await supabaseAdmin.from('credit_ledger').insert({
