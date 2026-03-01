@@ -59,6 +59,7 @@ import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityIma
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 import { parseEditorialDays } from '@/utils/itineraryParser';
+import { getAppUrl } from '@/utils/getAppUrl';
 
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
 import { useRefreshDay, type RefreshResult, type ProposedChange } from '@/hooks/useRefreshDay';
@@ -3291,7 +3292,7 @@ export function EditorialItinerary({
         token = newInvite.token;
       }
 
-      const link = `${window.location.origin}/invite/${token}`;
+      const link = `${getAppUrl()}/invite/${token}`;
       setShareLink(link);
       
       // Copy to clipboard

@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { getAppUrl } from '@/utils/getAppUrl';
 import { estimateCostSync } from '@/lib/cost-estimation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FirstUseHint } from './FirstUseHint';
@@ -1600,7 +1601,7 @@ export function PaymentsTab({
                       
                       if (error) throw error;
                       
-                      const inviteLink = `${window.location.origin}/invite/${invite.token}`;
+                      const inviteLink = `${getAppUrl()}/invite/${invite.token}`;
                       
                       // Open email client with invite
                       window.open(`mailto:${inviteEmail}?subject=Join my trip!&body=You're invited to join my trip! Click here: ${encodeURIComponent(inviteLink)}`, '_blank');

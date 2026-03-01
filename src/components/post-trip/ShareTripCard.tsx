@@ -4,6 +4,7 @@
  */
 
 import { useState, useRef } from 'react';
+import { getAppUrl } from '@/utils/getAppUrl';
 import { 
   Copy, Mail, Share2, 
   Instagram, Twitter, Check, Link2, Users
@@ -31,7 +32,7 @@ export function ShareTripCard({ isOpen, onClose, trip, photos, highlights }: Sha
   const { claimBonus, hasClaimedBonus } = useBonusCredits();
   const hasTriggeredShareBonus = useRef(false);
 
-  const shareUrl = `${window.location.origin}/trip/${trip.id}`;
+  const shareUrl = `${getAppUrl()}/trip/${trip.id}`;
 
   const triggerFirstShareBonus = async () => {
     if (hasTriggeredShareBonus.current || hasClaimedBonus('first_share')) return;
