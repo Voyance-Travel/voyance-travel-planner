@@ -168,14 +168,15 @@ export function buildFlightSelectionFromLegs(legs: FlightLeg[], isManualEntry = 
   }
 
   if (legs.length >= 2) {
-    const last = legs[legs.length - 1];
+    // Prefer the leg explicitly marked as destination departure; fallback to last leg
+    const destDepartureLeg = legs.find(l => l.isDestinationDeparture) || legs[legs.length - 1];
     result.return = {
-      airline: last.airline,
-      flightNumber: last.flightNumber,
-      departure: last.departure,
-      arrival: last.arrival,
-      price: last.price,
-      cabin: last.cabin,
+      airline: destDepartureLeg.airline,
+      flightNumber: destDepartureLeg.flightNumber,
+      departure: destDepartureLeg.departure,
+      arrival: destDepartureLeg.arrival,
+      price: destDepartureLeg.price,
+      cabin: destDepartureLeg.cabin,
     };
   }
 

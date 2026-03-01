@@ -15,8 +15,25 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plane, Train, Bus, Car, Ship, Plus, Trash2, ChevronDown, ChevronUp,
-  ArrowRight, Upload, GripVertical,
+  ArrowRight, Upload, GripVertical, MapPin,
 } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -516,7 +533,7 @@ export default function MultiLegFlightEditor({
 
       if (changed) {
         const emittedLegs = uniqueMeaningfulLegs(next.map((s) => s.flight));
-        const sig = emittedLegs.map(l => [l.airline,l.flightNumber,l.departureAirport,l.arrivalAirport,l.departureTime,l.arrivalTime,l.departureDate,l.price].join('|')).join('||');
+        const sig = emittedLegs.map(l => [l.airline,l.flightNumber,l.departureAirport,l.arrivalAirport,l.departureTime,l.arrivalTime,l.departureDate,l.price,l.isDestinationArrival,l.isDestinationDeparture].join('|')).join('||');
         if (sig !== lastEmittedSignature.current) {
           lastEmittedSignature.current = sig;
           onLegsChangeRef.current(emittedLegs);
@@ -530,7 +547,7 @@ export default function MultiLegFlightEditor({
   // Sync changes to parent — emit all legs (including non-flight) so data isn't lost
   const syncToParent = useCallback((updatedSlots: FlightLegSlot[]) => {
     const allLegs = uniqueMeaningfulLegs(updatedSlots.map(s => s.flight));
-    const sig = allLegs.map(l => [l.airline,l.flightNumber,l.departureAirport,l.arrivalAirport,l.departureTime,l.arrivalTime,l.departureDate,l.price].join('|')).join('||');
+    const sig = allLegs.map(l => [l.airline,l.flightNumber,l.departureAirport,l.arrivalAirport,l.departureTime,l.arrivalTime,l.departureDate,l.price,l.isDestinationArrival,l.isDestinationDeparture].join('|')).join('||');
     if (sig === lastEmittedSignature.current) return;
     lastEmittedSignature.current = sig;
     onLegsChangeRef.current(allLegs);
@@ -607,6 +624,54 @@ export default function MultiLegFlightEditor({
     return ['HOME', ...cities, 'HOME'];
   }, [destinations]);
 
+  // Drag and drop reorder
+  const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 8 } });
+  const keyboardSensor = useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates });
+  const sensors = useSensors(pointerSensor, keyboardSensor);
+  const slotIds = useMemo(() => slots.map(s => s.id), [slots]);
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setSlots(prev => {
+      const oldIndex = prev.findIndex(s => s.id === active.id);
+      const newIndex = prev.findIndex(s => s.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      const reordered = arrayMove(prev, oldIndex, newIndex);
+      syncToParent(reordered);
+      return reordered;
+    });
+  }, [syncToParent]);
+
+  // Star marking handlers — toggle on target, clear on others
+  const markDestinationArrival = useCallback((slotId: string) => {
+    setSlots(prev => {
+      const updated = prev.map(s => ({
+        ...s,
+        flight: {
+          ...s.flight,
+          isDestinationArrival: s.id === slotId ? !s.flight.isDestinationArrival : false,
+        },
+      }));
+      syncToParent(updated);
+      return updated;
+    });
+  }, [syncToParent]);
+
+  const markDestinationDeparture = useCallback((slotId: string) => {
+    setSlots(prev => {
+      const updated = prev.map(s => ({
+        ...s,
+        flight: {
+          ...s.flight,
+          isDestinationDeparture: s.id === slotId ? !s.flight.isDestinationDeparture : false,
+        },
+      }));
+      syncToParent(updated);
+      return updated;
+    });
+  }, [syncToParent]);
+
   return (
     <div className="space-y-4 p-4 rounded-xl border border-border bg-card">
       {/* Import button */}
@@ -632,23 +697,30 @@ export default function MultiLegFlightEditor({
         </div>
       )}
 
-      {/* Leg slots */}
-      <div className="space-y-3">
-        <AnimatePresence initial={false}>
-          {slots.map((slot, idx) => (
-            <LegSlotCard
-              key={slot.id}
-              slot={slot}
-              index={idx}
-              totalSlots={slots.length}
-              onUpdateFlight={(patch) => updateSlotFlight(slot.id, patch)}
-              onToggleExpanded={() => toggleSlotExpanded(slot.id)}
-              onChangeTransport={(type) => changeTransportType(slot.id, type)}
-              onRemove={!slot.isAutoGenerated ? () => removeSlot(slot.id) : undefined}
-            />
-          ))}
-        </AnimatePresence>
-      </div>
+      {/* Leg slots with drag-and-drop reorder */}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={slotIds} strategy={verticalListSortingStrategy}>
+          <div className="space-y-3">
+            <AnimatePresence initial={false}>
+              {slots.map((slot, idx) => (
+                <LegSlotCard
+                  key={slot.id}
+                  slot={slot}
+                  index={idx}
+                  totalSlots={slots.length}
+                  onUpdateFlight={(patch) => updateSlotFlight(slot.id, patch)}
+                  onToggleExpanded={() => toggleSlotExpanded(slot.id)}
+                  onChangeTransport={(type) => changeTransportType(slot.id, type)}
+                  onRemove={!slot.isAutoGenerated ? () => removeSlot(slot.id) : undefined}
+                  onMarkArrival={() => markDestinationArrival(slot.id)}
+                  onMarkDeparture={() => markDestinationDeparture(slot.id)}
+                  showStarControls={slots.length >= 2}
+                />
+              ))}
+            </AnimatePresence>
+          </div>
+        </SortableContext>
+      </DndContext>
 
       {/* Add another flight */}
       <Button
@@ -676,9 +748,27 @@ interface LegSlotCardProps {
   onToggleExpanded: () => void;
   onChangeTransport: (type: LegTransportType) => void;
   onRemove?: () => void;
+  onMarkArrival?: () => void;
+  onMarkDeparture?: () => void;
+  showStarControls?: boolean;
 }
 
-function LegSlotCard({ slot, index, totalSlots, onUpdateFlight, onToggleExpanded, onChangeTransport, onRemove }: LegSlotCardProps) {
+function LegSlotCard({ slot, index, totalSlots, onUpdateFlight, onToggleExpanded, onChangeTransport, onRemove, onMarkArrival, onMarkDeparture, showStarControls }: LegSlotCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: slot.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0.5 : 1,
+  };
   const Icon = TRANSPORT_ICONS[slot.transportType];
   const isNonFlight = slot.transportType !== 'flight';
 
@@ -690,17 +780,27 @@ function LegSlotCard({ slot, index, totalSlots, onUpdateFlight, onToggleExpanded
   };
 
   return (
+    <div ref={setNodeRef} style={style}>
     <motion.div
       initial={{ opacity: 0, height: 0 }}
       animate={{ opacity: 1, height: 'auto' }}
       exit={{ opacity: 0, height: 0 }}
-      className="border border-border rounded-lg overflow-hidden"
+      className={cn("border border-border rounded-lg overflow-hidden", slot.flight.isDestinationArrival && "ring-1 ring-primary/30")}
     >
       {/* Header */}
+      <div className="flex items-center">
+        {/* Drag handle */}
+        <div
+          {...attributes}
+          {...listeners}
+          className="px-1.5 py-3 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground"
+        >
+          <GripVertical className="h-4 w-4" />
+        </div>
       <button
         type="button"
         onClick={onToggleExpanded}
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
+        className="flex-1 flex items-center gap-3 pr-4 py-3 hover:bg-muted/50 transition-colors text-left"
       >
         <div className={cn('flex items-center justify-center w-7 h-7 rounded-full border', legTypeColors[slot.legType])}>
           <Icon className="h-3.5 w-3.5" />
@@ -743,7 +843,39 @@ function LegSlotCard({ slot, index, totalSlots, onUpdateFlight, onToggleExpanded
           {slot.isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
         </div>
       </button>
+      </div>{/* end header flex */}
 
+      {/* Star controls for marking destination arrival / departure */}
+      {showStarControls && totalSlots >= 2 && (
+        <div className="flex items-center gap-2 px-4 pb-2 pt-1">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onMarkArrival?.(); }}
+            className={cn(
+              "inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md border transition-colors",
+              slot.flight.isDestinationArrival
+                ? "bg-primary/10 border-primary/30 text-primary font-medium"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            )}
+          >
+            <MapPin className={cn("h-3 w-3", slot.flight.isDestinationArrival && "text-primary")} />
+            {slot.flight.isDestinationArrival ? 'Destination arrival ✓' : 'Mark arrival'}
+          </button>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onMarkDeparture?.(); }}
+            className={cn(
+              "inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md border transition-colors",
+              slot.flight.isDestinationDeparture
+                ? "bg-accent/80 border-accent text-accent-foreground font-medium"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            )}
+          >
+            <Plane className={cn("h-3 w-3", slot.flight.isDestinationDeparture && "text-accent-foreground")} />
+            {slot.flight.isDestinationDeparture ? 'Departure from dest ✓' : 'Mark departure'}
+          </button>
+        </div>
+      )}
       {/* Expanded content */}
       {slot.isExpanded && (
         <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
@@ -899,5 +1031,6 @@ function LegSlotCard({ slot, index, totalSlots, onUpdateFlight, onToggleExpanded
         </div>
       )}
     </motion.div>
+    </div>
   );
 }

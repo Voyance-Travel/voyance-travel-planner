@@ -1320,6 +1320,7 @@ export default function TripDetail() {
                 }
 
                 // Convert normalized legs to the FlightSelection display format
+                // Preserve isDestinationArrival / isDestinationDeparture flags
                 const legs = normalized.legs.map((leg, idx) => ({
                   airline: leg.airline || undefined,
                   airlineCode: leg.airline || undefined,
@@ -1335,11 +1336,24 @@ export default function TripDetail() {
                   },
                   price: leg.price || undefined,
                   cabinClass: leg.cabin || undefined,
+                  seat: leg.seatNumber || undefined,
+                  confirmationCode: leg.confirmationCode || undefined,
+                  terminal: leg.terminal || undefined,
+                  gate: leg.gate || undefined,
+                  baggageInfo: leg.baggageInfo || undefined,
+                  boardingPassUrl: leg.boardingPassUrl || undefined,
+                  frequentFlyerNumber: leg.frequentFlyerNumber || undefined,
+                  isDestinationArrival: leg.isDestinationArrival || undefined,
+                  isDestinationDeparture: leg.isDestinationDeparture || undefined,
                 }));
 
+                // Use starred legs for outbound/return selection
+                const outboundLeg = legs.find(l => l.isDestinationArrival) || legs[0];
+                const returnLeg = legs.find(l => l.isDestinationDeparture) || (legs.length >= 2 ? legs[legs.length - 1] : undefined);
+
                 return {
-                  outbound: legs[0],
-                  return: legs.length >= 2 ? legs[legs.length - 1] : undefined,
+                  outbound: outboundLeg,
+                  return: returnLeg,
                   legs, // Pass all legs for multi-city display
                 };
               })() : null;
