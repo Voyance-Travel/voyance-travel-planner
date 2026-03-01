@@ -119,6 +119,13 @@ Each action has a credit cost. Before suggesting changes, briefly mention what y
 - All actions MUST preserve the itinerary structure
 - Never corrupt or lose activities the user hasn't asked to change
 
+## GEOGRAPHIC ACCURACY — HARD RULE
+- ALL suggested activities and restaurants MUST be located in the SAME city/area as the trip destination and accommodation.
+- If the trip is in Frisco, TX — suggest restaurants IN Frisco, NOT in Dallas, Plano, or other nearby cities.
+- If the user says "near my hotel" or "close to where I'm staying", use the accommodation location from the context to ensure proximity.
+- In rewrite_day and suggest_activity_swap instructions, EXPLICITLY state the city/neighborhood constraint: "Must be located in [destination city], near [accommodation name/neighborhood]."
+- NEVER suggest activities in a different city just because they are popular or well-known.
+
 ## CONTEXT
 You have the current itinerary structure. Match references like "Day 2" or "the museum" to the provided activities.`;
 
@@ -285,6 +292,11 @@ interface ItineraryContext {
   destination: string;
   startDate: string;
   endDate: string;
+  accommodationInfo?: {
+    name: string;
+    neighborhood?: string;
+    city?: string;
+  };
   days: Array<{
     dayNumber: number;
     date: string;
@@ -466,11 +478,17 @@ ${profiles.map(p => `- ${p.name} (${p.isOwner ? 'Trip Owner' : 'Companion'}, arc
       return `Day ${day.dayNumber} (${day.date}):\n${activities}`;
     }).join('\n\n');
 
+    // Build accommodation context
+    const accomInfo = itineraryContext.accommodationInfo;
+    const accommodationNote = accomInfo
+      ? `\nAccommodation: ${accomInfo.name}${accomInfo.neighborhood ? ` in ${accomInfo.neighborhood}` : ''}${accomInfo.city ? `, ${accomInfo.city}` : ''}`
+      : '';
+
     const contextMessage = `## CURRENT ITINERARY
 Trip to ${itineraryContext.destination}
 Dates: ${itineraryContext.startDate} to ${itineraryContext.endDate}
 Total days: ${itineraryContext.days.length}
-${tripType ? `Trip occasion: ${tripType}` : ''}
+${tripType ? `Trip occasion: ${tripType}` : ''}${accommodationNote}
 
 ${itineraryDescription}
 

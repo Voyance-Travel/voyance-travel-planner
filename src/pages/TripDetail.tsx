@@ -1682,6 +1682,22 @@ export default function TripDetail() {
           endDate={effectiveEndDate}
           isLocalTrip={trip.user_id === 'local'}
           days={parseAssistantDays(trip.itinerary_data, trip.start_date)}
+          accommodationInfo={(() => {
+            const hotels = normalizeLegacyHotelSelection(
+              trip.hotel_selection as unknown,
+              trip.start_date,
+              trip.end_date
+            );
+            const h = hotels[0];
+            if (h?.name) {
+              return {
+                name: h.name,
+                neighborhood: h.neighborhood || undefined,
+                city: trip.destination || undefined,
+              };
+            }
+            return undefined;
+          })()}
           blendedDna={(() => {
             const bd = (trip as any).blended_dna;
             if (bd && typeof bd === 'object' && bd.isBlended) {
