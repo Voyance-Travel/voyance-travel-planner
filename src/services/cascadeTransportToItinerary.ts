@@ -430,29 +430,19 @@ export async function cascadeAllTransport(
 
   // ── Multi-city: inter-city transport ──
   if (tripCities?.length) {
-    // First city: outbound arrival
+    // First city: inbound arrival (prefer user-marked destination arrival leg from flight_selection)
     const firstCity = tripCities[0];
-    if (firstCity?.transport_details?.arrivalTime) {
-      const result = cascadeArrivalDay(
-        updatedDays,
-        firstCity.transport_details.arrivalTime,
-        firstCity.transport_type || 'flight'
-      );
+    const firstCityLegs = flightSelection?.legs || [];
+    const markedArrival = firstCityLegs.find((l: any) => l.isDestinationArrival);
+    const inboundLeg = markedArrival || firstCityLegs[0] || flightSelection?.departure;
+    const inboundArrivalTime = inboundLeg?.arrival?.time || firstCity?.transport_details?.arrivalTime;
+    const inboundType = inboundLeg?.arrival?.time ? 'flight' : (firstCity?.transport_type || 'flight');
+
+    if (inboundArrivalTime) {
+      const result = cascadeArrivalDay(updatedDays, inboundArrivalTime, inboundType);
       if (result.changed) {
         updatedDays = result.updatedDays;
         allChanges.push(...result.changes);
-      }
-    } else if (flightSelection) {
-      // Use flight_selection for outbound — prefer user-marked destination arrival leg
-      const legs = flightSelection.legs || [];
-      const markedArrival = legs.find((l: any) => l.isDestinationArrival);
-      const outbound = markedArrival || legs[0] || flightSelection.departure;
-      if (outbound?.arrival?.time) {
-        const result = cascadeArrivalDay(updatedDays, outbound.arrival.time, 'flight');
-        if (result.changed) {
-          updatedDays = result.updatedDays;
-          allChanges.push(...result.changes);
-        }
       }
     }
 
@@ -488,12 +478,13 @@ export async function cascadeAllTransport(
       dayOffset += cityNights;
     }
 
-    // Last city: return departure (last leg of flights or last city transport)
+    // Last city: return departure (prefer user-marked destination departure leg)
     const lastCity = tripCities[tripCities.length - 1];
-    if (flightSelection) {
+    if (flightSelection && updatedDays.length > 0) {
       const legs = flightSelection.legs || [];
-      const returnLeg = legs.length >= 2 ? legs[legs.length - 1] : flightSelection.return;
-      if (returnLeg?.departure?.time && updatedDays.length > 0) {
+      const markedDeparture = legs.find((l: any) => l.isDestinationDeparture);
+      const returnLeg = markedDeparture || (legs.length >= 2 ? legs[legs.length - 1] : flightSelection.return);
+      if (returnLeg?.departure?.time) {
         const result = cascadeDepartureDay(
           updatedDays,
           returnLeg.departure.time,
