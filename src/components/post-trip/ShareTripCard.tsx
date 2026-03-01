@@ -3,8 +3,9 @@
  * Beautiful shareable card for social media and referrals
  */
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { getAppUrl } from '@/utils/getAppUrl';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   Copy, Mail, Share2, 
   Instagram, Twitter, Check, Link2, Users
@@ -29,10 +30,51 @@ interface ShareTripCardProps {
 export function ShareTripCard({ isOpen, onClose, trip, photos, highlights }: ShareTripCardProps) {
   const [friendEmail, setFriendEmail] = useState('');
   const [copied, setCopied] = useState(false);
+  const [shareUrl, setShareUrl] = useState('');
   const { claimBonus, hasClaimedBonus } = useBonusCredits();
   const hasTriggeredShareBonus = useRef(false);
 
-  const shareUrl = `${getAppUrl()}/trip/${trip.id}`;
+  // Create invite-based share link on open
+  useEffect(() => {
+    if (!isOpen || shareUrl) return;
+    const createLink = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: existing } = await supabase
+          .from('trip_invites')
+          .select('token')
+          .eq('trip_id', trip.id)
+          .eq('invited_by', user.id)
+          .is('email', null)
+          .maybeSingle();
+
+        if (existing?.token) {
+          setShareUrl(`${getAppUrl()}/invite/${existing.token}`);
+          return;
+        }
+
+        const { data: newInvite, error } = await supabase
+          .from('trip_invites')
+          .insert({
+            trip_id: trip.id,
+            invited_by: user.id,
+            max_uses: 10,
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          })
+          .select('token')
+          .single();
+        if (error) throw error;
+        setShareUrl(`${getAppUrl()}/invite/${newInvite.token}`);
+      } catch (e) {
+        console.error('[ShareTripCard] Failed to create invite link:', e);
+        // Fallback - still better than nothing
+        setShareUrl(`${getAppUrl()}/invite/error`);
+      }
+    };
+    createLink();
+  }, [isOpen, trip.id, shareUrl]);
 
   const triggerFirstShareBonus = async () => {
     if (hasTriggeredShareBonus.current || hasClaimedBonus('first_share')) return;
