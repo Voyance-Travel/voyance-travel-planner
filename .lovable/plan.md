@@ -1,71 +1,60 @@
 
-# Fix: "Booking Required" Badge Showing on Free Time + Missing on Actual Bookable Activities
+# Fix: Paid Trip Shows Locked After Unlock
 
-## Problem
-Two related bugs:
-1. **"Booking Required" badge appears on free time / downtime activities** where there's nothing to book
-2. **"Booking Required" badge and booking links don't appear for actual bookable activities** (tours, museums, restaurants)
+## The Problem
+When a user pays credits to unlock a trip, the generation completes successfully but the trip page shows all days as locked, asking the user to pay again. Credits were already spent and AI generation costs were incurred.
 
 ## Root Cause
+The `useUnlockTrip` hook (bulk unlock) **never updates `unlocked_day_count`** on the `trips` table after successfully generating all days. This is the field that `get-entitlements` reads to determine which days are accessible. So after unlock, the entitlements system still thinks no days are unlocked.
 
-### Bug 1: Badge on Free Time
-In `EditorialItinerary.tsx` line 7931, the badge renders based solely on `activity.bookingRequired` with no check for downtime/free-time/transport:
-```tsx
-{activity.bookingRequired && !compact && (
-  <Badge>Booking Required</Badge>
-)}
-```
-The AI sometimes sets `bookingRequired: true` on free-time blocks despite prompt instructions, and the backend normalizer only catches activities whose titles contain exact keywords like "free time". If the AI uses a slightly different title (e.g., "Leisure Hour", "Relax & Explore"), the normalizer misses it and the badge shows.
+Additionally, generated day objects may retain stale `metadata.isLocked = true` flags, causing a secondary lock check to trigger even if entitlements would allow access.
 
-### Bug 2: Missing Badge/Links on Bookable Activities
-The `InlineBookingActions` component (which renders booking links) exits early at line 260 when `bookingRequired` is `false`:
-```tsx
-if (!activity.bookingRequired) { ... return null; }
-```
-The AI often fails to set `bookingRequired: true` on genuinely bookable activities (museums, guided tours, cooking classes). The backend normalizer only force-sets it for Viator-matched activities but doesn't infer it for unmatched ones that clearly need booking.
+## The Fix (3 changes)
 
-## Solution
+### 1. Update `unlocked_day_count` after bulk unlock
+**File:** `src/hooks/useUnlockTrip.ts`
 
-### Change 1: Filter the "Booking Required" badge from non-bookable activities
-**File:** `src/components/itinerary/EditorialItinerary.tsx` (line 7931)
+After the itinerary save succeeds (around line 253), add a database update to set `unlocked_day_count` to the total number of days:
 
-Add the existing `isDowntime`, `isTransport`, `isCheckIn`, and `isAccommodation` guards:
-```tsx
-{activity.bookingRequired && !compact && !isDowntime && !isTransport && !isCheckIn && !isAccommodation && (
-  <Badge variant="outline" className="text-xs border-accent/50 text-accent">
-    Booking Required
-  </Badge>
-)}
+```text
+await supabase
+  .from('trips')
+  .update({ unlocked_day_count: params.totalDays })
+  .eq('id', params.tripId);
 ```
 
-### Change 2: Auto-infer `bookingRequired` in the backend normalizer
-**File:** `supabase/functions/generate-itinerary/index.ts` (after the isLogistics block ~line 5360)
+Also invalidate entitlements queries so the UI immediately reflects the new unlock state.
 
-After setting `bookingRequired = false` for logistics, add the inverse: auto-set `bookingRequired = true` for categories that genuinely need booking when the AI didn't flag it:
-```typescript
-// Auto-set bookingRequired for categories that genuinely need it
-const bookableCategories = ['museum', 'tour', 'cultural', 'activity', 'show', 'entertainment'];
-const bookableKeywords = ['museum', 'tour', 'guided', 'cooking class', 'wine tasting', 
-  'tickets', 'skip-the-line', 'timed entry', 'reservation'];
-const isBookable = bookableCategories.includes(normalizedAct.category?.toLowerCase() || '') ||
-  bookableKeywords.some(kw => normalizedAct.title.toLowerCase().includes(kw));
-if (isBookable && !isLogistics) {
-  normalizedAct.bookingRequired = true;
-}
+### 2. Clear `metadata.isLocked` on generated days
+**File:** `src/hooks/useUnlockTrip.ts`
+
+Before saving, strip `metadata.isLocked` and `metadata.isPreview` from each generated day so stale lock flags don't persist:
+
+```text
+enrichedDays.forEach(day => {
+  if (day?.metadata) {
+    delete day.metadata.isLocked;
+    delete day.metadata.isPreview;
+  }
+});
 ```
 
-### Change 3: Expand the logistics keyword list to catch more free-time variants
-**File:** `supabase/functions/generate-itinerary/index.ts` (line 5350)
+### 3. Defensive check in the UI gating logic
+**File:** `src/components/itinerary/EditorialItinerary.tsx` (around line 4287)
 
-Add more free-time synonyms to the logistics keywords array:
-```typescript
-const logisticsKeywords = [
-  'check-in', 'checkout', 'check-out', 'arrival', 'departure', 'transfer',
-  'free time', 'at leisure', 'leisure time', 'downtime', 'rest',
-  'relax at hotel', 'explore on your own', 'personal time'
-];
+The current code checks `selectedDay.metadata?.isLocked` as a separate gating criterion from entitlements. This should defer to entitlements when available:
+
+```text
+// Only trust metadata.isLocked if entitlements haven't loaded yet
+const isLockedDay = selectedDay.metadata?.isLocked 
+  && !isManualMode 
+  && !canViewPremiumContentForDay(entitlements, selectedDay.dayNumber);
 ```
 
-## Files Changed
-1. `src/components/itinerary/EditorialItinerary.tsx` -- guard the badge from non-bookable activity types
-2. `supabase/functions/generate-itinerary/index.ts` -- expand logistics keywords + auto-infer bookingRequired for genuinely bookable categories
+This ensures that if entitlements say the day is unlocked, metadata flags can't override it.
+
+## Technical Details
+- `get-entitlements` edge function reads `unlocked_day_count` from the `trips` table (line 208-213 of the edge function)
+- `canViewPremiumContentForDay()` calls `canAccessDaySimple()` which checks `dayNumber <= unlockedDayCount`
+- The `useUnlockDay` hook (single day unlock) already increments `unlocked_day_count` correctly -- the bulk unlock hook was missing this step
+- No database migration needed; `unlocked_day_count` column already exists
