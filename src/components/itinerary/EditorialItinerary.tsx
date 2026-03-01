@@ -2076,16 +2076,14 @@ export function EditorialItinerary({
       ? 'Destination arrival leg updated' 
       : 'Destination departure leg updated');
 
-    // Refresh parent state so flightSelection prop updates
-    onBookingAdded?.();
-
+    let cascadeChanged = false;
     // Run cascade to update Day 1 / last day scheduling based on new arrival/departure
     try {
       const { runCascadeAndPersist } = await import('@/services/cascadeTransportToItinerary');
       const { getTripCities } = await import('@/services/tripCitiesService');
       const cities = await getTripCities(tripId);
       const currentDays = days; // use local days state
-      await runCascadeAndPersist(tripId, currentDays, updatedSelection, cities);
+      cascadeChanged = await runCascadeAndPersist(tripId, currentDays, updatedSelection, cities);
       
       // Refetch itinerary from DB to pick up cascade changes
       const { data: refreshed } = await supabase
@@ -2093,6 +2091,7 @@ export function EditorialItinerary({
         .select('itinerary_data')
         .eq('id', tripId)
         .single();
+
       if (refreshed?.itinerary_data) {
         const itData = refreshed.itinerary_data as Record<string, unknown>;
         // Correctly parse days from any supported shape
@@ -2111,11 +2110,19 @@ export function EditorialItinerary({
         }
         if (refreshedDays.length > 0) {
           setDays(refreshedDays);
-          toast.success('Itinerary updated with new flight times');
         }
+      }
+
+      if (cascadeChanged) {
+        toast.success('Day 1 and final day synced to your marked flight legs');
+      } else {
+        toast.info('Flight tags saved. No itinerary time shift was needed.');
       }
     } catch (cascadeErr) {
       console.warn('Cascade after leg marking failed:', cascadeErr);
+    } finally {
+      // Refresh parent state after cascade/refetch to avoid stale itinerary overwrites
+      await Promise.resolve(onBookingAdded?.());
     }
   }, [flightSelection, allFlightLegs, tripId, onBookingAdded, days, setDays]);
 
@@ -4228,12 +4235,12 @@ export function EditorialItinerary({
                                 </Badge>
                                 {isMarkedArrival && (
                                   <Badge className="text-[10px] h-4 px-1.5 bg-primary/10 text-primary border-0">
-                                    <Star className="h-2.5 w-2.5 mr-0.5 fill-primary" /> Final destination
+                                    <Star className="h-2.5 w-2.5 mr-0.5 fill-primary" /> ✓ Arrival to final destination
                                   </Badge>
                                 )}
                                 {isMarkedDeparture && (
                                   <Badge className="text-[10px] h-4 px-1.5 bg-accent/10 text-accent border-0">
-                                    <Star className="h-2.5 w-2.5 mr-0.5 fill-accent" /> Return from destination
+                                    <Star className="h-2.5 w-2.5 mr-0.5 fill-accent" /> ✓ Final departure from destination
                                   </Badge>
                                 )}
                                 <span className="text-xs text-muted-foreground">
@@ -4241,27 +4248,21 @@ export function EditorialItinerary({
                                 </span>
                               </div>
                               <div className="flex items-center gap-2">
-                                {/* Star button to mark as final destination */}
+                                {/* Arrival marker control */}
                                 {allFlightLegs.length > 1 && (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <button
-                                        type="button"
-                                        onClick={(e) => { e.stopPropagation(); handleMarkFlightLeg(idx, 'isDestinationArrival'); }}
-                                        className={cn(
-                                          "h-7 w-7 rounded-full flex items-center justify-center transition-colors",
-                                          isMarkedArrival
-                                            ? "bg-primary/15 text-primary"
-                                            : "text-muted-foreground/40 hover:text-primary hover:bg-primary/10"
-                                        )}
-                                      >
-                                        <Star className={cn("h-4 w-4", isMarkedArrival && "fill-primary")} />
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="left" className="text-xs">
-                                      {isMarkedArrival ? 'This leg arrives at your destination' : 'Mark as final destination arrival'}
-                                    </TooltipContent>
-                                  </Tooltip>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleMarkFlightLeg(idx, 'isDestinationArrival'); }}
+                                    className={cn(
+                                      "inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md border transition-colors",
+                                      isMarkedArrival
+                                        ? "bg-primary/10 border-primary/30 text-primary font-medium"
+                                        : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                                    )}
+                                  >
+                                    <Star className={cn("h-3 w-3", isMarkedArrival && "fill-primary")} />
+                                    {isMarkedArrival ? '✓ Arrival to final destination' : 'Mark as arrival to final destination'}
+                                  </button>
                                 )}
                                 <AirlineLogo 
                                   code={leg.airlineCode || leg.airline?.substring(0, 2) || ''} 
@@ -4360,7 +4361,7 @@ export function EditorialItinerary({
                                   )}
                                 >
                                   <Plane className="h-3 w-3" />
-                                  {isMarkedDeparture ? '✓ Departs from destination' : 'Mark as departure from destination'}
+                                  {isMarkedDeparture ? '✓ Final departure from destination' : 'Mark as final departure from destination'}
                                 </button>
                               </div>
                             )}
