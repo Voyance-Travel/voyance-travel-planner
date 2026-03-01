@@ -4,7 +4,8 @@ import {
   User, Bell, Shield, Link2,
   ChevronRight, Mail, Smartphone, 
   LogOut, Trash2, Loader2, KeyRound,
-  Briefcase, Users, ExternalLink, BarChart3, TestTube2, Activity
+  Briefcase, Users, ExternalLink, BarChart3, TestTube2, Activity,
+  Accessibility, Type, Eye, Zap, Palette
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
@@ -41,6 +42,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAccessibilityStore } from '@/stores/accessibility-store';
 import { ROUTES } from '@/config/routes';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -48,6 +50,12 @@ import { supabase } from '@/integrations/supabase/client';
 export default function Settings() {
   const { user, logout, refreshUserData } = useAuth();
   const navigate = useNavigate();
+  const {
+    largerText, setLargerText,
+    highContrast, setHighContrast,
+    reducedMotion, setReducedMotion,
+    differentiateWithoutColor, setDifferentiateWithoutColor,
+  } = useAccessibilityStore();
   
   // Loading states
   const [loading, setLoading] = useState(true);
@@ -520,6 +528,114 @@ export default function Settings() {
                       disabled={saving}
                     />
                   </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            {/* Accessibility Section */}
+            <motion.div variants={itemVariants}>
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Accessibility className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-lg">Accessibility</CardTitle>
+                      <CardDescription>Customize the interface for your needs</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-3">
+                      <Type className="w-4 h-4 mt-0.5 text-primary" />
+                      <div className="space-y-0.5">
+                        <Label htmlFor="a11y-larger-text-settings" className="text-sm font-medium cursor-pointer">
+                          Larger Text
+                        </Label>
+                        <p className="text-sm text-muted-foreground">
+                          Increase base font size for easier reading
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      id="a11y-larger-text-settings"
+                      checked={largerText}
+                      onCheckedChange={setLargerText}
+                      aria-label="Larger Text"
+                    />
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-3">
+                      <Eye className="w-4 h-4 mt-0.5 text-primary" />
+                      <div className="space-y-0.5">
+                        <Label htmlFor="a11y-high-contrast-settings" className="text-sm font-medium cursor-pointer">
+                          High Contrast
+                        </Label>
+                        <p className="text-sm text-muted-foreground">
+                          Increase color contrast for better visibility
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      id="a11y-high-contrast-settings"
+                      checked={highContrast}
+                      onCheckedChange={setHighContrast}
+                      aria-label="High Contrast"
+                    />
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-3">
+                      <Zap className="w-4 h-4 mt-0.5 text-primary" />
+                      <div className="space-y-0.5">
+                        <Label htmlFor="a11y-reduced-motion-settings" className="text-sm font-medium cursor-pointer">
+                          Reduced Motion
+                        </Label>
+                        <p className="text-sm text-muted-foreground">
+                          Minimize animations and transitions
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      id="a11y-reduced-motion-settings"
+                      checked={reducedMotion}
+                      onCheckedChange={setReducedMotion}
+                      aria-label="Reduced Motion"
+                    />
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-3">
+                      <Palette className="w-4 h-4 mt-0.5 text-primary" />
+                      <div className="space-y-0.5">
+                        <Label htmlFor="a11y-no-color-settings" className="text-sm font-medium cursor-pointer">
+                          Differentiate Without Color
+                        </Label>
+                        <p className="text-sm text-muted-foreground">
+                          Add patterns and underlines so color isn't the only indicator
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      id="a11y-no-color-settings"
+                      checked={differentiateWithoutColor}
+                      onCheckedChange={setDifferentiateWithoutColor}
+                      aria-label="Differentiate Without Color"
+                    />
+                  </div>
+
+                  <p className="text-xs text-muted-foreground pt-2">
+                    These preferences are saved locally and persist across sessions.
+                  </p>
                 </CardContent>
               </Card>
             </motion.div>
