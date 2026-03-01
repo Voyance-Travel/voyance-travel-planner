@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { getTripCities } from '@/services/tripCitiesService';
 import type { TripCity } from '@/types/tripCity';
 import { checkRedistributionNeeded, applyNightsRedistribution, type NightsRedistribution } from '@/utils/syncTripCitiesNights';
@@ -103,6 +104,7 @@ export default function TripDetail() {
   }>({ open: false, totalNights: 0, redistribution: [], pendingDateResult: null });
   const isManualMode = tripId ? isManualBuilder(tripId) : false;
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const hotelEnrichmentAttempted = useRef(false);
   const debriefPromptAttempted = useRef(false);
   const autoGenerateTriggered = useRef(false);
@@ -766,6 +768,9 @@ export default function TripDetail() {
           console.error('[TripDetail] Failed to force-save itinerary:', error);
         } else {
           console.log('[TripDetail] Itinerary force-saved successfully');
+          
+          // Invalidate entitlements so UI immediately reflects new unlocked_day_count
+          queryClient.invalidateQueries({ queryKey: ['entitlements'] });
           
           // Mark first_trip_used = true ONLY after successful save
           if (isFirstTrip) {

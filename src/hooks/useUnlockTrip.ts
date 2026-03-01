@@ -232,8 +232,17 @@ export function useUnlockTrip() {
     }));
 
     try {
+      // Strip stale lock metadata from enriched days
+      const cleanedDays = enrichedDays.filter(Boolean).map((day: any) => {
+        if (day?.metadata) {
+          delete day.metadata.isLocked;
+          delete day.metadata.isPreview;
+        }
+        return day;
+      });
+
       const itineraryToSave = {
-        days: enrichedDays.filter(Boolean),
+        days: cleanedDays,
         generatedAt: new Date().toISOString(),
         destination: params.destination,
         isPreview: false, // Clear preview flag
@@ -250,6 +259,21 @@ export function useUnlockTrip() {
       if (saveError) {
         console.error('[UnlockTrip] Save failed:', saveError);
         // Non-fatal — data is still available
+      }
+
+      // Update unlocked_day_count so entitlements reflect the unlock
+      try {
+        await supabase
+          .from('trips')
+          .update({ unlocked_day_count: params.totalDays } as any)
+          .eq('id', params.tripId);
+      } catch (dbErr) {
+        console.error('[UnlockTrip] Failed to update unlocked_day_count:', dbErr);
+      }
+
+      // Invalidate entitlements so UI immediately shows unlocked content
+      if (user?.id) {
+        queryClient.invalidateQueries({ queryKey: ['entitlements', user.id] });
       }
 
       setState({

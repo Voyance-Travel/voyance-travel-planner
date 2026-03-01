@@ -4284,7 +4284,7 @@ export function EditorialItinerary({
                 {/* Check if this day is locked (placeholder with no content) */}
                 {(() => {
                   const selectedDay = days[selectedDayIndex];
-                  const isLockedDay = selectedDay.metadata?.isLocked && !isManualMode;
+                  const isLockedDay = selectedDay.metadata?.isLocked && !isManualMode && !canViewPremiumContentForDay(entitlements, selectedDay.dayNumber);
                   const hasActivities = selectedDay.activities && selectedDay.activities.length > 0;
                   const canViewThisDay = canViewPremiumContentForDay(entitlements, selectedDay.dayNumber);
 
