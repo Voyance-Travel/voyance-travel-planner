@@ -4248,12 +4248,19 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
       .trim();
   };
 
-  // Concept similarity helper (also used for trip-wide checks)
+   // Concept similarity helper (also used for trip-wide checks)
   const conceptSimilarity = (a: string, b: string): boolean => {
     if (!a || !b || a.length < 5 || b.length < 5) return false;
     // Exact match
     if (a === b) return true;
-    // One contains the other
+    // One contains the other — but NOT if one is clearly a meal context
+    // e.g. "old town san diego" (from "Old Town San Diego at Lunch") vs "old town san diego state historic park"
+    // These are different activity types (dining vs sightseeing)
+    const mealKeywords = ['lunch', 'dinner', 'breakfast', 'brunch', 'coffee', 'cafe', 'dessert', 'snack', 'food', 'eat', 'meal', 'drinks', 'cocktail', 'bar'];
+    const aHasMeal = mealKeywords.some(kw => a.includes(kw));
+    const bHasMeal = mealKeywords.some(kw => b.includes(kw));
+    if (aHasMeal !== bHasMeal) return false; // one is meal, the other isn't — not duplicates
+    
     if (a.includes(b) || b.includes(a)) return true;
     // Key words match (e.g., "pastel de nata" in both)
     const aWords = new Set(a.split(/\s+/));
@@ -4349,7 +4356,12 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
       
       // Transport/logistics adjacency is expected in real itineraries (e.g. rideshare -> venue)
       if (!currIsTransportLike && !prevIsTransportLike && conceptSimilarity(currConcept, prevConcept)) {
-        errors.push(`Activities ${i} and ${i + 1} are too similar: "${prevAct.title}" followed by "${act.title}" - AVOID duplicate concepts back-to-back`);
+        if (isSmartFinish) {
+          // In Smart Finish, user anchors may cluster around neighborhoods — downgrade to warning
+          warnings.push(`Activities ${i} and ${i + 1} are similar: "${prevAct.title}" followed by "${act.title}" - consider adding variety`);
+        } else {
+          errors.push(`Activities ${i} and ${i + 1} are too similar: "${prevAct.title}" followed by "${act.title}" - AVOID duplicate concepts back-to-back`);
+        }
       }
 
       // HARD GUARD: back-to-back culinary classes/workshops (even if titles differ)
