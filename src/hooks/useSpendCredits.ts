@@ -29,6 +29,7 @@ const ACTION_MAP: Record<string, string> = {
   MYSTERY_LOGISTICS: 'mystery_logistics',
   TRANSPORT_MODE_CHANGE: 'transport_mode_change',
   ROUTE_OPTIMIZATION: 'route_optimization',
+  REGENERATE_TRIP: 'regenerate_trip',
 };
 
 interface SpendCreditsParams {

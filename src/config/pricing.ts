@@ -10,6 +10,8 @@ export const CREDIT_COSTS = {
   // Use voyanceFlowController re-export of calculateTripCredits() instead.
   TRIP_GENERATION: 0,  // Placeholder only - see guard comment above
   HOTEL_SEARCH: 40,           // Per city
+  // GUARD: REGENERATE_TRIP is a PLACEHOLDER. Actual cost = days × 30 (half of generation rate).
+  REGENERATE_TRIP: 0,         // Variable cost — see guard comment above
 
   // Fixed per-action costs
   UNLOCK_DAY: 60,             // Unlock a full day of details
