@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { getAppUrl } from '@/utils/getAppUrl';
 import { 
   Gift, Link2, Copy, Check, MessageCircle, Mail, 
   Share2, Users, X, Sparkles, ArrowRight
@@ -59,8 +60,8 @@ export function ReferralShareModal({
       if (!user) {
         // Use a generic shareable link for anonymous users
         const shareLink = tripId 
-          ? `${window.location.origin}/trip/${tripId}?ref=share`
-          : `${window.location.origin}?ref=share`;
+          ? `${getAppUrl()}/trip/${tripId}?ref=share`
+          : `${getAppUrl()}?ref=share`;
         setReferralLink(shareLink);
         return;
       }
@@ -70,8 +71,8 @@ export function ReferralShareModal({
       setReferralCode(code);
       
       const shareLink = tripId
-        ? `${window.location.origin}/trip/${tripId}?ref=${code}`
-        : `${window.location.origin}/start?ref=${code}`;
+        ? `${getAppUrl()}/trip/${tripId}?ref=${code}`
+        : `${getAppUrl()}/start?ref=${code}`;
       setReferralLink(shareLink);
       
       // Store referral code in database for tracking
@@ -84,8 +85,8 @@ export function ReferralShareModal({
     } catch (e) {
       console.error('Failed to generate referral link:', e);
       const fallbackLink = tripId 
-        ? `${window.location.origin}/trip/${tripId}`
-        : window.location.origin;
+        ? `${getAppUrl()}/trip/${tripId}`
+        : getAppUrl();
       setReferralLink(fallbackLink);
     } finally {
       setIsGenerating(false);

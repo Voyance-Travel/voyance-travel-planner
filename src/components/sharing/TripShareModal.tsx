@@ -4,6 +4,7 @@
  */
 
 import { useState } from 'react';
+import { getAppUrl } from '@/utils/getAppUrl';
 import { 
   Link2, Mail, Copy, Check, MessageCircle, 
   Share2, Users, Gift, X
@@ -50,7 +51,7 @@ export function TripShareModal({
     if (shareLink) return shareLink;
     
     // Fallback to preview link if no create function
-    const previewLink = `${window.location.origin}/trip/${tripId}`;
+    const previewLink = `${getAppUrl()}/trip/${tripId}`;
     
     if (onCreateShareLink) {
       setIsCreatingLink(true);
