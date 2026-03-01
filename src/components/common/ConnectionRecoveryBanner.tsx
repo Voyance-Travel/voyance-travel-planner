@@ -23,13 +23,15 @@ import { guardedRefreshSession } from '@/lib/authSessionGuard';
 import { toast } from 'sonner';
 
 /** How many consecutive fetch failures (credits, entitlements, etc.) before we show the banner */
-const FAILURE_THRESHOLD = 3;
+const FAILURE_THRESHOLD = 6;
 /** Once we detect trouble, how long to wait before showing the banner (avoids flash on transient blips) */
-const DEBOUNCE_MS = 4_000;
+const DEBOUNCE_MS = 8_000;
 /** Minimum ms between reportConnectionFailure increments */
-const FAILURE_THROTTLE_MS = 2_000;
+const FAILURE_THROTTLE_MS = 3_000;
 /** Max failures per throttle window */
-const MAX_FAILURES_PER_WINDOW = 5;
+const MAX_FAILURES_PER_WINDOW = 3;
+/** Auto-dismiss the banner after this many ms if no further failures occur */
+const AUTO_DISMISS_MS = 30_000;
 
 /**
  * Global failure counter — incremented by any Supabase query/function hook that
@@ -57,6 +59,7 @@ export function reportConnectionFailure() {
 
 export function resetConnectionFailures() {
   _globalFailureCount = 0;
+  _failuresInWindow = 0;
   _listeners.forEach(fn => fn());
 }
 
@@ -82,6 +85,7 @@ export function ConnectionRecoveryBanner() {
   const [showBanner, setShowBanner] = useState(false);
   const [isRecovering, setIsRecovering] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Register stale-channel detection to trigger recovery banner
   useEffect(() => {
@@ -103,6 +107,23 @@ export function ConnectionRecoveryBanner() {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [failureCount, showBanner]);
+
+  // Auto-dismiss after a period if the user doesn't interact
+  useEffect(() => {
+    if (showBanner) {
+      if (autoDismissRef.current) clearTimeout(autoDismissRef.current);
+      autoDismissRef.current = setTimeout(() => {
+        // Only auto-dismiss if no new failures have accumulated
+        if (_globalFailureCount < FAILURE_THRESHOLD * 2) {
+          resetConnectionFailures();
+          setShowBanner(false);
+        }
+      }, AUTO_DISMISS_MS);
+    }
+    return () => {
+      if (autoDismissRef.current) clearTimeout(autoDismissRef.current);
+    };
+  }, [showBanner]);
 
   const handleRecover = useCallback(async () => {
     setIsRecovering(true);

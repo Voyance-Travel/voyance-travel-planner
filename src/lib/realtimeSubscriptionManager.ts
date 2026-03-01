@@ -10,7 +10,7 @@
  *   1. Components register their subscription factory via `register(key, factory)`
  *   2. On disconnect recovery, call `resubscribeAll()` to re-establish everything
  *   3. Components call `unregister(key)` on unmount
- *   4. A 60s health-check ping detects silent WS drops
+ *   4. A 60s health-check ping detects silent WS drops and auto-recovers
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -27,6 +27,9 @@ interface RegisteredSubscription {
 const _registry = new Map<string, RegisteredSubscription>();
 let _healthCheckInterval: ReturnType<typeof setInterval> | null = null;
 let _onStaleDetected: (() => void) | null = null;
+/** Track consecutive stale health checks — only alert after repeated failures */
+let _consecutiveStaleChecks = 0;
+const STALE_CHECK_THRESHOLD = 3; // Must be stale for 3 consecutive checks (~3 min) before alerting
 
 /**
  * Register a realtime subscription. If a subscription with the same key
@@ -64,6 +67,7 @@ export function unregisterSubscription(key: string) {
   if (_registry.size === 0 && _healthCheckInterval) {
     clearInterval(_healthCheckInterval);
     _healthCheckInterval = null;
+    _consecutiveStaleChecks = 0;
   }
 }
 
@@ -86,12 +90,13 @@ export function resubscribeAll(): number {
     }
   }
 
+  _consecutiveStaleChecks = 0;
   console.log(`[RealtimeManager] Resubscribed ${restored}/${_registry.size} channels`);
   return restored;
 }
 
 /**
- * Set a callback that fires when the health check detects stale channels.
+ * Set a callback that fires when the health check detects persistently stale channels.
  */
 export function onStaleConnection(cb: () => void) {
   _onStaleDetected = cb;
@@ -106,24 +111,55 @@ export function getActiveSubscriptionCount(): number {
 
 /**
  * Health check: every 60s, inspect channel states. If any channel is in a
- * "closed" or "errored" state while still registered, it means the WS
- * died silently. Trigger the stale callback so the recovery banner can act.
+ * "closed" or "errored" state while still registered, attempt to silently
+ * re-subscribe it. Only escalate to the recovery banner if auto-recovery
+ * fails for multiple consecutive checks.
  */
 function startHealthCheck() {
   _healthCheckInterval = setInterval(() => {
     if (_registry.size === 0) return;
 
     let staleCount = 0;
-    for (const [, entry] of _registry) {
+    let recoveredCount = 0;
+
+    for (const [key, entry] of _registry) {
       const state = (entry.channel as any)?.state;
       if (state === 'errored' || state === 'closed') {
         staleCount++;
+        // Attempt silent auto-recovery for this channel
+        try {
+          if (entry.channel) {
+            try { supabase.removeChannel(entry.channel); } catch {}
+          }
+          const newChannel = entry.factory();
+          _registry.set(key, { ...entry, channel: newChannel });
+          recoveredCount++;
+        } catch (err) {
+          console.warn(`[RealtimeManager] Auto-recovery failed for "${key}":`, err);
+        }
       }
     }
 
-    if (staleCount > 0 && _onStaleDetected) {
-      console.warn(`[RealtimeManager] Health check: ${staleCount} stale channel(s) detected`);
+    if (staleCount === 0) {
+      // Everything healthy — reset consecutive counter
+      _consecutiveStaleChecks = 0;
+      return;
+    }
+
+    if (recoveredCount === staleCount) {
+      // All stale channels were recovered silently — reset counter
+      console.log(`[RealtimeManager] Health check: auto-recovered ${recoveredCount} stale channel(s)`);
+      _consecutiveStaleChecks = 0;
+      return;
+    }
+
+    // Some channels couldn't be recovered
+    _consecutiveStaleChecks++;
+    console.warn(`[RealtimeManager] Health check: ${staleCount - recoveredCount} unrecoverable stale channel(s), consecutive=${_consecutiveStaleChecks}`);
+
+    if (_consecutiveStaleChecks >= STALE_CHECK_THRESHOLD && _onStaleDetected) {
       _onStaleDetected();
+      _consecutiveStaleChecks = 0; // Reset after alerting to avoid spamming
     }
   }, 60_000);
 }
