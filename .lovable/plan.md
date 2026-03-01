@@ -1,66 +1,105 @@
 
 
-# Fix: Trip Total Price Not Updating After Regeneration
+# Fix: Urban Nomad Over-Assignment Bug
 
 ## Problem
+Urban Nomad is being assigned to too many users because its archetype profile has the weakest gates of any archetype and strong boosters on generic traits.
 
-After regenerating an itinerary, the "Trip Total" price stays at the old value. The UI never reflects the new costs from the regenerated activities.
+**Why it wins so often:**
+- Its `novelty_seeking >= 0.5` gate passes at the DEFAULT value (0.5) -- zero quiz signal needed
+- Its `nature_orientation <= 0.3` gate triggers for anyone who picks even one city-oriented answer
+- Its boosters (novelty_seeking 1.2, pace 1.0, flexibility 0.8, social_energy 0.6) reward common/moderate trait values that most quiz-takers have
+- Most competing archetypes require specialized high traits (food >= 0.75, art >= 0.7, etc.) that fewer users reach
 
-## Root Cause
+## Solution: Tighten Urban Nomad's profile and add a missing archetype discriminator
 
-The total price display uses a two-tier system:
+### Change 1: Tighten Urban Nomad required gates
+In `src/config/quiz-questions-v3.json`, update `urban_nomad.required`:
 
-```text
-canonicalTripTotal (from activity_costs DB table)
-        |
-        v
-  Is it non-null?
-   /          \
- YES           NO
-  |             |
-Use DB total  Use JS-calculated total
-+ flight      (sum of day costs + flight + hotel)
-+ hotel
+**Before:**
+```json
+"required": {
+  "nature_orientation": { "max": 0.3 },
+  "novelty_seeking": { "min": 0.5 }
+}
 ```
 
-**The problem**: `generate-day` (used during regeneration) does NOT write to the `activity_costs` table. Only the old `generate-full` action (initial generation) writes those rows. So after regeneration:
+**After:**
+```json
+"required": {
+  "nature_orientation": { "max": 0.25 },
+  "novelty_seeking": { "min": 0.6 },
+  "pace": { "min": 0.5 }
+}
+```
 
-- `activity_costs` still has OLD cost rows
-- `canonicalTripTotal` reads old data from `v_trip_total` view
-- Since it's non-null, it overrides the correct JS-calculated total
-- The UI shows the stale price
+- `nature_orientation` tightened from 0.3 to 0.25 -- must genuinely prefer cities, not just "not nature"
+- `novelty_seeking` raised from 0.5 to 0.6 -- must show active novelty-seeking, not just the default
+- `pace >= 0.5` added -- Urban Nomads should be at least moderate-paced (city energy)
 
-## Solution (two parts)
+### Change 2: Reduce Urban Nomad booster weights
+**Before:**
+```json
+"boosters": {
+  "novelty_seeking": 1.2,
+  "pace": 1.0,
+  "flexibility": 0.8,
+  "social_energy": 0.6
+}
+```
 
-### Part 1: Reset canonical total during regeneration (frontend)
+**After:**
+```json
+"boosters": {
+  "novelty_seeking": 1.0,
+  "pace": 0.7,
+  "flexibility": 0.5,
+  "social_energy": 0.4
+}
+```
 
-In `EditorialItinerary.tsx`, after regeneration completes:
-- Set `canonicalTripTotal` to `null` so the JS-calculated total takes over immediately
-- Then trigger an async rebuild of `activity_costs` via the existing `repair-trip-costs` action
-- When the rebuild finishes, re-fetch the canonical total
+This brings total booster potential from 3.6 down to 2.6, in line with other archetypes.
 
-### Part 2: Rebuild activity_costs after regeneration (frontend call)
+### Change 3: Add stronger penalties
+**Before:**
+```json
+"penalties": {
+  "nature_orientation": { "above": 0.5, "weight": -1.5 },
+  "restoration_need": { "above": 0.7, "weight": -0.8 },
+  "spirituality": { "above": 0.6, "weight": -0.5 }
+}
+```
 
-After `syncBudgetFromDays` and query invalidation, call the `repair-trip-costs` edge function action to rebuild `activity_costs` rows from the new itinerary data. Once complete, re-fetch the canonical total so the DB stays in sync for future page loads.
+**After:**
+```json
+"penalties": {
+  "nature_orientation": { "above": 0.4, "weight": -2.0 },
+  "restoration_need": { "above": 0.6, "weight": -1.0 },
+  "spirituality": { "above": 0.5, "weight": -0.8 },
+  "planning": { "above": 0.7, "weight": -0.5 }
+}
+```
 
-## Changes
+Heavy planners are less likely to be true "nomads."
 
-### `src/components/itinerary/EditorialItinerary.tsx`
+### Change 4: Fix legacy fallback mappings
+In `src/data/archetypeNarratives.ts`, `solo_explorer` and `city_explorer` both silently map to `urban_nomad`. This is a secondary source of over-assignment for users coming through non-quiz paths. Update:
 
-At the regeneration completion block (around line 2726-2733):
+```
+'solo_explorer' -> 'flexible_wanderer'   (solo != urban)
+'city_explorer' -> 'urban_nomad'         (keep -- this one is correct)
+```
 
-1. Add `setCanonicalTripTotal(null)` immediately -- this lets the JS total show the correct value right away
-2. After the existing budget sync and invalidation, fire off an async call to rebuild `activity_costs`:
-   - Call the `generate-itinerary` edge function with `action: 'repair-trip-costs'`
-   - On success, re-fetch `getTripTotal` and update `canonicalTripTotal`
-   - This is fire-and-forget so it doesn't block the user
+## Files changed
+1. `src/config/quiz-questions-v3.json` -- tighten urban_nomad required, boosters, penalties
+2. `src/data/archetypeNarratives.ts` -- fix solo_explorer mapping
 
-### No backend changes needed
+## Why this works
+- The tighter gates mean users must demonstrate genuine city-lover traits, not just "average"
+- Lower boosters prevent urban_nomad from outscoring archetypes that actually match
+- Stronger penalties push borderline cases toward more fitting archetypes
+- The solo_explorer mapping fix stops non-quiz users from defaulting into urban_nomad
 
-The `repair-trip-costs` action already exists and rebuilds `activity_costs` from the current itinerary data. We just need to call it after regeneration.
+## Risk
+Existing users who were assigned Urban Nomad won't change automatically -- their DNA is already stored. Only new quiz completions and DNA recalculations will use the updated profile. No data migration needed.
 
-## Why This Works
-
-- **Instant feedback**: Setting `canonicalTripTotal = null` immediately falls through to the JS calculation which correctly sums the new day costs
-- **Long-term consistency**: The async `repair-trip-costs` call rebuilds `activity_costs` so subsequent page loads also show correct totals
-- **No regression risk**: The JS fallback calculation (`jsTotalCost`) already works correctly -- it was just being bypassed by the stale canonical value
