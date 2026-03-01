@@ -2075,9 +2075,35 @@ export function EditorialItinerary({
       ? 'Destination arrival leg updated' 
       : 'Destination departure leg updated');
 
-    // Refresh parent state
+    // Refresh parent state so flightSelection prop updates
     onBookingAdded?.();
-  }, [flightSelection, allFlightLegs, tripId, onBookingAdded]);
+
+    // Run cascade to update Day 1 / last day scheduling based on new arrival/departure
+    try {
+      const { runCascadeAndPersist } = await import('@/services/cascadeTransportToItinerary');
+      const { getTripCities } = await import('@/services/tripCitiesService');
+      const cities = await getTripCities(tripId);
+      const currentDays = days; // use local days state
+      await runCascadeAndPersist(tripId, currentDays, updatedSelection, cities);
+      
+      // Refetch itinerary from DB to pick up cascade changes
+      const { data: refreshed } = await supabase
+        .from('trips')
+        .select('itinerary_data')
+        .eq('id', tripId)
+        .single();
+      if (refreshed?.itinerary_data) {
+        const itData = refreshed.itinerary_data as Record<string, unknown>;
+        const refreshedDays = (itData.days || itData.itinerary || []) as EditorialDay[];
+        if (refreshedDays.length > 0) {
+          setDays(refreshedDays);
+          toast.success('Itinerary updated with new flight times');
+        }
+      }
+    } catch (cascadeErr) {
+      console.warn('Cascade after leg marking failed:', cascadeErr);
+    }
+  }, [flightSelection, allFlightLegs, tripId, onBookingAdded, days, setDays]);
 
   // Helper to find payment for an item
   const getPaymentForItem = useCallback((itemType: 'flight' | 'hotel' | 'activity', itemId: string): TripPayment | undefined => {
