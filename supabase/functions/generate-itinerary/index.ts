@@ -4313,7 +4313,7 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
     }
 
     // Logistics should NOT have booking required
-    const logisticsKeywords = ['check-in', 'checkout', 'check-out', 'check in', 'check out', 'arrival', 'departure', 'transfer', 'free time', 'at leisure'];
+    const logisticsKeywords = ['check-in', 'checkout', 'check-out', 'check in', 'check out', 'arrival', 'departure', 'transfer', 'free time', 'at leisure', 'leisure time', 'downtime', 'rest', 'relax at hotel', 'explore on your own', 'personal time'];
     const transportLikeKeywords = ['rideshare', 'uber', 'lyft', 'taxi', 'metro', 'subway', 'tram', 'bus', 'train', 'ferry', 'flight'];
     const isLogistics = logisticsKeywords.some(kw => (act.title || '').toLowerCase().includes(kw)) ||
                         ['transport', 'accommodation', 'downtime', 'free_time'].includes(act.category?.toLowerCase() || '');
@@ -5347,7 +5347,9 @@ Generate activities for this day following ALL constraints above.`;
         };
 
         // Auto-fix logistics activities
-        const logisticsKeywords = ['check-in', 'checkout', 'check-out', 'arrival', 'departure', 'transfer', 'free time', 'at leisure'];
+        const logisticsKeywords = ['check-in', 'checkout', 'check-out', 'arrival', 'departure', 'transfer',
+          'free time', 'at leisure', 'leisure time', 'downtime', 'rest',
+          'relax at hotel', 'explore on your own', 'personal time'];
         const isLogistics = logisticsKeywords.some(kw => normalizedAct.title.toLowerCase().includes(kw)) ||
                             ['transport', 'accommodation', 'downtime', 'free_time'].includes(normalizedAct.category?.toLowerCase() || '');
         
@@ -5357,6 +5359,16 @@ Generate activities for this day following ALL constraints above.`;
           if (!normalizedAct.title.toLowerCase().includes('transfer')) {
             normalizedAct.cost = { amount: 0, currency: 'USD' };
           }
+        }
+
+        // Auto-set bookingRequired for categories that genuinely need it
+        const bookableCategories = ['museum', 'tour', 'cultural', 'activity', 'show', 'entertainment'];
+        const bookableKeywords = ['museum', 'tour', 'guided', 'cooking class', 'wine tasting',
+          'tickets', 'skip-the-line', 'timed entry', 'reservation'];
+        const isBookable = bookableCategories.includes(normalizedAct.category?.toLowerCase() || '') ||
+          bookableKeywords.some(kw => normalizedAct.title.toLowerCase().includes(kw));
+        if (isBookable && !isLogistics) {
+          normalizedAct.bookingRequired = true;
         }
 
         // Derive intelligence fields if AI didn't set them

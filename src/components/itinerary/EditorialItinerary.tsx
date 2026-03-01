@@ -7928,7 +7928,7 @@ function ActivityRow({
                   </button>
                 );
               })()}
-              {activity.bookingRequired && !compact && (
+              {activity.bookingRequired && !compact && !isDowntime && !isTransport && !isCheckIn && !isAccommodation && (
                 <Badge variant="outline" className="text-xs border-accent/50 text-accent">
                   Booking Required
                 </Badge>
