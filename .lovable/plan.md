@@ -1,26 +1,33 @@
 
-# Fix: Account for Flight Duration When Determining Itinerary Start
 
-## Status: ✅ IMPLEMENTED
+# Remove System Locks from Hotel and Transport Activities
 
-## Changes Made
+## Problem
+When hotel or transport data is added or shared, the system automatically locks those activities so nobody can edit them. Users should be able to change everything -- locking should only happen when a user explicitly chooses to lock something.
 
-### 1. `supabase/functions/generate-itinerary/prompt-library.ts`
-- **`extractFlightData()`** now populates `arrivalDate` and `departureDate` from legs data (user-marked `isDestinationArrival` leg preferred, with heuristic fallback)
-- **`buildDayPrompt()`** detects cross-day flights (arrivalDate > departureDate) and routes Day 1 to a new `buildOutboundTravelDayPrompt()` instead of `buildArrivalDayPrompt()`
-- **`buildOutboundTravelDayPrompt()`** generates constraints for a departure/travel day: pack, travel to airport, board, in-flight — no destination activities
+## Changes
 
-### 2. `supabase/functions/generate-itinerary/index.ts`
-- Added cross-day flight detection logging after context build (Stage 1.4.5)
-- Logs when Day 1 will be a departure travel day
+### 1. Remove locks from cascade-generated transport blocks
+**File:** `src/services/cascadeTransportToItinerary.ts`
 
-### 3. `src/services/cascadeTransportToItinerary.ts`
-- Single-city: when outbound `arrival.date > departure.date`, cascade arrival to Day 2 instead of Day 1
-- Multi-city: same cross-day detection for inbound flight, cascades to Day 2
+Two transport blocks are created with `isLocked: true`:
+- The "Head to station" departure block (line 137)
+- The "Arrive & Check In" block (line 181)
 
-## Edge Cases Handled
-- No flight data → unchanged behavior
-- Same-day arrival → unchanged behavior  
-- Cross-day (red-eye) → Day 1 = travel day, Day 2 = arrival + destination activities
-- Multi-leg with `isDestinationArrival` marker → uses correct leg's dates
-- Manual entry without dates → falls back to current behavior
+Change both to `isLocked: false`.
+
+### 2. Remove locks from sample itinerary data
+**File:** `src/data/sampleItineraries.ts`
+
+Approximately 20+ activities across sample itineraries have `isLocked: true`. Remove or set to `false` on all of them so sample/demo data doesn't come pre-locked either.
+
+### 3. No changes needed
+- `previewConverter.ts` — The `isLocked: true` there is for the premium day-gating paywall (locked vs unlocked days), not activity editing locks. This is a different system and should stay.
+- `EditorialItinerary.tsx` — The synthetic travel cards (`mkActivity`) were already fixed to `isLocked: false` in a previous change.
+
+## Summary
+| File | Change |
+|------|--------|
+| `src/services/cascadeTransportToItinerary.ts` | Set `isLocked: false` on departure and arrival blocks |
+| `src/data/sampleItineraries.ts` | Set all `isLocked: true` to `false` across sample data |
+
