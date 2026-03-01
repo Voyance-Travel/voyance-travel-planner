@@ -5363,6 +5363,41 @@ Generate activities for this day following ALL constraints above.`;
         return normalizedAct;
       });
 
+      // ==========================================================================
+      // HOTEL ADDRESS CORRECTION: Overwrite AI-hallucinated addresses on
+      // accommodation/hotel-return activities with the actual hotel data.
+      // The AI sometimes generates wrong addresses for "Return to Hotel" or
+      // "Rest & Recharge" activities despite being given the correct address.
+      // ==========================================================================
+      {
+        const actualHotelName = dayCity?.hotelName || flightContext.hotelName;
+        const actualHotelAddress = dayCity?.hotelAddress || flightContext.hotelAddress;
+        if (actualHotelName || actualHotelAddress) {
+          const hotelKeywords = ['hotel', 'check-in', 'check in', 'checkout', 'check-out', 'check out', 'freshen up', 'rest & recharge', 'rest and recharge', 'return to', 'settle in', 'wind down', "dad's", "mom's", "parent", "home base", 'airbnb', 'vacation rental'];
+          for (const act of generatedDay.activities) {
+            const cat = (act.category || '').toLowerCase();
+            const title = (act.title || '').toLowerCase();
+            const isAccommodationActivity = cat === 'accommodation' || cat === 'relaxation' ||
+              hotelKeywords.some(kw => title.includes(kw));
+            
+            if (isAccommodationActivity && (cat === 'accommodation' || cat === 'relaxation' || title.includes('hotel') || title.includes('home') || title.includes('airbnb') || title.includes('return') || title.includes('check'))) {
+              if (actualHotelName && act.location) {
+                act.location.name = actualHotelName;
+              }
+              if (actualHotelAddress && act.location) {
+                act.location.address = actualHotelAddress;
+              }
+              if (!act.location && (actualHotelName || actualHotelAddress)) {
+                (act as any).location = {
+                  name: actualHotelName || 'Accommodation',
+                  address: actualHotelAddress || '',
+                };
+              }
+            }
+          }
+        }
+      }
+
       // Force 24-hour HH:MM time format for UI consistency (some model outputs include AM/PM)
       for (const act of generatedDay.activities) {
         const parsedStart = parseTimeToMinutes(act.startTime || '');
