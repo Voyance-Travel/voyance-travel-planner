@@ -8,9 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Edit3, Link2, CheckCircle2 } from 'lucide-react';
+import { Edit3, Link2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
+import { validateCostUpdate } from '@/services/activityCostService';
 
 interface EditableActivity {
   id?: string;
@@ -39,6 +40,7 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
   const [startTime, setStartTime] = useState('12:00');
   const [endTime, setEndTime] = useState('13:00');
   const [cost, setCost] = useState('0');
+  const [costError, setCostError] = useState<string | null>(null);
   const [website, setWebsite] = useState('');
   const [reservationMade, setReservationMade] = useState(false);
   const [locationName, setLocationName] = useState('');
@@ -59,12 +61,37 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
     }
   }, [activity]);
 
+  // Validate cost on change
+  const handleCostChange = (value: string) => {
+    if (value === '' || parseFloat(value) >= 0) {
+      setCost(value);
+      const num = parseFloat(value) || 0;
+      const validation = validateCostUpdate(category, num);
+      setCostError(validation.valid ? null : validation.message || null);
+    }
+  };
+
+  // Re-validate when category changes
+  const handleCategoryChange = (newCategory: string) => {
+    setCategory(newCategory);
+    const num = parseFloat(cost) || 0;
+    if (num > 0) {
+      const validation = validateCostUpdate(newCategory, num);
+      setCostError(validation.valid ? null : validation.message || null);
+    }
+  };
+
   const handleSubmit = () => {
     if (!title.trim()) {
       toast.error('Please enter an activity title');
       return;
     }
     const costNum = parseFloat(cost) || 0;
+    const validation = validateCostUpdate(category, costNum);
+    if (!validation.valid) {
+      toast.error(validation.message || 'Invalid cost');
+      return;
+    }
     onSave({
       title: title.trim(),
       description,
@@ -100,7 +127,7 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
           {/* Category */}
           <div>
             <label className="text-sm font-medium mb-1 block">Category</label>
-            <Select value={category} onValueChange={setCategory}>
+            <Select value={category} onValueChange={handleCategoryChange}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="sightseeing">Sightseeing</SelectItem>
@@ -142,7 +169,13 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
           {/* Cost */}
           <div>
             <label className="text-sm font-medium mb-1 block">Cost ({currency})</label>
-            <Input type="number" min="0" value={cost} onChange={(e) => { const v = e.target.value; if (v === '' || parseFloat(v) >= 0) setCost(v); }} placeholder="0" />
+            <Input type="number" min="0" value={cost} onChange={(e) => handleCostChange(e.target.value)} placeholder="0" className={costError ? 'border-destructive' : ''} />
+            {costError && (
+              <div className="flex items-center gap-1.5 mt-1.5 text-xs text-destructive">
+                <AlertTriangle className="h-3 w-3 shrink-0" />
+                <span>{costError}</span>
+              </div>
+            )}
           </div>
 
           {/* Website / Link */}
@@ -162,7 +195,7 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
               onCheckedChange={(checked) => setReservationMade(checked === true)} 
             />
             <label htmlFor="reservation-made" className="text-sm font-medium flex items-center gap-2 cursor-pointer">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              <CheckCircle2 className="h-4 w-4 text-primary" />
               Reservation / Tickets Confirmed
             </label>
           </div>
