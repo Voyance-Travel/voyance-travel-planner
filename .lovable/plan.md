@@ -1,164 +1,84 @@
 
-# Table-Driven Budget Architecture & Cost Integrity
 
-## Problem Summary
-Three views show three different totals for the same trip because each uses a different JS calculation path. The Budget Coach can corrupt activity prices (e.g., $5 bus becomes $800, $15 ramen becomes $1,000). All costs originate from AI hallucination with no validation.
+# Soft Guardrails: Warn, Don't Block
 
-## Current State (What Exists)
-- `destination_cost_index` table already exists with per-city base costs (breakfast, lunch, dinner, etc.)
-- `trip_budget_ledger` table exists with category, entry_type (committed/planned), amount_cents
-- `trip_budget_summary` and `trip_cost_summary` SQL views already exist
-- `cost-estimation.ts` engine already does destination-aware pricing using `destination_cost_index`
-- Three separate cost calculation paths: `getDayTotalCost()` in EditorialItinerary, `getBudgetSummary()` in tripBudgetService, and `payableItems` in PaymentsTab
+## The Problem
 
-## Implementation Plan
+The current implementation has **hard caps** at two layers:
 
-### Phase 1: Create `cost_reference` and `activity_costs` Tables
+1. **Database trigger** (`validate_activity_cost`): Silently rewrites any cost above the cap to the cap value (e.g., $600 dining becomes $500). The user never even knows their data was changed.
+2. **Frontend validation** (`validateCostUpdate` in `EditActivityModal.tsx`): Returns `valid: false` and blocks the save button entirely.
 
-**New table: `cost_reference`** — granular per-category, per-subcategory pricing by destination (extends the existing `destination_cost_index` which only has broad category bases).
+Both of these prevent legitimate use cases like a $500/person omakase, a $1,000 fine dining experience, or a $400 private car transfer.
 
-```text
-cost_reference
-  id UUID PK
-  destination_city TEXT
-  destination_country TEXT
-  category TEXT (dining, transport, activity, nightlife, shopping)
-  subcategory TEXT (street_food, mid_range, fine_dining, bus, taxi, metro...)
-  item_name TEXT (optional: specific venue)
-  cost_low_usd NUMERIC(10,2)
-  cost_mid_usd NUMERIC(10,2)
-  cost_high_usd NUMERIC(10,2)
-  source TEXT (manual, api, ai_seeded)
-  confidence TEXT (high, medium, low)
-  UNIQUE(destination_city, category, subcategory, item_name)
-```
+## The Fix
 
-**New table: `activity_costs`** — one row per activity per trip, the single source of truth for all cost displays.
+Change both layers from "block/rewrite" to "warn but allow."
+
+### 1. Database Trigger: Remove hard caps, keep anomaly detection
+
+Replace the current trigger that silently rewrites costs with one that only:
+- Prevents negative costs (hard rule -- always valid)
+- Auto-corrects when linked to a reference AND the cost exceeds 3x the reference high-end AND the source is NOT `user_override` (keeps the reference-based guard for AI-generated costs only)
+- Logs a warning note when costs are unusually high, but **does not change the value** for user overrides
+
+The key distinction: **AI-generated costs** still get capped against reference data. **User-entered costs** are always respected.
 
 ```text
-activity_costs
-  id UUID PK
-  trip_id UUID FK trips
-  activity_id UUID
-  day_number INT
-  cost_reference_id UUID FK cost_reference (nullable)
-  cost_per_person_usd NUMERIC(10,2)
-  num_travelers INT DEFAULT 1
-  total_cost_usd GENERATED (cost_per_person_usd * num_travelers)
-  category TEXT
-  source TEXT (reference, user_override, booking_actual, fallback)
-  confidence TEXT
-  is_paid BOOLEAN DEFAULT FALSE
-  paid_amount_usd NUMERIC(10,2)
-  created_at, updated_at TIMESTAMPTZ
+Logic:
+  IF source = 'user_override' THEN
+    -- User explicitly set this. Allow it. Just add a note if it's high.
+    IF cost > category_warning_threshold THEN
+      append note: "[User override: above typical range for category]"
+    END IF
+  ELSE
+    -- AI/system generated. Apply reference-based correction.
+    IF cost_reference_id IS NOT NULL AND cost > ref.cost_high_usd * 3 THEN
+      auto-correct to ref.cost_high_usd
+    END IF
+  END IF
+
+  -- No category caps applied. No RAISE EXCEPTION. No silent rewrites for users.
 ```
 
-**New table: `exchange_rates`** — stored rates for consistent currency conversion.
+### 2. Frontend Validation: Warn, don't block
+
+Change `validateCostUpdate()` to return a **warning** level instead of `valid: false`:
 
 ```text
-exchange_rates
-  currency_code TEXT PK
-  rate_to_usd NUMERIC(12,6)
-  last_updated TIMESTAMPTZ
+Return type changes from:
+  { valid: boolean; message?: string }
+To:
+  { valid: true; warning?: string }  -- always valid, optionally warns
+
+Example:
+  $600 dining -> { valid: true, warning: "This is above the typical range for dining ($500/pp). Are you sure?" }
+  $40 dining  -> { valid: true }
+  -$5 dining  -> { valid: false, message: "Cost cannot be negative" }  -- only case that blocks
 ```
 
-**Validation trigger on `activity_costs`:** Enforces category caps (dining <= $500/pp, transport <= $300/pp, activity <= $1000/pp, global <= $2000/pp) and auto-corrects costs exceeding 3x the reference high-end.
+### 3. EditActivityModal: Show warning, allow save
 
-**RLS policies:** All three new tables get RLS. `cost_reference` and `exchange_rates` are read-only for authenticated users. `activity_costs` allows CRUD for trip owners/collaborators.
+- Replace the hard block (disabled save button + error state) with a yellow warning banner
+- The save button stays enabled
+- Warning text: "This is above the typical range for [category]. You can still save it."
+- Only truly invalid values (negative costs) disable save
 
-### Phase 2: Seed Cost Reference Data
+### 4. `upsertActivityCost`: Remove the blocking validation
 
-- Seed `cost_reference` with baseline pricing for destinations already in use (Hong Kong, Tokyo, Austin, Barcelona, Shanghai, Beijing, etc.)
-- Use AI to generate initial seed data once, stored with `source: 'ai_seeded'`, `confidence: 'medium'`
-- Create a `seed-cost-reference` edge function that can be called to populate data for new destinations on-demand
+- The service function currently calls `validateCostUpdate` and returns `null` if invalid
+- Change it to proceed with the upsert regardless (the DB trigger handles anomaly logging)
+- When source is `user_override`, the trigger respects the value
 
-### Phase 3: SQL Views for Consistent Totals
+## Files to Change
 
-Create four new views that all read from `activity_costs`:
+1. **New migration SQL** -- Replace the `validate_activity_cost` trigger function with the soft version that only hard-corrects AI-sourced costs
+2. **`src/services/activityCostService.ts`** -- Change `validateCostUpdate` return type to always return `valid: true` with an optional `warning` field (except for negatives). Remove the blocking check in `upsertActivityCost`
+3. **`src/components/itinerary/EditActivityModal.tsx`** -- Show warning text instead of blocking save. Keep save button enabled when warning is present
 
-- **`v_trip_total`** — total per-person and all-travelers cost per trip
-- **`v_day_totals`** — per-day breakdown
-- **`v_budget_by_category`** — category-level aggregation
-- **`v_payments_summary`** — paid vs unpaid totals
+## What This Preserves
 
-These replace the existing divergent JS calculations.
+- AI-generated costs (from `generate-itinerary` or `budget-coach`) are still corrected against `cost_reference` data -- no $1,000 ramen from AI hallucination
+- Anomaly detection still fires and logs notes for auditing
+- Users can enter any positive cost they want -- their $1,000 dinner, their $400 private transfer, their $6,000 Tokyo food budget
 
-### Phase 4: Cost Assignment During Generation
-
-**Modify `generate-itinerary` edge function:**
-1. Remove cost fields from the AI prompt schema — AI generates activity metadata only (name, description, category, subcategory, time, location)
-2. After AI returns activities, call a new `assignCosts()` function that:
-   - Looks up `cost_reference` for (destination_city, category, subcategory)
-   - Selects cost_low/mid/high based on budget tier (saver/moderate/premium)
-   - Falls back to `destination_cost_index` if no specific reference exists
-   - Inserts rows into `activity_costs`
-3. The activity JSON still gets a `cost` field for display, but it's sourced from the table lookup, not AI
-
-### Phase 5: Update Frontend to Use Single Source of Truth
-
-**EditorialItinerary.tsx:**
-- Replace `getDayTotalCost()` JS calculation with a query to `v_day_totals` / `v_trip_total`
-- Keep `getActivityCostInfo()` for individual card display but source from `activity_costs` table
-- When a user edits a cost, write to `activity_costs` with `source: 'user_override'`
-
-**BudgetTab.tsx:**
-- Continue using `useTripBudget` hook but update `getBudgetSummary()` to read from `v_budget_by_category` and `v_trip_total`
-- Remove independent ledger-based calculation
-
-**PaymentsTab.tsx:**
-- Replace `payableItems` cost derivation (currently re-computing from itinerary JSON + `estimateCostSync`) with a query to `activity_costs` joined with payment status
-- `estimatedTotal` comes from `v_payments_summary`
-
-### Phase 6: Budget Coach Guardrails
-
-**Edge function changes (`budget-coach/index.ts`):**
-- AI only returns qualitative swap suggestions (activity_id, replacement name, reasoning)
-- AI does NOT return cost numbers at all
-- Backend looks up `cost_reference` for the suggested replacement to get the new cost
-- Savings = current cost (from `activity_costs`) - reference cost for replacement
-- Strict guard: if new_cost >= current_cost, discard suggestion
-
-**Apply swap flow (`EditorialItinerary.tsx`):**
-- When user approves a swap, update `activity_costs` row with the new reference-backed cost
-- Never use AI-provided cost numbers
-- Frontend validates: new cost must be strictly less than current cost before applying
-
-### Phase 7: Backfill Existing Trips
-
-- Create a one-time migration/edge function to:
-  - Read existing itinerary JSON for each trip
-  - For each activity, look up `cost_reference` or use `destination_cost_index`
-  - If existing cost is within reference range, keep it; if outside (e.g., $800 bus), replace with reference mid
-  - Insert validated costs into `activity_costs`
-  - Flag auto-corrected entries
-
-### Phase 8: Frontend Validation Guards
-
-- Add `validateCostUpdate()` on the frontend before any cost write
-- Category caps: dining $500, transport $300, activity $1000, nightlife $200, global $2000
-- Show user-friendly error: "This price seems too high for [category]. Maximum is $X/person."
-
-## Files to Create
-- Migration SQL for `cost_reference`, `activity_costs`, `exchange_rates` tables + trigger + views + RLS
-- `supabase/functions/seed-cost-reference/index.ts` — seeds reference data per destination
-- `src/services/activityCostService.ts` — CRUD for `activity_costs`, query views
-
-## Files to Modify
-- `supabase/functions/generate-itinerary/index.ts` — remove cost from AI schema, add `assignCosts()` post-generation
-- `supabase/functions/budget-coach/index.ts` — AI returns qualitative swaps only, backend computes costs from reference
-- `src/components/itinerary/EditorialItinerary.tsx` — source totals from `v_trip_total`/`v_day_totals`, add cost validation
-- `src/components/itinerary/PaymentsTab.tsx` — source from `activity_costs` + `v_payments_summary`
-- `src/components/planner/budget/BudgetTab.tsx` — align with canonical views
-- `src/components/planner/budget/BudgetCoach.tsx` — update swap application to use reference costs
-- `src/services/tripBudgetService.ts` — `getBudgetSummary()` reads from SQL views
-- `src/hooks/useTripBudget.ts` — update queries to use new views
-- `src/services/budgetLedgerSync.ts` — sync to `activity_costs` instead of/in addition to ledger
-
-## Priority Order
-1. Tables + trigger + views (foundation)
-2. Seed reference data for existing destinations
-3. Frontend reads from views (fixes the 3-number divergence immediately)
-4. Generation pipeline uses reference lookups (prevents future hallucination)
-5. Budget Coach guardrails (prevents corruption)
-6. Backfill existing trips
-7. Exchange rates + currency handling
