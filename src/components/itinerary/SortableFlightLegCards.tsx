@@ -80,7 +80,7 @@ function SortableFlightCard({
   getAirportDisplay: (code: string) => string;
   renderBoardingPass?: (storagePath: string) => React.ReactNode;
 }) {
-  const sortableId = `flight-leg-${idx}`;
+  const sortableId = `flight-leg-${leg.flightNumber || ''}-${leg.departure?.airport || ''}-${leg.arrival?.airport || ''}-${idx}`;
   const {
     attributes,
     listeners,
@@ -225,7 +225,7 @@ function SortableFlightCard({
             )}
 
             {/* Mark buttons */}
-            {totalLegs > 1 && isEditable && (
+            {totalLegs > 1 && (
               <div className="mt-3 pt-3 border-t border-border/50 flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
@@ -275,7 +275,7 @@ export default function SortableFlightLegCards({
   const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 8 } });
   const keyboardSensor = useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates });
   const sensors = useSensors(pointerSensor, keyboardSensor);
-  const sortableIds = useMemo(() => legs.map((_, i) => `flight-leg-${i}`), [legs.length]);
+  const sortableIds = useMemo(() => legs.map((leg, i) => `flight-leg-${leg.flightNumber || ''}-${leg.departure?.airport || ''}-${leg.arrival?.airport || ''}-${i}`), [legs]);
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
@@ -291,9 +291,9 @@ export default function SortableFlightLegCards({
     // Non-editable: render without DnD
     return (
       <div className="space-y-3">
-        {legs.map((leg, idx) => (
+         {legs.map((leg, idx) => (
           <SortableFlightCard
-            key={idx}
+            key={`${leg.flightNumber || ''}-${leg.departure?.airport || ''}-${leg.arrival?.airport || ''}-${idx}`}
             leg={leg}
             idx={idx}
             totalLegs={legs.length}
@@ -315,7 +315,7 @@ export default function SortableFlightLegCards({
         <div className="space-y-3">
           {legs.map((leg, idx) => (
             <SortableFlightCard
-              key={idx}
+              key={`${leg.flightNumber || ''}-${leg.departure?.airport || ''}-${leg.arrival?.airport || ''}-${idx}`}
               leg={leg}
               idx={idx}
               totalLegs={legs.length}
