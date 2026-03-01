@@ -220,6 +220,8 @@ import {
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+  'Access-Control-Max-Age': '86400',
 };
 
 // =============================================================================
@@ -6395,28 +6397,36 @@ async function enrichActivity(
   // Determine if this activity should get Viator matching
   const shouldSearchViator = isBookableActivity(activity) && !(enriched as any).viatorProductCode;
 
-  // CRITICAL FIX: Add a per-activity timeout to prevent one slow enrichment from killing the whole request.
-  // Supabase edge functions have a hard ~150s wall-clock limit; we cap each activity at 10s.
+  // CRITICAL FIX: Add a real per-activity timeout to prevent one slow enrichment from killing the whole request.
+  // Edge runtime has a hard wall-clock limit; each activity must resolve quickly.
   const ENRICHMENT_TIMEOUT_MS = 10_000;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ENRICHMENT_TIMEOUT_MS);
+
+  let timeoutId: number | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Enrichment timed out after ${ENRICHMENT_TIMEOUT_MS}ms`));
+    }, ENRICHMENT_TIMEOUT_MS);
+  });
 
   try {
-    // Run venue verification, photo fetch, and Viator search in parallel — with abort signal
-    const [venueData, photoResult, viatorMatch] = await Promise.all([
-      verifyVenueWithDualAI(activity, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY)
-        .catch(e => { console.log(`[Stage 4] Venue verify timeout/error for "${activity.title}":`, e.message); return null; }),
-      !enriched.photos?.length 
-        ? fetchActivityImage(activity.title, activity.category || 'sightseeing', destination, supabaseUrl, supabaseKey)
-            .catch(e => { console.log(`[Stage 4] Image fetch timeout/error for "${activity.title}":`, e.message); return null; })
-        : Promise.resolve(null),
-      shouldSearchViator
-        ? searchViatorForActivity(activity.title, destination, activity.category || 'sightseeing', supabaseUrl, supabaseKey)
-            .catch(e => { console.log(`[Stage 4] Viator search timeout/error for "${activity.title}":`, e.message); return null; })
-        : Promise.resolve(null),
+    // Run venue verification, photo fetch, and Viator search in parallel
+    const [venueData, photoResult, viatorMatch] = await Promise.race([
+      Promise.all([
+        verifyVenueWithDualAI(activity, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY)
+          .catch(e => { console.log(`[Stage 4] Venue verify timeout/error for "${activity.title}":`, e.message); return null; }),
+        !enriched.photos?.length 
+          ? fetchActivityImage(activity.title, activity.category || 'sightseeing', destination, supabaseUrl, supabaseKey)
+              .catch(e => { console.log(`[Stage 4] Image fetch timeout/error for "${activity.title}":`, e.message); return null; })
+          : Promise.resolve(null),
+        shouldSearchViator
+          ? searchViatorForActivity(activity.title, destination, activity.category || 'sightseeing', supabaseUrl, supabaseKey)
+              .catch(e => { console.log(`[Stage 4] Viator search timeout/error for "${activity.title}":`, e.message); return null; })
+          : Promise.resolve(null),
+      ]),
+      timeoutPromise,
     ]);
 
-    clearTimeout(timer);
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
 
     // Apply Viator booking data if found
     if (viatorMatch) {
@@ -6470,7 +6480,7 @@ async function enrichActivity(
       }];
     }
   } catch (e) {
-    clearTimeout(timer);
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
     // Timeout or unexpected error — return activity with minimal enrichment
     console.warn(`[Stage 4] Enrichment aborted for "${activity.title}" (${e instanceof Error ? e.message : e})`);
   }
@@ -6555,23 +6565,38 @@ async function enrichItinerary(
     retriedSuccessfully: 0
   };
 
-  for (const day of days) {
+  // Hard cap total Stage 4 time so we always return a response before edge runtime termination.
+  const STAGE4_TIME_BUDGET_MS = 45_000;
+  const stage4StartedAt = Date.now();
+
+  for (let dayIndex = 0; dayIndex < days.length; dayIndex++) {
+    const day = days[dayIndex];
     const enrichedActivities: StrictActivity[] = [];
 
     // Process activities in batches of 3 with delays for rate limits
-    // (3 activities × 2 API calls each = 6 concurrent requests per batch)
+    // (3 activities × 2 API calls each = ~6 concurrent requests per batch)
     const BATCH_SIZE = 3;
+    let budgetExceeded = false;
+
     for (let i = 0; i < day.activities.length; i += BATCH_SIZE) {
+      const elapsedMs = Date.now() - stage4StartedAt;
+      if (elapsedMs >= STAGE4_TIME_BUDGET_MS) {
+        console.warn(`[Stage 4] Time budget reached at day ${day.dayNumber}. Returning remaining activities without enrichment.`);
+        enrichedActivities.push(...day.activities.slice(i));
+        budgetExceeded = true;
+        break;
+      }
+
       const batch = day.activities.slice(i, i + BATCH_SIZE);
-      
+
       const enrichedBatch = await Promise.all(
         batch.map(act => enrichActivityWithRetry(act, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY))
       );
-      
+
       for (const result of enrichedBatch) {
         enrichedActivities.push(result.activity);
         stats.totalActivities++;
-        
+
         if (result.activity.photos?.length) {
           stats.photosAdded++;
         }
@@ -6607,6 +6632,16 @@ async function enrichItinerary(
         pacingLevel: activityCount <= 3 ? 'relaxed' : activityCount <= 5 ? 'moderate' : 'packed'
       }
     });
+
+    // If we hit the budget mid-trip, append remaining days as-is and return safely.
+    if (budgetExceeded) {
+      const remainingDays = days.slice(dayIndex + 1);
+      if (remainingDays.length > 0) {
+        console.warn(`[Stage 4] Appending ${remainingDays.length} remaining day(s) without enrichment due to time budget.`);
+        enrichedDays.push(...remainingDays);
+      }
+      break;
+    }
   }
 
   console.log(`[Stage 4] Enrichment complete - ${stats.photosAdded} photos, ${stats.venuesVerified} venues verified, ${stats.enrichmentFailures} failures${stats.retriedSuccessfully > 0 ? `, ${stats.retriedSuccessfully} recovered via retry` : ''}`);
