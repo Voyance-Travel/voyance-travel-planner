@@ -10,11 +10,12 @@
 import { useState } from 'react';
 import { BoardingPassUpload } from './BoardingPassUpload';
 import { useNavigate } from 'react-router-dom';
-import { Plane, Hotel, Plus, ArrowRight, Loader2, CalendarIcon, ChevronDown, ChevronUp, Upload, Sparkles } from 'lucide-react';
+import { Plane, Hotel, Plus, ArrowRight, Loader2, CalendarIcon, ChevronDown, ChevronUp, Upload, Sparkles, MapPin } from 'lucide-react';
 import { format } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -54,6 +55,10 @@ export interface ManualFlightEntry {
   frequentFlyerNumber?: string;
   classification?: 'OUTBOUND' | 'RETURN' | 'CONNECTION' | 'INTER_DESTINATION';
   connectionGroup?: number;
+  /** User-marked: this leg arrives at the final destination */
+  isDestinationArrival?: boolean;
+  /** User-marked: this leg departs from the final destination (return) */
+  isDestinationDeparture?: boolean;
 }
 
 export interface ManualHotelEntry {
@@ -208,10 +213,11 @@ export function AddFlightInline({
   };
 
   const handleSave = async () => {
-    // Require at least leg 1 arrival time
-    if (!legs[0]?.arrivalTime) {
+    // Find which leg has the destination arrival (user-marked or first leg)
+    const destinationLeg = legs.find(l => l.isDestinationArrival) || legs[0];
+    if (!destinationLeg?.arrivalTime) {
       setArrivalTimeError(true);
-      toast.error('Please enter your arrival time so we can plan Day 1');
+      toast.error('Please enter your arrival time at the destination so we can plan Day 1');
       return;
     }
     setArrivalTimeError(false);
@@ -240,19 +246,24 @@ export function AddFlightInline({
         baggageInfo: leg.baggageInfo || undefined,
         boardingPassUrl: leg.boardingPassUrl || undefined,
         frequentFlyerNumber: leg.frequentFlyerNumber || undefined,
+        isDestinationArrival: leg.isDestinationArrival || undefined,
+        isDestinationDeparture: leg.isDestinationDeparture || undefined,
       }));
 
+      // Find the destination arrival leg for backward-compat "departure" (outbound) field
+      const destArrivalLeg = legObjs.find(l => l.isDestinationArrival) || legObjs[0];
+      
       const flightSelection: Record<string, unknown> = {
         legs: legObjs,
         isManualEntry: true,
-        // Backward compat
+        // Backward compat — "departure" means the outbound/destination-arrival leg
         departure: {
-          airline: legObjs[0].airline,
-          flightNumber: legObjs[0].flightNumber,
-          departure: legObjs[0].departure,
-          arrival: legObjs[0].arrival,
-          price: legObjs[0].price,
-          cabin: legObjs[0].cabin,
+          airline: destArrivalLeg.airline,
+          flightNumber: destArrivalLeg.flightNumber,
+          departure: destArrivalLeg.departure,
+          arrival: destArrivalLeg.arrival,
+          price: destArrivalLeg.price,
+          cabin: destArrivalLeg.cabin,
         },
       };
 
@@ -391,8 +402,17 @@ export function AddFlightInline({
           </div>
 
           <div className="space-y-3 py-2">
+            {legs.length > 1 && (
+              <div className="bg-muted/30 rounded-lg px-3 py-2 text-xs text-muted-foreground flex items-center gap-2">
+                <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
+                <span>Mark which flight lands at your <span className="font-medium text-foreground">final destination</span> — we'll use that to plan Day 1.</span>
+              </div>
+            )}
             {legs.map((leg, idx) => (
-              <div key={idx} className="border rounded-lg overflow-hidden">
+              <div key={idx} className={cn(
+                "border rounded-lg overflow-hidden",
+                leg.isDestinationArrival && "border-primary/50 ring-1 ring-primary/20"
+              )}>
                 {/* Leg header */}
                 <button
                   type="button"
@@ -400,7 +420,10 @@ export function AddFlightInline({
                   className="w-full flex items-center justify-between px-3 py-2.5 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
                 >
                   <div className="flex items-center gap-2">
-                    <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">
+                    <div className={cn(
+                      "h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold",
+                      leg.isDestinationArrival ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary"
+                    )}>
                       {idx + 1}
                     </div>
                     <span className="text-sm font-medium">{legLabel(idx)}</span>
@@ -408,6 +431,11 @@ export function AddFlightInline({
                       <span className="text-xs text-muted-foreground">
                         {leg.departureAirport} → {leg.arrivalAirport}
                       </span>
+                    )}
+                    {leg.isDestinationArrival && (
+                      <Badge variant="secondary" className="text-[10px] h-4 px-1.5 bg-primary/10 text-primary border-0">
+                        Destination
+                      </Badge>
                     )}
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -461,24 +489,47 @@ export function AddFlightInline({
                       </div>
                       <div>
                         <Label className="text-xs text-muted-foreground">
-                          Arrival Time {idx === 0 && '*'}
+                          Arrival Time {(leg.isDestinationArrival || (legs.length === 1)) && '*'}
                         </Label>
                         <Input
                           type="time"
                           value={leg.arrivalTime}
                           onChange={(e) => {
                             updateLeg(idx, { arrivalTime: e.target.value });
-                            if (idx === 0 && e.target.value) setArrivalTimeError(false);
+                            if ((leg.isDestinationArrival || idx === 0) && e.target.value) setArrivalTimeError(false);
                           }}
-                          className={cn("text-sm", idx === 0 && arrivalTimeError && "border-destructive ring-1 ring-destructive")}
+                          className={cn("text-sm", (leg.isDestinationArrival || (legs.length === 1 && idx === 0)) && arrivalTimeError && "border-destructive ring-1 ring-destructive")}
                         />
-                        {idx === 0 && (
+                        {(leg.isDestinationArrival || legs.length === 1) && (
                           <p className="text-[10px] text-muted-foreground mt-0.5">
                             Plans Day 1 activities
                           </p>
                         )}
                       </div>
                     </div>
+
+                    {/* Destination arrival marker - only show for multi-leg trips */}
+                    {legs.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Toggle: set this leg as destination arrival, clear others
+                          setLegs(prev => prev.map((l, i) => ({
+                            ...l,
+                            isDestinationArrival: i === idx ? !l.isDestinationArrival : false,
+                          })));
+                        }}
+                        className={cn(
+                          "w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs transition-colors",
+                          leg.isDestinationArrival
+                            ? "bg-primary/10 text-primary font-medium"
+                            : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
+                        )}
+                      >
+                        <MapPin className={cn("h-3.5 w-3.5", leg.isDestinationArrival && "text-primary")} />
+                        {leg.isDestinationArrival ? 'This is my destination arrival' : 'Mark as destination arrival'}
+                      </button>
+                    )}
 
                     {/* More details */}
                     <div className="grid grid-cols-2 gap-3">

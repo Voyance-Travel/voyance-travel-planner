@@ -400,8 +400,14 @@ export async function cascadeAllTransport(
   // ── Single-city: outbound + return ──
   if (!tripCities?.length && flightSelection) {
     const legs = flightSelection.legs || [];
-    const outbound = legs[0] || flightSelection.departure;
-    const returnLeg = legs.length >= 2 ? legs[legs.length - 1] : flightSelection.return;
+    
+    // Find the destination arrival leg (user-marked or heuristic)
+    const markedArrival = legs.find((l: any) => l.isDestinationArrival);
+    const outbound = markedArrival || legs[0] || flightSelection.departure;
+    
+    // Find the destination departure leg (user-marked or last leg)
+    const markedDeparture = legs.find((l: any) => l.isDestinationDeparture);
+    const returnLeg = markedDeparture || (legs.length >= 2 ? legs[legs.length - 1] : flightSelection.return);
 
     // Outbound arrival
     if (outbound?.arrival?.time) {
@@ -437,8 +443,10 @@ export async function cascadeAllTransport(
         allChanges.push(...result.changes);
       }
     } else if (flightSelection) {
-      // Use flight_selection for outbound
-      const outbound = flightSelection.legs?.[0] || flightSelection.departure;
+      // Use flight_selection for outbound — prefer user-marked destination arrival leg
+      const legs = flightSelection.legs || [];
+      const markedArrival = legs.find((l: any) => l.isDestinationArrival);
+      const outbound = markedArrival || legs[0] || flightSelection.departure;
       if (outbound?.arrival?.time) {
         const result = cascadeArrivalDay(updatedDays, outbound.arrival.time, 'flight');
         if (result.changed) {
