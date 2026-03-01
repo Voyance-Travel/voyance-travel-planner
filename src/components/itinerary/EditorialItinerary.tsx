@@ -2189,11 +2189,25 @@ export function EditorialItinerary({
     }
   }, [tripId]);
 
+  // ─── Canonical trip total from activity_costs table (single source of truth) ───
+  const [canonicalTripTotal, setCanonicalTripTotal] = useState<number | null>(null);
+  useEffect(() => {
+    import('@/services/activityCostService').then(({ getTripTotal }) => {
+      getTripTotal(tripId).then(data => {
+        if (data && data.total_all_travelers_usd > 0) {
+          setCanonicalTripTotal(data.total_all_travelers_usd);
+        }
+      });
+    });
+  }, [tripId, days]); // re-fetch when days change
+
   // Calculate totals with smart estimation using destination-aware pricing
   const totalActivityCost = days.reduce((sum, day) => sum + getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry), 0);
   const flightCost = allFlightLegs.reduce((sum, leg) => sum + (leg.price || 0), 0);
   const hotelCost = (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || days.length);
-  const totalCost = totalActivityCost + flightCost + hotelCost;
+  // Prefer canonical total from activity_costs table when available
+  const jsTotalCost = totalActivityCost + flightCost + hotelCost;
+  const totalCost = canonicalTripTotal !== null ? (canonicalTripTotal + flightCost + hotelCost) : jsTotalCost;
   
   // Derive local currency robustly (destinationInfo is often undefined on TripDetail)
   // IMPORTANT: If the trip is in the Eurozone, prefer EUR even if some upstream metadata is wrong.
@@ -4216,7 +4230,7 @@ export function EditorialItinerary({
               setHasChanges(true);
               toast.success('Activity removed from itinerary');
             }}
-            onApplyBudgetSwap={(suggestion) => {
+            onApplyBudgetSwap={async (suggestion) => {
               // suggestion.new_cost is in CENTS from the edge function.
               // Activity costs are stored in WHOLE currency units.
               const newCostWhole = Math.round(suggestion.new_cost / 100);
@@ -4263,6 +4277,21 @@ export function EditorialItinerary({
 
               if (applied) {
                 setHasChanges(true);
+                // Write the new cost to activity_costs table (single source of truth)
+                try {
+                  const { upsertActivityCost } = await import('@/services/activityCostService');
+                  await upsertActivityCost({
+                    trip_id: tripId,
+                    activity_id: suggestion.activity_id,
+                    day_number: suggestion.day_number,
+                    cost_per_person_usd: newCostWhole,
+                    num_travelers: travelers,
+                    category: 'activity', // Budget coach swaps are always activities
+                    source: 'reference',
+                  });
+                } catch (e) {
+                  console.warn('Failed to write swap cost to activity_costs:', e);
+                }
               } else {
                 toast.error('Swap skipped because suggested cost was not lower.');
               }
