@@ -168,7 +168,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Villa Floating Pavilion', address: 'Villa Amrita Private Grounds' },
             rating: 5.0,
             tags: ['Private Yoga', 'Sunset Views', 'Master Teacher'],
-            isLocked: true,
+            isLocked: false,
             photos: ['https://images.unsplash.com/photo-1545389336-cf090694435e?w=400'],
           },
           {
@@ -222,7 +222,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Pura Tanah Lot', address: 'Beraban Village, Tabanan' },
             rating: 4.9,
             tags: ['Sacred Temple', 'Ocean Views', 'Hindu Ceremony'],
-            isLocked: true,
+            isLocked: false,
             photos: ['https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400'],
           },
           {
@@ -317,7 +317,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Taman Harum Cooking School', address: 'Jl. Raya Tegallalang' },
             rating: 4.8,
             tags: ['Cooking Class', 'Organic Garden', 'Traditional Recipes'],
-            isLocked: true,
+            isLocked: false,
           },
           {
             id: 'bali-3-3',
@@ -381,7 +381,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Mount Batur', address: 'Kintamani, Bangli' },
             rating: 4.8,
             tags: ['Volcano Trek', 'Sunrise Views', 'Volcanic Cooking'],
-            isLocked: true,
+            isLocked: false,
           },
           {
             id: 'bali-4-2',
@@ -659,7 +659,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Senso-ji Temple', address: '2-3-1 Asakusa, Taito City' },
             rating: 4.8,
             tags: ['Historic Temple', 'Shopping', 'Traditional'],
-            isLocked: true,
+            isLocked: false,
           },
           {
             id: 'tokyo-2-3',
@@ -685,7 +685,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'teamLab Borderless', address: 'Palette Town, Odaiba' },
             rating: 4.9,
             tags: ['Digital Art', 'Interactive', 'Instagram-worthy'],
-            isLocked: true,
+            isLocked: false,
           },
           {
             id: 'tokyo-2-5',
@@ -809,7 +809,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Hallgrímskirkja', address: 'Hallgrímstorg 1, Reykjavik' },
             rating: 4.8,
             tags: ['Walking Tour', 'History', 'Architecture'],
-            isLocked: true,
+            isLocked: false,
           },
           {
             id: 'iceland-1-4',
@@ -860,7 +860,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Golden Circle Route', address: 'Thingvellir, Geysir, Gullfoss' },
             rating: 4.9,
             tags: ['UNESCO Site', 'Geyser', 'Waterfall'],
-            isLocked: true,
+            isLocked: false,
           },
           {
             id: 'iceland-2-2',
@@ -873,7 +873,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Remote Dark Sky Locations', address: 'Outside Reykjavik' },
             rating: 4.9,
             tags: ['Northern Lights', 'Super Jeep', 'Aurora Hunt'],
-            isLocked: true,
+            isLocked: false,
           },
         ],
         totalCost: 270,
@@ -2166,7 +2166,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Ratio Beerworks', address: '2920 Larimer St, RiNo' },
             rating: 4.7,
             tags: ['Craft Beer', 'Brewery Crawl', 'Local Scene'],
-            isLocked: true,
+            isLocked: false,
           },
           {
             id: 'denver-1-6',
@@ -2204,7 +2204,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Red Rocks Park & Amphitheatre', address: '18300 W Alameda Pkwy, Morrison' },
             rating: 4.9,
             tags: ['Sunrise', 'Hiking', 'Iconic Landmark'],
-            isLocked: true,
+            isLocked: false,
           },
           {
             id: 'denver-2-2',
@@ -2429,7 +2429,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Café Du Monde', address: '800 Decatur St, French Quarter' },
             rating: 4.6,
             tags: ['Iconic', 'Beignets', 'Since 1862'],
-            isLocked: true,
+            isLocked: false,
           },
           {
             id: 'nola-1-4',
@@ -2519,7 +2519,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Parkway Bakery & Tavern', address: '538 Hagan Ave, Mid-City' },
             rating: 4.8,
             tags: ['Po-Boys', 'Local Institution', 'Since 1911'],
-            isLocked: true,
+            isLocked: false,
           },
           {
             id: 'nola-2-4',
@@ -2558,7 +2558,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Frenchmen Street', address: 'Frenchmen St, Marigny' },
             rating: 4.9,
             tags: ['Live Jazz', 'Bar Hopping', 'Skip Bourbon St'],
-            isLocked: true,
+            isLocked: false,
           },
         ],
         totalCost: 153,
@@ -2596,7 +2596,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Willie Mae\'s Scotch House', address: '2401 St. Ann St, Tremé' },
             rating: 4.9,
             tags: ['Best Fried Chicken', 'James Beard Award', 'Institution'],
-            isLocked: true,
+            isLocked: false,
           },
           {
             id: 'nola-3-3',
@@ -2609,7 +2609,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Preservation Hall', address: '726 St. Peter St, French Quarter' },
             rating: 4.9,
             tags: ['Traditional Jazz', 'Intimate Venue', 'Historic'],
-            isLocked: true,
+            isLocked: false,
           },
           {
             id: 'nola-3-4',
@@ -2622,7 +2622,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Private Bywater Courtyard', address: 'Bywater, New Orleans' },
             rating: 5.0,
             tags: ['Private Dining', 'Candlelit', 'Chef\'s Table'],
-            isLocked: true,
+            isLocked: false,
           },
         ],
         totalCost: 195,
@@ -2769,7 +2769,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Supplizio', address: 'Via dei Banchi Vecchi 143, Testaccio' },
             rating: 4.7,
             tags: ['Street Food', 'Supplì', 'Roman Classic'],
-            isLocked: true,
+            isLocked: false,
           },
           {
             id: 'rome-1-4',
@@ -2795,7 +2795,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Hotel Forum Rooftop', address: 'Via Tor de\' Conti 25' },
             rating: 4.7,
             tags: ['Sunset Views', 'Roman Forum', 'Local Secret'],
-            isLocked: true,
+            isLocked: false,
           },
           {
             id: 'rome-1-6',
@@ -2808,7 +2808,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Trattoria Da Felice', address: 'Via Mastro Giorgio 29, Testaccio' },
             rating: 4.7,
             tags: ['Roman Classics', 'No Tourists', 'Legendary'],
-            isLocked: true,
+            isLocked: false,
           },
         ],
         totalCost: 112,
@@ -2833,7 +2833,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Colosseum', address: 'Piazza del Colosseo' },
             rating: 4.9,
             tags: ['Early Access', 'Arena Floor', 'Skip the Line'],
-            isLocked: true,
+            isLocked: false,
           },
           {
             id: 'rome-2-2',
@@ -2872,7 +2872,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Roscioli', address: 'Via dei Giubbonari 21' },
             rating: 4.8,
             tags: ['Legendary', 'Carbonara', 'Wine Selection'],
-            isLocked: true,
+            isLocked: false,
           },
           {
             id: 'rome-2-5',
@@ -2923,7 +2923,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Vatican Museums', address: 'Viale Vaticano' },
             rating: 4.8,
             tags: ['First Entry', 'Sistine Chapel', 'Raphael Rooms'],
-            isLocked: true,
+            isLocked: false,
           },
           {
             id: 'rome-3-2',
@@ -2936,7 +2936,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
             location: { name: 'Pizzarium Bonci', address: 'Via della Meloria 43' },
             rating: 4.9,
             tags: ['Best Pizza', 'Bonci', 'Pizza al Taglio'],
-            isLocked: true,
+            isLocked: false,
           },
           {
             id: 'rome-3-3',
