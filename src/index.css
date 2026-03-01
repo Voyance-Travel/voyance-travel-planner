@@ -315,6 +315,61 @@
   }
 }
 
+/* ================================================================
+   ACCESSIBILITY MODES
+   ================================================================ */
+
+/* ── Larger Text ──────────────────────────────────────────────── */
+html.a11y-larger-text {
+  font-size: 120%;
+}
+
+/* ── High Contrast ────────────────────────────────────────────── */
+html.a11y-high-contrast {
+  --foreground: 0 0% 0%;
+  --muted-foreground: 0 0% 20%;
+  --border: 0 0% 40%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 0%;
+}
+html.a11y-high-contrast.dark {
+  --foreground: 0 0% 100%;
+  --muted-foreground: 0 0% 85%;
+  --background: 0 0% 0%;
+  --card: 0 0% 5%;
+  --card-foreground: 0 0% 100%;
+  --border: 0 0% 60%;
+}
+html.a11y-high-contrast *:focus-visible {
+  outline: 3px solid hsl(var(--ring)) !important;
+  outline-offset: 3px;
+}
+
+/* ── Reduced Motion ───────────────────────────────────────────── */
+html.a11y-reduced-motion *,
+html.a11y-reduced-motion *::before,
+html.a11y-reduced-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* ── Differentiate Without Color Alone ─────────────────────────── */
+html.a11y-no-color-only a:not([class*="btn"]):not([class*="Button"]) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+html.a11y-no-color-only .badge,
+html.a11y-no-color-only [class*="Badge"] {
+  border-width: 2px;
+  font-weight: 600;
+}
+html.a11y-no-color-only [data-state="checked"] {
+  outline: 2px solid hsl(var(--foreground));
+  outline-offset: 1px;
+}
+
 /* 3D perspective utilities for page flip effects */
 .perspective-1000 {
   perspective: 1000px;

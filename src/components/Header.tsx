@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X, Compass, User, Info, Home, Sparkles, LogOut, LogIn } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { AccessibilitySettingsPanel } from '@/components/common/AccessibilitySettingsPanel';
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -96,6 +97,8 @@ export function Header() {
                 </Link>
               ))}
               
+              <AccessibilitySettingsPanel />
+
               {isAuthenticated ? (
                 <button 
                   onClick={logout}
