@@ -859,7 +859,7 @@ function LegSlotCard({ slot, index, totalSlots, onUpdateFlight, onToggleExpanded
             )}
           >
             <MapPin className={cn("h-3 w-3", slot.flight.isDestinationArrival && "text-primary")} />
-            {slot.flight.isDestinationArrival ? 'Destination arrival ✓' : 'Mark arrival'}
+            {slot.flight.isDestinationArrival ? 'Destination arrival ✓' : 'Mark as destination arrival'}
           </button>
           <button
             type="button"
@@ -872,7 +872,7 @@ function LegSlotCard({ slot, index, totalSlots, onUpdateFlight, onToggleExpanded
             )}
           >
             <Plane className={cn("h-3 w-3", slot.flight.isDestinationDeparture && "text-accent-foreground")} />
-            {slot.flight.isDestinationDeparture ? 'Departure from dest ✓' : 'Mark departure'}
+            {slot.flight.isDestinationDeparture ? 'Departure from dest ✓' : 'Mark as departure from destination'}
           </button>
         </div>
       )}

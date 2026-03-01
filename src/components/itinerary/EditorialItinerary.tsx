@@ -129,6 +129,7 @@ import { InterCityTransportEditor } from './InterCityTransportEditor';
 import { useUpdateCityTransport } from '@/hooks/useTripCities';
 
 import { ParsedTripNotesSection } from './ParsedTripNotesSection';
+import SortableFlightLegCards from './SortableFlightLegCards';
 
 // =============================================================================
 // BOARDING PASS VIEW BUTTON (inline helper)
@@ -1624,6 +1625,54 @@ export function EditorialItinerary({
       setHasChanges(true);
     });
   }, [unlockDay, tripId, days.length, destination, destinationCountry, travelers, startDate, budgetTier, tripType]);
+
+  // Handler to reorder flight legs via drag-and-drop
+  const handleReorderFlightLegs = useCallback(async (reorderedLegs: typeof allFlightLegs) => {
+    if (!flightSelection) return;
+
+    const updatedSelection: Record<string, unknown> = {
+      ...flightSelection,
+      legs: reorderedLegs,
+    };
+
+    // Update backward-compat departure/return fields
+    const destArrivalLeg = reorderedLegs.find(l => l.isDestinationArrival) || reorderedLegs[0];
+    if (destArrivalLeg) {
+      updatedSelection.departure = {
+        airline: destArrivalLeg.airline,
+        flightNumber: destArrivalLeg.flightNumber,
+        departure: destArrivalLeg.departure,
+        arrival: destArrivalLeg.arrival,
+        price: destArrivalLeg.price,
+        cabinClass: destArrivalLeg.cabinClass,
+      };
+    }
+    if (reorderedLegs.length >= 2) {
+      const destDepartureLeg = reorderedLegs.find(l => l.isDestinationDeparture) || reorderedLegs[reorderedLegs.length - 1];
+      updatedSelection.return = {
+        airline: destDepartureLeg.airline,
+        flightNumber: destDepartureLeg.flightNumber,
+        departure: destDepartureLeg.departure,
+        arrival: destDepartureLeg.arrival,
+        price: destDepartureLeg.price,
+        cabinClass: destDepartureLeg.cabinClass,
+      };
+    }
+
+    const { error } = await supabase
+      .from('trips')
+      .update({ flight_selection: updatedSelection as any })
+      .eq('id', tripId);
+
+    if (error) {
+      console.error('Failed to reorder flight legs:', error);
+      toast.error('Failed to reorder flights');
+      return;
+    }
+
+    toast.success('Flight order updated');
+    await Promise.resolve(onBookingAdded?.());
+  }, [flightSelection, tripId, onBookingAdded]);
 
 
   // Handle transport mode change for a specific activity route segment
@@ -4208,168 +4257,16 @@ export function EditorialItinerary({
                     </div>
                   )}
 
-                  {allFlightLegs.map((leg, idx) => {
-                    const isFirst = idx === 0;
-                    const isLast = idx === allFlightLegs.length - 1;
-                    const legLabel = allFlightLegs.length <= 2
-                      ? (isFirst ? 'Outbound' : 'Return')
-                      : `Leg ${idx + 1}`;
-                    const accentColor = isLast && allFlightLegs.length > 1 ? 'accent' : 'primary';
-                    const defaultDate = isFirst ? startDate : isLast ? endDate : undefined;
-                    const isMarkedArrival = !!(leg as any).isDestinationArrival;
-                    const isMarkedDeparture = !!(leg as any).isDestinationDeparture;
-
-                    return (
-                      <div key={idx} className={cn(
-                        "group rounded-xl border bg-card overflow-hidden hover:shadow-soft transition-shadow",
-                        isMarkedArrival ? "border-primary/40 ring-1 ring-primary/20" : isMarkedDeparture ? "border-accent/40 ring-1 ring-accent/20" : "border-border"
-                      )}>
-                        <div className="flex items-stretch">
-                          <div className={`w-1.5 bg-gradient-to-b from-${accentColor} to-${accentColor}/50 shrink-0`} />
-                          
-                          <div className="flex-1 p-4">
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center gap-2">
-                                <Badge variant={isFirst ? 'secondary' : 'outline'} className={cn("text-xs font-medium", !isFirst && `border-${accentColor}/30 text-${accentColor}`)}>
-                                  {legLabel}
-                                </Badge>
-                                {isMarkedArrival && (
-                                  <Badge className="text-[10px] h-4 px-1.5 bg-primary/10 text-primary border-0">
-                                    <Star className="h-2.5 w-2.5 mr-0.5 fill-primary" /> ✓ Arrival to final destination
-                                  </Badge>
-                                )}
-                                {isMarkedDeparture && (
-                                  <Badge className="text-[10px] h-4 px-1.5 bg-accent/10 text-accent border-0">
-                                    <Star className="h-2.5 w-2.5 mr-0.5 fill-accent" /> ✓ Final departure from destination
-                                  </Badge>
-                                )}
-                                <span className="text-xs text-muted-foreground">
-                                  {leg.departure?.date || defaultDate}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                {/* Arrival marker control */}
-                                {allFlightLegs.length > 1 && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleMarkFlightLeg(idx, 'isDestinationArrival'); }}
-                                    className={cn(
-                                      "inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md border transition-colors",
-                                      isMarkedArrival
-                                        ? "bg-primary/10 border-primary/30 text-primary font-medium"
-                                        : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-                                    )}
-                                  >
-                                    <Star className={cn("h-3 w-3", isMarkedArrival && "fill-primary")} />
-                                    {isMarkedArrival ? '✓ Arrival to final destination' : 'Mark as arrival to final destination'}
-                                  </button>
-                                )}
-                                <AirlineLogo 
-                                  code={leg.airlineCode || leg.airline?.substring(0, 2) || ''} 
-                                  name={leg.airline}
-                                  size="sm"
-                                />
-                                <span className="text-sm font-medium">{leg.airline}</span>
-                                <span className="text-xs text-muted-foreground">{leg.flightNumber}</span>
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center gap-4">
-                              <div className="text-center min-w-[60px]">
-                                <p className="text-xl font-semibold tracking-tight">{leg.departure?.time || '--:--'}</p>
-                                <p className={`text-xs font-medium text-${accentColor}`}>{getAirportDisplaySync(leg.departure?.airport || '')}</p>
-                              </div>
-                              
-                              <div className="flex-1 flex items-center gap-2">
-                                <div className={`h-1.5 w-1.5 rounded-full bg-${accentColor}`} />
-                                <div className="flex-1 relative">
-                                  <div className={`h-px bg-gradient-to-r from-${accentColor}/60 via-border to-${accentColor}/60`} />
-                                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2">
-                                    {leg.duration ? (
-                                      <span className="text-[10px] text-muted-foreground">{leg.duration}</span>
-                                    ) : (
-                                      <Plane className={cn("h-3 w-3 text-muted-foreground", isLast && allFlightLegs.length > 1 && "rotate-180")} />
-                                    )}
-                                  </div>
-                                </div>
-                                <div className={`h-1.5 w-1.5 rounded-full bg-${accentColor}`} />
-                              </div>
-                              
-                              <div className="text-center min-w-[60px]">
-                                <p className="text-xl font-semibold tracking-tight">{leg.arrival?.time || '--:--'}</p>
-                                <p className={`text-xs font-medium text-${accentColor}`}>{getAirportDisplaySync(leg.arrival?.airport || '')}</p>
-                              </div>
-                            </div>
-                            
-                            {(leg.cabinClass || leg.seat || leg.confirmationCode || leg.terminal || leg.gate || leg.baggageInfo || leg.frequentFlyerNumber || leg.boardingPassUrl) && (
-                              <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
-                                {/* Confirmation code + seat row */}
-                                {(leg.confirmationCode || leg.seat || leg.cabinClass) && (
-                                  <div className="flex items-center gap-3 flex-wrap">
-                                    {leg.confirmationCode && (
-                                      <span className="text-xs font-mono px-2 py-0.5 rounded bg-primary/10 text-primary font-semibold tracking-wider">
-                                        {leg.confirmationCode}
-                                      </span>
-                                    )}
-                                    {leg.cabinClass && (
-                                      <span className="text-xs px-2 py-0.5 rounded bg-secondary text-muted-foreground">{leg.cabinClass}</span>
-                                    )}
-                                    {leg.seat && (
-                                      <span className="text-xs text-muted-foreground">Seat {leg.seat}</span>
-                                    )}
-                                  </div>
-                                )}
-                                {/* Terminal, gate, baggage row */}
-                                {(leg.terminal || leg.gate || leg.baggageInfo) && (
-                                  <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
-                                    {leg.terminal && (
-                                      <span>{leg.terminal}</span>
-                                    )}
-                                    {leg.gate && (
-                                      <span>Gate {leg.gate}</span>
-                                    )}
-                                    {leg.baggageInfo && (
-                                      <span>🧳 {leg.baggageInfo}</span>
-                                    )}
-                                  </div>
-                                )}
-                                {/* Frequent flyer + boarding pass row */}
-                                {(leg.frequentFlyerNumber || leg.boardingPassUrl) && (
-                                  <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
-                                    {leg.frequentFlyerNumber && (
-                                      <span className="font-mono">FF# {leg.frequentFlyerNumber}</span>
-                                    )}
-                                    {leg.boardingPassUrl && (
-                                      <BoardingPassViewButton storagePath={leg.boardingPassUrl} />
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                            {/* Destination departure marker — only for multi-leg trips */}
-                            {allFlightLegs.length > 1 && (
-                              <div className="mt-3 pt-3 border-t border-border/50">
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); handleMarkFlightLeg(idx, 'isDestinationDeparture'); }}
-                                  className={cn(
-                                    "inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md border transition-colors",
-                                    isMarkedDeparture
-                                      ? "bg-accent/10 border-accent/30 text-accent font-medium"
-                                      : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-                                  )}
-                                >
-                                  <Plane className="h-3 w-3" />
-                                  {isMarkedDeparture ? '✓ Final departure from destination' : 'Mark as final departure from destination'}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  <SortableFlightLegCards
+                    legs={allFlightLegs as any}
+                    startDate={startDate}
+                    endDate={endDate}
+                    isEditable={effectiveIsEditable}
+                    onReorder={handleReorderFlightLegs as any}
+                    onMarkLeg={handleMarkFlightLeg}
+                    getAirportDisplay={getAirportDisplaySync}
+                    renderBoardingPass={(path) => <BoardingPassViewButton storagePath={path} />}
+                  />
                 </div>
               ) : (
                 /* Empty State - Add Flight CTA */
