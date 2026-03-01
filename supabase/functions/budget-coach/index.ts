@@ -219,66 +219,53 @@ Rules:
       }
     }
 
-    // Normalize model costs safely (model may return either whole-currency or cents)
-    const activityCostById = new Map<string, number>();
+    // Build a lookup of original activity costs (already in cents from the caller)
+    const activityCostCentsById = new Map<string, number>();
     for (const day of itinerary_days) {
       for (const activity of day.activities ?? []) {
-        if (typeof activity.cost === "number" && Number.isFinite(activity.cost)) {
-          activityCostById.set(activity.id, Math.max(0, Math.round(activity.cost)));
+        if (typeof activity.cost === "number" && Number.isFinite(activity.cost) && activity.cost > 0) {
+          activityCostCentsById.set(activity.id, Math.round(activity.cost));
         }
       }
     }
 
-    const toNumber = (value: unknown): number | null => {
-      if (typeof value === "number" && Number.isFinite(value)) return value;
-      if (typeof value === "string") {
-        const cleaned = value.replace(/[^\d.-]/g, "");
-        const parsed = Number(cleaned);
-        return Number.isFinite(parsed) ? parsed : null;
-      }
-      return null;
-    };
+    console.log("Activity costs (cents) from caller:", JSON.stringify(Object.fromEntries(activityCostCentsById)));
 
+    // The AI is instructed to return whole-currency values (e.g. 50 for $50).
+    // We simply multiply by 100 to get cents. No heuristic.
     suggestions = suggestions
       .map((s: any) => {
-        const rawCurrent = toNumber(s.current_cost);
-        const rawNew = toNumber(s.new_cost);
-        if (rawCurrent === null || rawNew === null || rawNew < 0) return null;
+        const rawNew = typeof s.new_cost === "number" ? s.new_cost : null;
+        if (rawNew === null || rawNew < 0) return null;
 
-        const originalCostCents = activityCostById.get(String(s.activity_id));
-        let multiplier = 100; // default: model returns whole-currency
+        // Convert AI's whole-currency value to cents
+        const newCostCents = Math.round(rawNew * 100);
 
-        if (typeof originalCostCents === "number" && originalCostCents > 0) {
-          const asWholeDelta = Math.abs(Math.round(rawCurrent * 100) - originalCostCents);
-          const asCentsDelta = Math.abs(Math.round(rawCurrent) - originalCostCents);
-          multiplier = asCentsDelta < asWholeDelta ? 1 : 100;
+        // Use the known activity cost as ground truth (already in cents)
+        const knownCostCents = activityCostCentsById.get(String(s.activity_id));
+        const currentCostCents = knownCostCents ?? Math.round((typeof s.current_cost === "number" ? s.current_cost : 0) * 100);
+
+        console.log(`Suggestion "${s.suggested_swap}": AI current=${s.current_cost}, AI new=${s.new_cost}, knownCents=${knownCostCents}, newCents=${newCostCents}, currentCents=${currentCostCents}`);
+
+        // STRICT GUARD: new cost must be strictly less than current cost
+        if (newCostCents >= currentCostCents) {
+          console.log(`  → FILTERED OUT (new ${newCostCents} >= current ${currentCostCents})`);
+          return null;
         }
-
-        const currentCost =
-          typeof originalCostCents === "number" && originalCostCents > 0
-            ? originalCostCents
-            : Math.max(0, Math.round(rawCurrent * multiplier));
-
-        let newCost = Math.max(0, Math.round(rawNew * multiplier));
-        const altNewCost = Math.max(0, Math.round(rawNew * (multiplier === 100 ? 1 : 100)));
-
-        // Never allow a swap suggestion to increase price
-        if (newCost > currentCost && altNewCost <= currentCost) {
-          newCost = altNewCost;
-        }
-        if (newCost >= currentCost) return null;
 
         return {
           ...s,
-          current_cost: currentCost,
-          new_cost: newCost,
-          savings: currentCost - newCost,
+          current_cost: currentCostCents,
+          new_cost: newCostCents,
+          savings: currentCostCents - newCostCents,
         };
       })
       .filter(Boolean) as any[];
 
     // Sort by savings desc
     suggestions.sort((a: any, b: any) => b.savings - a.savings);
+
+    console.log(`Returning ${suggestions.length} valid suggestions`);
 
     return new Response(
       JSON.stringify({ suggestions, on_target: false }),
