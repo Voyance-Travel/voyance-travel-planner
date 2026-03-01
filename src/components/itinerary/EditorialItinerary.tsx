@@ -22,7 +22,7 @@ import {
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
-  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2, ClipboardPaste, Compass, Bus, Ship, ArrowRight, Droplets
+  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2, ClipboardPaste, Compass, Bus, Ship, ArrowRight, Droplets, Wrench
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
@@ -44,7 +44,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -107,7 +107,7 @@ import { preloadAirportCodes, getAirportDisplaySync } from '@/services/locationS
 // InlineModifier removed — redundant with TripChat
 import type { ItineraryDay } from '@/services/itineraryActionExecutor';
 import { ItineraryValueHeader } from './ItineraryValueHeader';
-import { ItineraryUtilityBar } from './ItineraryUtilityBar';
+
 import { WhyWeSkippedSection } from './WhyWeSkippedSection';
 import { NewMemberSuggestionsCard } from './NewMemberSuggestionsCard';
 import { calculateItineraryValueStats } from '@/utils/intelligenceAnalytics';
@@ -2585,6 +2585,8 @@ export function EditorialItinerary({
 
   // Full itinerary regeneration — preserves flights/hotels/qualifiers, replaces schedule + pricing
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
+  const [isRepairingPricing, setIsRepairingPricing] = useState(false);
   const handleRegenerateItinerary = useCallback(async () => {
     setIsRegenerating(true);
     try {
@@ -2602,6 +2604,24 @@ export function EditorialItinerary({
       setIsRegenerating(false);
     }
   }, [tripId, user?.id, refetchItineraryFromDb]);
+
+  const handleRepairPricing = useCallback(async () => {
+    setIsRepairingPricing(true);
+    try {
+      const { repairTripCosts } = await import('@/services/activityCostService');
+      const result = await repairTripCosts(tripId);
+      if (result.success) {
+        toast.success(`Pricing repaired: ${result.repaired} activities updated${result.corrected > 0 ? `, ${result.corrected} outliers corrected` : ''}`);
+        await refetchItineraryFromDb();
+      } else {
+        toast.error(result.error || 'Failed to repair pricing');
+      }
+    } catch {
+      toast.error('Failed to repair pricing');
+    } finally {
+      setIsRepairingPricing(false);
+    }
+  }, [tripId, refetchItineraryFromDb]);
 
   // Open the optimize preferences dialog
   const openOptimizeDialog = useCallback(() => {
@@ -3514,19 +3534,6 @@ export function EditorialItinerary({
               />
             </div>
 
-            {/* Utility Bar — Share / Save / Repair / Regenerate */}
-            <ItineraryUtilityBar
-              tripId={tripId}
-              tripName={`Trip to ${destination}`}
-              destination={destination}
-              onSave={handleSave}
-              isSaving={isSaving}
-              shareUrl={shareLink || undefined}
-              onCreateShareLink={async () => { await handleCreateShareLink(); return shareLink || ''; }}
-              onRegenerateItinerary={handleRegenerateItinerary}
-              onRepairComplete={refetchItineraryFromDb}
-            />
-
             {/* Smart Finish Banner — DNA gap analysis for manual trips */}
             {isManualMode && (
               <SmartFinishBanner
@@ -3674,8 +3681,32 @@ export function EditorialItinerary({
                       >
                         <FileText className="h-4 w-4" />
                         Export PDF
-                      </Button>
+                    </Button>
                     )}
+
+                    {/* Repair Pricing */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={handleRepairPricing}
+                      disabled={isRepairingPricing}
+                    >
+                      {isRepairingPricing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
+                      {isRepairingPricing ? 'Repairing…' : 'Repair Pricing'}
+                    </Button>
+
+                    {/* Regenerate Itinerary */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => setShowRegenerateConfirm(true)}
+                      disabled={isRegenerating}
+                    >
+                      {isRegenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                      {isRegenerating ? 'Regenerating…' : 'Regenerate'}
+                    </Button>
                   </>
                 )}
               </div>
@@ -5396,7 +5427,50 @@ export function EditorialItinerary({
         </DialogContent>
       </Dialog>
 
-      {/* Group Unlock Modal */}
+      {/* Regenerate Confirmation Dialog */}
+      <Dialog open={showRegenerateConfirm} onOpenChange={setShowRegenerateConfirm}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Regenerate Itinerary
+            </DialogTitle>
+            <DialogDescription>
+              This will rebuild your day-by-day schedule and pricing from scratch using your original trip settings.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-3 space-y-3">
+            <div className="rounded-lg bg-secondary/50 p-3 space-y-2">
+              <p className="text-sm font-medium text-foreground">What's preserved:</p>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li>✓ Flights & hotels</li>
+                <li>✓ Multi-city routing</li>
+                <li>✓ Trip dates, travelers & preferences</li>
+              </ul>
+            </div>
+            <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 space-y-2">
+              <p className="text-sm font-medium text-foreground">What's replaced:</p>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li>✗ Daily schedule & activities</li>
+                <li>✗ Activity pricing</li>
+              </ul>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRegenerateConfirm(false)}>Cancel</Button>
+            <Button
+              variant="default"
+              onClick={() => {
+                setShowRegenerateConfirm(false);
+                handleRegenerateItinerary();
+              }}
+            >
+              Regenerate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <GroupUnlockModal
         isOpen={showGroupUnlockModal}
         onClose={() => setShowGroupUnlockModal(false)}
