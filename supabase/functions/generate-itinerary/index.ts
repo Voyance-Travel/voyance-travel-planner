@@ -9906,13 +9906,13 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
       // Includes attraction matching + AI-generated city guides (graceful fallback)
       // ==========================================================================
       
-      // Resolve destination ID for dynamic features
-      const destinationId = await getDestinationId(supabase, destination);
+      // Resolve destination ID for dynamic features (use resolvedDestination for multi-city)
+      const destinationId = await getDestinationId(supabase, resolvedDestination);
       
       const generationHierarchy = await buildFullPromptGuidanceAsync(
         supabase,
         primaryArchetype,
-        destination,
+        resolvedDestination,
         destinationId,
         effectiveBudgetTier,
         { pace: traitScores.pace, budget: traitScores.budget },
@@ -9946,7 +9946,7 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
       // Get archetype context for activity limits and other settings
       const archetypeContext = getFullArchetypeContext(
         primaryArchetype, 
-        destination, 
+        resolvedDestination, 
         effectiveBudgetTier, 
         { pace: traitScores.pace, budget: traitScores.budget }
       );
@@ -9959,7 +9959,7 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
       // ==========================================================================
       let voyancePicksPrompt = '';
       try {
-        const destCity = destination.split(',')[0].trim();
+        const destCity = resolvedDestination.split(',')[0].trim();
         const { data: vpRows } = await supabase
           .from('voyance_picks')
           .select('*')
@@ -10081,7 +10081,7 @@ All text must be clean, correctly spelled English. No garbled characters, no non
 `;
 
       const isFullDay = !isFirstDay && !isLastDay;
-      const userPrompt = `Generate Day ${dayNumber} of ${totalDays} in ${destination}${destinationCountry ? `, ${destinationCountry}` : ''}.
+      const userPrompt = `Generate Day ${dayNumber} of ${totalDays} in ${resolvedDestination}${resolvedCountry ? `, ${resolvedCountry}` : ''}.
 
 Date: ${date}
 Travelers: ${travelers}
