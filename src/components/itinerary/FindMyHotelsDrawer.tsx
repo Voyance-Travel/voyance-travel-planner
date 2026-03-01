@@ -209,7 +209,7 @@ export function FindMyHotelsDrawer({
       </Button>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="sm:max-w-[560px] max-h-[85vh] p-0 gap-0">
+        <DialogContent className="sm:max-w-[620px] max-h-[85vh] p-0 gap-0">
           <DialogHeader className="p-6 pb-3">
             <DialogTitle className="flex items-center gap-2 text-lg">
               <div className="rounded-full bg-primary/10 p-2">
@@ -384,36 +384,24 @@ function HotelRecommendationCard({
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {hotel.isTopPick && (
-                  <Badge className="bg-primary text-primary-foreground text-[10px] px-1.5 py-0 gap-0.5">
-                    <Heart className="h-2.5 w-2.5 fill-current" />
-                    Top Pick
-                  </Badge>
-                )}
-                <span className="font-semibold text-sm truncate">{hotel.name}</span>
-              </div>
+          <div>
+            {hotel.isTopPick && (
+              <Badge className="bg-primary text-primary-foreground text-[10px] px-1.5 py-0 gap-0.5 mb-1">
+                <Heart className="h-2.5 w-2.5 fill-current" />
+                Top Pick
+              </Badge>
+            )}
+            <span className="font-semibold text-sm leading-snug block">{hotel.name}</span>
 
-              {hotel.neighborhood && (
-                <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                  <MapPin className="h-3 w-3 shrink-0" />
-                  <span className="truncate">{hotel.neighborhood}</span>
-                </p>
-              )}
-            </div>
-
-            {/* Match score */}
-            <div className="text-right shrink-0">
-              <div className={cn('text-lg font-bold', matchColor)}>
-                {hotel.dnaMatchScore}%
-              </div>
-              <div className="text-[10px] text-muted-foreground">match</div>
-            </div>
+            {hotel.neighborhood && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                <MapPin className="h-3 w-3 shrink-0" />
+                <span className="truncate">{hotel.neighborhood}</span>
+              </p>
+            )}
           </div>
 
-          {/* Stars + Price row */}
+          {/* Stars + Price + Match score row */}
           <div className="flex items-center gap-3 mt-1.5">
             {hotel.stars > 0 && (
               <div className="flex items-center gap-0.5">
@@ -427,6 +415,12 @@ function HotelRecommendationCard({
                 ${hotel.pricePerNight}<span className="text-xs text-muted-foreground font-normal">/night</span>
               </span>
             )}
+            <div className="ml-auto flex items-center gap-1 shrink-0">
+              <span className={cn('text-sm font-bold', matchColor)}>
+                {hotel.dnaMatchScore}%
+              </span>
+              <span className="text-[10px] text-muted-foreground">match</span>
+            </div>
           </div>
 
           {/* Match reasons */}
@@ -441,7 +435,7 @@ function HotelRecommendationCard({
           )}
 
           {/* Actions: Select + Booking Link */}
-          <div className="flex items-center justify-between mt-3">
+          <div className="flex items-center justify-between flex-wrap gap-2 mt-3">
             <Button
               size="sm"
               variant={isSelected ? 'default' : 'outline'}
