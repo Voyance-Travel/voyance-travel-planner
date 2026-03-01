@@ -5370,8 +5370,8 @@ Generate activities for this day following ALL constraints above.`;
       // "Rest & Recharge" activities despite being given the correct address.
       // ==========================================================================
       {
-        const actualHotelName = dayCity?.hotelName || flightContext.hotelName;
-        const actualHotelAddress = dayCity?.hotelAddress || flightContext.hotelAddress;
+        const actualHotelName = dayCity?.hotelName || context.hotelData?.hotelName;
+        const actualHotelAddress = dayCity?.hotelAddress || context.hotelData?.hotelAddress;
         if (actualHotelName || actualHotelAddress) {
           const hotelKeywords = ['hotel', 'check-in', 'check in', 'checkout', 'check-out', 'check out', 'freshen up', 'rest & recharge', 'rest and recharge', 'return to', 'settle in', 'wind down', "dad's", "mom's", "parent", "home base", 'airbnb', 'vacation rental'];
           for (const act of generatedDay.activities) {
