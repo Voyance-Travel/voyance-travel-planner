@@ -4225,14 +4225,16 @@ export function EditorialItinerary({
                     ...day,
                     activities: day.activities.map(act => {
                       if (act.id !== suggestion.activity_id) return act;
+                      // Budget coach returns costs in cents; activity costs are in whole currency
+                      const newCostWhole = Math.round(suggestion.new_cost / 100);
                       return {
                         ...act,
                         title: suggestion.suggested_swap,
                         name: suggestion.suggested_swap,
                         description: suggestion.reason,
                         cost: typeof act.cost === 'object' && act.cost !== null
-                          ? { ...(act.cost as any), amount: suggestion.new_cost }
-                          : suggestion.new_cost,
+                          ? { ...(act.cost as any), amount: newCostWhole }
+                          : newCostWhole,
                       };
                     }),
                   };
