@@ -1,46 +1,66 @@
 
 
-# Fix: Initial Generation Timeout on Long Trips
+# Fix: Trip Total Price Not Updating After Regeneration
 
 ## Problem
 
-The `generate-full` action in `generate-itinerary` processes ALL days in a single edge function call. For a 16-day trip, this takes ~55 seconds, hitting the Deno edge runtime wall clock limit. When the runtime kills the function, no response (including CORS headers) is returned, causing the browser to report a CORS error.
+After regenerating an itinerary, the "Trip Total" price stays at the old value. The UI never reflects the new costs from the regenerated activities.
 
-The **regeneration** flow was already fixed to use day-by-day calls. The **initial generation** in `useItineraryGeneration.ts` still uses the monolithic `generate-full` action.
+## Root Cause
 
-## Solution
+The total price display uses a two-tier system:
 
-Refactor `useItineraryGeneration.ts` to use the same progressive day-by-day pattern that regeneration already uses:
+```text
+canonicalTripTotal (from activity_costs DB table)
+        |
+        v
+  Is it non-null?
+   /          \
+ YES           NO
+  |             |
+Use DB total  Use JS-calculated total
++ flight      (sum of day costs + flight + hotel)
++ hotel
+```
 
-1. **Call `generate-full` only for Stage 1 (context/profile loading) + Stage 2 setup** -- or switch entirely to calling `generate-day` in a loop from the frontend
-2. Each day call completes in ~5-10 seconds, well within timeout limits
-3. Auto-save after each day so partial progress is preserved
-4. Show progress UI during generation
+**The problem**: `generate-day` (used during regeneration) does NOT write to the `activity_costs` table. Only the old `generate-full` action (initial generation) writes those rows. So after regeneration:
+
+- `activity_costs` still has OLD cost rows
+- `canonicalTripTotal` reads old data from `v_trip_total` view
+- Since it's non-null, it overrides the correct JS-calculated total
+- The UI shows the stale price
+
+## Solution (two parts)
+
+### Part 1: Reset canonical total during regeneration (frontend)
+
+In `EditorialItinerary.tsx`, after regeneration completes:
+- Set `canonicalTripTotal` to `null` so the JS-calculated total takes over immediately
+- Then trigger an async rebuild of `activity_costs` via the existing `repair-trip-costs` action
+- When the rebuild finishes, re-fetch the canonical total
+
+### Part 2: Rebuild activity_costs after regeneration (frontend call)
+
+After `syncBudgetFromDays` and query invalidation, call the `repair-trip-costs` edge function action to rebuild `activity_costs` rows from the new itinerary data. Once complete, re-fetch the canonical total so the DB stays in sync for future page loads.
 
 ## Changes
 
-### 1. `src/hooks/useItineraryGeneration.ts`
-- Replace the single `generate-full` invocation with a two-phase approach:
-  - **Phase 1**: Call `generate-full` with a new flag like `setupOnly: true` or just call a lightweight setup/context action to initialize the trip in the database
-  - **Phase 2**: Loop through days 1..N calling `generate-day` for each, with progress callbacks, auto-save, and retry logic (matching the regeneration pattern in `EditorialItinerary.tsx`)
-- Add progress state/callback so the UI can show "Generating day 3 of 16..."
-- Add per-day timeout (120s) and retry with backoff (matching regeneration)
+### `src/components/itinerary/EditorialItinerary.tsx`
 
-### 2. `supabase/functions/generate-itinerary/index.ts` (minor)
-- Optionally add a `setup-only` action that runs Stages 1 + context loading without generating any days, returning the trip context needed for subsequent `generate-day` calls
-- Or: keep `generate-full` but have it bail after early save (Stage 3) if `setupOnly` is set
+At the regeneration completion block (around line 2726-2733):
 
-### 3. UI progress indicator
-- The generation flow already has loading states -- wire the day-by-day progress percentage into the existing loading UI in the trip planner
+1. Add `setCanonicalTripTotal(null)` immediately -- this lets the JS total show the correct value right away
+2. After the existing budget sync and invalidation, fire off an async call to rebuild `activity_costs`:
+   - Call the `generate-itinerary` edge function with `action: 'repair-trip-costs'`
+   - On success, re-fetch `getTripTotal` and update `canonicalTripTotal`
+   - This is fire-and-forget so it doesn't block the user
 
-## Technical Details
+### No backend changes needed
 
-- Matches the proven pattern already working in `EditorialItinerary.tsx` lines 2595-2738
-- Each `generate-day` call is self-contained (~5-10s) and well within edge function limits
-- Partial saves mean users never lose progress even if one day fails
-- Retry logic (4 attempts with exponential backoff) handles transient failures
-- No backend schema changes needed
+The `repair-trip-costs` action already exists and rebuilds `activity_costs` from the current itinerary data. We just need to call it after regeneration.
 
-## Risk
+## Why This Works
 
-Low -- `generate-day` is already battle-tested via regeneration. This just changes the orchestration from server-side to client-side for initial generation.
+- **Instant feedback**: Setting `canonicalTripTotal = null` immediately falls through to the JS calculation which correctly sums the new day costs
+- **Long-term consistency**: The async `repair-trip-costs` call rebuilds `activity_costs` so subsequent page loads also show correct totals
+- **No regression risk**: The JS fallback calculation (`jsTotalCost`) already works correctly -- it was just being bypassed by the stale canonical value
