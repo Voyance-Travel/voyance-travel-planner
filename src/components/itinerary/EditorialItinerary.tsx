@@ -2583,6 +2583,26 @@ export function EditorialItinerary({
     }
   }, [days, tripId, onSave]);
 
+  // Full itinerary regeneration — preserves flights/hotels/qualifiers, replaces schedule + pricing
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const handleRegenerateItinerary = useCallback(async () => {
+    setIsRegenerating(true);
+    try {
+      toast.info('Regenerating your itinerary…', { duration: 5000 });
+      const { data, error } = await supabase.functions.invoke('generate-itinerary', {
+        body: { action: 'generate-full', tripId, userId: user?.id },
+      });
+      if (error) throw error;
+      await refetchItineraryFromDb();
+      toast.success('Itinerary regenerated! Flights, hotels, and trip settings preserved.');
+    } catch (err) {
+      console.error('[EditorialItinerary] Regeneration failed:', err);
+      toast.error('Failed to regenerate itinerary. Please try again.');
+    } finally {
+      setIsRegenerating(false);
+    }
+  }, [tripId, user?.id, refetchItineraryFromDb]);
+
   // Open the optimize preferences dialog
   const openOptimizeDialog = useCallback(() => {
     setShowOptimizeDialog(true);
@@ -3493,6 +3513,19 @@ export function EditorialItinerary({
                 archetype={style}
               />
             </div>
+
+            {/* Utility Bar — Share / Save / Repair / Regenerate */}
+            <ItineraryUtilityBar
+              tripId={tripId}
+              tripName={`Trip to ${destination}`}
+              destination={destination}
+              onSave={handleSave}
+              isSaving={isSaving}
+              shareUrl={shareLink || undefined}
+              onCreateShareLink={async () => { await handleCreateShareLink(); return shareLink || ''; }}
+              onRegenerateItinerary={handleRegenerateItinerary}
+              onRepairComplete={refetchItineraryFromDb}
+            />
 
             {/* Smart Finish Banner — DNA gap analysis for manual trips */}
             {isManualMode && (
