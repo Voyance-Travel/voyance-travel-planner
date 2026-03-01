@@ -1,192 +1,60 @@
 
-## What’s happening (based on code audit)
+# Fix: Account for Flight Duration When Determining Itinerary Start
 
-You already have the right underlying data model (`legs[]` with `isDestinationArrival` / `isDestinationDeparture`) and the itinerary cascade logic supports it. The current breakage is due to **two regressions**:
+## Problem
+When a user departs at 10 PM on July 1st from the US to Europe, their itinerary currently starts on July 1st. But they won't land until July 2nd due to flight duration and timezone differences. The system blindly uses `trip.start_date` as Day 1 without checking the flight's actual arrival date.
 
-1) **The “starred” flags are being stripped when the trip is reloaded**, so the UI looks like it didn’t persist (and downstream logic falls back to heuristics).
-- In `src/pages/TripDetail.tsx`, `normalizeFlightSelection()` returns legs that may include `isDestinationArrival`/`isDestinationDeparture`, but the code that maps normalized legs into `normalizedFlight.legs` **does not copy those flags** into the object passed to `EditorialItinerary`.
-- Also, `TripDetail` sets `outbound = legs[0]` and `return = last leg`, ignoring the starred legs.
+## Root Cause
+Two gaps in the current logic:
 
-2) **Day 1 sometimes doesn’t update in the itinerary UI even after cascade runs** because the “refetch days after cascade” code in `EditorialItinerary` parses `itinerary_data` incorrectly:
-- It uses `itData.days || itData.itinerary || []`, but `itData.itinerary` is usually an object like `{ days: [...] }`, so `setDays()` often never runs.
+1. **`extractFlightData()` in `prompt-library.ts`** has `arrivalDate` and `departureDate` fields in its `FlightData` interface but never populates them from the flight selection data.
 
-There’s a third structural reason this keeps recurring:
-- You have **multiple flight editing flows** (Start step 2, AddBookingInline, MultiLegFlightEditor, itinerary flight card markers) with **different signatures / normalization**, and at least one of them (Start + MultiLegFlightEditor) uses “change signatures” that **ignore the star flags**, meaning toggling a star doesn’t propagate state.
+2. **`generate-itinerary/index.ts`** uses `context.startDate` (from `trip.start_date`) directly as Day 1 without comparing it against the flight's arrival date. If you depart July 1 at 10 PM and land July 2 at 1 PM, Day 1 should be July 2, not July 1.
 
----
+## Solution
 
-## Goals (what we’ll make true)
+### 1. Extract arrival date in `extractFlightData()` (prompt-library.ts)
+Populate the `arrivalDate` and `departureDate` fields from the flight selection legs. Pull from:
+- `legs[].arrival.date` (new format)
+- `departure.arrival.date` (legacy nested format)
+- Parse from ISO datetime strings if available (e.g., `2026-07-02T13:00:00`)
 
-1) Users can:
-- **Star exactly one leg as “Final destination arrival (outbound)”**
-- **Star exactly one leg as “Departure from destination (return)”**
-- **Reorder legs freely** in both Step 2 (outside) and inside the itinerary
+### 2. Compare arrival date vs start date in `generate-itinerary/index.ts`
+After building the generation context (~line 4007), add logic:
+- If `flightData.arrivalDate` exists and is **after** `context.startDate`, treat Day 1 as a **departure/travel day** (flight-only, no destination activities)
+- Shift the "real" itinerary activities to start on the arrival date
+- Two approaches (use the simpler one):
+  - **Option A (recommended)**: Keep `totalDays` the same, but mark Day 1 as a "Travel Day" via prompt constraints. Day 1 prompt gets: "Traveler is in transit. No destination activities. Only include: pack, travel to airport, board flight, in-flight rest."
+  - **Option B**: Shift `context.startDate` to the arrival date and reduce `totalDays` by 1. This changes the itinerary window but may confuse users who set specific dates.
 
-2) Those choices:
-- **Persist to the backend**
-- **Survive reloads**
-- **Drive Day 1 / last-day scheduling** (via cascade) and **drive any regeneration prompts** (via backward-compatible `flight_selection.departure` and `flight_selection.return`)
+Going with **Option A** -- it preserves the user's chosen dates while making Day 1 a realistic travel day.
 
-3) “Refresh” behavior stays as you chose: **Validation refresh** (not a rewrite). We’ll add a separate clearly-labeled “Sync itinerary to flight times” action to re-run cascade when needed (free, no credits).
+### 3. Inject "travel day" constraint into Day 1 prompt
+In `generateSingleDayWithRetry()` (~line 4567), when `dayNumber === 1` and the flight departs on `startDate` but arrives on `startDate + 1`:
+- Override the prompt to generate a **departure city travel day** instead of destination activities
+- Activities: morning prep, travel to airport, boarding, in-flight (no destination sightseeing)
+- The actual destination exploring starts on Day 2
 
----
+### 4. Same logic for return flight (last day)
+If the return flight's arrival date is after the trip end date, the last day should be a "travel day" at the destination (airport transfer + flight), not a full sightseeing day. This is partially handled already but needs the date comparison.
 
-## Implementation plan (no schema changes required)
+### 5. Update `cascadeTransportToItinerary.ts`
+The cascade logic also needs to recognize when Day 1 is a departure-city travel day:
+- If `leg.departure.date === startDate` and `leg.arrival.date > startDate`, don't try to schedule post-arrival activities on Day 1
+- Instead, cascade arrival logistics to Day 2
 
-### A) Fix persistence + reload: stop stripping starred flags
-**Files: `src/pages/TripDetail.tsx`**
+## Files to Change
 
-1. When building `normalizedFlight.legs`, include:
-- `isDestinationArrival`
-- `isDestinationDeparture`
+| File | Change |
+|------|--------|
+| `supabase/functions/generate-itinerary/prompt-library.ts` | Populate `arrivalDate`/`departureDate` in `extractFlightData()` from legs data |
+| `supabase/functions/generate-itinerary/index.ts` | Add arrival-date-vs-start-date comparison after context build; inject travel-day prompt for Day 1 when departure day != arrival day |
+| `src/services/cascadeTransportToItinerary.ts` | Skip arrival cascade on Day 1 when arrival date is Day 2; apply arrival cascade to Day 2 instead |
+| `src/utils/normalizeFlightSelection.ts` | No changes needed (already supports `arrival.date`) |
 
-2. When setting:
-- `normalizedFlight.outbound`: choose the leg where `isDestinationArrival === true` (fallback to existing heuristic if none).
-- `normalizedFlight.return`: choose the leg where `isDestinationDeparture === true` (fallback to last leg).
-
-**Result:** After you star a leg and `onBookingAdded()` refetches the trip, the UI still shows the star and uses the correct leg.
-
----
-
-### B) Fix “Day 1 didn’t update” after starring: correct itinerary refetch parsing
-**File: `src/components/itinerary/EditorialItinerary.tsx`**
-
-Update the post-cascade refetch logic to correctly read days from any supported shape:
-- Prefer `itinerary_data.days`
-- Fallback to `itinerary_data.itinerary?.days`
-- (Optional safety) fallback to `parseEditorialDays(refreshed.itinerary_data, startDate)` so we never silently fail.
-
-**Result:** When the cascade adjusts Day 1 or last day, the itinerary view updates immediately without reload.
-
----
-
-### C) Ensure backward-compat fields match the starred legs (so regeneration uses the right times)
-Right now your backend generation path (`supabase/functions/generate-itinerary/*`) reads mostly from:
-- `flight_selection.departure.arrival.time` (Day 1 timing)
-- `flight_selection.return.departure.time` (last day cutoff)
-
-So we must ensure those legacy fields always reflect the user-starred legs.
-
-**Files:**
-- `src/utils/normalizeFlightSelection.ts` (the builder)
-- `src/components/itinerary/EditorialItinerary.tsx` (marking handler)
-
-Changes:
-1. Update `buildFlightSelectionFromLegs()` so:
-- `departure` is set from `isDestinationArrival` leg (already done)
-- `return` is set from `isDestinationDeparture` leg (currently it always uses “last leg”)
-
-2. In `handleMarkFlightLeg()` inside `EditorialItinerary`, when updating `updatedSelection.return`, also prefer the starred departure leg (not always last).
-
-3. Fix minor field mismatch in legacy objects: use consistent cabin field naming (`cabin` vs `cabinClass`) to avoid downstream consumers missing cabin class.
-
-**Result:** Even if a regeneration happens server-side, it will use the starred arrival/departure windows.
-
----
-
-### D) Make “reorder legs” and “star legs” work in Step 2 (outside page) and persist into trip creation
-**Files:**
-- `src/components/planner/flight/MultiLegFlightEditor.tsx`
-- `src/pages/Start.tsx`
-
-#### D1) Add starring controls in MultiLegFlightEditor
-- Add “Star as final destination arrival” toggle
-- Add “Star as departure from destination” toggle
-- Enforce exclusivity: only one arrival-star and one departure-star at a time.
-
-#### D2) Add drag-and-drop reorder for legs in MultiLegFlightEditor
-You already have a great dnd-kit pattern in `DraggableActivityList.tsx`. We’ll reuse the same approach for flight leg slots:
-- `DndContext` + `SortableContext` + `arrayMove`
-- Drag handle icon already imported (`GripVertical`), so this matches existing design.
-
-Important: when reordering, we must reorder the emitted `ManualFlightEntry[]` accordingly.
-
-#### D3) Fix “star doesn’t propagate” in Step 2 due to signature keys ignoring the star flags
-Currently, both `MultiLegFlightEditor` and `Start.tsx` compute signatures that exclude:
-- `isDestinationArrival`
-- `isDestinationDeparture`
-
-So toggling a star can be considered a “no-op” and never reaches parent state.
-
-We will:
-- Include both flags in all “signature” builders used to dedupe emissions:
-  - MultiLegFlightEditor: `lastEmittedSignature` calculations
-  - Start.tsx: `normalizeLegs().makeKey` and `lastMultiLegSig` signature
-
-#### D4) Persist the starred flags when creating `flight_selection` on submit
-In `Start.tsx`, when mapping `ManualFlightEntry → FlightLeg`, include:
-- `isDestinationArrival`
-- `isDestinationDeparture`
-
-Then use the improved `buildFlightSelectionFromLegs()` (from section C) so departure/return legacy fields align with starred legs.
-
-**Result:** Step 2 marks + reorder will be included in the saved trip and used by itinerary building.
-
----
-
-### E) Ensure starring survives “Edit Flight Details” modal inside itinerary
-**File: `src/components/itinerary/EditorialItinerary.tsx`**
-
-When passing `existingLegs` into `AddFlightInline` for edit mode, include:
-- `isDestinationArrival`
-- `isDestinationDeparture`
-
-Otherwise, opening edit flight can silently “drop” the stars.
-
----
-
-### F) Add a dedicated “Sync itinerary to flight times” action (free) to avoid confusion with Refresh/Regenerate/Optimize
-Because your chosen “Refresh” = validation (not rewrite), and users still need a clear way to “rebuild timing around flights” after importing/starring.
-
-**File: `src/components/itinerary/EditorialItinerary.tsx`**
-
-Add a button near the Flight section (and/or near Optimize) labeled something like:
-- “Sync itinerary to flight times”
-
-Behavior:
-- Calls `runCascadeAndPersist(tripId, days, flight_selection, tripCities?)`
-- Refetches itinerary days using the fixed parser (section B)
-- Shows a toast describing what changed
-
-No credit spend; this is purely aligning schedule windows to already-entered booking times.
-
----
-
-## Acceptance checklist (how we’ll verify)
-
-1) In itinerary → Flight section:
-- Star a leg as destination arrival → reload page → star still shown.
-- Day 1 activities shift appropriately (later start if arrival is later).
-- Star a leg as destination departure → last day truncates appropriately.
-
-2) In Start Step 2:
-- Import multi-leg flights → reorder legs → star a leg → submit trip
-- Open trip itinerary → same order + stars present.
-
-3) Edit Flight Details modal:
-- Stars are still present in the editor
-- Saving does not remove them.
-
-4) “Refresh” continues to be validation-only.
-5) “Sync itinerary to flight times” updates Day 1/last day reliably.
-
----
-
-## Files we expect to touch
-- `src/pages/TripDetail.tsx` (preserve flags + select outbound/return by flags)
-- `src/components/itinerary/EditorialItinerary.tsx` (refetch parsing fix, legacy field alignment, edit modal preserves flags, add Sync button)
-- `src/utils/normalizeFlightSelection.ts` (return leg selection in builder)
-- `src/components/planner/flight/MultiLegFlightEditor.tsx` (star UI + reorder + signature includes flags)
-- `src/pages/Start.tsx` (signature includes flags + submit includes flags)
-
-No database migrations required.
-
----
-
-<lov-actions>
-<lov-suggestion message="Test end-to-end: star destination arrival/departure legs, reload the page, and confirm Day 1 + last-day times update correctly. Also test creating a new trip from Step 2 with reordered legs and starred legs.">Verify end-to-end</lov-suggestion>
-<lov-suggestion message="Add a dedicated “Sync itinerary to flight times” button in the itinerary so users can rerun the transport cascade anytime without regenerating content or spending credits.">Add Sync button</lov-suggestion>
-<lov-suggestion message="Unify flight editing by reusing a single shared FlightLegEditor component across Step 2 and the itinerary, to prevent regressions like dropped flags and missing reorder controls.">Unify flight editor</lov-suggestion>
-<lov-suggestion message="Add a small ‘Flight timing window’ banner on Day 1 and the last day showing which leg is currently driving scheduling (with a quick link to change the starred leg).">Show scheduling driver</lov-suggestion>
-<lov-suggestion message="Add an activity-level warning when a Day 1 activity starts before the post-arrival buffer, with a one-click ‘Sync to flight times’ fix.">Add timing warnings</lov-suggestion>
-</lov-actions>
+## Edge Cases Handled
+- **No flight data**: No change to current behavior (Day 1 = start_date as usual)
+- **Same-day arrival**: No change (e.g., domestic US flights landing same day)
+- **Red-eye arriving next morning**: Day 1 becomes travel day, Day 2 starts with arrival logistics
+- **Multi-leg with layover**: Uses the destination arrival leg's date (respects `isDestinationArrival` marker)
+- **Manual entry without dates**: Falls back to current behavior (time-only scheduling)
