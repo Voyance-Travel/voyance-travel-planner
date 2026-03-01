@@ -996,7 +996,7 @@ export function getArchetypeNarrative(archetypeId: string): ArchetypeNarrative {
     'wellness_seeker': 'zen_seeker',
     'budget_traveler': 'explorer',
     'family_traveler': 'family_architect',
-    'solo_explorer': 'urban_nomad',
+    'solo_explorer': 'flexible_wanderer',
     'food_lover': 'culinary_cartographer',
     'nature_lover': 'wilderness_pioneer',
     'city_explorer': 'urban_nomad',
