@@ -5243,8 +5243,8 @@ export function EditorialItinerary({
                 name: hotelSelection.name,
                 address: hotelSelection.address || '',
                 neighborhood: '',
-                checkInTime: hotelSelection.checkIn || '15:00',
-                checkOutTime: hotelSelection.checkOut || '11:00',
+                checkInTime: hotelSelection.checkInTime || '15:00',
+                checkOutTime: hotelSelection.checkOutTime || '11:00',
               } : undefined}
             />
           </DialogContent>
