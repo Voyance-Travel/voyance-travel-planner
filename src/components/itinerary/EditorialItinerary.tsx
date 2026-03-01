@@ -2724,6 +2724,8 @@ export function EditorialItinerary({
       }
 
       setRegenerationProgress(100);
+      // Immediately clear canonical total so JS-calculated total takes over
+      setCanonicalTripTotal(null);
       await refetchItineraryFromDb();
       // Sync budget from regenerated days and invalidate all budget queries
       syncBudgetFromDays(generatedDays);
@@ -2732,6 +2734,19 @@ export function EditorialItinerary({
       queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
       queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
       toast.success('Itinerary regenerated! Flights, hotels, and trip settings preserved.');
+
+      // Async rebuild activity_costs so DB stays in sync for future page loads
+      import('@/services/activityCostService').then(({ repairTripCosts, getTripTotal }) => {
+        repairTripCosts(tripId).then((result) => {
+          if (result.success) {
+            getTripTotal(tripId).then((data) => {
+              if (data && data.total_all_travelers_usd > 0) {
+                setCanonicalTripTotal(data.total_all_travelers_usd);
+              }
+            });
+          }
+        }).catch(err => console.error('[Regeneration] repair-trip-costs failed:', err));
+      });
     } catch (err: any) {
       console.error('[EditorialItinerary] Regeneration failed:', err);
       if (!err?.message?.startsWith('Not enough credits')) {
