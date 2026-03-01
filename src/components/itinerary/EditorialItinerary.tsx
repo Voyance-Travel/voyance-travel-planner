@@ -2587,23 +2587,82 @@ export function EditorialItinerary({
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
   const [isRepairingPricing, setIsRepairingPricing] = useState(false);
+
+  // Cost = 30 credits/day (half the 60/day generation rate)
+  const regenerationCost = useMemo(() => Math.ceil((days.length || 1) * 30), [days.length]);
+
   const handleRegenerateItinerary = useCallback(async () => {
     setIsRegenerating(true);
     try {
-      toast.info('Regenerating your itinerary…', { duration: 5000 });
+      // 1. Charge credits first — OutOfCreditsModal pops automatically on insufficient
+      await spendCredits.mutateAsync({
+        action: 'REGENERATE_TRIP',
+        tripId,
+        creditsAmount: regenerationCost,
+        metadata: { dayCount: days.length },
+      });
+
+      // 2. Invoke generate-itinerary
       const { data, error } = await supabase.functions.invoke('generate-itinerary', {
         body: { action: 'generate-full', tripId, userId: user?.id },
       });
-      if (error) throw error;
+
+      if (error) {
+        // Check for 504 timeout — poll DB for completion
+        const is504 = error.message?.includes('504') || error.message?.includes('timeout') || error.message?.includes('FunctionsFetchError');
+        if (is504) {
+          console.log('[EditorialItinerary] Regeneration 504 — polling for completion...');
+          const success = await pollForRegenerationCompletion();
+          if (success) {
+            await refetchItineraryFromDb();
+            toast.success('Itinerary regenerated! Flights, hotels, and trip settings preserved.');
+            return;
+          }
+        }
+        throw error;
+      }
+
       await refetchItineraryFromDb();
       toast.success('Itinerary regenerated! Flights, hotels, and trip settings preserved.');
-    } catch (err) {
+    } catch (err: any) {
       console.error('[EditorialItinerary] Regeneration failed:', err);
-      toast.error('Failed to regenerate itinerary. Please try again.');
+      // Don't show error toast for insufficient credits — modal handles it
+      if (!err?.message?.startsWith('Not enough credits')) {
+        toast.error('Failed to regenerate itinerary. Please try again.');
+      }
     } finally {
       setIsRegenerating(false);
     }
-  }, [tripId, user?.id, refetchItineraryFromDb]);
+  }, [tripId, user?.id, refetchItineraryFromDb, regenerationCost, days.length, spendCredits]);
+
+  // Poll DB for regeneration completion after a 504 timeout
+  const pollForRegenerationCompletion = useCallback(async (): Promise<boolean> => {
+    const maxChecks = 18; // 18 × 5s = 90 seconds
+    const intervalMs = 5000;
+    // Get baseline updated_at
+    const { data: baseline } = await supabase
+      .from('trips')
+      .select('updated_at')
+      .eq('id', tripId)
+      .maybeSingle();
+    const baselineTime = baseline?.updated_at ? new Date(baseline.updated_at).getTime() : Date.now();
+
+    for (let i = 1; i <= maxChecks; i++) {
+      await new Promise(r => setTimeout(r, intervalMs));
+      const { data: trip } = await supabase
+        .from('trips')
+        .select('updated_at, itinerary_data')
+        .eq('id', tripId)
+        .maybeSingle();
+
+      if (trip?.updated_at && new Date(trip.updated_at).getTime() > baselineTime) {
+        console.log(`[EditorialItinerary] Regeneration completed after ${i * 5}s polling`);
+        return true;
+      }
+    }
+    console.error('[EditorialItinerary] Regeneration polling timed out after 90s');
+    return false;
+  }, [tripId]);
 
   const handleRepairPricing = useCallback(async () => {
     setIsRepairingPricing(true);
@@ -3701,6 +3760,24 @@ export function EditorialItinerary({
                 )}
               </div>
             </div>
+
+            {/* Regeneration Loading Overlay */}
+            <AnimatePresence>
+              {isRegenerating && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="rounded-lg bg-primary/10 border border-primary/30 p-6 text-center space-y-3"
+                >
+                  <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+                  <div>
+                    <p className="text-lg font-semibold text-foreground">Rebuilding your itinerary…</p>
+                    <p className="text-sm text-muted-foreground">This may take up to a minute. Flights, hotels, and trip settings are preserved.</p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* What We Skipped - Tourist traps avoided */}
             <WhyWeSkippedSection
@@ -5445,6 +5522,13 @@ export function EditorialItinerary({
                 <li>✗ Activity pricing</li>
               </ul>
             </div>
+            <div className="rounded-lg bg-primary/10 border border-primary/20 p-3 flex items-center gap-2">
+              <Coins className="h-4 w-4 text-primary shrink-0" />
+              <p className="text-sm text-foreground">
+                <span className="font-semibold">{regenerationCost} credits</span>
+                <span className="text-muted-foreground"> ({days.length} days × 30 credits/day)</span>
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowRegenerateConfirm(false)}>Cancel</Button>
@@ -5455,7 +5539,7 @@ export function EditorialItinerary({
                 handleRegenerateItinerary();
               }}
             >
-              Regenerate
+              Regenerate ({regenerationCost} credits)
             </Button>
           </DialogFooter>
         </DialogContent>

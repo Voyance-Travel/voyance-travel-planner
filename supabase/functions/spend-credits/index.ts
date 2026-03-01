@@ -59,7 +59,7 @@ function getScaledCaps(unlockedDays: number): Record<string, number> {
 }
 
 // Variable-cost actions
-const VARIABLE_COST_ACTIONS = ['trip_generation', 'hotel_search', 'group_unlock'];
+const VARIABLE_COST_ACTIONS = ['trip_generation', 'hotel_search', 'group_unlock', 'regenerate_trip'];
 const HOTEL_SEARCH_PER_CITY = 40;
 const BASE_RATE_PER_DAY = 60;
 

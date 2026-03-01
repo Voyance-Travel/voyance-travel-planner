@@ -1,21 +1,20 @@
 /**
  * Itinerary Utility Bar
  * 
- * Share / Save / Export PDF / Repair Pricing / Regenerate buttons for the itinerary.
+ * Share / Save / Export PDF / Regenerate buttons for the itinerary.
  * Positioned below the intelligence summary.
  */
 
 import { useState } from 'react';
 import { 
   Share2, Download, Save, Link2, Copy, Check, 
-  Mail, MessageCircle, FileText, Wrench, RefreshCw, Loader2, AlertTriangle
+  Mail, MessageCircle, FileText, RefreshCw, Loader2, AlertTriangle, Coins
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { TripShareModal } from '@/components/sharing/TripShareModal';
-import { repairTripCosts } from '@/services/activityCostService';
 
 interface ItineraryUtilityBarProps {
   tripId: string;
@@ -25,10 +24,12 @@ interface ItineraryUtilityBarProps {
   onExportPDF?: () => void;
   onRegenerateItinerary?: () => void;
   isSaving?: boolean;
+  isRegenerating?: boolean;
+  regenerationCost?: number;
+  dayCount?: number;
   shareUrl?: string;
   className?: string;
   onCreateShareLink?: () => Promise<string>;
-  onRepairComplete?: () => void;
 }
 
 export function ItineraryUtilityBar({
@@ -39,31 +40,15 @@ export function ItineraryUtilityBar({
   onExportPDF,
   onRegenerateItinerary,
   isSaving,
+  isRegenerating,
+  regenerationCost,
+  dayCount,
   shareUrl,
   className,
   onCreateShareLink,
-  onRepairComplete,
 }: ItineraryUtilityBarProps) {
   const [showShareModal, setShowShareModal] = useState(false);
-  const [isRepairing, setIsRepairing] = useState(false);
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
-
-  const handleRepairPricing = async () => {
-    setIsRepairing(true);
-    try {
-      const result = await repairTripCosts(tripId);
-      if (result.success) {
-        toast.success(`Pricing repaired: ${result.repaired} activities updated${result.corrected > 0 ? `, ${result.corrected} outliers corrected` : ''}`);
-        onRepairComplete?.();
-      } else {
-        toast.error(result.error || 'Failed to repair pricing');
-      }
-    } catch {
-      toast.error('Failed to repair pricing');
-    } finally {
-      setIsRepairing(false);
-    }
-  };
 
   const handleExportPDF = () => {
     if (onExportPDF) {
@@ -105,18 +90,6 @@ export function ItineraryUtilityBar({
           </Button>
         )}
 
-        {/* Repair Pricing */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="gap-2"
-          onClick={handleRepairPricing}
-          disabled={isRepairing}
-        >
-          {isRepairing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
-          <span className="hidden sm:inline">{isRepairing ? 'Repairing...' : 'Repair Pricing'}</span>
-        </Button>
-
         {/* Regenerate Itinerary */}
         {onRegenerateItinerary && (
           <Button
@@ -124,9 +97,10 @@ export function ItineraryUtilityBar({
             size="sm"
             className="gap-2"
             onClick={() => setShowRegenerateConfirm(true)}
+            disabled={isRegenerating}
           >
-            <RefreshCw className="h-4 w-4" />
-            <span className="hidden sm:inline">Regenerate</span>
+            {isRegenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            <span className="hidden sm:inline">{isRegenerating ? 'Regenerating…' : 'Regenerate'}</span>
           </Button>
         )}
 
@@ -178,6 +152,17 @@ export function ItineraryUtilityBar({
                 <li>✗ Activity pricing</li>
               </ul>
             </div>
+            {regenerationCost != null && (
+              <div className="rounded-lg bg-primary/10 border border-primary/20 p-3 flex items-center gap-2">
+                <Coins className="h-4 w-4 text-primary shrink-0" />
+                <p className="text-sm text-foreground">
+                  <span className="font-semibold">{regenerationCost} credits</span>
+                  {dayCount != null && (
+                    <span className="text-muted-foreground"> ({dayCount} days × 30 credits/day)</span>
+                  )}
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowRegenerateConfirm(false)}>Cancel</Button>
@@ -188,7 +173,7 @@ export function ItineraryUtilityBar({
                 onRegenerateItinerary?.();
               }}
             >
-              Regenerate
+              Regenerate{regenerationCost != null ? ` (${regenerationCost} credits)` : ''}
             </Button>
           </DialogFooter>
         </DialogContent>
