@@ -9,6 +9,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { DayItinerary, BackendDay } from '@/types/itinerary';
 import { convertBackendDay } from '@/types/itinerary';
+import { sanitizeAIOutput } from '@/utils/textSanitizer';
 
 // ============================================================================
 // TYPES
@@ -109,25 +110,27 @@ function convertGeneratedToBackendDay(day: GeneratedDay): BackendDay {
   return {
     dayNumber: day.dayNumber,
     date: day.date,
-    theme: day.theme,
-    activities: day.activities.map(a => ({
-      id: a.id,
-      name: a.name,
-      description: a.description,
-      category: a.category,
-      startTime: a.startTime,
-      endTime: a.endTime,
-      duration: a.duration,
-      // BackendDay expects a string here; we normalize object locations.
-      location:
+    theme: sanitizeAIOutput(day.theme),
+    activities: day.activities.map(a => {
+      const rawLocation =
         typeof a.location === 'string'
           ? a.location
-          : a.location?.address || a.location?.name || '',
-      estimatedCost: a.estimatedCost,
-      bookingRequired: a.bookingRequired,
-      tips: a.tips,
-      coordinates: a.coordinates,
-    })),
+          : a.location?.address || a.location?.name || '';
+      return {
+        id: a.id,
+        name: sanitizeAIOutput(a.name),
+        description: sanitizeAIOutput(a.description),
+        category: sanitizeAIOutput(a.category),
+        startTime: a.startTime,
+        endTime: a.endTime,
+        duration: a.duration,
+        location: sanitizeAIOutput(rawLocation),
+        estimatedCost: a.estimatedCost,
+        bookingRequired: a.bookingRequired,
+        tips: a.tips ? sanitizeAIOutput(a.tips) : a.tips,
+        coordinates: a.coordinates,
+      };
+    }),
   };
 }
 
