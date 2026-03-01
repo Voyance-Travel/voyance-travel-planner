@@ -8802,9 +8802,23 @@ ${'='.repeat(60)}
                     resolvedTransitionFrom = prevCity?.city_name || '';
                     resolvedTransitionTo = city.city_name || '';
                     resolvedTransportMode = (city as any).transport_type || 'train';
-                    // Capture transport_details for schedule injection
+                    // Capture transport_details for schedule injection, normalizing legacy field names
                     if ((city as any).transport_details) {
-                      resolvedTransportDetails = (city as any).transport_details;
+                      const raw = (city as any).transport_details;
+                      const td: any = { ...raw };
+                      // Normalize "operator" → "carrier"
+                      if (raw.operator && !raw.carrier) td.carrier = raw.operator;
+                      // For flights: "departureStation"/"arrivalStation" may hold airport names
+                      if (resolvedTransportMode === 'flight') {
+                        if (raw.departureStation && !raw.departureAirport) td.departureAirport = raw.departureStation;
+                        if (raw.arrivalStation && !raw.arrivalAirport) td.arrivalAirport = raw.arrivalStation;
+                      }
+                      // Normalize duration variants
+                      if (!raw.duration) {
+                        if (raw.inTransitDuration) td.duration = raw.inTransitDuration;
+                        else if (raw.doorToDoorDuration) td.duration = raw.doorToDoorDuration;
+                      }
+                      resolvedTransportDetails = td;
                     }
                   }
                   break;
