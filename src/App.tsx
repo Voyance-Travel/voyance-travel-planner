@@ -18,6 +18,7 @@ import ErrorBoundary from '@/components/common/ErrorBoundary';
 import { GlobalErrorHandler } from '@/components/common/GlobalErrorHandler';
 import { OAuthReturnHandler } from '@/components/auth/OAuthReturnHandler';
 import { useAnalyticsTracker } from '@/hooks/useAnalyticsTracker';
+import { useAccessibilityClasses } from '@/hooks/useAccessibilityClasses';
 
 // Providers
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -129,6 +130,7 @@ function JourneyTracker() {
   const trackPageView = useJourneyStore(state => state.trackPageView);
   const trackAction = useJourneyStore(state => state.trackAction);
   useAnalyticsTracker();
+  useAccessibilityClasses();
   
   useEffect(() => {
     trackPageView(location.pathname);
