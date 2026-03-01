@@ -8813,6 +8813,12 @@ ${'='.repeat(60)}
                         if (raw.departureStation && !raw.departureAirport) td.departureAirport = raw.departureStation;
                         if (raw.arrivalStation && !raw.arrivalAirport) td.arrivalAirport = raw.arrivalStation;
                       }
+                      // For cars: map pickup/dropoff to departure/arrival stations for prompt
+                      if (resolvedTransportMode === 'car') {
+                        if (raw.pickupLocation && !raw.departureStation) td.departureStation = raw.pickupLocation;
+                        if (raw.dropoffLocation && !raw.arrivalStation) td.arrivalStation = raw.dropoffLocation;
+                        if (raw.rentalCompany && !raw.carrier) td.carrier = raw.rentalCompany;
+                      }
                       // Normalize duration variants
                       if (!raw.duration) {
                         if (raw.inTransitDuration) td.duration = raw.inTransitDuration;
