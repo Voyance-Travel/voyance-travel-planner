@@ -94,16 +94,16 @@ const GLOBAL_CAP = 2000;
 export function validateCostUpdate(
   category: string,
   costPerPerson: number
-): { valid: boolean; message?: string } {
-  const cap = CATEGORY_CAPS[category] || GLOBAL_CAP;
-  if (costPerPerson > cap) {
-    return {
-      valid: false,
-      message: `$${costPerPerson}/pp seems too high for ${category}. Maximum is $${cap}/pp.`,
-    };
-  }
+): { valid: boolean; message?: string; warning?: string } {
   if (costPerPerson < 0) {
     return { valid: false, message: 'Cost cannot be negative.' };
+  }
+  const threshold = CATEGORY_CAPS[category] || GLOBAL_CAP;
+  if (costPerPerson > threshold) {
+    return {
+      valid: true,
+      warning: `$${costPerPerson}/pp is above the typical range for ${category} ($${threshold}/pp). You can still save it.`,
+    };
   }
   return { valid: true };
 }
@@ -212,10 +212,9 @@ export async function upsertActivityCost(params: {
   cost_reference_id?: string | null;
   notes?: string;
 }): Promise<ActivityCostRow | null> {
-  // Frontend validation
-  const validation = validateCostUpdate(params.category, params.cost_per_person_usd);
-  if (!validation.valid) {
-    console.error('Cost validation failed:', validation.message);
+  // Only block truly invalid values (negative costs)
+  if (params.cost_per_person_usd < 0) {
+    console.error('Cost validation failed: negative cost');
     return null;
   }
 

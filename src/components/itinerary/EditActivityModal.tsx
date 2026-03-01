@@ -41,6 +41,7 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
   const [endTime, setEndTime] = useState('13:00');
   const [cost, setCost] = useState('0');
   const [costError, setCostError] = useState<string | null>(null);
+  const [costWarning, setCostWarning] = useState<string | null>(null);
   const [website, setWebsite] = useState('');
   const [reservationMade, setReservationMade] = useState(false);
   const [locationName, setLocationName] = useState('');
@@ -68,6 +69,7 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
       const num = parseFloat(value) || 0;
       const validation = validateCostUpdate(category, num);
       setCostError(validation.valid ? null : validation.message || null);
+      setCostWarning(validation.valid ? (validation.warning || null) : null);
     }
   };
 
@@ -78,6 +80,9 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
     if (num > 0) {
       const validation = validateCostUpdate(newCategory, num);
       setCostError(validation.valid ? null : validation.message || null);
+      setCostWarning(validation.valid ? (validation.warning || null) : null);
+    } else {
+      setCostWarning(null);
     }
   };
 
@@ -169,11 +174,17 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
           {/* Cost */}
           <div>
             <label className="text-sm font-medium mb-1 block">Cost ({currency})</label>
-            <Input type="number" min="0" value={cost} onChange={(e) => handleCostChange(e.target.value)} placeholder="0" className={costError ? 'border-destructive' : ''} />
+            <Input type="number" min="0" value={cost} onChange={(e) => handleCostChange(e.target.value)} placeholder="0" className={costError ? 'border-destructive' : costWarning ? 'border-yellow-500' : ''} />
             {costError && (
               <div className="flex items-center gap-1.5 mt-1.5 text-xs text-destructive">
                 <AlertTriangle className="h-3 w-3 shrink-0" />
                 <span>{costError}</span>
+              </div>
+            )}
+            {costWarning && !costError && (
+              <div className="flex items-center gap-1.5 mt-1.5 text-xs text-yellow-600 dark:text-yellow-400">
+                <AlertTriangle className="h-3 w-3 shrink-0" />
+                <span>{costWarning}</span>
               </div>
             )}
           </div>
@@ -208,7 +219,7 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={!title}>Save Changes</Button>
+          <Button onClick={handleSubmit} disabled={!title || !!costError}>Save Changes</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
