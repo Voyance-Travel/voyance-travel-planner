@@ -11659,6 +11659,200 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       );
     }
 
+    // ==========================================================================
+    // ACTION: repair-trip-costs - Fix corrupted/missing activity_costs for a trip
+    // ==========================================================================
+    if (action === 'repair-trip-costs') {
+      const { tripId } = params;
+      const userId = authResult.userId;
+
+      if (!tripId) {
+        return new Response(
+          JSON.stringify({ error: "tripId is required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Verify trip access
+      const tripAccessResult = await verifyTripAccess(supabase, tripId, userId, false);
+      if (!tripAccessResult.allowed) {
+        return new Response(
+          JSON.stringify({ error: tripAccessResult.reason || "Trip not found or access denied" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`[repair-trip-costs] Starting repair for trip ${tripId}, user ${userId}`);
+
+      // Fetch trip data
+      const { data: tripData, error: tripErr } = await supabase
+        .from("trips")
+        .select("id, destination, travelers, itinerary_data")
+        .eq("id", tripId)
+        .single();
+
+      if (tripErr || !tripData) {
+        return new Response(
+          JSON.stringify({ error: "Trip not found" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const itData = tripData.itinerary_data as any;
+      const days = itData?.days || itData?.itinerary?.days || [];
+      if (!days.length) {
+        return new Response(
+          JSON.stringify({ message: "No itinerary data to repair", repaired: 0 }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Load cost references
+      const { data: allRefs } = await supabase.from("cost_reference").select("*");
+      const refMap = new Map<string, any>();
+      if (allRefs) {
+        for (const r of allRefs) {
+          const cityLower = (r.destination_city || "").toLowerCase();
+          const exactKey = `${cityLower}|${r.category}|${r.subcategory || ""}`;
+          refMap.set(exactKey, r);
+          const fallbackKey = `${cityLower}|${r.category}|`;
+          if (!refMap.has(fallbackKey)) refMap.set(fallbackKey, r);
+        }
+      }
+
+      // Category/subcategory maps (inline for this action)
+      const catMap: Record<string, string> = {
+        sightseeing: "activity", cultural: "activity", adventure: "activity",
+        relaxation: "activity", entertainment: "activity", dining: "dining",
+        food: "dining", restaurant: "dining", cafe: "dining", transport: "transport",
+        transportation: "transport", transit: "transport", nightlife: "nightlife",
+        bar: "nightlife", shopping: "shopping",
+      };
+      const transportKw: Record<string, string[]> = {
+        taxi: ["taxi", "cab", "uber", "grab", "lyft", "ride", "private car"],
+        airport_transfer: ["airport transfer", "airport shuttle"],
+        metro: ["metro", "subway", "mrt", "mtr", "underground"],
+        bus: ["bus", "shuttle bus", "city bus"],
+        train: ["train", "rail", "shinkansen"],
+        ferry: ["ferry", "boat", "water taxi", "star ferry", "junk boat"],
+      };
+      const diningKw: Record<string, string[]> = {
+        street_food: ["street food", "hawker", "night market food", "dai pai dong"],
+        cafe: ["cafe", "café", "coffee", "bakery"],
+        casual_dining: ["noodle", "ramen", "dim sum", "dumpling", "pho"],
+        fine_dining: ["fine dining", "michelin", "omakase", "tasting menu"],
+      };
+
+      function normCat(raw?: string): string {
+        if (!raw) return "activity";
+        return catMap[raw.toLowerCase().trim()] || raw.toLowerCase().trim();
+      }
+
+      function inferSub(title: string, cat: string): string | null {
+        const t = (title || "").toLowerCase();
+        if (cat === "transport") {
+          for (const [sub, kws] of Object.entries(transportKw)) {
+            if (kws.some(kw => t.includes(kw))) return sub;
+          }
+        }
+        if (cat === "dining") {
+          for (const [sub, kws] of Object.entries(diningKw)) {
+            if (kws.some(kw => t.includes(kw))) return sub;
+          }
+        }
+        return null;
+      }
+
+      const destination = (tripData.destination || "").toLowerCase();
+      const numTravelers = tripData.travelers || 1;
+      const rows: any[] = [];
+      let corrected = 0;
+
+      for (const day of days) {
+        const dayNum = day.dayNumber || day.day_number || 1;
+        for (const activity of (day.activities || [])) {
+          if (!activity.id) continue;
+          const category = normCat(activity.category || activity.type);
+          if (category === "accommodation") continue;
+
+          const title = activity.title || activity.name || "";
+          const subcategory = inferSub(title, category);
+          let costPerPerson = typeof activity.estimatedCost === "number" ? activity.estimatedCost
+            : typeof activity.estimated_cost === "number" ? activity.estimated_cost
+            : typeof activity.cost === "number" ? activity.cost
+            : (activity.cost && typeof activity.cost === "object") ? (activity.cost.amount || 0)
+            : 0;
+
+          // Find reference
+          let ref: any = null;
+          if (subcategory) {
+            ref = refMap.get(`${destination}|${category}|${subcategory}`);
+          }
+          if (!ref) {
+            ref = refMap.get(`${destination}|${category}|`);
+          }
+
+          let source = "repair";
+          let wasCorrected = false;
+
+          if (ref) {
+            const maxAllowed = ref.cost_high_usd * 3;
+            if (costPerPerson > maxAllowed || costPerPerson < 0) {
+              costPerPerson = ref.cost_mid_usd;
+              source = "auto_corrected";
+              wasCorrected = true;
+            } else if (costPerPerson === 0) {
+              costPerPerson = ref.cost_mid_usd;
+              source = "reference_fallback";
+            }
+          } else if (costPerPerson < 0) {
+            costPerPerson = 0;
+            source = "auto_corrected";
+            wasCorrected = true;
+          }
+
+          if (wasCorrected) corrected++;
+
+          rows.push({
+            trip_id: tripId,
+            activity_id: activity.id,
+            day_number: dayNum,
+            cost_per_person_usd: Math.round(costPerPerson * 100) / 100,
+            num_travelers: numTravelers,
+            category,
+            source,
+            confidence: ref ? "medium" : "low",
+            cost_reference_id: ref?.id || null,
+            notes: wasCorrected ? `[Repair auto-corrected${subcategory ? `, ${subcategory}` : ""}]` : null,
+          });
+        }
+      }
+
+      let inserted = 0;
+      if (rows.length > 0) {
+        const { data: upserted, error: upsertErr } = await supabase
+          .from("activity_costs")
+          .upsert(rows, { onConflict: "trip_id,activity_id" })
+          .select("id");
+
+        if (upsertErr) {
+          console.error(`[repair-trip-costs] Upsert error:`, upsertErr);
+          return new Response(
+            JSON.stringify({ error: upsertErr.message }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        inserted = upserted?.length || 0;
+      }
+
+      console.log(`[repair-trip-costs] Done: ${inserted} rows upserted, ${corrected} corrected`);
+
+      return new Response(
+        JSON.stringify({ success: true, repaired: inserted, corrected, totalActivities: rows.length }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     return new Response(
       JSON.stringify({ error: "Unknown action" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }

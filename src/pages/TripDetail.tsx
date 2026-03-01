@@ -553,6 +553,34 @@ export default function TripDetail() {
     fetchTripData();
   }, [tripId]);
 
+  // Auto-repair legacy trips with missing activity_costs
+  const costRepairAttempted = useRef(false);
+  useEffect(() => {
+    if (!trip || loading || costRepairAttempted.current || !tripId) return;
+    if (!hasItineraryData(trip)) return;
+    
+    costRepairAttempted.current = true;
+    
+    // Check if activity_costs rows exist; if not, silently repair
+    (async () => {
+      try {
+        const { needsCostRepair } = await import('@/services/activityCostService');
+        const needsRepair = await needsCostRepair(tripId);
+        if (needsRepair) {
+          console.log('[TripDetail] Legacy trip detected — auto-repairing costs');
+          const { repairTripCosts } = await import('@/services/activityCostService');
+          const result = await repairTripCosts(tripId);
+          if (result.success) {
+            console.log(`[TripDetail] Auto-repair complete: ${result.repaired} rows`);
+            toast.success(`Trip pricing synced: ${result.repaired} activities updated`);
+          }
+        }
+      } catch (err) {
+        console.warn('[TripDetail] Auto-repair failed (non-critical):', err);
+      }
+    })();
+  }, [trip, loading, tripId]);
+
   // Auto-prompt debrief modal for completed trips without feedback
   useEffect(() => {
     if (
@@ -563,7 +591,6 @@ export default function TripDetail() {
       !loading
     ) {
       debriefPromptAttempted.current = true;
-      // Small delay to let UI settle
       const timer = setTimeout(() => {
         setShowDebriefModal(true);
       }, 1500);
