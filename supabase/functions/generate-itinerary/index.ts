@@ -11772,6 +11772,12 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         const dayNum = day.dayNumber || day.day_number || 1;
         for (const activity of (day.activities || [])) {
           if (!activity.id) continue;
+          // Skip non-UUID activity IDs (AI sometimes generates string IDs like "act_1", "transport-arrive-1")
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          if (!uuidRegex.test(activity.id)) {
+            console.warn(`[repair-trip-costs] Skipping non-UUID activity_id: "${activity.id}"`);
+            continue;
+          }
           const category = normCat(activity.category || activity.type);
           if (category === "accommodation") continue;
 
