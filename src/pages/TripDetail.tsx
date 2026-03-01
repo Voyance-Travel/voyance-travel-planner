@@ -43,6 +43,7 @@ import { toast } from 'sonner';
 import { normalizeLegacyHotelSelection, type HotelBooking } from '@/utils/hotelValidation';
 import { parseEditorialDays, parseAssistantDays } from '@/utils/itineraryParser';
 import { normalizeFlightSelection } from '@/utils/normalizeFlightSelection';
+import { injectHotelActivitiesIntoDays, injectMultiHotelActivities } from '@/utils/injectHotelActivities';
 import { cn } from '@/lib/utils';
 
 type Trip = Tables<'trips'>;
@@ -1617,7 +1618,53 @@ export default function TripDetail() {
                       ]);
                       setTripCities(updatedCities);
                       if (tripResult.data) {
-                        setTrip(tripResult.data);
+                        const updatedTrip = tripResult.data;
+
+                        // --- Inject hotel check-in/check-out activities into itinerary ---
+                        try {
+                          const itData = updatedTrip.itinerary_data as Record<string, any> | null;
+                          const currentDays = parseEditorialDays(itData, updatedTrip.start_date);
+                          if (currentDays.length > 0) {
+                            let injectedDays = currentDays;
+
+                            // Multi-city: inject from trip_cities hotel selections
+                            if (updatedCities.length > 0) {
+                              const cityHotels = updatedCities
+                                .filter((c: any) => c.hotel_selection)
+                                .map((c: any) => {
+                                  const hs = Array.isArray(c.hotel_selection) ? c.hotel_selection[0] : c.hotel_selection;
+                                  return hs;
+                                })
+                                .filter(Boolean);
+                              if (cityHotels.length > 0) {
+                                injectedDays = injectMultiHotelActivities(injectedDays as any[], cityHotels) as typeof injectedDays;
+                              }
+                            }
+
+                            // Single-city: inject from trips.hotel_selection
+                            const hotelRaw = updatedTrip.hotel_selection as any;
+                            if (hotelRaw && updatedCities.length <= 1) {
+                              const hotels = normalizeLegacyHotelSelection(hotelRaw, updatedTrip.start_date, updatedTrip.end_date);
+                              if (hotels.length > 0) {
+                                injectedDays = injectHotelActivitiesIntoDays(injectedDays as any[], hotels[0]) as typeof injectedDays;
+                              }
+                            }
+
+                            // Save injected days back if they changed
+                            if (JSON.stringify(injectedDays) !== JSON.stringify(currentDays)) {
+                              const newItData = { ...(itData || {}), days: injectedDays, savedAt: new Date().toISOString() };
+                              await supabase
+                                .from('trips')
+                                .update({ itinerary_data: newItData as any, updated_at: new Date().toISOString() })
+                                .eq('id', tripId);
+                              updatedTrip.itinerary_data = newItData as any;
+                            }
+                          }
+                        } catch (injErr) {
+                          console.error('[TripDetail] Hotel activity injection failed:', injErr);
+                        }
+
+                        setTrip(updatedTrip);
                       }
                     } catch { /* non-critical */ }
                   }}
