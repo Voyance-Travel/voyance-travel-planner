@@ -1837,6 +1837,21 @@ export interface TransitionDayParams {
   budgetTier?: string;
   primaryArchetype?: string;
   currency?: string;
+  /** User-entered transport details (times, carrier, duration, stations) */
+  transportDetails?: {
+    carrier?: string;
+    departureTime?: string;
+    arrivalTime?: string;
+    duration?: string;
+    departureStation?: string;
+    arrivalStation?: string;
+    departureAirport?: string;
+    arrivalAirport?: string;
+    costPerPerson?: number;
+    totalCost?: number;
+    bookingRef?: string;
+    seatClass?: string;
+  };
 }
 
 /**
@@ -1852,10 +1867,40 @@ export function buildTransitionDayPrompt(params: TransitionDayParams): string {
     primaryArchetype, currency,
   } = params;
 
+  const td = params.transportDetails;
   const fromLabel = transitionFromCountry ? `${transitionFrom}, ${transitionFromCountry}` : transitionFrom;
   const toLabel = transitionToCountry ? `${transitionTo}, ${transitionToCountry}` : transitionTo;
   const isSameCountry = transitionFromCountry && transitionToCountry && transitionFromCountry === transitionToCountry;
   const defaultMode = transportType || (isSameCountry ? 'train' : 'flight');
+
+  // Build confirmed booking schedule block if we have real times
+  let confirmedScheduleBlock = '';
+  if (td && (td.departureTime || td.arrivalTime)) {
+    const parts: string[] = [];
+    parts.push(`\n${'='.repeat(70)}`);
+    parts.push(`📋 CONFIRMED TRANSPORT SCHEDULE — USE THESE EXACT TIMES`);
+    parts.push(`${'='.repeat(70)}`);
+    parts.push(`The traveler has ALREADY booked their inter-city transport. Use these exact details:`);
+    if (td.carrier) parts.push(`  Operator/Carrier: ${td.carrier}`);
+    if (td.departureTime) {
+      const depStation = td.departureStation || td.departureAirport || `${transitionFrom} station`;
+      parts.push(`  Departure: ${td.departureTime} from ${depStation}`);
+    }
+    if (td.arrivalTime) {
+      const arrStation = td.arrivalStation || td.arrivalAirport || `${transitionTo} station`;
+      parts.push(`  Arrival: ${td.arrivalTime} at ${arrStation}`);
+    }
+    if (td.duration) parts.push(`  Journey Duration: ${td.duration}`);
+    if (td.seatClass) parts.push(`  Class: ${td.seatClass}`);
+    if (td.bookingRef) parts.push(`  Booking Ref: ${td.bookingRef}`);
+    if (td.costPerPerson) parts.push(`  Cost: ${td.costPerPerson} per person`);
+    parts.push('');
+    parts.push(`CRITICAL: The inter-city travel activity MUST use startTime="${td.departureTime || ''}" and endTime="${td.arrivalTime || ''}".`);
+    parts.push(`Schedule the "Transfer to station" activity to END at or before the departure time.`);
+    parts.push(`Schedule "Transfer to hotel" and check-in AFTER the arrival time.`);
+    parts.push(`DO NOT invent different departure/arrival times. The traveler has a confirmed booking.`);
+    confirmedScheduleBlock = parts.join('\n');
+  }
 
   // Archetype-aware recommendation guidance
   let recommendationGuidance = '';
@@ -1871,6 +1916,8 @@ export function buildTransitionDayPrompt(params: TransitionDayParams): string {
   }
 
   return `
+${confirmedScheduleBlock}
+
 ${'='.repeat(70)}
 🚆 MANDATORY TRANSITION DAY: ${fromLabel} → ${toLabel}
 ${'='.repeat(70)}

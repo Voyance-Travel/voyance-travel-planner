@@ -8772,6 +8772,7 @@ ${'='.repeat(60)}
       let resolvedTransitionFrom = paramTransitionFrom || '';
       let resolvedTransitionTo = paramTransitionTo || '';
       let resolvedTransportMode = paramTransitionMode || '';
+      let resolvedTransportDetails: any = null;
       let resolvedIsMultiCity = !!paramIsMultiCity;
       let resolvedDestination = destination;
       let resolvedCountry = destinationCountry;
@@ -8781,7 +8782,7 @@ ${'='.repeat(60)}
         try {
           const { data: tripCities } = await supabase
             .from('trip_cities')
-            .select('city_name, country, city_order, nights, days_total, transition_day_mode, transport_type')
+            .select('city_name, country, city_order, nights, days_total, transition_day_mode, transport_type, transport_details')
             .eq('trip_id', tripId)
             .order('city_order', { ascending: true });
 
@@ -8801,6 +8802,10 @@ ${'='.repeat(60)}
                     resolvedTransitionFrom = prevCity?.city_name || '';
                     resolvedTransitionTo = city.city_name || '';
                     resolvedTransportMode = (city as any).transport_type || 'train';
+                    // Capture transport_details for schedule injection
+                    if ((city as any).transport_details) {
+                      resolvedTransportDetails = (city as any).transport_details;
+                    }
                   }
                   break;
                 }
@@ -9813,6 +9818,7 @@ Start and end the day near the hotel when practical.`;
           travelers: travelers || 1,
           budgetTier: budgetTier || 'moderate',
           currency: 'USD',
+          transportDetails: resolvedTransportDetails || undefined,
         });
         
         // Override timing instructions completely for transition days
@@ -10515,14 +10521,46 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             console.warn(`[generate-day] ⚠️ TELEPORTING DETECTED! No inter-city travel found for ${resolvedTransitionFrom} → ${resolvedTransitionTo}. Injecting fallback transport blocks.`);
             
             const modeLabel = resolvedTransportMode.charAt(0).toUpperCase() + resolvedTransportMode.slice(1);
+            const td = resolvedTransportDetails || {};
+            
+            // Use real times from transport_details if available, else defaults
+            const hasTimes = !!(td.departureTime || td.arrivalTime);
+            const depTime = td.departureTime || '10:30';
+            const arrTime = td.arrivalTime || '13:30';
+            const depStation = td.departureStation || td.departureAirport || `${modeLabel} Station`;
+            const arrStation = td.arrivalStation || td.arrivalAirport || `${modeLabel} Station`;
+            const carrier = td.carrier || '';
+            const duration = td.duration || '';
+            const costPP = td.costPerPerson || 50;
+
+            // Calculate derived times from real schedule
+            const depMins = parseTimeToMinutes(depTime);
+            const arrMins = parseTimeToMinutes(arrTime);
+            // Transfer to station: 45 min before departure
+            const transferDepStart = depMins ? minutesToHHMM(depMins - 45) : '09:30';
+            const transferDepEnd = depMins ? minutesToHHMM(depMins) : '10:15';
+            // Checkout: 30 min before transfer
+            const checkoutStart = depMins ? minutesToHHMM(depMins - 75) : '09:00';
+            const checkoutEnd = depMins ? minutesToHHMM(depMins - 45) : '09:30';
+            // Transfer from station: starts at arrival
+            const transferArrStart = arrMins ? minutesToHHMM(arrMins) : '13:30';
+            const transferArrEnd = arrMins ? minutesToHHMM(arrMins + 45) : '14:15';
+            // Check-in: after transfer
+            const checkinStart = arrMins ? minutesToHHMM(arrMins + 45) : '14:15';
+            const checkinEnd = arrMins ? minutesToHHMM(arrMins + 90) : '15:00';
+
+            const interCityDesc = hasTimes
+              ? `${carrier ? carrier + ' — ' : ''}${resolvedTransportMode} from ${resolvedTransitionFrom} to ${resolvedTransitionTo}. Departs ${depTime}, arrives ${arrTime}${duration ? ` (${duration})` : ''}.`
+              : `Inter-city ${resolvedTransportMode} travel from ${resolvedTransitionFrom} to ${resolvedTransitionTo}. Duration varies by route and operator.`;
+
             const fallbackTransport = [
               {
                 id: `day${dayNumber}-checkout-${Date.now()}`,
                 title: `Hotel Checkout – ${resolvedTransitionFrom}`,
                 name: `Hotel Checkout – ${resolvedTransitionFrom}`,
                 category: 'accommodation',
-                startTime: '09:00',
-                endTime: '09:30',
+                startTime: checkoutStart,
+                endTime: checkoutEnd,
                 description: `Check out of hotel in ${resolvedTransitionFrom} and prepare for travel day`,
                 location: { name: `Hotel in ${resolvedTransitionFrom}`, address: resolvedTransitionFrom },
                 cost: { amount: 0, currency: 'USD' },
@@ -10531,13 +10569,13 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
               },
               {
                 id: `day${dayNumber}-transfer-depart-${Date.now()}`,
-                title: `Transfer to ${modeLabel} Station`,
-                name: `Transfer to ${modeLabel} Station`,
+                title: `Transfer to ${depStation}`,
+                name: `Transfer to ${depStation}`,
                 category: 'transport',
-                startTime: '09:30',
-                endTime: '10:15',
-                description: `Travel to ${resolvedTransportMode === 'flight' ? 'airport' : 'station'} in ${resolvedTransitionFrom}`,
-                location: { name: `${modeLabel} Station`, address: resolvedTransitionFrom },
+                startTime: transferDepStart,
+                endTime: transferDepEnd,
+                description: `Travel to ${depStation} in ${resolvedTransitionFrom}`,
+                location: { name: depStation, address: resolvedTransitionFrom },
                 cost: { amount: 15, currency: 'USD', basis: 'flat' },
                 isLocked: false,
                 durationMinutes: 45,
@@ -10547,22 +10585,22 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                 title: `${modeLabel} – ${resolvedTransitionFrom} to ${resolvedTransitionTo}`,
                 name: `${modeLabel} – ${resolvedTransitionFrom} to ${resolvedTransitionTo}`,
                 category: 'transport',
-                startTime: '10:30',
-                endTime: '13:30',
-                description: `Inter-city ${resolvedTransportMode} travel from ${resolvedTransitionFrom} to ${resolvedTransitionTo}. Duration varies by route and operator.`,
+                startTime: depTime,
+                endTime: arrTime,
+                description: interCityDesc,
                 location: { name: `${resolvedTransitionFrom} → ${resolvedTransitionTo}`, address: '' },
-                cost: { amount: 50, currency: 'USD', basis: 'per_person' },
+                cost: { amount: costPP, currency: td.currency || 'USD', basis: 'per_person' },
                 isLocked: false,
-                durationMinutes: 180,
+                durationMinutes: (arrMins && depMins) ? Math.max(30, arrMins - depMins) : 180,
               },
               {
                 id: `day${dayNumber}-transfer-arrive-${Date.now()}`,
                 title: `Transfer to Hotel – ${resolvedTransitionTo}`,
                 name: `Transfer to Hotel – ${resolvedTransitionTo}`,
                 category: 'transport',
-                startTime: '13:30',
-                endTime: '14:15',
-                description: `Travel from ${resolvedTransportMode === 'flight' ? 'airport' : 'station'} to hotel in ${resolvedTransitionTo}`,
+                startTime: transferArrStart,
+                endTime: transferArrEnd,
+                description: `Travel from ${arrStation} to hotel in ${resolvedTransitionTo}`,
                 location: { name: `Hotel in ${resolvedTransitionTo}`, address: resolvedTransitionTo },
                 cost: { amount: 15, currency: 'USD', basis: 'flat' },
                 isLocked: false,
@@ -10573,8 +10611,8 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                 title: `Hotel Check-in – ${resolvedTransitionTo}`,
                 name: `Hotel Check-in – ${resolvedTransitionTo}`,
                 category: 'accommodation',
-                startTime: '14:15',
-                endTime: '15:00',
+                startTime: checkinStart,
+                endTime: checkinEnd,
                 description: `Check in to hotel in ${resolvedTransitionTo}, freshen up and rest after travel`,
                 location: { name: `Hotel in ${resolvedTransitionTo}`, address: resolvedTransitionTo },
                 cost: { amount: 0, currency: 'USD' },
