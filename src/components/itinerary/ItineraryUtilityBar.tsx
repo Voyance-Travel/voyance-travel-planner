@@ -14,8 +14,6 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { TripShareModal } from '@/components/sharing/TripShareModal';
-
 interface ItineraryUtilityBarProps {
   tripId: string;
   tripName: string;
@@ -23,13 +21,12 @@ interface ItineraryUtilityBarProps {
   onSave?: () => void;
   onExportPDF?: () => void;
   onRegenerateItinerary?: () => void;
+  onShareClick?: () => void;
   isSaving?: boolean;
   isRegenerating?: boolean;
   regenerationCost?: number;
   dayCount?: number;
-  shareUrl?: string;
   className?: string;
-  onCreateShareLink?: () => Promise<string>;
 }
 
 export function ItineraryUtilityBar({
@@ -39,15 +36,13 @@ export function ItineraryUtilityBar({
   onSave,
   onExportPDF,
   onRegenerateItinerary,
+  onShareClick,
   isSaving,
   isRegenerating,
   regenerationCost,
   dayCount,
-  shareUrl,
   className,
-  onCreateShareLink,
 }: ItineraryUtilityBarProps) {
-  const [showShareModal, setShowShareModal] = useState(false);
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
 
   const handleExportPDF = () => {
@@ -70,7 +65,7 @@ export function ItineraryUtilityBar({
           variant="outline" 
           size="sm" 
           className="gap-2 font-medium border-primary/30 hover:bg-primary/10 hover:text-primary hover:border-primary/50"
-          onClick={() => setShowShareModal(true)}
+          onClick={onShareClick}
         >
           <Share2 className="h-4 w-4" />
           <span>Share</span>
@@ -112,17 +107,6 @@ export function ItineraryUtilityBar({
           </Button>
         )}
       </div>
-
-      {/* Share Modal */}
-      <TripShareModal
-        isOpen={showShareModal}
-        onClose={() => setShowShareModal(false)}
-        tripId={tripId}
-        tripName={tripName}
-        destination={destination}
-        shareLink={shareUrl}
-        onCreateShareLink={onCreateShareLink}
-      />
 
       {/* Regenerate Confirmation Dialog */}
       <Dialog open={showRegenerateConfirm} onOpenChange={setShowRegenerateConfirm}>
