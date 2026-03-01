@@ -1,37 +1,71 @@
 
-
-# Fix: Chinese Characters Appearing During Itinerary Loading
+# Fix: "Booking Required" Badge Showing on Free Time + Missing on Actual Bookable Activities
 
 ## Problem
-When the itinerary is being generated, Chinese characters occasionally appear in the loading/streaming view. These come from the AI model's raw response data (day themes, activity names, descriptions, locations) which is displayed directly without sanitization.
+Two related bugs:
+1. **"Booking Required" badge appears on free time / downtime activities** where there's nothing to book
+2. **"Booking Required" badge and booking links don't appear for actual bookable activities** (tours, museums, restaurants)
 
 ## Root Cause
-The `convertGeneratedToBackendDay` function in `useLovableItinerary.ts` passes all AI-generated text fields straight through without running them through the existing sanitization utilities (`sanitizeAIOutput`, `sanitizeActivityName`). The streaming day cards then render this unsanitized text immediately.
 
-The project already has robust sanitization utilities:
-- `sanitizeAIOutput()` in `textSanitizer.ts` -- strips CJK characters, schema leaks, and garbled text
-- `sanitizeActivityName()` in `activityNameSanitizer.ts` -- strips system prefixes and CJK characters
+### Bug 1: Badge on Free Time
+In `EditorialItinerary.tsx` line 7931, the badge renders based solely on `activity.bookingRequired` with no check for downtime/free-time/transport:
+```tsx
+{activity.bookingRequired && !compact && (
+  <Badge>Booking Required</Badge>
+)}
+```
+The AI sometimes sets `bookingRequired: true` on free-time blocks despite prompt instructions, and the backend normalizer only catches activities whose titles contain exact keywords like "free time". If the AI uses a slightly different title (e.g., "Leisure Hour", "Relax & Explore"), the normalizer misses it and the badge shows.
 
-They're just not being applied at the right point in the pipeline.
+### Bug 2: Missing Badge/Links on Bookable Activities
+The `InlineBookingActions` component (which renders booking links) exits early at line 260 when `bookingRequired` is `false`:
+```tsx
+if (!activity.bookingRequired) { ... return null; }
+```
+The AI often fails to set `bookingRequired: true` on genuinely bookable activities (museums, guided tours, cooking classes). The backend normalizer only force-sets it for Viator-matched activities but doesn't infer it for unmatched ones that clearly need booking.
 
 ## Solution
-Add sanitization in `convertGeneratedToBackendDay` so every text field from the AI response is cleaned before it reaches the UI or gets saved to the database.
 
-### Change: `src/hooks/useLovableItinerary.ts`
+### Change 1: Filter the "Booking Required" badge from non-bookable activities
+**File:** `src/components/itinerary/EditorialItinerary.tsx` (line 7931)
 
-Import `sanitizeAIOutput` from `@/utils/textSanitizer` and apply it to all string fields in `convertGeneratedToBackendDay`:
+Add the existing `isDowntime`, `isTransport`, `isCheckIn`, and `isAccommodation` guards:
+```tsx
+{activity.bookingRequired && !compact && !isDowntime && !isTransport && !isCheckIn && !isAccommodation && (
+  <Badge variant="outline" className="text-xs border-accent/50 text-accent">
+    Booking Required
+  </Badge>
+)}
+```
 
-- `day.theme` -- sanitized
-- `a.name` -- sanitized
-- `a.description` -- sanitized
-- `a.location` (string form) -- sanitized
-- `a.tips` -- sanitized
-- `a.category` -- sanitized (less likely to have CJK but costs nothing)
+### Change 2: Auto-infer `bookingRequired` in the backend normalizer
+**File:** `supabase/functions/generate-itinerary/index.ts` (after the isLogistics block ~line 5360)
 
-This is a single-point fix that covers both the streaming UI display and the data saved to the database, preventing Chinese characters from appearing anywhere downstream.
+After setting `bookingRequired = false` for logistics, add the inverse: auto-set `bookingRequired = true` for categories that genuinely need booking when the AI didn't flag it:
+```typescript
+// Auto-set bookingRequired for categories that genuinely need it
+const bookableCategories = ['museum', 'tour', 'cultural', 'activity', 'show', 'entertainment'];
+const bookableKeywords = ['museum', 'tour', 'guided', 'cooking class', 'wine tasting', 
+  'tickets', 'skip-the-line', 'timed entry', 'reservation'];
+const isBookable = bookableCategories.includes(normalizedAct.category?.toLowerCase() || '') ||
+  bookableKeywords.some(kw => normalizedAct.title.toLowerCase().includes(kw));
+if (isBookable && !isLogistics) {
+  normalizedAct.bookingRequired = true;
+}
+```
 
-## Why this approach
-- Fixes the problem at the source (data entry point) rather than patching every display point
-- Uses existing, battle-tested sanitization functions
-- Also cleans the data before it's saved to the database, so future page loads won't show stale Chinese characters either
-- Zero risk of breaking anything -- these sanitizers gracefully handle clean text (no-op)
+### Change 3: Expand the logistics keyword list to catch more free-time variants
+**File:** `supabase/functions/generate-itinerary/index.ts` (line 5350)
+
+Add more free-time synonyms to the logistics keywords array:
+```typescript
+const logisticsKeywords = [
+  'check-in', 'checkout', 'check-out', 'arrival', 'departure', 'transfer',
+  'free time', 'at leisure', 'leisure time', 'downtime', 'rest',
+  'relax at hotel', 'explore on your own', 'personal time'
+];
+```
+
+## Files Changed
+1. `src/components/itinerary/EditorialItinerary.tsx` -- guard the badge from non-bookable activity types
+2. `supabase/functions/generate-itinerary/index.ts` -- expand logistics keywords + auto-infer bookingRequired for genuinely bookable categories
