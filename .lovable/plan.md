@@ -1,60 +1,69 @@
 
-# Fix: Paid Trip Shows Locked After Unlock
+
+# Fix: Paid Trip Shows Locked on Day 1 After Generation
 
 ## The Problem
-When a user pays credits to unlock a trip, the generation completes successfully but the trip page shows all days as locked, asking the user to pay again. Credits were already spent and AI generation costs were incurred.
+After a paid generation completes (e.g., via "Just Tell Us"), the user lands on Day 1 and sees a "locked" prompt asking them to pay again. Navigating to Day 2 and back to Day 1 resolves it. This is a race condition -- not a data bug.
 
 ## Root Cause
-The `useUnlockTrip` hook (bulk unlock) **never updates `unlocked_day_count`** on the `trips` table after successfully generating all days. This is the field that `get-entitlements` reads to determine which days are accessible. So after unlock, the entitlements system still thinks no days are unlocked.
+When generation completes, `handleGenerationComplete` in `TripDetail.tsx` saves `unlocked_day_count` to the database but **never invalidates the entitlements query cache**. The `EditorialItinerary` component renders immediately with stale entitlements (where `unlocked_day_count` is still 0), so `canViewPremiumContentForDay()` returns `false` for all days, showing the LockedDayCard.
 
-Additionally, generated day objects may retain stale `metadata.isLocked = true` flags, causing a secondary lock check to trigger even if entitlements would allow access.
+By the time the user navigates to Day 2, the background refetch has completed, and the entitlements reflect the correct unlock count.
 
-## The Fix (3 changes)
+## The Fix (3 targeted changes)
 
-### 1. Update `unlocked_day_count` after bulk unlock
-**File:** `src/hooks/useUnlockTrip.ts`
+### 1. Invalidate entitlements after generation save (PRIMARY FIX)
+**File:** `src/pages/TripDetail.tsx` (after line 768)
 
-After the itinerary save succeeds (around line 253), add a database update to set `unlocked_day_count` to the total number of days:
+After the force-save succeeds, immediately invalidate the entitlements query so the UI picks up the new `unlocked_day_count`:
 
-```text
+```
+queryClient.invalidateQueries({ queryKey: ['entitlements'] });
+```
+
+This is the main fix. It ensures that the moment `unlocked_day_count` is written, the entitlements cache is refreshed.
+
+### 2. Update `unlocked_day_count` after bulk unlock (EXISTING PLAN)
+**File:** `src/hooks/useUnlockTrip.ts` (after itinerary save, around line 253)
+
+The bulk unlock flow (used when unlocking a preview trip via the UnlockBanner) also never updates `unlocked_day_count`. Add:
+
+```
 await supabase
   .from('trips')
   .update({ unlocked_day_count: params.totalDays })
   .eq('id', params.tripId);
+
+queryClient.invalidateQueries({ queryKey: ['entitlements'] });
 ```
 
-Also invalidate entitlements queries so the UI immediately reflects the new unlock state.
+Also strip stale `metadata.isLocked` / `metadata.isPreview` from each enriched day before saving.
 
-### 2. Clear `metadata.isLocked` on generated days
-**File:** `src/hooks/useUnlockTrip.ts`
+### 3. Defensive UI gate: entitlements override metadata
+**File:** `src/components/itinerary/EditorialItinerary.tsx` (line 4287)
 
-Before saving, strip `metadata.isLocked` and `metadata.isPreview` from each generated day so stale lock flags don't persist:
+Change the lock check so entitlements take priority over stale metadata flags:
 
-```text
-enrichedDays.forEach(day => {
-  if (day?.metadata) {
-    delete day.metadata.isLocked;
-    delete day.metadata.isPreview;
-  }
-});
 ```
+// Before (metadata alone can gate):
+const isLockedDay = selectedDay.metadata?.isLocked && !isManualMode;
 
-### 3. Defensive check in the UI gating logic
-**File:** `src/components/itinerary/EditorialItinerary.tsx` (around line 4287)
-
-The current code checks `selectedDay.metadata?.isLocked` as a separate gating criterion from entitlements. This should defer to entitlements when available:
-
-```text
-// Only trust metadata.isLocked if entitlements haven't loaded yet
+// After (entitlements override metadata):
 const isLockedDay = selectedDay.metadata?.isLocked 
   && !isManualMode 
   && !canViewPremiumContentForDay(entitlements, selectedDay.dayNumber);
 ```
 
-This ensures that if entitlements say the day is unlocked, metadata flags can't override it.
+This ensures that even with stale metadata, if entitlements say the day is unlocked, the user sees their content.
 
-## Technical Details
-- `get-entitlements` edge function reads `unlocked_day_count` from the `trips` table (line 208-213 of the edge function)
-- `canViewPremiumContentForDay()` calls `canAccessDaySimple()` which checks `dayNumber <= unlockedDayCount`
-- The `useUnlockDay` hook (single day unlock) already increments `unlocked_day_count` correctly -- the bulk unlock hook was missing this step
+## Why This Is Safe
+- Change 1 is purely a cache invalidation -- it doesn't alter any data, just forces a fresh fetch
+- Change 2 mirrors the pattern already used by `useUnlockDay` (single-day unlock) which correctly updates `unlocked_day_count`
+- Change 3 only loosens gating when the server has confirmed access -- it cannot create unauthorized access
 - No database migration needed; `unlocked_day_count` column already exists
+
+## Files Modified
+- `src/pages/TripDetail.tsx` -- add entitlements invalidation after save
+- `src/hooks/useUnlockTrip.ts` -- update `unlocked_day_count` + clear stale metadata + invalidate entitlements
+- `src/components/itinerary/EditorialItinerary.tsx` -- defensive entitlements-over-metadata check
+
