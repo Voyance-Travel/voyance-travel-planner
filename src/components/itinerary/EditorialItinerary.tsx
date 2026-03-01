@@ -2725,6 +2725,12 @@ export function EditorialItinerary({
 
       setRegenerationProgress(100);
       await refetchItineraryFromDb();
+      // Sync budget from regenerated days and invalidate all budget queries
+      syncBudgetFromDays(generatedDays);
+      queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
+      queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
+      queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
+      queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
       toast.success('Itinerary regenerated! Flights, hotels, and trip settings preserved.');
     } catch (err: any) {
       console.error('[EditorialItinerary] Regeneration failed:', err);
@@ -2735,7 +2741,7 @@ export function EditorialItinerary({
       setIsRegenerating(false);
       setRegenerationProgress(0);
     }
-  }, [tripId, user?.id, refetchItineraryFromDb, regenerationCost, days.length, spendCredits, startDate, destination, destinationCountry, travelers, tripType, budgetTier]);
+  }, [tripId, user?.id, refetchItineraryFromDb, regenerationCost, days.length, spendCredits, startDate, destination, destinationCountry, travelers, tripType, budgetTier, syncBudgetFromDays, queryClient]);
 
   const handleRepairPricing = useCallback(async () => {
     setIsRepairingPricing(true);
