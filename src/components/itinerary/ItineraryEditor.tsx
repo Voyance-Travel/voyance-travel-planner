@@ -232,8 +232,16 @@ export function ItineraryEditor({
   const [editActivityModal, setEditActivityModal] = useState<{ dayIndex: number; activityId: string } | null>(null);
 
   // Calculate totals - use group costs (per_person × travelers, flat as-is)
+  // Exclude accommodation activities to avoid double-counting hotel costs
+  // (hotel cost is already added separately from hotelSelection below)
+  const isAccommodationActivity = (act: GeneratedActivity) => {
+    const cat = (act as any).category || '';
+    const type = (act as any).type || '';
+    return cat === 'accommodation' || type === 'accommodation';
+  };
   const totalActivityCost = days.reduce((sum, day) => 
     sum + day.activities.reduce((daySum, act) => {
+      if (isAccommodationActivity(act)) return daySum; // skip — counted via hotelCost
       const cost = getActivityCost(act);
       const basis = getActivityCostBasis(act);
       return daySum + getGroupCost(cost, basis, travelers);
@@ -700,7 +708,11 @@ function DayCard({
   onAddActivity,
 }: DayCardProps) {
   // Calculate total cost using group costs (per_person × travelers)
+  // Exclude accommodation activities — hotel cost is tracked separately at trip level
   const totalCost = day.activities.reduce((sum, act) => {
+    const cat = (act as any).category || '';
+    const type = (act as any).type || '';
+    if (cat === 'accommodation' || type === 'accommodation') return sum;
     const cost = getActivityCost(act);
     const basis = getActivityCostBasis(act);
     return sum + getGroupCost(cost, basis, travelers);
