@@ -1,105 +1,37 @@
 
 
-# Fix: Urban Nomad Over-Assignment Bug
+# Fix: Chinese Characters Appearing During Itinerary Loading
 
 ## Problem
-Urban Nomad is being assigned to too many users because its archetype profile has the weakest gates of any archetype and strong boosters on generic traits.
+When the itinerary is being generated, Chinese characters occasionally appear in the loading/streaming view. These come from the AI model's raw response data (day themes, activity names, descriptions, locations) which is displayed directly without sanitization.
 
-**Why it wins so often:**
-- Its `novelty_seeking >= 0.5` gate passes at the DEFAULT value (0.5) -- zero quiz signal needed
-- Its `nature_orientation <= 0.3` gate triggers for anyone who picks even one city-oriented answer
-- Its boosters (novelty_seeking 1.2, pace 1.0, flexibility 0.8, social_energy 0.6) reward common/moderate trait values that most quiz-takers have
-- Most competing archetypes require specialized high traits (food >= 0.75, art >= 0.7, etc.) that fewer users reach
+## Root Cause
+The `convertGeneratedToBackendDay` function in `useLovableItinerary.ts` passes all AI-generated text fields straight through without running them through the existing sanitization utilities (`sanitizeAIOutput`, `sanitizeActivityName`). The streaming day cards then render this unsanitized text immediately.
 
-## Solution: Tighten Urban Nomad's profile and add a missing archetype discriminator
+The project already has robust sanitization utilities:
+- `sanitizeAIOutput()` in `textSanitizer.ts` -- strips CJK characters, schema leaks, and garbled text
+- `sanitizeActivityName()` in `activityNameSanitizer.ts` -- strips system prefixes and CJK characters
 
-### Change 1: Tighten Urban Nomad required gates
-In `src/config/quiz-questions-v3.json`, update `urban_nomad.required`:
+They're just not being applied at the right point in the pipeline.
 
-**Before:**
-```json
-"required": {
-  "nature_orientation": { "max": 0.3 },
-  "novelty_seeking": { "min": 0.5 }
-}
-```
+## Solution
+Add sanitization in `convertGeneratedToBackendDay` so every text field from the AI response is cleaned before it reaches the UI or gets saved to the database.
 
-**After:**
-```json
-"required": {
-  "nature_orientation": { "max": 0.25 },
-  "novelty_seeking": { "min": 0.6 },
-  "pace": { "min": 0.5 }
-}
-```
+### Change: `src/hooks/useLovableItinerary.ts`
 
-- `nature_orientation` tightened from 0.3 to 0.25 -- must genuinely prefer cities, not just "not nature"
-- `novelty_seeking` raised from 0.5 to 0.6 -- must show active novelty-seeking, not just the default
-- `pace >= 0.5` added -- Urban Nomads should be at least moderate-paced (city energy)
+Import `sanitizeAIOutput` from `@/utils/textSanitizer` and apply it to all string fields in `convertGeneratedToBackendDay`:
 
-### Change 2: Reduce Urban Nomad booster weights
-**Before:**
-```json
-"boosters": {
-  "novelty_seeking": 1.2,
-  "pace": 1.0,
-  "flexibility": 0.8,
-  "social_energy": 0.6
-}
-```
+- `day.theme` -- sanitized
+- `a.name` -- sanitized
+- `a.description` -- sanitized
+- `a.location` (string form) -- sanitized
+- `a.tips` -- sanitized
+- `a.category` -- sanitized (less likely to have CJK but costs nothing)
 
-**After:**
-```json
-"boosters": {
-  "novelty_seeking": 1.0,
-  "pace": 0.7,
-  "flexibility": 0.5,
-  "social_energy": 0.4
-}
-```
+This is a single-point fix that covers both the streaming UI display and the data saved to the database, preventing Chinese characters from appearing anywhere downstream.
 
-This brings total booster potential from 3.6 down to 2.6, in line with other archetypes.
-
-### Change 3: Add stronger penalties
-**Before:**
-```json
-"penalties": {
-  "nature_orientation": { "above": 0.5, "weight": -1.5 },
-  "restoration_need": { "above": 0.7, "weight": -0.8 },
-  "spirituality": { "above": 0.6, "weight": -0.5 }
-}
-```
-
-**After:**
-```json
-"penalties": {
-  "nature_orientation": { "above": 0.4, "weight": -2.0 },
-  "restoration_need": { "above": 0.6, "weight": -1.0 },
-  "spirituality": { "above": 0.5, "weight": -0.8 },
-  "planning": { "above": 0.7, "weight": -0.5 }
-}
-```
-
-Heavy planners are less likely to be true "nomads."
-
-### Change 4: Fix legacy fallback mappings
-In `src/data/archetypeNarratives.ts`, `solo_explorer` and `city_explorer` both silently map to `urban_nomad`. This is a secondary source of over-assignment for users coming through non-quiz paths. Update:
-
-```
-'solo_explorer' -> 'flexible_wanderer'   (solo != urban)
-'city_explorer' -> 'urban_nomad'         (keep -- this one is correct)
-```
-
-## Files changed
-1. `src/config/quiz-questions-v3.json` -- tighten urban_nomad required, boosters, penalties
-2. `src/data/archetypeNarratives.ts` -- fix solo_explorer mapping
-
-## Why this works
-- The tighter gates mean users must demonstrate genuine city-lover traits, not just "average"
-- Lower boosters prevent urban_nomad from outscoring archetypes that actually match
-- Stronger penalties push borderline cases toward more fitting archetypes
-- The solo_explorer mapping fix stops non-quiz users from defaulting into urban_nomad
-
-## Risk
-Existing users who were assigned Urban Nomad won't change automatically -- their DNA is already stored. Only new quiz completions and DNA recalculations will use the updated profile. No data migration needed.
-
+## Why this approach
+- Fixes the problem at the source (data entry point) rather than patching every display point
+- Uses existing, battle-tested sanitization functions
+- Also cleans the data before it's saved to the database, so future page loads won't show stale Chinese characters either
+- Zero risk of breaking anything -- these sanitizers gracefully handle clean text (no-op)
