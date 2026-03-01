@@ -4169,9 +4169,14 @@ export function EditorialItinerary({
                       : `Leg ${idx + 1}`;
                     const accentColor = isLast && allFlightLegs.length > 1 ? 'accent' : 'primary';
                     const defaultDate = isFirst ? startDate : isLast ? endDate : undefined;
+                    const isMarkedArrival = !!(leg as any).isDestinationArrival;
+                    const isMarkedDeparture = !!(leg as any).isDestinationDeparture;
 
                     return (
-                      <div key={idx} className="group rounded-xl border border-border bg-card overflow-hidden hover:shadow-soft transition-shadow">
+                      <div key={idx} className={cn(
+                        "group rounded-xl border bg-card overflow-hidden hover:shadow-soft transition-shadow",
+                        isMarkedArrival ? "border-primary/40 ring-1 ring-primary/20" : isMarkedDeparture ? "border-accent/40 ring-1 ring-accent/20" : "border-border"
+                      )}>
                         <div className="flex items-stretch">
                           <div className={`w-1.5 bg-gradient-to-b from-${accentColor} to-${accentColor}/50 shrink-0`} />
                           
@@ -4181,11 +4186,43 @@ export function EditorialItinerary({
                                 <Badge variant={isFirst ? 'secondary' : 'outline'} className={cn("text-xs font-medium", !isFirst && `border-${accentColor}/30 text-${accentColor}`)}>
                                   {legLabel}
                                 </Badge>
+                                {isMarkedArrival && (
+                                  <Badge className="text-[10px] h-4 px-1.5 bg-primary/10 text-primary border-0">
+                                    <Star className="h-2.5 w-2.5 mr-0.5 fill-primary" /> Final destination
+                                  </Badge>
+                                )}
+                                {isMarkedDeparture && (
+                                  <Badge className="text-[10px] h-4 px-1.5 bg-accent/10 text-accent border-0">
+                                    <Star className="h-2.5 w-2.5 mr-0.5 fill-accent" /> Return from destination
+                                  </Badge>
+                                )}
                                 <span className="text-xs text-muted-foreground">
                                   {leg.departure?.date || defaultDate}
                                 </span>
                               </div>
                               <div className="flex items-center gap-2">
+                                {/* Star button to mark as final destination */}
+                                {allFlightLegs.length > 1 && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); handleMarkFlightLeg(idx, 'isDestinationArrival'); }}
+                                        className={cn(
+                                          "h-7 w-7 rounded-full flex items-center justify-center transition-colors",
+                                          isMarkedArrival
+                                            ? "bg-primary/15 text-primary"
+                                            : "text-muted-foreground/40 hover:text-primary hover:bg-primary/10"
+                                        )}
+                                      >
+                                        <Star className={cn("h-4 w-4", isMarkedArrival && "fill-primary")} />
+                                      </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left" className="text-xs">
+                                      {isMarkedArrival ? 'This leg arrives at your destination' : 'Mark as final destination arrival'}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
                                 <AirlineLogo 
                                   code={leg.airlineCode || leg.airline?.substring(0, 2) || ''} 
                                   name={leg.airline}
@@ -4269,34 +4306,21 @@ export function EditorialItinerary({
                               </div>
                             )}
 
-                            {/* Destination leg markers — only for multi-leg trips */}
+                            {/* Destination departure marker — only for multi-leg trips */}
                             {allFlightLegs.length > 1 && (
-                              <div className="mt-3 pt-3 border-t border-border/50 flex flex-wrap gap-2">
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); handleMarkFlightLeg(idx, 'isDestinationArrival'); }}
-                                  className={cn(
-                                    "inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md border transition-colors",
-                                    (leg as any).isDestinationArrival
-                                      ? "bg-primary/10 border-primary/30 text-primary font-medium"
-                                      : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-                                  )}
-                                >
-                                  <MapPin className="h-3 w-3" />
-                                  {(leg as any).isDestinationArrival ? '✓ Destination arrival' : 'Mark as destination arrival'}
-                                </button>
+                              <div className="mt-3 pt-3 border-t border-border/50">
                                 <button
                                   type="button"
                                   onClick={(e) => { e.stopPropagation(); handleMarkFlightLeg(idx, 'isDestinationDeparture'); }}
                                   className={cn(
                                     "inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md border transition-colors",
-                                    (leg as any).isDestinationDeparture
+                                    isMarkedDeparture
                                       ? "bg-accent/10 border-accent/30 text-accent font-medium"
                                       : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
                                   )}
                                 >
                                   <Plane className="h-3 w-3" />
-                                  {(leg as any).isDestinationDeparture ? '✓ Destination departure' : 'Mark as destination departure'}
+                                  {isMarkedDeparture ? '✓ Departs from destination' : 'Mark as departure from destination'}
                                 </button>
                               </div>
                             )}
