@@ -531,6 +531,29 @@ export function AddFlightInline({
                       </button>
                     )}
 
+                    {/* Destination departure marker - only show for multi-leg trips */}
+                    {legs.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Toggle: set this leg as destination departure, clear others
+                          setLegs(prev => prev.map((l, i) => ({
+                            ...l,
+                            isDestinationDeparture: i === idx ? !l.isDestinationDeparture : false,
+                          })));
+                        }}
+                        className={cn(
+                          "w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs transition-colors",
+                          leg.isDestinationDeparture
+                            ? "bg-accent/10 text-accent font-medium"
+                            : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
+                        )}
+                      >
+                        <Plane className={cn("h-3.5 w-3.5", leg.isDestinationDeparture && "text-accent")} />
+                        {leg.isDestinationDeparture ? 'This is my destination departure' : 'Mark as destination departure'}
+                      </button>
+                    )}
+
                     {/* More details */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
