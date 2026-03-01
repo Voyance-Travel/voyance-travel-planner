@@ -1563,10 +1563,16 @@ export default function TripDetail() {
                     } : null);
                   }}
                   onBookingAdded={async () => {
-                    // Refetch trip_cities to pick up transfer/hotel changes without full reload
+                    // Refetch trip_cities AND trip to pick up hotel/transfer/flight changes
                     try {
-                      const updated = await getTripCities(tripId);
-                      setTripCities(updated);
+                      const [updatedCities, tripResult] = await Promise.all([
+                        getTripCities(tripId),
+                        supabase.from('trips').select('*').eq('id', tripId).single(),
+                      ]);
+                      setTripCities(updatedCities);
+                      if (tripResult.data) {
+                        setTrip(tripResult.data);
+                      }
                     } catch { /* non-critical */ }
                   }}
                   onUnlockComplete={(enrichedItinerary) => {
