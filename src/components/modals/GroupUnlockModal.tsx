@@ -43,6 +43,8 @@ export function GroupUnlockModal({
     priceId: string;
     productId: string;
     name: string;
+    tier: 'small' | 'medium' | 'large';
+    tripId: string;
   } | null>(null);
 
   const recommended = getRecommendedTier(collaboratorCount);
@@ -62,6 +64,8 @@ export function GroupUnlockModal({
             priceId: pack.priceId,
             productId: pack.productId,
             name: pack.name,
+            tier: pack.tier,
+            tripId,
           });
           return;
         }
@@ -150,6 +154,8 @@ export function GroupUnlockModal({
                         priceId: pack.priceId,
                         productId: pack.productId,
                         name: pack.name,
+                        tier: pack.tier,
+                        tripId,
                       })}
                     >
                       <CreditCard className="h-3 w-3" />
@@ -181,6 +187,8 @@ export function GroupUnlockModal({
           productName={checkoutConfig.name}
           returnPath={window.location.pathname + window.location.search}
           productId={checkoutConfig.productId}
+          tripId={checkoutConfig.tripId}
+          groupTier={checkoutConfig.tier}
         />
       )}
     </>

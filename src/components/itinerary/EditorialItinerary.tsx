@@ -3684,17 +3684,7 @@ export function EditorialItinerary({
                     </Button>
                     )}
 
-                    {/* Repair Pricing */}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-2"
-                      onClick={handleRepairPricing}
-                      disabled={isRepairingPricing}
-                    >
-                      {isRepairingPricing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
-                      {isRepairingPricing ? 'Repairing…' : 'Repair Pricing'}
-                    </Button>
+                    {/* Repair Pricing removed to simplify trip actions */}
 
                     {/* Regenerate Itinerary */}
                     <Button
@@ -5296,8 +5286,8 @@ export function EditorialItinerary({
             <TripCollaboratorsPanel
               tripId={tripId}
               ownerName={tripPermission?.isOwner ? 'You' : undefined}
-              ownerEmail={user?.email}
-              ownerAvatarUrl={user?.avatar}
+              ownerEmail={tripPermission?.isOwner ? user?.email : undefined}
+              ownerAvatarUrl={tripPermission?.isOwner ? user?.avatar : undefined}
               onInviteClick={handleCreateShareLink}
               onMemberAdded={(memberName) => {
                 toast.success(`${memberName} added to the trip!`, {
