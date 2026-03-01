@@ -369,19 +369,38 @@ export function ItineraryGenerator({
       console.error('[ItineraryGenerator] Generation failed:', err);
       setPrePhase(null);
 
-      // AUTO-REFUND: If credits were charged but generation failed, refund them
-      if (gateResult.creditsCharged > 0) {
-        console.log(`[ItineraryGenerator] Refunding ${gateResult.creditsCharged} credits for failed generation`);
-        const errMsg = err instanceof Error ? err.message : 'Unknown error';
-        const ok = await issueRefund(tripId, gateResult.creditsCharged, 'generation_failed', errMsg);
-        if (ok) {
-          toast.info(`Generation failed — ${gateResult.creditsCharged} credits have been refunded.`, { duration: 6000 });
-          if (userId) {
-            queryClient.invalidateQueries({ queryKey: ['credits', userId] });
-            queryClient.invalidateQueries({ queryKey: ['entitlements', userId] });
+      // PARTIAL REFUND: Only refund credits for days that were NOT generated.
+      // The progressive generator saves each day as it completes, so days.length
+      // reflects real progress even when a later day fails.
+      const gr = gateResultRef.current;
+      if (gr && gr.creditsCharged > 0) {
+        const daysCompleted = days.length;
+        const totalTrip = gr.requestedDays || totalDaysEstimate;
+        const creditsPerDay = Math.round(gr.creditsCharged / totalTrip);
+        const ungenerated = Math.max(0, totalTrip - daysCompleted);
+        const refundAmount = daysCompleted > 0 ? creditsPerDay * ungenerated : gr.creditsCharged;
+
+        if (refundAmount > 0) {
+          const errMsg = err instanceof Error ? err.message : 'Unknown error';
+          console.log(`[ItineraryGenerator] Partial refund: ${daysCompleted}/${totalTrip} days done, refunding ${refundAmount} of ${gr.creditsCharged} credits`);
+          const ok = await issueRefund(tripId, refundAmount, 'generation_failed_partial', `${daysCompleted}/${totalTrip} days completed. ${errMsg}`);
+          if (ok) {
+            toast.info(
+              daysCompleted > 0
+                ? `Generation stopped after ${daysCompleted}/${totalTrip} days — ${refundAmount} credits refunded for remaining days. Your progress has been saved.`
+                : `Generation failed — ${refundAmount} credits have been refunded.`,
+              { duration: 6000 }
+            );
+            if (userId) {
+              queryClient.invalidateQueries({ queryKey: ['credits', userId] });
+              queryClient.invalidateQueries({ queryKey: ['entitlements', userId] });
+            }
+          } else {
+            toast.error('Generation failed and automatic refund could not be processed. Please contact support.', { duration: 8000 });
           }
         } else {
-          toast.error('Generation failed and automatic refund could not be processed. Please contact support.', { duration: 8000 });
+          // All days generated but something else failed (e.g. final save) — no refund needed
+          toast.info('Generation completed but had a minor issue. Your itinerary has been saved.');
         }
       } else {
         // If useItineraryGeneration didn't already set the error, surface it
