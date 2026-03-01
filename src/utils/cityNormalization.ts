@@ -25,6 +25,35 @@ const COUNTRY_HINTS = new Set([
   'peru', 'chile', 'south africa', 'philippines', 'taiwan', 'hong kong',
 ]);
 
+// US states & territories that should NOT be treated as standalone cities
+const STATE_HINTS = new Set([
+  'alabama', 'alaska', 'arizona', 'arkansas', 'california', 'colorado',
+  'connecticut', 'delaware', 'florida', 'georgia', 'hawaii', 'idaho',
+  'illinois', 'indiana', 'iowa', 'kansas', 'kentucky', 'louisiana',
+  'maine', 'maryland', 'massachusetts', 'michigan', 'minnesota', 'mississippi',
+  'missouri', 'montana', 'nebraska', 'nevada', 'new hampshire', 'new jersey',
+  'new mexico', 'new york state', 'north carolina', 'north dakota', 'ohio',
+  'oklahoma', 'oregon', 'pennsylvania', 'rhode island', 'south carolina',
+  'south dakota', 'tennessee', 'texas', 'utah', 'vermont', 'virginia',
+  'washington state', 'west virginia', 'wisconsin', 'wyoming',
+  'puerto rico', 'guam', 'us virgin islands',
+  // Canadian provinces
+  'ontario', 'quebec', 'british columbia', 'alberta', 'manitoba',
+  'saskatchewan', 'nova scotia', 'new brunswick',
+  // Common abbreviations
+  'al', 'ak', 'az', 'ar', 'ca', 'co', 'ct', 'de', 'fl', 'ga', 'hi', 'id',
+  'il', 'in', 'ia', 'ks', 'ky', 'la', 'me', 'md', 'ma', 'mi', 'mn', 'ms',
+  'mo', 'mt', 'ne', 'nv', 'nh', 'nj', 'nm', 'ny', 'nc', 'nd', 'oh', 'ok',
+  'or', 'pa', 'ri', 'sc', 'sd', 'tn', 'tx', 'ut', 'vt', 'va', 'wa', 'wv',
+  'wi', 'wy',
+]);
+
+/** Check if a candidate is a region/state/country rather than a city */
+function isRegionNotCity(name: string): boolean {
+  const lower = name.toLowerCase().trim();
+  return COUNTRY_HINTS.has(lower) || STATE_HINTS.has(lower);
+}
+
 /** Remove filler words, brackets, trailing punctuation from a candidate city name */
 function cleanCandidate(value: string): string {
   return value
@@ -89,7 +118,7 @@ export function resolveCities(
         country: c?.country ? String(c.country) : undefined,
         nights: Number(c?.nights),
       }))
-      .filter((c) => c.name.length > 1);
+      .filter((c) => c.name.length > 1 && !isRegionNotCity(c.name));
 
     if (normalized.length > 1) {
       const allNightsValid = normalized.every(
@@ -144,9 +173,9 @@ export function resolveCities(
         candidates.length = 0;
         candidates.push(...weakParts);
       } else if (weakParts.length === 2) {
-        // Two parts — guard against "City, Country"
+        // Two parts — guard against "City, Country" or "City, State"
         const second = weakParts[1].toLowerCase();
-        if (!COUNTRY_HINTS.has(second)) {
+        if (!isRegionNotCity(second)) {
           candidates.length = 0;
           candidates.push(...weakParts);
         }
@@ -168,9 +197,9 @@ export function resolveCities(
     }
   }
 
-  // De-duplicate (case-insensitive)
+  // De-duplicate (case-insensitive) and filter out regions/states
   const deduped = Array.from(
-    new Map(candidates.map((n) => [n.toLowerCase(), n])).values(),
+    new Map(candidates.filter(n => !isRegionNotCity(n)).map((n) => [n.toLowerCase(), n])).values(),
   );
 
   if (deduped.length <= 1) {
