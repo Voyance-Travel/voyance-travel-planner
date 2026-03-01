@@ -13,6 +13,7 @@ import { type ArchetypeDetail } from '@/data/archetypeDetailContent';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/config/routes';
 import { toast } from 'sonner';
+import { getAppUrl } from '@/utils/getAppUrl';
 
 interface ArchetypeDetailSheetProps {
   archetype: ArchetypeDetail | null;
@@ -27,7 +28,7 @@ export default function ArchetypeDetailSheet({ archetype, open, onOpenChange }: 
 
   const handleShare = async () => {
     const shareText = `I might be a ${archetype.name}! "${archetype.tagline}" — Discover your Travel DNA on Voyance`;
-    const shareUrl = `${window.location.origin}/archetypes`;
+    const shareUrl = `${getAppUrl()}/archetypes`;
 
     if (navigator.share) {
       try {
@@ -241,7 +242,7 @@ export default function ArchetypeDetailSheet({ archetype, open, onOpenChange }: 
                   className="gap-2 text-muted-foreground"
                   onClick={async () => {
                     const inviteText = `Think you might be a ${archetype.name}? Take the Travel DNA quiz and find out!`;
-                    const inviteUrl = `${window.location.origin}${ROUTES.QUIZ}`;
+                    const inviteUrl = `${getAppUrl()}${ROUTES.QUIZ}`;
                     if (navigator.share) {
                       try {
                         await navigator.share({ title: 'Take the Travel DNA Quiz', text: inviteText, url: inviteUrl });

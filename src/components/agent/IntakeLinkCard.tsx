@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { generateIntakeLink, toggleIntakeEnabled, type AgencyAccount } from '@/services/agencyCRM';
 import { toast } from '@/hooks/use-toast';
+import { getAppUrl } from '@/utils/getAppUrl';
 
 interface IntakeLinkCardProps {
   account: AgencyAccount;
@@ -19,7 +20,7 @@ export default function IntakeLinkCard({ account, onUpdate }: IntakeLinkCardProp
   const [copied, setCopied] = useState(false);
 
   const intakeUrl = account.intake_token 
-    ? `${window.location.origin}/intake/${account.intake_token}`
+    ? `${getAppUrl()}/intake/${account.intake_token}`
     : null;
 
   const handleGenerate = async () => {

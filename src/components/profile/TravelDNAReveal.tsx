@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { getAppUrl } from '@/utils/getAppUrl';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -214,7 +215,7 @@ function ArchetypeHeroCard({
             className="px-0 h-auto py-0 text-xs text-background/30 hover:text-background hover:bg-transparent"
             onClick={async () => {
               const shareText = `I'm a ${narrative.name}! "${narrative.hookLine}" — Discover your Travel DNA on Voyance`;
-              const shareUrl = `${window.location.origin}/archetypes`;
+              const shareUrl = `${getAppUrl()}/archetypes`;
               
               if (navigator.share) {
                 try {

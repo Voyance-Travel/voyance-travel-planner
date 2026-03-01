@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Copy, Check, Link2, ExternalLink, RefreshCw } from 'lucide-react';
+import { getAppUrl } from '@/utils/getAppUrl';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -110,7 +111,7 @@ export default function ShareTripModal({ open, onOpenChange, tripId, tripName }:
   };
 
   const shareUrl = shareToken 
-    ? `${window.location.origin}/share/${shareToken}`
+    ? `${getAppUrl()}/share/${shareToken}`
     : '';
 
   const copyToClipboard = async () => {
