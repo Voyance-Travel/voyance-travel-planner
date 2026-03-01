@@ -1,84 +1,140 @@
 
+Goal: fix already-corrupted legacy trips (like Hong Kong) without forcing users to re-enter trip details, and add a top-level “Regenerate Itinerary” flow that preserves hotels/flights and original trip qualifiers while replacing corrupted scheduling/pricing.
 
-# Soft Guardrails: Warn, Don't Block
+What I verified in the current codebase
+1) Legacy repair currently exists but is not wired into the user flow:
+- `supabase/functions/backfill-activity-costs/index.ts` exists.
+- I found no frontend invocation of `backfill-activity-costs` (no automatic run, no user-trigger).
+- Result: existing trips can remain corrupted unless manually repaired out-of-band.
 
-## The Problem
+2) Your “Hong Kong still wrong” report is consistent with current state:
+- Recent Hong Kong trips exist and have itinerary data.
+- `activity_costs` rows are missing for those Hong Kong trip IDs in current data checks, so canonical totals/repair data may not be active for those trips.
 
-The current implementation has **hard caps** at two layers:
+3) Full regeneration can already reuse stored trip context:
+- `generate-itinerary` `generate-full` reads trip-level data from DB (`trips`, `trip_cities`, `trip_intents`, metadata, etc.).
+- So yes: re-running generation from stored trip context is feasible without re-entering details.
 
-1. **Database trigger** (`validate_activity_cost`): Silently rewrites any cost above the cap to the cap value (e.g., $600 dining becomes $500). The user never even knows their data was changed.
-2. **Frontend validation** (`validateCostUpdate` in `EditActivityModal.tsx`): Returns `valid: false` and blocks the save button entirely.
+4) Current regenerate UX is not where you want it:
+- A regenerate path exists via `TripConfirmationBanner`/generator flows, but there is no obvious top-of-itinerary “nuke-and-refresh” button in the main itinerary action area.
 
-Both of these prevent legitimate use cases like a $500/person omakase, a $1,000 fine dining experience, or a $400 private car transfer.
+Implementation plan
 
-## The Fix
+Phase 1 — Make corrupted legacy trips repairable in-app (not manual-only)
+A) Strengthen trip repair logic in `backfill-activity-costs`
+- Improve matching beyond category-only fallback:
+  1. destination + category + subcategory exact
+  2. destination + category + item_name fuzzy match from activity title
+  3. destination + category fallback
+- Add keyword/subcategory mapping for transport and dining (e.g., taxi, airport bus, metro, ramen, dim sum) so “taxi” doesn’t inherit metro-like defaults.
+- Add response stats by category + corrected count for transparent reporting.
 
-Change both layers from "block/rewrite" to "warn but allow."
+B) Add safe per-trip repair action callable from app
+- Add a new action in `generate-itinerary` (or a small dedicated backend function) like `repair-trip-costs`.
+- It should:
+  - authenticate user
+  - verify owner/editor access to trip
+  - run backfill logic for that trip only
+  - return structured repair results
+- This avoids exposing service-role-only functions directly from client.
 
-### 1. Database Trigger: Remove hard caps, keep anomaly detection
+C) Auto-repair trigger for legacy trips
+- In `TripDetail`, after loading a trip with itinerary:
+  - check if `activity_costs` rows are missing or clearly stale for that trip
+  - run one-time repair silently (or with unobtrusive toast)
+- This fixes old trips proactively the first time they’re opened post-release.
 
-Replace the current trigger that silently rewrites costs with one that only:
-- Prevents negative costs (hard rule -- always valid)
-- Auto-corrects when linked to a reference AND the cost exceeds 3x the reference high-end AND the source is NOT `user_override` (keeps the reference-based guard for AI-generated costs only)
-- Logs a warning note when costs are unusually high, but **does not change the value** for user overrides
+Phase 2 — Add top “Regenerate Itinerary” that preserves your setup
+A) Add top-level action button in itinerary header
+- Add button in the main Trip Summary actions row (same visible level as Share/Optimize/Save).
+- Label: “Regenerate Itinerary”.
 
-The key distinction: **AI-generated costs** still get capped against reference data. **User-entered costs** are always respected.
+B) Add confirmation modal with explicit preservation contract
+Default behavior:
+- Keep:
+  - flights (`flight_selection`)
+  - hotels (`hotel_selection` and per-city hotels in `trip_cities`)
+  - multi-city routing and transport legs (`trip_cities`, transport_type/details)
+  - trip qualifiers from DB (`trip_type`, budget tier, metadata fields like must-do, first-time flags, children ages, commitments, trip intents)
+- Replace:
+  - day schedule (`itinerary_data.days`)
+  - activity pricing (rewrite `activity_costs` from fresh generation path)
 
-```text
-Logic:
-  IF source = 'user_override' THEN
-    -- User explicitly set this. Allow it. Just add a note if it's high.
-    IF cost > category_warning_threshold THEN
-      append note: "[User override: above typical range for category]"
-    END IF
-  ELSE
-    -- AI/system generated. Apply reference-based correction.
-    IF cost_reference_id IS NOT NULL AND cost > ref.cost_high_usd * 3 THEN
-      auto-correct to ref.cost_high_usd
-    END IF
-  END IF
+Optional toggle (advanced):
+- “Preserve locked activities” off by default for “clean slate” regeneration.
 
-  -- No category caps applied. No RAISE EXCEPTION. No silent rewrites for users.
-```
+C) Run full generation from persisted trip context (no re-entry)
+- Reuse existing `ItineraryGenerator` + `generate-full` pipeline with current `tripId`.
+- On completion:
+  - overwrite itinerary day plan
+  - ensure `activity_costs` rewritten for the new itinerary
+  - keep flight/hotel/trip-level qualifiers unchanged
 
-### 2. Frontend Validation: Warn, don't block
+Phase 3 — Ensure all price displays converge immediately after repair/regeneration
+A) Remove stale-estimate dominance where canonical data exists
+- In `EditorialItinerary` total display, continue preferring canonical view total, but avoid silently falling back to estimated math when canonical data is expected but missing right after load.
+- Trigger canonical refresh after repair/regenerate completes.
 
-Change `validateCostUpdate()` to return a **warning** level instead of `valid: false`:
+B) Payments/Budget consistency hardening
+- `PaymentsTab` already reads `v_payments_summary` but still builds fallback payable items from itinerary estimates.
+- Tighten behavior so repaired/canonical data is primary immediately after regeneration/repair.
+- Keep fallback only for transitional states and show “repairing cost data…” status while syncing.
 
-```text
-Return type changes from:
-  { valid: boolean; message?: string }
-To:
-  { valid: true; warning?: string }  -- always valid, optionally warns
+Phase 4 — UX for “too far gone” recovery
+A) Add a second explicit action in same area:
+- “Repair Pricing” (fast, no day rewrite): runs per-trip backfill/repair only.
+- “Regenerate Itinerary” (full rewrite): replaces schedule + pricing but keeps user setup.
 
-Example:
-  $600 dining -> { valid: true, warning: "This is above the typical range for dining ($500/pp). Are you sure?" }
-  $40 dining  -> { valid: true }
-  -$5 dining  -> { valid: false, message: "Cost cannot be negative" }  -- only case that blocks
-```
+B) Messaging for user trust
+- On complete, show summary:
+  - rows repaired
+  - outliers corrected
+  - new trip total source
+- This directly addresses uncertainty like “was old corruption actually fixed?”
 
-### 3. EditActivityModal: Show warning, allow save
+Files to modify (planned)
+Backend
+1. `supabase/functions/backfill-activity-costs/index.ts`
+- Better matching hierarchy + richer repair stats.
+2. `supabase/functions/generate-itinerary/index.ts` (or new lightweight function)
+- Add authenticated `repair-trip-costs` action with trip access checks.
+3. (If needed) new migration for helper SQL function/view for “trip cost health” checks.
 
-- Replace the hard block (disabled save button + error state) with a yellow warning banner
-- The save button stays enabled
-- Warning text: "This is above the typical range for [category]. You can still save it."
-- Only truly invalid values (negative costs) disable save
+Frontend
+4. `src/pages/TripDetail.tsx`
+- Auto-check/trigger repair for legacy trips with missing canonical cost rows.
+- Wire top-level regenerate + repair actions.
+5. `src/components/itinerary/EditorialItinerary.tsx`
+- Add top header actions/modal for “Repair Pricing” + “Regenerate Itinerary”.
+- Refresh canonical totals after operations complete.
+6. `src/components/itinerary/PaymentsTab.tsx`
+- Prioritize canonical summary during and after repair.
+7. `src/services/activityCostService.ts`
+- Add helper methods for repair status checks and triggering repair action.
 
-### 4. `upsertActivityCost`: Remove the blocking validation
+Security and access rules
+- Keep user-scoped access via existing trip ownership/collaborator checks.
+- No direct client path to service-role-only operations.
+- Respect existing RLS behavior on `activity_costs` and reference tables.
 
-- The service function currently calls `validateCostUpdate` and returns `null` if invalid
-- Change it to proceed with the upsert regardless (the DB trigger handles anomaly logging)
-- When source is `user_override`, the trigger respects the value
+Validation checklist before release
+1) Open corrupted Hong Kong trip:
+- Click “Repair Pricing”:
+  - taxi-like outliers normalized via improved matching
+  - canonical totals populate
+  - header, budget, payments align
+2) Click “Regenerate Itinerary”:
+- flights/hotels/multi-city qualifiers preserved
+- day plan and pricing refreshed from stored context
+- no need to re-enter original trip form data
+3) Confirm no regression:
+- day-level regenerate still works
+- locked activity behavior unchanged unless full-regenerate toggle says otherwise
+4) Verify totals consistency:
+- Trip Summary, Budget, Payments within canonical pipeline expectations
 
-## Files to Change
-
-1. **New migration SQL** -- Replace the `validate_activity_cost` trigger function with the soft version that only hard-corrects AI-sourced costs
-2. **`src/services/activityCostService.ts`** -- Change `validateCostUpdate` return type to always return `valid: true` with an optional `warning` field (except for negatives). Remove the blocking check in `upsertActivityCost`
-3. **`src/components/itinerary/EditActivityModal.tsx`** -- Show warning text instead of blocking save. Keep save button enabled when warning is present
-
-## What This Preserves
-
-- AI-generated costs (from `generate-itinerary` or `budget-coach`) are still corrected against `cost_reference` data -- no $1,000 ramen from AI hallucination
-- Anomaly detection still fires and logs notes for auditing
-- Users can enter any positive cost they want -- their $1,000 dinner, their $400 private transfer, their $6,000 Tokyo food budget
-
+Expected user-facing outcome
+- Corrupted historical trips get fixed without starting over.
+- You can fully reset a “too far gone” itinerary from the top action button.
+- Your original trip setup (dates, multi-city path, flights, hotels, asks/qualifiers) is preserved and reused.
+- Pricing/scheduling are rebuilt cleanly with current guardrails.
