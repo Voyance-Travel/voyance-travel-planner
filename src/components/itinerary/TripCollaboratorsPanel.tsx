@@ -8,9 +8,10 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { 
   Crown, Users, Eye, Edit3, UserPlus, MoreVertical, 
-  X, Shield, ChevronDown, ChevronUp, Dna, Loader2, Sparkles, Link2, UserMinus
+  X, Shield, ChevronDown, ChevronUp, Dna, Loader2, Sparkles, Link2, UserMinus, LogOut
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -98,6 +99,8 @@ export function TripCollaboratorsPanel({
   const [collaboratorDNA, setCollaboratorDNA] = useState<Record<string, { hasDNA: boolean; compatibility: number | null }>>({});
   const [updatingPreferences, setUpdatingPreferences] = useState<string | null>(null);
   const [removingCollaborator, setRemovingCollaborator] = useState<TripCollaborator | null>(null);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const navigate = useNavigate();
 
   const isOwner = permission?.isOwner ?? false;
 
@@ -180,8 +183,30 @@ export function TripCollaboratorsPanel({
 
   const confirmRemove = async () => {
     if (!removingCollaborator) return;
-    removeCollaborator.mutate(removingCollaborator.id);
+    removeCollaborator.mutate(removingCollaborator.id, {
+      onSuccess: () => {
+        toast.success('Member removed. You can re-send the invite link to let them rejoin.');
+      },
+    });
     setRemovingCollaborator(null);
+  };
+
+  // Find current user's collaborator record (for leave functionality)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null));
+  }, []);
+  const myCollaboratorRecord = collaborators.find(c => c.user_id === currentUserId);
+
+  const handleLeaveTrip = async () => {
+    if (!myCollaboratorRecord) return;
+    removeCollaborator.mutate(myCollaboratorRecord.id, {
+      onSuccess: () => {
+        toast.success('You left the trip. Ask the owner for the invite link to rejoin.');
+        navigate('/');
+      },
+    });
+    setShowLeaveConfirm(false);
   };
 
   const handleTogglePreferences = async (collaborator: TripCollaborator) => {
@@ -505,9 +530,9 @@ export function TripCollaboratorsPanel({
                     </>
                   )}
 
-                  {/* Non-owner permission indicator */}
+                  {/* Non-owner permission indicator + Leave Trip */}
                   {!isOwner && permission?.permission && (
-                    <div className="mt-2 pt-2 border-t border-border/50">
+                    <div className="mt-2 pt-2 border-t border-border/50 space-y-2">
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Shield className="h-3 w-3" />
                         <span>
@@ -515,6 +540,17 @@ export function TripCollaboratorsPanel({
                           {permission.canEdit ? ' - you can edit this itinerary' : ' - view only'}
                         </span>
                       </div>
+                      {myCollaboratorRecord && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full gap-2 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+                          onClick={() => setShowLeaveConfirm(true)}
+                        >
+                          <LogOut className="h-3.5 w-3.5" />
+                          Leave Trip
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -544,6 +580,30 @@ export function TripCollaboratorsPanel({
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
             Remove
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    {/* Leave Trip Confirmation Dialog */}
+    <AlertDialog open={showLeaveConfirm} onOpenChange={setShowLeaveConfirm}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
+            <LogOut className="h-5 w-5 text-destructive" />
+            Leave this trip?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            You'll lose access to this itinerary. The trip owner can send you the invite link to rejoin anytime.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleLeaveTrip}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            Leave Trip
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
