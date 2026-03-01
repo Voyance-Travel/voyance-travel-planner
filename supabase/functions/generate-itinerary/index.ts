@@ -6775,6 +6775,65 @@ async function finalSaveItinerary(
     }
 
     console.log('[Stage 6] Final save successful');
+
+    // =========================================================================
+    // PHASE 4: Write activity_costs rows — single source of truth for all totals
+    // =========================================================================
+    try {
+      const allDays = enrichedData.days || [];
+      const costRows: Array<Record<string, unknown>> = [];
+
+      for (const day of allDays) {
+        for (const act of (day.activities || [])) {
+          // Skip downtime / free-time blocks
+          const cat = (act.category || 'activity').toLowerCase();
+          if (['downtime', 'free_time', 'accommodation'].includes(cat)) continue;
+
+          const rawCost = (act as any).cost || (act as any).estimatedCost || { amount: 0, currency: 'USD' };
+          const costPerPerson = typeof rawCost === 'number' ? rawCost : (rawCost.amount || 0);
+
+          // Skip truly free items
+          if (costPerPerson <= 0) continue;
+
+          // Map itinerary categories to cost_reference categories
+          const categoryMap: Record<string, string> = {
+            dining: 'dining', breakfast: 'dining', brunch: 'dining', lunch: 'dining',
+            dinner: 'dining', cafe: 'dining', coffee: 'dining', food: 'dining', restaurant: 'dining',
+            transport: 'transport', transportation: 'transport', taxi: 'transport', metro: 'transport',
+            activity: 'activity', attraction: 'activity', museum: 'activity', tour: 'activity',
+            sightseeing: 'activity', experience: 'activity', entertainment: 'activity',
+            nightlife: 'nightlife', bar: 'nightlife', club: 'nightlife',
+            shopping: 'shopping', market: 'shopping',
+          };
+          const mappedCategory = categoryMap[cat] || 'activity';
+
+          costRows.push({
+            trip_id: tripId,
+            activity_id: act.id,
+            day_number: day.dayNumber || 1,
+            cost_per_person_usd: Math.min(costPerPerson, 2000), // safety cap
+            num_travelers: context.travelers || 1,
+            category: mappedCategory,
+            source: 'reference',
+            confidence: 'medium',
+          });
+        }
+      }
+
+      if (costRows.length > 0) {
+        // Delete existing rows for this trip, then insert fresh
+        await supabase.from('activity_costs').delete().eq('trip_id', tripId);
+        const { error: costErr } = await supabase.from('activity_costs').insert(costRows);
+        if (costErr) {
+          console.warn('[Stage 6] activity_costs insert error (non-blocking):', costErr.message);
+        } else {
+          console.log(`[Stage 6] Wrote ${costRows.length} activity_costs rows`);
+        }
+      }
+    } catch (costWriteErr) {
+      console.warn('[Stage 6] activity_costs write failed (non-blocking):', costWriteErr);
+    }
+
     return true;
   } catch (e) {
     console.error('[Stage 6] Final save error:', e);

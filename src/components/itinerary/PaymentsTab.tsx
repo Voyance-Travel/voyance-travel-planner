@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getAppUrl } from '@/utils/getAppUrl';
 import { estimateCostSync } from '@/lib/cost-estimation';
+import { getPaymentsSummary, type PaymentsSummary } from '@/services/activityCostService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FirstUseHint } from './FirstUseHint';
 import { 
@@ -392,11 +393,22 @@ export function PaymentsTab({
     return items;
   }, [flightSelection, hotelSelection, days, payments]);
 
-  // Calculate totals
-  const estimatedTotal = payableItems.reduce((sum, item) => sum + item.amountCents, 0);
-  const paidAmount = payableItems
-    .filter(item => item.payment?.status === 'paid')
-    .reduce((sum, item) => sum + item.amountCents, 0);
+  // ─── Canonical totals from activity_costs table (single source of truth) ───
+  const [canonicalSummary, setCanonicalSummary] = useState<PaymentsSummary | null>(null);
+  useEffect(() => {
+    getPaymentsSummary(tripId).then(s => setCanonicalSummary(s));
+  }, [tripId]);
+
+  // Calculate totals — prefer canonical view when data exists
+  const fallbackTotal = payableItems.reduce((sum, item) => sum + item.amountCents, 0);
+  const estimatedTotal = canonicalSummary
+    ? Math.round((canonicalSummary.total_estimated_usd || 0) * 100)
+    : fallbackTotal;
+  const paidAmount = canonicalSummary
+    ? Math.round((canonicalSummary.total_paid_usd || 0) * 100)
+    : payableItems
+        .filter(item => item.payment?.status === 'paid')
+        .reduce((sum, item) => sum + item.amountCents, 0);
   const unpaidAmount = estimatedTotal - paidAmount;
   const progressPercent = estimatedTotal > 0 ? (paidAmount / estimatedTotal) * 100 : 0;
 

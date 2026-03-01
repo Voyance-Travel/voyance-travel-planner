@@ -48,6 +48,28 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
+    // ─── Look up cost_reference for this destination to ground AI suggestions ───
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
+    const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY") || "";
+    let costRefLookup = "";
+    if (SUPABASE_URL && SUPABASE_SERVICE_KEY && destination) {
+      try {
+        const { createClient } = await import("npm:@supabase/supabase-js@2.90.1");
+        const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+        const { data: refs } = await sb
+          .from("cost_reference")
+          .select("category, subcategory, item_name, cost_low_usd, cost_mid_usd, cost_high_usd")
+          .ilike("destination_city", destination.split(",")[0].trim())
+          .limit(50);
+        if (refs && refs.length > 0) {
+          costRefLookup = "\n\nREFERENCE PRICING (use these, NOT your own guesses):\n" +
+            refs.map((r: any) => `${r.category}/${r.subcategory || "general"} (${r.item_name || ""}): $${r.cost_low_usd}-$${r.cost_mid_usd}-$${r.cost_high_usd}`).join("\n");
+        }
+      } catch (refErr) {
+        console.warn("cost_reference lookup failed:", refErr);
+      }
+    }
+
     // Build a concise itinerary summary for the prompt
     const itinerarySummary = itinerary_days
       .map((day) => {
@@ -65,18 +87,26 @@ serve(async (req) => {
     const currentTotal = (current_total_cents / 100).toFixed(0);
     const gap = (gap_cents / 100).toFixed(0);
 
-    const systemPrompt = `You are a travel budget coach. You analyze itineraries and suggest specific cost-cutting swaps. You NEVER suggest removing an activity entirely — always suggest a cheaper replacement that gives a similar experience. Be specific with real venue/restaurant names when possible.`;
+    const systemPrompt = `You are a travel budget coach. You analyze itineraries and suggest specific cost-cutting swaps. You NEVER suggest removing an activity entirely — always suggest a cheaper replacement that gives a similar experience. Be specific with real venue/restaurant names when possible.
+
+CRITICAL COST RULES:
+- You must NEVER invent or guess prices. Use ONLY the reference pricing data provided below.
+- If no reference pricing is available for a swap, use conservative estimates well below the current cost.
+- Your new_cost must ALWAYS be strictly LESS than the current_cost. If you can't find a cheaper alternative, skip that item.
+- All costs are in whole currency units (e.g., 50 for $50), NOT cents.`;
 
     const userPrompt = `The user's travel itinerary to ${destination || "their destination"} costs ${currency} ${currentTotal} but their budget is ${currency} ${budgetTarget}. They need to cut ${currency} ${gap}.
 
 Here is the full itinerary:
 
 ${itinerarySummary}
+${costRefLookup}
 
 Suggest 5-8 specific cost-cutting swaps. For each:
 1. Identify the expensive item (name + current cost)
 2. Suggest a cheaper alternative that gives a similar experience
-3. Calculate the exact savings
+3. The new_cost MUST come from the reference pricing above, not from your own estimates
+4. Calculate the exact savings
 
 Types of swaps to consider:
 - Private/guided tours → general admission or self-guided
@@ -85,7 +115,6 @@ Types of swaps to consider:
 - Taxi rides → metro/walking if distance is reasonable
 - Paid activities → free alternatives in the same area
 - Premium experiences → mid-range alternatives
-- Paid cooking classes → free food market walks
 
 Rules:
 - NEVER suggest removing an activity — always suggest a cheaper replacement
