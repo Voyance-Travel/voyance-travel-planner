@@ -4217,7 +4217,10 @@ export function EditorialItinerary({
               toast.success('Activity removed from itinerary');
             }}
             onApplyBudgetSwap={(suggestion) => {
-              // Apply the Budget Coach swap: replace activity cost, name, description
+              // suggestion.new_cost is in CENTS from the edge function.
+              // Activity costs are stored in WHOLE currency units.
+              const newCostWhole = Math.round(suggestion.new_cost / 100);
+
               let applied = false;
               setDays(prev => {
                 const updated = prev.map(day => {
@@ -4232,18 +4235,9 @@ export function EditorialItinerary({
                           ? Number((act.cost as any).amount ?? 0)
                           : Number(act.cost ?? 0);
 
-                      const primaryNewCostWhole = Math.round(suggestion.new_cost / 100);
-                      const fallbackNewCostWhole = Math.round(suggestion.new_cost / 10000);
-                      const resolvedNewCostWhole =
-                        currentCostWhole > 0 &&
-                        primaryNewCostWhole >= currentCostWhole &&
-                        fallbackNewCostWhole > 0 &&
-                        fallbackNewCostWhole < currentCostWhole
-                          ? fallbackNewCostWhole
-                          : primaryNewCostWhole;
-
-                      // Safety: never apply a "saving" suggestion that increases price
-                      if (currentCostWhole > 0 && resolvedNewCostWhole >= currentCostWhole) {
+                      // STRICT GUARD: only apply if new cost is strictly lower
+                      if (currentCostWhole > 0 && newCostWhole >= currentCostWhole) {
+                        console.warn(`Budget swap blocked: new ${newCostWhole} >= current ${currentCostWhole}`);
                         return act;
                       }
 
@@ -4254,8 +4248,8 @@ export function EditorialItinerary({
                         name: suggestion.suggested_swap,
                         description: suggestion.reason,
                         cost: typeof act.cost === 'object' && act.cost !== null
-                          ? { ...(act.cost as any), amount: resolvedNewCostWhole }
-                          : resolvedNewCostWhole,
+                          ? { ...(act.cost as any), amount: newCostWhole }
+                          : newCostWhole,
                       };
                     }),
                   };
