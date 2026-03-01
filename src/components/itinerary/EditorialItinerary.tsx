@@ -4218,6 +4218,7 @@ export function EditorialItinerary({
             }}
             onApplyBudgetSwap={(suggestion) => {
               // Apply the Budget Coach swap: replace activity cost, name, description
+              let applied = false;
               setDays(prev => {
                 const updated = prev.map(day => {
                   if (day.dayNumber !== suggestion.day_number) return day;
@@ -4225,24 +4226,52 @@ export function EditorialItinerary({
                     ...day,
                     activities: day.activities.map(act => {
                       if (act.id !== suggestion.activity_id) return act;
-                      // Budget coach returns costs in cents; activity costs are in whole currency
-                      const newCostWhole = Math.round(suggestion.new_cost / 100);
+
+                      const currentCostWhole =
+                        typeof act.cost === 'object' && act.cost !== null
+                          ? Number((act.cost as any).amount ?? 0)
+                          : Number(act.cost ?? 0);
+
+                      const primaryNewCostWhole = Math.round(suggestion.new_cost / 100);
+                      const fallbackNewCostWhole = Math.round(suggestion.new_cost / 10000);
+                      const resolvedNewCostWhole =
+                        currentCostWhole > 0 &&
+                        primaryNewCostWhole >= currentCostWhole &&
+                        fallbackNewCostWhole > 0 &&
+                        fallbackNewCostWhole < currentCostWhole
+                          ? fallbackNewCostWhole
+                          : primaryNewCostWhole;
+
+                      // Safety: never apply a "saving" suggestion that increases price
+                      if (currentCostWhole > 0 && resolvedNewCostWhole >= currentCostWhole) {
+                        return act;
+                      }
+
+                      applied = true;
                       return {
                         ...act,
                         title: suggestion.suggested_swap,
                         name: suggestion.suggested_swap,
                         description: suggestion.reason,
                         cost: typeof act.cost === 'object' && act.cost !== null
-                          ? { ...(act.cost as any), amount: newCostWhole }
-                          : newCostWhole,
+                          ? { ...(act.cost as any), amount: resolvedNewCostWhole }
+                          : resolvedNewCostWhole,
                       };
                     }),
                   };
                 });
-                syncBudgetFromDays(updated);
+
+                if (applied) {
+                  syncBudgetFromDays(updated);
+                }
                 return updated;
               });
-              setHasChanges(true);
+
+              if (applied) {
+                setHasChanges(true);
+              } else {
+                toast.error('Swap skipped because suggested cost was not lower.');
+              }
             }}
           />
           </>

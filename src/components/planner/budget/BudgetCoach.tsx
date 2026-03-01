@@ -123,10 +123,10 @@ export function BudgetCoach({
       date: day.date,
       activities: day.activities.map((a) => {
         let costCents = 0;
-        if (typeof a.cost === 'number') {
-          costCents = a.cost;
-        } else if (a.cost && typeof a.cost === 'object') {
-          costCents = a.cost.amount;
+        if (typeof a.cost === 'number' && Number.isFinite(a.cost)) {
+          costCents = Math.max(0, Math.round(a.cost * 100));
+        } else if (a.cost && typeof a.cost === 'object' && Number.isFinite(a.cost.amount)) {
+          costCents = Math.max(0, Math.round(a.cost.amount * 100));
         }
         return {
           id: a.id,
