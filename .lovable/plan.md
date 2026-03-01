@@ -1,46 +1,46 @@
 
 
-# Fix: 20 Edge Functions Missing from Config
+# Fix: Initial Generation Timeout on Long Trips
 
 ## Problem
 
-There are **20 edge functions** that exist as code directories and are actively called from the frontend, but are **missing from `config.toml`**. Without a config entry, they default to `verify_jwt = true` at the Supabase gateway level. Since your project uses in-code JWT validation (not gateway-level), these functions will fail with 401/CORS errors when called from the browser.
+The `generate-full` action in `generate-itinerary` processes ALL days in a single edge function call. For a 16-day trip, this takes ~55 seconds, hitting the Deno edge runtime wall clock limit. When the runtime kills the function, no response (including CORS headers) is returned, causing the browser to report a CORS error.
 
-## Affected Functions
+The **regeneration** flow was already fixed to use day-by-day calls. The **initial generation** in `useItineraryGeneration.ts` still uses the monolithic `generate-full` action.
 
-All 20 are called from the frontend and have proper CORS headers and in-code auth, but will be blocked at the gateway:
+## Solution
 
-| Function | Called From |
-|---|---|
-| `refresh-day` | `useRefreshDay.ts` |
-| `trip-chat` | `TripChat.tsx` |
-| `trip-suggestions` | `TripSuggestions.tsx` |
-| `discover-proactive` | `DiscoverDrawer.tsx` |
-| `dna-feedback-chat` | `DNAFeedbackChat.tsx` |
-| `mid-trip-dna` | `MidTripDNA.tsx` |
-| `suggest-hotel-swaps` | `TripConfirmationBanner.tsx` |
-| `transit-estimate` | `useTransitEstimate.ts` |
-| `compare-transport` | `useTransportComparison.ts` |
-| `generate-skip-list` | `useSkipList.ts` |
-| `purchase-group-unlock` | `GroupUnlockModal.tsx` |
-| `topup-group-budget` | `GroupTopupModal.tsx` |
-| `spend-group-credits` | (group billing) |
-| `discover-hidden-gems` | (discovery feature) |
-| `chat-trip-planner` | (chat planner) |
-| `mystery-trip-logistics` | (mystery trips) |
-| `backfill-activity-costs` | (admin/migration) |
-| `backfill-destination-images` | (admin/migration) |
-| `cache-destination-image` | (image caching) |
-| `migrate-site-images` | (admin/migration) |
+Refactor `useItineraryGeneration.ts` to use the same progressive day-by-day pattern that regeneration already uses:
 
-## Fix
+1. **Call `generate-full` only for Stage 1 (context/profile loading) + Stage 2 setup** -- or switch entirely to calling `generate-day` in a loop from the frontend
+2. Each day call completes in ~5-10 seconds, well within timeout limits
+3. Auto-save after each day so partial progress is preserved
+4. Show progress UI during generation
 
-**Single change to `supabase/config.toml`**: Add all 20 missing function entries with `verify_jwt = false`, matching the existing pattern used by the other 85+ functions.
+## Changes
+
+### 1. `src/hooks/useItineraryGeneration.ts`
+- Replace the single `generate-full` invocation with a two-phase approach:
+  - **Phase 1**: Call `generate-full` with a new flag like `setupOnly: true` or just call a lightweight setup/context action to initialize the trip in the database
+  - **Phase 2**: Loop through days 1..N calling `generate-day` for each, with progress callbacks, auto-save, and retry logic (matching the regeneration pattern in `EditorialItinerary.tsx`)
+- Add progress state/callback so the UI can show "Generating day 3 of 16..."
+- Add per-day timeout (120s) and retry with backoff (matching regeneration)
+
+### 2. `supabase/functions/generate-itinerary/index.ts` (minor)
+- Optionally add a `setup-only` action that runs Stages 1 + context loading without generating any days, returning the trip context needed for subsequent `generate-day` calls
+- Or: keep `generate-full` but have it bail after early save (Stage 3) if `setupOnly` is set
+
+### 3. UI progress indicator
+- The generation flow already has loading states -- wire the day-by-day progress percentage into the existing loading UI in the trip planner
 
 ## Technical Details
 
-- **File changed**: `supabase/config.toml` only
-- **No code changes needed** — all 20 functions already have proper CORS headers and in-code auth
-- **Risk**: None — this aligns them with the architecture every other function already uses
-- **Impact**: Fixes silent 401 failures for features like Refresh Day, Trip Chat, Trip Suggestions, Discover, DNA Feedback, Hotel Swaps, Transit Estimates, Group Unlocks, and more
+- Matches the proven pattern already working in `EditorialItinerary.tsx` lines 2595-2738
+- Each `generate-day` call is self-contained (~5-10s) and well within edge function limits
+- Partial saves mean users never lose progress even if one day fails
+- Retry logic (4 attempts with exponential backoff) handles transient failures
+- No backend schema changes needed
 
+## Risk
+
+Low -- `generate-day` is already battle-tested via regeneration. This just changes the orchestration from server-side to client-side for initial generation.
