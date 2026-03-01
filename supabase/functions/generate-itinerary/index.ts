@@ -10573,11 +10573,26 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         if (activitiesToEnrich.length > 0 && GOOGLE_MAPS_API_KEY) {
           console.log(`[generate-day] Enriching ${activitiesToEnrich.length} new activities with ratings/photos...`);
           
+          // Time budget: cap enrichment so the overall request stays within edge runtime limits.
+          // AI generation + prompt building already consumed significant time; leave headroom for DB saves.
+          const ENRICHMENT_TIME_BUDGET_MS = 25_000;
+          const enrichStartedAt = Date.now();
+          
           // Enrich in parallel batches of 3 to avoid rate limits
           const batchSize = 3;
           const enrichedActivities: StrictActivity[] = [];
+          let enrichmentBudgetExceeded = false;
           
           for (let i = 0; i < activitiesToEnrich.length; i += batchSize) {
+            // Check time budget before starting next batch
+            const elapsed = Date.now() - enrichStartedAt;
+            if (elapsed >= ENRICHMENT_TIME_BUDGET_MS) {
+              console.warn(`[generate-day] Enrichment time budget reached (${elapsed}ms). Skipping remaining ${activitiesToEnrich.length - i} activities.`);
+              enrichedActivities.push(...activitiesToEnrich.slice(i));
+              enrichmentBudgetExceeded = true;
+              break;
+            }
+            
             const batch = activitiesToEnrich.slice(i, i + batchSize);
             const enrichedBatch = await Promise.all(
               batch.map(async (act: StrictActivity) => {
@@ -10599,6 +10614,10 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
               })
             );
             enrichedActivities.push(...enrichedBatch);
+          }
+          
+          if (enrichmentBudgetExceeded) {
+            console.log(`[generate-day] Enrichment partial: ${enrichedActivities.filter((a: { rating?: unknown }) => a.rating).length} enriched, rest returned as-is`);
           }
           
           // Merge enriched activities back with locked ones and sort by time
