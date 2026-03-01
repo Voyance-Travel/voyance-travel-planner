@@ -1078,7 +1078,7 @@ function FlightHotelStep({
     const normalizedLegs = normalizeLegs(legs);
 
     // Build a signature to skip no-op updates
-    const makeKey = (l: ManualFlightEntry) => [l.airline,l.flightNumber,l.departureAirport,l.arrivalAirport,l.departureTime,l.arrivalTime,l.departureDate,l.price].join('|');
+    const makeKey = (l: ManualFlightEntry) => [l.airline,l.flightNumber,l.departureAirport,l.arrivalAirport,l.departureTime,l.arrivalTime,l.departureDate,l.price,l.isDestinationArrival,l.isDestinationDeparture].join('|');
     const sig = normalizedLegs.map(makeKey).join('||');
     if (sig === lastMultiLegSig.current) return;
     lastMultiLegSig.current = sig;
@@ -2291,7 +2291,9 @@ export default function Start() {
             time: leg.arrivalTime || '',
           },
           price: leg.price || 0,
-          cabin: 'economy',
+          cabin: leg.cabinClass || 'economy',
+          isDestinationArrival: leg.isDestinationArrival || undefined,
+          isDestinationDeparture: leg.isDestinationDeparture || undefined,
         }));
         flightSelection = buildFlightSelectionFromLegs(flightLegs, true);
       }

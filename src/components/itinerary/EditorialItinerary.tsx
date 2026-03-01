@@ -2048,14 +2048,15 @@ export function EditorialItinerary({
       };
     }
     if (updatedLegs.length >= 2) {
-      const lastLeg = updatedLegs[updatedLegs.length - 1];
+      // Prefer the starred departure leg; fallback to last leg
+      const destDepartureLeg = updatedLegs.find(l => l.isDestinationDeparture) || updatedLegs[updatedLegs.length - 1];
       updatedSelection.return = {
-        airline: lastLeg.airline,
-        flightNumber: lastLeg.flightNumber,
-        departure: lastLeg.departure,
-        arrival: lastLeg.arrival,
-        price: lastLeg.price,
-        cabinClass: lastLeg.cabinClass,
+        airline: destDepartureLeg.airline,
+        flightNumber: destDepartureLeg.flightNumber,
+        departure: destDepartureLeg.departure,
+        arrival: destDepartureLeg.arrival,
+        price: destDepartureLeg.price,
+        cabinClass: destDepartureLeg.cabinClass,
       };
     }
 
@@ -2094,7 +2095,20 @@ export function EditorialItinerary({
         .single();
       if (refreshed?.itinerary_data) {
         const itData = refreshed.itinerary_data as Record<string, unknown>;
-        const refreshedDays = (itData.days || itData.itinerary || []) as EditorialDay[];
+        // Correctly parse days from any supported shape
+        let refreshedDays: EditorialDay[] = [];
+        if (Array.isArray(itData.days) && itData.days.length > 0) {
+          refreshedDays = itData.days as EditorialDay[];
+        } else if (itData.itinerary && typeof itData.itinerary === 'object') {
+          const nested = itData.itinerary as Record<string, unknown>;
+          if (Array.isArray(nested.days) && nested.days.length > 0) {
+            refreshedDays = nested.days as EditorialDay[];
+          }
+        }
+        // Final fallback: use the full parser
+        if (refreshedDays.length === 0) {
+          refreshedDays = parseEditorialDays(refreshed.itinerary_data, startDate) as unknown as EditorialDay[];
+        }
         if (refreshedDays.length > 0) {
           setDays(refreshedDays);
           toast.success('Itinerary updated with new flight times');
@@ -5014,6 +5028,8 @@ export function EditorialItinerary({
                 terminal: leg.terminal || '',
                 gate: leg.gate || '',
                 baggageInfo: leg.baggageInfo || '',
+                isDestinationArrival: leg.isDestinationArrival || undefined,
+                isDestinationDeparture: leg.isDestinationDeparture || undefined,
               })) : undefined}
               multiCityRoute={allHotels && allHotels.length > 1 ? (() => {
                 const route: Array<{ from: string; to: string; date?: string }> = [];
