@@ -70,6 +70,7 @@ interface ManualHotelEntry {
   checkOutDate?: string;
   pricePerNight?: number;
   includeInBudget?: boolean;
+  accommodationType?: 'hotel' | 'airbnb' | 'rental' | 'hostel' | 'other';
 }
 
 interface ChatCityInput {
@@ -1599,8 +1600,8 @@ function FlightHotelStep({
                   )}
                 >
                   <PenLine className="h-5 w-5 mx-auto mb-2 text-muted-foreground" />
-                  <div className="text-sm font-medium text-foreground">I have my own hotel</div>
-                  <div className="text-[10px] text-muted-foreground mt-1">Enter details</div>
+                  <div className="text-sm font-medium text-foreground">I have my own stay</div>
+                  <div className="text-[10px] text-muted-foreground mt-1">Hotel, Airbnb, etc.</div>
                 </button>
 
                 {/* Skip */}
@@ -1897,6 +1898,12 @@ Example: "We love local food markets, sunset viewpoints, and avoiding tourist cr
           }
         };
         const modalDestination = editingHotelCity || destination;
+        const accomType = currentHotel.accommodationType || 'hotel';
+        const accomLabels: Record<string, string> = {
+          hotel: 'Hotel', airbnb: 'Airbnb', rental: 'Vacation Rental', hostel: 'Hostel', other: 'Accommodation'
+        };
+        const accomLabel = accomLabels[accomType] || 'Hotel';
+        const isHotelType = accomType === 'hotel' || accomType === 'hostel';
 
         return (
           <Dialog open={showHotelModal} onOpenChange={setShowHotelModal}>
@@ -1904,29 +1911,67 @@ Example: "We love local food markets, sunset viewpoints, and avoiding tourist cr
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <Hotel className="h-5 w-5 text-primary" />
-                  {editingHotelCity ? `Hotel in ${editingHotelCity}` : 'Enter Hotel Details'}
+                  {editingHotelCity ? `${accomLabel} in ${editingHotelCity}` : `Add Accommodation`}
                 </DialogTitle>
                 <DialogDescription>
-                  Add your hotel information for a complete itinerary
+                  Enter your stay details — hotel, Airbnb, vacation rental, or any address.
                 </DialogDescription>
               </DialogHeader>
 
               <div className="space-y-4 py-4">
+                {/* Accommodation Type Selector */}
                 <div>
-                  <Label>Hotel Name *</Label>
-                  <HotelAutocomplete
-                    value={currentHotel.name}
-                    destination={modalDestination}
-                    placeholder="Start typing to search hotels..."
-                    onChange={(hotel) => setCurrentHotel({ 
-                      ...currentHotel, 
-                      name: hotel.name, 
-                      address: hotel.address || currentHotel.address 
-                    })}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Type to search or enter manually
-                  </p>
+                  <Label className="text-xs mb-1.5 block">Type of Stay</Label>
+                  <div className="flex gap-2 flex-wrap">
+                    {([
+                      { value: 'hotel', label: 'Hotel' },
+                      { value: 'airbnb', label: 'Airbnb' },
+                      { value: 'rental', label: 'Vacation Rental' },
+                      { value: 'hostel', label: 'Hostel' },
+                      { value: 'other', label: 'Other' },
+                    ] as const).map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setCurrentHotel({ ...currentHotel, accommodationType: opt.value })}
+                        className={cn(
+                          "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
+                          accomType === opt.value 
+                            ? "bg-primary text-primary-foreground border-primary" 
+                            : "bg-secondary text-muted-foreground border-border hover:border-primary/40"
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <Label>{accomLabel} Name *</Label>
+                  {isHotelType ? (
+                    <HotelAutocomplete
+                      value={currentHotel.name}
+                      destination={modalDestination}
+                      placeholder={accomType === 'hostel' ? 'e.g. Generator Hostel' : 'Start typing to search hotels...'}
+                      onChange={(hotel) => setCurrentHotel({ 
+                        ...currentHotel, 
+                        name: hotel.name, 
+                        address: hotel.address || currentHotel.address 
+                      })}
+                    />
+                  ) : (
+                    <Input
+                      placeholder={accomType === 'airbnb' ? 'e.g. Cozy French Quarter Loft' : 'e.g. Beachfront Villa'}
+                      value={currentHotel.name}
+                      onChange={(e) => setCurrentHotel({ ...currentHotel, name: e.target.value })}
+                    />
+                  )}
+                  {isHotelType && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Type to search or enter manually
+                    </p>
+                  )}
                 </div>
                 
                 <div>
@@ -2058,7 +2103,7 @@ Example: "We love local food markets, sunset viewpoints, and avoiding tourist cr
                     setShowHotelModal(false);
                   }}
                 >
-                  Save Hotel
+                  Save
                 </Button>
               </DialogFooter>
             </DialogContent>
