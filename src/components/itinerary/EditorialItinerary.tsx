@@ -1146,6 +1146,15 @@ export function EditorialItinerary({
       .catch(err => console.error('[EditorialItinerary] Budget sync failed:', err));
   }, [tripId, queryClient]);
 
+  // Auto-sync budget ledger on initial load so stale planned entries are replaced
+  const budgetSyncedRef = useRef(false);
+  useEffect(() => {
+    if (!budgetSyncedRef.current && rawDays.length > 0 && tripId) {
+      budgetSyncedRef.current = true;
+      syncBudgetFromDays(rawDays);
+    }
+  }, [rawDays.length, tripId, syncBudgetFromDays]);
+
   // Inject synthetic travel activity cards on transition days:
   // Check-out → Head to transport → Transport (seat/ticket) → Arrival → Check-in
   const days = useMemo(() => rawDays.map(day => {
