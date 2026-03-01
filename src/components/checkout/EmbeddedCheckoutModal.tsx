@@ -21,6 +21,9 @@ interface EmbeddedCheckoutModalProps {
   // Credit purchase fields
   productId?: string;
   credits?: number;
+  // Group unlock fields
+  tripId?: string;
+  groupTier?: 'small' | 'medium' | 'large';
   // Legacy day fields (deprecated)
   days?: number;
   packageTier?: 'essential' | 'complete';
@@ -35,6 +38,8 @@ export function EmbeddedCheckoutModal({
   returnPath = '/profile',
   productId,
   credits,
+  tripId,
+  groupTier,
   days,
   packageTier,
 }: EmbeddedCheckoutModalProps) {
@@ -52,6 +57,9 @@ export function EmbeddedCheckoutModal({
           // Credit purchase fields
           productId,
           credits,
+          // Group unlock fields
+          tripId,
+          groupTier,
           // Legacy day purchase fields
           days,
           packageTier,
@@ -72,7 +80,7 @@ export function EmbeddedCheckoutModal({
       setError(message);
       throw err;
     }
-  }, [priceId, mode, returnPath, productId, credits, days, packageTier]);
+  }, [priceId, mode, returnPath, productId, credits, tripId, groupTier, days, packageTier]);
 
   const options = { fetchClientSecret };
 

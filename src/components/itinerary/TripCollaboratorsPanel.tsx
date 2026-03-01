@@ -93,7 +93,7 @@ export function TripCollaboratorsPanel({
   const updatePermission = useUpdateCollaboratorPermission();
   const removeCollaborator = useRemoveTripCollaborator();
   const addCollaborator = useAddTripCollaborator();
-  const [showDetails, setShowDetails] = useState(false);
+  const [showDetails, setShowDetails] = useState(!compact);
   const [showFriendPicker, setShowFriendPicker] = useState(false);
   const [collaboratorDNA, setCollaboratorDNA] = useState<Record<string, { hasDNA: boolean; compatibility: number | null }>>({});
   const [updatingPreferences, setUpdatingPreferences] = useState<string | null>(null);
