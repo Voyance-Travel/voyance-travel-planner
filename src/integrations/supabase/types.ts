@@ -205,6 +205,94 @@ export type Database = {
         }
         Relationships: []
       }
+      activity_costs: {
+        Row: {
+          activity_id: string
+          category: string
+          confidence: string | null
+          cost_per_person_local: number | null
+          cost_per_person_usd: number
+          cost_reference_id: string | null
+          created_at: string | null
+          day_number: number
+          id: string
+          is_paid: boolean | null
+          local_currency: string | null
+          notes: string | null
+          num_travelers: number
+          paid_amount_usd: number | null
+          paid_at: string | null
+          source: string
+          total_cost_usd: number | null
+          trip_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          activity_id: string
+          category: string
+          confidence?: string | null
+          cost_per_person_local?: number | null
+          cost_per_person_usd: number
+          cost_reference_id?: string | null
+          created_at?: string | null
+          day_number: number
+          id?: string
+          is_paid?: boolean | null
+          local_currency?: string | null
+          notes?: string | null
+          num_travelers?: number
+          paid_amount_usd?: number | null
+          paid_at?: string | null
+          source?: string
+          total_cost_usd?: number | null
+          trip_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          activity_id?: string
+          category?: string
+          confidence?: string | null
+          cost_per_person_local?: number | null
+          cost_per_person_usd?: number
+          cost_reference_id?: string | null
+          created_at?: string | null
+          day_number?: number
+          id?: string
+          is_paid?: boolean | null
+          local_currency?: string | null
+          notes?: string | null
+          num_travelers?: number
+          paid_amount_usd?: number | null
+          paid_at?: string | null
+          source?: string
+          total_cost_usd?: number | null
+          trip_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_costs_cost_reference_id_fkey"
+            columns: ["cost_reference_id"]
+            isOneToOne: false
+            referencedRelation: "cost_reference"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_costs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "activity_costs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       activity_feedback: {
         Row: {
           activity_category: string | null
@@ -2120,6 +2208,69 @@ export type Database = {
         }
         Relationships: []
       }
+      cost_reference: {
+        Row: {
+          category: string
+          confidence: string
+          cost_high_local: number | null
+          cost_high_usd: number
+          cost_low_local: number | null
+          cost_low_usd: number
+          cost_mid_local: number | null
+          cost_mid_usd: number
+          destination_city: string
+          destination_country: string
+          exchange_rate: number | null
+          id: string
+          item_name: string | null
+          last_updated: string | null
+          local_currency: string | null
+          notes: string | null
+          source: string
+          subcategory: string | null
+        }
+        Insert: {
+          category: string
+          confidence?: string
+          cost_high_local?: number | null
+          cost_high_usd: number
+          cost_low_local?: number | null
+          cost_low_usd: number
+          cost_mid_local?: number | null
+          cost_mid_usd: number
+          destination_city: string
+          destination_country: string
+          exchange_rate?: number | null
+          id?: string
+          item_name?: string | null
+          last_updated?: string | null
+          local_currency?: string | null
+          notes?: string | null
+          source?: string
+          subcategory?: string | null
+        }
+        Update: {
+          category?: string
+          confidence?: string
+          cost_high_local?: number | null
+          cost_high_usd?: number
+          cost_low_local?: number | null
+          cost_low_usd?: number
+          cost_mid_local?: number | null
+          cost_mid_usd?: number
+          destination_city?: string
+          destination_country?: string
+          exchange_rate?: number | null
+          id?: string
+          item_name?: string | null
+          last_updated?: string | null
+          local_currency?: string | null
+          notes?: string | null
+          source?: string
+          subcategory?: string | null
+        }
+        Relationships: []
+      }
       credit_balances: {
         Row: {
           created_at: string
@@ -2774,6 +2925,24 @@ export type Database = {
           timezone?: string | null
           updated_at?: string
           weather_data?: Json | null
+        }
+        Relationships: []
+      }
+      exchange_rates: {
+        Row: {
+          currency_code: string
+          last_updated: string | null
+          rate_to_usd: number
+        }
+        Insert: {
+          currency_code: string
+          last_updated?: string | null
+          rate_to_usd: number
+        }
+        Update: {
+          currency_code?: string
+          last_updated?: string | null
+          rate_to_usd?: number
         }
         Relationships: []
       }
@@ -8029,6 +8198,107 @@ export type Database = {
           weather_preferences?: string[] | null
         }
         Relationships: []
+      }
+      v_budget_by_category: {
+        Row: {
+          category: string | null
+          category_total_all_travelers_usd: number | null
+          category_total_per_person_usd: number | null
+          item_count: number | null
+          trip_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_costs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "activity_costs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_day_totals: {
+        Row: {
+          activity_count: number | null
+          day_number: number | null
+          day_total_all_travelers_usd: number | null
+          day_total_per_person_usd: number | null
+          trip_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_costs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "activity_costs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_payments_summary: {
+        Row: {
+          paid_count: number | null
+          total_estimated_usd: number | null
+          total_paid_usd: number | null
+          total_remaining_usd: number | null
+          trip_id: string | null
+          unpaid_count: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_costs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "activity_costs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_trip_total: {
+        Row: {
+          activity_count: number | null
+          days_with_costs: number | null
+          total_all_travelers_usd: number | null
+          total_per_person_usd: number | null
+          trip_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_costs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "activity_costs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Functions: {
