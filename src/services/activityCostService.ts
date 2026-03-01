@@ -388,3 +388,55 @@ export function convertLocalToUsd(amountLocal: number, rateToUsd: number): numbe
   if (!rateToUsd || rateToUsd <= 0) return amountLocal;
   return amountLocal * rateToUsd;
 }
+
+// ─── Trip Cost Repair ────────────────────────────────────────
+
+export interface RepairResult {
+  success: boolean;
+  repaired: number;
+  corrected: number;
+  totalActivities: number;
+  error?: string;
+}
+
+/**
+ * Trigger a cost repair for a specific trip via the generate-itinerary edge function.
+ * This fixes corrupted/missing activity_costs rows using reference data.
+ */
+export async function repairTripCosts(tripId: string): Promise<RepairResult> {
+  try {
+    const { data, error } = await supabase.functions.invoke('generate-itinerary', {
+      body: { action: 'repair-trip-costs', tripId },
+    });
+
+    if (error) {
+      console.error('repairTripCosts error:', error);
+      return { success: false, repaired: 0, corrected: 0, totalActivities: 0, error: error.message };
+    }
+
+    return data as RepairResult;
+  } catch (err) {
+    console.error('repairTripCosts exception:', err);
+    return { success: false, repaired: 0, corrected: 0, totalActivities: 0, error: (err as Error).message };
+  }
+}
+
+/**
+ * Check if a trip has missing or stale activity_costs rows.
+ * Returns true if repair is needed.
+ */
+export async function needsCostRepair(tripId: string): Promise<boolean> {
+  // Check if trip has itinerary_data but no activity_costs rows
+  const { count, error } = await supabase
+    .from('activity_costs')
+    .select('id', { count: 'exact', head: true })
+    .eq('trip_id', tripId);
+
+  if (error) {
+    console.error('needsCostRepair error:', error);
+    return false;
+  }
+
+  // If there are 0 activity_costs rows, likely needs repair
+  return (count || 0) === 0;
+}

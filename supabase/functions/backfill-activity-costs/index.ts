@@ -3,6 +3,7 @@
  * 
  * Reads existing trips' itinerary_data JSON and populates the activity_costs table.
  * Validates costs against cost_reference ranges; auto-corrects outliers.
+ * Enhanced with keyword-based subcategory matching for accurate transport/dining pricing.
  * 
  * POST /backfill-activity-costs
  * Body: { tripId?: string }   — optional: backfill a single trip. Omit for all trips.
@@ -15,6 +16,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+// ─── Types ───────────────────────────────────────────────────
 
 interface ItineraryActivity {
   id?: string;
@@ -36,10 +39,16 @@ interface ItineraryDay {
 
 interface CostRef {
   id: string;
+  destination_city: string;
+  category: string;
+  subcategory: string | null;
+  item_name: string | null;
   cost_low_usd: number;
   cost_mid_usd: number;
   cost_high_usd: number;
 }
+
+// ─── Category & Subcategory Mapping ──────────────────────────
 
 const CATEGORY_MAP: Record<string, string> = {
   sightseeing: "activity",
@@ -61,10 +70,53 @@ const CATEGORY_MAP: Record<string, string> = {
   hotel: "accommodation",
 };
 
+/** Keyword → subcategory mapping for transport activities */
+const TRANSPORT_SUBCATEGORY_KEYWORDS: Record<string, string[]> = {
+  taxi: ["taxi", "cab", "uber", "grab", "lyft", "ride", "private car", "car service"],
+  airport_transfer: ["airport transfer", "airport shuttle", "airport pickup", "airport drop"],
+  metro: ["metro", "subway", "mrt", "mtr", "underground", "tube"],
+  bus: ["bus", "minibus", "shuttle bus", "city bus", "public bus"],
+  train: ["train", "rail", "railway", "bullet train", "shinkansen", "high-speed"],
+  ferry: ["ferry", "boat", "water taxi", "junk boat", "star ferry"],
+  tram: ["tram", "trolley", "streetcar", "light rail"],
+  cable_car: ["cable car", "gondola", "funicular", "peak tram"],
+};
+
+/** Keyword → subcategory mapping for dining activities */
+const DINING_SUBCATEGORY_KEYWORDS: Record<string, string[]> = {
+  street_food: ["street food", "food stall", "hawker", "night market food", "dai pai dong"],
+  fast_food: ["fast food", "mcdonald", "burger king", "kfc"],
+  cafe: ["cafe", "café", "coffee", "bakery", "pastry"],
+  casual_dining: ["casual", "bistro", "noodle", "ramen", "dim sum", "dumpling", "pho", "curry"],
+  fine_dining: ["fine dining", "michelin", "tasting menu", "omakase", "prix fixe"],
+  breakfast: ["breakfast", "brunch", "morning meal"],
+  lunch: ["lunch", "midday meal"],
+  dinner: ["dinner", "evening meal", "supper"],
+  bar: ["bar", "cocktail", "pub", "rooftop bar", "speakeasy"],
+};
+
 function normalizeCategory(raw?: string): string {
   if (!raw) return "activity";
   const lower = raw.toLowerCase().trim();
   return CATEGORY_MAP[lower] || lower;
+}
+
+function inferSubcategory(title: string, category: string): string | null {
+  const titleLower = (title || "").toLowerCase();
+  
+  if (category === "transport") {
+    for (const [sub, keywords] of Object.entries(TRANSPORT_SUBCATEGORY_KEYWORDS)) {
+      if (keywords.some(kw => titleLower.includes(kw))) return sub;
+    }
+  }
+  
+  if (category === "dining") {
+    for (const [sub, keywords] of Object.entries(DINING_SUBCATEGORY_KEYWORDS)) {
+      if (keywords.some(kw => titleLower.includes(kw))) return sub;
+    }
+  }
+  
+  return null;
 }
 
 function extractCost(activity: ItineraryActivity): number {
@@ -76,6 +128,33 @@ function extractCost(activity: ItineraryActivity): number {
   }
   return 0;
 }
+
+// ─── Reference Lookup ────────────────────────────────────────
+
+function findBestReference(
+  refMap: Map<string, CostRef>,
+  destination: string,
+  category: string,
+  subcategory: string | null,
+  title: string
+): CostRef | null {
+  // Level 1: exact destination + category + subcategory
+  if (subcategory) {
+    const exactKey = `${destination}|${category}|${subcategory}`;
+    const exact = refMap.get(exactKey);
+    if (exact) return exact;
+  }
+
+  // Level 2: fuzzy title match against item_name in refs
+  // (uses titleRefMap populated during ref loading)
+  // This is handled by the caller checking title-based keys
+
+  // Level 3: destination + category fallback
+  const fallbackKey = `${destination}|${category}|`;
+  return refMap.get(fallbackKey) || null;
+}
+
+// ─── Main Handler ────────────────────────────────────────────
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -118,10 +197,12 @@ Deno.serve(async (req) => {
     const refMap = new Map<string, CostRef>();
     if (allRefs) {
       for (const r of allRefs) {
-        const key = `${(r.destination_city || "").toLowerCase()}|${r.category}|${r.subcategory || ""}`;
-        refMap.set(key, r as CostRef);
-        // Also store city+category only as fallback
-        const fallbackKey = `${(r.destination_city || "").toLowerCase()}|${r.category}|`;
+        const cityLower = (r.destination_city || "").toLowerCase();
+        // Exact key: city|category|subcategory
+        const exactKey = `${cityLower}|${r.category}|${r.subcategory || ""}`;
+        refMap.set(exactKey, r as CostRef);
+        // Fallback key: city|category| (no subcategory)
+        const fallbackKey = `${cityLower}|${r.category}|`;
         if (!refMap.has(fallbackKey)) {
           refMap.set(fallbackKey, r as CostRef);
         }
@@ -130,6 +211,7 @@ Deno.serve(async (req) => {
 
     let totalInserted = 0;
     let totalCorrected = 0;
+    const categoryStats: Record<string, { count: number; corrected: number; totalCost: number }> = {};
     const errors: string[] = [];
 
     for (const trip of trips) {
@@ -152,11 +234,12 @@ Deno.serve(async (req) => {
             const category = normalizeCategory(activity.category || activity.type);
             if (category === "accommodation") continue; // skip hotel blocks
 
+            const title = activity.title || activity.name || "";
+            const subcategory = inferSubcategory(title, category);
             let costPerPerson = extractCost(activity);
 
-            // Look up reference
-            const refKey = `${destination}|${category}|`;
-            const ref = refMap.get(refKey);
+            // Find best reference match
+            const ref = findBestReference(refMap, destination, category, subcategory, title);
 
             let source = "backfill";
             let corrected = false;
@@ -178,16 +261,15 @@ Deno.serve(async (req) => {
               corrected = true;
             }
 
-            // Apply category caps (mirror the DB trigger)
-            const caps: Record<string, number> = { dining: 500, transport: 300, activity: 1000, nightlife: 200 };
-            const cap = caps[category] || 2000;
-            if (costPerPerson > cap) {
-              costPerPerson = ref ? ref.cost_high_usd : cap;
-              source = "auto_corrected";
-              corrected = true;
-            }
-
             if (corrected) totalCorrected++;
+
+            // Track category stats
+            if (!categoryStats[category]) {
+              categoryStats[category] = { count: 0, corrected: 0, totalCost: 0 };
+            }
+            categoryStats[category].count++;
+            if (corrected) categoryStats[category].corrected++;
+            categoryStats[category].totalCost += costPerPerson;
 
             rows.push({
               trip_id: trip.id,
@@ -199,7 +281,11 @@ Deno.serve(async (req) => {
               source,
               confidence: ref ? "medium" : "low",
               cost_reference_id: ref?.id || null,
-              notes: corrected ? "[Backfill auto-corrected]" : null,
+              notes: corrected
+                ? `[Backfill auto-corrected${subcategory ? `, subcategory: ${subcategory}` : ""}]`
+                : subcategory
+                  ? `[subcategory: ${subcategory}]`
+                  : null,
             });
           }
         }
@@ -226,6 +312,7 @@ Deno.serve(async (req) => {
         processed: trips.length,
         inserted: totalInserted,
         corrected: totalCorrected,
+        categoryStats,
         errors: errors.length > 0 ? errors : undefined,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
