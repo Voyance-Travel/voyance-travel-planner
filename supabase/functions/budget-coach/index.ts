@@ -130,7 +130,7 @@ Rules:
                           current_cost: {
                             type: "number",
                             description:
-                              "Current cost in minor units (cents)",
+                              "Current cost in whole currency units (e.g. 50 for $50)",
                           },
                           suggested_swap: {
                             type: "string",
@@ -140,11 +140,11 @@ Rules:
                           new_cost: {
                             type: "number",
                             description:
-                              "New cost in minor units (cents)",
+                              "New cost in whole currency units (e.g. 30 for $30)",
                           },
                           savings: {
                             type: "number",
-                            description: "Savings in minor units (cents)",
+                            description: "Savings in whole currency units",
                           },
                           reason: {
                             type: "string",
@@ -219,14 +219,15 @@ Rules:
       }
     }
 
-    // Ensure costs are in cents — the AI may return whole currency amounts
+    // The prompt shows costs in whole currency and asks for integers,
+    // so the AI returns whole-currency amounts. Always convert to cents.
     suggestions = suggestions.map((s: any) => {
-      const currentCost = s.current_cost < 1000 ? s.current_cost * 100 : s.current_cost;
-      const newCost = s.new_cost < 1000 ? s.new_cost * 100 : s.new_cost;
+      const currentCost = Math.round(s.current_cost * 100);
+      const newCost = Math.round(s.new_cost * 100);
       return {
         ...s,
-        current_cost: Math.round(currentCost),
-        new_cost: Math.round(newCost),
+        current_cost: currentCost,
+        new_cost: newCost,
         savings: Math.round(currentCost - newCost),
       };
     });
