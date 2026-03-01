@@ -1179,7 +1179,7 @@ export function EditorialItinerary({
         name: title,
         type: 'transit',
         category: 'transit',
-        isLocked: true,
+        isLocked: false,
         location: undefined,
         ...overrides,
       }) as any;
