@@ -1983,6 +1983,20 @@ export function EditorialItinerary({
     return result;
   }, [flightSelection]);
 
+  // Find the leg that actually arrives at the destination (user-marked or heuristic)
+  const destinationArrivalLeg: FlightLegDisplay | undefined = useMemo(() => {
+    if (allFlightLegs.length === 0) return undefined;
+    // 1. User-marked
+    const marked = allFlightLegs.find(l => (l as any).isDestinationArrival);
+    if (marked) return marked;
+    // 2. Single leg
+    if (allFlightLegs.length === 1) return allFlightLegs[0];
+    // 3. For 2 legs (outbound + return), use first
+    if (allFlightLegs.length === 2) return allFlightLegs[0];
+    // 4. For 3+ legs, second-to-last (assumes last is return)
+    return allFlightLegs[allFlightLegs.length - 2];
+  }, [allFlightLegs]);
+
   const hasFlightData = allFlightLegs.length > 0;
 
   useEffect(() => {
@@ -3494,9 +3508,9 @@ export function EditorialItinerary({
             )}
 
             {/* Flight Sync Warning - Show if flight times don't match Day 1 */}
-            {allFlightLegs[0]?.arrival?.time && days[0]?.activities?.[0] && (
+            {destinationArrivalLeg?.arrival?.time && days[0]?.activities?.[0] && (
               <FlightSyncWarning
-                flightArrivalTime={allFlightLegs[0].arrival.time}
+                flightArrivalTime={destinationArrivalLeg.arrival.time}
                 day1FirstActivity={days[0].activities[0]}
                 onSyncDay1={() => handleDayRegenerate(0)}
                 isRegenerating={regeneratingDay === days[0]?.dayNumber}
