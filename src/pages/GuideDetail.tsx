@@ -11,6 +11,7 @@ import { guides, getGuideBySlug, getRelatedGuides } from '@/data/guides';
 import { toast } from 'sonner';
 import ShareGuideSheet from '@/components/sharing/ShareGuideSheet';
 import { normalizeUnsplashUrl } from '@/utils/unsplash';
+import { getAppUrl } from '@/utils/getAppUrl';
 // Parse markdown-style content into structured JSX
 function parseContent(content: string) {
   // Remove the main title (# Title) as it's displayed in the hero
@@ -186,7 +187,7 @@ export default function GuideDetail() {
   // Find guide by slug or id (for backwards compatibility)
   const guide = slug ? (getGuideBySlug(slug) || guides.find(g => g.slug === slug || String(guides.indexOf(g) + 1) === slug)) : undefined;
   
-  const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+  const shareUrl = `${getAppUrl()}/guides/${slug}`;
 
   if (!guide) {
     return (
