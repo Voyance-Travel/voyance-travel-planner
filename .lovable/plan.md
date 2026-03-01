@@ -1,39 +1,37 @@
 
+# Fix: Hotel Check-In/Check-Out Time Not Updating
 
-# Allow Re-joining After Leaving a Trip (Simple MVP)
+## The Bug
 
-## How It Works
+When you edit a hotel and change the check-in time (e.g., from 3:00 PM to 9:00 AM), clicking "Update Hotel" saves the new time to the database but the Edit Hotel dialog is initialized with the **wrong fields**.
 
-The invite link system already supports multi-use tokens and re-joining. The `accept_trip_invite` database function handles users who were previously on a trip -- it uses `ON CONFLICT DO UPDATE` so clicking the same invite link again will re-add them. No new tables needed.
+In `EditorialItinerary.tsx` line 5246-5247, the existing hotel data is passed like this:
 
-The only missing piece is giving collaborators a way to **leave** a trip themselves, and making it clear to owners they can re-send the invite link.
+```
+checkInTime: hotelSelection.checkIn || '15:00',
+checkOutTime: hotelSelection.checkOut || '11:00',
+```
 
-## Changes
+But `hotelSelection.checkIn` and `hotelSelection.checkOut` are **date strings** (like `2026-04-15`), not time strings. The correct fields are `hotelSelection.checkInTime` and `hotelSelection.checkOutTime`.
 
-### 1. Add "Leave Trip" button for non-owner collaborators
+This means:
+- The edit form always shows `15:00` / `11:00` (the fallback defaults) since the date string gets treated as truthy but isn't a valid time
+- When you save, even though the time is correct in the form, the next time you open the dialog it reverts to defaults
 
-In `TripCollaboratorsPanel.tsx`, add a "Leave Trip" button visible to non-owner members. When clicked:
-- Show a confirmation dialog ("Are you sure you want to leave this trip? The owner can send you the invite link to rejoin.")
-- Call `removeTripCollaborator` with their own collaborator ID
-- Redirect to the dashboard after leaving
+## Fix
 
-### 2. Show a toast hint to owners when removing someone
+**File: `src/components/itinerary/EditorialItinerary.tsx`** (lines 5246-5247)
 
-When an owner removes a collaborator, show a toast like: "Member removed. You can re-send the invite link to let them rejoin."
+Change:
+```
+checkInTime: hotelSelection.checkIn || '15:00',
+checkOutTime: hotelSelection.checkOut || '11:00',
+```
 
-This reminds the owner that the existing invite link (already in the Share dialog) is all they need.
+To:
+```
+checkInTime: hotelSelection.checkInTime || '15:00',
+checkOutTime: hotelSelection.checkOutTime || '11:00',
+```
 
----
-
-## Technical Details
-
-| File | Change |
-|------|--------|
-| `src/components/itinerary/TripCollaboratorsPanel.tsx` | Add "Leave Trip" button for non-owners with confirmation dialog; update owner remove toast to hint about re-inviting |
-
-### How re-joining works (already built)
-- Owner copies invite link from Share dialog (already exists)
-- Sends it to the person who left
-- Person clicks link, `accept_trip_invite` runs, re-adds them via `ON CONFLICT DO UPDATE`
-- No new database tables, functions, or edge functions needed
-
+This is a two-character fix (adding `Time` to each field name) that correctly reads the saved check-in and check-out times.
