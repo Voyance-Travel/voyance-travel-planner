@@ -1,122 +1,192 @@
 
+## What’s happening (based on code audit)
 
-# Cost Leak Audit: Where You're Bleeding Money
+You already have the right underlying data model (`legs[]` with `isDestinationArrival` / `isDestinationDeparture`) and the itinerary cascade logic supports it. The current breakage is due to **two regressions**:
 
-## Overview
+1) **The “starred” flags are being stripped when the trip is reloaded**, so the UI looks like it didn’t persist (and downstream logic falls back to heuristics).
+- In `src/pages/TripDetail.tsx`, `normalizeFlightSelection()` returns legs that may include `isDestinationArrival`/`isDestinationDeparture`, but the code that maps normalized legs into `normalizedFlight.legs` **does not copy those flags** into the object passed to `EditorialItinerary`.
+- Also, `TripDetail` sets `outbound = legs[0]` and `return = last leg`, ignoring the starred legs.
 
-After auditing all edge functions and frontend services, I found **7 major cost leak categories** -- places where you're paying for API calls without caching, duplicating calls, or generating data nobody uses.
+2) **Day 1 sometimes doesn’t update in the itinerary UI even after cascade runs** because the “refetch days after cascade” code in `EditorialItinerary` parses `itinerary_data` incorrectly:
+- It uses `itData.days || itData.itinerary || []`, but `itData.itinerary` is usually an object like `{ days: [...] }`, so `setDays()` often never runs.
 
----
-
-## LEAK 1: Perplexity calls with ZERO server-side caching (HIGH -- ~$0.01-0.05 per call)
-
-These 5 edge functions call Perplexity every single time with no database cache. If a user revisits the same page or another user visits the same destination, you pay again:
-
-| Function | What it does | Cache? |
-|---|---|---|
-| `enrich-attraction` | Hours, prices, closures | None -- only in-memory client cache (lost on refresh) |
-| `lookup-activity-url` | Booking URLs | None -- only in-memory client cache |
-| `lookup-restaurant-url` | Restaurant websites | None at all |
-| `lookup-local-events` | Events during dates | None -- only in-memory client cache |
-| `lookup-travel-advisory` | Visa, safety info | None -- only in-memory client cache |
-
-The frontend `enrichmentService.ts` has in-memory `Map` caches, but these reset on every page refresh/navigation. The data (restaurant URLs, attraction hours, visa info) is stable enough to cache in `search_cache` for 12-48 hours.
-
-**Fix**: Add `search_cache` table lookups (like `fetch-reviews` and `profile-ideal-hotel` already do) to all 5 functions. These are your most-called Perplexity endpoints.
+There’s a third structural reason this keeps recurring:
+- You have **multiple flight editing flows** (Start step 2, AddBookingInline, MultiLegFlightEditor, itinerary flight card markers) with **different signatures / normalization**, and at least one of them (Start + MultiLegFlightEditor) uses “change signatures” that **ignore the star flags**, meaning toggling a star doesn’t propagate state.
 
 ---
 
-## LEAK 2: `lookup-destination-insights` called fresh every itinerary view (MEDIUM)
+## Goals (what we’ll make true)
 
-In `EditorialItinerary.tsx` (line 5250), destination insights (language phrases, voltage, emergency numbers, timezone) are fetched from Perplexity every time the itinerary page renders. The `fetchedRef` only guards against double-fetching within a single component mount -- not across sessions or users.
+1) Users can:
+- **Star exactly one leg as “Final destination arrival (outbound)”**
+- **Star exactly one leg as “Departure from destination (return)”**
+- **Reorder legs freely** in both Step 2 (outside) and inside the itinerary
 
-This data is **100% static** (voltage in France doesn't change). It should be cached per destination indefinitely (or 90+ days) in a table.
+2) Those choices:
+- **Persist to the backend**
+- **Survive reloads**
+- **Drive Day 1 / last-day scheduling** (via cascade) and **drive any regeneration prompts** (via backward-compatible `flight_selection.departure` and `flight_selection.return`)
 
-**Fix**: Cache in `search_cache` with key `dest-insights:{destination}` and a 90-day TTL.
-
----
-
-## LEAK 3: `check-subscription` called 4 separate times from different code paths (MEDIUM)
-
-Four different functions all independently call `check-subscription`:
-- `getBillingOverview()` 
-- `getSubscription()` 
-- `getBillingProfileSummary()` 
-- `checkSubscription()` (stripeAPI.ts)
-
-Each creates its own React Query cache entry with different keys (`billing-overview`, `subscription`, `billing-profile-summary`). If a page uses multiple billing components, you're hitting Stripe's API 3-4x when 1 call would suffice.
-
-**Fix**: Consolidate to a single `useCheckSubscription` query and derive all views from that one cached response.
+3) “Refresh” behavior stays as you chose: **Validation refresh** (not a rewrite). We’ll add a separate clearly-labeled “Sync itinerary to flight times” action to re-run cascade when needed (free, no credits).
 
 ---
 
-## LEAK 4: `ActivityLink` fires Perplexity on mount for EVERY activity (HIGH)
+## Implementation plan (no schema changes required)
 
-`ActivityLink.tsx` calls `lookupActivityUrl` (Perplexity) in a `useEffect` on mount. If an itinerary has 15 activities visible, that's **15 Perplexity API calls** just to find booking URLs -- most of which the user never clicks.
+### A) Fix persistence + reload: stop stripping starred flags
+**Files: `src/pages/TripDetail.tsx`**
 
-**Fix**: Make it on-demand (click to find URL) instead of auto-lookup. Or batch-resolve URLs during itinerary generation and store them in the activity data.
+1. When building `normalizedFlight.legs`, include:
+- `isDestinationArrival`
+- `isDestinationDeparture`
 
----
+2. When setting:
+- `normalizedFlight.outbound`: choose the leg where `isDestinationArrival === true` (fallback to existing heuristic if none).
+- `normalizedFlight.return`: choose the leg where `isDestinationDeparture === true` (fallback to last leg).
 
-## LEAK 5: `generate-quick-preview` Perplexity cost not tracked (LOW)
-
-The `fetchTravelAdvisory` function inside `generate-quick-preview` (line 263) calls Perplexity but the cost tracking comment on line 641 says "Perplexity tracking should happen in fetchTravelAdvisory, but we track here for simplicity" -- and it doesn't actually record the Perplexity call in the cost tracker. You're paying for it but not measuring it.
-
-**Fix**: Add `costTracker.recordPerplexity(1)` inside `fetchTravelAdvisory`.
-
----
-
-## LEAK 6: Duplicate preview generation paths (LOW-MEDIUM)
-
-You have 3 separate preview edge functions:
-- `generate-quick-preview` -- homepage destination entry
-- `generate-trip-preview` -- trip preview service  
-- `generate-full-preview` -- full preview with gated details
-
-These likely share significant prompt/logic overlap and none cache their results server-side. If a user generates a preview for "Paris" then navigates away and comes back, it regenerates.
-
-**Fix**: Cache preview results in a `preview_cache` table keyed by destination + parameters, with a 24-hour TTL.
+**Result:** After you star a leg and `onBookingAdded()` refetches the trip, the UI still shows the star and uses the correct leg.
 
 ---
 
-## LEAK 7: `explain-recommendation` has no caching (LOW)
+### B) Fix “Day 1 didn’t update” after starring: correct itinerary refetch parsing
+**File: `src/components/itinerary/EditorialItinerary.tsx`**
 
-Each time a user expands an activity explanation, it fires an AI call. The same activity for the same archetype will always produce a near-identical explanation.
+Update the post-cascade refetch logic to correctly read days from any supported shape:
+- Prefer `itinerary_data.days`
+- Fallback to `itinerary_data.itinerary?.days`
+- (Optional safety) fallback to `parseEditorialDays(refreshed.itinerary_data, startDate)` so we never silently fail.
 
-**Fix**: Cache explanations in `search_cache` keyed by `explain:{activityId}:{archetypeId}`.
+**Result:** When the cascade adjusts Day 1 or last day, the itinerary view updates immediately without reload.
 
 ---
 
-## Priority Action Plan
+### C) Ensure backward-compat fields match the starred legs (so regeneration uses the right times)
+Right now your backend generation path (`supabase/functions/generate-itinerary/*`) reads mostly from:
+- `flight_selection.departure.arrival.time` (Day 1 timing)
+- `flight_selection.return.departure.time` (last day cutoff)
 
-### Phase 1: Highest ROI (stops the biggest leaks)
-1. Add `search_cache` lookups to all 5 Perplexity enrichment functions (attraction, activity URL, restaurant URL, events, advisory)
-2. Make `ActivityLink` on-demand instead of auto-fire
-3. Cache `destination-insights` per destination (90-day TTL)
+So we must ensure those legacy fields always reflect the user-starred legs.
 
-### Phase 2: Consolidation
-4. Unify `check-subscription` to a single cached query
-5. Track Perplexity cost in `generate-quick-preview`
+**Files:**
+- `src/utils/normalizeFlightSelection.ts` (the builder)
+- `src/components/itinerary/EditorialItinerary.tsx` (marking handler)
 
-### Phase 3: Nice-to-have
-6. Cache preview generation results
-7. Cache `explain-recommendation` results
+Changes:
+1. Update `buildFlightSelectionFromLegs()` so:
+- `departure` is set from `isDestinationArrival` leg (already done)
+- `return` is set from `isDestinationDeparture` leg (currently it always uses “last leg”)
 
-### Technical approach for caching
+2. In `handleMarkFlightLeg()` inside `EditorialItinerary`, when updating `updatedSelection.return`, also prefer the starred departure leg (not always last).
 
-All 5 Perplexity functions would follow the same pattern (already used by `fetch-reviews` and `profile-ideal-hotel`):
+3. Fix minor field mismatch in legacy objects: use consistent cabin field naming (`cabin` vs `cabinClass`) to avoid downstream consumers missing cabin class.
 
-```text
-1. Build cache key from inputs (e.g., "attraction:louvre:paris")
-2. Query search_cache WHERE search_key = key AND expires_at > now()
-3. If hit -> return cached data (zero API cost)
-4. If miss -> call Perplexity -> save to search_cache with TTL -> return
-```
+**Result:** Even if a regeneration happens server-side, it will use the starred arrival/departure windows.
 
-TTLs by data type:
-- Destination insights (voltage, language): 90 days
-- Restaurant/activity URLs: 30 days  
-- Attraction hours/prices: 24 hours
-- Local events: 6 hours
-- Travel advisories: 7 days
+---
 
+### D) Make “reorder legs” and “star legs” work in Step 2 (outside page) and persist into trip creation
+**Files:**
+- `src/components/planner/flight/MultiLegFlightEditor.tsx`
+- `src/pages/Start.tsx`
+
+#### D1) Add starring controls in MultiLegFlightEditor
+- Add “Star as final destination arrival” toggle
+- Add “Star as departure from destination” toggle
+- Enforce exclusivity: only one arrival-star and one departure-star at a time.
+
+#### D2) Add drag-and-drop reorder for legs in MultiLegFlightEditor
+You already have a great dnd-kit pattern in `DraggableActivityList.tsx`. We’ll reuse the same approach for flight leg slots:
+- `DndContext` + `SortableContext` + `arrayMove`
+- Drag handle icon already imported (`GripVertical`), so this matches existing design.
+
+Important: when reordering, we must reorder the emitted `ManualFlightEntry[]` accordingly.
+
+#### D3) Fix “star doesn’t propagate” in Step 2 due to signature keys ignoring the star flags
+Currently, both `MultiLegFlightEditor` and `Start.tsx` compute signatures that exclude:
+- `isDestinationArrival`
+- `isDestinationDeparture`
+
+So toggling a star can be considered a “no-op” and never reaches parent state.
+
+We will:
+- Include both flags in all “signature” builders used to dedupe emissions:
+  - MultiLegFlightEditor: `lastEmittedSignature` calculations
+  - Start.tsx: `normalizeLegs().makeKey` and `lastMultiLegSig` signature
+
+#### D4) Persist the starred flags when creating `flight_selection` on submit
+In `Start.tsx`, when mapping `ManualFlightEntry → FlightLeg`, include:
+- `isDestinationArrival`
+- `isDestinationDeparture`
+
+Then use the improved `buildFlightSelectionFromLegs()` (from section C) so departure/return legacy fields align with starred legs.
+
+**Result:** Step 2 marks + reorder will be included in the saved trip and used by itinerary building.
+
+---
+
+### E) Ensure starring survives “Edit Flight Details” modal inside itinerary
+**File: `src/components/itinerary/EditorialItinerary.tsx`**
+
+When passing `existingLegs` into `AddFlightInline` for edit mode, include:
+- `isDestinationArrival`
+- `isDestinationDeparture`
+
+Otherwise, opening edit flight can silently “drop” the stars.
+
+---
+
+### F) Add a dedicated “Sync itinerary to flight times” action (free) to avoid confusion with Refresh/Regenerate/Optimize
+Because your chosen “Refresh” = validation (not rewrite), and users still need a clear way to “rebuild timing around flights” after importing/starring.
+
+**File: `src/components/itinerary/EditorialItinerary.tsx`**
+
+Add a button near the Flight section (and/or near Optimize) labeled something like:
+- “Sync itinerary to flight times”
+
+Behavior:
+- Calls `runCascadeAndPersist(tripId, days, flight_selection, tripCities?)`
+- Refetches itinerary days using the fixed parser (section B)
+- Shows a toast describing what changed
+
+No credit spend; this is purely aligning schedule windows to already-entered booking times.
+
+---
+
+## Acceptance checklist (how we’ll verify)
+
+1) In itinerary → Flight section:
+- Star a leg as destination arrival → reload page → star still shown.
+- Day 1 activities shift appropriately (later start if arrival is later).
+- Star a leg as destination departure → last day truncates appropriately.
+
+2) In Start Step 2:
+- Import multi-leg flights → reorder legs → star a leg → submit trip
+- Open trip itinerary → same order + stars present.
+
+3) Edit Flight Details modal:
+- Stars are still present in the editor
+- Saving does not remove them.
+
+4) “Refresh” continues to be validation-only.
+5) “Sync itinerary to flight times” updates Day 1/last day reliably.
+
+---
+
+## Files we expect to touch
+- `src/pages/TripDetail.tsx` (preserve flags + select outbound/return by flags)
+- `src/components/itinerary/EditorialItinerary.tsx` (refetch parsing fix, legacy field alignment, edit modal preserves flags, add Sync button)
+- `src/utils/normalizeFlightSelection.ts` (return leg selection in builder)
+- `src/components/planner/flight/MultiLegFlightEditor.tsx` (star UI + reorder + signature includes flags)
+- `src/pages/Start.tsx` (signature includes flags + submit includes flags)
+
+No database migrations required.
+
+---
+
+<lov-actions>
+<lov-suggestion message="Test end-to-end: star destination arrival/departure legs, reload the page, and confirm Day 1 + last-day times update correctly. Also test creating a new trip from Step 2 with reordered legs and starred legs.">Verify end-to-end</lov-suggestion>
+<lov-suggestion message="Add a dedicated “Sync itinerary to flight times” button in the itinerary so users can rerun the transport cascade anytime without regenerating content or spending credits.">Add Sync button</lov-suggestion>
+<lov-suggestion message="Unify flight editing by reusing a single shared FlightLegEditor component across Step 2 and the itinerary, to prevent regressions like dropped flags and missing reorder controls.">Unify flight editor</lov-suggestion>
+<lov-suggestion message="Add a small ‘Flight timing window’ banner on Day 1 and the last day showing which leg is currently driving scheduling (with a quick link to change the starred leg).">Show scheduling driver</lov-suggestion>
+<lov-suggestion message="Add an activity-level warning when a Day 1 activity starts before the post-arrival buffer, with a one-click ‘Sync to flight times’ fix.">Add timing warnings</lov-suggestion>
+</lov-actions>
