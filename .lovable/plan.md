@@ -1,22 +1,46 @@
 
 
-# Fix: Ensure All Shareable Links Use Public URLs
+# Fix: 20 Edge Functions Missing from Config
 
-## Findings
+## Problem
 
-After auditing the entire codebase, almost everything is correct. The `getAppUrl()` utility already handles URL normalization for shareable links (invites, referrals, agency shares, quiz invites, archetype shares, intake links).
+There are **20 edge functions** that exist as code directories and are actively called from the frontend, but are **missing from `config.toml`**. Without a config entry, they default to `verify_jwt = true` at the Supabase gateway level. Since your project uses in-code JWT validation (not gateway-level), these functions will fail with 401/CORS errors when called from the browser.
 
-The `window.location.origin` usages for auth flows (OAuth redirects, password resets, email confirmations) are intentionally correct -- those must match the browser's actual origin.
+## Affected Functions
 
-**One issue found:**
+All 20 are called from the frontend and have proper CORS headers and in-code auth, but will be blocked at the gateway:
 
-`src/pages/GuideDetail.tsx` (line 189) uses `window.location.href` directly for the guide share URL. If someone shares a guide from the preview environment, it will generate a private/preview URL instead of the public one.
+| Function | Called From |
+|---|---|
+| `refresh-day` | `useRefreshDay.ts` |
+| `trip-chat` | `TripChat.tsx` |
+| `trip-suggestions` | `TripSuggestions.tsx` |
+| `discover-proactive` | `DiscoverDrawer.tsx` |
+| `dna-feedback-chat` | `DNAFeedbackChat.tsx` |
+| `mid-trip-dna` | `MidTripDNA.tsx` |
+| `suggest-hotel-swaps` | `TripConfirmationBanner.tsx` |
+| `transit-estimate` | `useTransitEstimate.ts` |
+| `compare-transport` | `useTransportComparison.ts` |
+| `generate-skip-list` | `useSkipList.ts` |
+| `purchase-group-unlock` | `GroupUnlockModal.tsx` |
+| `topup-group-budget` | `GroupTopupModal.tsx` |
+| `spend-group-credits` | (group billing) |
+| `discover-hidden-gems` | (discovery feature) |
+| `chat-trip-planner` | (chat planner) |
+| `mystery-trip-logistics` | (mystery trips) |
+| `backfill-activity-costs` | (admin/migration) |
+| `backfill-destination-images` | (admin/migration) |
+| `cache-destination-image` | (image caching) |
+| `migrate-site-images` | (admin/migration) |
 
 ## Fix
 
-| File | Change |
-|------|--------|
-| `src/pages/GuideDetail.tsx` | Import `getAppUrl` and replace `window.location.href` with `` `${getAppUrl()}/guides/${slug}` `` |
+**Single change to `supabase/config.toml`**: Add all 20 missing function entries with `verify_jwt = false`, matching the existing pattern used by the other 85+ functions.
 
-This is a one-line fix to ensure guide share links always point to the public site.
+## Technical Details
+
+- **File changed**: `supabase/config.toml` only
+- **No code changes needed** — all 20 functions already have proper CORS headers and in-code auth
+- **Risk**: None — this aligns them with the architecture every other function already uses
+- **Impact**: Fixes silent 401 failures for features like Refresh Day, Trip Chat, Trip Suggestions, Discover, DNA Feedback, Hotel Swaps, Transit Estimates, Group Unlocks, and more
 
