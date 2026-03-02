@@ -10,6 +10,7 @@ import { parseLocalDate } from '@/utils/dateUtils';
 import { Loader2, Calendar, MapPin, ArrowLeft, Edit, Sparkles } from 'lucide-react';
 import { TripDateEditor, type DateChangeResult } from '@/components/trip/TripDateEditor';
 import MainLayout from '@/components/layout/MainLayout';
+import ErrorBoundary from '@/components/common/ErrorBoundary';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -1124,6 +1125,7 @@ export default function TripDetail() {
       
       {/* Hero Destination Image */}
       <div className="relative h-56 md:h-72 -mt-16">
+        <ErrorBoundary>
         <DynamicDestinationPhotos
           destination={trip.destination}
           startDate={trip.start_date}
@@ -1133,6 +1135,7 @@ export default function TripDetail() {
           hideOverlayText
           className="!rounded-none"
         />
+        </ErrorBoundary>
         {/* Back Button - positioned on hero */}
         <div className="absolute top-20 left-4 md:left-8 z-20">
           <Button
@@ -1199,6 +1202,7 @@ export default function TripDetail() {
 
           {/* Live Itinerary View for active trips */}
           {isLiveTrip ? (
+            <ErrorBoundary>
             <LiveItineraryView
               tripId={trip.id}
               tripName={trip.name}
@@ -1209,8 +1213,10 @@ export default function TripDetail() {
               onActivityComplete={handleActivityComplete}
               onActivitySkip={handleActivitySkip}
             />
+            </ErrorBoundary>
           ) : showGenerator ? (
             /* Itinerary Generator */
+            <ErrorBoundary>
             <ItineraryGenerator
               tripId={trip.id}
               destination={trip.destination}
@@ -1226,6 +1232,7 @@ export default function TripDetail() {
               onComplete={handleGenerationComplete}
               onCancel={() => setShowGenerator(false)}
             />
+            </ErrorBoundary>
           ) : !hasItinerary ? (
             /* Empty Itinerary - Auto-trigger generator if shouldAutoGenerate, otherwise show minimal loading */
             shouldAutoGenerate ? (
@@ -1477,6 +1484,7 @@ export default function TripDetail() {
 
               return (
                 <>
+                  <ErrorBoundary>
                   <TripHealthPanel
                     days={editorDays}
                     totalDaysExpected={editorDays.length}
@@ -1510,6 +1518,8 @@ export default function TripDetail() {
                       }
                     }}
                   />
+                  </ErrorBoundary>
+                  <ErrorBoundary>
                   {tripCities.length > 1 ? (
                     tripCities.map((city) => (
                       <TravelIntelCard
@@ -1538,6 +1548,8 @@ export default function TripDetail() {
                       className="mb-4"
                     />
                   )}
+                  </ErrorBoundary>
+                  <ErrorBoundary>
                   <EditorialItinerary
                   tripId={trip.id}
                   destination={trip.destination}
@@ -1709,6 +1721,7 @@ export default function TripDetail() {
                     }
                   }}
                 />
+                </ErrorBoundary>
                 </>
               );
             })()
@@ -1716,7 +1729,9 @@ export default function TripDetail() {
 
           {/* Trip Photo Gallery */}
           <div className="mt-12">
+            <ErrorBoundary>
             <TripPhotoGallery tripId={trip.id} />
+            </ErrorBoundary>
           </div>
 
         </div>
@@ -1724,6 +1739,7 @@ export default function TripDetail() {
 
       {/* Itinerary Assistant - Floating Chatbot */}
       {hasItinerary && !(isManualMode && !trip.smart_finish_purchased) && hasPremiumAccess && (
+        <ErrorBoundary fallback={null}>
         <ItineraryAssistant
           tripId={trip.id}
           destination={trip.destination}
@@ -1765,7 +1781,6 @@ export default function TripDetail() {
             return undefined;
           })()}
           onItineraryUpdate={(updatedDays) => {
-            // Refresh trip data to reflect changes - serialize for Json compatibility
             setTrip(prev => prev ? {
               ...prev,
               itinerary_data: JSON.parse(JSON.stringify({
@@ -1775,6 +1790,7 @@ export default function TripDetail() {
             } : null);
           }}
         />
+        </ErrorBoundary>
       )}
 
       {/* Trip Debrief Modal - Post-trip retrospective */}
