@@ -149,6 +149,8 @@ export function useGenerationGate() {
     }
 
     // Attempt to deduct credits server-side
+    // Track whether credits were actually spent so we can refund on unexpected errors
+    let creditsSpent = 0;
     try {
       const { data, error } = await supabase.functions.invoke('spend-credits', {
         body: {
@@ -171,8 +173,8 @@ export function useGenerationGate() {
         throw new Error(`Credit spend failed: ${error.message || 'network error'}`);
       }
 
-      // Handle insufficient credits (402 from edge function)
-      if (data?.error === 'Insufficient credits') {
+      // Handle insufficient credits (from edge function)
+      if (data?.code === 'INSUFFICIENT_CREDITS' || data?.error === 'Insufficient credits') {
         const available = data.available ?? currentBalance;
         const shortfall = Math.max(0, tripCost - available);
         return {
@@ -193,7 +195,9 @@ export function useGenerationGate() {
         throw new Error(`Credit spend failed: ${data.error}`);
       }
 
-      // Credits deducted successfully — proceed with full generation
+      // Credits deducted successfully — record how much was spent
+      creditsSpent = data.spent ?? tripCost;
+
       // Refresh credit balance in UI
       if (user?.id) {
         queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
@@ -202,7 +206,7 @@ export function useGenerationGate() {
       return {
         mode: 'full',
         tripCost,
-        creditsCharged: data.spent,
+        creditsCharged: creditsSpent,
         currentBalance: data.newBalance?.total ?? (currentBalance - tripCost),
         shortfall: 0,
         recommendedPack: null,
@@ -211,6 +215,26 @@ export function useGenerationGate() {
       };
     } catch (err) {
       console.error('[GenerationGate] Unexpected error:', err);
+
+      // DEFENSIVE REFUND: If credits were deducted but the gate is throwing,
+      // issue a fire-and-forget refund so the user doesn't lose credits.
+      if (creditsSpent > 0) {
+        console.warn(`[GenerationGate] Credits (${creditsSpent}) were spent but gate is failing — issuing defensive refund`);
+        supabase.functions.invoke('spend-credits', {
+          body: {
+            action: 'REFUND',
+            tripId: params.tripId,
+            creditsAmount: creditsSpent,
+            metadata: { reason: 'gate_error', originalAction: 'trip_generation' },
+          },
+        }).then(({ error: refundErr }) => {
+          if (refundErr) console.error('[GenerationGate] Defensive refund failed:', refundErr);
+          else console.log(`[GenerationGate] Defensive refund succeeded: +${creditsSpent} credits`);
+          // Refresh balance after refund
+          if (user?.id) queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
+        }).catch(e => console.error('[GenerationGate] Defensive refund error:', e));
+      }
+
       // Re-throw non-credit errors so the caller shows a generic retry UI,
       // NOT the "out of credits" modal (which 'locked' mode triggers).
       throw err;

@@ -574,6 +574,33 @@ serve(async (req) => {
       }
     }
 
+    // ── Create pending charge record for high-value actions (safety net) ──
+    // If the downstream operation fails, this pending charge enables auto-refund.
+    let pendingChargeId: string | null = null;
+    const HIGH_VALUE_ACTIONS = ['trip_generation', 'smart_finish', 'hotel_optimization', 'regenerate_trip'];
+    if (HIGH_VALUE_ACTIONS.includes(action) && tripId) {
+      try {
+        const { data: pcRow, error: pcErr } = await supabaseAdmin
+          .from('pending_credit_charges')
+          .insert({
+            user_id: user.id,
+            trip_id: tripId,
+            action: action,
+            credits_amount: cost,
+            status: 'pending',
+          })
+          .select('id')
+          .single();
+        if (pcErr) {
+          console.error('[spend-credits] Failed to create pending charge (non-fatal):', pcErr);
+        } else {
+          pendingChargeId = pcRow.id;
+        }
+      } catch (pcCreateErr) {
+        console.error('[spend-credits] Pending charge creation error (non-fatal):', pcCreateErr);
+      }
+    }
+
     // ── FIFO deduction with write-ahead ledger ──
     let deductResult;
     try {
@@ -581,10 +608,13 @@ serve(async (req) => {
     } catch (err: unknown) {
       const error = err as Error & { code?: string; required?: number; available?: number };
       if (error.code === 'INSUFFICIENT_CREDITS') {
-        // Return 200 so supabase.functions.invoke puts response in `data` (not `error`)
-        // Frontend checks data.error === 'Insufficient credits' to trigger the modal
-        // Return 200 so supabase.functions.invoke puts response in `data` (not `error`)
-        // Frontend checks data.code === 'INSUFFICIENT_CREDITS' to trigger the modal
+        // Mark pending charge as failed (no credits taken)
+        if (pendingChargeId) {
+          await supabaseAdmin.from('pending_credit_charges').update({
+            status: 'failed', resolved_at: new Date().toISOString(),
+            resolution_note: 'Insufficient credits',
+          }).eq('id', pendingChargeId).catch(() => {});
+        }
         return new Response(
           JSON.stringify({
             success: false,
@@ -596,6 +626,13 @@ serve(async (req) => {
           }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
+      }
+      // Mark pending charge as failed for non-INSUFFICIENT errors too
+      if (pendingChargeId) {
+        await supabaseAdmin.from('pending_credit_charges').update({
+          status: 'failed', resolved_at: new Date().toISOString(),
+          resolution_note: `Deduction failed: ${error.message}`,
+        }).eq('id', pendingChargeId).catch(() => {});
       }
       throw err;
     }
@@ -659,6 +696,7 @@ serve(async (req) => {
         success: true,
         spent: deductResult.deducted,
         action,
+        pendingChargeId,
         newBalance: { total: balance.total, purchased: balance.purchased, free: balance.free },
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
