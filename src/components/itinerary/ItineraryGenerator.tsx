@@ -278,18 +278,34 @@ export function ItineraryGenerator({
         days: totalDays,
         cities,
       });
-    } catch (err) {
-      console.error('[ItineraryGenerator] Gate error, defaulting to preview:', err);
-      gateResult = {
-        mode: 'locked',
-        tripCost: totalDays * 60,
-        creditsCharged: 0,
-        currentBalance: 0,
-        shortfall: totalDays * 60,
-        recommendedPack: null,
-        requestedDays: totalDays,
-        generateDays: 0,
-      };
+    } catch (err: any) {
+      // Distinguish credit errors from server/network errors
+      const msg = err?.message || '';
+      const isCreditError = msg.includes('INSUFFICIENT_CREDITS') || msg.includes('Not enough credits');
+
+      if (isCreditError) {
+        // Genuine insufficient credits — show locked state
+        console.warn('[ItineraryGenerator] Insufficient credits:', msg);
+        gateResult = {
+          mode: 'locked',
+          tripCost: totalDays * 60,
+          creditsCharged: 0,
+          currentBalance: 0,
+          shortfall: totalDays * 60,
+          recommendedPack: null,
+          requestedDays: totalDays,
+          generateDays: 0,
+        };
+      } else {
+        // Server/network error — surface as generic error, NOT "out of credits"
+        console.error('[ItineraryGenerator] Gate error (server/network):', err);
+        if (stallCheckRef.current) clearInterval(stallCheckRef.current);
+        if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
+        cancel();
+        setPrePhase(null);
+        toast.error('Something went wrong while preparing your trip. Please try again in a moment.');
+        return;
+      }
     }
 
     console.log(`[ItineraryGenerator] Gate result: mode=${gateResult.mode}, cost=${gateResult.tripCost}, charged=${gateResult.creditsCharged}`);
