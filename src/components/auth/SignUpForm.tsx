@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Mail, Lock, User, ArrowRight, Eye, EyeOff, Check, X } from 'lucide-react';
@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { SocialLoginButtons } from '@/components/auth/SocialLoginButtons';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
-import { consumeReturnPath } from '@/utils/authReturnPath';
+import { consumeReturnPath, saveReturnPath } from '@/utils/authReturnPath';
 
 const signUpSchema = z.object({
   firstName: z.string().trim().min(1, 'First name is required'),
@@ -52,6 +52,13 @@ export function SignUpForm() {
   const [searchParams] = useSearchParams();
   const { signup } = useAuth();
   const queryRedirect = searchParams.get('redirect') || searchParams.get('next');
+
+  // Persist redirect intent so it survives email-verification / new-tab flows
+  useEffect(() => {
+    if (queryRedirect && queryRedirect.startsWith('/')) {
+      saveReturnPath(queryRedirect);
+    }
+  }, [queryRedirect]);
 
   const {
     register,

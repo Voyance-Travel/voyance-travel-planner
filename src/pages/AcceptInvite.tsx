@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { saveReturnPath } from '@/utils/authReturnPath';
+import logger from '@/lib/logger';
 import MainLayout from '@/components/layout/MainLayout';
 
 interface InviteInfo {
@@ -106,6 +107,7 @@ export default function AcceptInvite() {
 
     const fetchInviteInfo = async () => {
       try {
+        logger.info('[invite] Opening invite link', { token: token?.slice(0, 8) });
         const { data, error: fetchError } = await supabase.rpc('get_trip_invite_info', {
           p_token: token,
         });
@@ -116,11 +118,14 @@ export default function AcceptInvite() {
           const info = data as unknown as InviteInfo;
           setInviteInfo(info);
           if (!info.valid) {
+            logger.warn('[invite] Invalid invite', { reason: info.reason, token: token?.slice(0, 8) });
             setError(info.error || 'Invalid invite');
+          } else {
+            logger.info('[invite] Valid invite displayed', { trip: info.tripName });
           }
         }
       } catch (err) {
-        console.error('Error fetching invite:', err);
+        logger.error('[invite] Error fetching invite:', err);
         setError('Unable to load invite details');
       } finally {
         setLoading(false);
@@ -142,6 +147,7 @@ export default function AcceptInvite() {
     if (!token) return;
 
     setAccepting(true);
+    logger.info('[invite] Accept attempt', { token: token?.slice(0, 8), userId: user?.id?.slice(0, 8) });
 
     try {
       const { data, error: acceptError } = await supabase.rpc('accept_trip_invite', {
@@ -153,6 +159,7 @@ export default function AcceptInvite() {
       const result = data as unknown as AcceptResult;
 
       if (result?.success) {
+        logger.info('[invite] Accept succeeded', { tripId: result.tripId });
         setAccepted(true);
         toast.success('You\'ve joined the trip!');
         
@@ -161,16 +168,18 @@ export default function AcceptInvite() {
           navigate(`/trip/${result.tripId}`);
         }, 1500);
       } else if (result?.requiresAuth) {
+        logger.info('[invite] Accept requires auth, redirecting');
         if (inviteReturnPath) {
           saveReturnPath(inviteReturnPath);
           navigate(`/signin?redirect=${encodeURIComponent(inviteReturnPath)}`);
         }
       } else {
+        logger.warn('[invite] Accept failed', { reason: result?.reason });
         const errorDisplay = getErrorDisplay(result?.reason, result?.error);
         setError(errorDisplay.message);
       }
     } catch (err) {
-      console.error('Error accepting invite:', err);
+      logger.error('[invite] Accept error:', err);
       setError('Failed to accept invite. Please try again.');
     } finally {
       setAccepting(false);

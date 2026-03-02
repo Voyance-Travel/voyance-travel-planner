@@ -1598,22 +1598,16 @@ export function PaymentsTab({
                         return;
                       }
                       
-                      // Create invite with email
-                      const { data: invite, error } = await supabase
-                        .from('trip_invites')
-                        .insert({
-                          trip_id: tripId,
-                          invited_by: user.id,
-                          email: inviteEmail,
-                          max_uses: 1,
-                          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-                        })
-                        .select('token')
-                        .single();
+                      // Use centralized invite resolver
+                      const { resolveInviteLink } = await import('@/services/inviteResolver');
+                      const result = await resolveInviteLink(tripId);
                       
-                      if (error) throw error;
+                      if (!result.success || !result.link) {
+                        const { getInviteErrorMessage } = await import('@/services/inviteResolver');
+                        throw new Error(getInviteErrorMessage(result.reason));
+                      }
                       
-                      const inviteLink = `${getAppUrl()}/invite/${invite.token}`;
+                      const inviteLink = result.link;
                       
                       // Open email client with invite
                       window.open(`mailto:${inviteEmail}?subject=Join my trip!&body=You're invited to join my trip! Click here: ${encodeURIComponent(inviteLink)}`, '_blank');
