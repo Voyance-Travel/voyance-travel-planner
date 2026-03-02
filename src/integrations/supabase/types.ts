@@ -8307,6 +8307,7 @@ export type Database = {
         Args: { p_stripe_session_id?: string; p_user_id: string }
         Returns: Json
       }
+      claim_first_trip_benefit: { Args: { p_user_id: string }; Returns: Json }
       cleanup_expired_search_cache: { Args: never; Returns: number }
       cleanup_expired_venues: { Args: never; Returns: number }
       cleanup_rate_limits: { Args: never; Returns: undefined }

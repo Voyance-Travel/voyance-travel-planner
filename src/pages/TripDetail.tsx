@@ -773,18 +773,15 @@ export default function TripDetail() {
           // Invalidate entitlements so UI immediately reflects new unlocked_day_count
           queryClient.invalidateQueries({ queryKey: ['entitlements'] });
           
-          // Mark first_trip_used = true ONLY after successful save
+          // Atomically claim first-trip benefit ONLY after successful save
           if (isFirstTrip) {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
-              const { error: flagError } = await supabase
-                .from('profiles')
-                .update({ first_trip_used: true })
-                .eq('id', user.id);
-              if (flagError) {
-                console.error('[TripDetail] Failed to set first_trip_used:', flagError);
+              const { error: claimError } = await supabase.rpc('claim_first_trip_benefit', { p_user_id: user.id });
+              if (claimError) {
+                console.error('[TripDetail] Failed to claim first_trip_used:', claimError);
               } else {
-                console.log('[TripDetail] first_trip_used flag set successfully');
+                console.log('[TripDetail] first_trip_used claimed atomically');
               }
             }
           }
