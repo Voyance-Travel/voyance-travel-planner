@@ -3306,6 +3306,58 @@ export function EditorialItinerary({
   // Alias for backwards compatibility
   const handleDayRegenerate = requestDayRegenerate;
 
+  // ── Flight Sync: deterministic cascade instead of AI regeneration ──
+  const handleSyncFlightToDay = useCallback(async () => {
+    if (!destinationArrivalLeg?.arrival?.time || !tripId) return;
+
+    const outboundLeg = destinationArrivalLeg;
+    const isCrossDayFlight = outboundLeg?.departure?.date && outboundLeg?.arrival?.date
+      && outboundLeg.arrival.date.substring(0, 10) > outboundLeg.departure.date.substring(0, 10);
+    const arrivalDayIndex = isCrossDayFlight ? 1 : 0;
+    const arrivalDay = days[arrivalDayIndex];
+    if (!arrivalDay) return;
+
+    setRegeneratingDay(arrivalDay.dayNumber);
+
+    try {
+      // Save version snapshot for undo
+      await saveDayVersion(tripId, {
+        dayNumber: arrivalDay.dayNumber,
+        title: arrivalDay.title,
+        theme: arrivalDay.theme,
+        activities: arrivalDay.activities as any,
+      }, 'before_flight_sync');
+
+      // Run deterministic cascade
+      const { cascadeArrivalDay } = await import('@/services/cascadeTransportToItinerary');
+      // cascadeArrivalDay operates on an array starting from the target day
+      const daySlice = [{ ...arrivalDay, activities: [...arrivalDay.activities] }];
+      const result = cascadeArrivalDay(daySlice, outboundLeg.arrival.time, 'flight');
+
+      if (result.changed && result.updatedDays[0]) {
+        const updatedDay = result.updatedDays[0];
+        setDays(prev => prev.map((d, i) => i === arrivalDayIndex ? { ...d, activities: updatedDay.activities } : d));
+
+        const change = result.changes[0];
+        const parts: string[] = [];
+        if (change?.shiftedActivities.length) parts.push(`${change.shiftedActivities.length} shifted`);
+        if (change?.removedActivities.length) parts.push(`${change.removedActivities.length} removed`);
+        if (change?.addedBlocks.length) parts.push(`${change.addedBlocks.length} added`);
+
+        toast.success('Schedule synced to flight times', {
+          description: parts.length ? parts.join(', ') : 'Activities adjusted',
+        });
+      } else {
+        toast.info('Schedule already matches flight times');
+      }
+    } catch (err) {
+      console.error('[FlightSync] Cascade error:', err);
+      toast.error('Failed to sync schedule');
+    } finally {
+      setRegeneratingDay(null);
+    }
+  }, [destinationArrivalLeg, days, tripId]);
+
   const handleDayLock = useCallback((dayIndex: number) => {
     setDays(prev => prev.map((day, idx) => {
       if (idx !== dayIndex) return day;
@@ -3973,7 +4025,7 @@ export function EditorialItinerary({
                   <FlightSyncWarning
                     flightArrivalTime={destinationArrivalLeg.arrival.time}
                     day1FirstActivity={arrivalDay.activities[0]}
-                    onSyncDay1={() => handleDayRegenerate(arrivalDayIndex)}
+                    onSyncDay1={handleSyncFlightToDay}
                     isRegenerating={regeneratingDay === arrivalDay?.dayNumber}
                   />
                 );
@@ -6509,12 +6561,12 @@ function FlightSyncWarning({ flightArrivalTime, day1FirstActivity, onSyncDay1, i
             {isRegenerating ? (
               <>
                 <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                Syncing Day 1...
+                Syncing schedule...
               </>
             ) : (
               <>
                 <RefreshCw className="h-4 w-4 mr-2" />
-                Regenerate Day 1 with correct times
+                Sync schedule to flight times
               </>
             )}
           </Button>
