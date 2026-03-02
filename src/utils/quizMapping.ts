@@ -1025,9 +1025,13 @@ export async function submitQuizComplete(
     // IMPORTANT: Preserve existing overrides - do NOT clear them
     try {
       // Create a clean JSON object for travel_dna
+      // Dedup guard: ensure secondary !== primary even on quiz completion path
+      const quizSecondary = (dna.secondary_archetype_name && dna.secondary_archetype_name !== dna.primary_archetype_name)
+        ? dna.secondary_archetype_name
+        : null;
       const travelDnaJson = {
         primary_archetype_name: dna.primary_archetype_name || null,
-        secondary_archetype_name: dna.secondary_archetype_name || null,
+        secondary_archetype_name: quizSecondary,
         dna_confidence_score: dna.dna_confidence_score ?? null,
         dna_rarity: dna.dna_rarity || null,
         trait_scores: dna.trait_scores || {},
@@ -1190,15 +1194,22 @@ export async function recalculateDNAFromPreferences(
   userId: string
 ): Promise<{ success: boolean; dna: TravelDNAPayload | null }> {
   try {
-    // 1. Fetch current preferences AND existing overrides in parallel
-    const [preferences, overridesResult] = await Promise.all([
+    // 1. Fetch current preferences, existing overrides, AND existing DNA in parallel
+    // We need the existing DNA so we can preserve the secondary archetype if recalc produces a duplicate
+    const [preferences, overridesResult, existingDnaResult] = await Promise.all([
       getUserPreferences(userId),
       supabase
         .from('profiles')
         .select('travel_dna_overrides')
         .eq('id', userId)
+        .maybeSingle(),
+      supabase
+        .from('travel_dna_profiles')
+        .select('secondary_archetype_name')
+        .eq('user_id', userId)
         .maybeSingle()
     ]);
+    const existingSecondary = existingDnaResult.data?.secondary_archetype_name as string | null;
     
     if (!preferences) {
       console.error('No preferences found for user:', userId);
@@ -1244,9 +1255,14 @@ export async function recalculateDNAFromPreferences(
       }
       const archetypeResult = determineArchetype(flatAnswers);
       const primaryId = archetypeResult.primary?.id || dna.primary_archetype_name || 'cultural_anthropologist';
-      const secondaryId = archetypeResult.secondary?.id || dna.secondary_archetype_name || null;
+      // Dedup: if recalc produces the same archetype for both primary and secondary,
+      // fall back to the pre-existing secondary to avoid clobbering it
+      const candidateSecondary = archetypeResult.secondary?.id || dna.secondary_archetype_name || null;
+      const secondaryId = (candidateSecondary && candidateSecondary !== primaryId)
+        ? candidateSecondary
+        : (existingSecondary && existingSecondary !== primaryId ? existingSecondary : null);
 
-      console.log('[DNA Recalc] Archetype re-match:', primaryId, '| secondary:', secondaryId);
+      console.log('[DNA Recalc] Archetype re-match:', primaryId, '| secondary:', secondaryId, '| candidate was:', candidateSecondary);
 
       dna.primary_archetype_name = primaryId;
       dna.secondary_archetype_name = secondaryId;
