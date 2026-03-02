@@ -536,7 +536,7 @@ export function useItinerary(tripId: string | null, options?: { refetchInterval?
       errorCountRef.current = 0;
       
       if (status === 'generating' || status === 'running' || status === 'queued') {
-        return baseInterval;
+        return 2000; // Fast polling during generation for responsive UI
       }
       return false;
     },
