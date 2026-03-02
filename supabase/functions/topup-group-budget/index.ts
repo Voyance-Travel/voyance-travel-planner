@@ -65,34 +65,23 @@ serve(async (req) => {
 
     // Check balance
     const now = new Date();
-    const { data: rows } = await supabaseAdmin
-      .from('credit_purchases')
-      .select('id, remaining, expires_at, credit_type')
-      .eq('user_id', user.id)
-      .gt('remaining', 0)
-      .order('expires_at', { ascending: true, nullsFirst: false });
+    // Atomic FIFO deduction via RPC (row-level locking prevents double-spend)
+    const { data: deductResult, error: deductErr } = await supabaseAdmin.rpc('deduct_credits_fifo', {
+      p_user_id: user.id,
+      p_cost: credits,
+    });
 
-    const activeRows = (rows || []).filter(r => !r.expires_at || new Date(r.expires_at) > now);
-    const totalAvailable = activeRows.reduce((sum, r) => sum + r.remaining, 0);
-
-    if (totalAvailable < credits) {
-      return new Response(JSON.stringify({
-        error: 'Insufficient credits',
-        required: credits,
-        available: totalAvailable,
-      }), { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
-    // Deduct FIFO
-    let remaining = credits;
-    for (const row of activeRows) {
-      if (remaining <= 0) break;
-      const take = Math.min(row.remaining, remaining);
-      await supabaseAdmin.from('credit_purchases').update({
-        remaining: row.remaining - take,
-        updated_at: now.toISOString(),
-      }).eq('id', row.id);
-      remaining -= take;
+    if (deductErr) {
+      const msg = deductErr.message || '';
+      if (msg.includes('INSUFFICIENT_CREDITS')) {
+        const match = msg.match(/available=(\d+)/);
+        return new Response(JSON.stringify({
+          error: 'Insufficient credits',
+          required: credits,
+          available: match ? parseInt(match[1], 10) : 0,
+        }), { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      throw new Error(`deduct_credits_fifo failed: ${msg}`);
     }
 
     // Add to budget
