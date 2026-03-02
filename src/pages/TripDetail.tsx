@@ -27,8 +27,9 @@ import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { TripDebriefModal } from '@/components/trip/TripDebriefModal';
 import { TripConfirmationBanner } from '@/components/trip/TripConfirmationBanner';
 import type { SwapSuggestion } from '@/components/trip/SwapReviewDialog';
+import { VersionConflictDialog } from '@/components/trip/VersionConflictDialog';
 import { supabase } from '@/integrations/supabase/client';
-import { setCachedVersion, clearCachedVersion, saveItineraryOptimistic } from '@/services/itineraryOptimisticUpdate';
+import { setCachedVersion, clearCachedVersion, saveItineraryOptimistic, fetchAndCacheVersion } from '@/services/itineraryOptimisticUpdate';
 import { useScheduleNotifications } from '@/services/tripNotificationsAPI';
 import { useTripLearning } from '@/services/tripLearningsAPI';
 import { useAuth } from '@/contexts/AuthContext';
@@ -96,6 +97,10 @@ export default function TripDetail() {
   const [destinationMeta, setDestinationMeta] = useState<Destination | null>(null);
   const [showDebriefModal, setShowDebriefModal] = useState(false);
   const [hasCollaborators, setHasCollaborators] = useState(false);
+  const [conflictState, setConflictState] = useState<{
+    open: boolean;
+    localData: Record<string, unknown> | null;
+  }>({ open: false, localData: null });
   const scheduleNotifications = useScheduleNotifications();
   const { isManualBuilder } = useManualBuilderStore();
   const [tripCities, setTripCities] = useState<TripCity[]>([]);
@@ -1035,7 +1040,7 @@ export default function TripDetail() {
     // Persist to backend with optimistic locking
     saveItineraryOptimistic(tripId!, newItineraryData).then((result) => {
       if (!result.success && result.error === 'version_conflict') {
-        toast.error('Another collaborator edited this itinerary. Please reload to see their changes.');
+        setConflictState({ open: true, localData: newItineraryData });
       } else if (!result.success) {
         console.error('[TripDetail] Failed to save swaps:', result.error);
       }
@@ -1673,7 +1678,7 @@ export default function TripDetail() {
                               const newItData = { ...(itData || {}), days: injectedDays, savedAt: new Date().toISOString() };
                               const saveResult = await saveItineraryOptimistic(tripId!, newItData);
                               if (!saveResult.success && saveResult.error === 'version_conflict') {
-                                toast.error('Another collaborator edited this itinerary. Please reload.');
+                                setConflictState({ open: true, localData: newItData });
                               }
                               updatedTrip.itinerary_data = newItData as any;
                             }
@@ -1821,6 +1826,42 @@ export default function TripDetail() {
         initialRedistribution={redistributionModal.redistribution}
         onConfirm={handleRedistributionConfirm}
         hasItinerary={hasItinerary}
+      />
+
+      {/* Version conflict resolution dialog */}
+      <VersionConflictDialog
+        open={conflictState.open}
+        onReloadLatest={async () => {
+          setConflictState({ open: false, localData: null });
+          // Re-fetch the trip from the server
+          const { data } = await supabase
+            .from('trips')
+            .select('*')
+            .eq('id', tripId!)
+            .single();
+          if (data) {
+            setTrip(data);
+            setCachedVersion(tripId!, (data as any).itinerary_version ?? 1);
+            toast.success('Loaded the latest version from your collaborator.');
+          }
+        }}
+        onForceKeepMine={async () => {
+          const localData = conflictState.localData;
+          setConflictState({ open: false, localData: null });
+          if (!localData || !tripId) return;
+          // Refresh version cache then force-save
+          await fetchAndCacheVersion(tripId);
+          const result = await saveItineraryOptimistic(tripId, localData);
+          if (result.success) {
+            toast.success('Your changes have been saved.');
+          } else {
+            toast.error('Failed to save — please try again.');
+          }
+        }}
+        onCancel={() => {
+          setConflictState({ open: false, localData: null });
+          toast('Local changes discarded.');
+        }}
       />
     </MainLayout>
   );
