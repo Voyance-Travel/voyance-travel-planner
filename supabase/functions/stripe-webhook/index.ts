@@ -223,7 +223,41 @@ serve(async (req) => {
         const metadata = session.metadata || {};
 
         if (!metadata || Object.keys(metadata).length === 0) {
-          logError("WARNING: session.metadata is empty or null", { sessionId: session.id, rawMetadata: session.metadata });
+          logError("CRITICAL: session.metadata is empty — cannot fulfil purchase. Aborting.", {
+            sessionId: session.id,
+            paymentStatus: session.payment_status,
+            amountTotal: session.amount_total,
+            customer: session.customer,
+          });
+          // Return 200 so Stripe doesn't retry, but log prominently for investigation
+          return new Response(JSON.stringify({ received: true, warning: "empty_metadata" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        // Validate critical fields present for purchase types that need them
+        if (metadata.type && !metadata.user_id) {
+          logError("CRITICAL: metadata.type is set but user_id is missing — cannot fulfil.", {
+            sessionId: session.id,
+            type: metadata.type,
+            metadata,
+          });
+          return new Response(JSON.stringify({ received: true, warning: "missing_user_id" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (metadata.type === "trip_pass" && !metadata.trip_id) {
+          logError("CRITICAL: trip_pass purchase missing trip_id — cannot fulfil.", {
+            sessionId: session.id,
+            metadata,
+          });
+          return new Response(JSON.stringify({ received: true, warning: "missing_trip_id" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
         }
 
         // Trip Pass Fulfillment
