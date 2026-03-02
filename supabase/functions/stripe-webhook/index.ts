@@ -795,10 +795,10 @@ serve(async (req) => {
     const message = error instanceof Error ? error.message : String(error);
     const stack = error instanceof Error ? error.stack : undefined;
     log("CRITICAL ERROR", { message, stack });
-    // Return 200 to prevent Stripe from retrying and marking endpoint as failing.
-    // The error is logged above for manual investigation.
-    return new Response(JSON.stringify({ received: true, error: 'fulfillment_failed', details: message }), {
-      headers: { "Content-Type": "application/json" }, status: 200,
+    // Return 500 so Stripe retries automatically (up to 3 days, exponential backoff).
+    // Idempotency guards (credit_ledger, group_unlocks, trip_purchases) prevent duplicate fulfillment on retry.
+    return new Response(JSON.stringify({ received: false, error: 'fulfillment_failed', details: message }), {
+      headers: { "Content-Type": "application/json" }, status: 500,
     });
   }
 });
