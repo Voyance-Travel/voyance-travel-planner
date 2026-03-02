@@ -73,7 +73,7 @@ serve(async (req) => {
       metadata: {
         trip_id: tripId,
         user_id: user.id,
-        product_type: "smart_finish",
+        type: "smart_finish",
       },
       success_url: `${origin}/trip/${tripId}?smart_finish=success`,
       cancel_url: `${origin}/trip/${tripId}?smart_finish=cancelled`,
