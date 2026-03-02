@@ -110,7 +110,10 @@ export function ManualTripPasteEntry({ }: ManualTripPasteEntryProps = {}) {
       }
 
       // Client-side sanitization safety net — strip any CJK / schema-leak artifacts
-      if (result.destination) result.destination = sanitizeAIField(result.destination);
+      if (result.destination) {
+        result.destination = sanitizeAIField(result.destination)
+          .replace(/\s+[A-Z][a-z]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?/g, '').trim();
+      }
       if (result.days) {
         for (const day of result.days) {
           if (day.theme) day.theme = sanitizeAIField(day.theme);
