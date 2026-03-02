@@ -3,9 +3,7 @@
  * Shareable modal with link, social buttons, email, and referral credits
  */
 
-import { useState, useCallback } from 'react';
-import { getAppUrl } from '@/utils/getAppUrl';
-import { supabase } from '@/integrations/supabase/client';
+import { useState, useCallback, useEffect } from 'react';
 import { 
   Link2, Mail, Copy, Check, MessageCircle, 
   Share2, Users, Gift, X
@@ -22,6 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { FirstUseHint } from '@/components/itinerary/FirstUseHint';
+import { resolveInviteLink, getInviteErrorMessage } from '@/services/inviteResolver';
 
 interface TripShareModalProps {
   isOpen: boolean;
@@ -47,56 +46,10 @@ export function TripShareModal({
   const [friendEmail, setFriendEmail] = useState('');
   const [isCreatingLink, setIsCreatingLink] = useState(false);
 
-  // Always create an invite-based share link (public route)
-  const createInviteLink = useCallback(async (): Promise<string> => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not signed in');
-
-    // Check for existing invite
-    const { data: existing } = await supabase
-      .from('trip_invites')
-      .select('token, expires_at')
-      .eq('trip_id', tripId)
-      .eq('invited_by', user.id)
-      .is('email', null)
-      .maybeSingle();
-
-    let token = existing?.token;
-
-    if (existing && existing.expires_at && new Date(existing.expires_at) < new Date()) {
-      // Refresh expired invite
-      const { data: updated, error } = await supabase
-        .from('trip_invites')
-        .update({
-          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          uses_count: 0,
-          accepted_at: null,
-          accepted_by: null,
-        })
-        .eq('trip_id', tripId)
-        .eq('invited_by', user.id)
-        .is('email', null)
-        .select('token')
-        .single();
-      if (error) throw error;
-      token = updated.token;
-    } else if (!token) {
-      // Create new invite
-      const { data: newInvite, error } = await supabase
-        .from('trip_invites')
-        .insert({
-          trip_id: tripId,
-          invited_by: user.id,
-          max_uses: 10,
-          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        })
-        .select('token')
-        .single();
-      if (error) throw error;
-      token = newInvite.token;
-    }
-
-    return `${getAppUrl()}/invite/${token}`;
+  // Reset share state when tripId changes
+  useEffect(() => {
+    setShareLink('');
+    setCopied(false);
   }, [tripId]);
 
   const getOrCreateShareLink = async () => {
@@ -104,11 +57,14 @@ export function TripShareModal({
     
     setIsCreatingLink(true);
     try {
-      // Use provided callback or our built-in invite link creator
-      const linkFn = onCreateShareLink || createInviteLink;
-      const link = await linkFn();
-      setShareLink(link);
-      return link;
+      // Use centralized resolver
+      const result = await resolveInviteLink(tripId);
+      if (!result.success || !result.link) {
+        toast.error(getInviteErrorMessage(result.reason));
+        return '';
+      }
+      setShareLink(result.link);
+      return result.link;
     } catch (e) {
       console.error('Failed to create share link:', e);
       toast.error('Failed to create share link. Please try again.');

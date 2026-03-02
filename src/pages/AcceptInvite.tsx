@@ -19,6 +19,7 @@ import MainLayout from '@/components/layout/MainLayout';
 
 interface InviteInfo {
   valid: boolean;
+  reason?: string;
   error?: string;
   tripName?: string;
   destination?: string;
@@ -31,9 +32,56 @@ interface InviteInfo {
 
 interface AcceptResult {
   success: boolean;
+  reason?: string;
   error?: string;
   requiresAuth?: boolean;
   tripId?: string;
+}
+
+/** Map backend reason codes to user-friendly error messages with specific icons/guidance */
+function getErrorDisplay(reason?: string, fallbackError?: string) {
+  switch (reason) {
+    case 'invalid_token':
+      return {
+        title: 'Link Not Valid',
+        message: 'This invite link is not valid. It may have been reset by the trip owner. Ask them for a new link.',
+      };
+    case 'expired':
+      return {
+        title: 'Link Expired',
+        message: 'This invite link has expired. Ask the trip owner for a fresh link.',
+      };
+    case 'trip_full':
+      return {
+        title: 'Trip Is Full',
+        message: 'This trip has reached its maximum number of travelers. Ask the owner to increase the traveler count.',
+      };
+    case 'invite_limit_reached':
+      return {
+        title: 'Link Limit Reached',
+        message: 'This invite link has been used the maximum number of times. Ask the trip owner for a new link.',
+      };
+    case 'already_member':
+      return {
+        title: 'Already a Member',
+        message: 'You are already a member of this trip. Check your dashboard.',
+      };
+    case 'already_owner':
+      return {
+        title: 'You Own This Trip',
+        message: 'You are the owner of this trip — no need to join!',
+      };
+    case 'trip_not_found':
+      return {
+        title: 'Trip Not Found',
+        message: 'The trip associated with this invite no longer exists.',
+      };
+    default:
+      return {
+        title: 'Invite Not Valid',
+        message: fallbackError || 'This invite link is no longer valid.',
+      };
+  }
 }
 
 export default function AcceptInvite() {
@@ -108,7 +156,8 @@ export default function AcceptInvite() {
         sessionStorage.setItem('pendingInviteToken', token);
         navigate('/signin?redirect=/invite/' + token);
       } else {
-        setError(result?.error || 'Failed to accept invite');
+        const errorDisplay = getErrorDisplay(result?.reason, result?.error);
+        setError(errorDisplay.message);
       }
     } catch (err) {
       console.error('Error accepting invite:', err);
@@ -139,6 +188,11 @@ export default function AcceptInvite() {
   }
 
   if (error || !inviteInfo?.valid) {
+    const errorDisplay = getErrorDisplay(
+      inviteInfo?.reason,
+      error || inviteInfo?.error
+    );
+    
     return (
       <MainLayout>
         <div className="min-h-[60vh] flex items-center justify-center px-4">
@@ -147,9 +201,9 @@ export default function AcceptInvite() {
               <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
                 <AlertCircle className="h-8 w-8 text-destructive" />
               </div>
-              <h1 className="text-xl font-semibold mb-2">Invite Not Valid</h1>
+              <h1 className="text-xl font-semibold mb-2">{errorDisplay.title}</h1>
               <p className="text-muted-foreground mb-6">
-                {error || inviteInfo?.error || 'This invite link is no longer valid.'}
+                {errorDisplay.message}
               </p>
               <Button onClick={() => navigate('/')}>
                 Go Home
