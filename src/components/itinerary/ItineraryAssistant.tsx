@@ -471,7 +471,7 @@ export function ItineraryAssistant({
           <Button
             onClick={() => setIsOpen(true)}
             className={cn(
-              "fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-50",
+              "fixed bottom-20 right-4 sm:bottom-6 sm:right-6 h-12 w-12 sm:h-14 sm:w-14 rounded-full shadow-lg z-40",
               "bg-primary hover:bg-primary/90 transition-all",
               isOpen && "hidden"
             )}
