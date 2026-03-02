@@ -211,16 +211,9 @@ export function useGenerationGate() {
       };
     } catch (err) {
       console.error('[GenerationGate] Unexpected error:', err);
-      return {
-        mode: 'locked',
-        tripCost,
-        creditsCharged: 0,
-        currentBalance,
-        shortfall: Math.max(0, tripCost - currentBalance),
-        recommendedPack: getRecommendedPackForEstimate(tripCost, currentBalance),
-        requestedDays: params.days,
-        generateDays: 0,
-      };
+      // Re-throw non-credit errors so the caller shows a generic retry UI,
+      // NOT the "out of credits" modal (which 'locked' mode triggers).
+      throw err;
     }
   }, [user, creditData, queryClient]);
 
