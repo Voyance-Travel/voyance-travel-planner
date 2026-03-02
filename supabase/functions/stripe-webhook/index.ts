@@ -382,8 +382,7 @@ serve(async (req) => {
             }
 
             log("Credit fulfillment complete", {
-              purchaseOk: clubInfo ? true : true, // logged individually above
-              ledgerOk: !ledgerErr,
+              ledgerOk: true,
               creditsAdded: creditsToAdd,
               sessionId: session.id,
             });
