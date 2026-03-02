@@ -11967,6 +11967,18 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
   } catch (error) {
     console.error("[generate-itinerary] Error:", error);
+
+    // Best-effort: mark trip as failed so the frontend stops showing infinite spinner
+    try {
+      const failTripId = typeof params === 'object' && params?.tripId;
+      if (failTripId && typeof supabase !== 'undefined') {
+        await supabase.from('trips').update({ itinerary_status: 'failed' }).eq('id', failTripId);
+        console.log(`[generate-itinerary] Marked trip ${failTripId} as failed`);
+      }
+    } catch (statusErr) {
+      console.error("[generate-itinerary] Failed to set itinerary_status=failed:", statusErr);
+    }
+
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
