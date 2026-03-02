@@ -625,6 +625,67 @@ serve(async (req) => {
             });
           }
         }
+
+        // ── Consumer credit pack refund clawback ──
+        // If this charge came from a credit pack purchase, zero out the credits
+        const paymentIntentId = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id;
+        if (paymentIntentId) {
+          // Retrieve the checkout session that created this payment intent
+          const sessions = await stripe.checkout.sessions.list({ payment_intent: paymentIntentId, limit: 1 });
+          const checkoutSession = sessions.data[0];
+
+          if (checkoutSession?.id) {
+            // Check if credit_purchases rows exist for this session
+            const { data: creditRows } = await supabaseAdmin
+              .from('credit_purchases')
+              .select('id, user_id, remaining, credit_type, amount')
+              .eq('stripe_session_id', checkoutSession.id)
+              .gt('remaining', 0);
+
+            if (creditRows && creditRows.length > 0) {
+              const refundUserId = creditRows[0].user_id;
+              let totalClawed = 0;
+
+              // Idempotency: check if we already processed this refund
+              const refundRef = latestRefund?.id || `refund-${charge.id}`;
+              const { data: existingClawback } = await supabaseAdmin
+                .from('credit_ledger')
+                .select('id')
+                .eq('stripe_session_id', checkoutSession.id)
+                .eq('transaction_type', 'refund')
+                .maybeSingle();
+
+              if (!existingClawback) {
+                // Zero out all credit_purchases rows for this session
+                for (const row of creditRows) {
+                  totalClawed += row.remaining;
+                  await supabaseAdmin
+                    .from('credit_purchases')
+                    .update({ remaining: 0, updated_at: new Date().toISOString() })
+                    .eq('id', row.id);
+                }
+
+                // Audit trail
+                await supabaseAdmin.from('credit_ledger').insert({
+                  user_id: refundUserId,
+                  transaction_type: 'refund',
+                  action_type: 'stripe_refund',
+                  credits_delta: -totalClawed,
+                  is_free_credit: false,
+                  stripe_session_id: checkoutSession.id,
+                  notes: `Stripe refund clawback: ${totalClawed} credits (refund ${refundRef})`,
+                });
+
+                // Sync balance cache
+                await syncBalanceCache(supabaseAdmin, refundUserId);
+                log("Consumer credit clawback complete", { userId: refundUserId, creditsClawed: totalClawed, refundId: refundRef });
+              } else {
+                log("Duplicate consumer credit clawback, skipping", { sessionId: checkoutSession.id });
+              }
+            }
+          }
+        }
+
         break;
       }
 
