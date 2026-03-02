@@ -77,6 +77,7 @@ serve(async (req) => {
         const match = msg.match(/available=(\d+)/);
         return new Response(JSON.stringify({
           error: 'Insufficient credits',
+          code: 'INSUFFICIENT_CREDITS',
           required: credits,
           available: match ? parseInt(match[1], 10) : 0,
         }), { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
