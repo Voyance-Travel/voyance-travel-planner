@@ -48,6 +48,7 @@ export function SignUpForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [serverError, setServerError] = useState('');
+  const [emailConfirmationSent, setEmailConfirmationSent] = useState(false);
   
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -92,8 +93,14 @@ export function SignUpForm() {
     setIsLoading(true);
     
     try {
-      await signup(data.email, data.password, { firstName: data.firstName.trim(), lastName: data.lastName.trim() });
+      const result = await signup(data.email, data.password, { firstName: data.firstName.trim(), lastName: data.lastName.trim() });
       
+      // Email confirmation required — show friendly message instead of navigating
+      if (result.needsEmailConfirmation) {
+        setEmailConfirmationSent(true);
+        return;
+      }
+
       // Prioritize invite token recovery over generic return path
       const pendingToken = consumePendingInviteToken();
       if (pendingToken) {
@@ -117,6 +124,27 @@ export function SignUpForm() {
     const qs = params.toString();
     return qs ? `${ROUTES.SIGNIN}?${qs}` : ROUTES.SIGNIN;
   })();
+
+  if (emailConfirmationSent) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="text-center space-y-4 py-8"
+      >
+        <div className="mx-auto w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
+          <Mail className="h-6 w-6 text-green-600" />
+        </div>
+        <h3 className="text-lg font-semibold text-slate-900">Check your email</h3>
+        <p className="text-sm text-slate-600 max-w-sm mx-auto">
+          We've sent a confirmation link to your email.
+          {urlInviteToken
+            ? " After confirming, you'll be redirected to join the trip."
+            : ' Please confirm your account to get started.'}
+        </p>
+      </motion.div>
+    );
+  }
 
   return (
     <div className="space-y-6">
