@@ -12,6 +12,7 @@ import { SocialLoginButtons } from '@/components/auth/SocialLoginButtons';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { consumeReturnPath, saveReturnPath } from '@/utils/authReturnPath';
+import { savePendingInviteToken, consumePendingInviteToken, extractInviteTokenFromPath } from '@/utils/inviteTokenPersistence';
 
 const signUpSchema = z.object({
   firstName: z.string().trim().min(1, 'First name is required'),
@@ -53,12 +54,18 @@ export function SignUpForm() {
   const { signup } = useAuth();
   const queryRedirect = searchParams.get('redirect') || searchParams.get('next');
 
-  // Persist redirect intent so it survives email-verification / new-tab flows
+  // Extract invite token from URL param or redirect path
+  const urlInviteToken = searchParams.get('inviteToken') || extractInviteTokenFromPath(queryRedirect);
+
+  // Persist redirect intent and invite token on mount
   useEffect(() => {
     if (queryRedirect && queryRedirect.startsWith('/')) {
       saveReturnPath(queryRedirect);
     }
-  }, [queryRedirect]);
+    if (urlInviteToken) {
+      savePendingInviteToken(urlInviteToken);
+    }
+  }, [queryRedirect, urlInviteToken]);
 
   const {
     register,
@@ -86,7 +93,14 @@ export function SignUpForm() {
     
     try {
       await signup(data.email, data.password, { firstName: data.firstName.trim(), lastName: data.lastName.trim() });
-      navigate(queryRedirect || consumeReturnPath('/'));
+      
+      // Prioritize invite token recovery over generic return path
+      const pendingToken = consumePendingInviteToken();
+      if (pendingToken) {
+        navigate(`/invite/${pendingToken}`, { replace: true });
+      } else {
+        navigate(queryRedirect || consumeReturnPath('/'));
+      }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create account. Please try again.';
       setServerError(errorMessage);
@@ -94,6 +108,15 @@ export function SignUpForm() {
       setIsLoading(false);
     }
   };
+
+  // Build link to signin preserving invite context
+  const signInLink = (() => {
+    const params = new URLSearchParams();
+    if (queryRedirect) params.set('redirect', queryRedirect);
+    if (urlInviteToken) params.set('inviteToken', urlInviteToken);
+    const qs = params.toString();
+    return qs ? `${ROUTES.SIGNIN}?${qs}` : ROUTES.SIGNIN;
+  })();
 
   return (
     <div className="space-y-6">
@@ -252,7 +275,7 @@ export function SignUpForm() {
         <p className="text-center text-sm text-slate-600">
           Already have an account?{' '}
           <Link 
-            to={ROUTES.SIGNIN} 
+            to={signInLink} 
             className="font-medium text-slate-900 hover:underline"
           >
             Sign in

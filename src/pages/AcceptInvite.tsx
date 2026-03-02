@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { MapPin, Calendar, Users, CheckCircle2, AlertCircle, Loader2, UserPlus } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { saveReturnPath } from '@/utils/authReturnPath';
+import { savePendingInviteToken, peekPendingInviteToken } from '@/utils/inviteTokenPersistence';
 import logger from '@/lib/logger';
 import MainLayout from '@/components/layout/MainLayout';
 
@@ -38,15 +39,17 @@ interface AcceptResult {
   error?: string;
   requiresAuth?: boolean;
   tripId?: string;
+  alreadyMember?: boolean;
 }
 
-/** Map backend reason codes to user-friendly error messages with specific icons/guidance */
+/** Map backend reason codes to user-friendly error messages */
 function getErrorDisplay(reason?: string, fallbackError?: string) {
   switch (reason) {
+    case 'token_not_found':
     case 'invalid_token':
       return {
         title: 'Link Not Valid',
-        message: 'This invite link is not valid. It may have been reset by the trip owner. Ask them for a new link.',
+        message: 'This invite link was not found. It may have been reset by the trip owner. Ask them for a new link.',
       };
     case 'expired':
       return {
@@ -87,7 +90,8 @@ function getErrorDisplay(reason?: string, fallbackError?: string) {
 }
 
 export default function AcceptInvite() {
-  const { token } = useParams<{ token: string }>();
+  const { token: routeToken } = useParams<{ token: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user, isLoading: authLoading } = useAuth();
   
@@ -96,6 +100,24 @@ export default function AcceptInvite() {
   const [accepting, setAccepting] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Resolve token with fallback: route param → query param → persisted token
+  const queryToken = searchParams.get('inviteToken');
+  const token = routeToken || queryToken || peekPendingInviteToken();
+
+  // Persist token immediately on mount for durability
+  useEffect(() => {
+    if (token) {
+      savePendingInviteToken(token);
+    }
+  }, [token]);
+
+  // If we have a persisted token but no route param, normalize URL
+  useEffect(() => {
+    if (!routeToken && token) {
+      navigate(`/invite/${token}`, { replace: true });
+    }
+  }, [routeToken, token, navigate]);
 
   // Fetch invite info
   useEffect(() => {
@@ -138,9 +160,10 @@ export default function AcceptInvite() {
   const inviteReturnPath = token ? `/invite/${token}` : null;
 
   const redirectToInviteAuth = (mode: 'signin' | 'signup') => {
-    if (!inviteReturnPath) return;
+    if (!inviteReturnPath || !token) return;
     saveReturnPath(inviteReturnPath);
-    navigate(`/${mode}?redirect=${encodeURIComponent(inviteReturnPath)}`);
+    savePendingInviteToken(token);
+    navigate(`/${mode}?redirect=${encodeURIComponent(inviteReturnPath)}&inviteToken=${encodeURIComponent(token)}`);
   };
 
   const handleAccept = async () => {
@@ -159,20 +182,16 @@ export default function AcceptInvite() {
       const result = data as unknown as AcceptResult;
 
       if (result?.success) {
-        logger.info('[invite] Accept succeeded', { tripId: result.tripId });
+        logger.info('[invite] Accept succeeded', { tripId: result.tripId, alreadyMember: result.alreadyMember });
         setAccepted(true);
-        toast.success('You\'ve joined the trip!');
+        toast.success(result.alreadyMember ? 'You\'re already a member!' : 'You\'ve joined the trip!');
         
-        // Navigate to trip after a short delay
         setTimeout(() => {
           navigate(`/trip/${result.tripId}`);
         }, 1500);
       } else if (result?.requiresAuth) {
         logger.info('[invite] Accept requires auth, redirecting');
-        if (inviteReturnPath) {
-          saveReturnPath(inviteReturnPath);
-          navigate(`/signin?redirect=${encodeURIComponent(inviteReturnPath)}`);
-        }
+        redirectToInviteAuth('signin');
       } else {
         logger.warn('[invite] Accept failed', { reason: result?.reason });
         const errorDisplay = getErrorDisplay(result?.reason, result?.error);
@@ -219,9 +238,14 @@ export default function AcceptInvite() {
                 <AlertCircle className="h-8 w-8 text-destructive" />
               </div>
               <h1 className="text-xl font-semibold mb-2">{errorDisplay.title}</h1>
-              <p className="text-muted-foreground mb-6">
+              <p className="text-muted-foreground mb-4">
                 {errorDisplay.message}
               </p>
+              {inviteInfo?.reason && (
+                <p className="text-xs text-muted-foreground/60 mb-4 font-mono">
+                  Reason: {inviteInfo.reason}
+                </p>
+              )}
               <Button onClick={() => navigate('/')}>
                 Go Home
               </Button>
@@ -249,7 +273,6 @@ export default function AcceptInvite() {
               Welcome to {inviteInfo.tripName}
             </p>
 
-            {/* Friend connection confirmation */}
             <div className="bg-muted/50 rounded-lg p-3 mb-4 flex items-center gap-3">
               <UserPlus className="h-4 w-4 text-primary shrink-0" />
               <p className="text-xs text-muted-foreground text-left">
@@ -275,7 +298,6 @@ export default function AcceptInvite() {
           className="max-w-md w-full"
         >
           <Card className="overflow-hidden">
-            {/* Header with gradient */}
             <div className="bg-gradient-to-r from-primary/20 via-primary/10 to-accent/20 p-6 text-center">
               <div className="flex items-center justify-center gap-2 mb-4">
                 {inviteInfo.inviterAvatar ? (
@@ -298,7 +320,6 @@ export default function AcceptInvite() {
             </div>
 
             <CardContent className="p-6 space-y-4">
-              {/* Trip Details */}
               <div className="space-y-3">
                 <div className="flex items-center gap-3 text-sm">
                   <MapPin className="h-4 w-4 text-primary" />
@@ -320,7 +341,6 @@ export default function AcceptInvite() {
                 )}
               </div>
 
-              {/* Action Buttons */}
               {user ? (
                 <Button 
                   className="w-full" 
@@ -343,10 +363,10 @@ export default function AcceptInvite() {
                     Sign in or create an account to join this trip
                   </p>
                   <div className="grid grid-cols-2 gap-3">
-                    <Button variant="outline" onClick={handleSignIn}>
+                    <Button variant="outline" onClick={() => redirectToInviteAuth('signin')}>
                       Sign In
                     </Button>
-                    <Button onClick={handleSignUp}>
+                    <Button onClick={() => redirectToInviteAuth('signup')}>
                       Create Account
                     </Button>
                   </div>

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { lovable } from '@/integrations/lovable/index';
 import { supabase } from '@/integrations/supabase/client';
 import { saveReturnPath } from '@/utils/authReturnPath';
+import { savePendingInviteToken, extractInviteTokenFromPath } from '@/utils/inviteTokenPersistence';
 import { toast } from 'sonner';
 
 const isCustomDomain = () =>
@@ -21,9 +22,15 @@ export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps)
   const [searchParams] = useSearchParams();
 
   const redirectPath = searchParams.get('redirect') || searchParams.get('next');
+  const inviteToken = searchParams.get('inviteToken') || extractInviteTokenFromPath(redirectPath);
+
   const persistAuthReturnPath = () => {
     if (redirectPath && redirectPath.startsWith('/')) {
       saveReturnPath(redirectPath);
+    }
+    // Also persist invite token so it survives the OAuth redirect
+    if (inviteToken) {
+      savePendingInviteToken(inviteToken);
     }
   };
 
