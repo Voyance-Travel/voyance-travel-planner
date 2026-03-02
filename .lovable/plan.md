@@ -1,35 +1,88 @@
 
-# Fix: FlightSyncWarning "Regenerate" Button Not Applying Flight Time Changes
+Goal: make invite links deterministic so you always know the copied link is valid for the currently open trip, and give you a one-click reset when you want a guaranteed fresh token.
 
-## The Bug
-When the FlightSyncWarning banner appears (because your flight arrival time doesn't match Day 1's schedule), clicking "Regenerate Day 1 with correct times" calls the full AI day regeneration. This AI call doesn't receive your flight arrival time as a constraint, so it generates a brand new day that still has the same timing mismatch. You can click it repeatedly and nothing changes -- it keeps regenerating without the flight context.
+What is happening today (confirmed)
+1. A new invite token is generated only when:
+   - no invite row exists for that trip, or
+   - the invite is expired and gets refreshed.
+2. Re-copying the link does not generate a new token.
+3. The itinerary page caches `shareLink` in component state and does not reset it on trip change.
+4. There are multiple share entry points with inconsistent behavior (`travelers - 1` vs `10` max uses).
+5. Your screenshot message (“Failed to accept invite. Please try again.”) is the generic catch path, so the real backend failure reason is hidden.
 
-## The Fix
-Instead of calling the full AI regeneration, the button should run the **transport cascade** function (`cascadeArrivalDay`), which already exists and correctly:
-- Shifts all activities forward to start after your flight arrival + transit buffer (1h 45m for flights)
-- Removes activities that can't fit
-- Adds an "Arrive & Check In" block at the right time
-- Preserves evening activities and meals
+This explains why “we thought it was fixed” keeps happening: the app can keep serving an old/wrong cached link and then hides the real join failure reason.
 
-This is a targeted time-sync, not a full regeneration -- no credits spent, instant result, and the activities stay the same (just rescheduled).
+Implementation approach
 
-## Changes
+Phase 1 — Guarantee “copy” always resolves the current trip’s active invite
+- Replace “copy cached string” behavior with “resolve current invite before copy”.
+- In the main itinerary share flow (`EditorialItinerary.tsx`):
+  - always fetch/resolve invite for current `tripId` on copy/generate click,
+  - never trust previously cached `shareLink` as source of truth.
+- Reset local share state whenever `tripId` changes:
+  - clear `shareLink`,
+  - clear copied state.
+- Do the same in other share surfaces:
+  - `TripShareModal.tsx` (internal state currently initialized once and can go stale),
+  - `ShareTripCard.tsx` (current effect can retain previous trip link when trip changes).
 
-### File: `src/components/itinerary/EditorialItinerary.tsx`
+Phase 2 — Centralize invite resolution in one backend-backed helper
+- Add a shared invite resolver service used by all UI share entry points.
+- Service behavior:
+  - resolve existing invite for this trip/owner,
+  - refresh if expired/exhausted,
+  - align max uses with current trip capacity rule,
+  - return structured link health info (token, expiry, uses, spots remaining, reason).
+- All components use this one helper so behavior is identical everywhere.
 
-1. **Add a new `handleSyncFlightToDay` function** (near line 3305) that:
-   - Reads the flight arrival time from `destinationArrivalLeg`
-   - Detects cross-day flights (overnight) to target the correct day index
-   - Calls `cascadeArrivalDay()` from `cascadeTransportToItinerary.ts` with the arrival time
-   - Updates the `days` state with the shifted activities
-   - Saves a version snapshot before applying (so undo works)
-   - Shows a toast with what changed ("3 activities shifted, 1 removed")
+Phase 3 — Add explicit link health + reset controls (so you can trust what you send)
+- In share UI, show:
+  - “Verified just now”
+  - spots remaining
+  - uses (`x / y`)
+  - expiry time
+- Add “Reset link” button:
+  - force-rotate token,
+  - copy fresh link immediately,
+  - old token becomes invalid by design.
+- If trip is full, block copying and show full-trip message instead of silently handing out a dead link.
 
-2. **Update FlightSyncWarning's `onSyncDay1` prop** (line 3976) to call the new `handleSyncFlightToDay` instead of `handleDayRegenerate(arrivalDayIndex)`
+Phase 4 — Make failures diagnosable (no more blind generic errors)
+- Update invite accept flow to surface structured reasons from backend:
+  - `trip_full`, `expired`, `invite_limit_reached`, `already_member`, etc.
+- On accept failure, display specific user-facing message (not generic “invalid”).
+- Add lightweight backend audit event for invite accept failures (token hash + reason + trip id) so issues are detectable even if users don’t report them.
 
-3. **Update the button label** in the `FlightSyncWarning` component (line 6517) from "Regenerate Day 1 with correct times" to "Sync schedule to flight times" -- since this is a time-shift, not a regeneration
+Technical scope
 
-### No other files changed
-- `cascadeTransportToItinerary.ts` already has all the logic needed
-- No edge function calls, no credits consumed
-- The cascade is deterministic -- same input always produces the same correctly-shifted output
+Frontend files
+- `src/components/itinerary/EditorialItinerary.tsx`
+  - reset share state on `tripId` change,
+  - copy button always resolves current invite first,
+  - add reset-link action and health display.
+- `src/components/sharing/TripShareModal.tsx`
+  - re-sync/reset internal link state on `tripId` changes,
+  - route all link creation through shared resolver.
+- `src/components/post-trip/ShareTripCard.tsx`
+  - prevent stale `shareUrl` reuse across trip changes,
+  - use shared resolver.
+- `src/pages/AcceptInvite.tsx`
+  - map backend reason codes to precise error UI.
+
+Backend (Lovable Cloud database functions)
+- extend invite info/accept responses to include reason/status fields.
+- add one canonical “resolve or rotate invite” function for trip owners.
+- no auth model changes needed; this stays owner-controlled.
+
+How you’ll know it’s fixed going forward
+- Every time you press copy, the app verifies/resolves against current trip first.
+- Share panel visibly reports invite health before sharing.
+- You have a manual “Reset link” control for immediate forced rotation.
+- Failures are logged with reason codes so we can diagnose without asking users to retry 15 times.
+
+Validation checklist
+1. Open Trip A, copy link; open Trip B, copy link; confirm tokens differ and each maps to correct trip.
+2. Re-open share panel after trip switch; ensure no prior link is shown/copied.
+3. Join with multiple accounts up to capacity; link remains valid until full.
+4. Press “Reset link”; old link fails, new link succeeds.
+5. Force each failure mode (full, expired, already member) and confirm clear message on invite page.
