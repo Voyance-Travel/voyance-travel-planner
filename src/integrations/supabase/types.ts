@@ -7883,6 +7883,48 @@ export type Database = {
         }
         Relationships: []
       }
+      credit_ledger_safe: {
+        Row: {
+          action_type: string | null
+          activity_id: string | null
+          created_at: string | null
+          credits_delta: number | null
+          id: string | null
+          is_free_credit: boolean | null
+          metadata: Json | null
+          notes: string | null
+          transaction_type: string | null
+          trip_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action_type?: string | null
+          activity_id?: string | null
+          created_at?: string | null
+          credits_delta?: number | null
+          id?: string | null
+          is_free_credit?: boolean | null
+          metadata?: Json | null
+          notes?: string | null
+          transaction_type?: string | null
+          trip_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action_type?: string | null
+          activity_id?: string | null
+          created_at?: string | null
+          credits_delta?: number | null
+          id?: string | null
+          is_free_credit?: boolean | null
+          metadata?: Json | null
+          notes?: string | null
+          transaction_type?: string | null
+          trip_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       finance_trip_profit_summary: {
         Row: {
           agent_earnings_cents: number | null
