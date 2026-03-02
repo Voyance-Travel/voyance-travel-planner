@@ -117,6 +117,11 @@ export function SignUpForm() {
             className="p-3 text-sm text-red-600 bg-red-50 rounded-lg"
           >
             {serverError}
+            {serverError.includes('already exists') && (
+              <a href="/signin" className="block mt-1 font-medium text-primary underline underline-offset-2">
+                Go to Sign In →
+              </a>
+            )}
           </motion.div>
         )}
         
