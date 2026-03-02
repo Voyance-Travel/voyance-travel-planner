@@ -366,105 +366,30 @@ serve(async (req) => {
 
             const clubInfo = productId ? CLUB_PRODUCT_MAP[productId] : null;
 
-            if (clubInfo) {
-              // ── Club pack: 2 credit_purchases rows (base + bonus) ──
-              const now = new Date();
-              const bonusExpires = new Date(now);
-              bonusExpires.setMonth(bonusExpires.getMonth() + 6);
-
-              // Base credits (never expire)
-              const { error: baseErr } = await supabaseAdmin.from('credit_purchases').insert({
-                user_id: userId,
-                credit_type: 'club_base',
-                amount: clubInfo.baseCredits,
-                remaining: clubInfo.baseCredits,
-                expires_at: null,
-                source: 'stripe',
-                stripe_session_id: session.id,
-                club_tier: clubInfo.tier,
-              });
-              if (baseErr) logError("CRITICAL: club base credit_purchases INSERT FAILED", JSON.stringify(baseErr));
-
-              // Bonus credits (6 month expiry)
-              const { error: bonusErr } = await supabaseAdmin.from('credit_purchases').insert({
-                user_id: userId,
-                credit_type: 'club_bonus',
-                amount: clubInfo.bonusCredits,
-                remaining: clubInfo.bonusCredits,
-                expires_at: bonusExpires.toISOString(),
-                source: 'stripe',
-                stripe_session_id: session.id,
-                club_tier: clubInfo.tier,
-              });
-              if (bonusErr) logError("CRITICAL: club bonus credit_purchases INSERT FAILED", JSON.stringify(bonusErr));
-
-              // Award club badge
-              await supabaseAdmin.from('user_badges').upsert({
-                user_id: userId,
-                badge_type: `club_${clubInfo.tier}`,
-                source: 'purchase',
-                metadata: { stripe_session_id: session.id, tier: clubInfo.tier },
-              }, { onConflict: 'user_id,badge_type' });
-
-              // Award founding member for adventurer
-              if (clubInfo.tier === 'adventurer') {
-                await supabaseAdmin.rpc('award_founding_member', {
-                  p_user_id: userId,
-                  p_stripe_session_id: session.id,
-                });
-                await supabaseAdmin.from('user_badges').upsert({
-                  user_id: userId,
-                  badge_type: 'founding_member',
-                  source: 'purchase',
-                  metadata: { stripe_session_id: session.id },
-                }, { onConflict: 'user_id,badge_type' });
-              }
-
-              log("Club pack fulfilled", { tier: clubInfo.tier, base: clubInfo.baseCredits, bonus: clubInfo.bonusCredits });
-            } else {
-              // ── Flex pack: 1 credit_purchases row (12 month expiry) ──
-              const flexExpires = new Date();
-              flexExpires.setMonth(flexExpires.getMonth() + 12);
-
-              const { error: flexErr } = await supabaseAdmin.from('credit_purchases').insert({
-                user_id: userId,
-                credit_type: 'flex',
-                amount: creditsToAdd,
-                remaining: creditsToAdd,
-                expires_at: flexExpires.toISOString(),
-                source: 'stripe',
-                stripe_session_id: session.id,
-              });
-              if (flexErr) logError("CRITICAL: flex credit_purchases INSERT FAILED", JSON.stringify(flexErr));
-
-              log("Flex pack fulfilled", { credits: creditsToAdd });
-            }
-
-            // Sync balance cache
-            try {
-              await syncBalanceCache(supabaseAdmin, userId);
-              log("Balance cache synced", { userId });
-            } catch (syncErr) {
-              log("CRITICAL: syncBalanceCache FAILED", { error: syncErr instanceof Error ? syncErr.message : String(syncErr) });
-            }
-
-            // Ledger entry
-            const ledgerActionType = clubInfo ? 'club_purchase' : 'stripe_purchase';
-            const { error: ledgerErr } = await supabaseAdmin.from("credit_ledger").insert({
-              user_id: userId,
-              transaction_type: 'purchase',
-              action_type: ledgerActionType,
-              credits_delta: creditsToAdd,
-              is_free_credit: false,
-              stripe_session_id: session.id,
-              stripe_product_id: productId,
-              price_id: priceId,
-              amount_cents: amountCents,
-              notes: clubInfo
-                ? `${clubInfo.tier} club pack - ${creditsToAdd} credits (${clubInfo.baseCredits} base + ${clubInfo.bonusCredits} bonus)`
-                : `Flex credit pack - ${creditsToAdd} credits`,
+            // Atomic fulfillment via single transactional RPC
+            const { data: fulfillResult, error: fulfillErr } = await supabaseAdmin.rpc('fulfill_credit_purchase', {
+              p_user_id: userId,
+              p_credits: clubInfo ? clubInfo.baseCredits : creditsToAdd,
+              p_bonus_credits: clubInfo ? clubInfo.bonusCredits : 0,
+              p_credit_type: clubInfo ? 'club_base' : 'flex',
+              p_stripe_session_id: session.id,
+              p_amount_cents: amountCents,
+              p_club_tier: clubInfo?.tier ?? null,
+              p_product_id: productId ?? null,
+              p_price_id: priceId ?? null,
             });
-            if (ledgerErr) logError("CRITICAL: credit_ledger INSERT FAILED", JSON.stringify(ledgerErr));
+
+            if (fulfillErr) {
+              logError("CRITICAL: fulfill_credit_purchase RPC FAILED — will retry via Stripe", JSON.stringify(fulfillErr));
+              throw new Error(`fulfill_credit_purchase failed: ${fulfillErr.message}`);
+            }
+
+            const result = fulfillResult as { success: boolean; skipped?: boolean; reason?: string; credits?: number; type?: string };
+            if (result?.skipped) {
+              log("Duplicate credit purchase (idempotent skip)", { sessionId: session.id });
+            } else {
+              log("Credit fulfillment complete (atomic)", { credits: result?.credits, type: result?.type });
+            }
 
             log("Credit fulfillment complete", {
               purchaseOk: clubInfo ? true : true, // logged individually above

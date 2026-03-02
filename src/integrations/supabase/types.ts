@@ -8315,6 +8315,20 @@ export type Database = {
         Args: { p_cost: number; p_user_id: string }
         Returns: Json
       }
+      fulfill_credit_purchase: {
+        Args: {
+          p_amount_cents: number
+          p_bonus_credits: number
+          p_club_tier?: string
+          p_credit_type: string
+          p_credits: number
+          p_price_id?: string
+          p_product_id?: string
+          p_stripe_session_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       generate_booking_reference: { Args: never; Returns: string }
       generate_intake_token: { Args: never; Returns: string }
       generate_invoice_number: { Args: never; Returns: string }
