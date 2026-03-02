@@ -556,9 +556,14 @@ export const TRIP_COST_EXAMPLES = {
 
 const MAX_REASONABLE_CREDITS = 100_000;
 
+let _formatCreditsWarned = false;
+
 export function formatCredits(credits: number): string {
   if (credits > MAX_REASONABLE_CREDITS) {
-    console.error(`[formatCredits] Unreasonable credit value detected: ${credits}. Possible data corruption.`);
+    if (!_formatCreditsWarned) {
+      _formatCreditsWarned = true;
+      console.warn(`[formatCredits] Unreasonable credit value detected: ${credits}. Subsequent warnings suppressed.`);
+    }
     return '—';
   }
   return credits.toLocaleString();
