@@ -13,26 +13,21 @@ const logStep = (step: string, details?: any) => {
 };
 
 // =============================================================================
-// RATE LIMITING - In-memory store (resets on cold start, but limits abuse)
+// RATE LIMITING - Database-backed (survives cold starts)
 // =============================================================================
-const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+import { checkDbRateLimit } from "../_shared/db-rate-limiter.ts";
+
 const RATE_LIMIT = { maxRequests: 5, windowMs: 60000 }; // 5 requests per minute per user
 
-function checkRateLimit(userId: string): { allowed: boolean; remaining: number } {
-  const now = Date.now();
-  const entry = rateLimitStore.get(userId);
-  
-  if (!entry || now > entry.resetAt) {
-    rateLimitStore.set(userId, { count: 1, resetAt: now + RATE_LIMIT.windowMs });
-    return { allowed: true, remaining: RATE_LIMIT.maxRequests - 1 };
-  }
-  
-  if (entry.count >= RATE_LIMIT.maxRequests) {
-    return { allowed: false, remaining: 0 };
-  }
-  
-  entry.count++;
-  return { allowed: true, remaining: RATE_LIMIT.maxRequests - entry.count };
+async function checkRateLimit(supabaseAdmin: any, userId: string): Promise<{ allowed: boolean; remaining: number }> {
+  const result = await checkDbRateLimit(
+    supabaseAdmin,
+    userId,
+    'create-booking-checkout',
+    RATE_LIMIT,
+    userId,
+  );
+  return { allowed: result.allowed, remaining: result.remaining };
 }
 
 // Single Trip Unlock price
@@ -84,7 +79,14 @@ serve(async (req) => {
     logStep("User authenticated", { userId, email: userEmail });
 
     // Rate limit check
-    const rateCheck = checkRateLimit(userId);
+    // Rate limit check — needs service client, create it early
+    const serviceClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { auth: { persistSession: false } }
+    );
+
+    const rateCheck = await checkRateLimit(serviceClient, userId);
     if (!rateCheck.allowed) {
       logStep("Rate limit exceeded", { userId });
       return new Response(JSON.stringify({ error: "Too many requests. Please wait a minute and try again." }), {
@@ -93,12 +95,7 @@ serve(async (req) => {
       });
     }
 
-    // Use service role client for database operations
-    const serviceClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-      { auth: { persistSession: false } }
-    );
+    // serviceClient already created above for rate limiting
 
     // Get trip details using service client
     const { data: trip, error: tripError } = await serviceClient

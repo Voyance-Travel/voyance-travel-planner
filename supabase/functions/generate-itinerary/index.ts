@@ -2150,32 +2150,30 @@ function buildNormalizedPromptContext(
 }
 
 // =============================================================================
-// RATE LIMITING - In-memory store (resets on cold start, but limits abuse)
+// RATE LIMITING - Database-backed (survives cold starts)
 // =============================================================================
-const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMITS = {
+import { checkDbRateLimit, type RateLimitRule } from "../_shared/db-rate-limiter.ts";
+
+const RATE_LIMIT_RULES: Record<string, RateLimitRule> = {
   'generate-full': { maxRequests: 3, windowMs: 300000 }, // 3 full generations per 5 min
-  'generate-day': { maxRequests: 20, windowMs: 60000 },   // 20 day generations per min (supports 15+ day trips with retries)
+  'generate-day': { maxRequests: 20, windowMs: 60000 },   // 20 day generations per min
   default: { maxRequests: 20, windowMs: 60000 }           // 20 requests per min for other actions
 };
 
-function checkRateLimit(userId: string, action: string): { allowed: boolean; remaining: number } {
-  const now = Date.now();
-  const key = `${userId}:${action}`;
-  const limits = RATE_LIMITS[action as keyof typeof RATE_LIMITS] || RATE_LIMITS.default;
-  const entry = rateLimitStore.get(key);
-  
-  if (!entry || now > entry.resetAt) {
-    rateLimitStore.set(key, { count: 1, resetAt: now + limits.windowMs });
-    return { allowed: true, remaining: limits.maxRequests - 1 };
-  }
-  
-  if (entry.count >= limits.maxRequests) {
-    return { allowed: false, remaining: 0 };
-  }
-  
-  entry.count++;
-  return { allowed: true, remaining: limits.maxRequests - entry.count };
+async function checkRateLimit(
+  supabaseAdmin: any,
+  userId: string,
+  action: string
+): Promise<{ allowed: boolean; remaining: number }> {
+  const rule = RATE_LIMIT_RULES[action] || RATE_LIMIT_RULES.default;
+  const result = await checkDbRateLimit(
+    supabaseAdmin,
+    userId,
+    `generate-itinerary:${action}`,
+    rule,
+    userId,
+  );
+  return { allowed: result.allowed, remaining: result.remaining };
 }
 
 // =============================================================================
@@ -7056,7 +7054,7 @@ serve(async (req) => {
     console.log(`[generate-itinerary] Action: ${action}`);
 
     // Rate limit check for expensive operations
-    const rateCheck = checkRateLimit(authResult.userId, action);
+    const rateCheck = await checkRateLimit(supabase, authResult.userId, action);
     if (!rateCheck.allowed) {
       console.log(`[generate-itinerary] Rate limit exceeded for ${authResult.userId} on ${action}`);
       return new Response(
