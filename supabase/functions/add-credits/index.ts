@@ -12,8 +12,9 @@ const logStep = (step: string, details?: unknown) => {
   console.log(`[ADD-CREDITS] ${step}${detailsStr}`);
 };
 
-// Minimum top-up is $5 (500 cents)
+// Minimum top-up is $5 (500 cents), maximum is $500 (50000 cents)
 const MIN_TOPUP_CENTS = 500;
+const MAX_TOPUP_CENTS = 50000;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -25,8 +26,14 @@ serve(async (req) => {
 
     const { amount_cents } = await req.json();
     
-    if (!amount_cents || amount_cents < MIN_TOPUP_CENTS) {
+    if (!amount_cents || typeof amount_cents !== 'number' || !Number.isInteger(amount_cents)) {
+      throw new Error("amount_cents must be an integer");
+    }
+    if (amount_cents < MIN_TOPUP_CENTS) {
       throw new Error(`Minimum top-up is $${MIN_TOPUP_CENTS / 100}`);
+    }
+    if (amount_cents > MAX_TOPUP_CENTS) {
+      throw new Error(`Maximum top-up is $${MAX_TOPUP_CENTS / 100}`);
     }
 
     // Authenticate user
