@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { formatCredits } from '@/config/pricing';
 
 export type TransportModeOption = 'bus' | 'train' | 'rideshare' | 'taxi' | 'walking' | 'cheapest';
 export type DistanceUnit = 'km' | 'miles';
@@ -196,7 +197,7 @@ export default function OptimizePreferencesDialog({
           {lowBalanceWarning && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
               <p className="text-xs text-amber-700 dark:text-amber-400">
-                This will leave you with {userBalance - creditCost} credits remaining
+                This will leave you with {formatCredits(userBalance - creditCost)} credits remaining
               </p>
             </div>
           )}

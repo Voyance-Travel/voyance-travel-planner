@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
-import { CREDIT_COSTS } from '@/config/pricing';
+import { CREDIT_COSTS, formatCredits } from '@/config/pricing';
 import { CreditNudge } from './CreditNudge';
 import { UnlockBanner } from './UnlockBanner';
 import { LockedDayCard } from './LockedDayCard';
@@ -3771,7 +3771,7 @@ export function EditorialItinerary({
                 <h3 className="font-serif text-lg font-semibold text-foreground">Trip Summary</h3>
                 <p className="text-sm text-muted-foreground mt-0.5">
                   {days.length} Days · {travelers} {travelers === 1 ? 'Guest' : 'Guests'}
-                  {creditData && <> · <span className="text-primary font-medium">{totalCredits}</span> credits remaining</>}
+                  {creditData && <> · <span className="text-primary font-medium">{formatCredits(totalCredits)}</span> credits remaining</>}
                 </p>
               </div>
 
