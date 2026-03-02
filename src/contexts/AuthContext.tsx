@@ -461,9 +461,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(error.message);
     }
     
+    // Supabase returns an empty identities array for repeated signups
+    // (user already exists). Surface a helpful message instead of a generic one.
+    if (data.user && (!data.user.identities || data.user.identities.length === 0)) {
+      throw new Error('An account with this email already exists. Please sign in instead.');
+    }
+    
     // Check if email confirmation is required
     if (data.user && !data.session) {
-      throw new Error('Please check your email to confirm your account');
+      throw new Error('Please check your email to confirm your account.');
     }
     
     // Profile is created automatically via trigger
