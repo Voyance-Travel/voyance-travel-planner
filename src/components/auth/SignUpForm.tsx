@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Mail, Lock, User, ArrowRight, Eye, EyeOff, Check, X } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, Eye, EyeOff, Check, X, RefreshCw } from 'lucide-react';
 import { useForm } from 'react-hook-form';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -49,7 +51,8 @@ export function SignUpForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [serverError, setServerError] = useState('');
   const [emailConfirmationSent, setEmailConfirmationSent] = useState(false);
-  
+  const [confirmedEmail, setConfirmedEmail] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { signup } = useAuth();
@@ -67,6 +70,25 @@ export function SignUpForm() {
       savePendingInviteToken(urlInviteToken);
     }
   }, [queryRedirect, urlInviteToken]);
+
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setTimeout(() => setResendCooldown(c => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
+
+  const handleResendConfirmation = useCallback(async () => {
+    if (!confirmedEmail || resendCooldown > 0) return;
+    try {
+      const { error } = await supabase.auth.resend({ type: 'signup', email: confirmedEmail });
+      if (error) throw error;
+      toast.success('Confirmation email resent — check your inbox and spam folder.');
+      setResendCooldown(60);
+    } catch (err) {
+      toast.error('Failed to resend. Please try again later.');
+    }
+  }, [confirmedEmail, resendCooldown]);
 
   const {
     register,
@@ -97,6 +119,7 @@ export function SignUpForm() {
       
       // Email confirmation required — show friendly message instead of navigating
       if (result.needsEmailConfirmation) {
+        setConfirmedEmail(data.email);
         setEmailConfirmationSent(true);
         return;
       }
@@ -142,6 +165,18 @@ export function SignUpForm() {
             ? " After confirming, you'll be redirected to join the trip."
             : ' Please confirm your account to get started.'}
         </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleResendConfirmation}
+          disabled={resendCooldown > 0}
+          className="mx-auto flex items-center gap-2"
+        >
+          <RefreshCw className={`h-4 w-4 ${resendCooldown > 0 ? '' : ''}`} />
+          {resendCooldown > 0
+            ? `Resend in ${resendCooldown}s`
+            : 'Resend confirmation email'}
+        </Button>
       </motion.div>
     );
   }
