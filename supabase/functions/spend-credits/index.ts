@@ -8,6 +8,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
+import { corsResponse, errorResponse, unauthorizedResponse, forbiddenResponse, exceptionResponse } from "../_shared/edge-response.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -157,16 +158,13 @@ async function syncBalanceCache(
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return corsResponse();
   }
 
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return unauthorizedResponse('Missing authorization header', 'MISSING_AUTH');
     }
 
     const token = authHeader.replace('Bearer ', '');
@@ -179,10 +177,7 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
     if (authError || !user) {
       console.error('[SPEND-CREDITS] Auth failed:', authError?.message || 'No user');
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return unauthorizedResponse();
     }
     console.log('[SPEND-CREDITS] User authenticated:', { userId: user.id });
 
@@ -265,10 +260,7 @@ serve(async (req) => {
         // Over group cap — fall through to charge credits
       } else {
         // No group unlock — collaborators can't perform these actions without one
-        return new Response(
-          JSON.stringify({ error: 'Group unlock required for collaborator actions', action }),
-          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return forbiddenResponse('Group unlock required for collaborator actions', 'GROUP_UNLOCK_REQUIRED');
       }
     }
 
@@ -388,10 +380,7 @@ serve(async (req) => {
 
       if (refundAmount <= 0) {
         console.error('[spend-credits] REFUND: unknown or zero refund amount for action:', originalAction);
-        return new Response(
-          JSON.stringify({ error: 'No refund amount recognized for originalAction', originalAction }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return errorResponse('No refund amount recognized for originalAction', 'INVALID_REFUND', 400, { originalAction });
       }
 
       // ── Idempotency check: prevent double refunds for the same pending charge ──
@@ -436,10 +425,7 @@ serve(async (req) => {
 
       if (purchaseErr) {
         console.error('[spend-credits] REFUND: failed to create credit_purchases row:', purchaseErr);
-        return new Response(
-          JSON.stringify({ error: 'Refund failed — could not restore credits' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return errorResponse('Refund failed — could not restore credits', 'REFUND_FAILED', 500);
       }
 
       // Log the refund in the credit ledger for audit trail
@@ -498,10 +484,7 @@ serve(async (req) => {
 
     if (isVariable) {
       if (!creditsAmount || creditsAmount <= 0) {
-        return new Response(
-          JSON.stringify({ error: 'creditsAmount required for variable-cost actions' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return errorResponse('creditsAmount required for variable-cost actions', 'MISSING_CREDITS_AMOUNT');
       }
       if (action === 'hotel_search') {
         const cityCount = (metadata?.cityCount as number) || 1;
@@ -514,10 +497,7 @@ serve(async (req) => {
         const days = (metadata?.days as number) || 1;
         const minCost = days * BASE_RATE_PER_DAY;
         if (creditsAmount < minCost * 0.9) {
-          return new Response(
-            JSON.stringify({ error: 'Trip cost too low for given parameters' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return errorResponse('Trip cost too low for given parameters', 'COST_TOO_LOW');
         }
       }
       cost = creditsAmount;
@@ -564,10 +544,7 @@ serve(async (req) => {
     } else if (action in FIXED_COSTS) {
       cost = FIXED_COSTS[action];
     } else {
-      return new Response(
-        JSON.stringify({ error: 'Invalid action', validActions: [...Object.keys(FIXED_COSTS), ...VARIABLE_COST_ACTIONS] }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse('Invalid action', 'INVALID_ACTION', 400, { validActions: [...Object.keys(FIXED_COSTS), ...VARIABLE_COST_ACTIONS] });
     }
 
     // ── Idempotency check: skip duplicate charges ──
@@ -606,9 +583,13 @@ serve(async (req) => {
       if (error.code === 'INSUFFICIENT_CREDITS') {
         // Return 200 so supabase.functions.invoke puts response in `data` (not `error`)
         // Frontend checks data.error === 'Insufficient credits' to trigger the modal
+        // Return 200 so supabase.functions.invoke puts response in `data` (not `error`)
+        // Frontend checks data.code === 'INSUFFICIENT_CREDITS' to trigger the modal
         return new Response(
           JSON.stringify({
+            success: false,
             error: 'Insufficient credits',
+            code: 'INSUFFICIENT_CREDITS',
             required: error.required,
             available: error.available,
             action,
@@ -679,9 +660,6 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error('[spend-credits] Unexpected error:', error);
-    return new Response(
-      JSON.stringify({ error: 'Internal server error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return exceptionResponse(error);
   }
 });

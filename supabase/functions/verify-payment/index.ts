@@ -1,11 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "npm:stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { corsResponse, okResponse, errorResponse, exceptionResponse } from "../_shared/edge-response.ts";
 
 const log = (step: string, details?: any) => {
   console.log(`[VERIFY-PAYMENT] ${step}`, details ? JSON.stringify(details) : '');
@@ -13,7 +9,7 @@ const log = (step: string, details?: any) => {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return corsResponse();
   }
 
   try {
@@ -46,11 +42,11 @@ serve(async (req) => {
     }
 
     if (!sessionId && !tripId) {
-      throw new Error("Either sessionId or tripId is required");
+      return errorResponse("Either sessionId or tripId is required", "MISSING_INPUT");
     }
 
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) throw new Error("STRIPE_SECRET_KEY not configured");
+    if (!stripeKey) return errorResponse("STRIPE_SECRET_KEY not configured", "CONFIG_ERROR", 500);
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
@@ -62,7 +58,6 @@ serve(async (req) => {
       log("Session status", { status: session.payment_status, paymentIntent: session.payment_intent });
 
       if (session.payment_status === 'paid') {
-        // Update payment record to paid using the session ID (secure because only the checkout initiator has this)
         const { error: updateError } = await serviceSupabase
           .from("trip_payments")
           .update({
@@ -79,22 +74,15 @@ serve(async (req) => {
           log("Payment marked as paid");
         }
 
-        return new Response(
-          JSON.stringify({ success: true, status: 'paid', session }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return okResponse({ status: 'paid', session });
       }
 
-      return new Response(
-        JSON.stringify({ success: true, status: session.payment_status }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return okResponse({ status: session.payment_status });
     }
 
     // If tripId provided, get all payments for the trip
-    // This requires authentication
     if (!userId) {
-      throw new Error("Authentication required to fetch trip payments");
+      return errorResponse("Authentication required to fetch trip payments", "AUTH_REQUIRED", 401);
     }
 
     log("Fetching payments for trip", { tripId, userId });
@@ -106,10 +94,9 @@ serve(async (req) => {
       .eq("user_id", userId);
 
     if (paymentsError) {
-      throw new Error(`Failed to fetch payments: ${paymentsError.message}`);
+      return errorResponse(`Failed to fetch payments: ${paymentsError.message}`, "QUERY_FAILED", 500);
     }
 
-    // Calculate totals
     const totalPaid = payments
       ?.filter(p => p.status === 'paid')
       .reduce((sum, p) => sum + (p.amount_cents * (p.quantity || 1)), 0) || 0;
@@ -120,25 +107,18 @@ serve(async (req) => {
 
     log("Payment totals", { totalPaid, totalPending, count: payments?.length });
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        payments: payments || [],
-        totals: {
-          paid: totalPaid,
-          pending: totalPending,
-          total: totalPaid + totalPending,
-        },
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return okResponse({
+      payments: payments || [],
+      totals: {
+        paid: totalPaid,
+        pending: totalPending,
+        total: totalPaid + totalPending,
+      },
+    });
 
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     log("ERROR", { message });
-    return new Response(
-      JSON.stringify({ success: false, error: message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return exceptionResponse(error);
   }
 });

@@ -1,11 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "npm:stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { corsResponse, okResponse, errorResponse, unauthorizedResponse, exceptionResponse } from "../_shared/edge-response.ts";
 
 const logStep = (step: string, details?: unknown) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -17,7 +13,7 @@ const TRIP_PASS_PRICE_ID = 'price_1SrKykFYxIg9jcJUblEmckuq';
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return corsResponse();
   }
 
   try {
@@ -26,16 +22,13 @@ serve(async (req) => {
     const { trip_id } = await req.json();
     
     if (!trip_id) {
-      throw new Error("trip_id is required");
+      return errorResponse("trip_id is required", "MISSING_TRIP_ID");
     }
 
     // Authenticate user
     const authHeader = req.headers.get("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 401,
-      });
+      return unauthorizedResponse();
     }
 
     const token = authHeader.replace("Bearer ", "");
@@ -47,10 +40,7 @@ serve(async (req) => {
 
     const { data: claimsData, error: claimsError } = await supabaseClient.auth.getClaims(token);
     if (claimsError || !claimsData?.claims) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 401,
-      });
+      return unauthorizedResponse("Invalid token", "INVALID_TOKEN");
     }
 
     const userId = claimsData.claims.sub as string;
@@ -61,7 +51,7 @@ serve(async (req) => {
       email = userData.user?.email;
     }
 
-    if (!email) throw new Error("Could not get user email");
+    if (!email) return errorResponse("Could not get user email", "NO_EMAIL");
     logStep("User authenticated", { userId, email, tripId: trip_id });
 
     // Verify user owns this trip
@@ -78,11 +68,11 @@ serve(async (req) => {
       .single();
 
     if (tripError || !trip) {
-      throw new Error("Trip not found");
+      return errorResponse("Trip not found", "TRIP_NOT_FOUND", 404);
     }
 
     if (trip.user_id !== userId) {
-      throw new Error("You don't own this trip");
+      return errorResponse("You don't own this trip", "NOT_TRIP_OWNER", 403);
     }
 
     // Check if already purchased
@@ -95,7 +85,7 @@ serve(async (req) => {
       .single();
 
     if (existingPurchase) {
-      throw new Error("Trip Pass already purchased for this trip");
+      return errorResponse("Trip Pass already purchased for this trip", "ALREADY_PURCHASED", 409);
     }
 
     // Initialize Stripe
@@ -135,16 +125,10 @@ serve(async (req) => {
 
     logStep("Checkout session created", { sessionId: session.id, tripId: trip_id });
 
-    return new Response(JSON.stringify({ url: session.url }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
-    });
+    return okResponse({ url: session.url });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR", { message: errorMessage });
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
-    });
+    return exceptionResponse(error);
   }
 });
