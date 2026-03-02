@@ -70,36 +70,25 @@ serve(async (req) => {
 
     const config = TIER_CONFIG[tier];
 
-    // Check balance via credit_purchases FIFO
     const now = new Date();
-    const { data: rows } = await supabaseAdmin
-      .from('credit_purchases')
-      .select('id, remaining, expires_at, credit_type')
-      .eq('user_id', user.id)
-      .gt('remaining', 0)
-      .order('expires_at', { ascending: true, nullsFirst: false });
 
-    const activeRows = (rows || []).filter(r => !r.expires_at || new Date(r.expires_at) > now);
-    const totalAvailable = activeRows.reduce((sum, r) => sum + r.remaining, 0);
+    // Atomic FIFO deduction via RPC (prevents race conditions / double-spend)
+    const { data: deductResult, error: deductError } = await supabaseAdmin
+      .rpc('deduct_credits_fifo', { p_user_id: user.id, p_cost: config.credits });
 
-    if (totalAvailable < config.credits) {
-      return new Response(JSON.stringify({
-        error: 'Insufficient credits',
-        required: config.credits,
-        available: totalAvailable,
-      }), { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
-    // Deduct FIFO
-    let remaining = config.credits;
-    for (const row of activeRows) {
-      if (remaining <= 0) break;
-      const take = Math.min(row.remaining, remaining);
-      await supabaseAdmin.from('credit_purchases').update({
-        remaining: row.remaining - take,
-        updated_at: now.toISOString(),
-      }).eq('id', row.id);
-      remaining -= take;
+    if (deductError) {
+      const msg = deductError.message || '';
+      if (msg.includes('INSUFFICIENT_CREDITS')) {
+        const match = msg.match(/available=(\d+)/);
+        const available = match ? parseInt(match[1], 10) : 0;
+        return new Response(JSON.stringify({
+          error: 'Insufficient credits',
+          code: 'INSUFFICIENT_CREDITS',
+          required: config.credits,
+          available,
+        }), { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      throw deductError;
     }
 
     // Create group budget
