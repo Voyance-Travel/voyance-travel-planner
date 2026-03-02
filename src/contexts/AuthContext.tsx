@@ -336,7 +336,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         // Starting initial auth check
         
-        const { data: { session: initialSession } } = await supabase.auth.getSession();
+        let { data: { session: initialSession } } = await supabase.auth.getSession();
         
         if (!isMounted) return;
         
@@ -359,14 +359,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                               userError.status === 401 || userError.status === 403;
           
           if (isAuthError) {
-            // Stale session detected, signing out
-            await supabase.auth.signOut();
-            if (isMounted) {
-              currentUserIdRef.current = null;
-              setSession(null);
-              setUser(null);
+            // Access token expired — attempt silent refresh before signing out
+            console.debug('[Auth] Access token expired, attempting silent refresh…');
+            const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+            
+            if (refreshError || !refreshData?.session) {
+              // Refresh failed — session is truly dead, sign out
+              console.debug('[Auth] Refresh failed, signing out:', refreshError?.message);
+              await supabase.auth.signOut();
+              if (isMounted) {
+                currentUserIdRef.current = null;
+                setSession(null);
+                setUser(null);
+              }
+              return;
             }
-            return;
+            
+            // Refresh succeeded — continue with the new session
+            console.debug('[Auth] Silent refresh succeeded');
+            initialSession = refreshData.session;
+            if (isMounted) {
+              setSession(refreshData.session);
+            }
           }
           
           // getUser failed (non-auth error), continuing with session
@@ -533,6 +547,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       'voyance_anonymous_session',
       'voyance_demo_trips',
       'voyance_local_trips',
+      'authTokenExpiry',
     ];
     legacyKeys.forEach(key => localStorage.removeItem(key));
     
