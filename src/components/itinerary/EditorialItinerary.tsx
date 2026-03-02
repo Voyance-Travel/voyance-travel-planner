@@ -60,6 +60,7 @@ import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 import { parseEditorialDays } from '@/utils/itineraryParser';
 import { getAppUrl } from '@/utils/getAppUrl';
+import { resolveInviteLink, getInviteErrorMessage, type InviteHealth } from '@/services/inviteResolver';
 
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
 import { useRefreshDay, type RefreshResult, type ProposedChange } from '@/hooks/useRefreshDay';
@@ -1418,11 +1419,12 @@ export function EditorialItinerary({
   const [creditNudge, setCreditNudge] = useState<{ action: keyof typeof CREDIT_COSTS } | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showShareGuideSheet, setShowShareGuideSheet] = useState(false);
-  const [shareLink, setShareLink] = useState<string | null>(null);
-  const [showGroupUnlockModal, setShowGroupUnlockModal] = useState(false);
-  const [newlyAddedMember, setNewlyAddedMember] = useState<string | null>(null);
-  const [isCreatingInvite, setIsCreatingInvite] = useState(false);
-  const [inviteCopied, setInviteCopied] = useState(false);
+   const [shareLink, setShareLink] = useState<string | null>(null);
+   const [inviteHealth, setInviteHealth] = useState<InviteHealth | null>(null);
+   const [showGroupUnlockModal, setShowGroupUnlockModal] = useState(false);
+   const [newlyAddedMember, setNewlyAddedMember] = useState<string | null>(null);
+   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
+   const [inviteCopied, setInviteCopied] = useState(false);
   const [showLocalCurrency, setShowLocalCurrency] = useState(true); // Currency display preference
   
   // Edit Flight/Hotel modal state
@@ -3544,80 +3546,40 @@ export function EditorialItinerary({
     toast.success('Activity updated');
   }, []);
 
-  const handleCreateShareLink = useCallback(async () => {
-    setIsCreatingInvite(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error('Please sign in to share your trip');
-        return;
-      }
+   // Reset share state when tripId changes — prevents stale links
+   useEffect(() => {
+     setShareLink(null);
+     setInviteHealth(null);
+     setInviteCopied(false);
+   }, [tripId]);
 
-      // Check if an invite already exists for this trip (including expired ones,
-      // since there's a unique constraint on (trip_id, email) with NULLS NOT DISTINCT)
-      const { data: existingInvite } = await supabase
-        .from('trip_invites')
-        .select('token, expires_at')
-        .eq('trip_id', tripId)
-        .eq('invited_by', user.id)
-        .is('email', null)
-        .maybeSingle();
+   const handleCreateShareLink = useCallback(async (forceRotate = false) => {
+     setIsCreatingInvite(true);
+     try {
+       const result = await resolveInviteLink(tripId, forceRotate);
+       setInviteHealth(result);
 
-      let token = existingInvite?.token;
+       if (!result.success || !result.link) {
+         toast.error(getInviteErrorMessage(result.reason));
+         return;
+       }
 
-      if (existingInvite && existingInvite.expires_at && new Date(existingInvite.expires_at) < new Date()) {
-        // Existing invite is expired — refresh it with a new expiration
-        const { data: updated, error } = await supabase
-          .from('trip_invites')
-          .update({
-            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-            uses_count: 0,
-            accepted_at: null,
-            accepted_by: null,
-            max_uses: Math.max(1, travelers - 1),
-          })
-          .eq('trip_id', tripId)
-          .eq('invited_by', user.id)
-          .is('email', null)
-          .select('token')
-          .single();
+       setShareLink(result.link);
+       
+       // Copy to clipboard
+       await navigator.clipboard.writeText(result.link);
+       setInviteCopied(true);
+       setTimeout(() => setInviteCopied(false), 2000);
+       toast.success(forceRotate ? 'New invite link generated & copied!' : 'Invite link copied!');
 
-        if (error) throw error;
-        token = updated.token;
-      } else if (!token) {
-        // No invite exists at all — create new one
-        const { data: newInvite, error } = await supabase
-          .from('trip_invites')
-          .insert({
-            trip_id: tripId,
-            invited_by: user.id,
-            max_uses: Math.max(1, travelers - 1),
-            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          })
-          .select('token')
-          .single();
-
-        if (error) throw error;
-        token = newInvite.token;
-      }
-
-      const link = `${getAppUrl()}/invite/${token}`;
-      setShareLink(link);
-      
-      // Copy to clipboard
-      await navigator.clipboard.writeText(link);
-      setInviteCopied(true);
-      setTimeout(() => setInviteCopied(false), 2000);
-      toast.success('Invite link copied!');
-
-      // Prompt group unlock if no budget exists yet
-      const { data: existingBudget } = await supabase
-        .from('group_budgets')
-        .select('id')
-        .eq('trip_id', tripId)
-        .maybeSingle();
-      
-      if (!existingBudget) {
+       // Prompt group unlock if no budget exists yet
+       const { data: existingBudget } = await supabase
+         .from('group_budgets')
+         .select('id')
+         .eq('trip_id', tripId)
+         .maybeSingle();
+       
+       if (!existingBudget) {
         // Delay slightly so the copy toast doesn't overlap
         setTimeout(() => setShowGroupUnlockModal(true), 600);
       }
@@ -5635,46 +5597,70 @@ export function EditorialItinerary({
               </div>
             )}
 
-            {/* Invite Link Section - only for owner */}
-            {tripPermission?.isOwner && (
-              <>
-                <div className="pt-4 border-t border-border space-y-2">
-                  <label className="text-sm font-medium">Invite Link</label>
-                  <div className="flex gap-2">
-                    <Input
-                      value={shareLink || 'Click to generate link...'}
-                      readOnly
-                      className="flex-1 text-sm"
-                      onClick={!shareLink ? handleCreateShareLink : undefined}
-                    />
-                    <Button 
-                      onClick={async () => {
-                        if (shareLink) {
-                          await navigator.clipboard.writeText(shareLink);
-                          setInviteCopied(true);
-                          setTimeout(() => setInviteCopied(false), 2000);
-                          toast.success('Link copied!');
-                        } else {
-                          handleCreateShareLink();
-                        }
-                      }}
-                      disabled={isCreatingInvite}
-                      className="gap-1.5"
-                    >
-                      {isCreatingInvite ? (
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                      ) : inviteCopied ? (
-                        <Check className="h-4 w-4" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                      {inviteCopied ? 'Copied!' : shareLink ? 'Copy' : 'Generate'}
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Link expires in 7 days.{travelers > 1 ? ` Up to ${travelers - 1} ${travelers - 1 === 1 ? 'person' : 'people'} can join.` : ' Share this trip with others.'}
-                  </p>
-                </div>
+             {/* Invite Link Section - only for owner */}
+             {tripPermission?.isOwner && (
+               <>
+                 <div className="pt-4 border-t border-border space-y-2">
+                   <label className="text-sm font-medium">Invite Link</label>
+                   <div className="flex gap-2">
+                     <Input
+                       value={shareLink || 'Click to generate link...'}
+                       readOnly
+                       className="flex-1 text-sm"
+                       onClick={!shareLink ? () => handleCreateShareLink() : undefined}
+                     />
+                     <Button 
+                       onClick={async () => {
+                         if (shareLink) {
+                           // Always re-resolve to guarantee freshness
+                           await handleCreateShareLink();
+                         } else {
+                           handleCreateShareLink();
+                         }
+                       }}
+                       disabled={isCreatingInvite}
+                       className="gap-1.5"
+                     >
+                       {isCreatingInvite ? (
+                         <RefreshCw className="h-4 w-4 animate-spin" />
+                       ) : inviteCopied ? (
+                         <Check className="h-4 w-4" />
+                       ) : (
+                         <Copy className="h-4 w-4" />
+                       )}
+                       {inviteCopied ? 'Copied!' : shareLink ? 'Copy' : 'Generate'}
+                     </Button>
+                   </div>
+                   {/* Invite health info */}
+                   {inviteHealth?.success && (
+                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                       <Check className="h-3 w-3 text-green-500" />
+                       <span>Verified just now</span>
+                       <span>·</span>
+                       <span>{inviteHealth.spotsRemaining} spot{inviteHealth.spotsRemaining !== 1 ? 's' : ''} remaining</span>
+                       <span>·</span>
+                       <span>{inviteHealth.usesCount}/{inviteHealth.maxUses} used</span>
+                     </div>
+                   )}
+                   {!inviteHealth && (
+                     <p className="text-xs text-muted-foreground">
+                       Link expires in 7 days.{travelers > 1 ? ` Up to ${travelers - 1} ${travelers - 1 === 1 ? 'person' : 'people'} can join.` : ' Share this trip with others.'}
+                     </p>
+                   )}
+                   {/* Reset link button */}
+                   {shareLink && (
+                     <Button
+                       variant="ghost"
+                       size="sm"
+                       className="text-xs h-7 text-muted-foreground hover:text-foreground"
+                       onClick={() => handleCreateShareLink(true)}
+                       disabled={isCreatingInvite}
+                     >
+                       <RefreshCw className="h-3 w-3 mr-1" />
+                       Reset link (invalidates old link)
+                     </Button>
+                   )}
+                 </div>
 
                 {/* Share Guide to Social */}
                 <div className="pt-2 border-t border-border">

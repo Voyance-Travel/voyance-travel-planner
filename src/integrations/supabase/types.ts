@@ -8388,6 +8388,10 @@ export type Database = {
         Returns: boolean
       }
       is_trip_owner: { Args: { p_trip_id: string }; Returns: boolean }
+      resolve_or_rotate_invite: {
+        Args: { p_force_rotate?: boolean; p_trip_id: string }
+        Returns: Json
+      }
       submit_client_intake: {
         Args: {
           p_allergies?: string[]
