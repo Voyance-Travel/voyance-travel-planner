@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { lovable } from '@/integrations/lovable/index';
 import { supabase } from '@/integrations/supabase/client';
+import { saveReturnPath } from '@/utils/authReturnPath';
 import { toast } from 'sonner';
 
 const isCustomDomain = () =>
@@ -16,9 +18,18 @@ interface SocialLoginButtonsProps {
 export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps) {
   const [isLoadingGoogle, setIsLoadingGoogle] = useState(false);
   const [isLoadingApple, setIsLoadingApple] = useState(false);
+  const [searchParams] = useSearchParams();
+
+  const redirectPath = searchParams.get('redirect') || searchParams.get('next');
+  const persistAuthReturnPath = () => {
+    if (redirectPath && redirectPath.startsWith('/')) {
+      saveReturnPath(redirectPath);
+    }
+  };
 
   const handleGoogleLogin = async () => {
     setIsLoadingGoogle(true);
+    persistAuthReturnPath();
     try {
       if (isCustomDomain()) {
         const { data, error } = await supabase.auth.signInWithOAuth({
@@ -50,6 +61,7 @@ export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps)
 
   const handleAppleLogin = async () => {
     setIsLoadingApple(true);
+    persistAuthReturnPath();
     try {
       const result = await lovable.auth.signInWithOAuth('apple', {
         redirect_uri: window.location.origin,

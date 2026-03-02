@@ -15,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
+import { saveReturnPath } from '@/utils/authReturnPath';
 import MainLayout from '@/components/layout/MainLayout';
 
 interface InviteInfo {
@@ -129,6 +130,14 @@ export default function AcceptInvite() {
     fetchInviteInfo();
   }, [token]);
 
+  const inviteReturnPath = token ? `/invite/${token}` : null;
+
+  const redirectToInviteAuth = (mode: 'signin' | 'signup') => {
+    if (!inviteReturnPath) return;
+    saveReturnPath(inviteReturnPath);
+    navigate(`/${mode}?redirect=${encodeURIComponent(inviteReturnPath)}`);
+  };
+
   const handleAccept = async () => {
     if (!token) return;
 
@@ -152,9 +161,10 @@ export default function AcceptInvite() {
           navigate(`/trip/${result.tripId}`);
         }, 1500);
       } else if (result?.requiresAuth) {
-        // Store token and redirect to login
-        sessionStorage.setItem('pendingInviteToken', token);
-        navigate('/signin?redirect=/invite/' + token);
+        if (inviteReturnPath) {
+          saveReturnPath(inviteReturnPath);
+          navigate(`/signin?redirect=${encodeURIComponent(inviteReturnPath)}`);
+        }
       } else {
         const errorDisplay = getErrorDisplay(result?.reason, result?.error);
         setError(errorDisplay.message);
@@ -168,13 +178,11 @@ export default function AcceptInvite() {
   };
 
   const handleSignIn = () => {
-    sessionStorage.setItem('pendingInviteToken', token || '');
-    navigate('/signin?redirect=/invite/' + token);
+    redirectToInviteAuth('signin');
   };
 
   const handleSignUp = () => {
-    sessionStorage.setItem('pendingInviteToken', token || '');
-    navigate('/signup?redirect=/invite/' + token);
+    redirectToInviteAuth('signup');
   };
 
   if (loading || authLoading) {
