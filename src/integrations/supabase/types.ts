@@ -7006,6 +7006,7 @@ export type Database = {
           itinerary_status:
             | Database["public"]["Enums"]["itinerary_status"]
             | null
+          itinerary_version: number
           last_activity_at: string | null
           metadata: Json | null
           name: string
@@ -7060,6 +7061,7 @@ export type Database = {
           itinerary_status?:
             | Database["public"]["Enums"]["itinerary_status"]
             | null
+          itinerary_version?: number
           last_activity_at?: string | null
           metadata?: Json | null
           name: string
@@ -7114,6 +7116,7 @@ export type Database = {
           itinerary_status?:
             | Database["public"]["Enums"]["itinerary_status"]
             | null
+          itinerary_version?: number
           last_activity_at?: string | null
           metadata?: Json | null
           name?: string
@@ -8407,6 +8410,14 @@ export type Database = {
         Returns: boolean
       }
       is_trip_owner: { Args: { p_trip_id: string }; Returns: boolean }
+      optimistic_update_itinerary: {
+        Args: {
+          p_expected_version: number
+          p_itinerary_data: Json
+          p_trip_id: string
+        }
+        Returns: Json
+      }
       resolve_or_rotate_invite: {
         Args: { p_force_rotate?: boolean; p_trip_id: string }
         Returns: Json
