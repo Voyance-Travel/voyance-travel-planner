@@ -154,7 +154,9 @@ export async function createTripFromParsed(
   userId: string
 ): Promise<{ tripId: string } | { error: string }> {
   try {
-    const destination = sanitizeAIOutput(parsed.destination) || 'Unknown';
+    const rawDestination = sanitizeAIOutput(parsed.destination) || 'Unknown';
+    // Strip IANA timezone identifiers the AI sometimes appends (e.g. "Barcelona Africa/Casablanca")
+    const destination = rawDestination.replace(/\s+[A-Z][a-z]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?/g, '').trim() || 'Unknown';
     const tripName = `Trip to ${destination}`;
     const itineraryData = convertParsedToItineraryData(parsed);
 

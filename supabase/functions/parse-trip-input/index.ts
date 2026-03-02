@@ -452,7 +452,11 @@ serve(async (req) => {
     // Sanitize all string fields in the parsed output
     sanitizeDeep(parsed);
     // Apply in-place to top-level fields
-    if (parsed.destination && typeof parsed.destination === 'string') parsed.destination = sanitizeStr(parsed.destination);
+    if (parsed.destination && typeof parsed.destination === 'string') {
+      parsed.destination = sanitizeStr(parsed.destination);
+      // Strip IANA timezone identifiers that the AI sometimes appends (e.g. "Barcelona Africa/Casablanca")
+      parsed.destination = parsed.destination.replace(/\s+[A-Z][a-z]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?/g, '').trim();
+    }
     if (parsed.tripVibe && typeof parsed.tripVibe === 'string') parsed.tripVibe = sanitizeStr(parsed.tripVibe);
     if (parsed.days) {
       for (const day of parsed.days) {
