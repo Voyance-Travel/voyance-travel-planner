@@ -19,6 +19,7 @@ import {
   ChevronUp,
   CheckCircle,
   Sparkles,
+  Lock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -47,6 +48,7 @@ interface ItineraryActivity {
   type?: string;
   cost?: { amount: number; currency: string } | number;
   description?: string;
+  isLocked?: boolean;
 }
 
 interface ItineraryDay {
@@ -116,28 +118,36 @@ export function BudgetCoach({
     [currency]
   );
 
+  // Collect locked activity IDs so we can filter suggestions targeting them
+  const lockedActivityIds = new Set(
+    itineraryDays.flatMap(d => d.activities.filter(a => a.isLocked).map(a => a.id))
+  );
+
   // Build the payload activities in the format the edge function expects
+  // Exclude locked activities — they should not be suggested for swaps
   const buildPayloadDays = useCallback(() => {
     return itineraryDays.map((day) => ({
       dayNumber: day.dayNumber,
       date: day.date,
-      activities: day.activities.map((a) => {
-        let costCents = 0;
-        if (typeof a.cost === 'number' && Number.isFinite(a.cost)) {
-          costCents = Math.max(0, Math.round(a.cost * 100));
-        } else if (a.cost && typeof a.cost === 'object' && Number.isFinite(a.cost.amount)) {
-          costCents = Math.max(0, Math.round(a.cost.amount * 100));
-        }
-        return {
-          id: a.id,
-          title: a.title || a.name || 'Activity',
-          category: a.category || a.type || 'activity',
-          cost: costCents,
-          currency,
-          day_number: day.dayNumber,
-          description: a.description,
-        };
-      }),
+      activities: day.activities
+        .filter((a) => !a.isLocked)
+        .map((a) => {
+          let costCents = 0;
+          if (typeof a.cost === 'number' && Number.isFinite(a.cost)) {
+            costCents = Math.max(0, Math.round(a.cost * 100));
+          } else if (a.cost && typeof a.cost === 'object' && Number.isFinite(a.cost.amount)) {
+            costCents = Math.max(0, Math.round(a.cost.amount * 100));
+          }
+          return {
+            id: a.id,
+            title: a.title || a.name || 'Activity',
+            category: a.category || a.type || 'activity',
+            cost: costCents,
+            currency,
+            day_number: day.dayNumber,
+            description: a.description,
+          };
+        }),
     }));
   }, [itineraryDays, currency]);
 
@@ -332,6 +342,7 @@ export function BudgetCoach({
                 <>
                   {suggestions.map((s, i) => {
                     const isApplied = appliedIds.has(s.activity_id);
+                    const isLocked = lockedActivityIds.has(s.activity_id);
                     // Once on target, collapse remaining unapplied
                     if (isNowOnTarget && !isApplied) return null;
 
@@ -392,26 +403,33 @@ export function BudgetCoach({
                           </div>
                         </div>
 
-                        {/* Apply button */}
-                        <Button
-                          variant={isApplied ? 'ghost' : 'default'}
-                          size="sm"
-                          disabled={isApplied}
-                          onClick={() => handleApply(s)}
-                          className={cn(
-                            'flex-shrink-0',
-                            isApplied && 'text-emerald-600 dark:text-emerald-400'
-                          )}
-                        >
-                          {isApplied ? (
-                            <>
-                              <Check className="h-3.5 w-3.5 mr-1" />
-                              Applied
-                            </>
-                          ) : (
-                            'Apply'
-                          )}
-                        </Button>
+                        {/* Apply button or locked notice */}
+                        {isLocked ? (
+                          <span className="flex-shrink-0 flex items-center gap-1 text-xs text-muted-foreground italic">
+                            <Lock className="h-3 w-3" />
+                            Locked
+                          </span>
+                        ) : (
+                          <Button
+                            variant={isApplied ? 'ghost' : 'default'}
+                            size="sm"
+                            disabled={isApplied}
+                            onClick={() => handleApply(s)}
+                            className={cn(
+                              'flex-shrink-0',
+                              isApplied && 'text-emerald-600 dark:text-emerald-400'
+                            )}
+                          >
+                            {isApplied ? (
+                              <>
+                                <Check className="h-3.5 w-3.5 mr-1" />
+                                Applied
+                              </>
+                            ) : (
+                              'Apply'
+                            )}
+                          </Button>
+                        )}
                       </motion.div>
                     );
                   })}
