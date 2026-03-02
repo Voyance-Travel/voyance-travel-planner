@@ -113,27 +113,52 @@ serve(async (req) => {
     }
     logStep("Trip found", { destination: trip.destination });
 
-    // Initialize Stripe
-    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
-      apiVersion: "2025-08-27.basil",
-    });
+    // =========================================================================
+    // SERVER-SIDE PRICE VALIDATION — prevent client-side price manipulation
+    // =========================================================================
+    const PRICE_TOLERANCE_CENTS = 100; // $1 rounding tolerance
 
-    // Check for existing Stripe customer
-    const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
-    let customerId;
-    if (customers.data.length > 0) {
-      customerId = customers.data[0].id;
-      logStep("Found existing customer", { customerId });
+    // Derive flight price from stored selection
+    let serverFlightTotal = 0;
+    if (trip.flight_selection) {
+      const fs = trip.flight_selection as any;
+      // Support multiple price shapes stored by Amadeus integration
+      serverFlightTotal = Number(fs.totalPrice ?? fs.total_price ?? fs.price ?? fs.grandTotal ?? fs.grand_total ?? 0);
     }
 
-    const origin = req.headers.get("origin") || "https://voyance-travel-planner.lovable.app";
+    // Derive hotel price from stored selection
+    let serverHotelTotal = 0;
+    if (trip.hotel_selection) {
+      const hs = trip.hotel_selection as any;
+      serverHotelTotal = Number(hs.totalPrice ?? hs.total_price ?? hs.price ?? hs.total ?? 0);
+    }
 
-    // Calculate totals
-    const flightCents = Math.round((flightTotal || 0) * 100);
-    const hotelCents = Math.round((hotelTotal || 0) * 100);
+    // Validate client-sent values against server-derived values
+    const clientFlightCents = Math.round((flightTotal || 0) * 100);
+    const clientHotelCents = Math.round((hotelTotal || 0) * 100);
+    const serverFlightCents = Math.round(serverFlightTotal * 100);
+    const serverHotelCents = Math.round(serverHotelTotal * 100);
+
+    if (serverFlightCents > 0 && Math.abs(clientFlightCents - serverFlightCents) > PRICE_TOLERANCE_CENTS) {
+      logStep("SECURITY: Flight price mismatch", { client: clientFlightCents, server: serverFlightCents });
+      return new Response(JSON.stringify({ error: "Flight price has changed. Please refresh and try again.", code: "PRICE_MISMATCH" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400,
+      });
+    }
+
+    if (serverHotelCents > 0 && Math.abs(clientHotelCents - serverHotelCents) > PRICE_TOLERANCE_CENTS) {
+      logStep("SECURITY: Hotel price mismatch", { client: clientHotelCents, server: serverHotelCents });
+      return new Response(JSON.stringify({ error: "Hotel price has changed. Please refresh and try again.", code: "PRICE_MISMATCH" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400,
+      });
+    }
+
+    // Use server-derived prices when available, fall back to client values only when no selection exists
+    const flightCents = serverFlightCents > 0 ? serverFlightCents : clientFlightCents;
+    const hotelCents = serverHotelCents > 0 ? serverHotelCents : clientHotelCents;
     const activitiesCents = Math.round((activitiesTotal || 0) * 100);
-    
-    // Line items for checkout
+
+    // Initialize Stripe
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
 
     // Trip service fee (always required)
