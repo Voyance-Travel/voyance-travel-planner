@@ -1,11 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "npm:stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { corsResponse, okResponse, errorResponse, unauthorizedResponse, exceptionResponse } from "../_shared/edge-response.ts";
 
 const logStep = (step: string, details?: unknown) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -18,7 +14,7 @@ const MAX_TOPUP_CENTS = 50000;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return corsResponse();
   }
 
   try {
@@ -27,22 +23,19 @@ serve(async (req) => {
     const { amount_cents } = await req.json();
     
     if (!amount_cents || typeof amount_cents !== 'number' || !Number.isInteger(amount_cents)) {
-      throw new Error("amount_cents must be an integer");
+      return errorResponse("amount_cents must be an integer", "INVALID_INPUT");
     }
     if (amount_cents < MIN_TOPUP_CENTS) {
-      throw new Error(`Minimum top-up is $${MIN_TOPUP_CENTS / 100}`);
+      return errorResponse(`Minimum top-up is $${MIN_TOPUP_CENTS / 100}`, "BELOW_MINIMUM", 400, { min: MIN_TOPUP_CENTS });
     }
     if (amount_cents > MAX_TOPUP_CENTS) {
-      throw new Error(`Maximum top-up is $${MAX_TOPUP_CENTS / 100}`);
+      return errorResponse(`Maximum top-up is $${MAX_TOPUP_CENTS / 100}`, "ABOVE_MAXIMUM", 400, { max: MAX_TOPUP_CENTS });
     }
 
     // Authenticate user
     const authHeader = req.headers.get("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 401,
-      });
+      return unauthorizedResponse();
     }
 
     const token = authHeader.replace("Bearer ", "");
@@ -54,10 +47,7 @@ serve(async (req) => {
 
     const { data: claimsData, error: claimsError } = await supabaseClient.auth.getClaims(token);
     if (claimsError || !claimsData?.claims) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 401,
-      });
+      return unauthorizedResponse("Invalid token", "INVALID_TOKEN");
     }
 
     const userId = claimsData.claims.sub as string;
@@ -68,7 +58,7 @@ serve(async (req) => {
       email = userData.user?.email;
     }
 
-    if (!email) throw new Error("Could not get user email");
+    if (!email) return errorResponse("Could not get user email", "NO_EMAIL");
     logStep("User authenticated", { userId, email });
 
     // Initialize Stripe
@@ -114,16 +104,10 @@ serve(async (req) => {
 
     logStep("Checkout session created", { sessionId: session.id, amount: amount_cents });
 
-    return new Response(JSON.stringify({ url: session.url }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
-    });
+    return okResponse({ url: session.url });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR", { message: errorMessage });
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
-    });
+    return exceptionResponse(error);
   }
 });
