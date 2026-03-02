@@ -8311,6 +8311,10 @@ export type Database = {
       cleanup_expired_venues: { Args: never; Returns: number }
       cleanup_rate_limits: { Args: never; Returns: undefined }
       consume_free_edit: { Args: { p_user_id: string }; Returns: Json }
+      deduct_credits_fifo: {
+        Args: { p_cost: number; p_user_id: string }
+        Returns: Json
+      }
       generate_booking_reference: { Args: never; Returns: string }
       generate_intake_token: { Args: never; Returns: string }
       generate_invoice_number: { Args: never; Returns: string }

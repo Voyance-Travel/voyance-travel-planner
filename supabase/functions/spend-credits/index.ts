@@ -76,68 +76,37 @@ interface SpendRequest {
 }
 
 /**
- * Deduct credits FIFO from credit_purchases.
- * Returns the total deducted or throws on insufficient credits.
+ * Deduct credits FIFO from credit_purchases using an atomic database function.
+ * The RPC runs in a single transaction with row-level locks to prevent
+ * partial deductions and concurrent double-spend.
  */
 async function deductFIFO(
   supabaseAdmin: ReturnType<typeof createClient>,
   userId: string,
   cost: number
 ): Promise<{ deducted: number; purchases: Array<{ id: string; deducted: number }> }> {
-  // Get all active credit rows, ordered by expiration (earliest first, NULL = never = last)
-  const { data: rows, error } = await supabaseAdmin
-    .from('credit_purchases')
-    .select('id, remaining, expires_at, credit_type')
-    .eq('user_id', userId)
-    .gt('remaining', 0)
-    .order('expires_at', { ascending: true, nullsFirst: false });
+  const { data, error } = await supabaseAdmin.rpc('deduct_credits_fifo', {
+    p_user_id: userId,
+    p_cost: cost,
+  });
 
   if (error) {
-    console.error('[SPEND-CREDITS] Failed to fetch credit purchases:', JSON.stringify(error));
-    throw new Error('Failed to fetch credit purchases');
-  }
-
-  // Filter out expired rows
-  const now = new Date();
-  const activeRows = (rows || []).filter(r => !r.expires_at || new Date(r.expires_at) > now);
-
-  const totalAvailable = activeRows.reduce((sum, r) => sum + r.remaining, 0);
-
-  // Simple rule: must have full cost or BLOCKED
-  if (totalAvailable < cost) {
-    throw Object.assign(new Error('Insufficient credits'), {
-      code: 'INSUFFICIENT_CREDITS',
-      required: cost,
-      available: totalAvailable,
-    });
-  }
-
-  let remaining = cost;
-  const deductions: Array<{ id: string; deducted: number }> = [];
-
-  for (const row of activeRows) {
-    if (remaining <= 0) break;
-    const take = Math.min(row.remaining, remaining);
-    deductions.push({ id: row.id, deducted: take });
-    remaining -= take;
-  }
-
-  // Apply deductions
-  for (const d of deductions) {
-    const { error: updateError } = await supabaseAdmin
-      .from('credit_purchases')
-      .update({
-        remaining: (activeRows.find(r => r.id === d.id)!.remaining) - d.deducted,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', d.id);
-
-    if (updateError) {
-      console.error('[spend-credits] Error updating purchase row:', updateError);
+    const msg = error.message || '';
+    if (msg.includes('INSUFFICIENT_CREDITS')) {
+      // Parse required/available from the error message
+      const match = msg.match(/required=(\d+), available=(\d+)/);
+      throw Object.assign(new Error('Insufficient credits'), {
+        code: 'INSUFFICIENT_CREDITS',
+        required: match ? parseInt(match[1]) : cost,
+        available: match ? parseInt(match[2]) : 0,
+      });
     }
+    console.error('[SPEND-CREDITS] deduct_credits_fifo RPC failed:', JSON.stringify(error));
+    throw new Error('Failed to deduct credits');
   }
 
-  return { deducted: cost, purchases: deductions };
+  const result = data as { success: boolean; deducted: number; purchases: Array<{ id: string; deducted: number }> };
+  return { deducted: result.deducted, purchases: result.purchases };
 }
 
 /**
@@ -672,31 +641,11 @@ serve(async (req) => {
         },
       });
     if (paidLedgerErr) {
-      console.error('[spend-credits] CRITICAL: Ledger insert failed after FIFO deduction. Rolling back.', paidLedgerErr);
-      // Rollback: restore the FIFO deductions
-      for (const d of deductResult.purchases) {
-        await supabaseAdmin
-          .from('credit_purchases')
-          .update({
-            remaining: supabaseAdmin.rpc ? undefined : undefined, // Can't increment easily, fetch + update
-          })
-          .eq('id', d.id);
-      }
-      // Fetch each row and restore
-      for (const d of deductResult.purchases) {
-        const { data: row } = await supabaseAdmin
-          .from('credit_purchases')
-          .select('remaining')
-          .eq('id', d.id)
-          .single();
-        if (row) {
-          await supabaseAdmin
-            .from('credit_purchases')
-            .update({ remaining: row.remaining + d.deducted, updated_at: new Date().toISOString() })
-            .eq('id', d.id);
-        }
-      }
-      throw new Error('Ledger insert failed — credits rolled back');
+      console.error('[spend-credits] CRITICAL: Ledger insert failed after FIFO deduction.', paidLedgerErr);
+      // FIFO deduction already committed atomically via RPC.
+      // Log the inconsistency but don't attempt a broken rollback — 
+      // the balance sync below will reconcile from credit_purchases source of truth.
+      // A separate reconciliation job can detect ledger gaps.
     }
 
     // ── Cost tracking for hotel_search (for Unit Economics dashboard) ──
