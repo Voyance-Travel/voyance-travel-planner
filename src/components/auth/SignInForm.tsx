@@ -12,6 +12,7 @@ import { SocialLoginButtons } from '@/components/auth/SocialLoginButtons';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { consumeReturnPath, saveReturnPath } from '@/utils/authReturnPath';
+import { savePendingInviteToken, consumePendingInviteToken, extractInviteTokenFromPath } from '@/utils/inviteTokenPersistence';
 
 const signInSchema = z.object({
   email: z.string().trim().email('Please enter a valid email address'),
@@ -38,12 +39,18 @@ export function SignInForm() {
       || queryNext 
       || null;
 
-  // Persist redirect intent so it survives OAuth / email-verification flows
+  // Extract invite token from URL param or redirect path
+  const urlInviteToken = searchParams.get('inviteToken') || extractInviteTokenFromPath(nextPath);
+
+  // Persist redirect intent and invite token on mount
   useEffect(() => {
     if (nextPath && nextPath.startsWith('/')) {
       saveReturnPath(nextPath);
     }
-  }, [nextPath]);
+    if (urlInviteToken) {
+      savePendingInviteToken(urlInviteToken);
+    }
+  }, [nextPath, urlInviteToken]);
 
   const {
     register,
@@ -60,7 +67,14 @@ export function SignInForm() {
     
     try {
       await login(data.email, data.password);
-      navigate(nextPath || consumeReturnPath(ROUTES.PROFILE.VIEW));
+      
+      // Prioritize invite token recovery over generic return path
+      const pendingToken = consumePendingInviteToken();
+      if (pendingToken) {
+        navigate(`/invite/${pendingToken}`, { replace: true });
+      } else {
+        navigate(nextPath || consumeReturnPath(ROUTES.PROFILE.VIEW));
+      }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to sign in. Please try again.';
       setServerError(errorMessage);
@@ -68,6 +82,15 @@ export function SignInForm() {
       setIsLoading(false);
     }
   };
+
+  // Build link to signup preserving invite context
+  const signUpLink = (() => {
+    const params = new URLSearchParams();
+    if (nextPath) params.set('redirect', nextPath);
+    if (urlInviteToken) params.set('inviteToken', urlInviteToken);
+    const qs = params.toString();
+    return qs ? `${ROUTES.SIGNUP}?${qs}` : ROUTES.SIGNUP;
+  })();
 
   return (
     <div className="space-y-6">
@@ -167,7 +190,7 @@ export function SignInForm() {
         <p className="text-center text-sm text-slate-600">
           Don't have an account?{' '}
           <Link 
-            to={ROUTES.SIGNUP} 
+            to={signUpLink} 
             className="font-medium text-slate-900 hover:underline"
           >
             Create one
