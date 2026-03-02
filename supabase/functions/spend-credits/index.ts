@@ -600,54 +600,59 @@ serve(async (req) => {
       throw err;
     }
 
-    // ── Ledger entry (write-ahead: BEFORE balance sync) ──
-    const { error: paidLedgerErr } = await supabaseAdmin
-      .from('credit_ledger')
-      .insert({
-        user_id: user.id,
-        transaction_type: 'spend',
-        credits_delta: -deductResult.deducted,
-        is_free_credit: false,
-        action_type: action,
-        trip_id: tripId || null,
-        activity_id: null,
-        notes: `${action.replace(/_/g, ' ')} - ${deductResult.deducted} credits`,
-        metadata: {
-          ...metadata,
-          day_index: dayIndex,
-          is_variable_cost: isVariable,
-          original_cost: cost,
-          fifo_deductions: deductResult.purchases,
-          activityId: activityId || null,
-        },
-      });
-    if (paidLedgerErr) {
-      console.error('[spend-credits] CRITICAL: Ledger insert failed after FIFO deduction.', paidLedgerErr);
-      // FIFO deduction already committed atomically via RPC.
-      // Log the inconsistency but don't attempt a broken rollback — 
-      // the balance sync below will reconcile from credit_purchases source of truth.
-      // A separate reconciliation job can detect ledger gaps.
-    }
-
-    // ── Cost tracking for hotel_search (for Unit Economics dashboard) ──
-    if (action === 'hotel_search' && tripId) {
-      const { error: costErr } = await supabaseAdmin
-        .from('trip_cost_tracking')
+    // ── Credits deducted successfully — from here we MUST return 200 ──
+    // Wrap post-deduction work in try/catch so failures in ledger/sync
+    // never cause a non-2xx response (credits are already gone).
+    let balance = { total: 0, purchased: 0, free: 0 };
+    try {
+      // ── Ledger entry (write-ahead: BEFORE balance sync) ──
+      const { error: paidLedgerErr } = await supabaseAdmin
+        .from('credit_ledger')
         .insert({
           user_id: user.id,
-          trip_id: tripId,
-          action_type: 'hotel_search',
-          cost_category: 'ai_generation',
-          estimated_cost_usd: 0.03,
-          input_tokens: 0,
-          output_tokens: 0,
-          model: 'credit-gated',
+          transaction_type: 'spend',
+          credits_delta: -deductResult.deducted,
+          is_free_credit: false,
+          action_type: action,
+          trip_id: tripId || null,
+          activity_id: null,
+          notes: `${action.replace(/_/g, ' ')} - ${deductResult.deducted} credits`,
+          metadata: {
+            ...metadata,
+            day_index: dayIndex,
+            is_variable_cost: isVariable,
+            original_cost: cost,
+            fifo_deductions: deductResult.purchases,
+            activityId: activityId || null,
+          },
         });
-      if (costErr) console.error('[spend-credits] Cost tracking insert failed:', costErr);
-    }
+      if (paidLedgerErr) {
+        console.error('[spend-credits] CRITICAL: Ledger insert failed after FIFO deduction.', paidLedgerErr);
+      }
 
-    // ── Sync balance cache AFTER successful deduction + ledger ──
-    const balance = await syncBalanceCache(supabaseAdmin, user.id);
+      // ── Cost tracking for hotel_search (for Unit Economics dashboard) ──
+      if (action === 'hotel_search' && tripId) {
+        const { error: costErr } = await supabaseAdmin
+          .from('trip_cost_tracking')
+          .insert({
+            user_id: user.id,
+            trip_id: tripId,
+            action_type: 'hotel_search',
+            cost_category: 'ai_generation',
+            estimated_cost_usd: 0.03,
+            input_tokens: 0,
+            output_tokens: 0,
+            model: 'credit-gated',
+          });
+        if (costErr) console.error('[spend-credits] Cost tracking insert failed:', costErr);
+      }
+
+      // ── Sync balance cache AFTER successful deduction + ledger ──
+      balance = await syncBalanceCache(supabaseAdmin, user.id);
+    } catch (postDeductErr) {
+      // Log but never fail the response — credits were already deducted
+      console.error('[spend-credits] Post-deduction error (credits already spent, returning 200):', postDeductErr);
+    }
 
     return new Response(
       JSON.stringify({
