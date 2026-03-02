@@ -28,6 +28,7 @@ import { TripDebriefModal } from '@/components/trip/TripDebriefModal';
 import { TripConfirmationBanner } from '@/components/trip/TripConfirmationBanner';
 import type { SwapSuggestion } from '@/components/trip/SwapReviewDialog';
 import { supabase } from '@/integrations/supabase/client';
+import { setCachedVersion, clearCachedVersion, saveItineraryOptimistic } from '@/services/itineraryOptimisticUpdate';
 import { useScheduleNotifications } from '@/services/tripNotificationsAPI';
 import { useTripLearning } from '@/services/tripLearningsAPI';
 import { useAuth } from '@/contexts/AuthContext';
@@ -472,6 +473,11 @@ export default function TripDetail() {
 
         setTrip(tripData);
 
+        // Seed optimistic locking version cache
+        if (tripData?.id) {
+          setCachedVersion(tripData.id, (tripData as any).itinerary_version ?? 1);
+        }
+
         // Load trip_cities for multi-city detection & per-city hotel/transport display
         try {
           const cities = await getTripCities(tripId);
@@ -555,6 +561,9 @@ export default function TripDetail() {
     }
 
     fetchTripData();
+    return () => {
+      if (tripId) clearCachedVersion(tripId);
+    };
   }, [tripId]);
 
   // Auto-repair legacy trips with missing activity_costs
@@ -1023,14 +1032,14 @@ export default function TripDetail() {
     // Update local state
     setTrip(prev => prev ? { ...prev, itinerary_data: newItineraryData as any } : null);
 
-    // Persist to backend
-    supabase
-      .from('trips')
-      .update({ itinerary_data: newItineraryData as any, updated_at: new Date().toISOString() })
-      .eq('id', tripId!)
-      .then(({ error }) => {
-        if (error) console.error('[TripDetail] Failed to save swaps:', error);
-      });
+    // Persist to backend with optimistic locking
+    saveItineraryOptimistic(tripId!, newItineraryData).then((result) => {
+      if (!result.success && result.error === 'version_conflict') {
+        toast.error('Another collaborator edited this itinerary. Please reload to see their changes.');
+      } else if (!result.success) {
+        console.error('[TripDetail] Failed to save swaps:', result.error);
+      }
+    });
   }, [trip, tripId]);
 
   const handleActivityComplete = async (activityId: string) => {
@@ -1662,10 +1671,10 @@ export default function TripDetail() {
                             // Save injected days back if they changed
                             if (JSON.stringify(injectedDays) !== JSON.stringify(currentDays)) {
                               const newItData = { ...(itData || {}), days: injectedDays, savedAt: new Date().toISOString() };
-                              await supabase
-                                .from('trips')
-                                .update({ itinerary_data: newItData as any, updated_at: new Date().toISOString() })
-                                .eq('id', tripId);
+                              const saveResult = await saveItineraryOptimistic(tripId!, newItData);
+                              if (!saveResult.success && saveResult.error === 'version_conflict') {
+                                toast.error('Another collaborator edited this itinerary. Please reload.');
+                              }
                               updatedTrip.itinerary_data = newItData as any;
                             }
                           }

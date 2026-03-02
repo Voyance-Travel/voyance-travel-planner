@@ -571,10 +571,11 @@ export async function runCascadeAndPersist(
       const itineraryData = tripData.itinerary_data as any;
       itineraryData.days = result.updatedDays;
       
-      await supabase
-        .from('trips')
-        .update({ itinerary_data: itineraryData, updated_at: new Date().toISOString() })
-        .eq('id', tripId);
+      const { saveItineraryOptimistic } = await import('@/services/itineraryOptimisticUpdate');
+      const saveResult = await saveItineraryOptimistic(tripId, itineraryData);
+      if (!saveResult.success && saveResult.error === 'version_conflict') {
+        console.warn('[cascade] Version conflict during transport cascade — another edit occurred');
+      }
     }
 
     // Show toast notifications
