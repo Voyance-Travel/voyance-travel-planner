@@ -540,7 +540,12 @@ export function useItinerary(tripId: string | null, options?: { refetchInterval?
       }
       return false;
     },
-    staleTime: 30 * 1000,
+    staleTime: (query) => {
+      const status = query.state.data?.status;
+      // During active generation, disable stale cache so every poll triggers a UI update
+      if (status === 'generating' || status === 'running' || status === 'queued') return 0;
+      return 30 * 1000;
+    },
     retry: (failureCount) => failureCount < 60,
   });
 }
