@@ -125,6 +125,9 @@ import { AddActivityModal } from './AddActivityModal';
 import { EditActivityModal } from './EditActivityModal';
 import { DiscoverDrawer } from './DiscoverDrawer';
 import { ImportActivitiesModal, type ImportMode } from './ImportActivitiesModal';
+import { useVersionHistory } from '@/hooks/useVersionHistory';
+import { saveDayVersion } from '@/services/itineraryVersionHistory';
+import { DayUndoButton } from '@/components/planner/DayUndoButton';
 import { SmartFinishBanner } from './SmartFinishBanner';
 import { InterCityTransportEditor } from './InterCityTransportEditor';
 import { useUpdateCityTransport } from '@/hooks/useTripCities';
@@ -1315,6 +1318,25 @@ export function EditorialItinerary({
 
   const [addActivityModal, setAddActivityModal] = useState<{ dayIndex: number; afterIndex?: number } | null>(null);
   const [importModal, setImportModal] = useState<{ dayIndex: number } | null>(null);
+
+  // Version history / undo for selected day
+  const selectedDay = days[selectedDayIndex];
+  const { canUndoDay, isUndoing, handleUndo, refreshUndoState } = useVersionHistory({
+    tripId,
+    dayNumber: selectedDay?.dayNumber ?? 1,
+    onRestore: useCallback((restoredActivities, metadata) => {
+      setDays(prev => prev.map((d, i) => {
+        if (i !== selectedDayIndex) return d;
+        return {
+          ...d,
+          activities: restoredActivities as unknown as EditorialActivity[],
+          ...(metadata?.title ? { title: metadata.title } : {}),
+          ...(metadata?.theme ? { theme: metadata.theme } : {}),
+        };
+      }));
+      setHasChanges(true);
+    }, [selectedDayIndex]),
+  });
   const [editActivityModal, setEditActivityModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
   const [timeEditModal, setTimeEditModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
   const [discoverDrawerOpen, setDiscoverDrawerOpen] = useState(false);
@@ -3344,46 +3366,65 @@ export function EditorialItinerary({
     toast.success('Activity added!');
   }, [tripCurrency, spendCredits, tripId, days, syncBudgetFromDays]);
 
-  const handleImportActivities = useCallback((dayIndex: number, activities: Array<Partial<EditorialActivity>>, mode: ImportMode = 'merge') => {
-    const newActivities = activities.map((activity, i) => ({
-      id: `import-${Date.now()}-${i}`,
-      title: activity.title || 'Imported Activity',
-      description: activity.description || '',
-      category: activity.category || 'activity',
-      startTime: activity.startTime || '',
-      endTime: activity.endTime || '',
-      location: activity.location || { name: '', address: '' },
-      cost: activity.cost || { amount: 0, currency: tripCurrency },
-      bookingRequired: false,
-      tags: [],
-      isLocked: false,
-    } as EditorialActivity));
+  const handleImportActivities = useCallback(async (imports: Array<{ dayIndex: number; activities: Array<Partial<EditorialActivity>>; mode: ImportMode }>) => {
+    // Save version snapshots for all affected days before modifying
+    const affectedDayIndices = [...new Set(imports.map(i => i.dayIndex))];
+    for (const di of affectedDayIndices) {
+      const day = days[di];
+      if (day) {
+        await saveDayVersion(tripId, {
+          dayNumber: day.dayNumber,
+          title: day.title,
+          theme: day.theme,
+          activities: day.activities as any,
+        }, 'before_import');
+      }
+    }
 
     setDays(prev => {
-      const updated = prev.map((day, idx) => {
-        if (idx !== dayIndex) return day;
+      const updated = [...prev];
+      for (const imp of imports) {
+        const { dayIndex, activities, mode } = imp;
+        const newActivities = activities.map((activity, i) => ({
+          id: `import-${Date.now()}-${i}-${dayIndex}`,
+          title: activity.title || 'Imported Activity',
+          description: activity.description || '',
+          category: activity.category || 'activity',
+          startTime: activity.startTime || '',
+          endTime: activity.endTime || '',
+          location: activity.location || { name: '', address: '' },
+          cost: activity.cost || { amount: 0, currency: tripCurrency },
+          bookingRequired: false,
+          tags: [],
+          isLocked: false,
+        } as EditorialActivity));
+
+        const day = updated[dayIndex];
+        if (!day) continue;
         if (mode === 'replace') {
-          return { ...day, activities: newActivities };
+          updated[dayIndex] = { ...day, activities: newActivities };
+        } else {
+          const combined = [...day.activities, ...newActivities];
+          combined.sort((a, b) => {
+            const timeA = a.startTime || '';
+            const timeB = b.startTime || '';
+            if (!timeA && !timeB) return 0;
+            if (!timeA) return 1;
+            if (!timeB) return -1;
+            return timeA.localeCompare(timeB);
+          });
+          updated[dayIndex] = { ...day, activities: combined };
         }
-        const combined = [...day.activities, ...newActivities];
-        combined.sort((a, b) => {
-          const timeA = a.startTime || '';
-          const timeB = b.startTime || '';
-          if (!timeA && !timeB) return 0;
-          if (!timeA) return 1;
-          if (!timeB) return -1;
-          return timeA.localeCompare(timeB);
-        });
-        return { ...day, activities: combined };
-      });
+      }
       syncBudgetFromDays(updated);
       return updated;
     });
     setHasChanges(true);
     setImportModal(null);
-    const verb = mode === 'replace' ? 'replaced with' : 'merged';
-    toast.success(`${newActivities.length} activities ${verb}!`);
-  }, [tripCurrency, syncBudgetFromDays]);
+    refreshUndoState();
+    const totalImported = imports.reduce((sum, i) => sum + i.activities.length, 0);
+    toast.success(`${totalImported} activities imported across ${affectedDayIndices.length} day${affectedDayIndices.length > 1 ? 's' : ''}!`);
+  }, [tripCurrency, syncBudgetFromDays, tripId, days, refreshUndoState]);
 
   // Update activity time — with optional cascade to shift all following activities
   const handleUpdateActivityTime = useCallback((dayIndex: number, activityIndex: number, startTime: string, endTime: string, cascade = false) => {
@@ -3950,9 +3991,18 @@ export function EditorialItinerary({
                   {days.length} day{days.length !== 1 ? 's' : ''}
                   {startDate && endDate ? ` · ${safeFormatDate(startDate, 'MMM d')} – ${safeFormatDate(endDate, 'MMM d')}` : ''}
                 </span>
-                <span className="text-xs text-muted-foreground">
-                  Day {selectedDayIndex + 1} of {days.length}
-                </span>
+                <div className="flex items-center gap-2">
+                  {canUndoDay && (
+                    <DayUndoButton
+                      onClick={handleUndo}
+                      isLoading={isUndoing}
+                      showLabel
+                    />
+                  )}
+                  <span className="text-xs text-muted-foreground">
+                    Day {selectedDayIndex + 1} of {days.length}
+                  </span>
+                </div>
               </div>
 
               <div className="flex items-center gap-2">
@@ -5221,9 +5271,14 @@ export function EditorialItinerary({
       <ImportActivitiesModal
         isOpen={!!importModal}
         onClose={() => setImportModal(null)}
-        onImport={(activities, mode) => importModal && handleImportActivities(importModal.dayIndex, activities, mode)}
+        onImport={handleImportActivities}
         currency={tripCurrency}
-        existingActivityCount={importModal ? (days[importModal.dayIndex]?.activities?.length ?? 0) : 0}
+        days={days.map(d => ({
+          dayNumber: d.dayNumber,
+          city: d.city,
+          activities: d.activities.map(a => ({ title: a.title, startTime: a.startTime })),
+        }))}
+        initialDayIndex={importModal?.dayIndex ?? 0}
       />
 
       {/* Time Edit Modal */}
