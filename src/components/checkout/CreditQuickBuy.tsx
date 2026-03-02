@@ -54,7 +54,7 @@ export function CreditQuickBuy({ currentBalance, tripId, children }: CreditQuick
     queryFn: async () => {
       if (!tripId || !user?.id) return null;
       const { data, error } = await supabase
-        .from('credit_ledger')
+        .from('credit_ledger_safe')
         .select('action_type, credits_delta')
         .eq('user_id', user.id)
         .eq('trip_id', tripId)

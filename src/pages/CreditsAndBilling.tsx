@@ -75,13 +75,13 @@ export default function CreditsAndBilling() {
 
     Promise.all([
       supabase
-        .from('credit_ledger')
+        .from('credit_ledger_safe')
         .select('id, transaction_type, action_type, credits_delta, notes, metadata, trip_id, created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(PAGE_SIZE + 1),
       supabase
-        .from('credit_ledger')
+        .from('credit_ledger_safe')
         .select('credits_delta')
         .eq('user_id', user.id),
     ]).then(([ledgerRes, summaryRes]) => {
@@ -107,7 +107,7 @@ export default function CreditsAndBilling() {
     setLoadingMore(true);
     const lastEntry = ledger[ledger.length - 1];
     const { data, error } = await supabase
-      .from('credit_ledger')
+      .from('credit_ledger_safe')
       .select('id, transaction_type, action_type, credits_delta, notes, metadata, trip_id, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
