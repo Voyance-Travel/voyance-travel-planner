@@ -1,15 +1,20 @@
 /**
- * ImportActivitiesModal — Paste text to import activities
- * Simple line-by-line parsing, no AI. User arranges manually.
- * Supports Start Over (replace) or Merge (combine + sort by time) when day has existing activities.
+ * ImportActivitiesModal — Multi-day, city-aware import
+ * 
+ * Flow: Paste text → Detect days/cities → Assign to trip days → Review → Import
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { ClipboardPaste, Check, X, RefreshCw, Merge, ArrowRight } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ClipboardPaste, Check, RefreshCw, Merge, ArrowRight, ChevronRight, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+// =============================================================================
+// TYPES
+// =============================================================================
 
 interface ParsedActivity {
   title: string;
@@ -22,33 +27,57 @@ interface ParsedActivity {
   included: boolean;
 }
 
+interface ParsedGroup {
+  /** Label detected from text (e.g. "Day 1", "Rome", or "Ungrouped") */
+  detectedLabel: string;
+  /** Target day index in the trip, user-assignable */
+  targetDayIndex: number;
+  /** Import mode for this group's target day */
+  mode: ImportMode;
+  activities: ParsedActivity[];
+}
+
 export type ImportMode = 'replace' | 'merge';
+
+interface TripDayInfo {
+  dayNumber: number;
+  city?: string;
+  activities: { title: string; startTime?: string }[];
+}
 
 interface ImportActivitiesModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onImport: (activities: Array<{
-    title: string;
-    startTime?: string;
-    endTime?: string;
-    category?: string;
-    description?: string;
-    location?: { name?: string; address?: string };
-    cost?: { amount: number; currency: string };
-  }>, mode: ImportMode) => void;
+  onImport: (imports: Array<{
+    dayIndex: number;
+    activities: Array<{
+      title: string;
+      startTime?: string;
+      endTime?: string;
+      category?: string;
+      description?: string;
+      location?: { name?: string; address?: string };
+      cost?: { amount: number; currency: string };
+    }>;
+    mode: ImportMode;
+  }>) => void;
   currency?: string;
-  /** Number of existing activities on the target day — drives the merge/replace choice */
-  existingActivityCount?: number;
+  days: TripDayInfo[];
+  /** Which day the user clicked "Import" from */
+  initialDayIndex?: number;
 }
 
-// Time patterns: "9:00 AM", "09:00", "9am", "9:00am - 10:30am", "9:00-10:30"
+// =============================================================================
+// PARSING UTILITIES
+// =============================================================================
+
 const TIME_PATTERN = /(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/gi;
 const TIME_RANGE_PATTERN = /(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*[-–—to]+\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i;
-
-// Cost patterns: "$25", "€30", "~$15"
 const COST_PATTERN = /[~≈]?[$€£¥]\s*(\d+(?:\.\d{2})?)/;
 
-// Category hints from keywords
+/** Detect "Day 1", "Day 2", "## Day 3", etc. */
+const DAY_BOUNDARY = /^[#*\s]*(?:\*\*)?day\s*(\d+)/i;
+
 const CATEGORY_HINTS: Record<string, string[]> = {
   dining: ['restaurant', 'café', 'cafe', 'bar', 'lunch', 'dinner', 'breakfast', 'brunch', 'eat', 'food', 'bistro', 'grill', 'seafood', 'sushi', 'pizza', 'taco'],
   sightseeing: ['visit', 'see', 'view', 'tower', 'monument', 'landmark', 'museum', 'gallery', 'church', 'cathedral', 'palace', 'castle', 'ruins'],
@@ -70,68 +99,46 @@ function guessCategory(text: string): string {
 function normalizeTime(raw: string): string | undefined {
   if (!raw) return undefined;
   const cleaned = raw.trim().toLowerCase();
-  
   const match24 = cleaned.match(/^(\d{1,2}):(\d{2})$/);
   if (match24) {
     const h = parseInt(match24[1]);
     return h <= 23 ? `${h.toString().padStart(2, '0')}:${match24[2]}` : undefined;
   }
-  
   const match12 = cleaned.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
   if (match12) {
     let h = parseInt(match12[1]);
     const m = match12[2] || '00';
-    const period = match12[3];
-    if (period === 'pm' && h !== 12) h += 12;
-    if (period === 'am' && h === 12) h = 0;
+    if (match12[3] === 'pm' && h !== 12) h += 12;
+    if (match12[3] === 'am' && h === 12) h = 0;
     return `${h.toString().padStart(2, '0')}:${m}`;
   }
-  
   const matchNum = cleaned.match(/^(\d{1,2})$/);
   if (matchNum) {
     const h = parseInt(matchNum[1]);
     if (h <= 23) return `${h.toString().padStart(2, '0')}:00`;
   }
-
   return undefined;
 }
 
-// =============================================================================
-// SMART PARSER — Handles ChatGPT / AI-formatted itineraries
-// =============================================================================
-
 const SKIP_LINE_PATTERNS: RegExp[] = [
-  /^[#*\s]*(?:\*\*)?day\s*\d+/i,
-  /^[#*\s🌴🏖️✈️🗺️📍]*\d+-day\s/i,
-  /itinerary/i,
   /^[-=*_]{3,}$/,
   /^#{1,4}\s*$/,
   /^(?:\*\*)?why\s+this\s+works/i,
   /^(?:\*\*)?(?:pro\s+)?tips?(?:\s*:|\s+for)/i,
   /^(?:\*\*)?💡/,
   /^(?:\*\*)?optimization/i,
-  /^(?:\*\*)?voyance/i,
   /^if\s+you\s+(?:want|need|like)/i,
-  /^just\s+tell\s+me/i,
   /^let\s+me\s+know/i,
   /^(?:tailor|rework|adjust|customize|align)\s/i,
-  /^(?:\*\*)?(?:morning|afternoon|evening|midday|lunch|departure|arrival|night)(?:\*\*)?$/i,
   /^option\s+[a-c]\s*:/i,
   /^(?:\*\*\s*\*\*|\*\*\*|---+|___+)$/,
-  /^(?:best|avoid|stay|book|don't)\s+(?:beaches|midday|dinner|location)/i,
   /^[-•]\s*(?:tailor|rework|align|customize)/i,
 ];
 
 const SECTION_TIME_MAP: Record<string, string> = {
-  'morning': '09:00',
-  'late morning': '10:30',
-  'midday': '12:00',
-  'lunch': '12:30',
-  'afternoon': '14:00',
-  'late afternoon': '16:00',
-  'evening': '18:00',
-  'night': '20:00',
-  'departure': '08:00',
+  'morning': '09:00', 'late morning': '10:30', 'midday': '12:00',
+  'lunch': '12:30', 'afternoon': '14:00', 'late afternoon': '16:00',
+  'evening': '18:00', 'night': '20:00', 'departure': '08:00',
 };
 
 function detectSectionTime(line: string): string | null {
@@ -143,7 +150,6 @@ function isSkipLine(line: string): boolean {
   const stripped = line.replace(/\*\*/g, '').replace(/^#+\s*/, '').trim();
   if (stripped.length <= 2) return true;
   if (/^[\p{Emoji}\s]+$/u.test(stripped)) return true;
-  
   for (const pattern of SKIP_LINE_PATTERNS) {
     if (pattern.test(stripped)) return true;
   }
@@ -172,15 +178,73 @@ function cleanMarkdown(line: string): string {
     .trim();
 }
 
-function parsePastedText(text: string, currency: string): ParsedActivity[] {
+/**
+ * Detect city headers like "Rome:", "**Florence**", "### Paris"
+ */
+function detectCityHeader(line: string, knownCities: string[]): string | null {
+  const stripped = line.replace(/\*\*/g, '').replace(/^#+\s*/, '').replace(/:$/, '').trim();
+  if (!stripped || stripped.length > 40) return null;
+  
+  for (const city of knownCities) {
+    if (stripped.toLowerCase() === city.toLowerCase()) return city;
+    if (stripped.toLowerCase().includes(city.toLowerCase()) && stripped.length < city.length + 15) return city;
+  }
+  return null;
+}
+
+/**
+ * Parse pasted text into groups (by day/city boundaries)
+ */
+function parsePastedTextGrouped(text: string, currency: string, knownCities: string[]): ParsedGroup[] {
   const rawLines = text.split('\n');
-  const activities: ParsedActivity[] = [];
+  const groups: ParsedGroup[] = [];
+  let currentGroup: ParsedGroup = {
+    detectedLabel: 'Ungrouped',
+    targetDayIndex: 0,
+    mode: 'merge',
+    activities: [],
+  };
   let currentSectionTime: string | null = null;
 
   for (let i = 0; i < rawLines.length; i++) {
     const raw = rawLines[i].trim();
     if (!raw) continue;
 
+    // Check for day boundary
+    const dayMatch = raw.match(DAY_BOUNDARY);
+    if (dayMatch) {
+      // Save current group if it has activities
+      if (currentGroup.activities.length > 0) {
+        groups.push(currentGroup);
+      }
+      const dayNum = parseInt(dayMatch[1]);
+      currentGroup = {
+        detectedLabel: `Day ${dayNum}`,
+        targetDayIndex: dayNum - 1,
+        mode: 'merge',
+        activities: [],
+      };
+      currentSectionTime = null;
+      continue;
+    }
+
+    // Check for city header
+    const cityMatch = detectCityHeader(raw, knownCities);
+    if (cityMatch) {
+      if (currentGroup.activities.length > 0) {
+        groups.push(currentGroup);
+      }
+      currentGroup = {
+        detectedLabel: cityMatch,
+        targetDayIndex: 0,
+        mode: 'merge',
+        activities: [],
+      };
+      currentSectionTime = null;
+      continue;
+    }
+
+    // Check section time
     const sectionTime = detectSectionTime(raw);
     if (sectionTime) {
       currentSectionTime = sectionTime;
@@ -192,15 +256,15 @@ function parsePastedText(text: string, currency: string): ParsedActivity[] {
     let workingLine = cleanMarkdown(raw);
     if (!workingLine || workingLine.length <= 2) continue;
 
-    if (activities.length > 0 && isDescriptionLine(raw)) {
-      const prev = activities[activities.length - 1];
+    // Check if description of previous activity
+    if (currentGroup.activities.length > 0 && isDescriptionLine(raw)) {
+      const prev = currentGroup.activities[currentGroup.activities.length - 1];
       const detail = cleanMarkdown(raw);
-      prev.description = prev.description 
-        ? `${prev.description}. ${detail}` 
-        : detail;
+      prev.description = prev.description ? `${prev.description}. ${detail}` : detail;
       continue;
     }
 
+    // Extract time
     let startTime: string | undefined;
     let endTime: string | undefined;
     const rangeMatch = workingLine.match(TIME_RANGE_PATTERN);
@@ -215,11 +279,9 @@ function parsePastedText(text: string, currency: string): ParsedActivity[] {
         workingLine = workingLine.replace(times[0], '').trim();
       }
     }
+    if (!startTime && currentSectionTime) startTime = currentSectionTime;
 
-    if (!startTime && currentSectionTime) {
-      startTime = currentSectionTime;
-    }
-
+    // Extract cost
     let costAmount = 0;
     const costMatch = workingLine.match(COST_PATTERN);
     if (costMatch) {
@@ -228,12 +290,11 @@ function parsePastedText(text: string, currency: string): ParsedActivity[] {
     }
 
     workingLine = workingLine.replace(/^[-–—:,]\s*/, '').replace(/[-–—:,]\s*$/, '').trim();
-
     if (workingLine.length <= 2) continue;
 
+    // Extract title/description
     let title = workingLine;
     let description: string | undefined;
-    
     const parenMatch = workingLine.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
     if (parenMatch && parenMatch[1].length > 3) {
       title = parenMatch[1].trim();
@@ -246,13 +307,11 @@ function parsePastedText(text: string, currency: string): ParsedActivity[] {
       }
     }
 
-    const category = guessCategory(workingLine);
-
-    activities.push({
+    currentGroup.activities.push({
       title,
       startTime,
       endTime,
-      category,
+      category: guessCategory(workingLine),
       description,
       location: { name: title },
       cost: costAmount > 0 ? { amount: costAmount, currency } : undefined,
@@ -260,220 +319,331 @@ function parsePastedText(text: string, currency: string): ParsedActivity[] {
     });
   }
 
-  return activities;
+  // Push last group
+  if (currentGroup.activities.length > 0) {
+    groups.push(currentGroup);
+  }
+
+  return groups;
 }
 
 // =============================================================================
 // COMPONENT
 // =============================================================================
 
-export function ImportActivitiesModal({ 
-  isOpen, onClose, onImport, currency = 'USD', existingActivityCount = 0 
+export function ImportActivitiesModal({
+  isOpen, onClose, onImport, currency = 'USD', days, initialDayIndex = 0,
 }: ImportActivitiesModalProps) {
   const [pastedText, setPastedText] = useState('');
-  const [step, setStep] = useState<'mode' | 'paste' | 'review'>('paste');
-  const [parsed, setParsed] = useState<ParsedActivity[]>([]);
-  const [importMode, setImportMode] = useState<ImportMode>('merge');
+  const [step, setStep] = useState<'paste' | 'assign' | 'review'>('paste');
+  const [groups, setGroups] = useState<ParsedGroup[]>([]);
 
-  const hasExistingActivities = existingActivityCount > 0;
-
-  const handleOpen = () => {
-    // If day has activities, show mode choice first; otherwise go straight to paste
-    if (hasExistingActivities) {
-      setStep('mode');
-    } else {
-      setStep('paste');
-      setImportMode('replace'); // No existing activities, replace is the only option
+  const knownCities = useMemo(() => {
+    const cities: string[] = [];
+    for (const d of days) {
+      if (d.city && !cities.includes(d.city)) cities.push(d.city);
     }
-  };
+    return cities;
+  }, [days]);
 
-  // Reset to correct initial step when modal opens
-  const handleOpenChange = (open: boolean) => {
-    if (open) {
-      handleOpen();
+  // Parse and detect groups
+  const handleParse = useCallback(() => {
+    const parsed = parsePastedTextGrouped(pastedText, currency, knownCities);
+    
+    // If only 1 group detected (no day/city boundaries), assign to the initial day
+    if (parsed.length <= 1) {
+      const singleGroup = parsed[0] || { detectedLabel: 'All Activities', targetDayIndex: initialDayIndex, mode: 'merge' as ImportMode, activities: [] };
+      singleGroup.targetDayIndex = initialDayIndex;
+      // If that day has existing activities, default to merge
+      singleGroup.mode = (days[initialDayIndex]?.activities?.length ?? 0) > 0 ? 'merge' : 'replace';
+      setGroups([singleGroup]);
     } else {
-      handleClose();
+      // Auto-match city groups to day indices
+      const matched = parsed.map(g => {
+        // Try to match by city name
+        const cityIdx = days.findIndex(d => d.city?.toLowerCase() === g.detectedLabel.toLowerCase());
+        if (cityIdx >= 0) {
+          g.targetDayIndex = cityIdx;
+        }
+        // Clamp to valid range
+        g.targetDayIndex = Math.min(g.targetDayIndex, days.length - 1);
+        g.targetDayIndex = Math.max(g.targetDayIndex, 0);
+        // Set mode based on whether target day has activities
+        g.mode = (days[g.targetDayIndex]?.activities?.length ?? 0) > 0 ? 'merge' : 'replace';
+        return g;
+      });
+      setGroups(matched);
     }
-  };
+    setStep('assign');
+  }, [pastedText, currency, knownCities, initialDayIndex, days]);
 
-  const handleParse = () => {
-    const activities = parsePastedText(pastedText, currency);
-    setParsed(activities);
-    setStep('review');
-  };
+  const updateGroupTarget = useCallback((groupIndex: number, dayIndex: number) => {
+    setGroups(prev => prev.map((g, i) => {
+      if (i !== groupIndex) return g;
+      return {
+        ...g,
+        targetDayIndex: dayIndex,
+        mode: (days[dayIndex]?.activities?.length ?? 0) > 0 ? 'merge' : 'replace',
+      };
+    }));
+  }, [days]);
 
-  const toggleActivity = (index: number) => {
-    setParsed(prev => prev.map((a, i) => i === index ? { ...a, included: !a.included } : a));
-  };
+  const updateGroupMode = useCallback((groupIndex: number, mode: ImportMode) => {
+    setGroups(prev => prev.map((g, i) => i === groupIndex ? { ...g, mode } : g));
+  }, []);
 
-  const handleImport = () => {
-    const toImport = parsed
-      .filter(a => a.included)
-      .map(({ included, ...rest }) => rest);
-    onImport(toImport, importMode);
+  const toggleActivity = useCallback((groupIndex: number, activityIndex: number) => {
+    setGroups(prev => prev.map((g, gi) => {
+      if (gi !== groupIndex) return g;
+      return {
+        ...g,
+        activities: g.activities.map((a, ai) => ai === activityIndex ? { ...a, included: !a.included } : a),
+      };
+    }));
+  }, []);
+
+  const handleImport = useCallback(() => {
+    // Group by target day index, merging groups that target the same day
+    const byDay = new Map<number, { activities: ParsedActivity[]; mode: ImportMode }>();
+    for (const group of groups) {
+      const existing = byDay.get(group.targetDayIndex);
+      const included = group.activities.filter(a => a.included);
+      if (!included.length) continue;
+      if (existing) {
+        existing.activities.push(...included);
+        // If any group targeting this day wants replace, use replace
+        if (group.mode === 'replace') existing.mode = 'replace';
+      } else {
+        byDay.set(group.targetDayIndex, { activities: [...included], mode: group.mode });
+      }
+    }
+
+    const imports = Array.from(byDay.entries()).map(([dayIndex, { activities, mode }]) => ({
+      dayIndex,
+      activities: activities.map(({ included, ...rest }) => rest),
+      mode,
+    }));
+
+    if (imports.length > 0) {
+      onImport(imports);
+    }
     handleClose();
-  };
+  }, [groups, onImport]);
 
   const handleClose = () => {
     setPastedText('');
-    setParsed([]);
+    setGroups([]);
     setStep('paste');
-    setImportMode('merge');
     onClose();
   };
 
-  const includedCount = parsed.filter(a => a.included).length;
+  const totalIncluded = groups.reduce((sum, g) => sum + g.activities.filter(a => a.included).length, 0);
+  const totalParsed = groups.reduce((sum, g) => sum + g.activities.length, 0);
+
+  // Conflict summary
+  const conflictSummary = useMemo(() => {
+    const summary: Array<{ dayNumber: number; newCount: number; existingCount: number; mode: ImportMode }> = [];
+    const byDay = new Map<number, { count: number; mode: ImportMode }>();
+    for (const g of groups) {
+      const included = g.activities.filter(a => a.included).length;
+      if (!included) continue;
+      const existing = byDay.get(g.targetDayIndex);
+      if (existing) {
+        existing.count += included;
+        if (g.mode === 'replace') existing.mode = 'replace';
+      } else {
+        byDay.set(g.targetDayIndex, { count: included, mode: g.mode });
+      }
+    }
+    for (const [dayIndex, { count, mode }] of byDay.entries()) {
+      const day = days[dayIndex];
+      if (day) {
+        summary.push({
+          dayNumber: day.dayNumber,
+          newCount: count,
+          existingCount: day.activities.length,
+          mode,
+        });
+      }
+    }
+    return summary;
+  }, [groups, days]);
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-lg">
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
+      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ClipboardPaste className="h-5 w-5" />
             Import Activities
           </DialogTitle>
           <DialogDescription>
-            {step === 'mode' 
-              ? `This day already has ${existingActivityCount} ${existingActivityCount === 1 ? 'activity' : 'activities'}. How would you like to import?`
-              : step === 'paste'
-                ? 'Paste an itinerary from your research, notes, or any text. One activity per line works best.'
-                : `${includedCount} of ${parsed.length} activities selected for import`
+            {step === 'paste'
+              ? 'Paste an itinerary from ChatGPT, Claude, or any text. Multi-day content is auto-detected.'
+              : step === 'assign'
+                ? `${totalParsed} activities found in ${groups.length} group${groups.length > 1 ? 's' : ''}. Assign each group to a day.`
+                : `Review: ${totalIncluded} activities ready to import`
             }
           </DialogDescription>
         </DialogHeader>
 
-        {step === 'mode' ? (
-          <div className="space-y-3 py-2">
-            <button
-              onClick={() => { setImportMode('replace'); setStep('paste'); }}
-              className={cn(
-                'w-full flex items-start gap-4 p-4 rounded-xl border-2 text-left transition-all',
-                'hover:border-primary/40 hover:bg-primary/5 border-border'
-              )}
-            >
-              <div className="mt-0.5 h-10 w-10 rounded-lg bg-destructive/10 flex items-center justify-center shrink-0">
-                <RefreshCw className="h-5 w-5 text-destructive" />
-              </div>
-              <div>
-                <p className="font-semibold text-sm">Start Over</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Replace all {existingActivityCount} existing {existingActivityCount === 1 ? 'activity' : 'activities'} with the imported content
-                </p>
-              </div>
-            </button>
-
-            <button
-              onClick={() => { setImportMode('merge'); setStep('paste'); }}
-              className={cn(
-                'w-full flex items-start gap-4 p-4 rounded-xl border-2 text-left transition-all',
-                'hover:border-primary/40 hover:bg-primary/5 border-border'
-              )}
-            >
-              <div className="mt-0.5 h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <Merge className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="font-semibold text-sm">Merge</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Add imported activities alongside existing ones, sorted by time
-                </p>
-              </div>
-            </button>
-          </div>
-        ) : step === 'paste' ? (
-          <div className="space-y-3 py-2">
-            {hasExistingActivities && (
-              <div className={cn(
-                'flex items-center gap-2 px-3 py-2 rounded-lg text-xs',
-                importMode === 'replace' 
-                  ? 'bg-destructive/10 text-destructive' 
-                  : 'bg-primary/10 text-primary'
-              )}>
-                {importMode === 'replace' ? (
-                  <><RefreshCw className="h-3.5 w-3.5" /> Starting over - existing activities will be replaced</>
-                ) : (
-                  <><Merge className="h-3.5 w-3.5" /> Merging - imported activities will be added alongside existing ones</>
-                )}
-              </div>
-            )}
-            <Textarea
-              value={pastedText}
-              onChange={(e) => setPastedText(e.target.value)}
-              placeholder={`Example:\n9:00 AM - Visit Eagle Beach\n11:00 AM - Snorkeling at Malmok - $40\n1:00 PM - Lunch at Zeerovers - fresh seafood\n3:00 PM - Explore Oranjestad downtown\n6:00 PM - Sunset at California Lighthouse`}
-              rows={10}
-              className="font-mono text-sm"
-            />
-            <p className="text-xs text-muted-foreground">
-              Times, costs ($), and categories are auto-detected. You can edit everything after import.
-            </p>
-          </div>
-        ) : (
-          <div className="py-2 max-h-[50vh] overflow-y-auto space-y-1">
-            {parsed.map((activity, i) => (
-              <div
-                key={i}
-                onClick={() => toggleActivity(i)}
-                className={cn(
-                  'flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-all border',
-                  activity.included
-                    ? 'bg-primary/5 border-primary/20'
-                    : 'bg-muted/30 border-transparent opacity-50'
-                )}
-              >
-                <div className={cn(
-                  'mt-0.5 h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors',
-                  activity.included ? 'border-primary bg-primary' : 'border-muted-foreground'
-                )}>
-                  {activity.included && <Check className="h-3 w-3 text-primary-foreground" />}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{activity.title}</p>
-                  <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                    {activity.startTime && (
-                      <span>{activity.startTime}{activity.endTime ? ` – ${activity.endTime}` : ''}</span>
-                    )}
-                    <span className="px-1.5 py-0.5 rounded bg-muted text-[10px] uppercase tracking-wide">
-                      {activity.category}
+        <div className="flex-1 overflow-y-auto">
+          {step === 'paste' ? (
+            <div className="space-y-3 py-2">
+              <Textarea
+                value={pastedText}
+                onChange={(e) => setPastedText(e.target.value)}
+                placeholder={`Example:\nDay 1 - Rome\n9:00 AM - Colosseum tour - $25\n12:00 PM - Lunch at Trattoria\n\nDay 2 - Florence\n10:00 AM - Uffizi Gallery - $20\n1:00 PM - Ponte Vecchio walk`}
+                rows={10}
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                Day markers (Day 1, Day 2) and city names are auto-detected. Times and costs ($) are extracted automatically.
+              </p>
+            </div>
+          ) : step === 'assign' ? (
+            <div className="space-y-4 py-2">
+              {groups.map((group, gi) => (
+                <div key={gi} className="border rounded-xl p-4 space-y-3">
+                  {/* Group header */}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-sm">{group.detectedLabel}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {group.activities.filter(a => a.included).length} activities
                     </span>
-                    {activity.cost && <span>${activity.cost.amount}</span>}
                   </div>
-                  {activity.description && (
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{activity.description}</p>
+
+                  {/* Day assignment */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground shrink-0">Import to:</span>
+                    <Select
+                      value={String(group.targetDayIndex)}
+                      onValueChange={(v) => updateGroupTarget(gi, parseInt(v))}
+                    >
+                      <SelectTrigger className="h-8 text-xs flex-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {days.map((d, di) => (
+                          <SelectItem key={di} value={String(di)} className="text-xs">
+                            Day {d.dayNumber}{d.city ? ` — ${d.city}` : ''}
+                            {d.activities.length > 0 ? ` (${d.activities.length} existing)` : ' (empty)'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Mode choice — only if target day has activities */}
+                  {(days[group.targetDayIndex]?.activities?.length ?? 0) > 0 && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => updateGroupMode(gi, 'merge')}
+                        className={cn(
+                          'flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border text-xs transition-all',
+                          group.mode === 'merge'
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-border hover:border-primary/30'
+                        )}
+                      >
+                        <Merge className="h-3.5 w-3.5" />
+                        Merge
+                      </button>
+                      <button
+                        onClick={() => updateGroupMode(gi, 'replace')}
+                        className={cn(
+                          'flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border text-xs transition-all',
+                          group.mode === 'replace'
+                            ? 'border-destructive bg-destructive/10 text-destructive'
+                            : 'border-border hover:border-destructive/30'
+                        )}
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Replace
+                      </button>
+                    </div>
                   )}
+
+                  {/* Activities preview */}
+                  <div className="space-y-1">
+                    {group.activities.map((activity, ai) => (
+                      <div
+                        key={ai}
+                        onClick={() => toggleActivity(gi, ai)}
+                        className={cn(
+                          'flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all text-xs',
+                          activity.included
+                            ? 'bg-primary/5'
+                            : 'opacity-40 line-through'
+                        )}
+                      >
+                        <div className={cn(
+                          'h-4 w-4 rounded-full border-2 flex items-center justify-center shrink-0',
+                          activity.included ? 'border-primary bg-primary' : 'border-muted-foreground'
+                        )}>
+                          {activity.included && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
+                        </div>
+                        <span className="flex-1 truncate">{activity.title}</span>
+                        {activity.startTime && <span className="text-muted-foreground">{activity.startTime}</span>}
+                        {activity.cost && <span className="text-muted-foreground">${activity.cost.amount}</span>}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
-            {parsed.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground">
-                <p className="text-sm">No activities could be parsed from the text.</p>
-                <Button variant="ghost" size="sm" onClick={() => setStep('paste')} className="mt-2">
-                  Try again
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
+              ))}
+
+              {groups.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p className="text-sm">No activities could be parsed from the text.</p>
+                  <Button variant="ghost" size="sm" onClick={() => setStep('paste')} className="mt-2">
+                    Try again
+                  </Button>
+                </div>
+              )}
+
+              {/* Conflict summary */}
+              {conflictSummary.length > 0 && (
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
+                  <p className="text-xs font-medium flex items-center gap-1">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                    Import Summary
+                  </p>
+                  {conflictSummary.map((s, i) => (
+                    <p key={i} className="text-xs text-muted-foreground">
+                      Day {s.dayNumber}: {s.newCount} new activit{s.newCount === 1 ? 'y' : 'ies'}
+                      {s.existingCount > 0 && (
+                        <span>
+                          {s.mode === 'replace'
+                            ? ` (replacing ${s.existingCount} existing)`
+                            : ` (merging with ${s.existingCount} existing)`
+                          }
+                        </span>
+                      )}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
 
         <DialogFooter>
-          {step === 'mode' ? (
-            <Button variant="outline" onClick={handleClose}>Cancel</Button>
-          ) : step === 'paste' ? (
+          {step === 'paste' ? (
             <>
-              <Button variant="outline" onClick={hasExistingActivities ? () => setStep('mode') : handleClose}>
-                {hasExistingActivities ? 'Back' : 'Cancel'}
-              </Button>
+              <Button variant="outline" onClick={handleClose}>Cancel</Button>
               <Button onClick={handleParse} disabled={pastedText.trim().length < 3}>
-                Parse Activities
+                <ArrowRight className="h-4 w-4 mr-1" />
+                Parse & Assign
               </Button>
             </>
-          ) : (
+          ) : step === 'assign' ? (
             <>
               <Button variant="outline" onClick={() => setStep('paste')}>Back</Button>
-              <Button onClick={handleImport} disabled={includedCount === 0}>
-                {importMode === 'replace' ? 'Replace with' : 'Merge'} {includedCount} {includedCount === 1 ? 'Activity' : 'Activities'}
+              <Button onClick={handleImport} disabled={totalIncluded === 0}>
+                Import {totalIncluded} Activit{totalIncluded === 1 ? 'y' : 'ies'}
               </Button>
             </>
-          )}
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>
