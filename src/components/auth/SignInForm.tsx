@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { SocialLoginButtons } from '@/components/auth/SocialLoginButtons';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
-import { consumeReturnPath } from '@/utils/authReturnPath';
+import { consumeReturnPath, saveReturnPath } from '@/utils/authReturnPath';
 
 const signInSchema = z.object({
   email: z.string().trim().email('Please enter a valid email address'),
@@ -37,6 +37,13 @@ export function SignInForm() {
     : (stateFrom ? (stateFrom.pathname || '') + (stateFrom.search || '') : null)
       || queryNext 
       || null;
+
+  // Persist redirect intent so it survives OAuth / email-verification flows
+  useEffect(() => {
+    if (nextPath && nextPath.startsWith('/')) {
+      saveReturnPath(nextPath);
+    }
+  }, [nextPath]);
 
   const {
     register,
