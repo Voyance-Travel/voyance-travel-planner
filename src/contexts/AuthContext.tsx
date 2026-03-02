@@ -40,7 +40,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, name?: { firstName: string; lastName: string }) => Promise<void>;
+  signup: (email: string, password: string, name?: { firstName: string; lastName: string }) => Promise<{ needsEmailConfirmation?: boolean }>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<User>) => void;
   setPreferences: (preferences: TravelPreferences) => Promise<void>;
@@ -441,13 +441,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signup = async (email: string, password: string, name?: { firstName: string; lastName: string }) => {
+  const signup = async (email: string, password: string, name?: { firstName: string; lastName: string }): Promise<{ needsEmailConfirmation?: boolean }> => {
     const fullName = name ? `${name.firstName} ${name.lastName}` : undefined;
+
+    // Build emailRedirectTo — include invite token so email confirmation
+    // lands on /?inviteToken=xyz and OAuthReturnHandler picks it up
+    let redirectUrl = `${window.location.origin}/`;
+    try {
+      const { peekPendingInviteToken } = await import('@/utils/inviteTokenPersistence');
+      const pendingToken = peekPendingInviteToken();
+      if (pendingToken) {
+        redirectUrl = `${window.location.origin}/?inviteToken=${encodeURIComponent(pendingToken)}`;
+      }
+    } catch { /* ignore */ }
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/`,
+        emailRedirectTo: redirectUrl,
         data: {
           first_name: name?.firstName,
           last_name: name?.lastName,
@@ -467,9 +479,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('An account with this email already exists. Please sign in instead.');
     }
     
-    // Check if email confirmation is required
+    // Email confirmation required — return gracefully instead of throwing
     if (data.user && !data.session) {
-      throw new Error('Please check your email to confirm your account.');
+      return { needsEmailConfirmation: true };
     }
     
     // Profile is created automatically via trigger
@@ -480,6 +492,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (data.user) {
       logSignup().catch(console.error);
     }
+
+    return {};
   };
 
   const logout = async () => {
