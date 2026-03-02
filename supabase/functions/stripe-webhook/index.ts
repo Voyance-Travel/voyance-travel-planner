@@ -351,18 +351,8 @@ serve(async (req) => {
           log("Processing credit purchase", { userId, creditsToAdd, priceId, productId, amountCents });
 
           if (userId && creditsToAdd > 0) {
-            // IDEMPOTENCY CHECK
-            const { data: existingLedger } = await supabaseAdmin
-              .from("credit_ledger")
-              .select("id")
-              .eq("stripe_session_id", session.id)
-              .eq("transaction_type", "purchase")
-              .maybeSingle();
-
-            if (existingLedger) {
-              log("Duplicate credit purchase event, skipping", { sessionId: session.id });
-              break;
-            }
+            // Idempotency is enforced by the unique index on credit_ledger(stripe_session_id, transaction_type)
+            // inside the fulfill_credit_purchase RPC — no check-then-act needed here.
 
             const clubInfo = productId ? CLUB_PRODUCT_MAP[productId] : null;
 
