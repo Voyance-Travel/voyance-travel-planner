@@ -16,26 +16,26 @@ interface ContactRequest {
   website?: string; // Honeypot field
 }
 
-// Simple in-memory rate limiting
-const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+// Database-backed rate limiting (survives cold starts)
+import { checkDbRateLimit } from "../_shared/db-rate-limiter.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.90.1";
+
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const MAX_REQUESTS_PER_WINDOW = 5;
 
-function isRateLimited(key: string): boolean {
-  const now = Date.now();
-  const record = rateLimitMap.get(key);
-  
-  if (!record || now > record.resetTime) {
-    rateLimitMap.set(key, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
-    return false;
-  }
-  
-  if (record.count >= MAX_REQUESTS_PER_WINDOW) {
-    return true;
-  }
-  
-  record.count++;
-  return false;
+async function isRateLimited(key: string): Promise<boolean> {
+  const supabaseAdmin = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    { auth: { persistSession: false } },
+  );
+  const result = await checkDbRateLimit(
+    supabaseAdmin,
+    key,
+    "send-contact-email",
+    { maxRequests: MAX_REQUESTS_PER_WINDOW, windowMs: RATE_LIMIT_WINDOW_MS },
+  );
+  return !result.allowed;
 }
 
 function validateEmail(email: string): boolean {
@@ -107,7 +107,7 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    if (isRateLimited(`email:${email}`)) {
+    if (await isRateLimited(`email:${email}`)) {
       console.warn(`[send-contact-email] Rate limited: ${email}`);
       return new Response(
         JSON.stringify({ success: false, error: "Too many requests. Please try again later." }),
@@ -119,7 +119,7 @@ const handler = async (req: Request): Promise<Response> => {
                      req.headers.get('cf-connecting-ip') || 
                      'unknown';
     
-    if (clientIP !== 'unknown' && isRateLimited(`ip:${clientIP}`)) {
+    if (clientIP !== 'unknown' && await isRateLimited(`ip:${clientIP}`)) {
       console.warn(`[send-contact-email] Rate limited IP: ${clientIP}`);
       return new Response(
         JSON.stringify({ success: false, error: "Too many requests. Please try again later." }),
