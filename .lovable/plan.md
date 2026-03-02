@@ -1,88 +1,55 @@
 
-Goal: make invite links deterministic so you always know the copied link is valid for the currently open trip, and give you a one-click reset when you want a guaranteed fresh token.
+Goal: identify why invite links are failing and implement a durable fix so users can consistently join trips.
 
-What is happening today (confirmed)
-1. A new invite token is generated only when:
-   - no invite row exists for that trip, or
-   - the invite is expired and gets refreshed.
-2. Re-copying the link does not generate a new token.
-3. The itinerary page caches `shareLink` in component state and does not reset it on trip change.
-4. There are multiple share entry points with inconsistent behavior (`travelers - 1` vs `10` max uses).
-5. Your screenshot message (“Failed to accept invite. Please try again.”) is the generic catch path, so the real backend failure reason is hidden.
+What I found (root cause diagnosis):
+1) This is not a permission-role issue.
+- Invite acceptance always inserts collaborators with default permission (`view`), and role checks are not what produce “invalid invite”.
 
-This explains why “we thought it was fixed” keeps happening: the app can keep serving an old/wrong cached link and then hides the real join failure reason.
+2) The backend invite functions are mostly working, but capacity checks are rejecting some links.
+- I verified current invite records and token health.
+- At least one currently active token resolves as `trip_full` (no spots remaining), which users experience as “link broken”.
+- This is driven by `travelers` vs accepted collaborator count.
 
-Implementation approach
+3) Invite context can still be lost after account creation/verification.
+- You already fixed part of this with saved return path before auth.
+- Remaining weak point: return-path storage is session-tab scoped, so verification/open-in-new-tab flows can still lose invite context.
 
-Phase 1 — Guarantee “copy” always resolves the current trip’s active invite
-- Replace “copy cached string” behavior with “resolve current invite before copy”.
-- In the main itinerary share flow (`EditorialItinerary.tsx`):
-  - always fetch/resolve invite for current `tripId` on copy/generate click,
-  - never trust previously cached `shareLink` as source of truth.
-- Reset local share state whenever `tripId` changes:
-  - clear `shareLink`,
-  - clear copied state.
-- Do the same in other share surfaces:
-  - `TripShareModal.tsx` (internal state currently initialized once and can go stale),
-  - `ShareTripCard.tsx` (current effect can retain previous trip link when trip changes).
+4) There is an inconsistent invite-creation path that bypasses the centralized resolver.
+- `PaymentsTab` directly inserts into `trip_invites` and builds links separately.
+- That creates flow inconsistency and makes invite behavior harder to trust/debug.
 
-Phase 2 — Centralize invite resolution in one backend-backed helper
-- Add a shared invite resolver service used by all UI share entry points.
-- Service behavior:
-  - resolve existing invite for this trip/owner,
-  - refresh if expired/exhausted,
-  - align max uses with current trip capacity rule,
-  - return structured link health info (token, expiry, uses, spots remaining, reason).
-- All components use this one helper so behavior is identical everywhere.
+Implementation plan:
+1) Unify invite creation across all UI entry points
+- Replace direct `trip_invites` insert in `PaymentsTab` with the same centralized invite resolver flow used elsewhere.
+- Ensure every “send/copy invite” action pulls from one source of truth.
 
-Phase 3 — Add explicit link health + reset controls (so you can trust what you send)
-- In share UI, show:
-  - “Verified just now”
-  - spots remaining
-  - uses (`x / y`)
-  - expiry time
-- Add “Reset link” button:
-  - force-rotate token,
-  - copy fresh link immediately,
-  - old token becomes invalid by design.
-- If trip is full, block copying and show full-trip message instead of silently handing out a dead link.
+2) Make auth-return persistence robust across verification/new-tab flows
+- Extend return-path persistence from session-only to a safer fallback strategy (session + durable fallback).
+- Keep redirect intent through sign-in/sign-up toggles and verification completion.
 
-Phase 4 — Make failures diagnosable (no more blind generic errors)
-- Update invite accept flow to surface structured reasons from backend:
-  - `trip_full`, `expired`, `invite_limit_reached`, `already_member`, etc.
-- On accept failure, display specific user-facing message (not generic “invalid”).
-- Add lightweight backend audit event for invite accept failures (token hash + reason + trip id) so issues are detectable even if users don’t report them.
+3) Improve invite failure diagnostics in UI
+- Distinguish and display exact states (`trip_full`, `expired`, `invite_limit_reached`, `invalid_token`) with clear owner actions.
+- In owner share UI, block/stale-proof copying when link is no longer valid and show “spots remaining” prominently.
 
-Technical scope
+4) Tighten backend acceptance behavior
+- Update invite acceptance logic to better handle rejoin scenarios (without falsely returning “already_member” when user should be restorable).
+- Keep collaborator + member synchronization consistent.
 
-Frontend files
-- `src/components/itinerary/EditorialItinerary.tsx`
-  - reset share state on `tripId` change,
-  - copy button always resolves current invite first,
-  - add reset-link action and health display.
-- `src/components/sharing/TripShareModal.tsx`
-  - re-sync/reset internal link state on `tripId` changes,
-  - route all link creation through shared resolver.
-- `src/components/post-trip/ShareTripCard.tsx`
-  - prevent stale `shareUrl` reuse across trip changes,
-  - use shared resolver.
-- `src/pages/AcceptInvite.tsx`
-  - map backend reason codes to precise error UI.
+5) Add observability for invite lifecycle
+- Add lightweight structured logging/telemetry around:
+  - link generated
+  - link opened
+  - accept attempted
+  - accept failed reason
+- This makes future failures immediately diagnosable instead of guesswork.
 
-Backend (Lovable Cloud database functions)
-- extend invite info/accept responses to include reason/status fields.
-- add one canonical “resolve or rotate invite” function for trip owners.
-- no auth model changes needed; this stays owner-controlled.
+6) Verification checklist (before closing)
+- Existing user accepts invite from published domain.
+- New user accepts invite via signup + email verification path.
+- OAuth accept path (Google/Apple) returns to exact invite URL.
+- Trip-full case shows explicit capacity messaging.
+- Rejoin flow works after collaborator removal.
 
-How you’ll know it’s fixed going forward
-- Every time you press copy, the app verifies/resolves against current trip first.
-- Share panel visibly reports invite health before sharing.
-- You have a manual “Reset link” control for immediate forced rotation.
-- Failures are logged with reason codes so we can diagnose without asking users to retry 15 times.
-
-Validation checklist
-1. Open Trip A, copy link; open Trip B, copy link; confirm tokens differ and each maps to correct trip.
-2. Re-open share panel after trip switch; ensure no prior link is shown/copied.
-3. Join with multiple accounts up to capacity; link remains valid until full.
-4. Press “Reset link”; old link fails, new link succeeds.
-5. Force each failure mode (full, expired, already member) and confirm clear message on invite page.
+Technical notes:
+- Primary files to update: `AcceptInvite.tsx`, `SignInForm.tsx`, `SignUpForm.tsx`, `SocialLoginButtons.tsx`, `PaymentsTab.tsx`, invite resolver service, and invite-related backend functions.
+- No role data will be moved to profile/users tables; access control remains backend-validated.
