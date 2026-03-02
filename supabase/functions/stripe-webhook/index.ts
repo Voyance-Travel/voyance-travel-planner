@@ -605,6 +605,25 @@ serve(async (req) => {
           if (userId && tripId && productId) {
             log("Processing group unlock", { userId, tripId, productId });
 
+            // OWNERSHIP CHECK: Verify the trip belongs to this user
+            const { data: tripRow, error: tripErr } = await supabaseAdmin
+              .from('trips')
+              .select('user_id')
+              .eq('id', tripId)
+              .maybeSingle();
+
+            if (tripErr || !tripRow) {
+              logError("CRITICAL: Group unlock trip not found", { tripId, userId, error: tripErr?.message });
+              break;
+            }
+
+            if (tripRow.user_id !== userId) {
+              logError("CRITICAL: Group unlock ownership mismatch — user does not own trip", {
+                tripId, metadataUserId: userId, actualOwner: tripRow.user_id,
+              });
+              break;
+            }
+
             // IDEMPOTENCY
             const { data: existing } = await supabaseAdmin
               .from('group_unlocks')
