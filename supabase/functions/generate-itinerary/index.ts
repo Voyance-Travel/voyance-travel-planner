@@ -285,6 +285,89 @@ function sanitizeOptionFields(obj: any): any {
   return obj;
 }
 
+// =============================================================================
+// DEEP TEXT SANITIZATION — Strip CJK artifacts & schema-leak fragments from AI text
+// Applied to all generated day/activity string fields before save or return
+// =============================================================================
+const CJK_ARTIFACTS = /[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF\u0E00-\u0E7F]+/g;
+const TEXT_SCHEMA_LEAK = /[,;|]*\s*(?:title|name|duration|practicalTips|accommodationNotes|tripVibe|tripPriorities|theme|dayNumber|activities|unparsed|dates|travelers|tripType|startTime|endTime|category|description|location|tags|bookingRequired|transportation|cost|estimatedCost|metadata|narrative|highlights|city|country|isTransitionDay)\s*[:;|]\s*[^,;|]*/gi;
+
+function sanitizeAITextField(text: string | undefined | null): string {
+  if (!text || typeof text !== 'string') return '';
+  return text
+    .replace(CJK_ARTIFACTS, '')
+    .replace(TEXT_SCHEMA_LEAK, '')
+    .replace(/—/g, ' - ')
+    .replace(/–/g, '-')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^[,;|:\s-]+|[,;|:\s-]+$/g, '')
+    .trim();
+}
+
+/**
+ * Deep-sanitize all user-facing text fields in a generated day object.
+ * Strips CJK characters, schema-leak fragments, and garbled text.
+ */
+function sanitizeGeneratedDay(day: any, dayNumber: number): any {
+  if (!day || typeof day !== 'object') return day;
+
+  // Sanitize day-level text fields
+  const cleanTitle = sanitizeAITextField(day.title);
+  const cleanTheme = sanitizeAITextField(day.theme);
+  day.title = cleanTitle || cleanTheme || `Day ${dayNumber}`;
+  day.theme = cleanTheme || cleanTitle || day.title;
+
+  // Sanitize day narrative
+  if (day.narrative && typeof day.narrative === 'object') {
+    if (day.narrative.theme) day.narrative.theme = sanitizeAITextField(day.narrative.theme) || day.theme;
+    if (Array.isArray(day.narrative.highlights)) {
+      day.narrative.highlights = day.narrative.highlights
+        .map((h: string) => sanitizeAITextField(h))
+        .filter((h: string) => h.length > 0);
+    }
+  }
+
+  // Sanitize accommodationNotes and practicalTips arrays
+  if (Array.isArray(day.accommodationNotes)) {
+    day.accommodationNotes = day.accommodationNotes
+      .map((n: string) => sanitizeAITextField(n))
+      .filter((n: string) => n.length > 0);
+  }
+  if (Array.isArray(day.practicalTips)) {
+    day.practicalTips = day.practicalTips
+      .map((t: string) => sanitizeAITextField(t))
+      .filter((t: string) => t.length > 0);
+  }
+
+  // Sanitize each activity's text fields
+  if (Array.isArray(day.activities)) {
+    day.activities = day.activities.map((act: any, idx: number) => {
+      if (!act || typeof act !== 'object') return act;
+      const cleanActTitle = sanitizeAITextField(act.title);
+      const cleanActName = sanitizeAITextField(act.name);
+      act.title = cleanActTitle || cleanActName || `Activity ${idx + 1}`;
+      act.name = act.title;
+      if (act.description) act.description = sanitizeAITextField(act.description) || undefined;
+      if (typeof act.tips === 'string') act.tips = sanitizeAITextField(act.tips) || undefined;
+      if (act.location && typeof act.location === 'object') {
+        if (act.location.name) act.location.name = sanitizeAITextField(act.location.name) || act.location.name;
+        if (act.location.address) act.location.address = sanitizeAITextField(act.location.address) || act.location.address;
+      }
+      if (act.transportation && typeof act.transportation === 'object') {
+        if (act.transportation.instructions) act.transportation.instructions = sanitizeAITextField(act.transportation.instructions) || undefined;
+      }
+      if (act.voyanceInsight) act.voyanceInsight = sanitizeAITextField(act.voyanceInsight) || undefined;
+      if (act.bestTime) act.bestTime = sanitizeAITextField(act.bestTime) || undefined;
+      if (act.personalization && typeof act.personalization === 'object') {
+        if (act.personalization.whyThisFits) act.personalization.whyThisFits = sanitizeAITextField(act.personalization.whyThisFits) || undefined;
+      }
+      return act;
+    });
+  }
+
+  return day;
+}
+
 function sanitizeDateFields(obj: any): any {
   if (obj === null || obj === undefined) return obj;
   if (Array.isArray(obj)) return obj.map(sanitizeDateFields);
@@ -5301,7 +5384,7 @@ Generate activities for this day following ALL constraints above.`;
       let generatedDay: StrictDay;
       if (toolCall?.function?.arguments) {
         // Standard tool call response
-        generatedDay = sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))) as StrictDay;
+        generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))), dayNumber) as StrictDay;
       } else if (message?.content) {
         // Fallback: AI returned content instead of tool call
         console.log("[Stage 2] AI returned content instead of tool_call, attempting to parse...");
@@ -5309,7 +5392,7 @@ Generate activities for this day following ALL constraints above.`;
           const contentStr = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
           const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
-            generatedDay = sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))) as StrictDay;
+            generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))), dayNumber) as StrictDay;
           } else {
             console.error("[Stage 2] No JSON found in content:", contentStr.substring(0, 500));
             throw new Error("Invalid AI response format - no JSON in content");
@@ -10439,7 +10522,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         let generatedDay;
         if (toolCall?.function?.arguments) {
           // Standard tool call response
-          generatedDay = sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments)));
+          generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))), dayNumber);
         } else if (message?.content) {
           // Fallback: AI returned content instead of tool call
           console.log("[generate-day] AI returned content instead of tool_call, attempting to parse...");
@@ -10448,7 +10531,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             const contentStr = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
             const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
-              generatedDay = sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0])));
+              generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))), dayNumber);
             } else {
               console.error("[generate-day] No JSON found in content:", contentStr.substring(0, 500));
               throw new Error("Invalid AI response format - no JSON in content");
