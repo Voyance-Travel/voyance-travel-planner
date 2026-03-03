@@ -1168,19 +1168,20 @@ export default function TripDetail() {
       <section className="pb-16 pt-6 relative z-10">
         <div className="max-w-4xl mx-auto px-4">
           {/* Status Badge, Date, and Inline Confirmation */}
-          {!isLiveTrip && (() => {
+          {(() => {
             const isPastTrip = isAfter(new Date(), parseLocalDate(effectiveEndDate));
             return (
               <div className="flex flex-wrap items-center gap-3 mb-8">
                 <Badge 
                   variant={
+                    isLiveTrip ? 'default' :
                     trip.status === 'completed' ? 'secondary' : 
                     trip.status === 'booked' ? 'default' : 
                     isPastTrip ? 'secondary' : 'outline'
                   }
                   className="capitalize"
                 >
-                  {isPastTrip && trip.status === 'draft' ? 'Past' : trip.status}
+                  {isLiveTrip ? 'Active' : isPastTrip && trip.status === 'draft' ? 'Past' : trip.status}
                 </Badge>
                 
                 <TripDateEditor
@@ -1194,7 +1195,7 @@ export default function TripDetail() {
                 />
 
                 {/* Inline confirmation buttons (only shows for draft trips within 14 days) */}
-                {hasItinerary && (
+                {!isLiveTrip && hasItinerary && (
                   <TripConfirmationBanner
                     tripId={trip.id}
                     destination={trip.destination}

@@ -290,13 +290,13 @@ export function TripDateEditor({
         <PopoverTrigger asChild>
           <button
             className={cn(
-              'group flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer',
+              'inline-flex items-center gap-2 text-sm font-medium text-foreground bg-secondary/50 hover:bg-secondary border border-border/50 rounded-full px-3 py-1.5 transition-colors cursor-pointer',
               className
             )}
           >
-            <CalendarIcon className="w-4 h-4" />
-            {format(currentStart, 'MMM d')} - {format(currentEnd, 'MMM d, yyyy')}
-            <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+            <CalendarIcon className="w-3.5 h-3.5 text-muted-foreground" />
+            {format(currentStart, 'MMM d')} – {format(currentEnd, 'MMM d, yyyy')}
+            <Pencil className="w-3 h-3 text-muted-foreground/60" />
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
