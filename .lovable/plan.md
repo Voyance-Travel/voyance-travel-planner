@@ -1,44 +1,46 @@
 
 
-# Fix BUG-19: Bulk Unlock Modal Shows Single-Day Cost
+# Fix: Out-of-Credits Modal Recommends Pack That Doesn't Cover Full Need
+
+## Problem
+The "Quick Boost (100 credits)" shows as the primary CTA when the user needs 120 credits for a bulk unlock. Even though the boost might technically cover the *deficit* (if the user has some balance), the UX is confusing -- users see "you need 120" but the recommended pack only has 100.
 
 ## Root Cause
+The modal's `showBoost` logic on line 53 decides which pack to feature:
 
-In `src/components/checkout/OutOfCreditsModal.tsx`, line 50:
-
-```typescript
-const actionCost = action ? CREDIT_COSTS[action] : creditsNeeded;
+```
+const showBoost = deficit <= BOOST_PACK.credits && deficit > 0;
 ```
 
-When `action` is provided (e.g., `'UNLOCK_DAY'`), the modal **always** looks up the per-action cost from the pricing config (`CREDIT_COSTS.UNLOCK_DAY = 60`), completely ignoring the `creditsNeeded` value (120) that was explicitly passed by `useBulkUnlock`. This means the deficit calculation, the display text, and the recommended pack are all wrong.
+This checks whether the boost covers the *deficit* (actionCost minus balance). But it creates a confusing experience: the header says "requires 120 credits" while the primary button offers only 100. Users can't easily tell that 100 + their existing balance = enough.
 
 ## Fix
 
-**File:** `src/components/checkout/OutOfCreditsModal.tsx` (line 50)
+**File:** `src/components/checkout/OutOfCreditsModal.tsx`
 
-Change the cost resolution to prefer the explicitly passed `creditsNeeded` over the config lookup:
-
-```typescript
-// Before (broken):
-const actionCost = action ? CREDIT_COSTS[action] : creditsNeeded;
-
-// After (fixed):
-const actionCost = creditsNeeded || (action ? CREDIT_COSTS[action] : 0);
-```
-
-This way:
-- Bulk unlock passes `creditsNeeded: 120` -- the modal shows 120
-- Single-day unlock passes `creditsNeeded: 60` -- the modal shows 60
-- Fallback to `CREDIT_COSTS[action]` only when `creditsNeeded` is not provided (backward compatible)
-
-Also update the action label on the same component so bulk unlocks say "Unlock All Days" instead of "Unlock Day":
+1. Change `showBoost` logic to compare against the **full action cost**, not just the deficit. This ensures the primary CTA always shows a pack that visually "covers" the displayed need:
 
 ```typescript
-// When creditsNeeded exceeds single-day cost and action is UNLOCK_DAY, show bulk label
-const actionLabel = (action === 'UNLOCK_DAY' && creditsNeeded > CREDIT_COSTS.UNLOCK_DAY)
-  ? 'Unlock All Remaining Days'
-  : action ? ACTION_LABELS[action] || action : 'this action';
+// Before: compares deficit (may be less than actionCost)
+const showBoost = deficit <= BOOST_PACK.credits && deficit > 0;
+
+// After: only show boost as primary if it covers the FULL action cost
+const showBoost = actionCost <= BOOST_PACK.credits && deficit > 0;
 ```
 
-**Single file change, two lines.**
+2. Pass `actionCost` (not `deficit`) to `getRecommendedPack` so the recommended pack always covers the full displayed need:
 
+```typescript
+// Before
+const recommended = getRecommendedPack(deficit);
+
+// After
+const recommended = getRecommendedPack(actionCost);
+```
+
+## Result
+- User needs 120 credits for bulk unlock
+- BOOST_PACK has 100 credits, 100 < 120, so `showBoost = false`
+- `getRecommendedPack(120)` returns Top-Up 300 ($25) as primary CTA
+- Quick Boost (100 credits, $9) still appears as secondary option
+- If user only needs a single 60-credit action, boost (100) still shows as primary since 100 >= 60
