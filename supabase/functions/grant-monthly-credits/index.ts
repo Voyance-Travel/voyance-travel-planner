@@ -82,12 +82,15 @@ serve(async (req) => {
       );
     }
 
-    // Calculate current effective free credits from credit_purchases
+    // Calculate current MONTHLY-GRANT-ONLY free credits from credit_purchases
+    // Only count rows from actual monthly grants toward the cap.
+    // Bonus credits (welcome, quiz, referral) should NOT reduce the monthly grant.
     const { data: freeRows } = await supabaseAdmin
       .from('credit_purchases')
       .select('remaining, expires_at')
       .eq('user_id', user.id)
-      .in('credit_type', ['free_monthly', 'signup_bonus', 'referral_bonus'])
+      .eq('credit_type', 'free_monthly')
+      .eq('source', 'monthly_grant')
       .gt('remaining', 0);
 
     let currentFreeCredits = 0;
