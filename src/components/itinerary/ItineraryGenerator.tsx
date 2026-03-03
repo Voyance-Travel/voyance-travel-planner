@@ -6,6 +6,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { useItineraryGeneration, GeneratedDay, TripOverview } from '@/hooks/useItineraryGeneration';
+import { useGenerationPoller } from '@/hooks/useGenerationPoller';
 import { toast } from 'sonner';
 import type { GenerationStep } from '@/hooks/useLovableItinerary';
 import { useEntitlements } from '@/hooks/useEntitlements';
@@ -109,9 +110,47 @@ export function ItineraryGenerator({
     error,
     status,
     generateItinerary,
+    startServerGeneration,
     reset,
     cancel,
   } = useItineraryGeneration();
+
+  // Server-side generation poller
+  const [serverGenActive, setServerGenActive] = useState(false);
+  const poller = useGenerationPoller({
+    tripId: serverGenActive ? tripId : null,
+    enabled: serverGenActive,
+    interval: 3000,
+    onReady: async () => {
+      setServerGenActive(false);
+      if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
+      if (stallCheckRef.current) clearInterval(stallCheckRef.current);
+      // Fetch the completed trip data
+      const { data: tripData } = await supabase.from('trips').select('itinerary_data').eq('id', tripId).single();
+      if (tripData?.itinerary_data) {
+        const itData = tripData.itinerary_data as Record<string, unknown>;
+        const completedDays = (itData.days as GeneratedDay[]) || [];
+        setPrePhase(null);
+        const gr = gateResultRef.current;
+        if (gr && gr.creditsCharged > 0) {
+          toast.success(`Trip generated! ${gr.creditsCharged} credits used`, { duration: 5000 });
+        }
+        onComplete(completedDays, undefined, gr?.isFirstTrip);
+      }
+    },
+    onFailed: (err) => {
+      setServerGenActive(false);
+      if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
+      if (stallCheckRef.current) clearInterval(stallCheckRef.current);
+      setPrePhase(null);
+      setHasStarted(false);
+      toast.error(`Generation failed: ${err}. Credits for ungenerated days have been refunded.`, { duration: 6000 });
+      if (userId) {
+        queryClient.invalidateQueries({ queryKey: ['credits', userId] });
+        queryClient.invalidateQueries({ queryKey: ['entitlements', userId] });
+      }
+    },
+  });
 
   // Get entitlements
   const { data: entitlements, isPaid } = useEntitlements();
@@ -389,39 +428,59 @@ export function ItineraryGenerator({
           effectiveEndDate = cappedEnd.toISOString().split('T')[0];
         }
 
-        const generatedDays = await generateItinerary({
-          tripId,
-          destination,
-          destinationCountry,
-          startDate,
-          endDate: effectiveEndDate,
-          travelers,
-          tripType,
-          budgetTier,
-          userId,
-          isMultiCity,
-        });
+        // Use server-side generation — fire and poll
+        try {
+          await startServerGeneration({
+            tripId,
+            destination,
+            destinationCountry,
+            startDate,
+            endDate: effectiveEndDate,
+            travelers,
+            tripType,
+            budgetTier,
+            userId,
+            isMultiCity,
+            creditsCharged: gateResult.creditsCharged,
+            requestedDays: totalRequestedDays,
+          });
+          // Server acknowledged — start polling for completion
+          setServerGenActive(true);
+          return; // Don't proceed — poller's onReady/onFailed handles the rest
+        } catch (serverErr) {
+          console.warn('[ItineraryGenerator] Server-side generation failed, falling back to frontend loop:', serverErr);
+          // Fallback to frontend loop if server-side fails to start
+          const generatedDays = await generateItinerary({
+            tripId,
+            destination,
+            destinationCountry,
+            startDate,
+            endDate: effectiveEndDate,
+            travelers,
+            tripType,
+            budgetTier,
+            userId,
+            isMultiCity,
+          });
 
-        // Append locked placeholder days for remaining days
-        const lockedDays = createLockedPlaceholderDays(startDate, daysToGenerate, totalRequestedDays, destination, gateResult.isFirstTrip);
-        const allDays = [...generatedDays, ...lockedDays];
+          const lockedDays = createLockedPlaceholderDays(startDate, daysToGenerate, totalRequestedDays, destination, gateResult.isFirstTrip);
+          const allDays = [...generatedDays, ...lockedDays];
 
-        setPrePhase(null);
-        await new Promise(resolve => setTimeout(resolve, 900));
-        if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
-        if (stallCheckRef.current) clearInterval(stallCheckRef.current);
+          setPrePhase(null);
+          await new Promise(resolve => setTimeout(resolve, 900));
+          if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
+          if (stallCheckRef.current) clearInterval(stallCheckRef.current);
 
-        // Show credit summary toast after generation
-        if (gateResult.creditsCharged > 0) {
-          toast.success(
-            `Trip generated! ${gateResult.creditsCharged} credits used · ${gateResult.currentBalance} remaining`,
-            { duration: 5000 }
-          );
-        } else if (gateResult.isFirstTrip) {
-          toast.success('Your first trip is free! 🎉', { duration: 4000 });
-        }
+          if (gateResult.creditsCharged > 0) {
+            toast.success(
+              `Trip generated! ${gateResult.creditsCharged} credits used · ${gateResult.currentBalance} remaining`,
+              { duration: 5000 }
+            );
+          } else if (gateResult.isFirstTrip) {
+            toast.success('Your first trip is free! 🎉', { duration: 4000 });
+          }
 
-        onComplete(allDays, overview, gateResult.isFirstTrip);
+          onComplete(allDays, overview, gateResult.isFirstTrip);
       } else if (gateResult.mode === 'partial') {
         // PARTIAL — gate found user can afford some days but didn't confirm yet
         // This shouldn't normally be reached since partial triggers the confirmation dialog,

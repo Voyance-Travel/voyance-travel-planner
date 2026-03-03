@@ -441,6 +441,62 @@ export function useItineraryGeneration() {
     return await generateItineraryProgressive(trip);
   }, [generateItineraryProgressive]);
 
+  /**
+   * Start server-side generation (generate-trip action).
+   * Returns immediately after the server acknowledges. The frontend should
+   * then poll trip.itinerary_status until it becomes 'ready' or 'failed'.
+   */
+  const startServerGeneration = useCallback(async (
+    trip: TripDetails & { creditsCharged?: number; requestedDays?: number }
+  ): Promise<{ status: string; totalDays: number }> => {
+    const startDate = new Date(trip.startDate);
+    const endDate = new Date(trip.endDate);
+    const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+    setState({
+      isGenerating: true,
+      currentDay: 0,
+      totalDays,
+      progress: 0,
+      days: [],
+      overview: undefined,
+      error: null,
+      status: 'generating',
+    });
+
+    const { data, error } = await supabase.functions.invoke('generate-itinerary', {
+      body: {
+        action: 'generate-trip',
+        tripId: trip.tripId,
+        destination: trip.destination,
+        destinationCountry: trip.destinationCountry,
+        startDate: trip.startDate,
+        endDate: trip.endDate,
+        travelers: trip.travelers || 1,
+        tripType: trip.tripType || 'vacation',
+        budgetTier: trip.budgetTier || 'moderate',
+        userId: trip.userId,
+        isMultiCity: trip.isMultiCity || false,
+        creditsCharged: trip.creditsCharged || 0,
+        requestedDays: trip.requestedDays || totalDays,
+      },
+    });
+
+    if (error) {
+      const errMsg = error.message || String(error);
+      setState(prev => ({ ...prev, isGenerating: false, error: errMsg, status: 'error' }));
+      throw new Error(errMsg);
+    }
+
+    if (data?.error) {
+      setState(prev => ({ ...prev, isGenerating: false, error: data.error, status: 'error' }));
+      throw new Error(data.error);
+    }
+
+    // Server acknowledged — generation is running in background
+    return { status: data?.status || 'generating', totalDays: data?.totalDays || totalDays };
+  }, []);
+
   const saveItinerary = useCallback(async (tripId: string, days: GeneratedDay[]): Promise<boolean> => {
     try {
       const { error } = await supabase.functions.invoke('generate-itinerary', {
@@ -490,6 +546,7 @@ export function useItineraryGeneration() {
     ...state,
     generateItinerary,
     generateItineraryProgressive,
+    startServerGeneration,
     saveItinerary,
     reset,
     cancel,
