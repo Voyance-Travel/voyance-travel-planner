@@ -8,14 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
 
-// Defer Stripe initialization until first use
-let stripePromise: ReturnType<typeof loadStripe> | null = null;
-function getStripe() {
-  if (!stripePromise) {
-    stripePromise = loadStripe('pk_live_51RJawaJytioXyqq9n5emMW9beYC8p5gGvNyWiNlcYevo4Ibe3YkTtrNGrqA70kSRn1tAX8W8xo0E9eI9x6swFYV700LWTtv0ea');
-  }
-  return stripePromise;
-}
+// Initialize Stripe with publishable key
+const stripePromise = loadStripe('pk_live_51RJawaJytioXyqq9n5emMW9beYC8p5gGvNyWiNlcYevo4Ibe3YkTtrNGrqA70kSRn1tAX8W8xo0E9eI9x6swFYV700LWTtv0ea');
 
 interface EmbeddedCheckoutModalProps {
   isOpen: boolean;
@@ -112,7 +106,7 @@ export function EmbeddedCheckoutModal({
             </div>
           ) : (
             <div id="checkout" className="min-h-[400px]">
-              <EmbeddedCheckoutProvider stripe={getStripe()} options={options}>
+              <EmbeddedCheckoutProvider stripe={stripePromise} options={options}>
                 <EmbeddedCheckout />
               </EmbeddedCheckoutProvider>
             </div>
