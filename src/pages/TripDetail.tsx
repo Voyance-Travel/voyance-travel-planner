@@ -1332,61 +1332,100 @@ export default function TripDetail() {
             </ErrorBoundary>
           ) : isServerGenerating || generationStalled ? (
             /* Server-side generation in progress or stalled */
-            <div className="flex flex-col items-center justify-center py-20 space-y-6">
-              {generationStalled ? (
-                /* Stalled / zombie state — offer resume */
-                <>
-                  <div className="relative">
-                    <Sparkles className="h-10 w-10 text-muted-foreground" />
-                  </div>
-                  <div className="text-center space-y-3 max-w-md">
-                    <h3 className="text-xl font-serif font-semibold">Generation stalled</h3>
-                    <p className="text-muted-foreground">
-                      Your itinerary stopped generating at Day {generationPoller.completedDays} of {generationPoller.totalDays}.
-                      This can happen if the connection was interrupted.
-                    </p>
-                    {generationPoller.totalDays > 0 && (
-                      <div className="w-64 mx-auto">
-                        <Progress value={generationPoller.progress} className="h-2" />
+            <div className="space-y-6">
+              {/* Progress header */}
+              <div className="flex flex-col items-center justify-center py-10 space-y-4">
+                {generationStalled ? (
+                  /* Stalled / zombie state — offer resume */
+                  <>
+                    <div className="relative">
+                      <Sparkles className="h-10 w-10 text-muted-foreground" />
+                    </div>
+                    <div className="text-center space-y-3 max-w-md">
+                      <h3 className="text-xl font-serif font-semibold">Generation stalled</h3>
+                      <p className="text-muted-foreground">
+                        Your itinerary stopped generating at Day {generationPoller.completedDays} of {generationPoller.totalDays}.
+                        This can happen if the connection was interrupted.
+                      </p>
+                      {generationPoller.totalDays > 0 && (
+                        <div className="w-64 mx-auto">
+                          <Progress value={generationPoller.progress} className="h-2" />
+                        </div>
+                      )}
+                      <div className="flex gap-3 justify-center pt-2">
+                        <Button onClick={handleResumeGeneration} disabled={resumingGeneration}>
+                          {resumingGeneration ? (
+                            <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Resuming…</>
+                          ) : (
+                            <>Resume from Day {generationPoller.completedDays + 1}</>
+                          )}
+                        </Button>
                       </div>
-                    )}
-                    <div className="flex gap-3 justify-center pt-2">
-                      <Button onClick={handleResumeGeneration} disabled={resumingGeneration}>
-                        {resumingGeneration ? (
-                          <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Resuming…</>
-                        ) : (
-                          <>Resume from Day {generationPoller.completedDays + 1}</>
-                        )}
-                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  /* Active generation — show progress */
+                  <>
+                    <div className="relative">
+                      <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                      <Sparkles className="h-4 w-4 text-primary absolute -top-1 -right-1 animate-pulse" />
+                    </div>
+                    <div className="text-center space-y-2 max-w-md">
+                      <h3 className="text-xl font-serif font-semibold">Generating your itinerary…</h3>
+                      {generationPoller.totalDays > 0 ? (
+                        <p className="text-muted-foreground">
+                          Day {generationPoller.completedDays} of {generationPoller.totalDays} complete
+                        </p>
+                      ) : (
+                        <p className="text-muted-foreground">Starting generation…</p>
+                      )}
+                      {generationPoller.totalDays > 0 && (
+                        <div className="w-64 mx-auto">
+                          <Progress value={generationPoller.progress} className="h-2" />
+                        </div>
+                      )}
+                      <p className="text-sm text-muted-foreground/70 mt-4">
+                        You can safely leave this page — we'll have it ready when you come back.
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Progressive day rendering — show completed days while generating */}
+              {generationPoller.partialDays.length > 0 && (
+                <ErrorBoundary>
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground text-center">
+                      Browse your completed days while we finish the rest:
+                    </p>
+                    <EditorialItinerary
+                      tripId={trip.id}
+                      days={parseEditorialDays({ days: generationPoller.partialDays }, trip.start_date) as EditorialDay[]}
+                      destination={trip.destination || ''}
+                      startDate={trip.start_date}
+                      endDate={effectiveEndDate}
+                      travelers={trip.travelers || 1}
+                      isEditable={false}
+                      isPreview={true}
+                    />
+                  </div>
+                </ErrorBoundary>
+              )}
+
+              {/* Skeleton for next generating day */}
+              {!generationStalled && generationPoller.completedDays < generationPoller.totalDays && (
+                <div className="border border-dashed border-border rounded-xl p-4 opacity-60 animate-pulse">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="font-medium">Day {generationPoller.completedDays + 1}</p>
+                      <p className="text-sm text-muted-foreground">Generating activities…</p>
                     </div>
                   </div>
-                </>
-              ) : (
-                /* Active generation — show progress */
-                <>
-                  <div className="relative">
-                    <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                    <Sparkles className="h-4 w-4 text-primary absolute -top-1 -right-1 animate-pulse" />
-                  </div>
-                  <div className="text-center space-y-2 max-w-md">
-                    <h3 className="text-xl font-serif font-semibold">Generating your itinerary…</h3>
-                    {generationPoller.totalDays > 0 ? (
-                      <p className="text-muted-foreground">
-                        Day {generationPoller.completedDays} of {generationPoller.totalDays} complete
-                      </p>
-                    ) : (
-                      <p className="text-muted-foreground">Starting generation…</p>
-                    )}
-                    {generationPoller.totalDays > 0 && (
-                      <div className="w-64 mx-auto">
-                        <Progress value={generationPoller.progress} className="h-2" />
-                      </div>
-                    )}
-                    <p className="text-sm text-muted-foreground/70 mt-4">
-                      You can safely leave this page — we'll have it ready when you come back.
-                    </p>
-                  </div>
-                </>
+                </div>
               )}
             </div>
           ) : showGenerator ? (
