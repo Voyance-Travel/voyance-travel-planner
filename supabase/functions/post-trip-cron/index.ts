@@ -113,7 +113,7 @@ serve(async (req: Request) => {
   } catch (error) {
     console.error("post-trip-cron error:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ success: false, error: "Post-trip processing failed", code: "CRON_ERROR" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "npm:stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
+import { corsResponse, errorResponse } from "../_shared/edge-response.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,7 +15,7 @@ const logStep = (step: string, details?: unknown) => {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return corsResponse();
   }
 
   try {
@@ -36,16 +37,21 @@ serve(async (req) => {
     } = await req.json();
     logStep("Request body parsed", { priceId, mode, returnPath, credits, days, packageTier, groupTripId, groupTier });
 
-    if (!priceId) {
-      throw new Error("priceId is required");
+    // Validate required inputs
+    if (!priceId || typeof priceId !== 'string' || priceId.length > 200) {
+      return errorResponse("priceId is required", "INVALID_INPUT");
+    }
+    if (mode && !['subscription', 'payment'].includes(mode)) {
+      return errorResponse("Invalid mode", "INVALID_INPUT");
+    }
+    if (credits !== undefined && (typeof credits !== 'number' || credits < 0 || credits > 100000)) {
+      return errorResponse("Invalid credits value", "INVALID_INPUT");
     }
 
     // Authenticate user
     const authHeader = req.headers.get("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "No authorization header provided" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401,
-      });
+      return errorResponse("No authorization header provided", "UNAUTHORIZED", 401);
     }
 
     const token = authHeader.replace("Bearer ", "");
@@ -57,17 +63,13 @@ serve(async (req) => {
 
     const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
     if (userError || !userData.user) {
-      return new Response(JSON.stringify({ error: "Invalid or expired token" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401,
-      });
+      return errorResponse("Invalid or expired token", "UNAUTHORIZED", 401);
     }
 
     const userId = userData.user.id;
     const email = userData.user.email;
     if (!email) {
-      return new Response(JSON.stringify({ error: "User email not available" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400,
-      });
+      return errorResponse("User email not available", "MISSING_EMAIL");
     }
 
     logStep("User authenticated", { userId, email });
@@ -133,8 +135,6 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR", { message: errorMessage });
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500,
-    });
+    return errorResponse("Checkout session creation failed", "CHECKOUT_ERROR", 500);
   }
 });
