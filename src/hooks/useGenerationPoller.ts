@@ -3,7 +3,7 @@
  * 
  * Polls trip.itinerary_status while generation is running server-side.
  * Shows progressive day count, detects stale/zombie processes via heartbeat,
- * and handles ready/failed transitions.
+ * and handles ready/failed transitions. Exposes partial days for progressive rendering.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -18,13 +18,15 @@ export interface GenerationPollState {
   totalDays: number;
   progress: number; // 0-100
   error?: string;
+  /** Partial days from itinerary_data available during generation */
+  partialDays: unknown[];
 }
 
 interface UseGenerationPollerOptions {
   tripId: string | null;
   /** Whether to start polling immediately */
   enabled?: boolean;
-  /** Poll interval in ms (default 3000) */
+  /** Poll interval in ms (default 5000) */
   interval?: number;
   /** Called when generation completes */
   onReady?: () => void;
@@ -34,20 +36,23 @@ interface UseGenerationPollerOptions {
   onStalled?: () => void;
 }
 
+const INITIAL_STATE: GenerationPollState = {
+  status: 'idle',
+  completedDays: 0,
+  totalDays: 0,
+  progress: 0,
+  partialDays: [],
+};
+
 export function useGenerationPoller({
   tripId,
   enabled = false,
-  interval = 3000,
+  interval = 5000,
   onReady,
   onFailed,
   onStalled,
 }: UseGenerationPollerOptions) {
-  const [state, setState] = useState<GenerationPollState>({
-    status: 'idle',
-    completedDays: 0,
-    totalDays: 0,
-    progress: 0,
-  });
+  const [state, setState] = useState<GenerationPollState>(INITIAL_STATE);
 
   const onReadyRef = useRef(onReady);
   const onFailedRef = useRef(onFailed);
@@ -77,9 +82,13 @@ export function useGenerationPoller({
       const totalDays = (meta.generation_total_days as number) || 0;
       const progress = totalDays > 0 ? Math.round((completedDays / totalDays) * 100) : 0;
 
+      // Extract partial days from itinerary_data
+      const itineraryData = (data.itinerary_data as Record<string, unknown>) || {};
+      const partialDays = (itineraryData.days as unknown[]) || [];
+
       if (itineraryStatus === 'ready') {
         stalledFiredRef.current = false;
-        setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100 });
+        setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays });
         onReadyRef.current?.();
         return;
       }
@@ -87,7 +96,7 @@ export function useGenerationPoller({
       if (itineraryStatus === 'failed') {
         stalledFiredRef.current = false;
         const genError = (meta.generation_error as string) || 'Generation failed';
-        setState({ status: 'failed', completedDays, totalDays, progress, error: genError });
+        setState({ status: 'failed', completedDays, totalDays, progress, error: genError, partialDays });
         onFailedRef.current?.(genError);
         return;
       }
@@ -100,7 +109,7 @@ export function useGenerationPoller({
       if (referenceTime) {
         const elapsed = Date.now() - new Date(referenceTime).getTime();
         if (elapsed > STALE_THRESHOLD_MS) {
-          setState({ status: 'stalled', completedDays, totalDays, progress });
+          setState({ status: 'stalled', completedDays, totalDays, progress, partialDays });
           if (!stalledFiredRef.current) {
             stalledFiredRef.current = true;
             onStalledRef.current?.();
@@ -111,7 +120,7 @@ export function useGenerationPoller({
 
       // Active generation
       stalledFiredRef.current = false;
-      setState({ status: 'polling', completedDays, totalDays, progress });
+      setState({ status: 'polling', completedDays, totalDays, progress, partialDays });
     } catch (err) {
       console.warn('[useGenerationPoller] Poll error:', err);
     }
