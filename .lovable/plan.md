@@ -1,51 +1,56 @@
 
 
-## Fix: Secondary archetype lost after disambiguation/fine-tune adjustment
+# Fix Invite Accept — 4 Surgical Changes
 
-### Root Cause
+## Overview
+Four targeted changes to make invite acceptance robust against double-clicks, stale auth tokens, and concurrent race conditions. No refactoring, no changes to `resolve_or_rotate_invite` or group budgets flow.
 
-After answering a disambiguation question (or fine-tuning), `recalculateDNAFromPreferences` is called, which:
-1. Converts stored preferences to quiz-like answers via `preferencesToQuizAnswers`
-2. Re-runs `determineArchetype(flatAnswers)` with these preference-derived answers
-3. These preference-derived answers lack the full quiz signal (life-stage questions, emotional questions, etc.), so the archetype matcher often returns the same archetype for both primary and secondary positions
-4. This gets saved to the database (e.g., `primary_archetype_name: midlife_explorer`, `secondary_archetype_name: midlife_explorer`)
-5. The UI correctly filters out the secondary when it matches the primary (line 490 of `TravelDNAReveal.tsx`), so nothing displays
+---
 
-Confirmed in the database: the user's profile has both `primary_archetype_name` and `secondary_archetype_name` set to `midlife_explorer`.
+## Change 1: Double-call guard (AcceptInvite.tsx)
 
-### Fix
+Add a `useRef(false)` guard to `handleAccept` to prevent React StrictMode and rapid double-clicks from firing multiple RPC calls.
 
-**File: `src/utils/quizMapping.ts`** (in `recalculateDNAFromPreferences`, around lines 1235-1263)
+- Add `import { useRef }` and create `acceptingRef = useRef(false)` at component level
+- Guard at top of `handleAccept`: `if (acceptingRef.current) return;` then set to `true`
+- Wrap existing try/catch in a `finally` that resets `acceptingRef.current = false`
+- Update button `disabled` prop: `disabled={accepting || acceptingRef.current}`
 
-Two changes:
+## Change 2: Auth token readiness (AcceptInvite.tsx)
 
-1. **Preserve existing secondary when recalc produces a duplicate**: After re-matching archetypes, if the new secondary is the same as the primary, fall back to the previously stored secondary (fetched from the database before recalc). This prevents the recalc from clobbering a valid secondary with a duplicate.
+Before calling the `accept_trip_invite` RPC, verify the session is valid. If not, redirect to sign-in with a return path.
 
-2. **Fetch existing DNA before recalc to preserve secondary**: At the start of `recalculateDNAFromPreferences`, also fetch the current `travel_dna_profiles` row so we have the original `secondary_archetype_name` to fall back to.
+- Add `import { guardedGetSession } from '@/lib/authSessionGuard'` (already exists in codebase)
+- Before the RPC call inside `handleAccept`, await `guardedGetSession()`
+- If no valid session, call `redirectToInviteAuth('signin')` and return early
 
-Specific logic change in the archetype re-match block:
+## Change 3: Structured error logging (AcceptInvite.tsx)
+
+Replace the generic `logger.error('[invite] Accept error:', err)` in the catch block with structured field extraction (`message`, `code`, `details`, `hint`, `status`).
+
+## Change 4: Row-level lock on invite (SQL migration)
+
+Update the `accept_trip_invite` RPC to add `FOR UPDATE` to the invite SELECT, serializing concurrent accept calls and preventing double-increment of `uses_count`.
+
+Single line change:
+```sql
+-- Before:
+SELECT * INTO v_invite FROM public.trip_invites WHERE token = p_token;
+-- After:
+SELECT * INTO v_invite FROM public.trip_invites WHERE token = p_token FOR UPDATE;
 ```
-// Current (broken):
-const secondaryId = archetypeResult.secondary?.id || dna.secondary_archetype_name || null;
 
-// Fixed:
-const candidateSecondary = archetypeResult.secondary?.id || dna.secondary_archetype_name || null;
-const secondaryId = (candidateSecondary && candidateSecondary !== primaryId)
-  ? candidateSecondary
-  : existingDna?.secondary_archetype_name || null;  // fall back to pre-recalc secondary
-```
+The full RPC will be re-created in a new migration with this one change. All other logic remains identical.
 
-Where `existingDna` is fetched at the top of the function from `travel_dna_profiles`.
+---
 
-3. **Same fix for the quiz completion recalc path** (around line 940-960 in `saveQuizResultsToDatabase`): Apply the same deduplication guard there too, for consistency.
+## Files Modified
+- `src/pages/AcceptInvite.tsx` — Changes 1, 2, 3
+- New migration SQL file — Change 4
 
-### Technical Details
-
-- **Files to modify**: `src/utils/quizMapping.ts`
-- **Changes**:
-  - Add a `getTravelDNA(userId)` call at the start of `recalculateDNAFromPreferences` to capture the existing secondary before it gets overwritten
-  - In the archetype re-match block (line ~1247), add a check: if the resolved secondary matches the primary, use the pre-existing secondary instead, or `null` if there was none
-  - Apply the same guard in `saveQuizResultsToDatabase` if the same pattern exists there
-- **No database migration needed** -- this is purely a frontend recalculation logic fix
-- **No new dependencies**
+## What is NOT touched
+- `resolve_or_rotate_invite` RPC
+- `group_budgets` / "Enable Group Editing" flow
+- Auth system / lock warnings
+- Invite validation/display logic
 
