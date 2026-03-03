@@ -1,76 +1,117 @@
 
-# Fix: Flight Import Times Not Matching Day 1 Itinerary
 
-## Problem
+# Server-Side Generation: Never Lose Credits on Page Refresh
 
-When a flight is imported showing a 06:15 arrival, the itinerary incorrectly tells the AI the flight "lands at 09:15" and starts scheduling activities from 09:15. The actual arrival time is being overwritten by the intelligence buffer calculation.
+## The Problem
+Itinerary generation currently runs as a **frontend loop** — the browser calls the edge function once per day, one at a time. If the user refreshes, closes the tab, or navigates away, the loop dies. Credits were already deducted but the itinerary is incomplete, and the user is asked to pay again.
 
-## Root Cause
+## The Solution
+Move the day-by-day orchestration to the **backend edge function**. The frontend makes a single "start generation" call, then polls the trip's status until it's done. Even if the user refreshes or leaves, the server keeps generating and saves the result to the database.
 
-Two bugs in the flight intelligence override logic in `generate-itinerary/index.ts` (lines 2953-2992):
+---
 
-1. **Arrival time overwritten with buffer time**: Line 2967 sets `arrivalTime24 = normalized` where `normalized` is the `availableFrom` value (arrival + 3h buffer). This means the AI prompt says "Flight lands at 09:15" instead of "Flight lands at 06:15". The actual landing time is lost.
+## Architecture Change
 
-2. **Inconsistent buffer (3h vs 4h)**: The `parse-booking-confirmation` edge function calculates `availableFrom` using a 3-hour international buffer. But the generation engine's own logic uses a 4-hour buffer (customs, baggage, transport, check-in, freshen up). After a long overnight international flight landing at 6:15 AM, 3 hours is too aggressive -- the generation engine's 4-hour buffer is more realistic.
+```text
+BEFORE (fragile):
+  Browser -> generate day 1 -> save -> generate day 2 -> save -> ... -> done
+  (user refreshes) -> loop dies -> credits lost
 
-## Fix
-
-### File: `supabase/functions/generate-itinerary/index.ts` (lines 2960-2977)
-
-**Change 1: Preserve actual arrival time**
-
-When the intelligence override fires, only update `earliestFirstActivity` -- do NOT overwrite `arrivalTime24` (which should always reflect the actual landing time). The arrival time for the prompt should come from the `arrivalDatetime` field, not the `availableFrom` field.
-
-```
-Before (broken):
-  arrivalTime24 = normalized;           // BUG: sets arrival to 09:15
-  earliestFirstActivity = normalized;   // Sets earliest activity to 09:15
-
-After (fixed):
-  earliestFirstActivity = normalized;   // Use intelligence buffer for activity scheduling
-  // Extract actual arrival time from arrivalDatetime, NOT availableFrom
-  const arrivalDt = firstDest.arrivalDatetime || firstDest.arrival_datetime;
-  if (arrivalDt includes 'T') {
-    arrivalTime24 = normalize the time portion;  // Keeps actual 06:15
-    arrivalTimeStr = time portion;
-  }
+AFTER (resilient):
+  Browser -> "start generation" -> edge function runs ALL days server-side
+  Browser -> polls trip.itinerary_status every 3s
+  (user refreshes) -> polls again -> sees progress or completed itinerary
 ```
 
-**Change 2: Apply the generation engine's own buffer as a floor**
+---
 
-After the intelligence override, ensure the `earliestFirstActivity` is at least `arrival + 4 hours` (the generation engine's standard). If the intelligence `availableFrom` is earlier than that, bump it up.
+## Implementation Plan
 
-```
-// Ensure minimum 4-hour buffer from actual arrival (generation engine standard)
-if (arrivalTime24 and earliestFirstActivity) {
-  const arrivalMins = parseTimeToMinutes(arrivalTime24);
-  const earliestMins = parseTimeToMinutes(earliestFirstActivity);
-  const minEarliest = arrivalMins + 240; // 4 hours
-  if (earliestMins < minEarliest) {
-    earliestFirstActivity = minutesToHHMM(minEarliest);
-  }
-}
-```
+### 1. New Edge Function Action: `generate-trip` (server-side orchestration)
 
-### File: `supabase/functions/parse-booking-confirmation/index.ts` (line 212-213)
+**File: `supabase/functions/generate-itinerary/index.ts`**
 
-**Change 3: Increase international buffer from 3h to 4h**
+Add a new action `generate-trip` that:
+- Accepts the same params as the current frontend loop (tripId, destination, dates, etc.)
+- Immediately sets `trips.itinerary_status = 'generating'` and returns `{ status: 'generating' }` to the client
+- Uses `EdgeRuntime.waitUntil()` to continue running the day-by-day loop in the background
+- After each day completes, saves progress to `trips.itinerary_data` (partial itinerary with days so far)
+- On completion: sets `itinerary_status = 'ready'`
+- On failure: sets `itinerary_status = 'failed'`, triggers credit refund for ungenerated days, stores error in `trips.metadata.generation_error`
 
-Update the `availableFrom` calculation in the AI prompt to use a 4-hour buffer for international flights, matching the generation engine's standard:
+The existing `generate-day` action stays untouched (used for single-day regeneration, unlock-day, etc.).
 
-```
-Before:
-  availableFrom = arrival time + 3 hours (international) or + 1.5 hours (domestic)
+### 2. Frontend: Replace Loop with Single Call + Polling
 
-After:
-  availableFrom = arrival time + 4 hours (international) or + 2 hours (domestic)
-```
+**File: `src/hooks/useItineraryGeneration.ts`**
 
-This ensures consistency between the two systems.
+Replace `generateItineraryProgressive` (the day-by-day frontend loop) with:
+- A single call to `generate-itinerary` with `action: 'generate-trip'`
+- Return immediately after the call succeeds
+
+**New file: `src/hooks/useGenerationPoller.ts`**
+
+Create a polling hook that:
+- Watches `trips.itinerary_status` for the current trip (query every 3 seconds while status is `generating`)
+- Reads `trips.itinerary_data.days` to show progressive day count
+- When status becomes `ready`: stops polling, triggers UI update
+- When status becomes `failed`: stops polling, shows error with refund confirmation
+
+### 3. Update ItineraryGenerator UI
+
+**File: `src/components/itinerary/ItineraryGenerator.tsx`**
+
+- After credits are deducted and `generate-trip` is called, switch to a "generation in progress" state
+- Show progress based on polled data (days completed / total days)
+- Display message: "Your itinerary is being generated. You can safely leave this page -- we'll have it ready when you come back."
+- Remove the `beforeunload` warning (no longer needed -- generation is server-side)
+
+### 4. Handle Page Reload During Generation
+
+**File: `src/pages/TripDetail.tsx`**
+
+When the trip loads with `itinerary_status === 'generating'`:
+- Show a "Generation in progress" banner instead of the empty state or generator CTA
+- Start the polling hook automatically
+- When polling detects `ready`, refresh the trip data and show the itinerary
+
+When the trip loads with `itinerary_status === 'failed'`:
+- Check for `metadata.generation_error` and display it
+- Show a "Retry" button (no re-charge -- refund already happened server-side)
+
+### 5. Server-Side Refund on Failure
+
+**File: `supabase/functions/generate-itinerary/index.ts`** (within the new `generate-trip` action)
+
+If the background loop fails partway:
+- Calculate ungenerated days
+- Call the existing `spend-credits` refund logic server-side
+- Save partial progress (days that did complete)
+- Set `itinerary_status = 'failed'` with error details
+
+This eliminates the need for any client-side refund logic for initial generation.
+
+---
+
+## Files to Create/Modify
+
+| File | Change |
+|------|--------|
+| `supabase/functions/generate-itinerary/index.ts` | Add `generate-trip` action with server-side orchestration loop |
+| `src/hooks/useGenerationPoller.ts` | **New** -- polling hook for generation status |
+| `src/hooks/useItineraryGeneration.ts` | Replace frontend loop with single `generate-trip` call |
+| `src/components/itinerary/ItineraryGenerator.tsx` | Switch to poll-based progress UI, remove stall detection |
+| `src/pages/TripDetail.tsx` | Handle `generating` and `failed` statuses on page load |
+
+## What Stays the Same
+- `generate-day` action (used for single-day unlock, regeneration)
+- Credit gating logic (`useGenerationGate`)
+- The actual AI prompt building and day generation logic (reused by `generate-trip`)
+- `save-itinerary` action
+- All existing itinerary display components
 
 ## Expected Result
-
-- Flight lands at 06:15 -> prompt correctly says "Flight lands at 06:15"
-- Earliest first sightseeing activity: 10:15 (06:15 + 4h buffer)
-- Day 1 itinerary includes: arrival, customs, transport to hotel, check-in, freshen up, then first activity around 10:15-11:00
-- No more "09:15" phantom arrival time in the itinerary
+- User starts generation, can safely refresh or close the tab
+- Coming back shows progress or completed itinerary
+- Credits are never lost -- server handles refunds on failure
+- No more "pay again to finish" scenarios
