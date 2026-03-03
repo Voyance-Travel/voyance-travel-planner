@@ -538,3 +538,117 @@ export function validateMustDosInItinerary(
     found,
   };
 }
+
+// =============================================================================
+// MUST-HAVES CONSTRAINT PROMPT BUILDER
+// =============================================================================
+// Converts the structured mustHaves checklist (from trip.metadata.mustHaves)
+// into a categorized prompt section that the AI must respect.
+// Unlike mustDoActivities (venue names), mustHaves can contain schedule
+// constraints, hotel preferences, group logistics, etc.
+// =============================================================================
+
+interface MustHaveItem {
+  label: string;
+  notes?: string;
+  checked?: boolean;
+}
+
+type MustHaveCategory = 'schedule' | 'accommodation' | 'group_logistics' | 'venue';
+
+function categorizeMustHave(item: MustHaveItem): MustHaveCategory {
+  const text = `${item.label} ${item.notes || ''}`.toLowerCase();
+
+  // Schedule constraint patterns
+  if (
+    /\b(not available|unavailable|until|after|before|from \d|by \d|no earlier|no later|only after|only before|wake|sleep|nap|school|class|meeting|appointment)\b/.test(text) ||
+    /\b\d{1,2}(:\d{2})?\s*(am|pm|a\.m\.|p\.m\.)\b/i.test(text) ||
+    /\b(morning|afternoon|evening|night)\s+(off|free|busy|unavailable)\b/.test(text)
+  ) {
+    return 'schedule';
+  }
+
+  // Accommodation patterns
+  if (
+    /\b(hotel|stay at|riad|hostel|airbnb|resort|accommodation|lodging|check.?in|check.?out|room|suite|villa)\b/.test(text)
+  ) {
+    return 'accommodation';
+  }
+
+  // Group logistics patterns
+  if (
+    /\b(family|friend|arrive|arriving|joining|leaving|depart|group|party size|kids|children|baby|toddler|elderly|wheelchair|mobility)\b/.test(text)
+  ) {
+    return 'group_logistics';
+  }
+
+  return 'venue';
+}
+
+export function buildMustHavesConstraintPrompt(
+  mustHaves: MustHaveItem[],
+  totalDays: number
+): string {
+  if (!mustHaves || mustHaves.length === 0) return '';
+
+  const categorized: Record<MustHaveCategory, MustHaveItem[]> = {
+    schedule: [],
+    accommodation: [],
+    group_logistics: [],
+    venue: [],
+  };
+
+  for (const item of mustHaves) {
+    const cat = categorizeMustHave(item);
+    categorized[cat].push(item);
+  }
+
+  const parts: string[] = [];
+  parts.push(`\n${'='.repeat(60)}`);
+  parts.push(`## 🚨 TRAVELER'S NON-NEGOTIABLE REQUIREMENTS (MUST-HAVES)`);
+  parts.push(`${'='.repeat(60)}`);
+  parts.push(`The traveler has explicitly listed these requirements. They are NOT suggestions — they are HARD CONSTRAINTS. Violating ANY of them = itinerary rejection.\n`);
+
+  if (categorized.schedule.length > 0) {
+    parts.push(`### ⏰ HARD SCHEDULING CONSTRAINTS`);
+    parts.push(`These override default scheduling. Respect them on EVERY applicable day:\n`);
+    for (const item of categorized.schedule) {
+      parts.push(`- "${item.label}"${item.notes ? ` — ${item.notes}` : ''}`);
+    }
+    parts.push(`\n→ Do NOT schedule ANY activities that conflict with these time constraints.`);
+    parts.push('');
+  }
+
+  if (categorized.accommodation.length > 0) {
+    parts.push(`### 🏨 ACCOMMODATION REQUIREMENTS`);
+    parts.push(`Use these as geographic anchors for daily planning:\n`);
+    for (const item of categorized.accommodation) {
+      parts.push(`- "${item.label}"${item.notes ? ` — ${item.notes}` : ''}`);
+    }
+    parts.push(`\n→ Plan activities radiating from this accommodation location.`);
+    parts.push('');
+  }
+
+  if (categorized.group_logistics.length > 0) {
+    parts.push(`### 👥 GROUP & LOGISTICS CONSTRAINTS`);
+    parts.push(`Adjust group dynamics and activity selection accordingly:\n`);
+    for (const item of categorized.group_logistics) {
+      parts.push(`- "${item.label}"${item.notes ? ` — ${item.notes}` : ''}`);
+    }
+    parts.push('');
+  }
+
+  if (categorized.venue.length > 0) {
+    parts.push(`### 📍 MUST-VISIT VENUES & ACTIVITIES`);
+    parts.push(`These MUST appear in the itinerary by name:\n`);
+    for (const item of categorized.venue) {
+      parts.push(`- "${item.label}"${item.notes ? ` — ${item.notes}` : ''}`);
+    }
+    parts.push(`\n→ Schedule these on the most logical day and do NOT substitute with alternatives.`);
+    parts.push('');
+  }
+
+  parts.push(`VIOLATION OF ANY REQUIREMENT ABOVE = ITINERARY REJECTION\n`);
+
+  return parts.join('\n');
+}

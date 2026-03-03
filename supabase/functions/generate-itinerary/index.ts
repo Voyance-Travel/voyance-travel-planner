@@ -143,6 +143,7 @@ import {
 import {
   parseMustDoInput,
   scheduleMustDos,
+  buildMustHavesConstraintPrompt,
   type MustDoPriority,
 } from './must-do-priorities.ts';
 
@@ -441,6 +442,7 @@ interface GenerationContext {
   // Phase 3: Premium features
   preBookedCommitments?: PreBookedCommitment[];
   mustDoActivities?: string;
+  mustHaves?: Array<{label: string; notes?: string}>;
   /** Whether this generation is triggered by Smart Finish enrichment mode */
   isSmartFinish?: boolean;
   /** Smart Finish was requested for this trip (anchors must still be preserved) */
@@ -4121,6 +4123,8 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     celebrationDay: trip.metadata?.celebrationDay,
     // User research notes / must-do activities from Page 2 paste field
     mustDoActivities: trip.metadata?.mustDoActivities || undefined,
+    // Structured must-haves checklist (schedule constraints, hotel prefs, etc.)
+    mustHaves: (trip.metadata?.mustHaves as Array<{label: string; notes?: string}>) || undefined,
     firstTimePerCity: trip.metadata?.firstTimePerCity || undefined,
     // Smart Finish detection: prefer direct request body flag (avoids DB race condition),
     // then fall back to metadata checks for backward compatibility
@@ -8322,6 +8326,15 @@ ${'='.repeat(60)}
       }
 
       // =======================================================================
+      // STAGE 1.9991: Must-Haves Checklist Constraints
+      // =======================================================================
+      let mustHavesPrompt = "";
+      if (context.mustHaves && context.mustHaves.length > 0) {
+        mustHavesPrompt = buildMustHavesConstraintPrompt(context.mustHaves, context.totalDays);
+        console.log(`[Stage 1.9991] ✓ Must-haves checklist injected: ${context.mustHaves.length} items`);
+      }
+
+      // =======================================================================
       // STAGE 1.9995: Trip Vibe Override — user's trip-specific intent
       // =======================================================================
       let tripVibePrompt = "";
@@ -8350,7 +8363,7 @@ ${'='.repeat(60)}
       // Order: ARCHETYPE CONSTRAINTS → INTEREST OVERRIDE → TRIP VIBE → TRIP TYPE → SKIP LIST → DIETARY ENFORCEMENT → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → HIDDEN GEMS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE → USER RESEARCH
       // NOTE: generationHierarchy includes destination essentials, archetype behavioral rules, budget guardrails (Phase 2 Fix)
       // Phase 2 Fix: Removed unifiedDNAContext - all traveler data now comes from generationHierarchy via unified profile
-      const preferenceContext = generationHierarchy + '\n\n' + interestOverridePrompt + '\n\n' + tripVibePrompt + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + (context.flightIntelligencePrompt ? '\n\n' + context.flightIntelligencePrompt : '') + tripLearningsContext + recentlyUsedContext + localEventsContext + hiddenGemsContext + voyancePicksContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + groupBlendingPromptSection + geographicPrompt + userResearchPrompt;
+      const preferenceContext = generationHierarchy + '\n\n' + interestOverridePrompt + '\n\n' + tripVibePrompt + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + (context.flightIntelligencePrompt ? '\n\n' + context.flightIntelligencePrompt : '') + tripLearningsContext + recentlyUsedContext + localEventsContext + hiddenGemsContext + voyancePicksContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + groupBlendingPromptSection + geographicPrompt + userResearchPrompt + mustHavesPrompt;
 
       // STAGE 1.9999: Pre-fetch known venue hours from verified_venues cache
       try {
@@ -9303,6 +9316,20 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
             mustDoPrompt = `\n## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)\n\nThe traveler has researched these specific venues. Include as many as possible in the itinerary:\n"${mustDoActivities.trim()}"\n`;
             console.log(`[generate-day] Must-do raw text injected (${mustDoActivities.length} chars)`);
           }
+        }
+        }
+
+      // Load structured must-haves checklist from trip metadata
+      let mustHavesConstraintPrompt = '';
+      if (tripId) {
+        // Re-use the tripMeta we already fetched above if available, otherwise fetch
+        const metadataForMustHaves = (tripId && mustDoPrompt !== undefined) 
+          ? (await supabase.from('trips').select('metadata').eq('id', tripId).single()).data?.metadata as Record<string, unknown> | null
+          : null;
+        const mustHavesList = (metadataForMustHaves?.mustHaves as Array<{label: string; notes?: string}>) || [];
+        if (mustHavesList.length > 0) {
+          mustHavesConstraintPrompt = buildMustHavesConstraintPrompt(mustHavesList, totalDays);
+          console.log(`[generate-day] Must-haves checklist injected: ${mustHavesList.length} items`);
         }
       }
 
@@ -10349,6 +10376,7 @@ NEVER suggest a more expensive alternative when the user asks for cheaper. This 
 ${preferenceContext}
 ${tripIntentsContext}
 ${mustDoPrompt}
+${mustHavesConstraintPrompt}
 ${previousDayActivities?.length ? `\nAvoid repeating these specific venues/activities (be creative and pick DIFFERENT ones): ${previousDayActivities.join(', ')}` : ''}
 
 CRITICAL REMINDERS:
