@@ -1,73 +1,59 @@
 
 
-# Add Daily Cron Job to Sync Expired Credit Balances
+# Fix: "Just Tell Us" Flow Resolving Dates to 2025
 
 ## Problem
-When free credits expire (after 2 months), the `credit_balances` cache row may still show stale `free_credits` values until the next spend or grant event triggers a recalculation. Users could briefly see outdated balances.
+When users type dates like "March 15-28" without a year, the AI parser sometimes outputs 2025 dates. The month-reference fixer only catches "in March" / "next April" patterns, missing bare date formats. The past-date safety net exists but may not trigger reliably.
 
-## Solution
-Add a lightweight SQL function + daily cron job that recalculates `free_credits` in `credit_balances` for any user whose `free_credits_expires_at` has passed. No edge function needed -- pure SQL, matching the existing `cleanup_rate_limits` pattern.
+## Root Causes
+1. The system prompt tells the AI today's date but doesn't strongly enough forbid past years
+2. The month-reference regex (line 490) only matches `in|next|this coming` + month -- it misses "March 15", "March 15-28", "Mar 15 to Mar 28"
+3. The past-date safety net (line 528) compares against `new Date()` server time, which should work, but the AI is still outputting 2025 before the net runs
 
-## Technical Changes
+## Changes
 
-### 1. New database function: `sync_expired_credit_balances()`
+### 1. Strengthen the AI system prompt (parse-trip-input edge function)
 
-```sql
-CREATE OR REPLACE FUNCTION public.sync_expired_credit_balances()
-RETURNS integer
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  updated_count integer;
-BEGIN
-  -- Recalculate free_credits for users whose expiry has passed
-  UPDATE public.credit_balances cb
-  SET 
-    free_credits = (
-      SELECT COALESCE(SUM(cp.remaining), 0)::int
-      FROM public.credit_purchases cp
-      WHERE cp.user_id = cb.user_id
-        AND cp.remaining > 0
-        AND cp.credit_type IN ('free_monthly', 'signup_bonus', 'referral_bonus')
-        AND (cp.expires_at IS NULL OR cp.expires_at > now())
-    ),
-    purchased_credits = (
-      SELECT COALESCE(SUM(cp.remaining), 0)::int
-      FROM public.credit_purchases cp
-      WHERE cp.user_id = cb.user_id
-        AND cp.remaining > 0
-        AND cp.credit_type NOT IN ('free_monthly', 'signup_bonus', 'referral_bonus')
-        AND (cp.expires_at IS NULL OR cp.expires_at > now())
-    ),
-    updated_at = now()
-  WHERE cb.free_credits > 0
-    AND cb.free_credits_expires_at IS NOT NULL
-    AND cb.free_credits_expires_at < now();
+In the `SYSTEM_PROMPT` (line 91-94), add an explicit rule:
 
-  GET DIAGNOSTICS updated_count = ROW_COUNT;
-  RETURN updated_count;
-END;
-$$;
+```
+## CRITICAL DATE RULES
+- The current year is [YEAR]. NEVER output dates in [YEAR-1] or earlier.
+- When a user provides only month and day (e.g., "March 15"), assume the current year.
+  If that date has already passed this year, use next year.
+- ALL dates in the output MUST be in the future. Zero exceptions.
 ```
 
-### 2. Daily cron schedule (runs at 1 AM UTC)
+### 2. Expand the month-reference date fixer
 
-```sql
-SELECT cron.schedule(
-  'sync-expired-credit-balances',
-  '0 1 * * *',
-  $$SELECT public.sync_expired_credit_balances()$$
-);
+Currently (line 490) the regex only matches:
+```
+/\b(?:in|next|this coming)\s+(january|february|...)\b/i
 ```
 
-## What this does NOT change
-- No edge functions created
-- No changes to `spend-credits`, `grant-monthly-credits`, or `useCredits` hook
-- No changes to the FIFO deduction logic
-- Expired `credit_purchases` rows are not deleted (they remain for audit/history)
+Add a second pass that catches bare month + day patterns like:
+- "March 15"
+- "March 15-28"  
+- "Mar 15 to Mar 28"
+- "March 15 - March 28"
 
-## File
-- 1 new SQL migration file
+For these, if the AI output a past-year date, override the year to the next upcoming occurrence of that month.
+
+### 3. Harden the past-date safety net
+
+The existing safety net (line 528-562) already bumps past dates forward. Reinforce it by:
+- Adding a log when dates are bumped so we can trace this in production
+- Ensuring the comparison is done correctly with local date construction (not UTC)
+- Adding a secondary check: if the year is less than the current year, always bump -- don't even compare month/day
+
+### File Modified
+- `supabase/functions/parse-trip-input/index.ts`
+  - Strengthen system prompt with explicit year/future-only rules
+  - Add regex pass for bare "Month Day" patterns (e.g., "March 15") to resolve year correctly
+  - Harden past-date safety net with explicit year < currentYear check
+
+### No Changes To
+- Frontend components
+- Other edge functions
+- Database schema
 
