@@ -54,8 +54,8 @@ export function OutOfCreditsModal() {
   const deficit = Math.max(0, actionCost - creditsAvailable);
 
   // Determine recommended pack
-  const showBoost = deficit <= BOOST_PACK.credits && deficit > 0;
-  const recommended = getRecommendedPack(deficit);
+  const showBoost = actionCost <= BOOST_PACK.credits && deficit > 0;
+  const recommended = getRecommendedPack(actionCost);
 
   const handleBuyPack = async (pack: { priceId: string; productId: string; credits: number; name: string; id?: string }) => {
     const packId = (pack as any).id || pack.name;
