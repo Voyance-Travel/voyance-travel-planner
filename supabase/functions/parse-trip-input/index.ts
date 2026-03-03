@@ -88,10 +88,19 @@ const EXTRACT_TOOL = {
   },
 };
 
+const currentYear = new Date().getFullYear();
 const SYSTEM_PROMPT = `You are a travel itinerary parser. Your job is to extract structured trip data from user-pasted text, which may come from ChatGPT, Claude, blogs, notes, or other sources.
 
 ## CURRENT DATE
-Today's date is ${new Date().toISOString().split('T')[0]}. When resolving relative date references (like "next weekend", "this March", "in April"), always use this as the reference point. All resolved dates MUST be in the future relative to today. Never output dates in the past.
+Today's date is ${new Date().toISOString().split('T')[0]}. The current year is ${currentYear}.
+
+## CRITICAL DATE RULES — READ CAREFULLY
+- The current year is ${currentYear}. NEVER output dates in ${currentYear - 1} or earlier.
+- When a user provides only month and day (e.g., "March 15"), assume the current year (${currentYear}).
+  If that date has already passed this year, use next year (${currentYear + 1}).
+- ALL dates in the output MUST be in the future. Zero exceptions.
+- When resolving relative date references (like "next weekend", "this March", "in April"), always use today's date as the reference point.
+- Double-check every date you output: if the year is ${currentYear - 1} or earlier, you have made an error.
 
 ## CRITICAL PARSING RULES
 
@@ -525,17 +534,82 @@ serve(async (req) => {
       }
     }
 
+    // --- Bare "Month Day" date fixing ---
+    // Catches patterns like "March 15", "March 15-28", "Mar 15 to Mar 28"
+    // that the above regex misses (it only handles "in March" / "next March")
+    if (parsed.dates?.start) {
+      const bareMonthDayRe = /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\s+\d{1,2}\b/i;
+      const bareMatch = text.match(bareMonthDayRe);
+      if (bareMatch) {
+        const monthNames2: Record<string, number> = {
+          january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+          july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
+          jan: 0, feb: 1, mar: 2, apr: 3, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+        };
+        const mentionedMonth = monthNames2[bareMatch[1].toLowerCase()];
+        if (mentionedMonth !== undefined) {
+          const startParts = parsed.dates.start.split('-').map(Number);
+          const startYear = startParts[0];
+          const now2 = new Date();
+          const currentYr = now2.getFullYear();
+          
+          // If the AI output a past year, fix it
+          if (startYear < currentYr) {
+            // Determine the next upcoming occurrence of this month
+            let fixedYear = currentYr;
+            const testDate = new Date(currentYr, mentionedMonth, startParts[2] || 1);
+            if (testDate < now2) {
+              fixedYear = currentYr + 1;
+            }
+            const yearDelta = fixedYear - startYear;
+            parsed.dates.start = `${fixedYear}-${String(startParts[1]).padStart(2, '0')}-${String(startParts[2]).padStart(2, '0')}`;
+            if (parsed.dates.end) {
+              const endParts = parsed.dates.end.split('-').map(Number);
+              parsed.dates.end = `${endParts[0] + yearDelta}-${String(endParts[1]).padStart(2, '0')}-${String(endParts[2]).padStart(2, '0')}`;
+            }
+            if (parsed.days) {
+              for (const day of parsed.days) {
+                if (day.date) {
+                  const dp = day.date.split('-').map(Number);
+                  if (dp.length === 3) {
+                    day.date = `${dp[0] + yearDelta}-${String(dp[1]).padStart(2, '0')}-${String(dp[2]).padStart(2, '0')}`;
+                  }
+                }
+              }
+            }
+            console.log(`[parse-trip-input] Bare month-day fix: bumped year ${startYear} → ${fixedYear} (detected "${bareMatch[0]}" in input)`);
+          }
+        }
+      }
+    }
+
     // --- Past-date safety net ---
-    // If the AI resolved dates to the past, bump them forward by 1 year
+    // If the AI resolved dates to the past, bump them forward.
+    // Primary check: if year < current year, always bump (no month/day comparison needed).
     if (parsed.dates?.start) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const startParts = parsed.dates.start.split('-').map(Number);
-      const startCheck = new Date(startParts[0], startParts[1] - 1, startParts[2]);
+      const currentYearNow = today.getFullYear();
       
-      if (startCheck < today) {
-        // Calculate how many years to add
-        const yearsToAdd = Math.ceil((today.getTime() - startCheck.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+      // If the year is strictly less than current year, always bump — don't even compare month/day
+      let yearsToAdd = 0;
+      if (startParts[0] < currentYearNow) {
+        yearsToAdd = currentYearNow - startParts[0];
+        // After bumping to current year, check if the date is still in the past
+        const bumped = new Date(startParts[0] + yearsToAdd, startParts[1] - 1, startParts[2]);
+        if (bumped < today) {
+          yearsToAdd += 1;
+        }
+      } else {
+        // Year is current or future — check if the specific date is past
+        const startCheck = new Date(startParts[0], startParts[1] - 1, startParts[2]);
+        if (startCheck < today) {
+          yearsToAdd = 1;
+        }
+      }
+      
+      if (yearsToAdd > 0) {
         const newStartYear = startParts[0] + yearsToAdd;
         parsed.dates.start = `${newStartYear}-${String(startParts[1]).padStart(2, '0')}-${String(startParts[2]).padStart(2, '0')}`;
         
@@ -557,7 +631,7 @@ serve(async (req) => {
           }
         }
         
-        console.log(`[parse-trip-input] Bumped past dates forward by ${yearsToAdd} year(s): ${startParts[0]} → ${newStartYear}`);
+        console.log(`[parse-trip-input] Past-date safety net: bumped dates forward by ${yearsToAdd} year(s): ${startParts[0]} → ${newStartYear}`);
       }
     }
 
