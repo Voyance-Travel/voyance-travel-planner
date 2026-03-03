@@ -41,10 +41,23 @@ serve(async (req) => {
   try {
     logStep("Function started");
 
-    const { tripId, flightTotal, hotelTotal, activitiesTotal } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const tripId = typeof body?.tripId === 'string' ? body.tripId.trim() : '';
+    const flightTotal = typeof body?.flightTotal === 'number' ? body.flightTotal : 0;
+    const hotelTotal = typeof body?.hotelTotal === 'number' ? body.hotelTotal : 0;
+    const activitiesTotal = typeof body?.activitiesTotal === 'number' ? body.activitiesTotal : 0;
     logStep("Request body", { tripId, flightTotal, hotelTotal, activitiesTotal });
 
-    if (!tripId) throw new Error("tripId is required");
+    if (!tripId || tripId.length > 200) {
+      return new Response(JSON.stringify({ success: false, error: "Invalid tripId", code: "INVALID_INPUT" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400,
+      });
+    }
+    if (flightTotal < 0 || hotelTotal < 0 || activitiesTotal < 0 || flightTotal > 1000000 || hotelTotal > 1000000 || activitiesTotal > 1000000) {
+      return new Response(JSON.stringify({ success: false, error: "Invalid price values", code: "INVALID_INPUT" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400,
+      });
+    }
 
     // Authenticate user using getUser for proper JWT validation
     const authHeader = req.headers.get("Authorization");

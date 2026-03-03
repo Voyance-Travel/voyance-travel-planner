@@ -15,7 +15,21 @@ serve(async (req) => {
   try {
     log("Function started");
 
-    const { sessionId, tripId, itemId } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const sessionId = typeof body?.sessionId === 'string' ? body.sessionId.trim() : '';
+    const tripId = typeof body?.tripId === 'string' ? body.tripId.trim() : '';
+    const itemId = typeof body?.itemId === 'string' ? body.itemId.trim() : '';
+
+    // Input validation
+    if (sessionId && sessionId.length > 200) {
+      return errorResponse("Invalid sessionId", "INVALID_INPUT");
+    }
+    if (tripId && tripId.length > 200) {
+      return errorResponse("Invalid tripId", "INVALID_INPUT");
+    }
+    if (itemId && itemId.length > 200) {
+      return errorResponse("Invalid itemId", "INVALID_INPUT");
+    }
 
     const serviceSupabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -94,7 +108,8 @@ serve(async (req) => {
       .eq("user_id", userId);
 
     if (paymentsError) {
-      return errorResponse(`Failed to fetch payments: ${paymentsError.message}`, "QUERY_FAILED", 500);
+      log("Payment query failed", { error: paymentsError.message });
+      return errorResponse("Failed to fetch payments", "QUERY_FAILED", 500);
     }
 
     const totalPaid = payments
