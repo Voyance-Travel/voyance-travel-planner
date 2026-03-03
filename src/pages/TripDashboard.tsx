@@ -472,8 +472,15 @@ function TripCard({ trip, index = 0, onDelete }: { trip: Trip; index?: number; o
               </Badge>
             )}
             {hasItinerary && (
-              <Badge variant="secondary" className="gap-1 text-[10px] sm:text-xs bg-primary/10 text-primary border-primary/20 shrink-0">
-                <Sparkles className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> Ready
+              <Badge variant="secondary" className={`gap-1 text-[10px] sm:text-xs shrink-0 ${
+                trip.itineraryStatus === 'partial' 
+                  ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                  : trip.status === 'draft' 
+                    ? 'bg-muted text-muted-foreground border-border'
+                    : 'bg-primary/10 text-primary border-primary/20'
+              }`}>
+                <Sparkles className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> 
+                {trip.itineraryStatus === 'partial' ? 'Partial' : trip.status === 'draft' ? 'Draft' : 'Ready'}
               </Badge>
             )}
           </div>
