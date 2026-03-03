@@ -320,7 +320,6 @@ export default function CreditsAndBilling() {
                   <p className="text-2xl font-bold text-foreground">{formatCredits(pack.credits)}</p>
                   <p className="text-sm text-muted-foreground mb-3">credits</p>
                   <p className="text-xl font-semibold text-foreground">${pack.price}</p>
-                  <p className="text-xs text-muted-foreground mt-1">${pack.perCredit}/credit</p>
                 </CardContent>
               </Card>
             ))}
@@ -354,7 +353,6 @@ export default function CreditsAndBilling() {
                     {formatCredits(pack.baseCredits)} base + {formatCredits(pack.bonusCredits)} bonus
                   </p>
                   <p className="text-xl font-semibold text-foreground">${pack.price}</p>
-                  <p className="text-xs text-muted-foreground mt-1">${pack.perCredit}/credit</p>
                   <div className="mt-3 space-y-1">
                     {pack.perks.map((perk) => (
                       <p key={perk} className="text-[11px] text-muted-foreground flex items-center gap-1.5 justify-center">
