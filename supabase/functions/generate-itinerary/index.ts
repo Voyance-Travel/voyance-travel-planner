@@ -12093,7 +12093,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
     // day credits are refunded server-side.
     // ==========================================================================
     if (action === 'generate-trip') {
-      const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, isMultiCity, creditsCharged, requestedDays } = params;
+      const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, isMultiCity, creditsCharged, requestedDays, resumeFromDay } = params;
       const userId = authResult.userId;
 
       if (!tripId || !destination || !startDate || !endDate) {
@@ -12181,18 +12181,52 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           }
         }
 
-        const generatedDays: any[] = [];
+        // If resuming, load existing days from partial itinerary_data
+        const effectiveStartDay = resumeFromDay && resumeFromDay > 1 ? resumeFromDay : 1;
+        let generatedDays: any[] = [];
+        
+        if (effectiveStartDay > 1) {
+          const { data: existingTrip } = await supabase.from('trips').select('itinerary_data').eq('id', tripId).single();
+          const existingData = existingTrip?.itinerary_data as any;
+          if (existingData?.days && Array.isArray(existingData.days)) {
+            generatedDays = existingData.days.slice(0, effectiveStartDay - 1);
+            console.log(`[generate-trip] Resuming from day ${effectiveStartDay}, loaded ${generatedDays.length} existing days`);
+          }
+        }
+
         const previousActivities: string[] = [];
+        // Collect activity titles from already-generated days for context
+        for (const day of generatedDays) {
+          if (day?.activities) {
+            day.activities.forEach((act: any) => {
+              previousActivities.push(act.title || act.name || '');
+            });
+          }
+        }
         let lastError: string | null = null;
 
         try {
-          for (let dayNum = 1; dayNum <= totalDays; dayNum++) {
+          for (let dayNum = effectiveStartDay; dayNum <= totalDays; dayNum++) {
             const dayDate = new Date(startDate);
             dayDate.setDate(dayDate.getDate() + dayNum - 1);
             const formattedDate = dayDate.toISOString().split('T')[0];
             const cityInfo = dayCityMap?.[dayNum - 1];
 
             console.log(`[generate-trip] Generating day ${dayNum}/${totalDays} for ${cityInfo?.cityName || destination}`);
+
+            // === HEARTBEAT: Update before starting this day ===
+            {
+              const { data: hbTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
+              const hbMeta = (hbTrip?.metadata as Record<string, unknown>) || {};
+              await supabase.from('trips').update({
+                metadata: {
+                  ...hbMeta,
+                  generation_heartbeat: new Date().toISOString(),
+                  generation_completed_days: dayNum - 1,
+                  generation_total_days: totalDays,
+                },
+              }).eq('id', tripId);
+            }
 
             // Retry loop for each day
             const MAX_RETRIES = 4;
@@ -12269,12 +12303,18 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
               itinerary_data: partialItinerary,
             }).eq('id', tripId);
 
-            // Update metadata with progress
-            const { data: metaTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
-            const meta = (metaTrip?.metadata as Record<string, unknown>) || {};
-            await supabase.from('trips').update({
-              metadata: { ...meta, generation_completed_days: dayNum },
-            }).eq('id', tripId);
+            // === HEARTBEAT: Update after completing this day ===
+            {
+              const { data: metaTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
+              const meta = (metaTrip?.metadata as Record<string, unknown>) || {};
+              await supabase.from('trips').update({
+                metadata: {
+                  ...meta,
+                  generation_completed_days: dayNum,
+                  generation_heartbeat: new Date().toISOString(),
+                },
+              }).eq('id', tripId);
+            }
 
             console.log(`[generate-trip] Day ${dayNum}/${totalDays} complete`);
             
