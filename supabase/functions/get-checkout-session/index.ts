@@ -1,10 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "npm:stripe@18.5.0";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { okResponse, errorResponse, corsResponse, exceptionResponse } from "../_shared/edge-response.ts";
 
 const logStep = (step: string, details?: unknown) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -13,16 +9,17 @@ const logStep = (step: string, details?: unknown) => {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return corsResponse();
   }
 
   try {
     logStep("Function started");
 
-    const { sessionId } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const sessionId = typeof body?.sessionId === 'string' ? body.sessionId.trim() : '';
     
-    if (!sessionId) {
-      throw new Error("sessionId is required");
+    if (!sessionId || sessionId.length > 200) {
+      return errorResponse("sessionId is required", "INVALID_INPUT");
     }
 
     logStep("Retrieving session", { sessionId });
@@ -68,9 +65,6 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR", { message: errorMessage });
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
-    });
+    return errorResponse("Failed to retrieve checkout session", "CHECKOUT_SESSION_ERROR", 500);
   }
 });
