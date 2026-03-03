@@ -145,11 +145,15 @@ export default function TripDetail() {
   // SERVER-SIDE GENERATION: Poll for background generation progress
   // =========================================================================
   const isServerGenerating = trip?.itinerary_status === 'generating' || trip?.itinerary_status === 'queued';
+  const [generationStalled, setGenerationStalled] = useState(false);
+  const [resumingGeneration, setResumingGeneration] = useState(false);
+
   const generationPoller = useGenerationPoller({
     tripId: tripId || null,
-    enabled: isServerGenerating,
+    enabled: isServerGenerating && !generationStalled,
     interval: 3000,
     onReady: async () => {
+      setGenerationStalled(false);
       // Reload trip data to get completed itinerary
       if (!tripId) return;
       const { data } = await supabase.from('trips').select('*').eq('id', tripId).single();
@@ -164,8 +168,8 @@ export default function TripDetail() {
       }
     },
     onFailed: (err) => {
+      setGenerationStalled(false);
       toast.error(`Generation failed: ${err}. Credits for ungenerated days have been refunded.`, { duration: 6000 });
-      // Reload trip to get updated status
       if (tripId) {
         supabase.from('trips').select('*').eq('id', tripId).single().then(({ data }) => {
           if (data) setTrip(data);
@@ -176,7 +180,66 @@ export default function TripDetail() {
         queryClient.invalidateQueries({ queryKey: ['entitlements', user.id] });
       }
     },
+    onStalled: () => {
+      setGenerationStalled(true);
+    },
   });
+
+  // Resume generation from where it left off
+  const handleResumeGeneration = useCallback(async () => {
+    if (!tripId || !trip) return;
+    setResumingGeneration(true);
+    setGenerationStalled(false);
+
+    const meta = (trip.metadata as Record<string, unknown>) || {};
+    const completedDays = (meta.generation_completed_days as number) || 0;
+    const totalDays = (meta.generation_total_days as number) || 0;
+
+    try {
+      // Reset status to generating with fresh heartbeat
+      await supabase.from('trips').update({
+        itinerary_status: 'generating',
+        metadata: {
+          ...meta,
+          generation_error: null,
+          generation_heartbeat: new Date().toISOString(),
+          generation_started_at: new Date().toISOString(),
+        },
+      }).eq('id', tripId);
+
+      // Reload trip to pick up new status
+      const { data: refreshed } = await supabase.from('trips').select('*').eq('id', tripId).single();
+      if (refreshed) setTrip(refreshed);
+
+      // Call generate-trip which will resume from completedDays+1
+      const { error } = await supabase.functions.invoke('generate-itinerary', {
+        body: {
+          action: 'generate-trip',
+          tripId,
+          destination: trip.destination,
+          destinationCountry: (trip as any).destination_country,
+          startDate: trip.start_date,
+          endDate: trip.end_date,
+          travelers: trip.travelers || 1,
+          tripType: trip.trip_type,
+          budgetTier: (trip as any).budget_tier,
+          isMultiCity: !!(trip as any).is_multi_city,
+          creditsCharged: 0, // Already charged, no new charge
+          requestedDays: totalDays,
+          resumeFromDay: completedDays + 1, // Signal to backend to skip completed days
+        },
+      });
+
+      if (error) throw error;
+      toast.success('Resuming generation…');
+    } catch (err) {
+      console.error('[Resume] Failed:', err);
+      toast.error('Failed to resume generation. Please try again.');
+      setGenerationStalled(true);
+    } finally {
+      setResumingGeneration(false);
+    }
+  }, [tripId, trip, supabase]);
   // =========================================================================
   // HOTEL ENRICHMENT: Auto-enrich if missing address/website/photos
   // =========================================================================
@@ -1267,31 +1330,64 @@ export default function TripDetail() {
               onActivitySkip={handleActivitySkip}
             />
             </ErrorBoundary>
-          ) : isServerGenerating ? (
-            /* Server-side generation in progress — show polling progress */
+          ) : isServerGenerating || generationStalled ? (
+            /* Server-side generation in progress or stalled */
             <div className="flex flex-col items-center justify-center py-20 space-y-6">
-              <div className="relative">
-                <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                <Sparkles className="h-4 w-4 text-primary absolute -top-1 -right-1 animate-pulse" />
-              </div>
-              <div className="text-center space-y-2 max-w-md">
-                <h3 className="text-xl font-serif font-semibold">Generating your itinerary…</h3>
-                {generationPoller.totalDays > 0 ? (
-                  <p className="text-muted-foreground">
-                    Day {generationPoller.completedDays} of {generationPoller.totalDays} complete
-                  </p>
-                ) : (
-                  <p className="text-muted-foreground">Starting generation…</p>
-                )}
-                {generationPoller.totalDays > 0 && (
-                  <div className="w-64 mx-auto">
-                    <Progress value={generationPoller.progress} className="h-2" />
+              {generationStalled ? (
+                /* Stalled / zombie state — offer resume */
+                <>
+                  <div className="relative">
+                    <Sparkles className="h-10 w-10 text-muted-foreground" />
                   </div>
-                )}
-                <p className="text-sm text-muted-foreground/70 mt-4">
-                  You can safely leave this page — we'll have it ready when you come back.
-                </p>
-              </div>
+                  <div className="text-center space-y-3 max-w-md">
+                    <h3 className="text-xl font-serif font-semibold">Generation stalled</h3>
+                    <p className="text-muted-foreground">
+                      Your itinerary stopped generating at Day {generationPoller.completedDays} of {generationPoller.totalDays}.
+                      This can happen if the connection was interrupted.
+                    </p>
+                    {generationPoller.totalDays > 0 && (
+                      <div className="w-64 mx-auto">
+                        <Progress value={generationPoller.progress} className="h-2" />
+                      </div>
+                    )}
+                    <div className="flex gap-3 justify-center pt-2">
+                      <Button onClick={handleResumeGeneration} disabled={resumingGeneration}>
+                        {resumingGeneration ? (
+                          <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Resuming…</>
+                        ) : (
+                          <>Resume from Day {generationPoller.completedDays + 1}</>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* Active generation — show progress */
+                <>
+                  <div className="relative">
+                    <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                    <Sparkles className="h-4 w-4 text-primary absolute -top-1 -right-1 animate-pulse" />
+                  </div>
+                  <div className="text-center space-y-2 max-w-md">
+                    <h3 className="text-xl font-serif font-semibold">Generating your itinerary…</h3>
+                    {generationPoller.totalDays > 0 ? (
+                      <p className="text-muted-foreground">
+                        Day {generationPoller.completedDays} of {generationPoller.totalDays} complete
+                      </p>
+                    ) : (
+                      <p className="text-muted-foreground">Starting generation…</p>
+                    )}
+                    {generationPoller.totalDays > 0 && (
+                      <div className="w-64 mx-auto">
+                        <Progress value={generationPoller.progress} className="h-2" />
+                      </div>
+                    )}
+                    <p className="text-sm text-muted-foreground/70 mt-4">
+                      You can safely leave this page — we'll have it ready when you come back.
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
           ) : showGenerator ? (
             /* Itinerary Generator */
