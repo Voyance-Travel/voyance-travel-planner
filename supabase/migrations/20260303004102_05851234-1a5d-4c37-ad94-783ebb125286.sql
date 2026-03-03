@@ -1,0 +1,1 @@
+ALTER TABLE public.pending_credit_charges ADD COLUMN IF NOT EXISTS refund_attempts integer NOT NULL DEFAULT 0;

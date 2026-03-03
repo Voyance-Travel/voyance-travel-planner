@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
 const STALE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
+const MAX_REFUND_ATTEMPTS = 3;
 
 export function useStalePendingChargeRefund(tripId: string | undefined) {
   const queryClient = useQueryClient();
@@ -29,20 +30,48 @@ export function useStalePendingChargeRefund(tripId: string | undefined) {
 
         // Find stale pending charges for this trip
         const cutoff = new Date(Date.now() - STALE_THRESHOLD_MS).toISOString();
-        const { data: staleCharges } = await supabase
+        const { data: staleCharges } = await (supabase
           .from('pending_credit_charges')
-          .select('id, credits_amount, action, created_at')
+          .select('id, credits_amount, action, created_at, refund_attempts')
           .eq('trip_id', tripId)
           .eq('user_id', user.id)
           .eq('status', 'pending')
-          .lt('created_at', cutoff);
+          .lt('created_at', cutoff) as any);
 
         if (!staleCharges?.length) return;
 
         console.log(`[StalePendingCharge] Found ${staleCharges.length} stale pending charge(s) for trip ${tripId}`);
 
+        let anyRefunded = false;
+
         for (const charge of staleCharges) {
+          const attempts = (charge as any).refund_attempts ?? 0;
+
+          // Max attempts reached — mark as failed and stop retrying
+          if (attempts >= MAX_REFUND_ATTEMPTS) {
+            if (attempts === MAX_REFUND_ATTEMPTS) {
+              console.warn(`[StalePendingCharge] Max refund attempts (${MAX_REFUND_ATTEMPTS}) reached for ${charge.id} — marking as failed`);
+              await supabase
+              await (supabase
+                .from('pending_credit_charges')
+                .update({
+                  status: 'failed',
+                  resolved_at: new Date().toISOString(),
+                  resolution_note: `Auto-marked failed after ${MAX_REFUND_ATTEMPTS} refund attempts`,
+                  refund_attempts: attempts,
+                } as any)
+                .eq('id', charge.id) as any);
+            }
+            continue;
+          }
+
           try {
+            // Increment attempt counter before trying
+            await (supabase
+              .from('pending_credit_charges')
+              .update({ refund_attempts: attempts + 1 } as any)
+              .eq('id', charge.id) as any);
+
             // Issue refund
             const { data: refundData, error: refundError } = await supabase.functions.invoke('spend-credits', {
               body: {
@@ -57,7 +86,7 @@ export function useStalePendingChargeRefund(tripId: string | undefined) {
             });
 
             if (refundError || !refundData?.success) {
-              console.error(`[StalePendingCharge] Refund failed for ${charge.id}:`, refundError ?? refundData);
+              console.error(`[StalePendingCharge] Refund failed for ${charge.id} (attempt ${attempts + 1}/${MAX_REFUND_ATTEMPTS}):`, refundError ?? refundData);
               continue;
             }
 
@@ -72,17 +101,20 @@ export function useStalePendingChargeRefund(tripId: string | undefined) {
               .eq('id', charge.id);
 
             console.log(`[StalePendingCharge] Auto-refunded charge ${charge.id}: +${charge.credits_amount} credits`);
+            anyRefunded = true;
           } catch (err) {
-            console.error(`[StalePendingCharge] Error processing charge ${charge.id}:`, err);
+            console.error(`[StalePendingCharge] Error processing charge ${charge.id} (attempt ${attempts + 1}/${MAX_REFUND_ATTEMPTS}):`, err);
           }
         }
 
-        // Show toast and invalidate caches
-        toast.info('A previous Smart Finish attempt failed — your credits have been refunded.', {
-          duration: 6000,
-        });
-        queryClient.invalidateQueries({ queryKey: ['credits'] });
-        queryClient.invalidateQueries({ queryKey: ['entitlements'] });
+        // Only show toast if at least one refund succeeded
+        if (anyRefunded) {
+          toast.info('A previous Smart Finish attempt failed — your credits have been refunded.', {
+            duration: 6000,
+          });
+          queryClient.invalidateQueries({ queryKey: ['credits'] });
+          queryClient.invalidateQueries({ queryKey: ['entitlements'] });
+        }
       } catch (err) {
         console.error('[StalePendingCharge] Check failed:', err);
       }
