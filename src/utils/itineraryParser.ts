@@ -14,11 +14,18 @@ import { format, parseISO, addDays } from 'date-fns';
 // Strip non-Latin scripts from AI text artifacts before rendering
 const NON_LATIN_SCRIPT = /[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF\u0600-\u06FF\u0400-\u04FF\u0E00-\u0E7F]+/g;
 
+// Strip leaked JSON schema field names from AI text (e.g. ",title: -", "practicalTips;|")
+const SCHEMA_LEAK_RE = /[,;|]*\s*(?:title|name|duration|practicalTips|accommodationNotes|tripVibe|tripPriorities|theme|dayNumber|activities|unparsed|dates|travelers|tripType|startTime|endTime|category|description|location|tags|bookingRequired|transportation|cost|estimatedCost|metadata|narrative|highlights|city|country|isTransitionDay)\s*[:;|]\s*[^,;|]*/gi;
+
 function sanitizeDisplayString(value: string | undefined | null): string | undefined {
   if (!value) return undefined;
   const cleaned = value
     .replace(NON_LATIN_SCRIPT, '')
+    .replace(SCHEMA_LEAK_RE, '')
+    .replace(/—/g, ' - ')
+    .replace(/–/g, '-')
     .replace(/\s{2,}/g, ' ')
+    .replace(/^[,;|:\s-]+|[,;|:\s-]+$/g, '')
     .trim();
   return cleaned || undefined;
 }

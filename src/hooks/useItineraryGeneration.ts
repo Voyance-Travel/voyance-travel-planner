@@ -5,6 +5,7 @@ import { reportConnectionFailure, resetConnectionFailures } from '@/components/c
 import { resubscribeAll } from '@/lib/realtimeSubscriptionManager';
 import { guardedRefreshSession } from '@/lib/authSessionGuard';
 import { getTripCities } from '@/services/tripCitiesService';
+import { sanitizeAIOutput } from '@/utils/textSanitizer';
 
 // =============================================================================
 // TYPES
@@ -284,6 +285,18 @@ export function useItineraryGeneration() {
             }
 
             const generatedDay: GeneratedDay = data.day;
+
+            // Frontend safety-net: sanitize all text fields before local state/save
+            if (generatedDay.title) generatedDay.title = sanitizeAIOutput(generatedDay.title) || `Day ${dayNum}`;
+            if (generatedDay.theme) generatedDay.theme = sanitizeAIOutput(generatedDay.theme) || generatedDay.title;
+            if (generatedDay.narrative?.theme) generatedDay.narrative.theme = sanitizeAIOutput(generatedDay.narrative.theme) || generatedDay.theme || '';
+            generatedDay.activities.forEach((act, idx) => {
+              if (act.title) act.title = sanitizeAIOutput(act.title) || `Activity ${idx + 1}`;
+              if (act.name) act.name = sanitizeAIOutput(act.name) || act.title;
+              if (act.description) act.description = sanitizeAIOutput(act.description) || '';
+              if (typeof act.tips === 'string') act.tips = sanitizeAIOutput(act.tips) || '';
+            });
+
             generatedDays.push(generatedDay);
 
             // Track activities for context in subsequent days
