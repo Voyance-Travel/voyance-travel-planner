@@ -52,10 +52,39 @@ serve(async (req) => {
     const { tripId, itemType, itemId, itemName, amountCents, currency = 'USD', quantity = 1, externalProvider, externalBookingUrl } = body;
 
     if (!tripId || !itemType || !itemId || !itemName || !amountCents) {
-      throw new Error("Missing required fields: tripId, itemType, itemId, itemName, amountCents");
+      return new Response(
+        JSON.stringify({ success: false, error: "Missing required fields", code: "INVALID_INPUT" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    log("Booking request", body);
+    // Input validation
+    if (typeof tripId !== 'string' || tripId.length > 200) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Invalid tripId", code: "INVALID_INPUT" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (!['flight', 'hotel', 'activity'].includes(itemType)) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Invalid itemType", code: "INVALID_INPUT" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (typeof amountCents !== 'number' || !Number.isInteger(amountCents) || amountCents <= 0 || amountCents > 10000000) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Invalid amountCents", code: "INVALID_INPUT" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (typeof itemName !== 'string' || itemName.length > 500) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Invalid itemName", code: "INVALID_INPUT" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    log("Booking request validated", { tripId, itemType, itemId });
 
     // Initialize Stripe
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
@@ -157,7 +186,7 @@ serve(async (req) => {
     const message = error instanceof Error ? error.message : String(error);
     log("ERROR", { message });
     return new Response(
-      JSON.stringify({ success: false, error: message }),
+      JSON.stringify({ success: false, error: "Booking failed. Please try again.", code: "BOOKING_ERROR" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
