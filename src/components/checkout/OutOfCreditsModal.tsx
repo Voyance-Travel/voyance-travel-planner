@@ -47,8 +47,10 @@ export function OutOfCreditsModal() {
   const { data: tripPermission } = useTripPermission(tripId);
   const isGuestOnSharedTrip = tripId && tripPermission && !tripPermission.isOwner && tripPermission.permission !== null;
 
-  const actionCost = action ? CREDIT_COSTS[action] : creditsNeeded;
-  const actionLabel = action ? ACTION_LABELS[action] || action : 'this action';
+  const actionCost = creditsNeeded || (action ? CREDIT_COSTS[action] : 0);
+  const actionLabel = (action === 'UNLOCK_DAY' && creditsNeeded > CREDIT_COSTS.UNLOCK_DAY)
+    ? 'Unlock All Remaining Days'
+    : action ? ACTION_LABELS[action] || action : 'this action';
   const deficit = Math.max(0, actionCost - creditsAvailable);
 
   // Determine recommended pack
