@@ -1,56 +1,73 @@
 
 
-# Fix Invite Accept — 4 Surgical Changes
+# Add Daily Cron Job to Sync Expired Credit Balances
 
-## Overview
-Four targeted changes to make invite acceptance robust against double-clicks, stale auth tokens, and concurrent race conditions. No refactoring, no changes to `resolve_or_rotate_invite` or group budgets flow.
+## Problem
+When free credits expire (after 2 months), the `credit_balances` cache row may still show stale `free_credits` values until the next spend or grant event triggers a recalculation. Users could briefly see outdated balances.
 
----
+## Solution
+Add a lightweight SQL function + daily cron job that recalculates `free_credits` in `credit_balances` for any user whose `free_credits_expires_at` has passed. No edge function needed -- pure SQL, matching the existing `cleanup_rate_limits` pattern.
 
-## Change 1: Double-call guard (AcceptInvite.tsx)
+## Technical Changes
 
-Add a `useRef(false)` guard to `handleAccept` to prevent React StrictMode and rapid double-clicks from firing multiple RPC calls.
+### 1. New database function: `sync_expired_credit_balances()`
 
-- Add `import { useRef }` and create `acceptingRef = useRef(false)` at component level
-- Guard at top of `handleAccept`: `if (acceptingRef.current) return;` then set to `true`
-- Wrap existing try/catch in a `finally` that resets `acceptingRef.current = false`
-- Update button `disabled` prop: `disabled={accepting || acceptingRef.current}`
-
-## Change 2: Auth token readiness (AcceptInvite.tsx)
-
-Before calling the `accept_trip_invite` RPC, verify the session is valid. If not, redirect to sign-in with a return path.
-
-- Add `import { guardedGetSession } from '@/lib/authSessionGuard'` (already exists in codebase)
-- Before the RPC call inside `handleAccept`, await `guardedGetSession()`
-- If no valid session, call `redirectToInviteAuth('signin')` and return early
-
-## Change 3: Structured error logging (AcceptInvite.tsx)
-
-Replace the generic `logger.error('[invite] Accept error:', err)` in the catch block with structured field extraction (`message`, `code`, `details`, `hint`, `status`).
-
-## Change 4: Row-level lock on invite (SQL migration)
-
-Update the `accept_trip_invite` RPC to add `FOR UPDATE` to the invite SELECT, serializing concurrent accept calls and preventing double-increment of `uses_count`.
-
-Single line change:
 ```sql
--- Before:
-SELECT * INTO v_invite FROM public.trip_invites WHERE token = p_token;
--- After:
-SELECT * INTO v_invite FROM public.trip_invites WHERE token = p_token FOR UPDATE;
+CREATE OR REPLACE FUNCTION public.sync_expired_credit_balances()
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  updated_count integer;
+BEGIN
+  -- Recalculate free_credits for users whose expiry has passed
+  UPDATE public.credit_balances cb
+  SET 
+    free_credits = (
+      SELECT COALESCE(SUM(cp.remaining), 0)::int
+      FROM public.credit_purchases cp
+      WHERE cp.user_id = cb.user_id
+        AND cp.remaining > 0
+        AND cp.credit_type IN ('free_monthly', 'signup_bonus', 'referral_bonus')
+        AND (cp.expires_at IS NULL OR cp.expires_at > now())
+    ),
+    purchased_credits = (
+      SELECT COALESCE(SUM(cp.remaining), 0)::int
+      FROM public.credit_purchases cp
+      WHERE cp.user_id = cb.user_id
+        AND cp.remaining > 0
+        AND cp.credit_type NOT IN ('free_monthly', 'signup_bonus', 'referral_bonus')
+        AND (cp.expires_at IS NULL OR cp.expires_at > now())
+    ),
+    updated_at = now()
+  WHERE cb.free_credits > 0
+    AND cb.free_credits_expires_at IS NOT NULL
+    AND cb.free_credits_expires_at < now();
+
+  GET DIAGNOSTICS updated_count = ROW_COUNT;
+  RETURN updated_count;
+END;
+$$;
 ```
 
-The full RPC will be re-created in a new migration with this one change. All other logic remains identical.
+### 2. Daily cron schedule (runs at 1 AM UTC)
 
----
+```sql
+SELECT cron.schedule(
+  'sync-expired-credit-balances',
+  '0 1 * * *',
+  $$SELECT public.sync_expired_credit_balances()$$
+);
+```
 
-## Files Modified
-- `src/pages/AcceptInvite.tsx` — Changes 1, 2, 3
-- New migration SQL file — Change 4
+## What this does NOT change
+- No edge functions created
+- No changes to `spend-credits`, `grant-monthly-credits`, or `useCredits` hook
+- No changes to the FIFO deduction logic
+- Expired `credit_purchases` rows are not deleted (they remain for audit/history)
 
-## What is NOT touched
-- `resolve_or_rotate_invite` RPC
-- `group_budgets` / "Enable Group Editing" flow
-- Auth system / lock warnings
-- Invite validation/display logic
+## File
+- 1 new SQL migration file
 
