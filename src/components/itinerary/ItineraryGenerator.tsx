@@ -481,6 +481,7 @@ export function ItineraryGenerator({
           }
 
           onComplete(allDays, overview, gateResult.isFirstTrip);
+        }
       } else if (gateResult.mode === 'partial') {
         // PARTIAL — gate found user can afford some days but didn't confirm yet
         // This shouldn't normally be reached since partial triggers the confirmation dialog,

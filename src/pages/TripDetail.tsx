@@ -14,8 +14,10 @@ import ErrorBoundary from '@/components/common/ErrorBoundary';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { LiveItineraryView } from '@/components/itinerary/LiveItineraryView';
 import { ItineraryGenerator } from '@/components/itinerary/ItineraryGenerator';
+import { useGenerationPoller } from '@/hooks/useGenerationPoller';
 import { EditorialItinerary } from '@/components/itinerary/EditorialItinerary';
 import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
 import { ItineraryAssistant } from '@/components/itinerary/ItineraryAssistant';
@@ -139,6 +141,42 @@ export default function TripDetail() {
   // Stale pending charge safety net — auto-refund failed Smart Finish charges
   useStalePendingChargeRefund(tripId);
 
+  // =========================================================================
+  // SERVER-SIDE GENERATION: Poll for background generation progress
+  // =========================================================================
+  const isServerGenerating = trip?.itinerary_status === 'generating' || trip?.itinerary_status === 'queued';
+  const generationPoller = useGenerationPoller({
+    tripId: tripId || null,
+    enabled: isServerGenerating,
+    interval: 3000,
+    onReady: async () => {
+      // Reload trip data to get completed itinerary
+      if (!tripId) return;
+      const { data } = await supabase.from('trips').select('*').eq('id', tripId).single();
+      if (data) {
+        setTrip(data);
+        setCachedVersion(tripId, (data as any).itinerary_version ?? 1);
+        toast.success('Your itinerary is ready! 🎉');
+        if (user?.id) {
+          queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
+          queryClient.invalidateQueries({ queryKey: ['entitlements', user.id] });
+        }
+      }
+    },
+    onFailed: (err) => {
+      toast.error(`Generation failed: ${err}. Credits for ungenerated days have been refunded.`, { duration: 6000 });
+      // Reload trip to get updated status
+      if (tripId) {
+        supabase.from('trips').select('*').eq('id', tripId).single().then(({ data }) => {
+          if (data) setTrip(data);
+        });
+      }
+      if (user?.id) {
+        queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
+        queryClient.invalidateQueries({ queryKey: ['entitlements', user.id] });
+      }
+    },
+  });
   // =========================================================================
   // HOTEL ENRICHMENT: Auto-enrich if missing address/website/photos
   // =========================================================================
@@ -1229,6 +1267,32 @@ export default function TripDetail() {
               onActivitySkip={handleActivitySkip}
             />
             </ErrorBoundary>
+          ) : isServerGenerating ? (
+            /* Server-side generation in progress — show polling progress */
+            <div className="flex flex-col items-center justify-center py-20 space-y-6">
+              <div className="relative">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                <Sparkles className="h-4 w-4 text-primary absolute -top-1 -right-1 animate-pulse" />
+              </div>
+              <div className="text-center space-y-2 max-w-md">
+                <h3 className="text-xl font-serif font-semibold">Generating your itinerary…</h3>
+                {generationPoller.totalDays > 0 ? (
+                  <p className="text-muted-foreground">
+                    Day {generationPoller.completedDays} of {generationPoller.totalDays} complete
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground">Starting generation…</p>
+                )}
+                {generationPoller.totalDays > 0 && (
+                  <div className="w-64 mx-auto">
+                    <Progress value={generationPoller.progress} className="h-2" />
+                  </div>
+                )}
+                <p className="text-sm text-muted-foreground/70 mt-4">
+                  You can safely leave this page — we'll have it ready when you come back.
+                </p>
+              </div>
+            </div>
           ) : showGenerator ? (
             /* Itinerary Generator */
             <ErrorBoundary>
