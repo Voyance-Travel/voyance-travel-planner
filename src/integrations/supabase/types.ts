@@ -8490,6 +8490,7 @@ export type Database = {
         }
         Returns: Json
       }
+      sync_expired_credit_balances: { Args: never; Returns: number }
       transition_booking_state: {
         Args: {
           p_activity_id: string
