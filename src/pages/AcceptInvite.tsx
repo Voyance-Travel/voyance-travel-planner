@@ -3,7 +3,7 @@
  * Handles trip invite link acceptance with auth flow
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { MapPin, Calendar, Users, CheckCircle2, AlertCircle, Loader2, UserPlus } from 'lucide-react';
@@ -18,6 +18,7 @@ import { parseLocalDate } from '@/utils/dateUtils';
 import { saveReturnPath } from '@/utils/authReturnPath';
 import { savePendingInviteToken, peekPendingInviteToken } from '@/utils/inviteTokenPersistence';
 import logger from '@/lib/logger';
+import { guardedGetSession } from '@/lib/authSessionGuard';
 import MainLayout from '@/components/layout/MainLayout';
 
 interface InviteInfo {
@@ -100,6 +101,7 @@ export default function AcceptInvite() {
   const [accepting, setAccepting] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const acceptingRef = useRef(false);
 
   // Resolve token with fallback: route param → query param → persisted token
   const queryToken = searchParams.get('inviteToken');
@@ -167,12 +169,21 @@ export default function AcceptInvite() {
   };
 
   const handleAccept = async () => {
-    if (!token) return;
+    if (!token || acceptingRef.current) return;
+    acceptingRef.current = true;
 
     setAccepting(true);
     logger.info('[invite] Accept attempt', { token: token?.slice(0, 8), userId: user?.id?.slice(0, 8) });
 
     try {
+      // Change 2: Ensure auth token is valid before RPC call
+      const { data: sessionData } = await guardedGetSession();
+      if (!sessionData?.session) {
+        logger.warn('[invite] No valid session, redirecting to sign-in');
+        redirectToInviteAuth('signin');
+        return;
+      }
+
       const { data, error: acceptError } = await supabase.rpc('accept_trip_invite', {
         p_token: token,
       });
@@ -197,11 +208,20 @@ export default function AcceptInvite() {
         const errorDisplay = getErrorDisplay(result?.reason, result?.error);
         setError(errorDisplay.message);
       }
-    } catch (err) {
-      logger.error('[invite] Accept error:', err);
+    } catch (err: any) {
+      // Change 3: Structured error logging
+      logger.error('[invite] Accept error:', {
+        message: err?.message,
+        code: err?.code,
+        details: err?.details,
+        hint: err?.hint,
+        status: err?.status,
+        raw: err,
+      });
       setError('Failed to accept invite. Please try again.');
     } finally {
       setAccepting(false);
+      acceptingRef.current = false;
     }
   };
 
@@ -346,7 +366,7 @@ export default function AcceptInvite() {
                   className="w-full" 
                   size="lg"
                   onClick={handleAccept}
-                  disabled={accepting}
+                  disabled={accepting || acceptingRef.current}
                 >
                   {accepting ? (
                     <>
