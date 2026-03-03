@@ -209,7 +209,7 @@ a) CLASSIFY each segment:
 b) DETECT MISSING LEGS: Check if there's a flight between each consecutive destination. Flag missing legs using the EXACT field names shown above: "fromCity" (NOT "from_city"), "toCity" (NOT "to_city").
 
 c) CALCULATE DESTINATION AVAILABILITY WINDOWS:
-   - availableFrom = arrival time + 3 hours (international) or + 1.5 hours (domestic/short-haul under 4h)
+   - availableFrom = arrival time + 4 hours (international) or + 2 hours (domestic/short-haul under 4h)
    - availableUntil = departure time - 3.5 hours (international) or - 2.5 hours (domestic/short-haul)
    - If arrival/departure is unknown (missing leg), set to null
 

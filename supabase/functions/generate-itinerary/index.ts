@@ -2964,14 +2964,29 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
             if (intelTime) {
               const normalized = normalizeTo24h(intelTime);
               if (normalized) {
-                arrivalTime24 = normalized;
                 earliestFirstActivity = normalized;
-                // Update display time from arrivalDatetime
+                // Extract actual arrival time from arrivalDatetime, NOT availableFrom
                 const arrivalDt = (firstDest.arrivalDatetime || (firstDest as any).arrival_datetime) as string | null;
                 if (arrivalDt?.includes('T')) {
-                  arrivalTimeStr = arrivalDt.split('T')[1]?.substring(0, 5) || arrivalTimeStr;
+                  const actualTime = arrivalDt.split('T')[1]?.substring(0, 5);
+                  if (actualTime) {
+                    const actualNormalized = normalizeTo24h(actualTime);
+                    if (actualNormalized) {
+                      arrivalTime24 = actualNormalized;
+                      arrivalTimeStr = actualTime;
+                    }
+                  }
                 }
-                console.log(`[FlightContext] ✈️ OVERRIDDEN by flight intelligence: arrival=${arrivalTimeStr}, earliest=${earliestFirstActivity}`);
+                // Ensure minimum 4-hour buffer from actual arrival (generation engine standard)
+                if (arrivalTime24) {
+                  const arrivalMins = parseTimeToMinutes(arrivalTime24) || 0;
+                  const earliestMins = parseTimeToMinutes(earliestFirstActivity) || 0;
+                  const minEarliest = arrivalMins + 240; // 4 hours
+                  if (earliestMins < minEarliest) {
+                    earliestFirstActivity = minutesToHHMM(minEarliest);
+                  }
+                }
+                console.log(`[FlightContext] ✈️ OVERRIDDEN by flight intelligence: arrival=${arrivalTime24}, earliest=${earliestFirstActivity}`);
               }
             }
           }
