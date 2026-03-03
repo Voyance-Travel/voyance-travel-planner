@@ -1,59 +1,72 @@
 
+Issue confirmed: this is not user error. We have corrupted day text being saved from generation (example in backend data: `Arrival and Academic Roots抽,title:`), which explains why you keep seeing it repeatedly.
 
-# Fix: "Just Tell Us" Flow Resolving Dates to 2025
+## Why this is happening
 
-## Problem
-When users type dates like "March 15-28" without a year, the AI parser sometimes outputs 2025 dates. The month-reference fixer only catches "in March" / "next April" patterns, missing bare date formats. The past-date safety net exists but may not trigger reliably.
+1. The day-generation pipeline is trusting AI strings too much before save.
+2. The existing sanitizers remove some artifacts, but they do not reliably strip schema-leak fragments like `,title: -`.
+3. The generation preview path (`useItineraryGeneration`) currently renders raw day/activity strings from the backend response with minimal cleanup.
+4. Existing corrupted trips keep showing the same bad text because display parsing does not fully scrub these artifacts.
 
-## Root Causes
-1. The system prompt tells the AI today's date but doesn't strongly enough forbid past years
-2. The month-reference regex (line 490) only matches `in|next|this coming` + month -- it misses "March 15", "March 15-28", "Mar 15 to Mar 28"
-3. The past-date safety net (line 528) compares against `new Date()` server time, which should work, but the AI is still outputting 2025 before the net runs
+## Implementation plan
 
-## Changes
+### 1) Harden backend generation sanitization at the source
+**File:** `supabase/functions/generate-itinerary/index.ts`
 
-### 1. Strengthen the AI system prompt (parse-trip-input edge function)
+- Add a dedicated deep text sanitizer for generated day payloads (day title/theme/narrative + activity title/name/description/location/tips).
+- Extend leak-pattern cleanup to catch:
+  - `,title: ...`
+  - `,theme: ...`
+  - `,dayNumber: ...`
+  - `practicalTips`/`accommodationNotes` fragments
+  - stray CJK artifacts like `抽`
+- Apply sanitizer in **both** generation branches:
+  - `action === 'generate-day' | 'regenerate-day'`
+  - `action === 'generate-full'` Stage 2 path
+- Ensure fallback normalization still runs after cleanup:
+  - if day title becomes empty, fallback to `theme` or `Day N`
+  - if activity title becomes empty, fallback to `Activity N`
 
-In the `SYSTEM_PROMPT` (line 91-94), add an explicit rule:
+### 2) Add frontend safety-net sanitization for live generation preview
+**File:** `src/hooks/useItineraryGeneration.ts`
 
-```
-## CRITICAL DATE RULES
-- The current year is [YEAR]. NEVER output dates in [YEAR-1] or earlier.
-- When a user provides only month and day (e.g., "March 15"), assume the current year.
-  If that date has already passed this year, use next year.
-- ALL dates in the output MUST be in the future. Zero exceptions.
-```
+- Sanitize incoming `generatedDay` text before putting it into local state (and before partial save payload composition).
+- This ensures users don’t see raw artifacts even if a backend edge-case slips through.
 
-### 2. Expand the month-reference date fixer
+### 3) Strengthen shared text sanitization rules
+**File:** `src/utils/textSanitizer.ts`
 
-Currently (line 490) the regex only matches:
-```
-/\b(?:in|next|this coming)\s+(january|february|...)\b/i
-```
+- Expand schema-leak regex patterns to include `title`-style leaked keys safely.
+- Keep cleanup conservative to avoid removing legitimate natural language.
+- Reuse this same sanitizer from generation-facing paths to avoid duplicated regex logic.
 
-Add a second pass that catches bare month + day patterns like:
-- "March 15"
-- "March 15-28"  
-- "Mar 15 to Mar 28"
-- "March 15 - March 28"
+### 4) Protect existing itinerary rendering paths
+**File:** `src/utils/itineraryParser.ts`
 
-For these, if the AI output a past-year date, override the year to the next upcoming occurrence of that month.
+- Upgrade `sanitizeDisplayString` to also strip schema-leak fragments (not just non-Latin script).
+- This cleans already-stored bad content when reading historical trips, so old broken titles won’t keep appearing.
 
-### 3. Harden the past-date safety net
+### 5) One-time cleanup for existing corrupted records
+**Backend data repair (migration/script):**
 
-The existing safety net (line 528-562) already bumps past dates forward. Reinforce it by:
-- Adding a log when dates are bumped so we can trace this in production
-- Ensuring the comparison is done correctly with local date construction (not UTC)
-- Adding a secondary check: if the year is less than the current year, always bump -- don't even compare month/day
+- Run a targeted cleanup update for known leak patterns in:
+  - `trips.itinerary_data` JSON day titles/themes/narratives
+  - `itinerary_days.title/theme`
+- Scope pattern cleanup to obvious schema-leak signatures (`title:`, `practicalTips`, etc.) and CJK artifacts to avoid altering legitimate content.
 
-### File Modified
-- `supabase/functions/parse-trip-input/index.ts`
-  - Strengthen system prompt with explicit year/future-only rules
-  - Add regex pass for bare "Month Day" patterns (e.g., "March 15") to resolve year correctly
-  - Harden past-date safety net with explicit year < currentYear check
+## Validation checklist
 
-### No Changes To
-- Frontend components
-- Other edge functions
-- Database schema
+1. Reproduce with the same “Just Tell Us” scenario that previously produced `抽,title: -`.
+2. Confirm generated day title/theme is clean in:
+   - generation preview
+   - trip detail page
+   - saved trip reload.
+3. Confirm activity titles are clean and still meaningful.
+4. Confirm no regressions in normal valid titles (nothing over-sanitized).
+5. Verify existing corrupted trips now display clean text after parser/cleanup pass.
 
+## Expected outcome
+
+- New trips: this artifact stops appearing.
+- Existing trips: corrupted labels are cleaned on read (and optionally repaired in DB).
+- User experience: no more repeated dead-end of seeing malformed titles after regeneration.
