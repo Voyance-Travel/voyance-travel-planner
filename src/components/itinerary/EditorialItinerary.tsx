@@ -4562,6 +4562,15 @@ export function EditorialItinerary({
                         cost: typeof act.cost === 'object' && act.cost !== null
                           ? { ...(act.cost as any), amount: newCostWhole }
                           : newCostWhole,
+                        // Update location name so dining venue display reflects the swap
+                        location: {
+                          ...(act.location || {}),
+                          name: suggestion.suggested_swap,
+                        },
+                        // Clear stale Voyance intelligence from old activity
+                        tips: undefined,
+                        voyanceInsight: undefined,
+                        isVoyancePick: false,
                       };
                     }),
                   };
