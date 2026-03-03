@@ -85,7 +85,7 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR", { message: errorMessage });
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ success: false, error: "Usage processing failed", code: "USAGE_ERROR" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });

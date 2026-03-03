@@ -407,7 +407,7 @@ Deno.serve(async (req) => {
     if (error) {
       console.error('Insert error:', error)
       return new Response(
-        JSON.stringify({ error: error.message, details: error }),
+        JSON.stringify({ success: false, error: "Data import failed", code: "INSERT_ERROR" }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -421,7 +421,7 @@ Deno.serve(async (req) => {
     const errorMessage = err instanceof Error ? err.message : 'Unknown error'
     console.error('Bulk import error:', errorMessage)
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ success: false, error: "Import processing failed", code: "IMPORT_ERROR" }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }

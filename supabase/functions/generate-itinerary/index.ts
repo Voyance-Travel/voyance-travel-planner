@@ -11130,7 +11130,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       } catch (error) {
         console.error("[generate-day] Error:", error);
         return new Response(
-          JSON.stringify({ error: error instanceof Error ? error.message : "Generation failed" }),
+          JSON.stringify({ success: false, error: "Day generation failed", code: "GENERATE_DAY_ERROR" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -12061,7 +12061,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
     }
 
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Internal server error" }),
+      JSON.stringify({ success: false, error: "Itinerary generation failed", code: "GENERATE_ERROR" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

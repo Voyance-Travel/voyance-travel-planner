@@ -456,7 +456,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('[trip-notifications] Error:', error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Internal server error' }),
+      JSON.stringify({ success: false, error: "Notification processing failed", code: "NOTIFICATION_ERROR" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

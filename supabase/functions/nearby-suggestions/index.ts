@@ -215,7 +215,7 @@ OUTPUT FORMAT (JSON only, no markdown):
   } catch (error) {
     console.error("nearby-suggestions error:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ success: false, error: "Suggestion lookup failed", code: "SUGGESTIONS_ERROR" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

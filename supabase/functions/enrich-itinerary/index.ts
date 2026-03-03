@@ -172,7 +172,7 @@ serve(async (req) => {
   } catch (error) {
     console.error("[enrich-itinerary] Error:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Enrichment failed" }),
+      JSON.stringify({ success: false, error: "Itinerary enrichment failed", code: "ENRICHMENT_ERROR" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

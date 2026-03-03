@@ -427,7 +427,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('Airport transfers error:', error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ success: false, error: "Transfer lookup failed", code: "TRANSFER_ERROR" }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

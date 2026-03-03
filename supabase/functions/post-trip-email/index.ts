@@ -177,7 +177,7 @@ const handler = async (req: Request): Promise<Response> => {
   } catch (error) {
     console.error("post-trip-email error:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ success: false, error: "Email delivery failed", code: "EMAIL_ERROR" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

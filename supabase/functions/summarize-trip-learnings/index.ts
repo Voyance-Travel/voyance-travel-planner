@@ -145,7 +145,7 @@ Output a single paragraph that could be injected into an AI prompt for their nex
   } catch (error) {
     console.error('[summarize-trip-learnings] Error:', error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ success: false, error: "Trip summary failed", code: "SUMMARY_ERROR" }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

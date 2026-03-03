@@ -231,7 +231,7 @@ const handler = async (req: Request): Promise<Response> => {
   } catch (error) {
     logStep("Error", { error: error instanceof Error ? error.message : String(error) });
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ success: false, error: "Email test failed", code: "EMAIL_ERROR" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

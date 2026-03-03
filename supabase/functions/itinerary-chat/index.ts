@@ -655,7 +655,7 @@ ${itineraryDescription}
   } catch (error) {
     log("Error", { message: error instanceof Error ? error.message : String(error) });
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ success: false, error: "Chat processing failed", code: "CHAT_ERROR" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
