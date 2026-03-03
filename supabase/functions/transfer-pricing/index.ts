@@ -557,7 +557,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('[Transfer-Pricing] Error:', error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ success: false, error: "Transfer pricing failed", code: "PRICING_ERROR" }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

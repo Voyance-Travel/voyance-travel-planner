@@ -184,7 +184,7 @@ OUTPUT FORMAT (JSON only, no markdown):
   } catch (error) {
     console.error("discover-proactive error:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ success: false, error: "Discovery failed", code: "DISCOVERY_ERROR" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

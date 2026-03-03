@@ -228,7 +228,7 @@ Refine your analysis based on this additional information.`
   } catch (error) {
     console.error("[parse-travel-story] Error:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Failed to analyze story" }),
+      JSON.stringify({ success: false, error: "Story analysis failed", code: "PARSE_ERROR" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
