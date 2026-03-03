@@ -179,6 +179,9 @@ export function ItineraryGenerator({
 
   const isFirstTrip = entitlements?.is_first_trip ?? false;
 
+  // State for partial generation
+  const [partialDays, setPartialDays] = useState<number | null>(null);
+
   // Show cost confirmation before generating (for non-first-trip users)
   const handleGenerateClick = () => {
     // First trip is always free — skip cost confirmation
@@ -196,10 +199,17 @@ export function ItineraryGenerator({
 
   const handleConfirmGenerate = () => {
     setShowCostConfirm(false);
+    setPartialDays(null); // Full generation
     handleGenerate();
   };
 
-  const handleGenerate = async () => {
+  const handleConfirmPartialGenerate = (days: number) => {
+    setShowCostConfirm(false);
+    setPartialDays(days);
+    handleGenerate(days);
+  };
+
+  const handleGenerate = async (overrideDays?: number) => {
     setHasStarted(true);
     setShowGenericWarning(false);
     setShowCostConfirm(false);
@@ -308,6 +318,60 @@ export function ItineraryGenerator({
       }
     }
 
+    // ── PARTIAL MODE: user confirmed partial generation via overrideDays ──
+    // The gate returned 'partial' but we need to actually spend credits now
+    if (gateResult.mode === 'partial' && overrideDays && overrideDays > 0) {
+      const costPerDay = Math.ceil(gateResult.tripCost / gateResult.requestedDays);
+      const partialCost = overrideDays * costPerDay;
+      
+      try {
+        const { data, error: spendErr } = await supabase.functions.invoke('spend-credits', {
+          body: {
+            action: 'trip_generation',
+            tripId,
+            creditsAmount: partialCost,
+            metadata: {
+              days: overrideDays,
+              totalDays,
+              mode: 'partial',
+            },
+          },
+        });
+
+        if (spendErr || data?.error) {
+          console.error('[ItineraryGenerator] Partial spend failed:', spendErr || data?.error);
+          if (stallCheckRef.current) clearInterval(stallCheckRef.current);
+          if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
+          cancel();
+          setPrePhase(null);
+          toast.error('Failed to process credits. Please try again.');
+          return;
+        }
+
+        // Convert to full mode with the partial cost
+        gateResult = {
+          ...gateResult,
+          mode: 'full',
+          creditsCharged: data.spent ?? partialCost,
+          currentBalance: data.newBalance?.total ?? (gateResult.currentBalance - partialCost),
+          generateDays: overrideDays,
+        };
+
+        // Refresh credit balance
+        if (userId) {
+          queryClient.invalidateQueries({ queryKey: ['credits', userId] });
+        }
+      } catch (err) {
+        console.error('[ItineraryGenerator] Partial spend error:', err);
+        if (stallCheckRef.current) clearInterval(stallCheckRef.current);
+        if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
+        cancel();
+        setPrePhase(null);
+        toast.error('Something went wrong. Please try again.');
+        return;
+      }
+    }
+
     console.log(`[ItineraryGenerator] Gate result: mode=${gateResult.mode}, cost=${gateResult.tripCost}, charged=${gateResult.creditsCharged}`);
     gateResultRef.current = gateResult;
 
@@ -358,6 +422,16 @@ export function ItineraryGenerator({
         }
 
         onComplete(allDays, overview, gateResult.isFirstTrip);
+      } else if (gateResult.mode === 'partial') {
+        // PARTIAL — gate found user can afford some days but didn't confirm yet
+        // This shouldn't normally be reached since partial triggers the confirmation dialog,
+        // but handle gracefully: show the cost confirm dialog
+        console.log(`[ItineraryGenerator] PARTIAL: user can afford ${daysToGenerate}/${totalRequestedDays} days. Showing confirmation.`);
+        setPrePhase(null);
+        setHasStarted(false);
+        if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
+        if (stallCheckRef.current) clearInterval(stallCheckRef.current);
+        setShowCostConfirm(true);
       } else {
         // LOCKED — no credits, no AI, no API calls
         console.log(`[ItineraryGenerator] LOCKED: user has ${gateResult.currentBalance} credits, needs ${gateResult.tripCost}. No AI generation.`);
@@ -637,60 +711,93 @@ export function ItineraryGenerator({
 
           
           {/* Cost Confirmation Dialog */}
-          {showCostConfirm && costEstimate.totalCredits > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4 text-left"
-            >
-              <div className="flex items-center gap-2 mb-3">
-                <Coins className="h-4 w-4 text-primary" />
-                <span className="text-sm font-semibold text-foreground">Cost Breakdown</span>
-              </div>
-              <div className="space-y-1.5 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">{totalDaysEstimate} days × 60 cr/day</span>
-                  <span className="text-foreground">{costEstimate.baseCredits} cr</span>
+          {showCostConfirm && costEstimate.totalCredits > 0 && (() => {
+            const canAffordAll = currentBalance >= costEstimate.totalCredits;
+            const costPerDay = 60; // CREDIT_COSTS standard
+            const affordableDays = costPerDay > 0 ? Math.floor(currentBalance / costPerDay) : 0;
+            const partialCost = affordableDays * costPerDay;
+            const canAffordPartial = !canAffordAll && affordableDays >= 1;
+
+            return (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4 text-left"
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <Coins className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-semibold text-foreground">Cost Breakdown</span>
                 </div>
-                {costEstimate.multiCityFee > 0 && (
+                <div className="space-y-1.5 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Multi-city fee</span>
-                    <span className="text-foreground">+{costEstimate.multiCityFee} cr</span>
+                    <span className="text-muted-foreground">{totalDaysEstimate} days × {costPerDay} cr/day</span>
+                    <span className="text-foreground">{costEstimate.baseCredits} cr</span>
                   </div>
-                )}
-                {costEstimate.complexity.multiplier > 1 && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">{costEstimate.complexity.tierLabel} complexity</span>
-                    <span className="text-foreground">×{costEstimate.complexity.multiplier}</span>
+                  {costEstimate.multiCityFee > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Multi-city fee</span>
+                      <span className="text-foreground">+{costEstimate.multiCityFee} cr</span>
+                    </div>
+                  )}
+                  {costEstimate.complexity.multiplier > 1 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">{costEstimate.complexity.tierLabel} complexity</span>
+                      <span className="text-foreground">×{costEstimate.complexity.multiplier}</span>
+                    </div>
+                  )}
+                  <div className="border-t border-border pt-1.5 flex justify-between font-semibold">
+                    <span className="text-foreground">Total</span>
+                    <span className="text-primary">{formatCredits(costEstimate.totalCredits)} credits</span>
                   </div>
-                )}
-                <div className="border-t border-border pt-1.5 flex justify-between font-semibold">
-                  <span className="text-foreground">Total</span>
-                  <span className="text-primary">{formatCredits(costEstimate.totalCredits)} credits</span>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Your balance</span>
+                    <span className={canAffordAll ? 'text-foreground' : 'text-destructive'}>
+                      {formatCredits(currentBalance)} credits
+                    </span>
+                  </div>
+                  {canAffordAll && (
+                    <div className="text-xs text-muted-foreground">
+                      After: {formatCredits(currentBalance - costEstimate.totalCredits)} credits remaining
+                    </div>
+                  )}
+                  {canAffordPartial && (
+                    <div className="mt-2 p-2.5 rounded-lg bg-accent/50 border border-accent text-xs text-foreground">
+                      You have enough credits for <span className="font-semibold">{affordableDays} of {totalDaysEstimate} days</span>.
+                      Generate those now and unlock the rest later.
+                    </div>
+                  )}
                 </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Your balance</span>
-                  <span className={currentBalance >= costEstimate.totalCredits ? 'text-foreground' : 'text-destructive'}>
-                    {formatCredits(currentBalance)} credits
-                  </span>
+                <div className="flex flex-col gap-2 mt-4">
+                  {canAffordAll ? (
+                    <Button size="sm" onClick={handleConfirmGenerate} className="w-full gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Confirm & Generate
+                    </Button>
+                  ) : canAffordPartial ? (
+                    <Button size="sm" onClick={() => handleConfirmPartialGenerate(affordableDays)} className="w-full gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Generate {affordableDays} {affordableDays === 1 ? 'Day' : 'Days'} ({partialCost} cr)
+                    </Button>
+                  ) : (
+                    <Button size="sm" onClick={() => {
+                      setShowCostConfirm(false);
+                      showOutOfCredits({
+                        creditsNeeded: costEstimate.totalCredits,
+                        creditsAvailable: currentBalance,
+                        tripId,
+                      });
+                    }} className="w-full gap-1.5">
+                      <Wallet className="h-3.5 w-3.5" />
+                      Get Credits
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => setShowCostConfirm(false)}>
+                    Cancel
+                  </Button>
                 </div>
-                {currentBalance >= costEstimate.totalCredits && (
-                  <div className="text-xs text-muted-foreground">
-                    After: {formatCredits(currentBalance - costEstimate.totalCredits)} credits remaining
-                  </div>
-                )}
-              </div>
-              <div className="flex gap-2 mt-4">
-                <Button size="sm" onClick={handleConfirmGenerate} className="flex-1 gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Confirm & Generate
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setShowCostConfirm(false)}>
-                  Cancel
-                </Button>
-              </div>
-            </motion.div>
-          )}
+              </motion.div>
+            );
+          })()}
 
           {!showCostConfirm && (
             <div className="flex flex-col gap-3">

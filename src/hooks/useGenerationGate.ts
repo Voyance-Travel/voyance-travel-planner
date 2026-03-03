@@ -26,7 +26,7 @@ import { useCredits } from './useCredits';
 // TYPES
 // ============================================================================
 
-export type GenerationMode = 'full' | 'preview' | 'locked';
+export type GenerationMode = 'full' | 'partial' | 'preview' | 'locked';
 
 export interface GateResult {
   mode: GenerationMode;
@@ -131,10 +131,31 @@ export function useGenerationGate() {
 
     // ────────────────────────────────────────────────────
     // SUBSEQUENT TRIPS: Check credits
-    // Simple rule: balance >= cost or LOCKED (no AI, no API calls)
+    // Full if can afford all, Partial if can afford ≥1 day, Locked if 0
     // ────────────────────────────────────────────────────
     if (!user || currentBalance < tripCost) {
+      const costPerDay = Math.ceil(tripCost / params.days);
+      const affordableDays = costPerDay > 0 ? Math.floor(currentBalance / costPerDay) : 0;
       const shortfall = Math.max(0, tripCost - currentBalance);
+
+      if (affordableDays >= 1 && user) {
+        // PARTIAL: User can afford some days but not all
+        const partialCost = affordableDays * costPerDay;
+        console.log(`[GenerationGate] Partial generation: can afford ${affordableDays}/${params.days} days (${partialCost} credits)`);
+        
+        // Don't deduct yet — deduction happens after user confirms in the UI
+        return {
+          mode: 'partial',
+          tripCost,
+          creditsCharged: 0, // Not charged yet — charged after confirmation
+          currentBalance,
+          shortfall,
+          recommendedPack: getRecommendedPackForEstimate(tripCost, currentBalance),
+          requestedDays: params.days,
+          generateDays: affordableDays,
+        };
+      }
+
       console.log(`[GenerationGate] Insufficient credits: have ${currentBalance}, need ${tripCost} — LOCKED`);
       return {
         mode: 'locked',
