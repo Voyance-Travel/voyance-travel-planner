@@ -81,15 +81,19 @@ export function useUnlockDay() {
     });
 
     try {
+      // Idempotency key prevents duplicate charges from rapid taps
+      const idempotencyKey = `unlock_day_${params.tripId}_d${params.dayNumber}_${Date.now()}`;
       const { data: spendData, error: spendError } = await supabase.functions.invoke('spend-credits', {
         body: {
           action: 'unlock_day',
           tripId: params.tripId,
           creditsAmount: CREDIT_COSTS.UNLOCK_DAY,
+          idempotencyKey,
           metadata: {
             type: 'single_day_unlock',
             dayNumber: params.dayNumber,
             destination: params.destination,
+            idempotencyKey,
           },
         },
       });
@@ -148,6 +152,12 @@ export function useUnlockDay() {
 
       const enrichedDay = data.day || data;
 
+      // Clear isLocked/isPreview on the enriched day so UI shows it immediately
+      if (enrichedDay?.metadata) {
+        enrichedDay.metadata.isLocked = false;
+        enrichedDay.metadata.isPreview = false;
+      }
+
       // QA-020: Update unlocked_day_count using max-based logic (never decreases)
       try {
         const { data: tripRow } = await supabase
@@ -161,9 +171,10 @@ export function useUnlockDay() {
           .from('trips')
           .update({ unlocked_day_count: newCount } as any)
           .eq('id', params.tripId);
-        // Invalidate both entitlements and trip queries for immediate UI update
+        // Invalidate entitlements, trip, and credits queries for immediate UI update
         queryClient.invalidateQueries({ queryKey: ['entitlements'] });
         queryClient.invalidateQueries({ queryKey: ['trip', params.tripId] });
+        queryClient.invalidateQueries({ queryKey: ['credits'] });
       } catch (dbErr) {
         console.error('[UnlockDay] Failed to update unlocked_day_count:', dbErr);
       }

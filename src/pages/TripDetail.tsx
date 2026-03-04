@@ -867,17 +867,33 @@ export default function TripDetail() {
     }, { replace: true });
     
     // Force-save to backend so we never regenerate on refresh
+    // CRITICAL: Never decrease unlocked_day_count — use max of existing vs computed
     if (tripId) {
       try {
         console.log('[TripDetail] Force-saving itinerary to backend:', tripId);
+        
+        // Fetch current unlocked_day_count to ensure we never decrease it
+        const { data: currentTrip } = await supabase
+          .from('trips')
+          .select('unlocked_day_count')
+          .eq('id', tripId)
+          .maybeSingle();
+        const existingUnlocked = (currentTrip as any)?.unlocked_day_count ?? 0;
+        const computedUnlocked = isPreview === false 
+          ? computeUnlockedDayCount({ isFirstTrip: !!isFirstTrip, isPreview: false, generatedDayCount: nonLockedDays.length }) 
+          : undefined;
+        // Never write a lower value than what's already stored
+        const safeUnlocked = computedUnlocked !== undefined 
+          ? Math.max(existingUnlocked, computedUnlocked) 
+          : undefined;
+        
         const { error } = await supabase
           .from('trips')
           .update({
             itinerary_data: JSON.parse(JSON.stringify(itineraryPayload)) as any,
             itinerary_status: 'ready',
             updated_at: new Date().toISOString(),
-            // Set unlocked_day_count via voyanceFlowController (single source of truth)
-            ...(isPreview === false ? { unlocked_day_count: computeUnlockedDayCount({ isFirstTrip, isPreview: false, generatedDayCount: nonLockedDays.length }) } : {}),
+            ...(safeUnlocked !== undefined ? { unlocked_day_count: safeUnlocked } : {}),
           })
           .eq('id', tripId);
         
