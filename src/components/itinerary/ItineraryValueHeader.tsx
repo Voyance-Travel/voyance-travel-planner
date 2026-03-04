@@ -110,7 +110,7 @@ export function ItineraryValueHeader({
       )}
     >
       {/* Header */}
-      <div className="p-5 text-center border-b border-border/50">
+      <div className="p-3 sm:p-5 text-center border-b border-border/50">
         <h2 className="text-sm font-semibold text-primary uppercase tracking-wider mb-1">
           Voyance Intelligence Summary
         </h2>

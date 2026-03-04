@@ -3662,8 +3662,8 @@ export function EditorialItinerary({
       )}
 
 
-      {/* Navigation Tabs - Horizontally scrollable on mobile with fade indicator */}
-      <div className="relative">
+      {/* Navigation Tabs - Sticky on mobile, horizontally scrollable with fade indicator */}
+      <div className="sticky top-0 z-30 bg-background sm:relative sm:z-auto">
         <div 
           className="border-b border-border overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0"
           ref={(el) => {
@@ -7186,7 +7186,7 @@ function DayCard({
   // Library modal state removed - agent features disabled
 
   return (
-    <div className="border border-border bg-card overflow-hidden rounded-xl shadow-sm hover:shadow-md transition-shadow" data-tour="day-header">
+    <div className="border border-border bg-card overflow-hidden rounded-xl shadow-none sm:shadow-sm sm:hover:shadow-md transition-shadow" data-tour="day-header">
       {/* Day Header - Editorial Style with Color Accent */}
       <div className={cn(
         "relative p-4 sm:p-6 transition-colors duration-500",
@@ -7206,10 +7206,12 @@ function DayCard({
           <div className="flex items-center gap-2 sm:gap-4">
             <div className="relative shrink-0">
               <span className={cn(
-                "text-xl sm:text-5xl font-serif font-light transition-colors duration-500",
+                "font-serif font-light transition-colors duration-500",
+                "text-sm sm:text-5xl",
                 allLocked ? "text-emerald-500/50" : "text-primary/40"
               )}>
-                {String(day.dayNumber).padStart(2, '0')}
+                <span className="sm:hidden font-sans font-semibold text-xs uppercase tracking-wider">Day {day.dayNumber}</span>
+                <span className="hidden sm:inline">{String(day.dayNumber).padStart(2, '0')}</span>
               </span>
               <div className="hidden sm:block absolute -bottom-1 left-1/2 -translate-x-1/2 w-6 sm:w-8 h-0.5 bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
             </div>
@@ -7262,8 +7264,9 @@ function DayCard({
                 {day.weather.high && <span className="font-medium">{day.weather.high}°</span>}
               </div>
             )}
-            {/* Transport Details Toggle - hidden for preview/locked days */}
+            {/* Desktop: show all action buttons inline */}
             {!dayIsPreview && (
+            <div className="hidden sm:flex items-center gap-1.5">
             <Tooltip delayDuration={200}>
               <TooltipTrigger asChild>
                 <Button
@@ -7271,34 +7274,35 @@ function DayCard({
                   size="sm"
                   onClick={() => setShowTransportDetails(prev => !prev)}
                   className={cn(
-                    "h-7 sm:h-8 gap-1 sm:gap-1.5 text-xs font-medium transition-all shrink-0 px-2 sm:px-3",
+                    "h-8 gap-1.5 text-xs font-medium transition-all shrink-0 px-3",
                     showTransportDetails 
                       ? "bg-primary text-primary-foreground" 
                       : "border-primary/30 hover:bg-primary/10 hover:border-primary/50"
                   )}
                   aria-label={showTransportDetails ? 'Hide Routes' : 'Show Routes'}
                 >
-                  <Route className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
-                  <span className="hidden sm:inline">{showTransportDetails ? 'Hide Routes' : 'Show Routes'}</span>
+                  <Route className="h-3.5 w-3.5" />
+                  <span>{showTransportDetails ? 'Hide Routes' : 'Show Routes'}</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">
                 <span className="text-xs font-medium">{showTransportDetails ? 'Hide Routes' : 'Show Routes'}</span>
               </TooltipContent>
             </Tooltip>
+            </div>
             )}
             {isEditable && (
-              <>
+              <div className="hidden sm:flex items-center gap-1">
                 <Tooltip delayDuration={200}>
                   <TooltipTrigger asChild>
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => onDayLock(dayIndex)}
-                      className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-primary/10 shrink-0"
+                      className="h-8 w-8 hover:bg-primary/10 shrink-0"
                       aria-label={allLocked ? 'Unlock Day' : 'Lock Day'}
                     >
-                      {allLocked ? <Lock className="h-3.5 sm:h-4 w-3.5 sm:w-4 text-primary" /> : <Unlock className="h-3.5 sm:h-4 w-3.5 sm:w-4" />}
+                      {allLocked ? <Lock className="h-4 w-4 text-primary" /> : <Unlock className="h-4 w-4" />}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">
@@ -7313,11 +7317,11 @@ function DayCard({
                       size="icon"
                       onClick={onDayRegenerate}
                       disabled={isRegenerating}
-                      className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-accent/10 shrink-0"
+                      className="h-8 w-8 hover:bg-accent/10 shrink-0"
                       aria-label="Regenerate Day"
                       data-tour="regenerate-button"
                     >
-                      <RefreshCw className={cn("h-3.5 sm:h-4 w-3.5 sm:w-4", isRegenerating && "animate-spin text-accent")} />
+                      <RefreshCw className={cn("h-4 w-4", isRegenerating && "animate-spin text-accent")} />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">
@@ -7325,9 +7329,42 @@ function DayCard({
                   </TooltipContent>
                 </Tooltip>
                 )}
-                {/* Save to Library button removed - agent features disabled */}
-              </>
+              </div>
             )}
+            {/* Mobile: overflow menu for Routes/Lock/Regenerate */}
+            <div className="sm:hidden flex items-center gap-1">
+              {(isEditable || !dayIsPreview) && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
+                      <MoreHorizontal className="h-3.5 w-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    {!dayIsPreview && (
+                      <DropdownMenuItem onClick={() => setShowTransportDetails(prev => !prev)}>
+                        <Route className="h-3.5 w-3.5 mr-2" />
+                        {showTransportDetails ? 'Hide Routes' : 'Show Routes'}
+                      </DropdownMenuItem>
+                    )}
+                    {isEditable && (
+                      <>
+                        <DropdownMenuItem onClick={() => onDayLock(dayIndex)}>
+                          {allLocked ? <Lock className="h-3.5 w-3.5 mr-2" /> : <Unlock className="h-3.5 w-3.5 mr-2" />}
+                          {allLocked ? 'Unlock Day' : 'Lock Day'}
+                        </DropdownMenuItem>
+                        {!aiLocked && (
+                          <DropdownMenuItem onClick={onDayRegenerate} disabled={isRegenerating}>
+                            <RefreshCw className={cn("h-3.5 w-3.5 mr-2", isRegenerating && "animate-spin")} />
+                            Regenerate Day
+                          </DropdownMenuItem>
+                        )}
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
             <Tooltip delayDuration={200}>
               <TooltipTrigger asChild>
                 <Button
