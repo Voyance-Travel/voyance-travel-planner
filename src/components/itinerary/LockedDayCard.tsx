@@ -6,7 +6,7 @@
  */
 
 import { motion } from 'framer-motion';
-import { Sparkles, Pencil, CreditCard } from 'lucide-react';
+import { Sparkles, Pencil, CreditCard, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
@@ -33,6 +33,8 @@ interface LockedDayCardProps {
   isFirstTrip?: boolean;
   canAfford?: boolean;
   currentBalance?: number;
+  isUnlocking?: boolean;
+  unlockError?: string | null;
 }
 
 export function LockedDayCard({
@@ -46,6 +48,8 @@ export function LockedDayCard({
   isFirstTrip = false,
   canAfford = false,
   currentBalance = 0,
+  isUnlocking = false,
+  unlockError = null,
 }: LockedDayCardProps) {
   const { enableManualBuilder } = useManualBuilderStore();
   const { showOutOfCredits } = useOutOfCredits();
@@ -102,11 +106,21 @@ export function LockedDayCard({
       <div className="flex flex-col gap-3 w-full max-w-xs">
         <Button
           onClick={handleFinishForMe}
+          disabled={isUnlocking}
           className="w-full gap-2.5 rounded-xl h-12 text-sm font-medium"
           size="lg"
         >
-          <Sparkles className="h-4 w-4" />
-          {canAfford ? 'Plan this day for me' : 'Finish it for me'}
+          {isUnlocking ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Unlocking Day {dayNumber}...
+            </>
+          ) : (
+            <>
+              <Sparkles className="h-4 w-4" />
+              {canAfford ? 'Plan this day for me' : 'Finish it for me'}
+            </>
+          )}
         </Button>
 
         {tripId && (
@@ -122,8 +136,19 @@ export function LockedDayCard({
         )}
       </div>
 
+      {/* Inline error state */}
+      {unlockError && (
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-xs text-destructive mt-4 text-center max-w-xs"
+        >
+          {unlockError}. Please try again.
+        </motion.p>
+      )}
+
       {/* Subtle credit hint - only when they can't afford */}
-      {!canAfford && !isFirstTrip && (
+      {!canAfford && !isFirstTrip && !unlockError && (
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

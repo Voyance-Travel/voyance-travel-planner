@@ -1507,7 +1507,7 @@ export function EditorialItinerary({
   const routeOptCost = useRouteOptCost(tripId);
   
   // Per-day unlock for preview itineraries
-  const { unlockDay, isUnlocking: isUnlockingDay, unlockingDayNumber } = useUnlockDay();
+  const { unlockDay, isUnlocking: isUnlockingDay, unlockingDayNumber, state: unlockDayState } = useUnlockDay();
   const { bulkUnlock, isUnlocking: isBulkUnlocking } = useBulkUnlock();
   
   // Transport mode change free cap
@@ -4373,6 +4373,8 @@ export function EditorialItinerary({
                         isFirstTrip={!!selectedDay.metadata?.isFirstTrip}
                         canAfford={totalCredits >= CREDIT_COSTS.UNLOCK_DAY}
                         currentBalance={totalCredits}
+                        isUnlocking={isUnlockingDay && unlockingDayNumber === selectedDay.dayNumber}
+                        unlockError={unlockDayState?.step === 'error' && unlockDayState?.dayNumber === selectedDay.dayNumber ? unlockDayState.error : null}
                       />
                     );
                   }
@@ -4400,6 +4402,8 @@ export function EditorialItinerary({
                           isFirstTrip={!!selectedDay.metadata?.isFirstTrip}
                           canAfford={totalCredits >= CREDIT_COSTS.UNLOCK_DAY}
                           currentBalance={totalCredits}
+                          isUnlocking={isUnlockingDay && unlockingDayNumber === selectedDay.dayNumber}
+                          unlockError={unlockDayState?.step === 'error' && unlockDayState?.dayNumber === selectedDay.dayNumber ? unlockDayState.error : null}
                         />
                       ) : (
                         <DayCard

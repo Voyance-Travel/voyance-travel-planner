@@ -12299,19 +12299,22 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
               status: 'generating',
               generatedAt: new Date().toISOString(),
             };
-            await supabase.from('trips').update({
-              itinerary_data: partialItinerary,
-            }).eq('id', tripId);
 
-            // === HEARTBEAT: Update after completing this day ===
+            // === PROGRESSIVE UNLOCK: Update unlocked_day_count so generated days are never re-locked ===
             {
-              const { data: metaTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
+              const { data: metaTrip } = await supabase.from('trips').select('metadata, unlocked_day_count').eq('id', tripId).single();
               const meta = (metaTrip?.metadata as Record<string, unknown>) || {};
+              const currentUnlocked = (metaTrip as any)?.unlocked_day_count ?? 0;
+              // unlocked_day_count = max(current, completed day number) — never decreases
+              const newUnlocked = Math.max(currentUnlocked, dayNum);
               await supabase.from('trips').update({
+                itinerary_data: partialItinerary,
+                unlocked_day_count: newUnlocked,
                 metadata: {
                   ...meta,
                   generation_completed_days: dayNum,
                   generation_heartbeat: new Date().toISOString(),
+                  generation_total_days: totalDays,
                 },
               }).eq('id', tripId);
             }
@@ -12330,9 +12333,20 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             status: 'ready',
             generatedAt: new Date().toISOString(),
           };
+          // Final unlock count = max(existing, totalDays)
+          const { data: finalTrip } = await supabase.from('trips').select('metadata, unlocked_day_count').eq('id', tripId).single();
+          const finalMeta = (finalTrip?.metadata as Record<string, unknown>) || {};
+          const finalUnlocked = Math.max((finalTrip as any)?.unlocked_day_count ?? 0, generatedDays.length);
           await supabase.from('trips').update({
             itinerary_data: finalItinerary,
             itinerary_status: 'ready',
+            unlocked_day_count: finalUnlocked,
+            metadata: {
+              ...finalMeta,
+              generation_completed_days: generatedDays.length,
+              generation_completed_at: new Date().toISOString(),
+              generation_heartbeat: new Date().toISOString(),
+            },
           }).eq('id', tripId);
 
           console.log(`[generate-trip] ✅ Trip ${tripId} generation complete: ${totalDays} days`);
@@ -12341,15 +12355,18 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           lastError = err instanceof Error ? err.message : String(err);
           console.error(`[generate-trip] ❌ Generation failed for trip ${tripId}: ${lastError}`);
 
-          // Save partial progress
+          // Save partial progress and preserve unlocked_day_count for generated days
           if (generatedDays.length > 0) {
             const partialItinerary = {
               days: generatedDays,
               status: 'partial',
               generatedAt: new Date().toISOString(),
             };
+            const { data: failTrip } = await supabase.from('trips').select('unlocked_day_count').eq('id', tripId).single();
+            const currentUnlocked = (failTrip as any)?.unlocked_day_count ?? 0;
             await supabase.from('trips').update({
               itinerary_data: partialItinerary,
+              unlocked_day_count: Math.max(currentUnlocked, generatedDays.length),
             }).eq('id', tripId);
           }
 

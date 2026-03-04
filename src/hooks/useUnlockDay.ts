@@ -148,7 +148,7 @@ export function useUnlockDay() {
 
       const enrichedDay = data.day || data;
 
-      // QA-020: Increment unlocked_day_count in DB so gating picks it up
+      // QA-020: Update unlocked_day_count using max-based logic (never decreases)
       try {
         const { data: tripRow } = await supabase
           .from('trips')
@@ -156,13 +156,16 @@ export function useUnlockDay() {
           .eq('id', params.tripId)
           .maybeSingle();
         const currentCount = (tripRow as any)?.unlocked_day_count ?? 0;
+        const newCount = Math.max(currentCount, params.dayNumber);
         await supabase
           .from('trips')
-          .update({ unlocked_day_count: currentCount + 1 } as any)
+          .update({ unlocked_day_count: newCount } as any)
           .eq('id', params.tripId);
+        // Invalidate both entitlements and trip queries for immediate UI update
+        queryClient.invalidateQueries({ queryKey: ['entitlements'] });
         queryClient.invalidateQueries({ queryKey: ['trip', params.tripId] });
       } catch (dbErr) {
-        console.error('[UnlockDay] Failed to increment unlocked_day_count:', dbErr);
+        console.error('[UnlockDay] Failed to update unlocked_day_count:', dbErr);
       }
 
       setState({
