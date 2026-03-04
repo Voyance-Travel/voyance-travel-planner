@@ -995,7 +995,7 @@ export function ItineraryGenerator({
         animate={{ opacity: 1, y: 0 }}
         className="py-10"
       >
-        <GenerationPhases currentStep={prePhase} destination={destination} totalDays={totalDaysEstimate} />
+        <GenerationPhases currentStep={prePhase} destination={destination} totalDays={totalDaysEstimate} tripId={tripId} />
         <div className="flex justify-center mt-6">
           <Button
             variant="ghost"
@@ -1018,129 +1018,23 @@ export function ItineraryGenerator({
   // SERVER-SIDE GENERATION: dedicated progress view using poller data
   // =========================================================================
   if (serverGenActive) {
-    const pollerDays = poller.partialDays as unknown[];
-    const hasPartialDays = pollerDays.length > 0;
-
     return (
-      <div className="py-8 space-y-6">
-        {/* Progress Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center"
-        >
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary mb-4">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm font-medium">
-              {poller.totalDays > 0
-                ? `Generating Day ${poller.completedDays + 1} of ${poller.totalDays}`
-                : 'Starting generation…'}
-            </span>
-          </div>
-
-          <h2 className="text-2xl font-serif font-bold mb-2">
-            Crafting Your {destination} Adventure
-          </h2>
-
-          {poller.totalDays > 0 && (
-            <div className="max-w-md mx-auto mt-4">
-              <Progress value={poller.progress} className="h-2" />
-              <p className="text-sm text-muted-foreground mt-2">
-                {poller.completedDays} of {poller.totalDays} days complete
-              </p>
-            </div>
-          )}
-        </motion.div>
-
-        {/* Safe-to-leave banner */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="max-w-lg mx-auto"
-        >
-          <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-            <Cloud className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-foreground">Building in the cloud</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                You can close this page or navigate away — your itinerary will be waiting for you when you come back.
-              </p>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Day-by-day progress list from itinerary_days table */}
-        {poller.generatedDaysList.length > 0 ? (
-          <div className="max-w-lg mx-auto space-y-3">
-            <p className="text-sm text-muted-foreground text-center">
-              {poller.completedDays} of {poller.totalDays} days complete
-              {poller.totalDays > 0 && poller.completedDays < poller.totalDays && (
-                <> · ~{Math.ceil((poller.totalDays - poller.completedDays) * 1.2)} min remaining</>
-              )}
-            </p>
-            {poller.generatedDaysList.map((day) => (
-              <motion.div
-                key={day.day_number}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4 }}
-                className="flex items-center gap-3 rounded-xl border border-border bg-card p-3"
-              >
-                <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold shrink-0">
-                  {day.day_number}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-foreground text-sm truncate">{day.title}</p>
-                  {day.theme && (
-                    <p className="text-xs text-muted-foreground truncate">{day.theme}</p>
-                  )}
-                </div>
-                <Check className="h-4 w-4 text-primary shrink-0" />
-              </motion.div>
-            ))}
-          </div>
-        ) : hasPartialDays ? (
-          <div className="space-y-4 max-w-2xl mx-auto">
-            <p className="text-sm text-muted-foreground text-center">
-              Browse your completed days while we finish the rest:
-            </p>
-            <EditorialItinerary
-              tripId={tripId}
-              days={parseEditorialDays({ days: pollerDays }, startDate) as EditorialDay[]}
-              destination={destination}
-              startDate={startDate}
-              endDate={endDate}
-              travelers={travelers}
-              isEditable={false}
-              isPreview={true}
-            />
-          </div>
-        ) : (
-          <PersonalizedLoadingProgress
-            tripType={tripType}
-            destination={destination}
-            travelers={travelers}
-            progress={poller.progress}
-          />
-        )}
-
-        {/* Skeleton for next generating day */}
-        {poller.totalDays > 0 && poller.completedDays < poller.totalDays && (
-          <div className="max-w-2xl mx-auto">
-            <div className="border border-dashed border-border rounded-xl p-4 opacity-60 animate-pulse">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="font-medium">Day {poller.completedDays + 1}</p>
-                  <p className="text-sm text-muted-foreground">Generating activities…</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+      <div className="py-10">
+        <GenerationPhases tripId={tripId} totalDays={totalDaysEstimate} destination={destination} currentStep="preparing" />
+        <div className="flex justify-center mt-6">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              reset();
+              setServerGenActive(false);
+              setHasStarted(false);
+              onCancel?.();
+            }}
+          >
+            Cancel
+          </Button>
+        </div>
       </div>
     );
   }
