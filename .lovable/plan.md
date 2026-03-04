@@ -1,117 +1,64 @@
 
 
-# Server-Side Generation: Never Lose Credits on Page Refresh
+# Fix: Real-Time Progress During Server-Side Generation
 
-## The Problem
-Itinerary generation currently runs as a **frontend loop** — the browser calls the edge function once per day, one at a time. If the user refreshes, closes the tab, or navigates away, the loop dies. Credits were already deducted but the itinerary is incomplete, and the user is asked to pay again.
+## Problem Summary
 
-## The Solution
-Move the day-by-day orchestration to the **backend edge function**. The frontend makes a single "start generation" call, then polls the trip's status until it's done. Even if the user refreshes or leaves, the server keeps generating and saves the result to the database.
+When server-side generation is active, **two things go wrong**:
 
----
+1. **ItineraryGenerator shows a dead UI**: After calling `startServerGeneration`, it sets `serverGenActive = true` and renders the "generating" view — but that view reads `isGenerating`, `progress`, and `days` from the **frontend generation hook** (`useItineraryGeneration`), which has nothing happening. The poller data (`poller.partialDays`, `poller.completedDays`, `poller.progress`) is fetched correctly but **never wired into the UI**.
 
-## Architecture Change
+2. **No progressive day rendering in ItineraryGenerator**: The `EditorialItinerary` progressive preview only exists in `TripDetail.tsx` (lines 1395-1413), not in `ItineraryGenerator.tsx`. So while staying on the generator screen, the user sees a frozen spinner.
 
-```text
-BEFORE (fragile):
-  Browser -> generate day 1 -> save -> generate day 2 -> save -> ... -> done
-  (user refreshes) -> loop dies -> credits lost
+3. **"You can safely leave" messaging is buried**: It exists in TripDetail (line 1388) but is a small, low-contrast line. It's missing entirely from the ItineraryGenerator view.
 
-AFTER (resilient):
-  Browser -> "start generation" -> edge function runs ALL days server-side
-  Browser -> polls trip.itinerary_status every 3s
-  (user refreshes) -> polls again -> sees progress or completed itinerary
-```
+## Changes
 
----
-
-## Implementation Plan
-
-### 1. New Edge Function Action: `generate-trip` (server-side orchestration)
-
-**File: `supabase/functions/generate-itinerary/index.ts`**
-
-Add a new action `generate-trip` that:
-- Accepts the same params as the current frontend loop (tripId, destination, dates, etc.)
-- Immediately sets `trips.itinerary_status = 'generating'` and returns `{ status: 'generating' }` to the client
-- Uses `EdgeRuntime.waitUntil()` to continue running the day-by-day loop in the background
-- After each day completes, saves progress to `trips.itinerary_data` (partial itinerary with days so far)
-- On completion: sets `itinerary_status = 'ready'`
-- On failure: sets `itinerary_status = 'failed'`, triggers credit refund for ungenerated days, stores error in `trips.metadata.generation_error`
-
-The existing `generate-day` action stays untouched (used for single-day regeneration, unlock-day, etc.).
-
-### 2. Frontend: Replace Loop with Single Call + Polling
-
-**File: `src/hooks/useItineraryGeneration.ts`**
-
-Replace `generateItineraryProgressive` (the day-by-day frontend loop) with:
-- A single call to `generate-itinerary` with `action: 'generate-trip'`
-- Return immediately after the call succeeds
-
-**New file: `src/hooks/useGenerationPoller.ts`**
-
-Create a polling hook that:
-- Watches `trips.itinerary_status` for the current trip (query every 3 seconds while status is `generating`)
-- Reads `trips.itinerary_data.days` to show progressive day count
-- When status becomes `ready`: stops polling, triggers UI update
-- When status becomes `failed`: stops polling, shows error with refund confirmation
-
-### 3. Update ItineraryGenerator UI
-
+### 1. Wire poller data into ItineraryGenerator's generating UI
 **File: `src/components/itinerary/ItineraryGenerator.tsx`**
 
-- After credits are deducted and `generate-trip` is called, switch to a "generation in progress" state
-- Show progress based on polled data (days completed / total days)
-- Display message: "Your itinerary is being generated. You can safely leave this page -- we'll have it ready when you come back."
-- Remove the `beforeunload` warning (no longer needed -- generation is server-side)
+When `serverGenActive` is true, render a **server-generation-specific progress view** instead of the frontend-loop progress view. This view should:
 
-### 4. Handle Page Reload During Generation
+- Use `poller.completedDays` / `poller.totalDays` for progress text
+- Use `poller.progress` for the progress bar
+- Show `poller.partialDays` using `EditorialItinerary` (same pattern as TripDetail lines 1396-1413)
+- Show the "Generating Day X..." skeleton for the next day
+- Display a clear "You can safely leave" message with emphasis (not buried text)
+- Show the `PersonalizedLoadingProgress` component during the initial wait (before day 1 completes)
 
-**File: `src/pages/TripDetail.tsx`**
+The logic: detect `serverGenActive` early in the render flow and return a dedicated server-progress block that bypasses the existing frontend-loop UI entirely.
 
-When the trip loads with `itinerary_status === 'generating'`:
-- Show a "Generation in progress" banner instead of the empty state or generator CTA
-- Start the polling hook automatically
-- When polling detects `ready`, refresh the trip data and show the itinerary
+### 2. Improve "safe to leave" messaging
+**Files: `ItineraryGenerator.tsx` and `TripDetail.tsx`**
 
-When the trip loads with `itinerary_status === 'failed'`:
-- Check for `metadata.generation_error` and display it
-- Show a "Retry" button (no re-charge -- refund already happened server-side)
+Upgrade the messaging from a tiny muted line to a visible callout:
+- Use an info-style card/banner: "Your itinerary is being built in the cloud. You can close this page or navigate away — it'll be waiting for you when you come back."
+- On the TripDashboard, the trip already shows a "Generating itinerary…" badge (line 454) — confirm this links back to the trip detail correctly (it does via normal card click).
 
-### 5. Server-Side Refund on Failure
+### 3. Remove duplicate poller instances
+**File: `src/components/itinerary/ItineraryGenerator.tsx`**
 
-**File: `supabase/functions/generate-itinerary/index.ts`** (within the new `generate-trip` action)
+The ItineraryGenerator has its own `useGenerationPoller` (line 120), AND TripDetail has another one (line 151). When both are mounted simultaneously, they both poll every 3s — doubling DB reads for no reason.
 
-If the background loop fails partway:
-- Calculate ungenerated days
-- Call the existing `spend-credits` refund logic server-side
-- Save partial progress (days that did complete)
-- Set `itinerary_status = 'failed'` with error details
+Fix: ItineraryGenerator's poller is the one that's active during initial generation. TripDetail's poller only activates when the user returns to a trip that's already generating (no ItineraryGenerator mounted). This is already roughly correct because ItineraryGenerator's poller uses `serverGenActive` and TripDetail's uses `isServerGenerating`. But when ItineraryGenerator is mounted AND `serverGenActive` is true, both fire. 
 
-This eliminates the need for any client-side refund logic for initial generation.
+Solution: Pass the poller state down from TripDetail to ItineraryGenerator as a prop, OR have ItineraryGenerator skip its own poller when not needed. Simplest: keep ItineraryGenerator's poller (it's the one active during initial gen) and disable TripDetail's when `showGenerator` is true.
 
----
+### 4. Poll interval tuning
+**File: `src/hooks/useGenerationPoller.ts`**
 
-## Files to Create/Modify
+No change needed — already at 3s in ItineraryGenerator and 3s in TripDetail. This is appropriate for active generation.
+
+## Files to Modify
 
 | File | Change |
 |------|--------|
-| `supabase/functions/generate-itinerary/index.ts` | Add `generate-trip` action with server-side orchestration loop |
-| `src/hooks/useGenerationPoller.ts` | **New** -- polling hook for generation status |
-| `src/hooks/useItineraryGeneration.ts` | Replace frontend loop with single `generate-trip` call |
-| `src/components/itinerary/ItineraryGenerator.tsx` | Switch to poll-based progress UI, remove stall detection |
-| `src/pages/TripDetail.tsx` | Handle `generating` and `failed` statuses on page load |
+| `src/components/itinerary/ItineraryGenerator.tsx` | Add server-gen progress view with partial day rendering, PersonalizedLoadingProgress, and "safe to leave" banner |
+| `src/pages/TripDetail.tsx` | Disable TripDetail's poller when ItineraryGenerator is mounted to avoid double-polling; improve "safe to leave" copy |
 
-## What Stays the Same
-- `generate-day` action (used for single-day unlock, regeneration)
-- Credit gating logic (`useGenerationGate`)
-- The actual AI prompt building and day generation logic (reused by `generate-trip`)
-- `save-itinerary` action
-- All existing itinerary display components
+## What stays the same
+- The poller hook itself (working correctly)
+- The edge function (writing heartbeat + partial days correctly)
+- TripDashboard's "Generating itinerary…" badge
+- Resume/stalled detection logic
 
-## Expected Result
-- User starts generation, can safely refresh or close the tab
-- Coming back shows progress or completed itinerary
-- Credits are never lost -- server handles refunds on failure
-- No more "pay again to finish" scenarios
