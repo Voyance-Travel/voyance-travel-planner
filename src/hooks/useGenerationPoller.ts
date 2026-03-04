@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 const STALE_THRESHOLD_MS = 3 * 60 * 1000;
 
 export interface GenerationPollState {
-  status: 'idle' | 'polling' | 'ready' | 'failed' | 'stalled';
+  status: 'idle' | 'polling' | 'ready' | 'failed' | 'stalled' | 'partial';
   completedDays: number;
   totalDays: number;
   progress: number; // 0-100
@@ -101,6 +101,13 @@ export function useGenerationPoller({
         return;
       }
 
+      if (itineraryStatus === 'partial') {
+        stalledFiredRef.current = false;
+        const genError = (meta.generation_error as string) || 'Generation paused';
+        setState({ status: 'partial', completedDays, totalDays, progress, error: genError, partialDays });
+        return;
+      }
+
       // Still generating — check heartbeat for stale detection
       const heartbeat = meta.generation_heartbeat as string | undefined;
       const startedAt = meta.generation_started_at as string | undefined;
@@ -160,6 +167,7 @@ export function useGenerationPoller({
     isReady: state.status === 'ready',
     isFailed: state.status === 'failed',
     isStalled: state.status === 'stalled',
+    isPartial: state.status === 'partial',
     startPolling,
     stopPolling,
   };

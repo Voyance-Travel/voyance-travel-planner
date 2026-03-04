@@ -8619,6 +8619,7 @@ export type Database = {
         | "not_started"
         | "queued"
         | "generating"
+        | "partial"
         | "ready"
         | "failed"
       payment_method:
@@ -8898,6 +8899,7 @@ export const Constants = {
         "not_started",
         "queued",
         "generating",
+        "partial",
         "ready",
         "failed",
       ],

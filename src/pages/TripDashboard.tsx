@@ -871,6 +871,83 @@ export default function TripDashboard() {
     loadTrips();
   }, [isAuthenticated, user?.id]);
 
+  // =========================================================================
+  // WELCOME-BACK NOTIFICATION: Show toast when user returns and their
+  // itinerary has progressed, completed, or is partially done
+  // =========================================================================
+  useEffect(() => {
+    if (!trips.length) return;
+
+    // Find the most recently updated trip that's in a notable generation state
+    const generatingTrips = trips.filter(t =>
+      t.itineraryStatus === 'ready' ||
+      t.itineraryStatus === 'generating' ||
+      t.itineraryStatus === 'partial'
+    );
+
+    if (!generatingTrips.length) return;
+
+    // Only show once per session
+    const shownKey = 'voyance_welcome_back_shown';
+    const alreadyShown = sessionStorage.getItem(shownKey);
+    if (alreadyShown) return;
+
+    const trip = generatingTrips[0]; // Most recently updated
+    const meta = trip.metadata || {};
+    const completedDays = (meta as any)?.generation_completed_days || 0;
+    const totalDays = (meta as any)?.generation_total_days || 0;
+    const completedAt = (meta as any)?.generation_completed_at;
+
+    // Only show if generation completed while user was away (within last 24h)
+    if (trip.itineraryStatus === 'ready' && completedAt) {
+      const completedTime = new Date(completedAt).getTime();
+      const hoursSinceComplete = (Date.now() - completedTime) / (1000 * 60 * 60);
+      if (hoursSinceComplete < 24) {
+        sessionStorage.setItem(shownKey, 'true');
+        toast.success(
+          `Your ${trip.destination || trip.name} itinerary is ready! 🎉`,
+          {
+            action: {
+              label: 'View Itinerary',
+              onClick: () => navigate(`/trip/${trip.id}`),
+            },
+            duration: 10000,
+          }
+        );
+        return;
+      }
+    }
+
+    if (trip.itineraryStatus === 'generating' && completedDays > 0) {
+      sessionStorage.setItem(shownKey, 'true');
+      toast.info(
+        `Your ${trip.destination || trip.name} itinerary: ${completedDays} of ${totalDays} days ready`,
+        {
+          action: {
+            label: 'Check Progress',
+            onClick: () => navigate(`/trip/${trip.id}`),
+          },
+          duration: 8000,
+        }
+      );
+      return;
+    }
+
+    if (trip.itineraryStatus === 'partial' && completedDays > 0) {
+      sessionStorage.setItem(shownKey, 'true');
+      toast.warning(
+        `Your ${trip.destination || trip.name} itinerary paused at Day ${completedDays}/${totalDays}`,
+        {
+          action: {
+            label: 'Resume',
+            onClick: () => navigate(`/trip/${trip.id}`),
+          },
+          duration: 10000,
+        }
+      );
+    }
+  }, [trips, navigate]);
+
    // Handle trip deletion - remove from local state
    const handleTripDelete = useCallback((tripId: string) => {
      setTrips(prev => prev.filter(t => t.id !== tripId));
