@@ -1,79 +1,65 @@
 
 
-## Plan: Fix Generation Progress UI — Replace Fake Spinner with Live Polling
+## Plan: Modernize Mobile Trip Detail UI
 
-### Root Cause
+This is a large codebase with most changes already partially implemented from previous rounds. The key remaining work focuses on polishing the mobile experience across 3 files.
 
-The `prePhase` at line 991 renders `GenerationPhases` (the fake globe/phase stepper). The useEffect at line 219 SHOULD clear `prePhase` when `serverGenActive` becomes true, revealing the real progress view at line 1020. But there are two problems:
+### What's Already Done
+- Hero height reduced to `h-40` on mobile (Change 1) ✅
+- Compact status line on mobile ✅
+- MobileTripOverview wrapping Health + Travel Intel with localStorage collapse ✅
+- Tab bar has overflow menu for Payments/Info on mobile ✅
+- ItineraryValueHeader auto-collapses on return visits ✅
+- Action buttons have primary/secondary split ✅
+- Day headers hide description on mobile ✅
 
-1. **If `startServerGeneration` throws** (edge function timeout, 403, etc.), the catch at line 455 falls back to `generateItinerary` (frontend loop). `setServerGenActive(true)` at line 453 is **never reached**. The frontend loop also likely fails or produces nothing, so `days.length` stays 0, `prePhase` stays set, and the user sees the fake spinner forever.
+### What Still Needs Work
 
-2. **Even if `serverGenActive` works**, the server progress view at line 1020 only shows day titles from the poller — it doesn't show during the `prePhase` block. The `GenerationPhases` component itself does zero polling.
+#### 1. Make Tab Bar Sticky on Mobile (`EditorialItinerary.tsx`, ~line 3650)
+The tab bar container needs `sticky top-0 z-30` on mobile so users can always switch tabs while scrolling through long itineraries. Currently it scrolls away.
 
-### The Fix: Make GenerationPhases poll directly
+**Lines ~3650-3660**: Add `sm:relative sm:top-auto` to keep desktop unchanged, add `sticky top-0 z-30 bg-background` for mobile.
 
-Instead of relying on the complex `prePhase` → `serverGenActive` handoff, **rewrite `GenerationPhases.tsx`** to accept `tripId` and `totalDays`, poll `itinerary_days` itself, and show live day-by-day progress. This way, even if it's rendered via the `prePhase` block (line 991), users see real progress.
+#### 2. Compact Day Number in DayCard on Mobile (`EditorialItinerary.tsx`, ~line 7205-7215)
+The large `text-5xl` day number (`01`, `02`) takes excessive space on mobile. Change to `text-xl` on mobile with `sm:text-5xl` for desktop. The padded "01" format is fine on desktop but on mobile use "DAY 1" prefix style.
 
-### Changes
+**Lines ~7208-7213**: Change `text-xl sm:text-5xl` and conditionally show "DAY" prefix on mobile vs the large numeral on desktop.
 
-#### 1. Rewrite `GenerationPhases.tsx` — complete replacement
+#### 3. Move Day Action Buttons to Overflow Menu on Mobile (`EditorialItinerary.tsx`, ~line 7242-7347)
+Currently the day header shows: price badge, weather, Routes button, Lock button, Regenerate button, Collapse chevron — all inline. On mobile this overflows. Move Lock, Regenerate, and Routes into a `DropdownMenu` "⋯" button on mobile, keeping only price badge + weather + collapse chevron visible.
 
-Delete all current content (globe, phase stepper, travel quotes, rotating activities). Replace with:
+**Lines ~7242-7347**: Wrap Lock/Regenerate/Routes in `hidden sm:flex` and add a mobile-only `DropdownMenu` with those actions.
 
-- Accept props: `tripId?: string`, `totalDays?: number`, `destination?: string`, `currentStep` (kept for brief initial display)
-- Internal state: `days[]` from polling `itinerary_days`, `isComplete` boolean
-- `useEffect` with 5-second polling interval when `tripId` is provided:
-  - Query `itinerary_days` for `day_number, title, theme` ordered by `day_number`
-  - Query `trips` for `itinerary_status`
-  - Set `isComplete` when status is `'ready'` or `'generated'`
-- Render:
-  - Header: "Building Day X of Y" with sparkle icon
-  - Progress bar: `completedDays / totalDays * 100`
-  - Time estimate: `~${Math.ceil(remainingDays * 1.2)} min remaining`
-  - Completed days list: day number badge + title + theme + checkmark, animated fade-in
-  - Currently generating day: pulsing placeholder
-  - Upcoming days: faded placeholders (max 3 shown)
-  - "Feel free to leave" message at bottom
-  - When complete: "Your itinerary is ready!" with checkmark
+#### 4. VoyanceInsight Truncation on Mobile
+The VoyanceInsight paragraphs in activity cards show full text. On mobile, truncate to 1 line with "..." expand. This is in the `ActivityRow` component or `VoyanceInsight` component.
 
-If `tripId` is not provided (shouldn't happen but fallback), show a simple "Preparing..." spinner.
+Search for the `VoyanceInsight` component usage in ActivityRow and add `line-clamp-1 sm:line-clamp-none` with click-to-expand.
 
-#### 2. Update `ItineraryGenerator.tsx` — pass `tripId` to GenerationPhases
+#### 5. Increase Spacing Between Activity Cards (`EditorialItinerary.tsx`)
+Activity cards feel cramped. The `DraggableActivityList` renders items with minimal gap. Add `space-y-3 sm:space-y-4` to the activity list container for more breathing room.
 
-At line 998 where `GenerationPhases` is rendered inside the `prePhase` block:
+#### 6. Fix Flight Date Boxes Overlapping on Mobile (`SortableFlightLegCards.tsx`)
+The flight card header row (line ~133-161) uses `flex items-center justify-between` with badges and airport displays that can overlap on narrow screens. Add `flex-wrap gap-2` and ensure the route visualization (line ~164-189) stacks properly on very narrow screens.
 
-```tsx
-<GenerationPhases currentStep={prePhase} destination={destination} totalDays={totalDaysEstimate} tripId={tripId} />
-```
+**Lines ~133-161 and ~164-189**: Add `flex-wrap gap-2` to header, and add responsive `flex-col sm:flex-row` to route visualization for very narrow screens.
 
-This is the key change — `GenerationPhases` now receives `tripId` and can poll `itinerary_days` directly.
+#### 7. Visual Polish — Reduce Border/Shadow Noise
+- DayCard: Change `shadow-sm hover:shadow-md` to `shadow-none sm:shadow-sm sm:hover:shadow-md` on mobile (line ~7189)
+- Activity cards within days: reduce double-border effect by using subtler dividers
+- ItineraryValueHeader expanded: reduce padding on mobile
 
-#### 3. Remove redundant server progress view in `ItineraryGenerator.tsx`
+### Files to Modify
 
-The `serverGenActive` block (lines 1020-1146) becomes redundant since `GenerationPhases` now handles all progress display. However, to minimize risk, keep the `serverGenActive` block but have it also render the rewritten `GenerationPhases` component:
+| File | Changes |
+|------|---------|
+| `src/components/itinerary/EditorialItinerary.tsx` | Sticky tab bar; compact day number; day action overflow menu; activity spacing; DayCard shadow reduction |
+| `src/components/itinerary/SortableFlightLegCards.tsx` | Fix flight card layout overlap on mobile |
+| `src/components/itinerary/VoyanceInsight.tsx` | Truncate insight text on mobile with expand |
+| `src/components/itinerary/ItineraryValueHeader.tsx` | Minor padding reduction on mobile |
 
-```tsx
-if (serverGenActive) {
-  return (
-    <div className="py-10">
-      <GenerationPhases tripId={tripId} totalDays={totalDaysEstimate} destination={destination} currentStep="preparing" />
-    </div>
-  );
-}
-```
-
-This ensures both code paths (`prePhase` block and `serverGenActive` block) show the same live progress UI.
-
-### Files to modify
-
-| File | What |
-|------|------|
-| `src/components/planner/shared/GenerationPhases.tsx` | Complete rewrite — poll `itinerary_days`, show live day-by-day progress |
-| `src/components/itinerary/ItineraryGenerator.tsx` | Pass `tripId` to GenerationPhases at line 998; simplify `serverGenActive` block to use same component |
-
-### Why This Fixes All Three Scenarios
-
-1. **User stays during generation**: `GenerationPhases` polls every 5s, shows days appearing live
-2. **User leaves mid-generation**: "Feel free to leave" message visible; when they return, TripDetail.tsx detects generating state (already working)
-3. **User returns after completion**: TripDetail.tsx shows full itinerary (already working)
+### Priority
+1. Sticky tab bar + compact day headers (biggest mobile UX wins)
+2. Day action overflow menu (reduces clutter)
+3. Flight date box fix (visible bug)
+4. VoyanceInsight truncation + spacing polish
 
