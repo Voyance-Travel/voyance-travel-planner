@@ -12167,33 +12167,45 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       // Fire the first day generation via self-chain (non-blocking)
       const generateUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-itinerary`;
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-      fetch(generateUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${serviceKey}`,
-        },
-        body: JSON.stringify({
-          action: 'generate-trip-day',
-          tripId,
-          destination,
-          destinationCountry,
-          startDate,
-          endDate,
-          travelers: travelers || 1,
-          tripType: tripType || 'vacation',
-          budgetTier: budgetTier || 'moderate',
-          userId,
-          isMultiCity: isMultiCity || false,
-          creditsCharged: creditsCharged || 0,
-          requestedDays: requestedDays || totalDays,
-          dayNumber: effectiveStartDay,
-          totalDays,
-        }),
-      }).catch(err => {
-        console.error(`[generate-trip] Failed to trigger day ${effectiveStartDay}:`, err);
+      const initialChainBody = JSON.stringify({
+        action: 'generate-trip-day',
+        tripId,
+        destination,
+        destinationCountry,
+        startDate,
+        endDate,
+        travelers: travelers || 1,
+        tripType: tripType || 'vacation',
+        budgetTier: budgetTier || 'moderate',
+        userId,
+        isMultiCity: isMultiCity || false,
+        creditsCharged: creditsCharged || 0,
+        requestedDays: requestedDays || totalDays,
+        dayNumber: effectiveStartDay,
+        totalDays,
       });
+
+      // Retry loop with exponential backoff for intermittent 403 errors
+      const maxRetries = 3;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const response = await fetch(generateUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${serviceKey}`,
+            },
+            body: initialChainBody,
+          });
+          if (response.ok || response.status < 500) break;
+          console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} failed: ${response.status}`);
+        } catch (err) {
+          console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} error:`, err);
+        }
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 2000 * attempt));
+        }
+      }
 
       // Return immediately — generation continues server-side via self-chaining
       return new Response(
@@ -12493,38 +12505,56 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
         console.log(`[generate-trip-day] Day ${dayNumber}/${totalDays} complete, chaining to day ${dayNumber + 1}`);
 
-        // Fire-and-forget: call ourselves for the next day
+        // Fire-and-forget with retry: call ourselves for the next day
         // Uses SERVICE_ROLE_KEY so it's a server-to-server call independent of user session
         const generateUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-itinerary`;
         const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-        fetch(generateUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${serviceKey}`,
-          },
-          body: JSON.stringify({
-            action: 'generate-trip-day',
-            tripId,
-            destination,
-            destinationCountry,
-            startDate,
-            endDate,
-            travelers,
-            tripType,
-            budgetTier,
-            userId,
-            isMultiCity,
-            creditsCharged,
-            requestedDays,
-            dayNumber: dayNumber + 1,
-            totalDays,
-          }),
-        }).catch(err => {
-          console.error(`[generate-trip-day] Failed to trigger day ${dayNumber + 1}:`, err);
-          // If chaining fails, the stale heartbeat detection on the frontend will catch it
+        const chainBody = JSON.stringify({
+          action: 'generate-trip-day',
+          tripId,
+          destination,
+          destinationCountry,
+          startDate,
+          endDate,
+          travelers,
+          tripType,
+          budgetTier,
+          userId,
+          isMultiCity,
+          creditsCharged,
+          requestedDays,
+          dayNumber: dayNumber + 1,
+          totalDays,
         });
+
+        // Retry loop with exponential backoff for intermittent 403 errors
+        const maxRetries = 3;
+        let chainSuccess = false;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            const response = await fetch(generateUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${serviceKey}`,
+              },
+              body: chainBody,
+            });
+            if (response.ok || response.status < 500) {
+              chainSuccess = true;
+              break;
+            }
+            console.error(`[generate-trip-day] Chain attempt ${attempt}/${maxRetries} failed: ${response.status}`);
+          } catch (err) {
+            console.error(`[generate-trip-day] Chain attempt ${attempt}/${maxRetries} error:`, err);
+          }
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 2000 * attempt));
+          }
+        }
+        if (!chainSuccess) {
+          console.error(`[generate-trip-day] All ${maxRetries} chain attempts failed for day ${dayNumber + 1}`);
+        }
 
         return new Response(
           JSON.stringify({ status: 'day_complete', dayNumber, totalDays, nextDay: dayNumber + 1 }),

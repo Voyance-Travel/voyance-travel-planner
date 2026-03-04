@@ -11,6 +11,7 @@ import type { GenerationStep } from '@/hooks/useLovableItinerary';
 interface GenerationPhasesProps {
   currentStep: GenerationStep;
   destination?: string;
+  totalDays?: number;
 }
 
 // Fun facts about travel that rotate during loading
@@ -61,7 +62,7 @@ function getPhaseIndex(step: GenerationStep): number {
   return -1;
 }
 
-export function GenerationPhases({ currentStep, destination }: GenerationPhasesProps) {
+export function GenerationPhases({ currentStep, destination, totalDays }: GenerationPhasesProps) {
   const currentPhaseIndex = getPhaseIndex(currentStep);
   const [factIndex, setFactIndex] = useState(0);
   const [activityIndex, setActivityIndex] = useState(0);
@@ -285,7 +286,11 @@ export function GenerationPhases({ currentStep, destination }: GenerationPhasesP
 
       {/* Time estimate */}
       <p className="text-center text-xs text-muted-foreground mt-4">
-        Usually takes less than a minute
+        {totalDays && totalDays > 7
+          ? `Takes about ${Math.ceil(totalDays * 1.2)} minutes. You can leave and come back.`
+          : totalDays && totalDays > 3
+            ? `Takes about ${Math.ceil(totalDays * 1.2)} minutes`
+            : 'Usually takes 2-4 minutes'}
       </p>
     </motion.div>
   );

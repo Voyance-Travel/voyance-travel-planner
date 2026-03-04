@@ -7,7 +7,7 @@ import { NightsRedistributionModal } from '@/components/trip/NightsRedistributio
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { format, isAfter, isBefore, differenceInDays, addDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
-import { Loader2, Calendar, MapPin, ArrowLeft, Edit, Sparkles } from 'lucide-react';
+import { Loader2, Calendar, MapPin, ArrowLeft, Edit, Sparkles, CheckCircle } from 'lucide-react';
 import { TripDateEditor, type DateChangeResult } from '@/components/trip/TripDateEditor';
 import MainLayout from '@/components/layout/MainLayout';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
@@ -144,7 +144,9 @@ export default function TripDetail() {
   // =========================================================================
   // SERVER-SIDE GENERATION: Poll for background generation progress
   // =========================================================================
-  const isServerGenerating = trip?.itinerary_status === 'generating' || trip?.itinerary_status === 'queued';
+  const [itineraryDaysCount, setItineraryDaysCount] = useState<number>(0);
+  const [itineraryDaysSummaries, setItineraryDaysSummaries] = useState<Array<{ day_number: number; title: string; theme: string }>>([]);
+  const isServerGenerating = trip?.itinerary_status === 'generating' || trip?.itinerary_status === 'queued' || (itineraryDaysCount > 0 && !trip?.itinerary_data && trip?.itinerary_status !== 'ready' && (trip?.itinerary_status as string) !== 'generated');
   const [generationStalled, setGenerationStalled] = useState(false);
   const [resumingGeneration, setResumingGeneration] = useState(false);
 
@@ -159,6 +161,7 @@ export default function TripDetail() {
       const { data } = await supabase.from('trips').select('*').eq('id', tripId).single();
       if (data) {
         setTrip(data);
+        setItineraryDaysCount(0); // Reset — full data is now in itinerary_data
         setCachedVersion(tripId, (data as any).itinerary_version ?? 1);
         toast.success('Your itinerary is ready! 🎉');
         if (user?.id) {
@@ -578,6 +581,23 @@ export default function TripDetail() {
         }
 
         setTrip(tripData);
+
+        // Check itinerary_days count for generation state detection
+        try {
+          const { data: daysSummary, count: daysCount } = await supabase
+            .from('itinerary_days')
+            .select('day_number, title, theme', { count: 'exact' })
+            .eq('trip_id', tripId)
+            .order('day_number');
+          setItineraryDaysCount(daysCount || 0);
+          setItineraryDaysSummaries((daysSummary || []).map((d: any) => ({
+            day_number: d.day_number,
+            title: d.title || `Day ${d.day_number}`,
+            theme: d.theme || '',
+          })));
+        } catch (e) {
+          console.warn('[TripDetail] itinerary_days check failed:', e);
+        }
 
         // Seed optimistic locking version cache
         if (tripData?.id) {
@@ -1352,16 +1372,16 @@ export default function TripDetail() {
               {/* Progress header */}
               <div className="flex flex-col items-center justify-center py-10 space-y-4">
                 {generationStalled ? (
-                  /* Stalled / zombie state — offer resume */
+                  /* Stalled — auto-resume was attempted, show reconnecting */
                   <>
                     <div className="relative">
-                      <Sparkles className="h-10 w-10 text-muted-foreground" />
+                      <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
                     </div>
                     <div className="text-center space-y-3 max-w-md">
-                      <h3 className="text-xl font-serif font-semibold">Generation stalled</h3>
+                      <h3 className="text-xl font-serif font-semibold">Reconnecting...</h3>
                       <p className="text-muted-foreground">
-                        Your itinerary stopped generating at Day {generationPoller.completedDays} of {generationPoller.totalDays}.
-                        This can happen if the connection was interrupted.
+                        Generation paused at Day {generationPoller.completedDays} of {generationPoller.totalDays}.
+                        Attempting to resume automatically.
                       </p>
                       {generationPoller.totalDays > 0 && (
                         <div className="w-64 mx-auto">
@@ -1369,43 +1389,50 @@ export default function TripDetail() {
                         </div>
                       )}
                       <div className="flex gap-3 justify-center pt-2">
-                        <Button onClick={handleResumeGeneration} disabled={resumingGeneration}>
+                        <Button variant="outline" size="sm" onClick={handleResumeGeneration} disabled={resumingGeneration}>
                           {resumingGeneration ? (
                             <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Resuming…</>
                           ) : (
-                            <>Resume from Day {generationPoller.completedDays + 1}</>
+                            <>Retry manually</>
                           )}
                         </Button>
                       </div>
                     </div>
                   </>
                 ) : (
-                  /* Active generation — show progress */
+                  /* Active generation — show progress with day list */
                   <>
                     <div className="relative">
                       <Loader2 className="h-10 w-10 animate-spin text-primary" />
                       <Sparkles className="h-4 w-4 text-primary absolute -top-1 -right-1 animate-pulse" />
                     </div>
                     <div className="text-center space-y-2 max-w-md">
-                      <h3 className="text-xl font-serif font-semibold">Generating your itinerary…</h3>
+                      <h3 className="text-xl font-serif font-semibold">
+                        {generationPoller.completedDays > 0
+                          ? `Building Day ${generationPoller.completedDays + 1} of ${generationPoller.totalDays}`
+                          : 'Generating your itinerary…'}
+                      </h3>
                       {generationPoller.totalDays > 0 ? (
-                        <p className="text-muted-foreground">
-                          Day {generationPoller.completedDays} of {generationPoller.totalDays} complete
-                        </p>
+                        <>
+                          <p className="text-muted-foreground">
+                            {generationPoller.completedDays} of {generationPoller.totalDays} days complete
+                            {generationPoller.completedDays > 0 && generationPoller.totalDays > generationPoller.completedDays
+                              ? ` · ~${Math.ceil((generationPoller.totalDays - generationPoller.completedDays) * 1.2)} min remaining`
+                              : ''}
+                          </p>
+                          <div className="w-64 mx-auto">
+                            <Progress value={generationPoller.progress} className="h-2" />
+                          </div>
+                        </>
                       ) : (
                         <p className="text-muted-foreground">Starting generation…</p>
-                      )}
-                      {generationPoller.totalDays > 0 && (
-                        <div className="w-64 mx-auto">
-                          <Progress value={generationPoller.progress} className="h-2" />
-                        </div>
                       )}
                       <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 mt-4 max-w-md mx-auto">
                         <Sparkles className="h-5 w-5 text-primary mt-0.5 shrink-0" />
                         <div>
                           <p className="text-sm font-medium text-foreground">Building in the cloud</p>
                           <p className="text-sm text-muted-foreground mt-1">
-                            You can close this page or navigate away — your itinerary will be waiting for you when you come back.
+                            Feel free to leave — we'll keep building your itinerary in the background. Come back anytime to check progress.
                           </p>
                         </div>
                       </div>
@@ -1414,8 +1441,37 @@ export default function TripDetail() {
                 )}
               </div>
 
-              {/* Progressive day rendering — show completed days while generating */}
-              {generationPoller.partialDays.length > 0 && (
+              {/* Progressive day rendering — show completed days from itinerary_days */}
+              {generationPoller.generatedDaysList.length > 0 && (
+                <ErrorBoundary>
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground text-center">
+                      Your completed days:
+                    </p>
+                    <div className="space-y-2 max-w-lg mx-auto">
+                      {generationPoller.generatedDaysList.map((day) => (
+                        <div
+                          key={day.day_number}
+                          className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card"
+                          style={{ animation: 'fadeInUp 0.3s ease-out' }}
+                        >
+                          <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold shrink-0">
+                            {day.day_number}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">{day.title}</p>
+                            {day.theme && <p className="text-xs text-muted-foreground truncate">{day.theme}</p>}
+                          </div>
+                          <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </ErrorBoundary>
+              )}
+
+              {/* Also show partialDays from itinerary_data if generatedDaysList is empty */}
+              {generationPoller.generatedDaysList.length === 0 && generationPoller.partialDays.length > 0 && (
                 <ErrorBoundary>
                   <div className="space-y-4">
                     <p className="text-sm text-muted-foreground text-center">
@@ -1437,14 +1493,14 @@ export default function TripDetail() {
 
               {/* Skeleton for next generating day */}
               {!generationStalled && generationPoller.completedDays < generationPoller.totalDays && (
-                <div className="border border-dashed border-border rounded-xl p-4 opacity-60 animate-pulse">
+                <div className="border border-dashed border-border rounded-xl p-4 opacity-60 animate-pulse max-w-lg mx-auto">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
                       <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                     </div>
                     <div>
-                      <p className="font-medium">Day {generationPoller.completedDays + 1}</p>
-                      <p className="text-sm text-muted-foreground">Generating activities…</p>
+                      <p className="font-medium text-sm">Day {generationPoller.completedDays + 1}</p>
+                      <p className="text-xs text-muted-foreground">Generating activities…</p>
                     </div>
                   </div>
                 </div>

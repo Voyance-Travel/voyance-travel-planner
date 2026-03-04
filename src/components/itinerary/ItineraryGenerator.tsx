@@ -995,7 +995,7 @@ export function ItineraryGenerator({
         animate={{ opacity: 1, y: 0 }}
         className="py-10"
       >
-        <GenerationPhases currentStep={prePhase} />
+        <GenerationPhases currentStep={prePhase} destination={destination} totalDays={totalDaysEstimate} />
         <div className="flex justify-center mt-6">
           <Button
             variant="ghost"
