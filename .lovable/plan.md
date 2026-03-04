@@ -1,66 +1,79 @@
 
 
-## Plan: Fix Generation Progress — Replace Fake Spinner with Live Day-by-Day Progress
+## Plan: Fix Generation Progress UI — Replace Fake Spinner with Live Polling
 
-### Root Cause (Confirmed)
+### Root Cause
 
-The rendering order in `ItineraryGenerator.tsx` is:
-1. Error state → line 962
-2. **`prePhase` check → line 991** — renders `GenerationPhases` (the fake spinner)
-3. `serverGenActive` check → line 1020 — renders the real progress view
+The `prePhase` at line 991 renders `GenerationPhases` (the fake globe/phase stepper). The useEffect at line 219 SHOULD clear `prePhase` when `serverGenActive` becomes true, revealing the real progress view at line 1020. But there are two problems:
 
-The problem: `prePhase` is set to `'preparing'` before `startServerGeneration()` is called (line 327). It's only cleared when `days.length > 0` (line 219), but `days` comes from `useItineraryGeneration()` (the frontend loop hook), NOT from the poller. With server-side generation, `days` never gets populated, so **`prePhase` never clears** and the user is permanently stuck on the fake `GenerationPhases` spinner.
+1. **If `startServerGeneration` throws** (edge function timeout, 403, etc.), the catch at line 455 falls back to `generateItinerary` (frontend loop). `setServerGenActive(true)` at line 453 is **never reached**. The frontend loop also likely fails or produces nothing, so `days.length` stays 0, `prePhase` stays set, and the user sees the fake spinner forever.
 
-The `serverGenActive` progress view (line 1020) — which already has progress bar, "Building in the cloud" messaging, and day-by-day rendering — is **never reached** because the `prePhase` check comes first.
+2. **Even if `serverGenActive` works**, the server progress view at line 1020 only shows day titles from the poller — it doesn't show during the `prePhase` block. The `GenerationPhases` component itself does zero polling.
 
-### Fix: Two Changes
+### The Fix: Make GenerationPhases poll directly
 
-#### Change 1: Clear `prePhase` when server generation is active (`ItineraryGenerator.tsx`)
+Instead of relying on the complex `prePhase` → `serverGenActive` handoff, **rewrite `GenerationPhases.tsx`** to accept `tripId` and `totalDays`, poll `itinerary_days` itself, and show live day-by-day progress. This way, even if it's rendered via the `prePhase` block (line 991), users see real progress.
 
-In the `useEffect` that clears `prePhase` (lines 216-222), add `serverGenActive` as a trigger:
+### Changes
 
-```typescript
-useEffect(() => {
-  if (!prePhase) return;
-  if (days.length > 0 || status === 'error' || status === 'complete' || serverGenActive) {
-    setPrePhase(null);
-  }
-}, [prePhase, days.length, status, serverGenActive]);
+#### 1. Rewrite `GenerationPhases.tsx` — complete replacement
+
+Delete all current content (globe, phase stepper, travel quotes, rotating activities). Replace with:
+
+- Accept props: `tripId?: string`, `totalDays?: number`, `destination?: string`, `currentStep` (kept for brief initial display)
+- Internal state: `days[]` from polling `itinerary_days`, `isComplete` boolean
+- `useEffect` with 5-second polling interval when `tripId` is provided:
+  - Query `itinerary_days` for `day_number, title, theme` ordered by `day_number`
+  - Query `trips` for `itinerary_status`
+  - Set `isComplete` when status is `'ready'` or `'generated'`
+- Render:
+  - Header: "Building Day X of Y" with sparkle icon
+  - Progress bar: `completedDays / totalDays * 100`
+  - Time estimate: `~${Math.ceil(remainingDays * 1.2)} min remaining`
+  - Completed days list: day number badge + title + theme + checkmark, animated fade-in
+  - Currently generating day: pulsing placeholder
+  - Upcoming days: faded placeholders (max 3 shown)
+  - "Feel free to leave" message at bottom
+  - When complete: "Your itinerary is ready!" with checkmark
+
+If `tripId` is not provided (shouldn't happen but fallback), show a simple "Preparing..." spinner.
+
+#### 2. Update `ItineraryGenerator.tsx` — pass `tripId` to GenerationPhases
+
+At line 998 where `GenerationPhases` is rendered inside the `prePhase` block:
+
+```tsx
+<GenerationPhases currentStep={prePhase} destination={destination} totalDays={totalDaysEstimate} tripId={tripId} />
 ```
 
-This is the **one-line fix** that unblocks everything. Once `serverGenActive` becomes true (line 453, right after `startServerGeneration` succeeds), `prePhase` clears, and the existing server progress view at line 1020 renders.
+This is the key change — `GenerationPhases` now receives `tripId` and can poll `itinerary_days` directly.
 
-#### Change 2: Show `generatedDaysList` from poller in the progress view (`ItineraryGenerator.tsx`)
+#### 3. Remove redundant server progress view in `ItineraryGenerator.tsx`
 
-The server progress view (lines 1020-1119) currently uses `poller.partialDays` (from `itinerary_data.days` on the trips table) for the `EditorialItinerary` component. But during generation, `itinerary_data` may be empty while `itinerary_days` table rows exist.
+The `serverGenActive` block (lines 1020-1146) becomes redundant since `GenerationPhases` now handles all progress display. However, to minimize risk, keep the `serverGenActive` block but have it also render the rewritten `GenerationPhases` component:
 
-Update the progress view to also use `poller.generatedDaysList` (from the `itinerary_days` table) to show a simple day list when `partialDays` is empty but `generatedDaysList` has entries:
+```tsx
+if (serverGenActive) {
+  return (
+    <div className="py-10">
+      <GenerationPhases tripId={tripId} totalDays={totalDaysEstimate} destination={destination} currentStep="preparing" />
+    </div>
+  );
+}
+```
 
-- Show `poller.generatedDaysList` items as completed day summaries (day number + title + theme + checkmark)
-- Show the "currently generating" pulsing placeholder for `completedDays + 1`
-- Add time estimate: `~${Math.ceil((poller.totalDays - poller.completedDays) * 1.2)} min remaining`
-- Add "Feel free to leave" text (already present as "Building in the cloud" banner — no change needed)
-
-#### Change 3: Fix time estimate in `GenerationPhases.tsx`
-
-The `GenerationPhases` component is still shown briefly during the pre-authorization phase (before server gen starts). Update the time estimate text (line 288-294) — this was already partially done but the component still says "Usually takes 2-4 minutes" for short trips. This is minor since users will only see it for ~2 seconds now.
+This ensures both code paths (`prePhase` block and `serverGenActive` block) show the same live progress UI.
 
 ### Files to modify
 
-| File | Change | Lines |
-|------|--------|-------|
-| `src/components/itinerary/ItineraryGenerator.tsx` | Add `serverGenActive` to prePhase clear condition; enhance server progress view with `generatedDaysList` | ~219, ~1020-1119 |
-| `src/components/planner/shared/GenerationPhases.tsx` | No major changes needed — it's now only shown for ~2s during pre-auth | Minor |
+| File | What |
+|------|------|
+| `src/components/planner/shared/GenerationPhases.tsx` | Complete rewrite — poll `itinerary_days`, show live day-by-day progress |
+| `src/components/itinerary/ItineraryGenerator.tsx` | Pass `tripId` to GenerationPhases at line 998; simplify `serverGenActive` block to use same component |
 
-### Why This Works
+### Why This Fixes All Three Scenarios
 
-The existing code already has:
-- Poller querying `itinerary_days` table every 3s ✅
-- `generatedDaysList` with day summaries ✅  
-- "Building in the cloud" banner ✅
-- Progress bar with `poller.progress` ✅
-- "Generating Day X..." skeleton ✅
-- Completion detection via `onReady` ✅
-
-All of this is just never rendered because `prePhase` blocks it. One condition change fixes the entire UX.
+1. **User stays during generation**: `GenerationPhases` polls every 5s, shows days appearing live
+2. **User leaves mid-generation**: "Feel free to leave" message visible; when they return, TripDetail.tsx detects generating state (already working)
+3. **User returns after completion**: TripDetail.tsx shows full itinerary (already working)
 
