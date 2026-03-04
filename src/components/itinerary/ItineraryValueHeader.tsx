@@ -10,7 +10,7 @@
  * Each badge is expandable to show specifics. Includes savings calculation.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, Clock, MapPinOff, Target, TrendingUp, ChevronDown, ChevronUp,
@@ -47,6 +47,7 @@ interface ItineraryValueHeaderProps {
   destination: string;
   archetype?: string;
   className?: string;
+  tripId?: string;
 }
 
 export function ItineraryValueHeader({
@@ -54,13 +55,50 @@ export function ItineraryValueHeader({
   destination,
   archetype,
   className,
+  tripId,
 }: ItineraryValueHeaderProps) {
   const hasValue = stats.voyanceFinds > 0 || 
                    stats.timingOptimizations > 0 || 
                    stats.touristTrapsAvoided > 0 ||
                    stats.insiderTips > 0;
 
+  // Auto-collapse on return visits (mobile only)
+  const storageKey = tripId ? `voyance_intel_seen_${tripId}` : null;
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    if (!storageKey) return false;
+    try { return !!localStorage.getItem(storageKey); } catch { return false; }
+  });
+  useEffect(() => {
+    if (storageKey) {
+      try { localStorage.setItem(storageKey, '1'); } catch { /* ignore */ }
+    }
+  }, [storageKey]);
+
   if (!hasValue) return null;
+
+  // Collapsed summary line on mobile for return visits
+  if (isCollapsed) {
+    const summaryParts = [];
+    if (stats.touristTrapsAvoided > 0) summaryParts.push(`${stats.touristTrapsAvoided} local picks`);
+    if (stats.insiderTips > 0) summaryParts.push(`${stats.insiderTips} insider tips`);
+    if (stats.estimatedSavings?.time) summaryParts.push(`${stats.estimatedSavings.time} saved`);
+    
+    return (
+      <button
+        onClick={() => setIsCollapsed(false)}
+        className={cn(
+          'w-full sm:hidden rounded-xl border border-border bg-card p-3 flex items-center gap-2.5 text-left hover:bg-secondary/30 transition-colors',
+          className
+        )}
+      >
+        <Sparkles className="h-4 w-4 text-primary shrink-0" />
+        <span className="text-xs text-muted-foreground flex-1 truncate">
+          ✨ {summaryParts.join(', ')}
+        </span>
+        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+      </button>
+    );
+  }
 
   return (
     <motion.div
