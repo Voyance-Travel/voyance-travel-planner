@@ -118,7 +118,7 @@ export function LockedDayCard({
           ) : (
             <>
               <Sparkles className="h-4 w-4" />
-              {canAfford ? 'Plan this day for me' : 'Finish it for me'}
+              {canAfford ? 'Unlock this day' : 'Unlock this day'}
             </>
           )}
         </Button>

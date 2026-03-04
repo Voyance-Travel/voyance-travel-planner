@@ -1615,20 +1615,9 @@ export function EditorialItinerary({
 
   const [changingTransportActivityId, setChangingTransportActivityId] = useState<string | null>(null);
 
-  // Auto-unlock locked days when user has sufficient credits
-  useEffect(() => {
-    if (!days[selectedDayIndex]) return;
-    const day = days[selectedDayIndex];
-    if (
-      day.metadata?.isLocked &&
-      !isManualMode &&
-      !isUnlockingDay &&
-      totalCredits >= CREDIT_COSTS.UNLOCK_DAY
-    ) {
-      handleUnlockDay(day.dayNumber);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDayIndex, isManualMode, isUnlockingDay]);
+  // REMOVED: Auto-unlock useEffect that fired on every day navigation.
+  // This caused "dead button" + duplicate credit charges (QA-plan item #1).
+  // Unlock is now ONLY triggered by explicit user click on LockedDayCard CTA.
 
   // Handle per-day unlock from preview mode
   const handleUnlockDay = useCallback((dayNumber: number) => {
