@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Loader2, CheckCircle, MapPin, Clock, DollarSign, RefreshCw, Star, Image, Wallet, Lightbulb, AlertCircle, LogIn, Coins, Cloud } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle, MapPin, Clock, DollarSign, RefreshCw, Star, Image, Wallet, Lightbulb, AlertCircle, LogIn, Coins, Cloud, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -216,10 +216,10 @@ export function ItineraryGenerator({
   useEffect(() => {
     if (!prePhase) return;
     // Clear pre-phase when days arrive OR when an error/completion occurs
-    if (days.length > 0 || status === 'error' || status === 'complete') {
+    if (days.length > 0 || status === 'error' || status === 'complete' || serverGenActive) {
       setPrePhase(null);
     }
-  }, [prePhase, days.length, status]);
+  }, [prePhase, days.length, status, serverGenActive]);
 
   const isFirstTrip = entitlements?.is_first_trip ?? false;
 
@@ -1070,18 +1070,37 @@ export function ItineraryGenerator({
           </div>
         </motion.div>
 
-        {/* Personalized loading messages while waiting for first day */}
-        {!hasPartialDays && (
-          <PersonalizedLoadingProgress
-            tripType={tripType}
-            destination={destination}
-            travelers={travelers}
-            progress={poller.progress}
-          />
-        )}
-
-        {/* Progressive day rendering — show completed days */}
-        {hasPartialDays && (
+        {/* Day-by-day progress list from itinerary_days table */}
+        {poller.generatedDaysList.length > 0 ? (
+          <div className="max-w-lg mx-auto space-y-3">
+            <p className="text-sm text-muted-foreground text-center">
+              {poller.completedDays} of {poller.totalDays} days complete
+              {poller.totalDays > 0 && poller.completedDays < poller.totalDays && (
+                <> · ~{Math.ceil((poller.totalDays - poller.completedDays) * 1.2)} min remaining</>
+              )}
+            </p>
+            {poller.generatedDaysList.map((day) => (
+              <motion.div
+                key={day.day_number}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4 }}
+                className="flex items-center gap-3 rounded-xl border border-border bg-card p-3"
+              >
+                <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold shrink-0">
+                  {day.day_number}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-foreground text-sm truncate">{day.title}</p>
+                  {day.theme && (
+                    <p className="text-xs text-muted-foreground truncate">{day.theme}</p>
+                  )}
+                </div>
+                <Check className="h-4 w-4 text-primary shrink-0" />
+              </motion.div>
+            ))}
+          </div>
+        ) : hasPartialDays ? (
           <div className="space-y-4 max-w-2xl mx-auto">
             <p className="text-sm text-muted-foreground text-center">
               Browse your completed days while we finish the rest:
@@ -1097,6 +1116,13 @@ export function ItineraryGenerator({
               isPreview={true}
             />
           </div>
+        ) : (
+          <PersonalizedLoadingProgress
+            tripType={tripType}
+            destination={destination}
+            travelers={travelers}
+            progress={poller.progress}
+          />
         )}
 
         {/* Skeleton for next generating day */}
