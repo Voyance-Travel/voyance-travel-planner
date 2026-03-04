@@ -130,7 +130,7 @@ function SortableFlightCard({
 
           <div className="flex-1 p-4">
             {/* Header row */}
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 gap-2">
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant={isFirst ? 'secondary' : 'outline'} className={cn("text-xs font-medium", !isFirst && `border-${accentColor}/30 text-${accentColor}`)}>
                   {legLabel}
