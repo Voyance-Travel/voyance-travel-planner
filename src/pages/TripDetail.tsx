@@ -22,6 +22,7 @@ import { EditorialItinerary } from '@/components/itinerary/EditorialItinerary';
 import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
 import { ItineraryAssistant } from '@/components/itinerary/ItineraryAssistant';
 import TravelIntelCard from '@/components/itinerary/TravelIntelCard';
+import { MobileTripOverview } from '@/components/trip/MobileTripOverview';
 import { TripHealthPanel } from '@/components/trip/TripHealthPanel';
 import { useEntitlements, canViewPremiumContentForDay } from '@/hooks/useEntitlements';
 import { computeUnlockedDayCount } from '@/lib/voyanceFlowController';
@@ -1274,8 +1275,8 @@ export default function TripDetail() {
     <MainLayout>
       <Head title={`${trip.name} | Voyance`} />
       
-      {/* Hero Destination Image */}
-      <div className="relative h-56 md:h-72 -mt-16">
+      {/* Hero Destination Image — compact on mobile, taller on desktop */}
+      <div className="relative h-40 sm:h-56 md:h-72 -mt-16">
         <ErrorBoundary>
         <DynamicDestinationPhotos
           destination={trip.destination}
@@ -1302,55 +1303,77 @@ export default function TripDetail() {
         <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-background to-transparent" />
       </div>
       
-      <section className="pb-16 pt-6 relative z-10">
+      <section className="pb-16 pt-4 sm:pt-6 relative z-10">
         <div className="max-w-4xl mx-auto px-4">
-          {/* Status Badge, Date, and Inline Confirmation */}
+          {/* Compact Status Line — mobile: single row; desktop: keeps existing layout */}
           {(() => {
             const isPastTrip = isAfter(new Date(), parseLocalDate(effectiveEndDate));
+            const statusLabel = isLiveTrip ? 'Active' : isPastTrip && trip.status === 'draft' ? 'Past' : (trip.status || 'draft');
+            const dayCount = differenceInDays(parseLocalDate(effectiveEndDate), parseLocalDate(trip.start_date)) + 1;
+            const dateRange = `${format(parseLocalDate(trip.start_date), 'MMM d')}–${format(parseLocalDate(effectiveEndDate), 'MMM d')}`;
             return (
-              <div className="flex flex-wrap items-center gap-3 mb-8">
-                <Badge 
-                  variant={
-                    isLiveTrip ? 'default' :
-                    trip.status === 'completed' ? 'secondary' : 
-                    trip.status === 'booked' ? 'default' : 
-                    isPastTrip ? 'secondary' : 'outline'
-                  }
-                  className="capitalize"
-                >
-                  {isLiveTrip ? 'Active' : isPastTrip && trip.status === 'draft' ? 'Past' : trip.status}
-                </Badge>
-                
-                <TripDateEditor
-                  startDate={trip.start_date}
-                  endDate={effectiveEndDate}
-                  hasItinerary={hasItinerary}
-                  flightSelection={trip.flight_selection as Record<string, unknown> | null}
-                  onDateChange={handleDateChange}
-                  days={itineraryDays.map(d => ({ dayNumber: d.dayNumber, theme: d.theme, activities: d.activities }))}
-                  cities={tripCities.map(c => ({ id: c.id, city_name: c.city_name, nights: c.nights ?? undefined }))}
-                />
-
-                {/* Inline confirmation buttons (only shows for draft trips within 14 days) */}
-                {!isLiveTrip && hasItinerary && (
-                  <TripConfirmationBanner
-                    tripId={trip.id}
-                    destination={trip.destination}
+              <>
+                {/* Mobile: compact single line */}
+                <div className="flex items-center gap-2 mb-4 sm:hidden text-sm text-muted-foreground">
+                  <span className="capitalize font-medium text-foreground">{statusLabel}</span>
+                  <span>·</span>
+                  <span>{dateRange}</span>
+                  <span>·</span>
+                  <span>{dayCount}d</span>
+                  <TripDateEditor
                     startDate={trip.start_date}
                     endDate={effectiveEndDate}
-                    currentStatus={trip.status as string}
-                    hasFlightSelection={!!trip.flight_selection}
-                    hasHotelSelection={!!trip.hotel_selection}
-                    itineraryDays={itineraryDays}
-                    onStatusUpdate={(status) => setTrip(prev => prev ? { ...prev, status } as any : null)}
-                    onTripDataUpdate={(data) => setTrip(prev => prev ? { ...prev, ...data } as any : null)}
-                    onApplySwaps={handleApplySwaps}
-                    onRegenerateTrip={handleRegenerateTrip}
+                    hasItinerary={hasItinerary}
+                    flightSelection={trip.flight_selection as Record<string, unknown> | null}
+                    onDateChange={handleDateChange}
+                    days={itineraryDays.map(d => ({ dayNumber: d.dayNumber, theme: d.theme, activities: d.activities }))}
+                    cities={tripCities.map(c => ({ id: c.id, city_name: c.city_name, nights: c.nights ?? undefined }))}
                   />
-                )}
-              </div>
+                </div>
+                {/* Desktop: original layout */}
+                <div className="hidden sm:flex flex-wrap items-center gap-3 mb-8">
+                  <Badge 
+                    variant={
+                      isLiveTrip ? 'default' :
+                      trip.status === 'completed' ? 'secondary' : 
+                      trip.status === 'booked' ? 'default' : 
+                      isPastTrip ? 'secondary' : 'outline'
+                    }
+                    className="capitalize"
+                  >
+                    {statusLabel}
+                  </Badge>
+                  <TripDateEditor
+                    startDate={trip.start_date}
+                    endDate={effectiveEndDate}
+                    hasItinerary={hasItinerary}
+                    flightSelection={trip.flight_selection as Record<string, unknown> | null}
+                    onDateChange={handleDateChange}
+                    days={itineraryDays.map(d => ({ dayNumber: d.dayNumber, theme: d.theme, activities: d.activities }))}
+                    cities={tripCities.map(c => ({ id: c.id, city_name: c.city_name, nights: c.nights ?? undefined }))}
+                  />
+                </div>
+              </>
             );
           })()}
+
+          {/* Inline confirmation buttons (only shows for draft trips within 14 days) */}
+          {!isLiveTrip && hasItinerary && (
+            <TripConfirmationBanner
+              tripId={trip.id}
+              destination={trip.destination}
+              startDate={trip.start_date}
+              endDate={effectiveEndDate}
+              currentStatus={trip.status as string}
+              hasFlightSelection={!!trip.flight_selection}
+              hasHotelSelection={!!trip.hotel_selection}
+              itineraryDays={itineraryDays}
+              onStatusUpdate={(status) => setTrip(prev => prev ? { ...prev, status } as any : null)}
+              onTripDataUpdate={(data) => setTrip(prev => prev ? { ...prev, ...data } as any : null)}
+              onApplySwaps={handleApplySwaps}
+              onRegenerateTrip={handleRegenerateTrip}
+            />
+          )}
 
           {/* Live Itinerary View for active trips */}
           {isLiveTrip ? (
@@ -1776,71 +1799,157 @@ export default function TripDetail() {
 
               return (
                 <>
-                  <ErrorBoundary>
-                  <TripHealthPanel
-                    days={editorDays}
-                    totalDaysExpected={editorDays.length}
-                    hasFlights={!!trip.flight_selection}
-                    hasHotel={
-                      !!trip.hotel_selection || 
-                      (tripCities.length > 0 && tripCities.every(c => {
-                        const h = c.hotel_selection as any;
-                        const hotel = Array.isArray(h) && h.length > 0 ? h[0] : h;
-                        return !!hotel?.name;
-                      }))
-                    }
-                    isMultiCity={!!(trip as any).is_multi_city || tripCities.length > 1}
-                    hasInterCityTransport={editorDays.some((d: any) => d.isTransitionDay)}
-                    className="mb-4"
-                    onAction={(action, ctx) => {
-                      if (action === 'add_flights') {
-                        setNavigateToSection('flights');
-                        // Reset after navigation so it can be triggered again
-                        setTimeout(() => setNavigateToSection(null), 500);
-                      } else if (action === 'add_hotel') {
-                        setNavigateToSection('hotels');
-                        setTimeout(() => setNavigateToSection(null), 500);
-                      } else if (action === 'add_intercity') {
-                        setNavigateToSection('hotels');
-                        setTimeout(() => setNavigateToSection(null), 500);
-                      } else if (action === 'generate_day' || action === 'refresh_day') {
-                        toast.info(`Use the day toolbar to ${action === 'generate_day' ? 'generate' : 'refresh'} Day ${ctx?.dayNumber || ''}`);
-                      } else if (action === 'generate_missing_days' || action === 'generate_all') {
-                        setShowGenerator(true);
+                  {/* Mobile: Collapsed Trip Overview wrapping Health + Travel Intel */}
+                  <div className="sm:hidden mb-4">
+                    <MobileTripOverview
+                      tripHealthPanel={
+                        <ErrorBoundary>
+                          <TripHealthPanel
+                            days={editorDays}
+                            totalDaysExpected={editorDays.length}
+                            hasFlights={!!trip.flight_selection}
+                            hasHotel={
+                              !!trip.hotel_selection || 
+                              (tripCities.length > 0 && tripCities.every(c => {
+                                const h = c.hotel_selection as any;
+                                const hotel = Array.isArray(h) && h.length > 0 ? h[0] : h;
+                                return !!hotel?.name;
+                              }))
+                            }
+                            isMultiCity={!!(trip as any).is_multi_city || tripCities.length > 1}
+                            hasInterCityTransport={editorDays.some((d: any) => d.isTransitionDay)}
+                            className=""
+                            onAction={(action, ctx) => {
+                              if (action === 'add_flights') {
+                                setNavigateToSection('flights');
+                                setTimeout(() => setNavigateToSection(null), 500);
+                              } else if (action === 'add_hotel') {
+                                setNavigateToSection('hotels');
+                                setTimeout(() => setNavigateToSection(null), 500);
+                              } else if (action === 'add_intercity') {
+                                setNavigateToSection('hotels');
+                                setTimeout(() => setNavigateToSection(null), 500);
+                              } else if (action === 'generate_day' || action === 'refresh_day') {
+                                toast.info(`Use the day toolbar to ${action === 'generate_day' ? 'generate' : 'refresh'} Day ${ctx?.dayNumber || ''}`);
+                              } else if (action === 'generate_missing_days' || action === 'generate_all') {
+                                setShowGenerator(true);
+                              }
+                            }}
+                          />
+                        </ErrorBoundary>
                       }
-                    }}
-                  />
-                  </ErrorBoundary>
-                  <ErrorBoundary>
-                  {tripCities.length > 1 ? (
-                    tripCities.map((city) => (
+                      travelIntelCards={
+                        <ErrorBoundary>
+                          {tripCities.length > 1 ? (
+                            tripCities.map((city) => (
+                              <TravelIntelCard
+                                key={city.id}
+                                city={city.city_name}
+                                country={city.country || trip.destination_country || ((destinationMeta as any)?.country as string | undefined)}
+                                startDate={city.arrival_date || trip.start_date}
+                                endDate={city.departure_date || effectiveEndDate}
+                                travelers={trip.travelers || 2}
+                                archetype={(trip as any).travel_style || undefined}
+                                interests={(trip as any).interests || undefined}
+                                tripId={trip.id}
+                                className="mb-3"
+                              />
+                            ))
+                          ) : (
+                            <TravelIntelCard
+                              city={trip.destination}
+                              country={trip.destination_country || ((destinationMeta as any)?.country as string | undefined)}
+                              startDate={trip.start_date}
+                              endDate={effectiveEndDate}
+                              travelers={trip.travelers || 2}
+                              archetype={(trip as any).travel_style || undefined}
+                              interests={(trip as any).interests || undefined}
+                              tripId={trip.id}
+                              className=""
+                            />
+                          )}
+                        </ErrorBoundary>
+                      }
+                      daysPlanned={editorDays.filter((d: any) => {
+                        const acts = d.activities || [];
+                        return acts.some((a: any) => {
+                          const cat = (a.category || a.type || '').toLowerCase();
+                          return !['check-in', 'check-out', 'hotel', 'accommodation'].includes(cat);
+                        });
+                      }).length}
+                      totalDays={editorDays.length}
+                      cityCount={tripCities.length > 1 ? tripCities.length : 1}
+                      tripId={trip.id}
+                    />
+                  </div>
+
+                  {/* Desktop: Original layout — Health + Travel Intel separately */}
+                  <div className="hidden sm:block">
+                    <ErrorBoundary>
+                    <TripHealthPanel
+                      days={editorDays}
+                      totalDaysExpected={editorDays.length}
+                      hasFlights={!!trip.flight_selection}
+                      hasHotel={
+                        !!trip.hotel_selection || 
+                        (tripCities.length > 0 && tripCities.every(c => {
+                          const h = c.hotel_selection as any;
+                          const hotel = Array.isArray(h) && h.length > 0 ? h[0] : h;
+                          return !!hotel?.name;
+                        }))
+                      }
+                      isMultiCity={!!(trip as any).is_multi_city || tripCities.length > 1}
+                      hasInterCityTransport={editorDays.some((d: any) => d.isTransitionDay)}
+                      className="mb-4"
+                      onAction={(action, ctx) => {
+                        if (action === 'add_flights') {
+                          setNavigateToSection('flights');
+                          setTimeout(() => setNavigateToSection(null), 500);
+                        } else if (action === 'add_hotel') {
+                          setNavigateToSection('hotels');
+                          setTimeout(() => setNavigateToSection(null), 500);
+                        } else if (action === 'add_intercity') {
+                          setNavigateToSection('hotels');
+                          setTimeout(() => setNavigateToSection(null), 500);
+                        } else if (action === 'generate_day' || action === 'refresh_day') {
+                          toast.info(`Use the day toolbar to ${action === 'generate_day' ? 'generate' : 'refresh'} Day ${ctx?.dayNumber || ''}`);
+                        } else if (action === 'generate_missing_days' || action === 'generate_all') {
+                          setShowGenerator(true);
+                        }
+                      }}
+                    />
+                    </ErrorBoundary>
+                    <ErrorBoundary>
+                    {tripCities.length > 1 ? (
+                      tripCities.map((city) => (
+                        <TravelIntelCard
+                          key={city.id}
+                          city={city.city_name}
+                          country={city.country || trip.destination_country || ((destinationMeta as any)?.country as string | undefined)}
+                          startDate={city.arrival_date || trip.start_date}
+                          endDate={city.departure_date || effectiveEndDate}
+                          travelers={trip.travelers || 2}
+                          archetype={(trip as any).travel_style || undefined}
+                          interests={(trip as any).interests || undefined}
+                          tripId={trip.id}
+                          className="mb-4"
+                        />
+                      ))
+                    ) : (
                       <TravelIntelCard
-                        key={city.id}
-                        city={city.city_name}
-                        country={city.country || trip.destination_country || ((destinationMeta as any)?.country as string | undefined)}
-                        startDate={city.arrival_date || trip.start_date}
-                        endDate={city.departure_date || effectiveEndDate}
+                        city={trip.destination}
+                        country={trip.destination_country || ((destinationMeta as any)?.country as string | undefined)}
+                        startDate={trip.start_date}
+                        endDate={effectiveEndDate}
                         travelers={trip.travelers || 2}
                         archetype={(trip as any).travel_style || undefined}
                         interests={(trip as any).interests || undefined}
                         tripId={trip.id}
                         className="mb-4"
                       />
-                    ))
-                  ) : (
-                    <TravelIntelCard
-                      city={trip.destination}
-                      country={trip.destination_country || ((destinationMeta as any)?.country as string | undefined)}
-                      startDate={trip.start_date}
-                      endDate={effectiveEndDate}
-                      travelers={trip.travelers || 2}
-                      archetype={(trip as any).travel_style || undefined}
-                      interests={(trip as any).interests || undefined}
-                      tripId={trip.id}
-                      className="mb-4"
-                    />
-                  )}
-                  </ErrorBoundary>
+                    )}
+                    </ErrorBoundary>
+                  </div>
                   <ErrorBoundary>
                   <EditorialItinerary
                   tripId={trip.id}

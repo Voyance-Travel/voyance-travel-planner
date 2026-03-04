@@ -3683,11 +3683,11 @@ export function EditorialItinerary({
         >
           <div className="flex gap-1 min-w-max" data-tour="tab-bar">
             {[
-              { id: 'itinerary', label: 'Itinerary', fullLabel: 'Day-by-Day Itinerary', icon: <Calendar className="h-4 w-4" /> },
+              { id: 'itinerary', label: 'Itinerary', fullLabel: 'Itinerary', icon: <Calendar className="h-4 w-4" /> },
               { id: 'budget', label: 'Budget', fullLabel: 'Budget', icon: <Wallet className="h-4 w-4" /> },
-              { id: 'payments', label: 'Payments', fullLabel: 'Payments', icon: <CreditCard className="h-4 w-4" /> },
               { id: 'details', label: 'Details', fullLabel: 'Trip Details', icon: <Plane className="h-4 w-4" /> },
-              { id: 'needtoknow', label: 'Info', fullLabel: 'Need to Know', icon: <Info className="h-4 w-4" /> },
+              { id: 'payments', label: 'Payments', fullLabel: 'Payments', icon: <CreditCard className="h-4 w-4" />, mobileOverflow: true },
+              { id: 'needtoknow', label: 'Info', fullLabel: 'Need to Know', icon: <Info className="h-4 w-4" />, mobileOverflow: true },
               ...(collaborators.length > 0 ? [{ id: 'collab', label: 'Group', fullLabel: 'Group Chat & Vote', icon: <MessageCircle className="h-4 w-4" /> }] : []),
             ].map((tab) => (
               <button
@@ -3695,6 +3695,7 @@ export function EditorialItinerary({
                 onClick={() => setActiveTab(tab.id as typeof activeTab)}
                 className={cn(
                   "px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-sans tracking-wide transition-colors relative flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0",
+                  (tab as any).mobileOverflow && "hidden sm:flex",
                   activeTab === tab.id
                     ? "text-foreground"
                     : "text-muted-foreground hover:text-foreground"
@@ -3711,6 +3712,22 @@ export function EditorialItinerary({
                 )}
               </button>
             ))}
+            {/* Mobile overflow menu for hidden tabs */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="sm:hidden px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 shrink-0">
+                  <MoreHorizontal className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setActiveTab('payments' as typeof activeTab)}>
+                  <CreditCard className="h-4 w-4 mr-2" /> Payments
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setActiveTab('needtoknow' as typeof activeTab)}>
+                  <Info className="h-4 w-4 mr-2" /> Need to Know
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
         {/* Fade gradient indicating more tabs */}
@@ -3737,6 +3754,7 @@ export function EditorialItinerary({
                 stats={valueStats}
                 destination={destination}
                 archetype={style}
+                tripId={tripId}
               />
             </div>
 
@@ -3791,24 +3809,91 @@ export function EditorialItinerary({
                 )}
               </div>
 
-              {/* Action Buttons */}
-              <div className="px-6 py-4 flex items-center justify-center gap-3 flex-wrap" data-tour="trip-actions">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setShowShareModal(true)}
-                  className="gap-2"
-                >
-                  <Share2 className="h-4 w-4" />
-                  Share
-                </Button>
+              {/* Action Buttons — Primary + Secondary pattern */}
+              <div className="px-6 py-4 space-y-3" data-tour="trip-actions">
+                {/* Primary actions */}
+                <div className="flex items-center justify-center gap-3 flex-wrap">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setShowShareModal(true)}
+                    className="gap-2"
+                  >
+                    <Share2 className="h-4 w-4" />
+                    Share
+                  </Button>
 
+                  {/* PDF Export */}
+                  {effectiveIsEditable && (entitlements?.can_export_pdf || smartFinishPurchased || isPaid || isManualMode) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={async () => {
+                        try {
+                          toast.info('Generating PDF...');
+                          const { generateConsumerTripPdf } = await import('@/utils/consumerPdfGenerator');
+                          const unlockedDayNumbers = new Set(
+                            days.filter(d => canViewPremiumContentForDay(entitlements, d.dayNumber)).map(d => d.dayNumber)
+                          );
+                          await generateConsumerTripPdf({
+                            tripName: `Trip to ${destination}`,
+                            destination, startDate, endDate, travelers, days, unlockedDayNumbers,
+                            flight: allFlightLegs[0] ? {
+                              airline: allFlightLegs[0].airline || '',
+                              departure: allFlightLegs[0].departure?.time || '',
+                              arrival: allFlightLegs[0].arrival?.time || '',
+                              departureAirport: allFlightLegs[0].departure?.airport || '',
+                              arrivalAirport: allFlightLegs[0].arrival?.airport || '',
+                            } : undefined,
+                            hotel: hotelSelection ? {
+                              name: hotelSelection.name || '',
+                              neighborhood: hotelSelection.neighborhood || '',
+                              checkIn: startDate, checkOut: endDate,
+                            } : undefined,
+                          });
+                          toast.success('PDF downloaded!');
+                        } catch (err) {
+                          console.error('PDF export failed:', err);
+                          toast.error('Failed to generate PDF. Please try again.');
+                        }
+                      }}
+                    >
+                      <FileText className="h-4 w-4" />
+                      Export PDF
+                    </Button>
+                  )}
+
+                  {/* Saved indicator (not a button) */}
+                  {effectiveIsEditable && (
+                    <span className={cn(
+                      "text-xs flex items-center gap-1",
+                      hasChanges ? "text-muted-foreground" : "text-primary"
+                    )}>
+                      {hasChanges ? (
+                        <Button 
+                          size="sm"
+                          onClick={handleSave} 
+                          disabled={isSaving}
+                          className="gap-2"
+                        >
+                          {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                          Save
+                        </Button>
+                      ) : (
+                        <><Check className="h-3.5 w-3.5" /> Saved</>
+                      )}
+                    </span>
+                  )}
+                </div>
+
+                {/* Secondary actions — collapsed on mobile */}
                 {effectiveIsEditable && (
-                  <>
+                  <div className="flex items-center justify-center gap-2 flex-wrap">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button 
-                          variant="outline" 
+                          variant="ghost" 
                           size="sm"
                           onClick={() => {
                             if (entitlements?.can_optimize_routes) {
@@ -3818,9 +3903,9 @@ export function EditorialItinerary({
                             }
                           }} 
                           disabled={isOptimizing || days.length === 0}
-                          className="gap-2"
+                          className="gap-1.5 text-xs text-muted-foreground"
                         >
-                          {isOptimizing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Route className="h-4 w-4" />}
+                          {isOptimizing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Route className="h-3.5 w-3.5" />}
                           {isOptimizing ? 'Optimizing...' : 'Optimize'}
                           {!entitlements?.can_optimize_routes && <Lock className="h-3 w-3 ml-0.5 opacity-60" />}
                           {entitlements?.can_optimize_routes && !routeOptCost.isFirstTrip && routeOptCost.cost > 0 && (
@@ -3839,71 +3924,17 @@ export function EditorialItinerary({
                       </TooltipContent>
                     </Tooltip>
 
-                    <Button 
-                      size="sm"
-                      onClick={handleSave} 
-                      disabled={isSaving || !hasChanges}
-                      className="gap-2"
-                    >
-                      {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                      {hasChanges ? 'Save' : 'Saved ✓'}
-                    </Button>
-
-                    {/* PDF Export */}
-                    {(entitlements?.can_export_pdf || smartFinishPurchased || isPaid || isManualMode) && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-2"
-                        onClick={async () => {
-                          try {
-                            toast.info('Generating PDF...');
-                            const { generateConsumerTripPdf } = await import('@/utils/consumerPdfGenerator');
-                            const unlockedDayNumbers = new Set(
-                              days.filter(d => canViewPremiumContentForDay(entitlements, d.dayNumber)).map(d => d.dayNumber)
-                            );
-                            await generateConsumerTripPdf({
-                              tripName: `Trip to ${destination}`,
-                              destination, startDate, endDate, travelers, days, unlockedDayNumbers,
-                              flight: allFlightLegs[0] ? {
-                                airline: allFlightLegs[0].airline || '',
-                                departure: allFlightLegs[0].departure?.time || '',
-                                arrival: allFlightLegs[0].arrival?.time || '',
-                                departureAirport: allFlightLegs[0].departure?.airport || '',
-                                arrivalAirport: allFlightLegs[0].arrival?.airport || '',
-                              } : undefined,
-                              hotel: hotelSelection ? {
-                                name: hotelSelection.name || '',
-                                neighborhood: hotelSelection.neighborhood || '',
-                                checkIn: startDate, checkOut: endDate,
-                              } : undefined,
-                            });
-                            toast.success('PDF downloaded!');
-                          } catch (err) {
-                            console.error('PDF export failed:', err);
-                            toast.error('Failed to generate PDF. Please try again.');
-                          }
-                        }}
-                      >
-                        <FileText className="h-4 w-4" />
-                        Export PDF
-                    </Button>
-                    )}
-
-                    {/* Repair Pricing removed to simplify trip actions */}
-
-                    {/* Regenerate Itinerary */}
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
-                      className="gap-2"
+                      className="gap-1.5 text-xs text-muted-foreground"
                       onClick={() => setShowRegenerateConfirm(true)}
                       disabled={isRegenerating}
                     >
-                      {isRegenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                      {isRegenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                       {isRegenerating ? 'Regenerating…' : 'Regenerate'}
                     </Button>
-                  </>
+                  </div>
                 )}
               </div>
             </div>
@@ -7171,21 +7202,21 @@ function DayCard({
             : "bg-gradient-to-b from-primary via-accent to-primary/50"
         )} />
         
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
-          <div className="flex items-center gap-3 sm:gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <div className="relative shrink-0">
               <span className={cn(
-                "text-3xl sm:text-5xl font-serif font-light transition-colors duration-500",
+                "text-xl sm:text-5xl font-serif font-light transition-colors duration-500",
                 allLocked ? "text-emerald-500/50" : "text-primary/40"
               )}>
                 {String(day.dayNumber).padStart(2, '0')}
               </span>
-              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-6 sm:w-8 h-0.5 bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+              <div className="hidden sm:block absolute -bottom-1 left-1/2 -translate-x-1/2 w-6 sm:w-8 h-0.5 bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               {/* City badge for multi-city trips */}
               {day.city && (
-                <div className="flex items-center gap-1.5 mb-1">
+                <div className="flex items-center gap-1.5 mb-0.5 sm:mb-1">
                   <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-primary/30 bg-primary/5 text-primary font-medium">
                     <MapPin className="h-2.5 w-2.5 mr-0.5" />
                     {day.city}{day.country ? `, ${day.country}` : ''}
@@ -7198,11 +7229,11 @@ function DayCard({
                   )}
                 </div>
               )}
-              <h3 className="font-serif text-lg sm:text-xl font-medium text-foreground mb-0.5 sm:mb-1 truncate">
+              <h3 className="font-serif text-base sm:text-xl font-medium text-foreground mb-0 sm:mb-1 truncate">
                 {day.title || day.theme || `Day ${day.dayNumber}`}
               </h3>
               {day.description && (
-                <p className="text-xs sm:text-sm text-muted-foreground italic line-clamp-1 sm:line-clamp-none">{day.description}</p>
+                <p className="hidden sm:block text-sm text-muted-foreground italic line-clamp-1 sm:line-clamp-none">{day.description}</p>
               )}
             </div>
           </div>
