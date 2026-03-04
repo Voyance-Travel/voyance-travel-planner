@@ -7148,10 +7148,11 @@ serve(async (req) => {
       const clonedReq = req.clone();
       const peekBody = await clonedReq.json();
       
-      if (peekBody.action === 'generate-trip-day' && peekBody.userId) {
+      const allowedServiceRoleActions = ['generate-trip-day', 'generate-day', 'regenerate-day'];
+      if (allowedServiceRoleActions.includes(peekBody.action) && peekBody.userId) {
         // Trusted internal call — skip user-auth, use provided userId
         authResult = { userId: peekBody.userId };
-        console.log(`[generate-itinerary] Service-role bypass for generate-trip-day, userId: ${authResult.userId}`);
+        console.log(`[generate-itinerary] Service-role bypass for ${peekBody.action}, userId: ${authResult.userId}`);
       } else {
         // Service role key used for a non-whitelisted action — reject
         console.error(`[generate-itinerary] Service-role call for non-whitelisted action: ${peekBody.action}`);
