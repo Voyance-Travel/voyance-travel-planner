@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Loader2, CheckCircle, MapPin, Clock, DollarSign, RefreshCw, Star, Image, Wallet, Lightbulb, AlertCircle, LogIn, Coins } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle, MapPin, Clock, DollarSign, RefreshCw, Star, Image, Wallet, Lightbulb, AlertCircle, LogIn, Coins, Cloud } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +19,11 @@ import { format, differenceInCalendarDays } from 'date-fns';
 import { parseLocalDate, safeFormatDate } from '@/utils/dateUtils';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { ROUTES } from '@/config/routes';
+import { EditorialItinerary } from '@/components/itinerary/EditorialItinerary';
+import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
+import { parseEditorialDays } from '@/utils/itineraryParser';
+import PersonalizedLoadingProgress from '@/components/planner/PersonalizedLoadingProgress';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useGenerationGate, type GateResult } from '@/hooks/useGenerationGate';
 import { generateFullPreview, type FullPreview, type PreviewDay } from '@/services/fullPreviewService';
 import { convertPreviewToGeneratedDays, createLockedPlaceholderDays } from '@/utils/previewConverter';
@@ -1009,7 +1014,112 @@ export function ItineraryGenerator({
     );
   }
 
-  // Generating state
+  // =========================================================================
+  // SERVER-SIDE GENERATION: dedicated progress view using poller data
+  // =========================================================================
+  if (serverGenActive) {
+    const pollerDays = poller.partialDays as unknown[];
+    const hasPartialDays = pollerDays.length > 0;
+
+    return (
+      <div className="py-8 space-y-6">
+        {/* Progress Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center"
+        >
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary mb-4">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm font-medium">
+              {poller.totalDays > 0
+                ? `Generating Day ${poller.completedDays + 1} of ${poller.totalDays}`
+                : 'Starting generation…'}
+            </span>
+          </div>
+
+          <h2 className="text-2xl font-serif font-bold mb-2">
+            Crafting Your {destination} Adventure
+          </h2>
+
+          {poller.totalDays > 0 && (
+            <div className="max-w-md mx-auto mt-4">
+              <Progress value={poller.progress} className="h-2" />
+              <p className="text-sm text-muted-foreground mt-2">
+                {poller.completedDays} of {poller.totalDays} days complete
+              </p>
+            </div>
+          )}
+        </motion.div>
+
+        {/* Safe-to-leave banner */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="max-w-lg mx-auto"
+        >
+          <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+            <Cloud className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-foreground">Building in the cloud</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                You can close this page or navigate away — your itinerary will be waiting for you when you come back.
+              </p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Personalized loading messages while waiting for first day */}
+        {!hasPartialDays && (
+          <PersonalizedLoadingProgress
+            tripType={tripType}
+            destination={destination}
+            travelers={travelers}
+            progress={poller.progress}
+          />
+        )}
+
+        {/* Progressive day rendering — show completed days */}
+        {hasPartialDays && (
+          <div className="space-y-4 max-w-2xl mx-auto">
+            <p className="text-sm text-muted-foreground text-center">
+              Browse your completed days while we finish the rest:
+            </p>
+            <EditorialItinerary
+              tripId={tripId}
+              days={parseEditorialDays({ days: pollerDays }, startDate) as EditorialDay[]}
+              destination={destination}
+              startDate={startDate}
+              endDate={endDate}
+              travelers={travelers}
+              isEditable={false}
+              isPreview={true}
+            />
+          </div>
+        )}
+
+        {/* Skeleton for next generating day */}
+        {poller.totalDays > 0 && poller.completedDays < poller.totalDays && (
+          <div className="max-w-2xl mx-auto">
+            <div className="border border-dashed border-border rounded-xl p-4 opacity-60 animate-pulse">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="font-medium">Day {poller.completedDays + 1}</p>
+                  <p className="text-sm text-muted-foreground">Generating activities…</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Generating state (frontend loop fallback — only reached if serverGenActive is false)
   return (
     <div className="py-8">
       {/* Progress Header */}

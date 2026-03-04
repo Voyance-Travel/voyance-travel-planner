@@ -150,7 +150,7 @@ export default function TripDetail() {
 
   const generationPoller = useGenerationPoller({
     tripId: tripId || null,
-    enabled: isServerGenerating && !generationStalled,
+    enabled: isServerGenerating && !generationStalled && !showGenerator,
     interval: 3000,
     onReady: async () => {
       setGenerationStalled(false);
@@ -1384,9 +1384,15 @@ export default function TripDetail() {
                           <Progress value={generationPoller.progress} className="h-2" />
                         </div>
                       )}
-                      <p className="text-sm text-muted-foreground/70 mt-4">
-                        You can safely leave this page — we'll have it ready when you come back.
-                      </p>
+                      <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 mt-4 max-w-md mx-auto">
+                        <Sparkles className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-sm font-medium text-foreground">Building in the cloud</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            You can close this page or navigate away — your itinerary will be waiting for you when you come back.
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   </>
                 )}
