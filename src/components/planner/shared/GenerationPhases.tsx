@@ -1,297 +1,233 @@
 /**
- * Pre-generation visual phases component
- * Shows engaging visual experience before day-by-day generation starts
+ * Live Generation Progress Component
+ * Polls itinerary_days and shows real day-by-day progress during generation
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Brain, Heart, Wand2, Check, MapPin, Utensils, Camera, Coffee, Sun, Moon, Compass, Globe, Plane } from 'lucide-react';
+import { Sparkles, Check, Loader2, Cloud } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { Progress } from '@/components/ui/progress';
 import type { GenerationStep } from '@/hooks/useLovableItinerary';
 
 interface GenerationPhasesProps {
   currentStep: GenerationStep;
   destination?: string;
   totalDays?: number;
+  tripId?: string;
 }
 
-// Fun facts about travel that rotate during loading
-const TRAVEL_FACTS = [
-  "The best memories come from unplanned moments",
-  "Every journey starts with a single step",
-  "Adventure awaits around every corner",
-  "Travel is the only thing you buy that makes you richer",
-  "Collect moments, not just photos",
-  "The world is a book, and those who don't travel read only one page",
-];
-
-// Preview activities that cycle during loading
-const PREVIEW_ACTIVITIES = [
-  { icon: Coffee, label: 'Finding hidden cafés', color: 'text-amber-500' },
-  { icon: Camera, label: 'Discovering photo spots', color: 'text-blue-500' },
-  { icon: Utensils, label: 'Curating local favorites', color: 'text-rose-500' },
-  { icon: Compass, label: 'Planning walking routes', color: 'text-emerald-500' },
-  { icon: Sun, label: 'Timing golden hours', color: 'text-orange-500' },
-  { icon: MapPin, label: 'Mapping neighborhoods', color: 'text-violet-500' },
-];
-
-const phases = [
-  {
-    step: 'gathering-dna' as const,
-    icon: Brain,
-    title: 'Reading your Travel DNA',
-    subtitle: 'Understanding what makes you tick',
-  },
-  {
-    step: 'personalizing' as const,
-    icon: Heart,
-    title: 'Matching your vibe',
-    subtitle: "Finding places you'll actually love",
-  },
-  {
-    step: 'preparing' as const,
-    icon: Wand2,
-    title: 'Crafting the magic',
-    subtitle: 'Building your perfect day-by-day plan',
-  },
-];
-
-function getPhaseIndex(step: GenerationStep): number {
-  if (step === 'gathering-dna') return 0;
-  if (step === 'personalizing') return 1;
-  if (step === 'preparing') return 2;
-  return -1;
+interface PolledDay {
+  day_number: number;
+  title: string | null;
+  theme: string | null;
 }
 
-export function GenerationPhases({ currentStep, destination, totalDays }: GenerationPhasesProps) {
-  const currentPhaseIndex = getPhaseIndex(currentStep);
-  const [factIndex, setFactIndex] = useState(0);
-  const [activityIndex, setActivityIndex] = useState(0);
-  
-  // Rotate through facts
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setFactIndex(prev => (prev + 1) % TRAVEL_FACTS.length);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
+export function GenerationPhases({ currentStep, destination, totalDays, tripId }: GenerationPhasesProps) {
+  const [days, setDays] = useState<PolledDay[]>([]);
+  const [isComplete, setIsComplete] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Rotate through preview activities faster
   useEffect(() => {
-    const interval = setInterval(() => {
-      setActivityIndex(prev => (prev + 1) % PREVIEW_ACTIVITIES.length);
-    }, 1200);
-    return () => clearInterval(interval);
-  }, []);
-  
-  // Only show during pre-generation phases
-  if (currentPhaseIndex === -1) return null;
+    if (!tripId) return;
 
-  const currentActivity = PREVIEW_ACTIVITIES[activityIndex];
-  const ActivityIcon = currentActivity.icon;
+    const poll = async () => {
+      try {
+        const { data: currentDays } = await supabase
+          .from('itinerary_days')
+          .select('day_number, title, theme')
+          .eq('trip_id', tripId)
+          .order('day_number');
+
+        if (currentDays && currentDays.length > 0) {
+          setDays(currentDays);
+        }
+
+        const { data: trip } = await supabase
+          .from('trips')
+          .select('itinerary_status')
+          .eq('id', tripId)
+          .single();
+
+        if (trip?.itinerary_status) {
+          setStatus(trip.itinerary_status as string);
+          const s = trip.itinerary_status as string;
+          if (s === 'ready' || s === 'generated') {
+            setIsComplete(true);
+            if (intervalRef.current) {
+              clearInterval(intervalRef.current);
+              intervalRef.current = null;
+            }
+          }
+        }
+      } catch (e) {
+        // Silently continue polling
+      }
+    };
+
+    poll();
+    intervalRef.current = setInterval(poll, 5000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [tripId]);
+
+  const completedDays = days.length;
+  const total = totalDays || 0;
+  const remainingDays = Math.max(0, total - completedDays);
+  const progress = total > 0 ? (completedDays / total) * 100 : 0;
+  const nextDay = completedDays + 1;
+
+  // No tripId — simple preparing state
+  if (!tripId) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="w-full max-w-lg mx-auto px-4 text-center py-12"
+      >
+        <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+        <p className="text-muted-foreground">Preparing your trip...</p>
+      </motion.div>
+    );
+  }
+
+  // Complete state
+  if (isComplete) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="w-full max-w-lg mx-auto px-4 text-center py-8"
+      >
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+          className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4"
+        >
+          <Check className="h-8 w-8 text-primary" />
+        </motion.div>
+        <h2 className="text-xl font-serif font-bold text-foreground mb-1">
+          Your itinerary is ready!
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          {total} days in {destination || 'your destination'} — loading now...
+        </p>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
       className="w-full max-w-lg mx-auto px-4"
     >
-      {/* Hero section with animated globe */}
-      <div className="relative text-center mb-8">
-        {/* Animated background rings */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <motion.div
-            className="w-32 h-32 rounded-full border border-primary/10"
-            animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }}
-            transition={{ duration: 3, repeat: Infinity, ease: 'easeOut' }}
-          />
-          <motion.div
-            className="absolute w-24 h-24 rounded-full border border-primary/20"
-            animate={{ scale: [1, 1.3, 1], opacity: [0.7, 0.2, 0.7] }}
-            transition={{ duration: 2.5, repeat: Infinity, ease: 'easeOut', delay: 0.5 }}
-          />
-        </div>
-
-        {/* Main icon */}
+      {/* Header */}
+      <div className="text-center mb-6">
         <motion.div
-          className="relative inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 mb-4 shadow-lg"
-          animate={{ 
-            boxShadow: [
-              '0 0 0 0 rgba(var(--primary), 0.2)',
-              '0 0 0 20px rgba(var(--primary), 0)',
-            ]
-          }}
-          transition={{ duration: 1.5, repeat: Infinity }}
+          animate={{ scale: [1, 1.1, 1] }}
+          transition={{ duration: 2, repeat: Infinity }}
+          className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mb-3"
         >
-          <motion.div
-            animate={{ rotateY: 360 }}
-            transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
-          >
-            <Globe className="w-10 h-10 text-primary" />
-          </motion.div>
-          
-          {/* Orbiting plane */}
-          <motion.div
-            className="absolute"
-            animate={{ rotate: 360 }}
-            transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
-            style={{ width: 80, height: 80 }}
-          >
-            <Plane className="w-4 h-4 text-primary absolute -top-1 left-1/2 -translate-x-1/2 rotate-45" />
-          </motion.div>
+          <Sparkles className="h-6 w-6 text-primary" />
         </motion.div>
 
-        <h2 className="text-2xl font-serif font-bold text-foreground mb-1">
-          Building your {destination || 'dream trip'}
+        <h2 className="text-xl font-serif font-bold text-foreground mb-1">
+          {completedDays === 0 && status !== 'generating'
+            ? `Building your ${destination || 'trip'}`
+            : `Building Day ${Math.min(nextDay, total)} of ${total}`}
         </h2>
-        
-        {/* Rotating activity indicator */}
-        <div className="h-8 flex items-center justify-center gap-2">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activityIndex}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.3 }}
-              className="flex items-center gap-2 text-sm text-muted-foreground"
-            >
-              <ActivityIcon className={`w-4 h-4 ${currentActivity.color}`} />
-              <span>{currentActivity.label}...</span>
-            </motion.div>
-          </AnimatePresence>
-        </div>
+
+        <p className="text-sm text-muted-foreground">
+          {completedDays === 0
+            ? 'Getting started...'
+            : `${completedDays} ${completedDays === 1 ? 'day' : 'days'} complete · ~${Math.max(1, Math.ceil(remainingDays * 1.2))} min remaining`}
+        </p>
       </div>
 
-      {/* Compact phase progress - horizontal on mobile */}
-      <div className="flex items-center justify-center gap-2 mb-6">
-        {phases.map((phase, index) => {
-          const isCompleted = index < currentPhaseIndex;
-          const isCurrent = index === currentPhaseIndex;
-          const Icon = phase.icon;
+      {/* Progress bar */}
+      {total > 0 && (
+        <div className="mb-6">
+          <Progress value={progress} className="h-2" />
+          <p className="text-xs text-muted-foreground text-right mt-1">{Math.round(progress)}%</p>
+        </div>
+      )}
 
-          return (
-            <motion.div
-              key={phase.step}
-              className="flex items-center gap-2"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: index * 0.1 }}
-            >
-              <div
-                className={`
-                  relative w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300
-                  ${isCurrent ? 'bg-primary text-primary-foreground shadow-lg scale-110' : ''}
-                  ${isCompleted ? 'bg-primary/20 text-primary' : ''}
-                  ${!isCurrent && !isCompleted ? 'bg-muted text-muted-foreground' : ''}
-                `}
-              >
-                {isCompleted ? (
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                  >
-                    <Check className="w-5 h-5" />
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    animate={isCurrent ? { scale: [1, 1.15, 1] } : {}}
-                    transition={{ duration: 0.8, repeat: isCurrent ? Infinity : 0 }}
-                  >
-                    <Icon className="w-5 h-5" />
-                  </motion.div>
-                )}
-                
-                {isCurrent && (
-                  <motion.div
-                    className="absolute inset-0 rounded-full border-2 border-primary"
-                    animate={{ scale: [1, 1.3, 1], opacity: [1, 0, 1] }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                  />
+      {/* Day list */}
+      <div className="space-y-2 mb-6">
+        {/* Completed days */}
+        {days.map((day) => (
+          <motion.div
+            key={day.day_number}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.3 }}
+            className="flex items-start gap-3 p-3 rounded-lg bg-primary/5 border border-primary/10"
+          >
+            <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
+              <Check className="h-3.5 w-3.5 text-primary" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-primary uppercase tracking-wide">Day {day.day_number}</span>
+                {day.title && (
+                  <span className="text-sm font-medium text-foreground truncate">{day.title}</span>
                 )}
               </div>
-
-              {/* Connector line (except last) */}
-              {index < phases.length - 1 && (
-                <div className="w-8 h-0.5 rounded-full overflow-hidden bg-muted">
-                  <motion.div
-                    className="h-full bg-primary"
-                    initial={{ width: '0%' }}
-                    animate={{ 
-                      width: isCompleted ? '100%' : isCurrent ? '50%' : '0%' 
-                    }}
-                    transition={{ duration: 0.5 }}
-                  />
-                </div>
+              {day.theme && (
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">{day.theme}</p>
               )}
-            </motion.div>
-          );
-        })}
+            </div>
+          </motion.div>
+        ))}
+
+        {/* Currently generating day */}
+        {!isComplete && nextDay <= total && (
+          <div className="flex items-start gap-3 p-3 rounded-lg border border-border bg-card">
+            <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
+              <Loader2 className="h-3.5 w-3.5 text-muted-foreground animate-spin" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Day {nextDay}</span>
+                <motion.span
+                  animate={{ opacity: [0.4, 1, 0.4] }}
+                  transition={{ duration: 1.5, repeat: Infinity }}
+                  className="text-sm text-muted-foreground"
+                >
+                  Generating...
+                </motion.span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Upcoming days (show max 2) */}
+        {!isComplete && Array.from({ length: Math.min(2, total - nextDay) }, (_, i) => nextDay + 1 + i).map((dayNum) => (
+          <div key={dayNum} className="flex items-start gap-3 p-3 rounded-lg opacity-30">
+            <div className="w-6 h-6 rounded-full border border-border flex items-center justify-center shrink-0 mt-0.5">
+              <span className="text-[10px] text-muted-foreground">{dayNum}</span>
+            </div>
+            <div className="h-4 w-32 rounded bg-muted/50" />
+          </div>
+        ))}
       </div>
 
-      {/* Current phase details */}
+      {/* Feel free to leave message */}
       <motion.div
-        key={currentPhaseIndex}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="text-center mb-6"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1 }}
+        className="flex items-center gap-2 p-3 rounded-lg bg-secondary/50 border border-border"
       >
-        <p className="font-medium text-foreground">
-          {phases[currentPhaseIndex]?.title}
-        </p>
-        <p className="text-sm text-muted-foreground">
-          {phases[currentPhaseIndex]?.subtitle}
+        <Cloud className="h-4 w-4 text-muted-foreground shrink-0" />
+        <p className="text-xs text-muted-foreground">
+          Feel free to leave — we'll keep building your itinerary in the background. Come back anytime.
         </p>
       </motion.div>
-
-      {/* Inspirational quote card */}
-      <motion.div
-        className="relative bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl p-6 border border-primary/10 overflow-hidden"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-      >
-        {/* Decorative sparkles */}
-        <Sparkles className="absolute top-3 right-3 w-4 h-4 text-primary/30" />
-        <Sparkles className="absolute bottom-3 left-3 w-3 h-3 text-primary/20" />
-        
-        <div className="relative">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">
-            ✨ Travel Inspiration
-          </p>
-          <AnimatePresence mode="wait">
-            <motion.p
-              key={factIndex}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.4 }}
-              className="text-foreground font-medium italic"
-            >
-              "{TRAVEL_FACTS[factIndex]}"
-            </motion.p>
-          </AnimatePresence>
-        </div>
-
-        {/* Progress bar at bottom */}
-        <div className="mt-4 h-1 rounded-full bg-muted/50 overflow-hidden">
-          <motion.div
-            className="h-full bg-gradient-to-r from-primary/50 via-primary to-primary/50"
-            animate={{ x: ['-100%', '200%'] }}
-            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-            style={{ width: '50%' }}
-          />
-        </div>
-      </motion.div>
-
-      {/* Time estimate */}
-      <p className="text-center text-xs text-muted-foreground mt-4">
-        {totalDays && totalDays > 7
-          ? `Takes about ${Math.ceil(totalDays * 1.2)} minutes. You can leave and come back.`
-          : totalDays && totalDays > 3
-            ? `Takes about ${Math.ceil(totalDays * 1.2)} minutes`
-            : 'Usually takes 2-4 minutes'}
-      </p>
     </motion.div>
   );
 }
