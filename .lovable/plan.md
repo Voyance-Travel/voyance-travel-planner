@@ -1,43 +1,81 @@
 
 
-## Analysis: Day-by-Day Backend Loop Already Exists — But Has a Critical Auth Bug
+## Plan: Fix Frontend Generation UX — Live Progress + Seamless Return
 
-The `generate-trip` → `generate-trip-day` → `generate-day` self-chaining architecture you described is **already implemented** in the codebase (lines 12086–12504 of `generate-itinerary/index.ts`). The frontend already calls `generate-trip` which fires off `generate-trip-day` via fetch, which chains to the next day, exactly as your spec describes.
+### Problem
+The backend works correctly — days are saved individually to `itinerary_days` table and `itinerary_data.days` is progressively populated. But the frontend has three gaps:
 
-**However, there is a critical bug that prevents it from working:**
+1. **`useGenerationPoller` only reads `trips.metadata` for progress** — it gets `completedDays` from `metadata.generation_completed_days`. If that metadata is stale or missing, progress shows 0 even when days exist in `itinerary_days`.
+2. **TripDetail doesn't check `itinerary_days` on page load** — if `itinerary_data` is null and `itinerary_status` isn't `'generating'`, it shows the "Generate Itinerary" button even when days exist.
+3. **Stall detection shows a manual "Resume" button** instead of auto-resuming.
+4. **Time estimate says "Usually takes less than a minute"** — wrong for multi-day trips.
 
-### The Auth Bug (Showstopper)
+### Changes
 
-All actions in `generate-itinerary` pass through `validateAuth()` at line 7142, which calls `supabase.auth.getUser(token)`. When `generate-trip-day` self-chains using `SERVICE_ROLE_KEY`, `getUser()` fails because a service role key is not a user JWT. Every chained call returns **401 Unauthorized**, so only Day 1 ever generates.
+#### 1. `useGenerationPoller.ts` — Poll `itinerary_days` as fallback + auto-resume on stall
 
-### Fix Required
+- Add a secondary query to `itinerary_days` table counting rows and fetching day summaries (day_number, title, theme) during each poll cycle.
+- If `metadata.generation_completed_days` is 0 but `itinerary_days` has rows, use the `itinerary_days` count as `completedDays`.
+- Expose `generatedDaysList` (array of `{day_number, title, theme}`) from the hook for the progress UI to render.
+- **Auto-resume on stall**: When stall is detected (heartbeat > 3min), instead of firing `onStalled`, automatically invoke `generate-itinerary` with `action: 'generate-trip'` and `resumeFromDay: completedDays + 1`. Only attempt once per stall (use existing `stalledFiredRef`). If auto-resume fails, then fire `onStalled` for manual fallback.
+- Add `'generated'` as a completion status check alongside `'ready'` (the backend uses `'generated'` not `'ready'`).
 
-**File: `supabase/functions/generate-itinerary/index.ts`**
+#### 2. `TripDetail.tsx` — Auto-detect generation state on page load
 
-1. **Bypass user-auth for server-to-server calls**: Detect when the request uses the `SERVICE_ROLE_KEY` (by checking if the bearer token matches the service role key, or by adding a shared internal secret header). For `generate-trip-day` specifically, the `userId` is already passed in the request body from the initial `generate-trip` call — so we can trust it when the caller authenticates with the service role key.
+In `fetchTripData()` (around line 533), after loading the trip, add a check against `itinerary_days`:
 
-   Concretely:
-   - After line 7131 (`const supabaseKey = ...`), extract the bearer token from the request
-   - If the bearer token equals `supabaseKey` (the service role key), treat it as an **internal server call** and skip `validateAuth()` — instead, use the `userId` from the request body directly
-   - Only apply this bypass for `generate-trip-day` action to minimize attack surface
+```
+const { count: dayCount } = await supabase
+  .from('itinerary_days')
+  .select('*', { count: 'exact', head: true })
+  .eq('trip_id', tripId)
+```
 
-2. **No other backend changes needed** — the self-chaining, progressive persistence, heartbeat updates, refund logic, and resume support are all already correctly implemented.
+Then in the rendering logic (line ~1349-1546), change the condition chain:
+- If `itinerary_status === 'generated'` AND `hasItineraryData` → show complete itinerary (existing)
+- If `itinerary_status === 'generating'` OR (`dayCount > 0` AND `!hasItineraryData`) → show progress view with poller enabled
+- If none of the above → show "Generate Itinerary" button
 
-### Frontend — Already Correct
+This ensures returning users NEVER see the generate button when days exist.
 
-The frontend (`TripDetail.tsx` line 215, `useItineraryGeneration.ts` line 467) already calls `generate-trip` and polls via `useGenerationPoller`. The resume flow at line 200 already works. The welcome-back toast in `TripDashboard.tsx` was added in the previous conversation turn.
+Also update `isServerGenerating` (line 147) to include the case where `itinerary_days` exist but `itinerary_status` may have been reset.
 
-### Zombie Cleanup (Data Fix)
+#### 3. `TripDetail.tsx` — Replace stalled UI with auto-resume
 
-Run a one-time data update to fix stuck trips that failed due to the auth bug:
-- Mark trips stuck in `generating` for >15 min as `partial` with appropriate metadata
+Remove the "Resume from Day X" button (lines 1354-1381). Replace with a brief "Reconnecting..." indicator since the poller now auto-resumes. Keep the manual resume as a hidden fallback (show after 2 failed auto-resume attempts).
 
-### Summary of Changes
+#### 4. `TripDetail.tsx` — Enhance progress view with day list from poller
 
-| # | Where | What |
-|---|-------|------|
-| 1 | Edge Function `index.ts` | Add service-role auth bypass for `generate-trip-day` action |
-| 2 | Database | Clean up zombie trips stuck in `generating` |
+In the generating progress section (lines 1383-1451), replace the generic spinner + `partialDays` from `itinerary_data` with the new `generatedDaysList` from the poller. Show:
+- Day number badge + title + theme for each completed day
+- Pulsing "Generating Day X..." for the current day
+- Faded placeholders for upcoming days (max 3)
+- Progress bar and accurate time estimate
 
-Everything else in your spec (self-chaining, progressive saves, resume, polling, welcome-back toast) is already built and will start working once the auth bypass is in place.
+#### 5. `GenerationPhases.tsx` — Add `totalDays` prop for dynamic time estimate
+
+Replace the static "Usually takes less than a minute" (line 288) with:
+- `totalDays <= 3` → "Usually takes 2-4 minutes"
+- `totalDays <= 7` → "Takes about X minutes"  
+- `totalDays > 7` → "Takes about X minutes. You can leave and come back."
+
+Add `totalDays?: number` to the props interface.
+
+#### 6. `ItineraryGenerator.tsx` — Pass `totalDays` to `GenerationPhases`
+
+Where `GenerationPhases` is rendered, pass `totalDays={totalDaysEstimate}`.
+
+#### 7. Edge Function — Add retry logic for self-chain calls
+
+In `generate-itinerary/index.ts`, wrap the fire-and-forget `fetch` for the next day in a 3-attempt retry loop with exponential backoff (2s, 4s, 6s) to handle intermittent 403 errors.
+
+### Files to modify
+
+| File | What |
+|------|------|
+| `src/hooks/useGenerationPoller.ts` | Poll `itinerary_days`, expose day list, auto-resume on stall, recognize `'generated'` status |
+| `src/pages/TripDetail.tsx` | Check `itinerary_days` on load, replace stalled UI, enhance progress view |
+| `src/components/planner/shared/GenerationPhases.tsx` | Dynamic time estimates |
+| `src/components/itinerary/ItineraryGenerator.tsx` | Pass totalDays to GenerationPhases |
+| `supabase/functions/generate-itinerary/index.ts` | Retry logic on self-chain fetch |
 
