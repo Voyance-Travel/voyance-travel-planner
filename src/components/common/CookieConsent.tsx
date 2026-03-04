@@ -43,6 +43,26 @@ export function CookieConsent() {
 
   // Check for existing consent on mount
   useEffect(() => {
+    // Suppress cookie banner inside native app (Apple Guideline 5.1.2(i))
+    const isNativeApp = !!(
+      (window as any).isNativeApp ||
+      navigator.userAgent.includes('VoyanceApp') ||
+      (window as any).Capacitor?.isNativePlatform?.() ||
+      (window as any).webkit?.messageHandlers?.nativeApp
+    );
+    if (isNativeApp) {
+      const nativePrefs: CookiePreferences = {
+        essential: true,
+        analytics: false,
+        marketing: false,
+        timestamp: new Date().toISOString(),
+        version: CONSENT_VERSION,
+      };
+      localStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(nativePrefs));
+      setPreferences(nativePrefs);
+      return; // Never show banner in native app
+    }
+
     const stored = localStorage.getItem(CONSENT_STORAGE_KEY);
     
     if (stored) {
