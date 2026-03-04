@@ -7133,19 +7133,47 @@ serve(async (req) => {
     const GOOGLE_MAPS_API_KEY = Deno.env.get("GOOGLE_MAPS_API_KEY");
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Create auth client for validation
-    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: req.headers.get('Authorization') || '' } }
-    });
+    // ── Service-role auth bypass for server-to-server self-chaining ──
+    // When generate-trip-day calls itself via fetch() with the SERVICE_ROLE_KEY,
+    // validateAuth() fails because a service role key is not a user JWT.
+    // Detect this case and trust the userId from the request body instead.
+    const bearerToken = req.headers.get('Authorization')?.replace('Bearer ', '') || '';
+    const isServiceRoleCall = bearerToken === supabaseKey;
 
-    // Validate authentication
-    const authResult = await validateAuth(req, authClient);
-    if (!authResult) {
-      console.error("[generate-itinerary] Unauthorized request");
-      return new Response(
-        JSON.stringify({ error: "Unauthorized. Please sign in to generate itineraries." }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    let authResult: { userId: string } | null = null;
+
+    if (isServiceRoleCall) {
+      // Parse body to peek at action + userId (we'll re-parse later via req.json() — 
+      // but since we need to check before full routing, clone the request)
+      const clonedReq = req.clone();
+      const peekBody = await clonedReq.json();
+      
+      if (peekBody.action === 'generate-trip-day' && peekBody.userId) {
+        // Trusted internal call — skip user-auth, use provided userId
+        authResult = { userId: peekBody.userId };
+        console.log(`[generate-itinerary] Service-role bypass for generate-trip-day, userId: ${authResult.userId}`);
+      } else {
+        // Service role key used for a non-whitelisted action — reject
+        console.error(`[generate-itinerary] Service-role call for non-whitelisted action: ${peekBody.action}`);
+        return new Response(
+          JSON.stringify({ error: "Unauthorized action for service role" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    } else {
+      // Normal user request — validate JWT as usual
+      const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: req.headers.get('Authorization') || '' } }
+      });
+
+      authResult = await validateAuth(req, authClient);
+      if (!authResult) {
+        console.error("[generate-itinerary] Unauthorized request");
+        return new Response(
+          JSON.stringify({ error: "Unauthorized. Please sign in to generate itineraries." }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
     
     console.log(`[generate-itinerary] Authenticated user: ${authResult.userId}`);
