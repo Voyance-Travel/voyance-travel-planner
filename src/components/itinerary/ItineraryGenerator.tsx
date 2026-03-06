@@ -128,8 +128,6 @@ export function ItineraryGenerator({
     interval: 3000,
     onReady: async () => {
       setServerGenActive(false);
-      if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
-      if (stallCheckRef.current) clearInterval(stallCheckRef.current);
       // Fetch the completed trip data
       const { data: tripData } = await supabase.from('trips').select('itinerary_data').eq('id', tripId).single();
       if (tripData?.itinerary_data) {
@@ -145,8 +143,6 @@ export function ItineraryGenerator({
     },
     onFailed: (err) => {
       setServerGenActive(false);
-      if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
-      if (stallCheckRef.current) clearInterval(stallCheckRef.current);
       setPrePhase(null);
       setHasStarted(false);
       toast.error(`Generation failed: ${err}. Credits for ungenerated days have been refunded.`, { duration: 6000 });
@@ -179,9 +175,6 @@ export function ItineraryGenerator({
   const [showCostConfirm, setShowCostConfirm] = useState(false);
   const [prePhase, setPrePhase] = useState<Extract<GenerationStep, 'gathering-dna' | 'personalizing' | 'preparing'> | null>(null);
   const autoStartTriggered = useRef(false);
-  const generationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const stallCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastProgressTimeRef = useRef<number>(Date.now());
   const gateResultRef = useRef<GateResult | null>(null);
 
   // Generation gate — pre-authorizes credits before generation
@@ -203,13 +196,6 @@ export function ItineraryGenerator({
     return calculateTripCredits({ days: totalDaysEstimate, cities });
   }, [totalDaysEstimate, destination, isMultiCity]);
 
-  // Reset stall detector whenever a new day completes
-  useEffect(() => {
-    if (days.length > 0 && hasStarted) {
-      lastProgressTimeRef.current = Date.now();
-      console.log(`[ItineraryGenerator] Progress: day ${days.length} complete, stall detector reset`);
-    }
-  }, [days.length, hasStarted]);
 
   // Keep the pre-generation experience on screen until the first day is ready,
   // so we don't flash back to the generic spinner state.
@@ -258,61 +244,6 @@ export function ItineraryGenerator({
     setShowGenericWarning(false);
     setShowCostConfirm(false);
 
-    // Stall detector: instead of a fixed timeout, check every 10s if progress
-    // has stalled for >600s. This allows long trips to complete while still
-    // catching genuine stalls quickly.
-    if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
-    if (stallCheckRef.current) clearInterval(stallCheckRef.current);
-    lastProgressTimeRef.current = Date.now();
-
-    const handleStallTimeout = async () => {
-      if (stallCheckRef.current) clearInterval(stallCheckRef.current);
-      console.error('[ItineraryGenerator] Generation stalled — no progress for 600s');
-      cancel(); // Stop the day-by-day loop from dispatching more calls
-      setPrePhase(null);
-      reset();
-      setHasStarted(false);
-
-      // Partial refund: only refund credits for ungenerated days
-      const gr = gateResultRef.current;
-      if (gr && gr.creditsCharged > 0) {
-        const daysCompleted = days.length;
-        const totalTrip = gr.requestedDays || totalDaysEstimate;
-        const creditsPerDay = Math.round(gr.creditsCharged / totalTrip);
-        const ungenerated = Math.max(0, totalTrip - daysCompleted);
-        const refundAmount = creditsPerDay * ungenerated;
-
-        if (refundAmount > 0) {
-          const ok = await issueRefund(tripId, refundAmount, 'generation_stall_partial', `${daysCompleted}/${totalTrip} days completed`);
-          if (ok) {
-            toast.info(
-              daysCompleted > 0
-                ? `Generation stalled after ${daysCompleted}/${totalTrip} days — ${refundAmount} credits refunded for remaining days.`
-                : `Generation timed out — ${refundAmount} credits have been refunded.`,
-              { duration: 6000 }
-            );
-            if (userId) {
-              queryClient.invalidateQueries({ queryKey: ['credits', userId] });
-              queryClient.invalidateQueries({ queryKey: ['entitlements', userId] });
-            }
-          } else {
-            toast.error('Generation stalled. Automatic refund failed — please contact support.', { duration: 8000 });
-          }
-        } else {
-          toast.info('Generation stalled but all days were completed. No refund needed.');
-        }
-      } else {
-        toast.error('Generation stalled. Please try again.');
-      }
-    };
-
-    stallCheckRef.current = setInterval(() => {
-      const elapsed = Date.now() - lastProgressTimeRef.current;
-      if (elapsed > 600_000) {
-        handleStallTimeout();
-      }
-    }, 10_000);
-
     // Pre-generation phases (matches the newer streaming UX)
     setPrePhase('gathering-dna');
     await new Promise(resolve => setTimeout(resolve, 800));
@@ -353,8 +284,6 @@ export function ItineraryGenerator({
       } else {
         // Server/network error — surface as generic error, NOT "out of credits"
         console.error('[ItineraryGenerator] Gate error (server/network):', err);
-        if (stallCheckRef.current) clearInterval(stallCheckRef.current);
-        if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
         cancel();
         setPrePhase(null);
         toast.error('Something went wrong while preparing your trip. Please try again in a moment.');
@@ -384,8 +313,6 @@ export function ItineraryGenerator({
 
         if (spendErr || data?.error) {
           console.error('[ItineraryGenerator] Partial spend failed:', spendErr || data?.error);
-          if (stallCheckRef.current) clearInterval(stallCheckRef.current);
-          if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
           cancel();
           setPrePhase(null);
           toast.error('Failed to process credits. Please try again.');
@@ -407,8 +334,6 @@ export function ItineraryGenerator({
         }
       } catch (err) {
         console.error('[ItineraryGenerator] Partial spend error:', err);
-        if (stallCheckRef.current) clearInterval(stallCheckRef.current);
-        if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
         cancel();
         setPrePhase(null);
         toast.error('Something went wrong. Please try again.');
@@ -453,39 +378,11 @@ export function ItineraryGenerator({
           setServerGenActive(true);
           return; // Don't proceed — poller's onReady/onFailed handles the rest
         } catch (serverErr) {
-          console.warn('[ItineraryGenerator] Server-side generation failed, falling back to frontend loop:', serverErr);
-          // Fallback to frontend loop if server-side fails to start
-          const generatedDays = await generateItinerary({
-            tripId,
-            destination,
-            destinationCountry,
-            startDate,
-            endDate: effectiveEndDate,
-            travelers,
-            tripType,
-            budgetTier,
-            userId,
-            isMultiCity,
-          });
-
-          const lockedDays = createLockedPlaceholderDays(startDate, daysToGenerate, totalRequestedDays, destination, gateResult.isFirstTrip);
-          const allDays = [...generatedDays, ...lockedDays];
-
+          console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
           setPrePhase(null);
-          await new Promise(resolve => setTimeout(resolve, 900));
-          if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
-          if (stallCheckRef.current) clearInterval(stallCheckRef.current);
-
-          if (gateResult.creditsCharged > 0) {
-            toast.success(
-              `Trip generated! ${gateResult.creditsCharged} credits used · ${gateResult.currentBalance} remaining`,
-              { duration: 5000 }
-            );
-          } else if (gateResult.isFirstTrip) {
-            toast.success('Your first trip is free! 🎉', { duration: 4000 });
-          }
-
-          onComplete(allDays, overview, gateResult.isFirstTrip);
+          setHasStarted(false);
+          toast.error('Failed to start generation. Please try again.');
+          return;
         }
       } else if (gateResult.mode === 'partial') {
         // PARTIAL — gate found user can afford some days but didn't confirm yet
@@ -494,8 +391,6 @@ export function ItineraryGenerator({
         console.log(`[ItineraryGenerator] PARTIAL: user can afford ${daysToGenerate}/${totalRequestedDays} days. Showing confirmation.`);
         setPrePhase(null);
         setHasStarted(false);
-        if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
-        if (stallCheckRef.current) clearInterval(stallCheckRef.current);
         setShowCostConfirm(true);
       } else {
         // LOCKED — no credits, no AI, no API calls
@@ -514,13 +409,9 @@ export function ItineraryGenerator({
         });
 
         // Pass locked placeholders to onComplete so the trip structure exists
-        if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
-        if (stallCheckRef.current) clearInterval(stallCheckRef.current);
         onComplete(lockedDays, undefined, false);
       }
     } catch (err) {
-      if (generationTimeoutRef.current) clearTimeout(generationTimeoutRef.current);
-      if (stallCheckRef.current) clearInterval(stallCheckRef.current);
       console.error('[ItineraryGenerator] Generation failed:', err);
       setPrePhase(null);
 
