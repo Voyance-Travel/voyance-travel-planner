@@ -1230,7 +1230,7 @@ function FlightHotelStep({
                     </div>
 
                     {/* Date & Times */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-3">
                       <div className="col-span-2 sm:col-span-1">
                       
                         <Label className="text-xs text-muted-foreground">Date</Label>
@@ -1238,7 +1238,7 @@ function FlightHotelStep({
                           type="date"
                           value={outboundFlight.departureDate}
                           onChange={(e) => setOutboundFlight({ ...outboundFlight, departureDate: e.target.value })}
-                          className="text-sm"
+                          className="text-xs h-8"
                         />
                       </div>
                       <div>
@@ -1247,7 +1247,7 @@ function FlightHotelStep({
                           type="time"
                           value={outboundFlight.departureTime}
                           onChange={(e) => setOutboundFlight({ ...outboundFlight, departureTime: e.target.value })}
-                          className="text-sm"
+                          className="text-xs h-8"
                         />
                       </div>
                       <div>
@@ -1256,7 +1256,7 @@ function FlightHotelStep({
                           type="time"
                           value={outboundFlight.arrivalTime}
                           onChange={(e) => setOutboundFlight({ ...outboundFlight, arrivalTime: e.target.value })}
-                          className="text-sm"
+                          className="text-xs h-8"
                         />
                       </div>
                     </div>
@@ -1354,7 +1354,7 @@ function FlightHotelStep({
                                   />
                                 </div>
                               </div>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-3">
                                 <div className="col-span-2 sm:col-span-1">
                                   <Label className="text-xs text-muted-foreground">Date</Label>
                                   <Input
@@ -1365,7 +1365,7 @@ function FlightHotelStep({
                                       updated[idx] = { ...updated[idx], departureDate: e.target.value };
                                       setAdditionalLegs(updated);
                                     }}
-                                    className="text-sm"
+                                    className="text-xs h-8"
                                   />
                                 </div>
                                 <div>
@@ -1378,7 +1378,7 @@ function FlightHotelStep({
                                       updated[idx] = { ...updated[idx], departureTime: e.target.value };
                                       setAdditionalLegs(updated);
                                     }}
-                                    className="text-sm"
+                                    className="text-xs h-8"
                                   />
                                 </div>
                                 <div>
@@ -1391,7 +1391,7 @@ function FlightHotelStep({
                                       updated[idx] = { ...updated[idx], arrivalTime: e.target.value };
                                       setAdditionalLegs(updated);
                                     }}
-                                    className="text-sm"
+                                    className="text-xs h-8"
                                   />
                                 </div>
                               </div>
@@ -1469,14 +1469,14 @@ function FlightHotelStep({
                           />
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-3">
                         <div className="col-span-2 sm:col-span-1">
                           <Label className="text-xs text-muted-foreground">Date</Label>
                           <Input
                             type="date"
                             value={returnFlight.departureDate}
                             onChange={(e) => setReturnFlight({ ...returnFlight, departureDate: e.target.value })}
-                            className="text-sm"
+                            className="text-xs h-8"
                           />
                         </div>
                         <div>
@@ -1485,7 +1485,7 @@ function FlightHotelStep({
                             type="time"
                             value={returnFlight.departureTime}
                             onChange={(e) => setReturnFlight({ ...returnFlight, departureTime: e.target.value })}
-                            className="text-sm"
+                            className="text-xs h-8"
                           />
                         </div>
                         <div>
@@ -1494,7 +1494,7 @@ function FlightHotelStep({
                             type="time"
                             value={returnFlight.arrivalTime}
                             onChange={(e) => setReturnFlight({ ...returnFlight, arrivalTime: e.target.value })}
-                            className="text-sm"
+                            className="text-xs h-8"
                           />
                         </div>
                       </div>
