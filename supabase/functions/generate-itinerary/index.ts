@@ -8378,6 +8378,11 @@ ${'='.repeat(60)}
         console.log(`[Stage 1.999b] ✓ Interest categories injected: ${labels}`);
       }
 
+      // Inject structured generation rules
+      if (context.generationRules && context.generationRules.length > 0) {
+        userResearchPrompt += formatGenerationRules(context.generationRules);
+        console.log(`[Stage 1.999c] ✓ Generation rules injected: ${context.generationRules.length} rules`);
+      }
 
       // =======================================================================
       let mustHavesPrompt = "";
