@@ -308,6 +308,7 @@ export function useGenerationPoller({
     stalledFiredRef.current = false;
     autoResumeAttemptedRef.current = false;
     onReadyCalledRef.current = false;
+    completedDaysHWM.current = 0;
     setState(prev => ({ ...prev, status: 'polling' }));
   }, []);
 
