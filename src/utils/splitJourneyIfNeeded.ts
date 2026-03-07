@@ -230,13 +230,14 @@ export async function splitJourneyIfNeeded(
     }
   }
 
-  // Mark original trip as split (don't delete — keep for audit trail)
+  // Mark original trip as cancelled with split metadata (don't delete — keep for audit trail)
   await supabase
     .from('trips')
     .update({
-      status: 'split_into_journey',
+      status: 'cancelled',
       metadata: {
         ...metadata,
+        splitIntoJourney: true,
         journeyId,
         splitIntoLegs: legs.map(l => l.id),
       } as any,
