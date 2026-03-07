@@ -884,7 +884,7 @@ function TripDetailsStep({
 
         {/* Credit Cost Estimate */}
         {planMode !== 'chat' && planMode !== 'manual' && startDate && endDate && (
-          <TripCostEstimate tripDays={differenceInDays(endDate, startDate) + 1} />
+          <TripCostEstimate tripDays={differenceInDays(endDate, startDate)} />
         )}
       </div>
 

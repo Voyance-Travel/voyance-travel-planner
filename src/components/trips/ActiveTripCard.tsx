@@ -133,7 +133,7 @@ export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
   let daysRemaining = 0;
   
   if (startDate && endDate) {
-    totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
     currentDay = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     currentDay = Math.max(1, Math.min(currentDay, totalDays));
     progressPercent = (currentDay / totalDays) * 100;

@@ -292,7 +292,7 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
     
     setCreatingTrip(true);
     try {
-      const days = Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const days = Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24));
       const selectedHotel = selectedHotelIndex !== null ? hotelSuggestions[selectedHotelIndex] : null;
 
       const tripData = await createTrip.mutateAsync({

@@ -1275,12 +1275,12 @@ export default function TripDetail() {
   // Compute effective end date: if itinerary has more days than start_date→end_date suggests,
   // derive end_date from start_date + (numDays - 1) to fix stale/incorrect end_date values
   const effectiveEndDate = (() => {
-    const storedDayCount = differenceInDays(parseLocalDate(trip.end_date), parseLocalDate(trip.start_date)) + 1;
+    const storedDayCount = differenceInDays(parseLocalDate(trip.end_date), parseLocalDate(trip.start_date));
     const itineraryDayCount = itineraryDays.length;
     if (itineraryDayCount > 1 && itineraryDayCount > storedDayCount) {
       const start = parseLocalDate(trip.start_date);
       const corrected = new Date(start);
-      corrected.setDate(corrected.getDate() + itineraryDayCount - 1);
+      corrected.setDate(corrected.getDate() + itineraryDayCount);
       return format(corrected, 'yyyy-MM-dd');
     }
     return trip.end_date;
@@ -1324,7 +1324,7 @@ export default function TripDetail() {
           {(() => {
             const isPastTrip = isAfter(new Date(), parseLocalDate(effectiveEndDate));
             const statusLabel = isLiveTrip ? 'Active' : isPastTrip && trip.status === 'draft' ? 'Past' : (trip.status || 'draft');
-            const dayCount = differenceInDays(parseLocalDate(effectiveEndDate), parseLocalDate(trip.start_date)) + 1;
+            const dayCount = differenceInDays(parseLocalDate(effectiveEndDate), parseLocalDate(trip.start_date));
             const dateRange = `${format(parseLocalDate(trip.start_date), 'MMM d')}–${format(parseLocalDate(effectiveEndDate), 'MMM d')}`;
             return (
               <>
@@ -1621,7 +1621,7 @@ export default function TripDetail() {
                     </h2>
                     
                     <p className="text-muted-foreground mb-6">
-                      Let our AI create a personalized {differenceInDays(parseLocalDate(effectiveEndDate), parseLocalDate(trip.start_date)) + 1}-day itinerary 
+                      Let our AI create a personalized {differenceInDays(parseLocalDate(effectiveEndDate), parseLocalDate(trip.start_date))}-day itinerary 
                       for {trip.destination} based on your preferences.
                     </p>
                     

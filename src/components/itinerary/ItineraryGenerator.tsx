@@ -277,7 +277,7 @@ export function ItineraryGenerator({
     await new Promise(resolve => setTimeout(resolve, 800));
 
     // Calculate trip days for the gate
-    const totalDays = differenceInCalendarDays(parseLocalDate(endDate), parseLocalDate(startDate)) + 1;
+    const totalDays = differenceInCalendarDays(parseLocalDate(endDate), parseLocalDate(startDate));
     const cities = isMultiCity ? [] : [destination]; // Multi-city cities resolved inside gate if needed
 
     // PRE-AUTHORIZE: Check credits and deduct if affordable

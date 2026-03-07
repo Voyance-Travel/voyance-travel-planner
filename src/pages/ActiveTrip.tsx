@@ -180,7 +180,7 @@ export default function ActiveTrip() {
     const now = new Date();
     const start = parseLocalDate(trip.start_date);
     const end = parseLocalDate(trip.end_date);
-    const totalDays = differenceInDays(end, start) + 1;
+    const totalDays = differenceInDays(end, start);
     const currentDayNumber = Math.max(1, Math.min(differenceInDays(now, start) + 1, totalDays));
     const daysRemaining = Math.max(0, differenceInDays(end, now));
     const progressPercent = (currentDayNumber / totalDays) * 100;

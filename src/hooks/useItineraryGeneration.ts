@@ -147,7 +147,7 @@ export function useItineraryGeneration() {
   const generateItineraryProgressive = useCallback(async (trip: TripDetails): Promise<GeneratedDay[]> => {
     const startDate = new Date(trip.startDate);
     const endDate = new Date(trip.endDate);
-    const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
 
     // Reset cancellation flag at the start of a new generation
     cancelledRef.current = false;
@@ -451,7 +451,7 @@ export function useItineraryGeneration() {
   ): Promise<{ status: string; totalDays: number }> => {
     const startDate = new Date(trip.startDate);
     const endDate = new Date(trip.endDate);
-    const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
 
     setState({
       isGenerating: true,
