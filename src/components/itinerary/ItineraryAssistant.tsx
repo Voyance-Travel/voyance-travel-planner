@@ -149,7 +149,7 @@ export function ItineraryAssistant({
       setMessages([{
         id: 'welcome',
         role: 'assistant',
-        content: `Hi! I'm here to help you customize your ${destination} itinerary. You can tell me things like:\n\n• "Make Day 3 more relaxed"\n• "I'm a foodie — more eating options on Day 2"\n• "Replace the museum with something outdoors"\n• "Move dinner earlier and add a jazz club"\n• "Days 4 and 5 feel similar — make them different"\n\nI'll handle all the changes — meals, transit, timing — in one go. What would you like?`,
+        content: `Hi! I'm here to help you customize your ${destination} itinerary. You can tell me things like:\n\n• "Make Day 3 more relaxed"\n• "I'm a foodie, more eating options on Day 2"\n• "Replace the museum with something outdoors"\n• "Move dinner earlier and add a jazz club"\n• "Days 4 and 5 feel similar, make them different"\n\nI'll handle all the changes (meals, transit, timing) in one go. What would you like?`,
         timestamp: new Date(),
       }]);
     }

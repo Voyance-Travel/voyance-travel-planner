@@ -338,7 +338,7 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
   const costPeriodEnd = cs.date_range?.end_date ? String(cs.date_range.end_date).split('T')[0] : '';
 
   if (totalCostEntries > 0 && uniqueCostTripCount === 0) {
-    warnings.push('Cost tracking entries have no trip_id linkage — per-trip costs are estimated');
+    warnings.push('Cost tracking entries have no trip_id linkage. Per-trip costs are estimated');
   }
 
   // ---- REVENUE (from credit_ledger) ----
@@ -389,7 +389,7 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
   }
 
   if (purchaseCount === 0) {
-    warnings.push('No purchase transactions in credit ledger — revenue data is not yet available');
+    warnings.push('No purchase transactions in credit ledger. Revenue data is not yet available');
   }
 
   // Build per-user purchase drilldown

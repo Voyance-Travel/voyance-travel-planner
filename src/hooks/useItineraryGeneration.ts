@@ -355,7 +355,7 @@ export function useItineraryGeneration() {
 
               // Show brief toast so user knows it's still working
               if (attempt >= 1) {
-                toast.info(`Day ${dayNum} is taking longer than usual — retrying automatically...`, { duration: 3000 });
+                toast.info(`Day ${dayNum} is taking longer than usual. Retrying automatically...`, { duration: 3000 });
               }
 
               await new Promise(resolve => setTimeout(resolve, delay));
@@ -371,7 +371,7 @@ export function useItineraryGeneration() {
             } catch {}
           }
           const savedMsg = generatedDays.length > 0 
-            ? ` Days 1-${generatedDays.length} have been saved — you can resume generation.`
+            ? ` Days 1-${generatedDays.length} have been saved. You can resume generation.`
             : '';
           throw new Error(`Day ${dayNum} couldn't be generated after ${MAX_RETRIES + 1} attempts.${savedMsg}`);
         }

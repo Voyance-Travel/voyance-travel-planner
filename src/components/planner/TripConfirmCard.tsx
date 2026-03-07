@@ -30,7 +30,7 @@ interface TripConfirmCardProps {
 }
 
 function formatDate(dateStr?: string): string {
-  if (!dateStr) return '—';
+  if (!dateStr) return '-';
   try {
     return format(parseISO(dateStr), 'MMM d, yyyy');
   } catch {

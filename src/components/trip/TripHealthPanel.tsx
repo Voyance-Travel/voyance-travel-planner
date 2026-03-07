@@ -146,7 +146,7 @@ function analyzeHealth(days: any[]): HealthIssue[] {
         issues.push({
           id: `budget-heavy-${i}`,
           severity: 'warning',
-          message: `Day ${days[i].dayNumber || i + 1} spending is 3× the average — consider redistributing`,
+          message: `Day ${days[i].dayNumber || i + 1} spending is 3× the average. Consider redistributing`,
         });
       }
     });

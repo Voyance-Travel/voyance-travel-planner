@@ -659,7 +659,7 @@ function FlightSegmentCard({ segment, label }: FlightSegmentCardProps) {
       </div>
       <div className="flex items-center justify-between">
         <div className="text-center">
-          <p className="text-2xl font-bold">{dep?.airport || '—'}</p>
+          <p className="text-2xl font-bold">{dep?.airport || '-'}</p>
           {dep?.city && <p className="text-sm text-muted-foreground">{dep.city}</p>}
           {dep?.time && <p className="text-sm font-medium">{dep.time}</p>}
           {dep?.date && <p className="text-xs text-muted-foreground">{dep.date}</p>}
@@ -674,7 +674,7 @@ function FlightSegmentCard({ segment, label }: FlightSegmentCardProps) {
           {segment.stops && <p className="text-center text-xs text-muted-foreground">{segment.stops}</p>}
         </div>
         <div className="text-center">
-          <p className="text-2xl font-bold">{arr?.airport || '—'}</p>
+          <p className="text-2xl font-bold">{arr?.airport || '-'}</p>
           {arr?.city && <p className="text-sm text-muted-foreground">{arr.city}</p>}
           {arr?.time && <p className="text-sm font-medium">{arr.time}</p>}
           {arr?.date && <p className="text-xs text-muted-foreground">{arr.date}</p>}

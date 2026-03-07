@@ -160,7 +160,7 @@ async function fetchRealCostMetrics(): Promise<RealCostMetrics | null> {
       // No warning needed — trips table is the canonical source
     } else {
       totalTrips = Math.max(1, Math.ceil(entries.length / 8));
-      dataQualityWarning = 'No trip data available — using estimated trip count';
+      dataQualityWarning = 'No trip data available. Using estimated trip count';
     }
 
     // Count unique users and total interactions

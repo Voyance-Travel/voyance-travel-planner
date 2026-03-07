@@ -289,7 +289,7 @@ export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
               <span className="text-sm font-medium text-foreground">How was today?</span>
               <p className="text-xs text-muted-foreground">
                 {userRating > 0 
-                  ? `You rated today ${userRating}/5 — this helps personalize future trips`
+                  ? `You rated today ${userRating}/5. This helps personalize future trips`
                   : 'Tap a star to rate your experience today'}
               </p>
             </div>

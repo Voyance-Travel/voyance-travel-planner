@@ -603,12 +603,12 @@ function showCascadeToasts(changes: CascadeChange[]) {
     const removedNames = changes.flatMap(c => c.removedActivities).slice(0, 3);
     const moreCount = totalRemoved - removedNames.length;
     const removedText = removedNames.join(', ') + (moreCount > 0 ? ` +${moreCount} more` : '');
-    toast.info(`✈️ Itinerary adjusted — removed ${totalRemoved} activit${totalRemoved === 1 ? 'y' : 'ies'} on ${dayLabels}`, {
+    toast.info(`✈️ Itinerary adjusted. Removed ${totalRemoved} activit${totalRemoved === 1 ? 'y' : 'ies'} on ${dayLabels}`, {
       description: removedText,
       duration: 6000,
     });
   } else if (totalShifted > 0) {
-    toast.info(`✈️ Itinerary adjusted — shifted ${totalShifted} activit${totalShifted === 1 ? 'y' : 'ies'} on ${dayLabels}`, {
+    toast.info(`✈️ Itinerary adjusted. Shifted ${totalShifted} activit${totalShifted === 1 ? 'y' : 'ies'} on ${dayLabels}`, {
       duration: 4000,
     });
   } else if (totalAdded > 0) {

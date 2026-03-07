@@ -109,7 +109,7 @@ export function useStalePendingChargeRefund(tripId: string | undefined) {
 
         // Only show toast if at least one refund succeeded
         if (anyRefunded) {
-          toast.info('A previous Smart Finish attempt failed — your credits have been refunded.', {
+          toast.info('A previous Smart Finish attempt failed. Your credits have been refunded.', {
             duration: 6000,
           });
           queryClient.invalidateQueries({ queryKey: ['credits'] });

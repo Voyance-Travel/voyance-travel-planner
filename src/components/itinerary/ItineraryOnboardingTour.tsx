@@ -33,7 +33,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: 'trip-at-a-glance',
     title: 'Your Trip at a Glance',
-    description: 'We analyzed your destination and baked intelligence into every activity — hidden gems, timing tricks, and local picks. This summary shows what we found.',
+    description: 'We analyzed your destination and baked intelligence into every activity: hidden gems, timing tricks, and local picks. This summary shows what we found.',
     icon: <Sparkles className="h-5 w-5" />,
     selector: '[data-tour="value-header"]',
     position: 'bottom',
@@ -49,7 +49,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: 'trip-actions',
     title: 'Share, Optimize & Export',
-    description: 'Share your trip with companions — they can propose changes or edit directly. Optimize lets AI improve flow and timing. Export creates a beautiful PDF.',
+    description: 'Share your trip with companions. They can propose changes or edit directly. Optimize lets AI improve flow and timing. Export creates a beautiful PDF.',
     icon: <Share2 className="h-5 w-5" />,
     selector: '[data-tour="trip-actions"]',
     position: 'top',
@@ -73,7 +73,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: 'chat-bubble',
     title: 'Your AI Trip Assistant',
-    description: "Tell the assistant what you want — 'Make Day 3 more relaxed' or 'Add more food options.' It'll suggest changes you can approve before they're applied. 5 free messages included.",
+    description: "Tell the assistant what you want. 'Make Day 3 more relaxed' or 'Add more food options.' It'll suggest changes you can approve before they're applied. 5 free messages included.",
     icon: <MessageSquare className="h-5 w-5" />,
     selector: '[data-tour="chat-bubble"]',
     position: 'left',

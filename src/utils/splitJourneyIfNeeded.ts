@@ -140,7 +140,7 @@ export async function splitJourneyIfNeeded(
       legMetadata.isFirstTimeVisitor = firstTimePerCity[dest.city];
     }
 
-    const legName = `${journeyName} — ${dest.city}`;
+    const legName = `${journeyName}: ${dest.city}`;
 
     legInserts.push({
       user_id: originalTrip.user_id,
