@@ -7305,13 +7305,13 @@ function DayCard({
             <div className="min-w-0 flex-1">
               {/* City badge for multi-city trips */}
               {day.city && (
-                <div className="flex items-center gap-1.5 mb-0.5 sm:mb-1">
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-primary/30 bg-primary/5 text-primary font-medium">
+                <div className="flex items-center gap-1.5 mb-0.5 sm:mb-1 flex-wrap">
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-primary/30 bg-primary/10 text-foreground font-medium">
                     <MapPin className="h-2.5 w-2.5 mr-0.5" />
                     {day.city}{day.country ? `, ${day.country}` : ''}
                   </Badge>
                   {day.isTransitionDay && day.transitionFrom && day.transitionTo && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-accent/40 bg-accent/10 text-accent-foreground font-medium">
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-border bg-card text-foreground font-medium">
                       <ArrowRight className="h-2.5 w-2.5 mr-0.5" />
                       {day.transitionFrom} → {day.transitionTo}
                     </Badge>
