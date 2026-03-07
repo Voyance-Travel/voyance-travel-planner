@@ -282,6 +282,23 @@ export function useGenerationPoller({
       poll();
     }, interval);
 
+    // Tab visibility handler: when user returns from background, immediately poll
+    // and suppress stalled/failed transitions for a grace period
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        justResumedRef.current = true;
+        resumedAtRef.current = Date.now();
+        // Immediate fresh poll before any error state can flash
+        poll().finally(() => {
+          // Clear the resume flag after grace period
+          setTimeout(() => {
+            justResumedRef.current = false;
+          }, 5000);
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     // Realtime subscription for instant updates when new days are inserted
     const channel = supabase
       .channel(`gen-progress-${tripId}`)
@@ -315,6 +332,7 @@ export function useGenerationPoller({
 
     return () => {
       clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibility);
       supabase.removeChannel(channel);
     };
   }, [enabled, tripId, interval, poll]);
