@@ -4432,38 +4432,56 @@ export function EditorialItinerary({
                     );
                   }
 
-                  // Days with no activities at all: show LockedDayCard fallback
-                  if (isLockedDay && !hasActivities) {
-                    return (
-                      <LockedDayCard
-                        dayNumber={selectedDay.dayNumber}
-                        title={selectedDay.title || `Day ${selectedDay.dayNumber}`}
-                        activityCount={6}
-                        teaserLine={`Unlock Day ${selectedDay.dayNumber} to discover curated activities, real venues, and personalized recommendations.`}
-                        intelligenceBadges={{ finds: 3, timingHacks: 2, trapsAvoided: 1, tips: 2 }}
-                        onUnlock={() => handleUnlockDay(selectedDay.dayNumber)}
-                        creditsNeeded={CREDIT_COSTS.UNLOCK_DAY}
-                        tripId={tripId}
-                        onManualBuild={() => {
-                          if (tripId) {
-                            enableManualBuilder(tripId);
-                            toast.success('Manual builder mode enabled! Edit freely.');
-                          }
-                        }}
-                        isFirstTrip={!!selectedDay.metadata?.isFirstTrip}
-                        canAfford={totalCredits >= CREDIT_COSTS.UNLOCK_DAY}
-                        currentBalance={totalCredits}
-                        isUnlocking={isUnlockingDay && unlockingDayNumber === selectedDay.dayNumber}
-                        unlockError={unlockDayState?.step === 'error' && unlockDayState?.dayNumber === selectedDay.dayNumber ? unlockDayState.error : null}
-                      />
-                    );
-                  }
+                   // Days with no activities at all: show LockedDayCard fallback
+                   // But NOT during active generation — those days are still being built
+                   if (isLockedDay && !hasActivities && !isActivelyGenerating) {
+                     return (
+                       <LockedDayCard
+                         dayNumber={selectedDay.dayNumber}
+                         title={selectedDay.title || `Day ${selectedDay.dayNumber}`}
+                         activityCount={6}
+                         teaserLine={`Unlock Day ${selectedDay.dayNumber} to discover curated activities, real venues, and personalized recommendations.`}
+                         intelligenceBadges={{ finds: 3, timingHacks: 2, trapsAvoided: 1, tips: 2 }}
+                         onUnlock={() => handleUnlockDay(selectedDay.dayNumber)}
+                         creditsNeeded={CREDIT_COSTS.UNLOCK_DAY}
+                         tripId={tripId}
+                         onManualBuild={() => {
+                           if (tripId) {
+                             enableManualBuilder(tripId);
+                             toast.success('Manual builder mode enabled! Edit freely.');
+                           }
+                         }}
+                         isFirstTrip={!!selectedDay.metadata?.isFirstTrip}
+                         canAfford={totalCredits >= CREDIT_COSTS.UNLOCK_DAY}
+                         currentBalance={totalCredits}
+                         isUnlocking={isUnlockingDay && unlockingDayNumber === selectedDay.dayNumber}
+                         unlockError={unlockDayState?.step === 'error' && unlockDayState?.dayNumber === selectedDay.dayNumber ? unlockDayState.error : null}
+                       />
+                     );
+                   }
+
+                   // During generation, locked days with no activities show generating placeholder
+                   if (isLockedDay && !hasActivities && isActivelyGenerating) {
+                     return (
+                       <div className="flex flex-col items-center justify-center py-12 text-center">
+                         <motion.div
+                           animate={{ opacity: [0.4, 1, 0.4] }}
+                           transition={{ duration: 1.5, repeat: Infinity }}
+                           className="text-muted-foreground"
+                         >
+                           <Sparkles className="h-8 w-8 mx-auto mb-3 text-primary" />
+                           <p className="text-sm font-medium">This day is still being created...</p>
+                           <p className="text-xs text-muted-foreground mt-1">Check back in a moment</p>
+                         </motion.div>
+                       </div>
+                     );
+                   }
 
                   // Days with activities but locked: show LockedDayCard (no real content in DOM)
                   // SECURITY: Previously used FrostedGateOverlay+DayCard which leaked activities to DevTools
                   return (
                     <>
-                      {!canViewThisDay && !isManualMode && hasActivities ? (
+                      {!canViewThisDay && !isManualMode && hasActivities && !isActivelyGenerating ? (
                         <LockedDayCard
                           dayNumber={selectedDay.dayNumber}
                           title={selectedDay.title || selectedDay.theme || `Day ${selectedDay.dayNumber}`}
