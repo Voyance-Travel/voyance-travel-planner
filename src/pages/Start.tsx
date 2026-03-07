@@ -2963,6 +2963,9 @@ export default function Start() {
                   isFirstTimeVisitor,
                   firstTimePerCity,
                   mustDoActivities,
+                  selectedLandmarks,
+                  selectedCategories,
+                  customMustDos,
                   currentStep: 1,
                 };
                 sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));

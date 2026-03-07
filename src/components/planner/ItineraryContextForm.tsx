@@ -281,7 +281,7 @@ export default function ItineraryContextForm({
           </div>
         </div>
 
-        {/* Must-Do Activities */}
+        {/* Must-Do Activities — kept as simple textarea for this secondary flow */}
         <div className="space-y-3">
           <Label className="flex items-center gap-2 text-sm font-medium">
             <Star className="w-4 h-4 text-muted-foreground" />
@@ -297,20 +297,6 @@ export default function ItineraryContextForm({
           <p className="text-xs text-muted-foreground">
             Tell us what you absolutely can't miss. We'll make sure it's in your itinerary.
           </p>
-          {hasComplexConstraints && (
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-sm">
-              <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-medium text-foreground text-xs">Heads up</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Our itinerary generator works best with straightforward trips. Features like 
-                  blocked time windows, hotel changes mid-trip, and guests joining later aren't 
-                  fully supported yet. We'll do our best, but you may need to manually adjust 
-                  the generated itinerary.
-                </p>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Pre-Booked Commitments */}
