@@ -154,7 +154,7 @@ export function TripShareModal({
           {/* First-use hint */}
           <FirstUseHint
             hintKey="share_hint_shown"
-            message="New: You can choose how guests interact — let them edit freely, or use Propose & Vote so you stay in control."
+            message="New: You can choose how guests interact. Let them edit freely, or use Propose & Vote so you stay in control."
           />
           {/* Referral Bonus Banner */}
           <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20">

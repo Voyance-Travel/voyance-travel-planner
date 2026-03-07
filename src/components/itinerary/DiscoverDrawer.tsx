@@ -265,7 +265,7 @@ export function DiscoverDrawer({
             Discover in {destination}
           </SheetTitle>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Curated for you — based on your Travel DNA, schedule, and this destination
+            Curated for you, based on your Travel DNA, schedule, and this destination
           </p>
         </SheetHeader>
 

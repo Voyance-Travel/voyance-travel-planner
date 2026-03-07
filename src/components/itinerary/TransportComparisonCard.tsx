@@ -303,7 +303,7 @@ export function TransportComparisonCard({
       )}
 
       <p className="text-[10px] text-muted-foreground/60 px-1 italic">
-        Prices are estimates — book externally, then paste your confirmation back here
+        Prices are estimates. Book externally, then paste your confirmation back here
       </p>
     </div>
   );

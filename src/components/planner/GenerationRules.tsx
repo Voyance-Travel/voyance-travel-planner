@@ -199,7 +199,7 @@ export function GenerationRules({ rules, onRulesChange, startDate, endDate }: Ge
       {hasComplexRules && (
         <p className="text-xs text-muted-foreground flex items-center gap-1.5">
           <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
-          Complex rules are best-effort — you may need to adjust manually.
+          Complex rules are best-effort. You may need to adjust manually.
         </p>
       )}
 

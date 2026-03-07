@@ -4295,7 +4295,7 @@ export function EditorialItinerary({
                               <p>🚗 Head to the airport by <span className="font-semibold text-foreground">{recommendedAirportTime}</span></p>
                             )}
                             <p>✈️ <span className="font-medium text-foreground">{outboundLeg.airline || ''} {outboundLeg.flightNumber || ''}</span> departs at <span className="font-semibold text-foreground">{depTime}</span> from {depAirport}</p>
-                            <p>🌙 Overnight flight — you'll arrive {formattedArrDate ? `on ${formattedArrDate} ` : ''}at <span className="font-semibold text-foreground">{arrTime}</span> ({arrAirport})</p>
+                            <p>🌙 Overnight flight. You'll arrive {formattedArrDate ? `on ${formattedArrDate} ` : ''}at <span className="font-semibold text-foreground">{arrTime}</span> ({arrAirport})</p>
                           </div>
                         </div>
                       );
@@ -6384,7 +6384,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
       id: 'language',
       icon: <Globe className="h-5 w-5" />,
       label: 'Language',
-      value: info.language + (info.languageEnglishFriendly ? ` — ${info.languageEnglishFriendly}` : ''),
+      value: info.language + (info.languageEnglishFriendly ? ` (${info.languageEnglishFriendly})` : ''),
       tips: info.languageTips,
     },
     {
@@ -6933,7 +6933,7 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {transportCarrier ? `${transportCarrier} · ` : ''}
-                  No airport security — head straight to your hotel after arrival
+                  No airport security. Head straight to your hotel after arrival
                 </p>
               </div>
             </div>

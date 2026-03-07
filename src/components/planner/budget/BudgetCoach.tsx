@@ -231,7 +231,7 @@ export function BudgetCoach({
             <CheckCircle className="h-5 w-5" />
             <span className="font-medium">On target</span>
             <span className="text-muted-foreground text-sm">
-              — You're within your {formatCurrency(budgetTargetCents)} budget
+              You're within your {formatCurrency(budgetTargetCents)} budget
             </span>
           </div>
         </CardContent>
@@ -456,7 +456,7 @@ export function BudgetCoach({
                       </span>
                     ) : appliedSavings > 0 ? (
                       <span>
-                        Applied: {formatCurrency(appliedSavings)} — still{' '}
+                        Applied: {formatCurrency(appliedSavings)}, still{' '}
                         {formatCurrency(remainingGap)} over
                       </span>
                     ) : totalPotentialSavings >= gapCents ? (

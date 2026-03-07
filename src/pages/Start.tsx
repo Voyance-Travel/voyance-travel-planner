@@ -1814,7 +1814,7 @@ function FlightHotelStep({
                   {editingHotelCity ? `${accomLabel} in ${editingHotelCity}` : `Add Accommodation`}
                 </DialogTitle>
                 <DialogDescription>
-                  Enter your stay details — hotel, Airbnb, vacation rental, or any address.
+                  Enter your stay details: hotel, Airbnb, vacation rental, or any address.
                 </DialogDescription>
               </DialogHeader>
 

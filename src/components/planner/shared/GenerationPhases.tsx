@@ -210,7 +210,7 @@ export function GenerationPhases({
           Your itinerary is ready!
         </h2>
         <p className="text-sm text-muted-foreground mb-6">
-          {totalDays} {totalDays === 1 ? 'day' : 'days'} in {destination || 'your destination'} — crafted just for you.
+          {totalDays} {totalDays === 1 ? 'day' : 'days'} in {destination || 'your destination'}, crafted just for you.
         </p>
 
         {/* Summary of completed days */}
@@ -252,10 +252,10 @@ export function GenerationPhases({
   // Build subtitle with elapsed time reassurance
   let subtitleText: string;
   if (allVisibleDaysDone) {
-    subtitleText = 'Almost there — assembling your trip now';
+    subtitleText = 'Almost there, assembling your trip now';
   } else if (displayCompletedDays === 0) {
     subtitleText = elapsed > 15
-      ? 'Still working — this can take a minute for the first day…'
+      ? 'Still working. This can take a minute for the first day…'
       : 'Getting started...';
   } else {
     subtitleText = `${displayCompletedDays} ${displayCompletedDays === 1 ? 'day' : 'days'} complete · ~${Math.max(1, Math.ceil(remainingDays * 1.2))} min remaining`;
@@ -352,7 +352,7 @@ export function GenerationPhases({
                         >
                           <Clock className="h-2.5 w-2.5 shrink-0" />
                           <span className="truncate">
-                            {act.start_time || act.time ? `${act.start_time || act.time} — ` : ''}
+                            {act.start_time || act.time ? `${act.start_time || act.time} · ` : ''}
                             {act.title || act.name || 'Activity'}
                           </span>
                         </motion.div>
@@ -415,7 +415,7 @@ export function GenerationPhases({
       >
         <Sparkles className="h-4 w-4 text-muted-foreground shrink-0" />
         <p className="text-xs text-muted-foreground">
-          Feel free to leave — we'll keep building your itinerary in the background. Come back anytime.
+          Feel free to leave. We'll keep building your itinerary in the background. Come back anytime.
         </p>
       </motion.div>
     </motion.div>

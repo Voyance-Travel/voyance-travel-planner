@@ -526,7 +526,7 @@ export function ImportActivitiesModal({
                       <SelectContent>
                         {days.map((d, di) => (
                           <SelectItem key={di} value={String(di)} className="text-xs">
-                            Day {d.dayNumber}{d.city ? ` — ${d.city}` : ''}
+                            Day {d.dayNumber}{d.city ? ` · ${d.city}` : ''}
                             {d.activities.length > 0 ? ` (${d.activities.length} existing)` : ' (empty)'}
                           </SelectItem>
                         ))}

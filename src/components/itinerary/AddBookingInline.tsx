@@ -406,7 +406,7 @@ export function AddFlightInline({
             {legs.length > 1 && (
               <div className="bg-muted/30 rounded-lg px-3 py-2 text-xs text-muted-foreground flex items-center gap-2">
                 <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
-                <span>Mark which flight lands at your <span className="font-medium text-foreground">final destination</span> — we'll use that to plan Day 1.</span>
+                <span>Mark which flight lands at your <span className="font-medium text-foreground">final destination</span>. We'll use that to plan Day 1.</span>
               </div>
             )}
             {legs.map((leg, idx) => (
