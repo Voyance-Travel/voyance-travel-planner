@@ -119,6 +119,7 @@ import { VoyanceInsight } from './VoyanceInsight';
 import { ContextualTipsPopover, type ContextualTip } from './ContextualTipsPopover';
 import { VoyancePickCallout } from './VoyancePickCallout';
 import { TransitBadge } from './TransitBadge';
+import { TripDateEditor as TripDateEditorInline } from '@/components/trip/TripDateEditor';
 import { TransitGapIndicator, computeGapMinutes } from './TransitGapIndicator';
 import { DayRouteMap } from './DayRouteMap';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
@@ -440,6 +441,11 @@ export interface EditorialItineraryProps {
   /** Journey fields for linked trips */
   journeyId?: string | null;
   journeyName?: string | null;
+  /** Date editing props — renders inline pencil icon next to date display */
+  onDateChange?: (result: import('@/components/trip/TripDateEditor').DateChangeResult) => Promise<void>;
+  hasItinerary?: boolean;
+  dateEditorFlightSelection?: Record<string, unknown> | null;
+  dateEditorCities?: Array<{ id: string; city_name: string; nights?: number }>;
 }
 
 // =============================================================================
@@ -1116,6 +1122,10 @@ export function EditorialItinerary({
   itineraryStatus,
   journeyId,
   journeyName,
+  onDateChange,
+  hasItinerary: hasItineraryProp,
+  dateEditorFlightSelection,
+  dateEditorCities,
 }: EditorialItineraryProps) {
   const queryClient = useQueryClient();
   const isActivelyGenerating = itineraryStatus === 'generating' || itineraryStatus === 'queued';
@@ -4055,9 +4065,22 @@ export function EditorialItinerary({
             <div className="space-y-2">
               {/* Trip length header */}
               <div className="flex items-center justify-between px-1">
-                <span className="text-xs font-medium text-muted-foreground">
-                  {days.length} day{days.length !== 1 ? 's' : ''}
-                  {startDate && endDate ? ` · ${safeFormatDate(startDate, 'MMM d')} – ${safeFormatDate(endDate, 'MMM d')}` : ''}
+                <span className="text-xs font-medium text-muted-foreground inline-flex items-center gap-1">
+                  <span>
+                    {days.length} day{days.length !== 1 ? 's' : ''}
+                    {startDate && endDate ? ` · ${safeFormatDate(startDate, 'MMM d')} – ${safeFormatDate(endDate, 'MMM d')}` : ''}
+                  </span>
+                  {onDateChange && (
+                    <TripDateEditorInline
+                      startDate={startDate}
+                      endDate={endDate}
+                      hasItinerary={hasItineraryProp ?? days.length > 0}
+                      flightSelection={dateEditorFlightSelection}
+                      onDateChange={onDateChange}
+                      days={days}
+                      cities={dateEditorCities}
+                    />
+                  )}
                 </span>
                 <div className="flex items-center gap-2">
                   {canUndoDay && (
