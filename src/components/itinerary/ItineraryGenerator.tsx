@@ -180,8 +180,9 @@ export function ItineraryGenerator({
         if (gr && gr.creditsCharged > 0) {
           toast.success(`Trip generated! ${gr.creditsCharged} credits used`, { duration: 5000 });
         }
-        // CRITICAL: Call onComplete BEFORE setting serverGenActive=false
-        // so the parent transitions before this component unmounts
+        // Let the celebration screen show for 3 seconds before transitioning
+        console.log('[ItineraryGenerator] Showing celebration for 3s before onComplete');
+        await new Promise(r => setTimeout(r, 3000));
         console.log('[ItineraryGenerator] Calling onComplete with', completedDays.length, 'days');
         onComplete(completedDays, undefined, gr?.isFirstTrip);
       } catch (err) {
