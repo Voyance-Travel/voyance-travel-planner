@@ -7,6 +7,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Check, Loader2, Clock } from 'lucide-react';
+import { GenerationAnimation } from './GenerationAnimation';
 import { Progress } from '@/components/ui/progress';
 import type { GenerationStep } from '@/hooks/useLovableItinerary';
 import type { GeneratedDaySummary } from '@/hooks/useGenerationPoller';
@@ -161,13 +162,8 @@ export function GenerationPhases({
     >
       {/* Header */}
       <div className="text-center mb-6">
-        <motion.div
-          animate={{ scale: [1, 1.1, 1] }}
-          transition={{ duration: 2, repeat: Infinity }}
-          className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mb-3"
-        >
-          <Sparkles className="h-6 w-6 text-primary" />
-        </motion.div>
+        {/* Airplane/Globe Animation */}
+        <GenerationAnimation progress={displayProgress} className="mb-2" />
 
         <h2 className="text-xl font-serif font-bold text-foreground mb-1">
           {headerText}
