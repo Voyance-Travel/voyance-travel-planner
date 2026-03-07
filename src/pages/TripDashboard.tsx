@@ -1265,11 +1265,31 @@ export default function TripDashboard() {
                           animate={{ opacity: 1 }}
                           className="space-y-6"
                         >
-                      {hasMultipleSameDestination ? (
-                        // Grouped view
+                      {hasJourneys ? (
+                        // Journey-aware rendering: journey playlists + standalone cards
+                        <>
+                          {renderItems.map((item, idx) => {
+                            if (item.type === 'journey') {
+                              return (
+                                <JourneyPlaylist
+                                  key={item.journeyId}
+                                  journeyName={item.journeyName}
+                                  trips={item.trips}
+                                  index={idx}
+                                />
+                              );
+                            }
+                            return (
+                              <div key={item.trip.id} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                <TripCard trip={item.trip} index={idx} onDelete={handleTripDelete} />
+                              </div>
+                            );
+                          })}
+                        </>
+                      ) : hasMultipleSameDestination ? (
+                        // Legacy grouped view
                         groupedTrips.map((group, groupIndex) => (
                           group.trips.length > 1 ? (
-                            // Collapsible folder for multiple trips
                             <Collapsible
                               key={group.key}
                               open={expandedGroups.has(group.key)}
@@ -1316,7 +1336,6 @@ export default function TripDashboard() {
                               </motion.div>
                             </Collapsible>
                           ) : (
-                            // Single trip - show as regular card
                             <motion.div
                               key={group.key}
                               initial={{ opacity: 0, y: 10 }}
