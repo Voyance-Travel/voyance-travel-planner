@@ -1320,58 +1320,25 @@ export default function TripDetail() {
       
       <section className="pb-16 pt-4 sm:pt-6 relative z-10">
         <div className="max-w-4xl mx-auto px-4">
-          {/* Compact Status Line — mobile: single row; desktop: keeps existing layout */}
+          {/* Trip title with subtle status badge */}
           {(() => {
             const isPastTrip = isAfter(new Date(), parseLocalDate(effectiveEndDate));
             const statusLabel = isLiveTrip ? 'Active' : isPastTrip && trip.status === 'draft' ? 'Past' : (trip.status || 'draft');
-            const dayCount = differenceInDays(parseLocalDate(effectiveEndDate), parseLocalDate(trip.start_date));
-            const dateRange = `${format(parseLocalDate(trip.start_date), 'MMM d')}–${format(parseLocalDate(effectiveEndDate), 'MMM d')}`;
             return (
-              <>
-                {/* Mobile: compact single line */}
-                <div className="flex items-center gap-2 mb-4 sm:hidden text-sm text-muted-foreground">
-                  <span className="capitalize font-medium text-foreground">{statusLabel}</span>
-                  <span>·</span>
-                  <span>{dateRange}</span>
-                  <span>·</span>
-                  <span>{dayCount}d</span>
-                  <TripDateEditor
-                    startDate={trip.start_date}
-                    endDate={effectiveEndDate}
-                    hasItinerary={hasItinerary}
-                    flightSelection={trip.flight_selection as Record<string, unknown> | null}
-                    onDateChange={handleDateChange}
-                    days={itineraryDays.map(d => ({ dayNumber: d.dayNumber, theme: d.theme, activities: d.activities }))}
-                    cities={tripCities.map(c => ({ id: c.id, city_name: c.city_name, nights: c.nights ?? undefined }))}
-                    compact
-                    disabled={isServerGenerating}
-                  />
-                </div>
-                {/* Desktop: original layout */}
-                <div className="hidden sm:flex flex-wrap items-center gap-3 mb-8">
-                  <Badge 
-                    variant={
-                      isLiveTrip ? 'default' :
-                      trip.status === 'completed' ? 'secondary' : 
-                      trip.status === 'booked' ? 'default' : 
-                      isPastTrip ? 'secondary' : 'outline'
-                    }
-                    className="capitalize"
-                  >
-                    {statusLabel}
-                  </Badge>
-                  <TripDateEditor
-                    startDate={trip.start_date}
-                    endDate={effectiveEndDate}
-                    hasItinerary={hasItinerary}
-                    flightSelection={trip.flight_selection as Record<string, unknown> | null}
-                    onDateChange={handleDateChange}
-                    days={itineraryDays.map(d => ({ dayNumber: d.dayNumber, theme: d.theme, activities: d.activities }))}
-                    cities={tripCities.map(c => ({ id: c.id, city_name: c.city_name, nights: c.nights ?? undefined }))}
-                    disabled={isServerGenerating}
-                  />
-                </div>
-              </>
+              <div className="flex items-center gap-2 mb-4 sm:mb-6">
+                <h1 className="text-xl sm:text-2xl font-serif font-bold truncate">{trip.name}</h1>
+                <Badge 
+                  variant={
+                    isLiveTrip ? 'default' :
+                    trip.status === 'completed' ? 'secondary' : 
+                    trip.status === 'booked' ? 'default' : 
+                    isPastTrip ? 'secondary' : 'outline'
+                  }
+                  className="capitalize shrink-0 text-[10px] px-1.5 py-0"
+                >
+                  {statusLabel}
+                </Badge>
+              </div>
             );
           })()}
 
