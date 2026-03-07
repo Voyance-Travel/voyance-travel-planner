@@ -1,11 +1,11 @@
 /**
- * MustSeeLandmarkPicker — AI-powered landmark chips + interest categories + custom input
- * Replaces free-text must-do textarea with a curated, tappable experience.
+ * MustSeeLandmarkPicker — AI-powered landmark chips + custom input
+ * Tappable landmark suggestions per city with custom must-do items.
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, Plus, X, Sparkles, Star } from 'lucide-react';
+import { Loader2, Plus, X, Sparkles } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -17,38 +17,21 @@ interface Landmark {
   category: string;
 }
 
-const INTEREST_CATEGORIES = [
-  { id: 'history', label: 'History & Museums', emoji: '🏛️' },
-  { id: 'food', label: 'Food & Dining', emoji: '🍕' },
-  { id: 'shopping', label: 'Shopping', emoji: '🛍️' },
-  { id: 'nature', label: 'Parks & Nature', emoji: '🌳' },
-  { id: 'culture', label: 'Arts & Culture', emoji: '🎭' },
-  { id: 'nightlife', label: 'Nightlife', emoji: '🌙' },
-];
-
 interface MustSeeLandmarkPickerProps {
   /** City name(s) to fetch landmarks for */
   cities: string[];
   /** Selected landmark names */
   selectedLandmarks: string[];
   onSelectedLandmarksChange: (landmarks: string[]) => void;
-  /** Selected interest category IDs */
-  selectedCategories: string[];
-  onSelectedCategoriesChange: (categories: string[]) => void;
   /** Custom user-added items */
   customItems: string[];
   onCustomItemsChange: (items: string[]) => void;
-  /** Optional free-text notes (kept for backward compat) */
-  additionalNotes?: string;
-  onAdditionalNotesChange?: (notes: string) => void;
 }
 
 export function MustSeeLandmarkPicker({
   cities,
   selectedLandmarks,
   onSelectedLandmarksChange,
-  selectedCategories,
-  onSelectedCategoriesChange,
   customItems,
   onCustomItemsChange,
 }: MustSeeLandmarkPickerProps) {
@@ -88,14 +71,6 @@ export function MustSeeLandmarkPicker({
     );
   };
 
-  const toggleCategory = (id: string) => {
-    onSelectedCategoriesChange(
-      selectedCategories.includes(id)
-        ? selectedCategories.filter(c => c !== id)
-        : [...selectedCategories, id]
-    );
-  };
-
   const addCustomItem = () => {
     const trimmed = customInput.trim();
     if (trimmed && !customItems.includes(trimmed)) {
@@ -112,32 +87,6 @@ export function MustSeeLandmarkPicker({
 
   return (
     <div className="space-y-5">
-      {/* Interest Categories */}
-      <div className="space-y-2">
-        <label className="flex items-center gap-2 text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-          <Star className="w-4 h-4" />
-          What interests you?
-        </label>
-        <div className="flex flex-wrap gap-2">
-          {INTEREST_CATEGORIES.map(cat => (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => toggleCategory(cat.id)}
-              className={cn(
-                'px-3 py-1.5 rounded-full text-sm border transition-all duration-200',
-                selectedCategories.includes(cat.id)
-                  ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                  : 'bg-card text-foreground border-border hover:border-primary/50'
-              )}
-            >
-              <span className="mr-1.5">{cat.emoji}</span>
-              {cat.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Must-See Landmarks per city */}
       {hasAnyCities && (
         <div className="space-y-4">

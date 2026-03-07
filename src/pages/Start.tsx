@@ -147,7 +147,8 @@ const sampleItineraries = [
 function StepIndicator({ currentStep, isMultiCity }: { currentStep: number; isMultiCity?: boolean }) {
   const steps = [
     { label: 'Trip Details', step: 1 },
-    { label: isMultiCity ? 'Transportation & Hotel' : 'Flight & Hotel', step: 2 },
+    { label: 'Personalize', step: 2 },
+    { label: isMultiCity ? 'Transport & Hotel' : 'Flight & Hotel', step: 3 },
   ];
 
   return (
@@ -942,16 +943,6 @@ function FlightHotelStep({
   setIsFirstTimeVisitor,
   firstTimePerCity,
   setFirstTimePerCity,
-  mustDoActivities,
-  setMustDoActivities,
-  selectedLandmarks,
-  setSelectedLandmarks,
-  selectedCategories,
-  setSelectedCategories,
-   customMustDos,
-   generationRules,
-   onGenerationRulesChange,
-  setCustomMustDos,
   onSubmit,
   onBack,
   isSubmitting,
@@ -988,16 +979,6 @@ function FlightHotelStep({
   setIsFirstTimeVisitor: (v: boolean) => void;
   firstTimePerCity: Record<string, boolean>;
   setFirstTimePerCity: (v: Record<string, boolean>) => void;
-  mustDoActivities: string;
-  setMustDoActivities: (v: string) => void;
-  selectedLandmarks: string[];
-  setSelectedLandmarks: (v: string[]) => void;
-  selectedCategories: string[];
-  setSelectedCategories: (v: string[]) => void;
-   customMustDos: string[];
-   generationRules: GenerationRule[];
-   onGenerationRulesChange: (rules: GenerationRule[]) => void;
-  setCustomMustDos: (v: string[]) => void;
   onSubmit: () => void;
   onBack: () => void;
   isSubmitting: boolean;
@@ -1766,111 +1747,6 @@ function FlightHotelStep({
             />
           </div>
         )}
-
-        {/* Personalization Section */}
-        <div className="space-y-4 pt-4 border-t border-border">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-muted-foreground" />
-            <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-              Personalize Your Trip
-              <span className="text-muted-foreground/60 ml-1">(optional)</span>
-            </label>
-          </div>
-
-          {/* First-Time Visitor Toggle(s) */}
-          {isMultiCity && multiCityDestinations && multiCityDestinations.length >= 2 ? (
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">We'll tailor each city based on your familiarity.</p>
-              <div className="grid gap-2">
-                {multiCityDestinations.map((dest) => {
-                  const isFirst = firstTimePerCity[dest.city] ?? true;
-                  return (
-                    <div key={dest.city} className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Globe className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                        <span className="text-sm font-medium truncate">First time in {dest.city}?</span>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="text-xs text-muted-foreground">{isFirst ? 'Yes' : 'No'}</span>
-                        <Switch
-                          checked={isFirst}
-                          onCheckedChange={(checked) => {
-                            setFirstTimePerCity({ ...firstTimePerCity, [dest.city]: checked });
-                          }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                First time → iconic landmarks & must-sees. Returning → hidden gems & local favorites.
-              </p>
-            </div>
-          ) : (
-            <div className="flex items-start gap-3 p-4 rounded-lg border border-border bg-muted/30">
-              <Checkbox
-                id="firstTimeVisitor"
-                checked={isFirstTimeVisitor}
-                onCheckedChange={(checked) => setIsFirstTimeVisitor(checked === true)}
-                className="mt-0.5"
-              />
-              <div className="flex-1">
-                <label 
-                  htmlFor="firstTimeVisitor" 
-                  className="flex items-center gap-2 text-sm font-medium cursor-pointer"
-                >
-                  <Globe className="w-4 h-4 text-muted-foreground" />
-                  First time visiting {destination}?
-                </label>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {isFirstTimeVisitor 
-                    ? "We'll include iconic landmarks and must-see attractions" 
-                    : "We'll focus on hidden gems and local favorites"}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Must-See Landmarks & Interest Picker */}
-          <MustSeeLandmarkPicker
-            cities={isMultiCity && multiCityDestinations.length > 0
-              ? multiCityDestinations.map(d => d.city)
-              : destination ? [destination] : []
-            }
-            selectedLandmarks={selectedLandmarks}
-            onSelectedLandmarksChange={setSelectedLandmarks}
-            selectedCategories={selectedCategories}
-            onSelectedCategoriesChange={setSelectedCategories}
-            customItems={customMustDos}
-            onCustomItemsChange={setCustomMustDos}
-          />
-
-          {/* Generation Rules — Structured Constraints */}
-          <GenerationRules
-            rules={generationRules}
-            onRulesChange={onGenerationRulesChange}
-            startDate={startDate}
-            endDate={endDate}
-          />
-
-          {/* Extra Details — Optional paste field for research/notes */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <label className="flex items-center gap-2 text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                <MessageSquareText className="w-4 h-4" />
-                Anything else?
-              </label>
-              <span className="text-xs text-muted-foreground/60">(optional)</span>
-            </div>
-            <Textarea
-              value={mustDoActivities}
-              onChange={(e) => setMustDoActivities(e.target.value)}
-              placeholder="Paste notes, other AI suggestions, skip requests, or special requirements..."
-              className="min-h-[70px] resize-none text-sm"
-            />
-          </div>
-        </div>
       </div>
 
       {/* Navigation */}
@@ -2161,23 +2037,27 @@ export default function Start() {
 
   const DRAFT_STORAGE_KEY = 'voyance_start_draft';
 
-  // Current step: 1 = Trip Details, 2 = Flight & Hotel
+  // Current step: 1 = Trip Details, 2 = Personalize (optional), 3 = Flight & Hotel
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDNAPrompt, setShowDNAPrompt] = useState(false);
 
-  // Helper: advance to step 2 and push history so browser back returns to step 1
-  const goToStep2 = useCallback(() => {
-    setCurrentStep(2);
-    window.history.pushState({ step: 2 }, '', '/start?step=2');
+  // Helper: advance to a specific step and push history
+  const goToStep = useCallback((step: number) => {
+    setCurrentStep(step);
+    window.history.pushState({ step }, '', `/start?step=${step}`);
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
   }, []);
 
-  // Listen for browser back button to return to step 1
+  // Shorthand for the common Step 1 → Step 2 transition
+  const goToStep2 = useCallback(() => goToStep(2), [goToStep]);
+
+  // Listen for browser back button to navigate between steps
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
-      if (currentStep === 2 && (!event.state?.step || event.state.step === 1)) {
-        setCurrentStep(1);
+      const targetStep = event.state?.step || 1;
+      if (targetStep < currentStep) {
+        setCurrentStep(targetStep);
         window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
       }
     };
@@ -2264,7 +2144,7 @@ export default function Start() {
    const [mustDoActivities, setMustDoActivities] = useState('');
    const [generationRules, setGenerationRules] = useState<GenerationRule[]>([]);
   const [selectedLandmarks, setSelectedLandmarks] = useState<string[]>([]);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedCategories] = useState<string[]>([]); // Kept for backward compat with saved metadata
   const [customMustDos, setCustomMustDos] = useState<string[]>([]);
 
   // Fetch user's DNA budget preference for smart defaults
@@ -2309,7 +2189,7 @@ export default function Start() {
           if (savedDraft.firstTimePerCity) setFirstTimePerCity(savedDraft.firstTimePerCity);
           if (savedDraft.mustDoActivities) setMustDoActivities(savedDraft.mustDoActivities);
           if (savedDraft.selectedLandmarks) setSelectedLandmarks(savedDraft.selectedLandmarks);
-          if (savedDraft.selectedCategories) setSelectedCategories(savedDraft.selectedCategories);
+          // selectedCategories removed — interest categories are no longer user-facing
           if (savedDraft.customMustDos) setCustomMustDos(savedDraft.customMustDos);
           if (savedDraft.generationRules) setGenerationRules(savedDraft.generationRules);
           if (savedDraft.destination) setDestinationSelection({ display: savedDraft.destination, cityName: savedDraft.destination });
@@ -2321,12 +2201,12 @@ export default function Start() {
           if (savedDraft.isMultiCity) setIsMultiCity(savedDraft.isMultiCity);
           if (savedDraft.multiCityDestinations) setMultiCityDestinations(savedDraft.multiCityDestinations);
           if (savedDraft.multiCityTransports) setMultiCityTransports(savedDraft.multiCityTransports);
-          const restoredStep = savedDraft.currentStep || 2;
+          const restoredStep = savedDraft.currentStep || 3;
           setCurrentStep(restoredStep);
           sessionStorage.removeItem(DRAFT_STORAGE_KEY);
-          // Push history for step 2 so back button works
-          if (restoredStep === 2) {
-            window.history.replaceState({ step: 2 }, '', '/start?step=2');
+          // Push history so back button works
+          if (restoredStep > 1) {
+            window.history.replaceState({ step: restoredStep }, '', `/start?step=${restoredStep}`);
           }
         }
       } catch {}
@@ -2879,7 +2759,129 @@ export default function Start() {
                   />
                 )}
 
-                {currentStep === 2 && startDate && endDate && (
+                {currentStep === 2 && (
+                  <motion.div
+                    key="personalize"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.2 }}
+                    className="space-y-6"
+                  >
+                    <div className="text-center space-y-1 mb-6">
+                      <h2 className="text-xl font-serif font-semibold">Personalize your trip <span className="text-muted-foreground font-normal text-base">(optional)</span></h2>
+                      <p className="text-sm text-muted-foreground">Add landmarks, must-dos, and rules — or skip and we'll build a great trip anyway.</p>
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => goToStep(3)}
+                    >
+                      Skip — go to Flight & Hotel →
+                    </Button>
+
+                    <div className="space-y-4 pt-2">
+                      {/* First-Time Visitor Toggle(s) */}
+                      {isMultiCity && multiCityDestinations && multiCityDestinations.length >= 2 ? (
+                        <div className="space-y-2">
+                          <p className="text-xs text-muted-foreground">We'll tailor each city based on your familiarity.</p>
+                          <div className="grid gap-2">
+                            {multiCityDestinations.map((dest) => {
+                              const isFirst = firstTimePerCity[dest.city] ?? true;
+                              return (
+                                <div key={dest.city} className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <Globe className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                    <span className="text-sm font-medium truncate">First time in {dest.city}?</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    <span className="text-xs text-muted-foreground">{isFirst ? 'Yes' : 'No'}</span>
+                                    <Switch
+                                      checked={isFirst}
+                                      onCheckedChange={(checked) => {
+                                        setFirstTimePerCity({ ...firstTimePerCity, [dest.city]: checked });
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-start gap-3 p-4 rounded-lg border border-border bg-muted/30">
+                          <Checkbox
+                            id="firstTimeVisitor"
+                            checked={isFirstTimeVisitor}
+                            onCheckedChange={(checked) => setIsFirstTimeVisitor(checked === true)}
+                            className="mt-0.5"
+                          />
+                          <div className="flex-1">
+                            <label htmlFor="firstTimeVisitor" className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                              <Globe className="w-4 h-4 text-muted-foreground" />
+                              First time visiting {destinationSelection.cityName}?
+                            </label>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {isFirstTimeVisitor
+                                ? "We'll include iconic landmarks and must-see attractions"
+                                : "We'll focus on hidden gems and local favorites"}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Must-See Landmarks */}
+                      <MustSeeLandmarkPicker
+                        cities={isMultiCity && multiCityDestinations.length > 0
+                          ? multiCityDestinations.map(d => d.city)
+                          : destinationSelection.cityName ? [destinationSelection.cityName] : []
+                        }
+                        selectedLandmarks={selectedLandmarks}
+                        onSelectedLandmarksChange={setSelectedLandmarks}
+                        customItems={customMustDos}
+                        onCustomItemsChange={setCustomMustDos}
+                      />
+
+                      {/* Generation Rules */}
+                      <GenerationRules
+                        rules={generationRules}
+                        onRulesChange={setGenerationRules}
+                        startDate={startDate ? format(startDate, 'yyyy-MM-dd') : undefined}
+                        endDate={endDate ? format(endDate, 'yyyy-MM-dd') : undefined}
+                      />
+
+                      {/* Anything else? */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center gap-2 text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+                            <MessageSquareText className="w-4 h-4" />
+                            Anything else?
+                          </label>
+                          <span className="text-xs text-muted-foreground/60">(optional)</span>
+                        </div>
+                        <Textarea
+                          value={mustDoActivities}
+                          onChange={(e) => setMustDoActivities(e.target.value)}
+                          placeholder="Paste notes, other AI suggestions, skip requests, or special requirements..."
+                          className="min-h-[70px] resize-none text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Navigation */}
+                    <div className="flex justify-between pt-4">
+                      <Button variant="ghost" onClick={() => window.history.back()}>
+                        Back
+                      </Button>
+                      <Button onClick={() => goToStep(3)}>
+                        Continue <ArrowRight className="w-4 h-4 ml-2" />
+                      </Button>
+                    </div>
+                  </motion.div>
+                )}
+
+                {currentStep === 3 && startDate && endDate && (
                   <FlightHotelStep
                     key="flight-hotel"
                     destination={isMultiCity ? (multiCityDestinations[0]?.city || '') : destinationSelection.cityName}
@@ -2906,16 +2908,6 @@ export default function Start() {
                     setManualHotelList={setManualHotelList}
                     manualHotels={manualHotels}
                     setManualHotels={setManualHotels}
-                    mustDoActivities={mustDoActivities}
-                    setMustDoActivities={setMustDoActivities}
-                    selectedLandmarks={selectedLandmarks}
-                    setSelectedLandmarks={setSelectedLandmarks}
-                    selectedCategories={selectedCategories}
-                    setSelectedCategories={setSelectedCategories}
-                    customMustDos={customMustDos}
-                    setCustomMustDos={setCustomMustDos}
-                    generationRules={generationRules}
-                    onGenerationRulesChange={setGenerationRules}
                     onSubmit={handleSubmit}
                     onBack={() => {
                       window.history.back();
