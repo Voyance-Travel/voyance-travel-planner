@@ -1,11 +1,11 @@
 /**
  * GenerationRules — Structured constraint rules for trip itinerary generation.
- * Replaces free-text approach with typed, reliable constraints.
+ * Compact, mobile-friendly design with sheet-based rule creation.
  */
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Plus, Clock, CalendarHeart, Hotel, Users, MessageSquare, AlertTriangle, ChevronDown } from 'lucide-react';
+import { X, Plus, Clock, CalendarHeart, Hotel, Users, MessageSquare, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,18 +15,15 @@ import { cn } from '@/lib/utils';
 
 export interface GenerationRule {
   type: 'blocked_time' | 'special_event' | 'hotel_change' | 'guest_change' | 'free_text';
-  // blocked_time
   days?: string[];
   from?: string;
   to?: string;
   reason?: string;
-  // special_event / hotel_change / guest_change
   date?: string;
   description?: string;
   hotelName?: string;
   additionalGuests?: number;
   note?: string;
-  // free_text
   text?: string;
 }
 
@@ -41,11 +38,11 @@ const DAY_OPTIONS = [
 ];
 
 const RULE_TYPES = [
-  { type: 'blocked_time' as const, label: 'Blocked time', icon: Clock, description: "I'm unavailable during certain hours" },
-  { type: 'special_event' as const, label: 'Special event', icon: CalendarHeart, description: 'Something happening on a specific date' },
-  { type: 'hotel_change' as const, label: 'Hotel change', icon: Hotel, description: "I'm switching hotels mid-trip" },
-  { type: 'guest_change' as const, label: 'Group change', icon: Users, description: 'Someone joins or leaves mid-trip' },
-  { type: 'free_text' as const, label: 'Other', icon: MessageSquare, description: 'Anything else the planner should know' },
+  { type: 'blocked_time' as const, label: 'Blocked time', icon: Clock },
+  { type: 'special_event' as const, label: 'Special event', icon: CalendarHeart },
+  { type: 'hotel_change' as const, label: 'Hotel change', icon: Hotel },
+  { type: 'guest_change' as const, label: 'Group change', icon: Users },
+  { type: 'free_text' as const, label: 'Other', icon: MessageSquare },
 ];
 
 function getRuleIcon(type: GenerationRule['type']) {
@@ -58,39 +55,24 @@ function getRuleIcon(type: GenerationRule['type']) {
   }
 }
 
-function getRuleSummary(rule: GenerationRule): { label: string; detail: string } {
+function getRuleSummary(rule: GenerationRule): string {
   switch (rule.type) {
     case 'blocked_time': {
       const dayLabels = (rule.days || []).map(d => DAY_OPTIONS.find(o => o.id === d)?.label || d).join(', ');
-      return {
-        label: `Unavailable ${dayLabels}`,
-        detail: `${rule.from || '?'} – ${rule.to || '?'}${rule.reason ? ` (${rule.reason})` : ''}`,
-      };
+      return `${dayLabels} ${rule.from}–${rule.to}${rule.reason ? ` · ${rule.reason}` : ''}`;
     }
     case 'special_event':
-      return {
-        label: `Event on ${rule.date || '?'}`,
-        detail: rule.description || 'Special event',
-      };
+      return `${rule.date} · ${rule.description || 'Event'}`;
     case 'hotel_change':
-      return {
-        label: `Hotel change on ${rule.date || '?'}`,
-        detail: rule.hotelName ? `Moving to ${rule.hotelName}` : 'Switching hotels',
-      };
-    case 'guest_change':
-      return {
-        label: `Group change on ${rule.date || '?'}`,
-        detail: rule.additionalGuests
-          ? `${rule.additionalGuests > 0 ? '+' : ''}${rule.additionalGuests} traveler${Math.abs(rule.additionalGuests) !== 1 ? 's' : ''}`
-          : rule.note || 'Group size changes',
-      };
+      return `${rule.date}${rule.hotelName ? ` · ${rule.hotelName}` : ''}`;
+    case 'guest_change': {
+      const n = rule.additionalGuests || 0;
+      return `${rule.date} · ${n > 0 ? '+' : ''}${n} traveler${Math.abs(n) !== 1 ? 's' : ''}${rule.note ? ` · ${rule.note}` : ''}`;
+    }
     case 'free_text':
-      return {
-        label: 'Custom rule',
-        detail: rule.text || '',
-      };
+      return rule.text || '';
     default:
-      return { label: 'Rule', detail: '' };
+      return '';
   }
 }
 
@@ -105,7 +87,6 @@ export function GenerationRules({ rules, onRulesChange, startDate, endDate }: Ge
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedType, setSelectedType] = useState<GenerationRule['type'] | null>(null);
 
-  // Draft state for each rule type
   const [draftDays, setDraftDays] = useState<string[]>([]);
   const [draftFrom, setDraftFrom] = useState('09:00');
   const [draftTo, setDraftTo] = useState('15:00');
@@ -133,7 +114,6 @@ export function GenerationRules({ rules, onRulesChange, startDate, endDate }: Ge
 
   const addRule = () => {
     if (!selectedType) return;
-
     let newRule: GenerationRule;
     switch (selectedType) {
       case 'blocked_time':
@@ -159,7 +139,6 @@ export function GenerationRules({ rules, onRulesChange, startDate, endDate }: Ge
       default:
         return;
     }
-
     onRulesChange([...rules, newRule]);
     resetDraft();
     setSheetOpen(false);
@@ -176,116 +155,112 @@ export function GenerationRules({ rules, onRulesChange, startDate, endDate }: Ge
   const hasComplexRules = rules.some(r => r.type === 'blocked_time' || r.type === 'hotel_change' || r.type === 'guest_change');
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
+      {/* Header — only show label, keep it minimal */}
       <div className="flex items-center justify-between">
-        <label className="flex items-center gap-2 text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-          <AlertTriangle className="w-4 h-4" />
-          Rules for your trip
+        <label className="text-xs tracking-wide uppercase font-medium text-muted-foreground">
+          Scheduling rules
         </label>
         <span className="text-xs text-muted-foreground/60">(optional)</span>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Schedule constraints, special events, or anything the itinerary should work around.
-      </p>
 
-      {/* Existing rules */}
-      <AnimatePresence mode="popLayout">
-        {rules.map((rule, i) => {
-          const Icon = getRuleIcon(rule.type);
-          const { label, detail } = getRuleSummary(rule);
-          return (
-            <motion.div
-              key={`${rule.type}-${i}`}
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="flex items-start gap-3 bg-muted/50 rounded-lg p-3 border border-border"
-            >
-              <Icon className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <span className="text-sm font-medium text-foreground">{label}</span>
-                <span className="text-xs text-muted-foreground block truncate">{detail}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => removeRule(i)}
-                className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </motion.div>
-          );
-        })}
-      </AnimatePresence>
-
-      {/* Best-effort warning */}
-      {hasComplexRules && (
-        <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-sm">
-          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-xs text-foreground font-medium">Heads up</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Complex rules like blocked time windows and mid-trip changes are best-effort. 
-              The itinerary will try to respect them, but you may need to manually adjust.
-            </p>
-          </div>
+      {/* Existing rules — compact single-line items */}
+      {rules.length > 0 && (
+        <div className="space-y-1">
+          <AnimatePresence mode="popLayout">
+            {rules.map((rule, i) => {
+              const Icon = getRuleIcon(rule.type);
+              const summary = getRuleSummary(rule);
+              return (
+                <motion.div
+                  key={`${rule.type}-${i}`}
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="flex items-center gap-2 py-1.5 px-2 rounded-md bg-muted/40 border border-border text-sm"
+                >
+                  <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span className="flex-1 min-w-0 truncate text-foreground">{summary}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeRule(i)}
+                    className="text-muted-foreground hover:text-destructive transition-colors shrink-0 p-0.5"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
         </div>
       )}
 
-      {/* Add rule button */}
-      <Button
+      {/* Best-effort warning — compact */}
+      {hasComplexRules && (
+        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+          <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
+          Complex rules are best-effort — you may need to adjust manually.
+        </p>
+      )}
+
+      {/* Add rule — small text link when empty, small button when rules exist */}
+      <button
         type="button"
-        variant="outline"
-        size="sm"
         onClick={() => { resetDraft(); setSheetOpen(true); }}
-        className="text-sm gap-1.5"
+        className={cn(
+          'inline-flex items-center gap-1 text-sm transition-colors',
+          rules.length === 0
+            ? 'text-muted-foreground hover:text-foreground'
+            : 'text-primary hover:text-primary/80'
+        )}
       >
         <Plus className="w-3.5 h-3.5" />
         Add a rule
-      </Button>
+      </button>
 
       {/* Add Rule Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>{selectedType ? `Add ${RULE_TYPES.find(r => r.type === selectedType)?.label}` : 'Choose rule type'}</SheetTitle>
+        <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto">
+          <SheetHeader className="pb-2">
+            <SheetTitle className="text-base">
+              {selectedType ? RULE_TYPES.find(r => r.type === selectedType)?.label : 'Add a rule'}
+            </SheetTitle>
           </SheetHeader>
 
-          <div className="mt-4 space-y-4">
+          <div className="space-y-3">
             {!selectedType ? (
-              /* Rule type selection */
-              <div className="space-y-2">
-                {RULE_TYPES.map(rt => {
-                  const Icon = rt.icon;
-                  return (
-                    <button
-                      key={rt.type}
-                      type="button"
-                      onClick={() => setSelectedType(rt.type)}
-                      className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-muted/50 transition-colors text-left"
-                    >
-                      <Icon className="w-5 h-5 text-primary shrink-0" />
-                      <div>
-                        <div className="text-sm font-medium text-foreground">{rt.label}</div>
-                        <div className="text-xs text-muted-foreground">{rt.description}</div>
-                      </div>
-                    </button>
-                  );
-                })}
+              /* Rule type selector — compact select dropdown */
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">What kind of rule?</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {RULE_TYPES.map(rt => {
+                    const Icon = rt.icon;
+                    return (
+                      <button
+                        key={rt.type}
+                        type="button"
+                        onClick={() => setSelectedType(rt.type)}
+                        className="flex items-center gap-2 p-2.5 rounded-lg border border-border hover:border-primary/40 hover:bg-muted/50 transition-colors text-left"
+                      >
+                        <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <span className="text-sm text-foreground">{rt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             ) : selectedType === 'blocked_time' ? (
-              /* Blocked time form */
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div>
-                  <label className="text-sm font-medium text-foreground mb-2 block">Which days?</label>
-                  <div className="flex flex-wrap gap-2">
+                  <label className="text-xs font-medium text-foreground mb-1.5 block">Days</label>
+                  <div className="flex flex-wrap gap-1.5">
                     {DAY_OPTIONS.map(day => (
                       <button
                         key={day.id}
                         type="button"
                         onClick={() => toggleDay(day.id)}
                         className={cn(
-                          'px-3 py-1.5 rounded-full text-sm border transition-all',
+                          'w-10 h-8 rounded text-xs border transition-colors',
                           draftDays.includes(day.id)
                             ? 'bg-primary text-primary-foreground border-primary'
                             : 'bg-card text-foreground border-border hover:border-primary/50'
@@ -295,148 +270,116 @@ export function GenerationRules({ rules, onRulesChange, startDate, endDate }: Ge
                       </button>
                     ))}
                   </div>
-                  <div className="flex gap-2 mt-2">
-                    <button
-                      type="button"
-                      onClick={() => setDraftDays(['mon', 'tue', 'wed', 'thu', 'fri'])}
-                      className="text-xs text-primary hover:underline"
-                    >
-                      Weekdays
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDraftDays(['sat', 'sun'])}
-                      className="text-xs text-primary hover:underline"
-                    >
-                      Weekends
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDraftDays(DAY_OPTIONS.map(d => d.id))}
-                      className="text-xs text-primary hover:underline"
-                    >
-                      Every day
-                    </button>
+                  <div className="flex gap-3 mt-1.5">
+                    {[
+                      { label: 'Weekdays', days: ['mon', 'tue', 'wed', 'thu', 'fri'] },
+                      { label: 'Weekends', days: ['sat', 'sun'] },
+                      { label: 'All', days: DAY_OPTIONS.map(d => d.id) },
+                    ].map(preset => (
+                      <button key={preset.label} type="button" onClick={() => setDraftDays(preset.days)} className="text-xs text-primary hover:underline">
+                        {preset.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-sm font-medium text-foreground mb-1 block">From</label>
-                    <Input type="time" value={draftFrom} onChange={e => setDraftFrom(e.target.value)} />
+                    <label className="text-xs font-medium text-foreground mb-1 block">From</label>
+                    <Input type="time" value={draftFrom} onChange={e => setDraftFrom(e.target.value)} className="h-9 text-sm" />
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-foreground mb-1 block">To</label>
-                    <Input type="time" value={draftTo} onChange={e => setDraftTo(e.target.value)} />
+                    <label className="text-xs font-medium text-foreground mb-1 block">To</label>
+                    <Input type="time" value={draftTo} onChange={e => setDraftTo(e.target.value)} className="h-9 text-sm" />
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-foreground mb-1 block">Reason <span className="text-muted-foreground font-normal">(optional)</span></label>
-                  <Input
-                    value={draftReason}
-                    onChange={e => setDraftReason(e.target.value)}
-                    placeholder="e.g., School, work meetings, nap time..."
-                  />
+                  <label className="text-xs font-medium text-foreground mb-1 block">Reason <span className="text-muted-foreground font-normal">(optional)</span></label>
+                  <Input value={draftReason} onChange={e => setDraftReason(e.target.value)} placeholder="e.g., Work meetings" className="h-9 text-sm" />
                 </div>
-                <div className="flex gap-2 pt-2">
-                  <Button type="button" variant="ghost" onClick={() => setSelectedType(null)} className="flex-1">Back</Button>
-                  <Button type="button" onClick={addRule} disabled={draftDays.length === 0} className="flex-1">Add Rule</Button>
+                <div className="flex gap-2 pt-1">
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedType(null)} className="flex-1">Back</Button>
+                  <Button type="button" size="sm" onClick={addRule} disabled={draftDays.length === 0} className="flex-1">Add</Button>
                 </div>
               </div>
             ) : selectedType === 'special_event' ? (
-              /* Special event form */
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div>
-                  <label className="text-sm font-medium text-foreground mb-1 block">Date</label>
-                  <Input type="date" value={draftDate} onChange={e => setDraftDate(e.target.value)} min={startDate} max={endDate} />
+                  <label className="text-xs font-medium text-foreground mb-1 block">Date</label>
+                  <Input type="date" value={draftDate} onChange={e => setDraftDate(e.target.value)} min={startDate} max={endDate} className="h-9 text-sm" />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-foreground mb-1 block">What's happening?</label>
-                  <Input
-                    value={draftDescription}
-                    onChange={e => setDraftDescription(e.target.value)}
-                    placeholder="e.g., My mother arrives — plan activities for two"
-                  />
+                  <label className="text-xs font-medium text-foreground mb-1 block">What's happening?</label>
+                  <Input value={draftDescription} onChange={e => setDraftDescription(e.target.value)} placeholder="e.g., Anniversary dinner" className="h-9 text-sm" />
                 </div>
-                <div className="flex gap-2 pt-2">
-                  <Button type="button" variant="ghost" onClick={() => setSelectedType(null)} className="flex-1">Back</Button>
-                  <Button type="button" onClick={addRule} disabled={!draftDate || !draftDescription} className="flex-1">Add Rule</Button>
+                <div className="flex gap-2 pt-1">
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedType(null)} className="flex-1">Back</Button>
+                  <Button type="button" size="sm" onClick={addRule} disabled={!draftDate || !draftDescription} className="flex-1">Add</Button>
                 </div>
               </div>
             ) : selectedType === 'hotel_change' ? (
-              /* Hotel change form */
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div>
-                  <label className="text-sm font-medium text-foreground mb-1 block">Date of hotel change</label>
-                  <Input type="date" value={draftDate} onChange={e => setDraftDate(e.target.value)} min={startDate} max={endDate} />
+                  <label className="text-xs font-medium text-foreground mb-1 block">Date</label>
+                  <Input type="date" value={draftDate} onChange={e => setDraftDate(e.target.value)} min={startDate} max={endDate} className="h-9 text-sm" />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-foreground mb-1 block">New hotel name <span className="text-muted-foreground font-normal">(optional)</span></label>
-                  <Input
-                    value={draftHotelName}
-                    onChange={e => setDraftHotelName(e.target.value)}
-                    placeholder="e.g., Hotel Lunetta, Trastevere"
-                  />
+                  <label className="text-xs font-medium text-foreground mb-1 block">New hotel <span className="text-muted-foreground font-normal">(optional)</span></label>
+                  <Input value={draftHotelName} onChange={e => setDraftHotelName(e.target.value)} placeholder="e.g., Hotel Lunetta" className="h-9 text-sm" />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-foreground mb-1 block">Notes <span className="text-muted-foreground font-normal">(optional)</span></label>
-                  <Input value={draftNote} onChange={e => setDraftNote(e.target.value)} placeholder="e.g., Check-in after 3pm" />
+                  <label className="text-xs font-medium text-foreground mb-1 block">Notes <span className="text-muted-foreground font-normal">(optional)</span></label>
+                  <Input value={draftNote} onChange={e => setDraftNote(e.target.value)} placeholder="e.g., Check-in after 3pm" className="h-9 text-sm" />
                 </div>
-                <div className="flex gap-2 pt-2">
-                  <Button type="button" variant="ghost" onClick={() => setSelectedType(null)} className="flex-1">Back</Button>
-                  <Button type="button" onClick={addRule} disabled={!draftDate} className="flex-1">Add Rule</Button>
+                <div className="flex gap-2 pt-1">
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedType(null)} className="flex-1">Back</Button>
+                  <Button type="button" size="sm" onClick={addRule} disabled={!draftDate} className="flex-1">Add</Button>
                 </div>
               </div>
             ) : selectedType === 'guest_change' ? (
-              /* Guest change form */
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div>
-                  <label className="text-sm font-medium text-foreground mb-1 block">Date</label>
-                  <Input type="date" value={draftDate} onChange={e => setDraftDate(e.target.value)} min={startDate} max={endDate} />
+                  <label className="text-xs font-medium text-foreground mb-1 block">Date</label>
+                  <Input type="date" value={draftDate} onChange={e => setDraftDate(e.target.value)} min={startDate} max={endDate} className="h-9 text-sm" />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-foreground mb-1 block">How many people join or leave?</label>
-                  <div className="flex items-center gap-3">
+                  <label className="text-xs font-medium text-foreground mb-1 block">Change</label>
+                  <div className="flex items-center gap-2">
                     <Select value={String(draftAdditionalGuests)} onValueChange={v => setDraftAdditionalGuests(parseInt(v))}>
-                      <SelectTrigger className="w-24">
+                      <SelectTrigger className="w-20 h-9 text-sm">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         {[-3, -2, -1, 1, 2, 3, 4, 5].map(n => (
-                          <SelectItem key={n} value={String(n)}>
-                            {n > 0 ? `+${n}` : n}
-                          </SelectItem>
+                          <SelectItem key={n} value={String(n)}>{n > 0 ? `+${n}` : n}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                    <span className="text-sm text-muted-foreground">
-                      {draftAdditionalGuests > 0 ? 'joining' : 'leaving'}
-                    </span>
+                    <span className="text-xs text-muted-foreground">{draftAdditionalGuests > 0 ? 'joining' : 'leaving'}</span>
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-foreground mb-1 block">Who? <span className="text-muted-foreground font-normal">(optional)</span></label>
-                  <Input value={draftNote} onChange={e => setDraftNote(e.target.value)} placeholder="e.g., My mother arrives from Madrid" />
+                  <label className="text-xs font-medium text-foreground mb-1 block">Who? <span className="text-muted-foreground font-normal">(optional)</span></label>
+                  <Input value={draftNote} onChange={e => setDraftNote(e.target.value)} placeholder="e.g., My mother arrives" className="h-9 text-sm" />
                 </div>
-                <div className="flex gap-2 pt-2">
-                  <Button type="button" variant="ghost" onClick={() => setSelectedType(null)} className="flex-1">Back</Button>
-                  <Button type="button" onClick={addRule} disabled={!draftDate} className="flex-1">Add Rule</Button>
+                <div className="flex gap-2 pt-1">
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedType(null)} className="flex-1">Back</Button>
+                  <Button type="button" size="sm" onClick={addRule} disabled={!draftDate} className="flex-1">Add</Button>
                 </div>
               </div>
             ) : selectedType === 'free_text' ? (
-              /* Free text form */
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div>
-                  <label className="text-sm font-medium text-foreground mb-1 block">What should we know?</label>
+                  <label className="text-xs font-medium text-foreground mb-1 block">What should we know?</label>
                   <Textarea
                     value={draftFreeText}
                     onChange={e => setDraftFreeText(e.target.value)}
-                    placeholder="e.g., We're celebrating our anniversary on March 18 — something special for dinner that night."
-                    className="min-h-[80px] resize-none"
+                    placeholder="e.g., We're celebrating our anniversary on March 18"
+                    className="min-h-[60px] resize-none text-sm"
                   />
                 </div>
-                <div className="flex gap-2 pt-2">
-                  <Button type="button" variant="ghost" onClick={() => setSelectedType(null)} className="flex-1">Back</Button>
-                  <Button type="button" onClick={addRule} disabled={!draftFreeText.trim()} className="flex-1">Add Rule</Button>
+                <div className="flex gap-2 pt-1">
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedType(null)} className="flex-1">Back</Button>
+                  <Button type="button" size="sm" onClick={addRule} disabled={!draftFreeText.trim()} className="flex-1">Add</Button>
                 </div>
               </div>
             ) : null}
