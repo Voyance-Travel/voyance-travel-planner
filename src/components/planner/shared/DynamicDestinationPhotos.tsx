@@ -307,7 +307,7 @@ export default function DynamicDestinationPhotos({
       
       {/* Content overlay */}
       {!hideOverlayText && (
-        <div className="absolute inset-0 p-6 md:p-8 flex flex-col justify-end">
+        <div className="absolute inset-0 p-6 md:p-8 flex flex-col justify-end" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
           <div className="flex items-end justify-between">
             <div>
               <div className="flex items-center gap-2 text-white mb-2">
