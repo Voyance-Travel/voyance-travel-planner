@@ -176,7 +176,7 @@ export function InterCityTransportEditor({
 
           {/* Common fields: times, duration, cost, booking ref, notes */}
           <div className="space-y-3 pt-2 border-t border-border">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
               <Field label="Departure time" icon={Clock}>
                 <Input type="time" value={details.departureTime || ''} onChange={e => update({ departureTime: e.target.value })} />
               </Field>
