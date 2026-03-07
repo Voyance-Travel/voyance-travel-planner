@@ -1112,6 +1112,7 @@ export function EditorialItinerary({
   itineraryStatus,
 }: EditorialItineraryProps) {
   const queryClient = useQueryClient();
+  const isActivelyGenerating = itineraryStatus === 'generating' || itineraryStatus === 'queued';
   const [rawDays, setRawDays] = useState<EditorialDay[]>(initialDays);
 
   // Sanitize wrapper: ensures every activity has a valid title and filters out
