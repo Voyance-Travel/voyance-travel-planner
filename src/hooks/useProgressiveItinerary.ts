@@ -71,10 +71,10 @@ export function useProgressiveItinerary() {
     isGeneratingRef.current = true;
     abortControllerRef.current = new AbortController();
 
-    // Calculate total days
+    // Calculate total days (inclusive end date)
     const start = new Date(params.startDate);
     const end = new Date(params.endDate);
-    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
     setProgress({
       status: 'generating',

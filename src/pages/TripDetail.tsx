@@ -1425,7 +1425,7 @@ export default function TripDetail() {
                 <GenerationPhases
                   currentStep="preparing"
                   destination={trip.destination || ''}
-                  totalDays={generationPoller.totalDays || differenceInDays(parseLocalDate(effectiveEndDate), parseLocalDate(trip.start_date))}
+                  totalDays={generationPoller.totalDays || (differenceInDays(parseLocalDate(effectiveEndDate), parseLocalDate(trip.start_date)) + 1)}
                   tripId={trip.id}
                   completedDays={generationPoller.completedDays}
                   generatedDaysList={generationPoller.generatedDaysList}
@@ -1511,7 +1511,7 @@ export default function TripDetail() {
                     </h2>
                     
                     <p className="text-muted-foreground mb-6">
-                      Let our AI create a personalized {differenceInDays(parseLocalDate(effectiveEndDate), parseLocalDate(trip.start_date))}-day itinerary 
+                      Let our AI create a personalized {differenceInDays(parseLocalDate(effectiveEndDate), parseLocalDate(trip.start_date)) + 1}-day itinerary 
                       for {trip.destination} based on your preferences.
                     </p>
                     

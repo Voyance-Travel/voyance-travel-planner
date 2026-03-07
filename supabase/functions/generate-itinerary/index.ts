@@ -4035,8 +4035,8 @@ function calculateDays(startDate: string, endDate: string): number {
   const [ey, em, ed] = endDate.split('-').map(Number);
   const start = new Date(sy, sm - 1, sd);
   const end = new Date(ey, em - 1, ed);
-  // Exclusive end-date standard: endDate is departure day, not an activity day
-  return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  // Inclusive end-date: last day IS an activity day (March 7-9 = 3 days)
+  return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 }
 
 function formatDate(startDate: string, dayOffset: number): string {
@@ -12324,7 +12324,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       // Calculate total days — for multi-city, prefer sum of nights from trip_cities
       const sDate = new Date(startDate);
       const eDate = new Date(endDate);
-      let totalDays = Math.ceil((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24));
+      let totalDays = Math.ceil((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
       // For multi-city trips, override totalDays with sum of city nights to prevent
       // date-arithmetic mismatches from producing extra/missing days
