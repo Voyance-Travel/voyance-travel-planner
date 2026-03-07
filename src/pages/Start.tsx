@@ -49,6 +49,7 @@ import { buildFlightSelectionFromLegs, type FlightLeg } from '@/utils/normalizeF
 import GuestLinkModal, { type LinkedGuest } from '@/components/planner/GuestLinkModal';
 import { TripChatPlanner } from '@/components/planner/TripChatPlanner';
 import { MustSeeLandmarkPicker } from '@/components/planner/MustSeeLandmarkPicker';
+import { GenerationRules, type GenerationRule } from '@/components/planner/GenerationRules';
 import { ManualTripPasteEntry } from '@/components/planner/ManualTripPasteEntry';
 import { TripCostEstimate } from '@/components/planner/TripCostEstimate';
 import { resolveCities } from '@/utils/cityNormalization';
@@ -947,7 +948,9 @@ function FlightHotelStep({
   setSelectedLandmarks,
   selectedCategories,
   setSelectedCategories,
-  customMustDos,
+   customMustDos,
+   generationRules,
+   onGenerationRulesChange,
   setCustomMustDos,
   onSubmit,
   onBack,
@@ -991,7 +994,9 @@ function FlightHotelStep({
   setSelectedLandmarks: (v: string[]) => void;
   selectedCategories: string[];
   setSelectedCategories: (v: string[]) => void;
-  customMustDos: string[];
+   customMustDos: string[];
+   generationRules: GenerationRule[];
+   onGenerationRulesChange: (rules: GenerationRule[]) => void;
   setCustomMustDos: (v: string[]) => void;
   onSubmit: () => void;
   onBack: () => void;
@@ -2248,7 +2253,8 @@ export default function Start() {
   // Personalization state
   const [isFirstTimeVisitor, setIsFirstTimeVisitor] = useState(true);
   const [firstTimePerCity, setFirstTimePerCity] = useState<Record<string, boolean>>({});
-  const [mustDoActivities, setMustDoActivities] = useState('');
+   const [mustDoActivities, setMustDoActivities] = useState('');
+   const [generationRules, setGenerationRules] = useState<GenerationRule[]>([]);
   const [selectedLandmarks, setSelectedLandmarks] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [customMustDos, setCustomMustDos] = useState<string[]>([]);
