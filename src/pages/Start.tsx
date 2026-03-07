@@ -48,6 +48,7 @@ import type { ManualFlightEntry } from '@/components/itinerary/AddBookingInline'
 import { buildFlightSelectionFromLegs, type FlightLeg } from '@/utils/normalizeFlightSelection';
 import GuestLinkModal, { type LinkedGuest } from '@/components/planner/GuestLinkModal';
 import { TripChatPlanner } from '@/components/planner/TripChatPlanner';
+import { MustSeeLandmarkPicker } from '@/components/planner/MustSeeLandmarkPicker';
 import { ManualTripPasteEntry } from '@/components/planner/ManualTripPasteEntry';
 import { TripCostEstimate } from '@/components/planner/TripCostEstimate';
 import { resolveCities } from '@/utils/cityNormalization';
