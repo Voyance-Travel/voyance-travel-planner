@@ -1017,7 +1017,58 @@ export default function TripDashboard() {
   const completedCount = filterTrips('completed').length;
   const activeTrips = filterTrips('active');
 
-  // Group trips by destination
+  // Build renderable items: journey groups + standalone trips, sorted by date
+  type RenderItem = 
+    | { type: 'journey'; journeyId: string; journeyName: string; trips: Trip[]; sortDate: string }
+    | { type: 'standalone'; trip: Trip; sortDate: string };
+
+  const renderItems = useMemo((): RenderItem[] => {
+    const journeyMap = new Map<string, Trip[]>();
+    const standalone: Trip[] = [];
+
+    filteredTrips.forEach(trip => {
+      if (trip.journeyId) {
+        const list = journeyMap.get(trip.journeyId) || [];
+        list.push(trip);
+        journeyMap.set(trip.journeyId, list);
+      } else {
+        standalone.push(trip);
+      }
+    });
+
+    const items: RenderItem[] = [];
+
+    // Add journey groups
+    journeyMap.forEach((trips, journeyId) => {
+      const sorted = trips.sort((a, b) => (a.journeyOrder || 0) - (b.journeyOrder || 0));
+      const firstDate = sorted[0]?.startDate || '9999-12-31';
+      items.push({
+        type: 'journey',
+        journeyId,
+        journeyName: sorted[0]?.journeyName || 'Multi-City Journey',
+        trips: sorted,
+        sortDate: firstDate,
+      });
+    });
+
+    // Add standalone trips
+    standalone.forEach(trip => {
+      items.push({
+        type: 'standalone',
+        trip,
+        sortDate: trip.startDate || '9999-12-31',
+      });
+    });
+
+    // Sort by date (most recent first for upcoming, chronological for completed)
+    items.sort((a, b) => b.sortDate.localeCompare(a.sortDate));
+
+    return items;
+  }, [filteredTrips]);
+
+  const hasJourneys = renderItems.some(item => item.type === 'journey');
+
+  // Group trips by destination (legacy grouping for non-journey trips)
   const groupedTrips = useMemo(() => {
     const groups: Record<string, TripGroup> = {};
     
