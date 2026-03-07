@@ -942,6 +942,12 @@ function FlightHotelStep({
   setFirstTimePerCity,
   mustDoActivities,
   setMustDoActivities,
+  selectedLandmarks,
+  setSelectedLandmarks,
+  selectedCategories,
+  setSelectedCategories,
+  customMustDos,
+  setCustomMustDos,
   onSubmit,
   onBack,
   isSubmitting,
@@ -980,6 +986,12 @@ function FlightHotelStep({
   setFirstTimePerCity: (v: Record<string, boolean>) => void;
   mustDoActivities: string;
   setMustDoActivities: (v: string) => void;
+  selectedLandmarks: string[];
+  setSelectedLandmarks: (v: string[]) => void;
+  selectedCategories: string[];
+  setSelectedCategories: (v: string[]) => void;
+  customMustDos: string[];
+  setCustomMustDos: (v: string[]) => void;
   onSubmit: () => void;
   onBack: () => void;
   isSubmitting: boolean;
