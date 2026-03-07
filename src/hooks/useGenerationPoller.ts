@@ -160,6 +160,14 @@ export function useGenerationPoller({
       }
 
       if (itineraryStatus === 'failed') {
+        // Suppress failed transition if we just resumed from a background tab (grace period)
+        const inResumeGrace = justResumedRef.current && (Date.now() - resumedAtRef.current < 5000);
+        if (inResumeGrace) {
+          // Don't show failed yet — stay polling, the next cycle will confirm
+          setState({ status: 'polling', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList });
+          return;
+        }
+
         stalledFiredRef.current = false;
         autoResumeAttemptedRef.current = false;
         const genError = (meta.generation_error as string) || 'Generation failed';
