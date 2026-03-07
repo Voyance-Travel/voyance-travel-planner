@@ -83,6 +83,9 @@ export function useGenerationPoller({
   const onReadyCalledRef = useRef(false);
   // High-water mark: completedDays should never decrease during a generation cycle
   const completedDaysHWM = useRef(0);
+  // Tab visibility: suppress stalled/failed transitions briefly after tab resumes
+  const justResumedRef = useRef(false);
+  const resumedAtRef = useRef(0);
 
   const poll = useCallback(async () => {
     if (!tripId) return;
