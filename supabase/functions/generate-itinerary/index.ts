@@ -9435,8 +9435,13 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
           mustDoPrompt += `\n## USER INTERESTS\nPrioritize activities in these categories: ${labels}. Lean heavily toward these when choosing between options.\n`;
           console.log(`[generate-day] Interest categories injected: ${labels}`);
         }
+        // Inject structured generation rules for per-day generation
+        const genRules = (metadata?.generationRules as any[]) || [];
+        if (genRules.length > 0) {
+          mustDoPrompt += formatGenerationRules(genRules);
+          console.log(`[generate-day] Generation rules injected: ${genRules.length} rules`);
         }
-
+        }
 
       let mustHavesConstraintPrompt = '';
       let preBookedCommitmentsPrompt = '';
