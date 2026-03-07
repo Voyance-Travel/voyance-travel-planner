@@ -147,7 +147,7 @@ export default function DynamicDestinationPhotos({
           <Loader2 className="w-8 h-8 text-white/60 animate-spin" />
         </div>
         {!hideOverlayText && (
-          <div className="absolute inset-0 p-6 md:p-8 flex flex-col justify-end">
+          <div className="absolute inset-0 p-6 md:p-8 flex flex-col justify-end" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
             <div className="flex items-center gap-2 text-white mb-2">
               <MapPin className="w-5 h-5" />
               <h2 className="text-3xl md:text-4xl font-serif font-semibold">{cleanDestination}</h2>
@@ -205,7 +205,7 @@ export default function DynamicDestinationPhotos({
     return (
       <div className={`relative rounded-2xl overflow-hidden h-56 md:h-72 ${className}`} style={getGradientStyle()}>
         {!hideOverlayText && (
-          <div className="absolute inset-0 p-6 md:p-8 flex flex-col justify-end">
+          <div className="absolute inset-0 p-6 md:p-8 flex flex-col justify-end" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
             <div className="flex items-center gap-2 text-white mb-2">
               <MapPin className="w-5 h-5" />
               <h2 className="text-3xl md:text-4xl font-serif font-semibold">{cleanDestination}</h2>
@@ -262,7 +262,7 @@ export default function DynamicDestinationPhotos({
           onError={() => { setHeroImage(null); setError(true); }}
         />
         <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-black/20" />
-        <div className="absolute inset-0 p-5 flex items-center justify-between">
+         <div className="absolute inset-0 p-5 flex items-center justify-between" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
           <div>
             <div className="flex items-center gap-2 text-white mb-1">
               <MapPin className="w-5 h-5" />
