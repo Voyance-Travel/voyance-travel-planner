@@ -1747,7 +1747,7 @@ function FlightHotelStep({
             />
           </div>
         )}
-
+      </div>
 
       {/* Navigation */}
       <div className="flex justify-between pt-6 max-w-xl mx-auto">
