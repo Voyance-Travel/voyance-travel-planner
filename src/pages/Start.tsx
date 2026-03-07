@@ -49,6 +49,7 @@ import { buildFlightSelectionFromLegs, type FlightLeg } from '@/utils/normalizeF
 import GuestLinkModal, { type LinkedGuest } from '@/components/planner/GuestLinkModal';
 import { TripChatPlanner } from '@/components/planner/TripChatPlanner';
 import { MustSeeLandmarkPicker } from '@/components/planner/MustSeeLandmarkPicker';
+import { GenerationRules, type GenerationRule } from '@/components/planner/GenerationRules';
 import { ManualTripPasteEntry } from '@/components/planner/ManualTripPasteEntry';
 import { TripCostEstimate } from '@/components/planner/TripCostEstimate';
 import { resolveCities } from '@/utils/cityNormalization';
@@ -947,7 +948,9 @@ function FlightHotelStep({
   setSelectedLandmarks,
   selectedCategories,
   setSelectedCategories,
-  customMustDos,
+   customMustDos,
+   generationRules,
+   onGenerationRulesChange,
   setCustomMustDos,
   onSubmit,
   onBack,
@@ -991,7 +994,9 @@ function FlightHotelStep({
   setSelectedLandmarks: (v: string[]) => void;
   selectedCategories: string[];
   setSelectedCategories: (v: string[]) => void;
-  customMustDos: string[];
+   customMustDos: string[];
+   generationRules: GenerationRule[];
+   onGenerationRulesChange: (rules: GenerationRule[]) => void;
   setCustomMustDos: (v: string[]) => void;
   onSubmit: () => void;
   onBack: () => void;
@@ -1841,6 +1846,14 @@ function FlightHotelStep({
             onCustomItemsChange={setCustomMustDos}
           />
 
+          {/* Generation Rules — Structured Constraints */}
+          <GenerationRules
+            rules={generationRules}
+            onRulesChange={onGenerationRulesChange}
+            startDate={startDate}
+            endDate={endDate}
+          />
+
           {/* Extra Details — Optional paste field for research/notes */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
@@ -2248,7 +2261,8 @@ export default function Start() {
   // Personalization state
   const [isFirstTimeVisitor, setIsFirstTimeVisitor] = useState(true);
   const [firstTimePerCity, setFirstTimePerCity] = useState<Record<string, boolean>>({});
-  const [mustDoActivities, setMustDoActivities] = useState('');
+   const [mustDoActivities, setMustDoActivities] = useState('');
+   const [generationRules, setGenerationRules] = useState<GenerationRule[]>([]);
   const [selectedLandmarks, setSelectedLandmarks] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [customMustDos, setCustomMustDos] = useState<string[]>([]);
@@ -2297,6 +2311,7 @@ export default function Start() {
           if (savedDraft.selectedLandmarks) setSelectedLandmarks(savedDraft.selectedLandmarks);
           if (savedDraft.selectedCategories) setSelectedCategories(savedDraft.selectedCategories);
           if (savedDraft.customMustDos) setCustomMustDos(savedDraft.customMustDos);
+          if (savedDraft.generationRules) setGenerationRules(savedDraft.generationRules);
           if (savedDraft.destination) setDestinationSelection({ display: savedDraft.destination, cityName: savedDraft.destination });
           if (savedDraft.startDate) setStartDate(parseLocalDate(savedDraft.startDate));
           if (savedDraft.endDate) setEndDate(parseLocalDate(savedDraft.endDate));
@@ -2460,7 +2475,7 @@ export default function Start() {
           transportation_preferences: isMultiCity && multiCityTransports.length > 0 ? multiCityTransports as any : null,
           creation_source: isMultiCity ? 'multi_city' : 'single_city',
           status: 'draft',
-          metadata: {
+          metadata: ({
             isFirstTimeVisitor,
             firstTimePerCity: isMultiCity && Object.keys(firstTimePerCity).length > 0 ? firstTimePerCity : null,
             mustDoActivities: [
@@ -2471,10 +2486,11 @@ export default function Start() {
               ? [...selectedLandmarks, ...customMustDos, ...(mustDoActivities ? [mustDoActivities] : [])]
               : null,
             interestCategories: selectedCategories.length > 0 ? selectedCategories : null,
+            generationRules: generationRules.length > 0 ? generationRules : null,
             celebrationDay: celebrationDay || null,
             pacing: pacing || 'balanced',
             lastUpdated: new Date().toISOString(),
-          },
+          }) as any,
         })
         .select('id')
         .single();
@@ -2898,6 +2914,8 @@ export default function Start() {
                     setSelectedCategories={setSelectedCategories}
                     customMustDos={customMustDos}
                     setCustomMustDos={setCustomMustDos}
+                    generationRules={generationRules}
+                    onGenerationRulesChange={setGenerationRules}
                     onSubmit={handleSubmit}
                     onBack={() => {
                       window.history.back();
@@ -2969,6 +2987,7 @@ export default function Start() {
                   selectedLandmarks,
                   selectedCategories,
                   customMustDos,
+                  generationRules,
                   currentStep: 1,
                 };
                 sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
