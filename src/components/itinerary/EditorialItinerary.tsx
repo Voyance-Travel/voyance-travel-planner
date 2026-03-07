@@ -7569,11 +7569,11 @@ function DayCard({
                   )}>
                     {/* Mobile: Time-of-day section header */}
                     {showTimeOfDayHeader && (
-                      <div className="sm:hidden flex items-center gap-2 px-4 pt-3 pb-1">
-                        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      <div className="sm:hidden flex items-center gap-2 px-4 pt-4 pb-1.5">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-primary/60">
                           {timeOfDay}
                         </span>
-                        <div className="flex-1 h-px bg-border" />
+                        <div className="flex-1 h-px bg-primary/10" />
                       </div>
                     )}
                     {/* Mobile: Card wrapper with timeline */}
