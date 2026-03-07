@@ -12144,7 +12144,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       // Calculate total days
       const sDate = new Date(startDate);
       const eDate = new Date(endDate);
-      const totalDays = Math.ceil((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const totalDays = Math.ceil((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24));
 
       // Set status to generating + store metadata
       const { data: currentTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
