@@ -163,7 +163,7 @@ export default function DynamicDestinationPhotos({
     if (variant === 'compact') {
       return (
         <div className={`relative rounded-xl overflow-hidden h-20 ${className}`} style={getGradientStyle()}>
-          <div className="absolute inset-0 p-3 flex items-center">
+          <div className="absolute inset-0 p-3 flex items-center" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
             <div className="flex items-center gap-2 text-white text-sm">
               <MapPin className="w-4 h-4" />
               <span className="font-medium">{cleanDestination}</span>
@@ -240,8 +240,8 @@ export default function DynamicDestinationPhotos({
           className="absolute inset-0 w-full h-full object-cover"
           onError={() => { setHeroImage(null); setError(true); }}
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/40 to-transparent" />
-        <div className="absolute inset-0 p-3 flex items-center">
+        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/50 to-transparent" />
+        <div className="absolute inset-0 p-3 flex items-center" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
           <div className="flex items-center gap-2 text-white text-sm">
             <MapPin className="w-4 h-4" />
             <span className="font-medium">{cleanDestination}</span>
