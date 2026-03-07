@@ -150,12 +150,15 @@ export default function TripDetail() {
   const isServerGenerating = trip?.itinerary_status === 'generating' || trip?.itinerary_status === 'queued' || (itineraryDaysCount > 0 && !trip?.itinerary_data && trip?.itinerary_status !== 'ready' && (trip?.itinerary_status as string) !== 'generated');
   const [generationStalled, setGenerationStalled] = useState(false);
   const [resumingGeneration, setResumingGeneration] = useState(false);
+  const onReadyCalledRef = useRef(false);
 
   const generationPoller = useGenerationPoller({
     tripId: tripId || null,
     enabled: isServerGenerating && !generationStalled && !showGenerator,
     interval: 3000,
     onReady: async () => {
+      if (onReadyCalledRef.current) return;
+      onReadyCalledRef.current = true;
       setGenerationStalled(false);
       // Reload trip data to get completed itinerary
       if (!tripId) return;
@@ -163,6 +166,7 @@ export default function TripDetail() {
       if (data) {
         setTrip(data);
         setItineraryDaysCount(0); // Reset — full data is now in itinerary_data
+        setShowGenerator(false); // Ensure generator view is dismissed
         setCachedVersion(tripId, (data as any).itinerary_version ?? 1);
         toast.success('Your itinerary is ready! 🎉');
         if (user?.id) {
