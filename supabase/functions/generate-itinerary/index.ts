@@ -442,6 +442,7 @@ interface GenerationContext {
   // Phase 3: Premium features
   preBookedCommitments?: PreBookedCommitment[];
   mustDoActivities?: string;
+  interestCategories?: string[];
   mustHaves?: Array<{label: string; notes?: string}>;
   /** Whether this generation is triggered by Smart Finish enrichment mode */
   isSmartFinish?: boolean;
