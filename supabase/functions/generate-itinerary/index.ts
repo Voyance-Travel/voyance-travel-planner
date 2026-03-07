@@ -10443,6 +10443,7 @@ ${preferenceContext}
 ${tripIntentsContext}
 ${mustDoPrompt}
 ${mustHavesConstraintPrompt}
+${preBookedCommitmentsPrompt}
 ${previousDayActivities?.length ? `\nAvoid repeating these specific venues/activities (be creative and pick DIFFERENT ones): ${previousDayActivities.join(', ')}` : ''}
 
 CRITICAL REMINDERS:
