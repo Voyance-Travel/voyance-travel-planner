@@ -49,13 +49,13 @@ function useSimulatedProgress(realProgress: number, isActive: boolean) {
       return;
     }
 
-    // Tick up slowly: 1-2% every 2s, max 15%
+    // Tick up faster initially for better perceived responsiveness: 3% every 1.5s, max 18%
     intervalRef.current = setInterval(() => {
       setSimulated(prev => {
-        if (prev >= 15) return prev;
-        return prev + (prev < 5 ? 2 : 1);
+        if (prev >= 18) return prev;
+        return prev + (prev < 6 ? 3 : prev < 12 ? 2 : 1);
       });
-    }, 2000);
+    }, 1500);
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);

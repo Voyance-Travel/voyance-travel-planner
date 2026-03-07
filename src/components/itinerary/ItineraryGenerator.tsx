@@ -120,11 +120,36 @@ export function ItineraryGenerator({
     cancel,
   } = useItineraryGeneration();
 
-  // Server-side generation poller
+  // Get entitlements
+  const { data: entitlements, isPaid } = useEntitlements();
+
+  // Out of credits modal
+  const { showOutOfCredits } = useOutOfCredits();
+  const queryClient = useQueryClient();
+
+  // Get auth state
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  // Get preference completion status
+  const { data: preferenceStatus } = usePreferenceCompletion();
+  const showPreferenceNudge = preferenceStatus && 
+    (preferenceStatus.personalizationLevel === 'none' || preferenceStatus.personalizationLevel === 'basic');
+
+  const [hasStarted, setHasStarted] = useState(false);
+  const [showNudgeCard, setShowNudgeCard] = useState(true);
+  const [showGenericWarning, setShowGenericWarning] = useState(false);
+  const [showCostConfirm, setShowCostConfirm] = useState(false);
+  const [prePhase, setPrePhase] = useState<Extract<GenerationStep, 'gathering-dna' | 'personalizing' | 'preparing'> | null>(null);
+
+  // Server-side generation poller — start polling as soon as generation has started
+  // (even during prePhase) so progress updates aren't missed and GenerationPhases
+  // doesn't remount and lose simulated progress state
   const [serverGenActive, setServerGenActive] = useState(false);
+  const pollerEnabled = serverGenActive || (hasStarted && !!prePhase);
   const poller = useGenerationPoller({
-    tripId: serverGenActive ? tripId : null,
-    enabled: serverGenActive,
+    tripId: pollerEnabled ? tripId : null,
+    enabled: pollerEnabled,
     interval: 3000,
     onReady: async () => {
       console.log('[ItineraryGenerator] onReady fired — fetching completed itinerary');
@@ -179,27 +204,6 @@ export function ItineraryGenerator({
     },
   });
 
-  // Get entitlements
-  const { data: entitlements, isPaid } = useEntitlements();
-
-  // Out of credits modal
-  const { showOutOfCredits } = useOutOfCredits();
-  const queryClient = useQueryClient();
-
-  // Get auth state
-  const { user } = useAuth();
-  const navigate = useNavigate();
-
-  // Get preference completion status
-  const { data: preferenceStatus } = usePreferenceCompletion();
-  const showPreferenceNudge = preferenceStatus && 
-    (preferenceStatus.personalizationLevel === 'none' || preferenceStatus.personalizationLevel === 'basic');
-
-  const [hasStarted, setHasStarted] = useState(false);
-  const [showNudgeCard, setShowNudgeCard] = useState(true);
-  const [showGenericWarning, setShowGenericWarning] = useState(false);
-  const [showCostConfirm, setShowCostConfirm] = useState(false);
-  const [prePhase, setPrePhase] = useState<Extract<GenerationStep, 'gathering-dna' | 'personalizing' | 'preparing'> | null>(null);
   const autoStartTriggered = useRef(false);
   const gateResultRef = useRef<GateResult | null>(null);
 
@@ -933,15 +937,25 @@ export function ItineraryGenerator({
     );
   }
 
-  // Pre-generation phases
-  if (prePhase) {
+  // Pre-generation phases OR server-side generation — unified render to prevent
+  // GenerationPhases from remounting (which resets the simulated progress to 0%)
+  if (prePhase || serverGenActive) {
     return (
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         className="py-10"
       >
-        <GenerationPhases currentStep={prePhase} destination={destination} totalDays={totalDaysEstimate} tripId={tripId} completedDays={poller.completedDays} generatedDaysList={poller.generatedDaysList} isComplete={poller.isReady} progress={poller.progress} />
+        <GenerationPhases
+          currentStep={prePhase || 'preparing'}
+          destination={destination}
+          totalDays={totalDaysEstimate}
+          tripId={tripId}
+          completedDays={poller.completedDays}
+          generatedDaysList={poller.generatedDaysList}
+          isComplete={poller.isReady}
+          progress={poller.progress}
+        />
         <div className="flex justify-center mt-6">
           <Button
             variant="ghost"
@@ -949,30 +963,6 @@ export function ItineraryGenerator({
             onClick={() => {
               reset();
               setPrePhase(null);
-              setHasStarted(false);
-              onCancel?.();
-            }}
-          >
-            Cancel
-          </Button>
-        </div>
-      </motion.div>
-    );
-  }
-
-  // =========================================================================
-  // SERVER-SIDE GENERATION: dedicated progress view using poller data
-  // =========================================================================
-  if (serverGenActive) {
-    return (
-      <div className="py-10">
-        <GenerationPhases tripId={tripId} totalDays={totalDaysEstimate} destination={destination} currentStep="preparing" completedDays={poller.completedDays} generatedDaysList={poller.generatedDaysList} isComplete={poller.isReady} progress={poller.progress} />
-        <div className="flex justify-center mt-6">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              reset();
               setServerGenActive(false);
               setHasStarted(false);
               onCancel?.();
@@ -981,7 +971,7 @@ export function ItineraryGenerator({
             Cancel
           </Button>
         </div>
-      </div>
+      </motion.div>
     );
   }
 

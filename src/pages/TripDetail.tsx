@@ -156,11 +156,13 @@ export default function TripDetail() {
 
   const generationPoller = useGenerationPoller({
     tripId: tripId || null,
-    enabled: isServerGenerating && !generationStalled && !showGenerator,
+    enabled: isServerGenerating && !generationStalled,
     interval: 3000,
     onReady: async () => {
       if (onReadyCalledRef.current) return;
       onReadyCalledRef.current = true;
+      // If ItineraryGenerator is active, let it handle the transition via its own poller
+      const generatorHandling = showGenerator;
       setGenerationStalled(false);
       // Reload trip data to get completed itinerary
       if (!tripId) return;
@@ -170,7 +172,10 @@ export default function TripDetail() {
         setItineraryDaysCount(0); // Reset — full data is now in itinerary_data
         setShowGenerator(false); // Ensure generator view is dismissed
         setCachedVersion(tripId, (data as any).itinerary_version ?? 1);
-        toast.success('Your itinerary is ready! 🎉');
+        // Only show toast if ItineraryGenerator isn't handling it (avoids duplicate toasts)
+        if (!generatorHandling) {
+          toast.success('Your itinerary is ready! 🎉');
+        }
         if (user?.id) {
           queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
           queryClient.invalidateQueries({ queryKey: ['entitlements', user.id] });
