@@ -83,6 +83,9 @@ export function useGenerationPoller({
   const onReadyCalledRef = useRef(false);
   // High-water mark: completedDays should never decrease during a generation cycle
   const completedDaysHWM = useRef(0);
+  // Tab visibility: suppress stalled/failed transitions briefly after tab resumes
+  const justResumedRef = useRef(false);
+  const resumedAtRef = useRef(0);
 
   const poll = useCallback(async () => {
     if (!tripId) return;
@@ -157,6 +160,14 @@ export function useGenerationPoller({
       }
 
       if (itineraryStatus === 'failed') {
+        // Suppress failed transition if we just resumed from a background tab (grace period)
+        const inResumeGrace = justResumedRef.current && (Date.now() - resumedAtRef.current < 5000);
+        if (inResumeGrace) {
+          // Don't show failed yet — stay polling, the next cycle will confirm
+          setState({ status: 'polling', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList });
+          return;
+        }
+
         stalledFiredRef.current = false;
         autoResumeAttemptedRef.current = false;
         const genError = (meta.generation_error as string) || 'Generation failed';
@@ -174,27 +185,31 @@ export function useGenerationPoller({
       }
 
       // Still generating — check for stall using BOTH heartbeat and itinerary_days timestamps
+      // BUT skip stall detection during resume grace period (just came back from background tab)
+      const inResumeGrace = justResumedRef.current && (Date.now() - resumedAtRef.current < 5000);
       let isStalled = false;
 
-      // Method 1: Heartbeat-based stall detection
-      const heartbeat = meta.generation_heartbeat as string | undefined;
-      const startedAt = meta.generation_started_at as string | undefined;
-      const referenceTime = heartbeat || startedAt;
+      if (!inResumeGrace) {
+        // Method 1: Heartbeat-based stall detection
+        const heartbeat = meta.generation_heartbeat as string | undefined;
+        const startedAt = meta.generation_started_at as string | undefined;
+        const referenceTime = heartbeat || startedAt;
 
-      if (referenceTime) {
-        const elapsed = Date.now() - new Date(referenceTime).getTime();
-        if (elapsed > STALE_THRESHOLD_MS) {
-          isStalled = true;
-        }
-      }
-
-      // Method 2: itinerary_days-based stall detection (if days exist but no new one in 5min)
-      if (!isStalled && dayCount > 0 && dayCount < (totalDays || Infinity)) {
-        const lastDay = daysList[daysList.length - 1];
-        if (lastDay?.created_at) {
-          const lastCreated = new Date(lastDay.created_at).getTime();
-          if (Date.now() - lastCreated > DAY_STALL_THRESHOLD_MS) {
+        if (referenceTime) {
+          const elapsed = Date.now() - new Date(referenceTime).getTime();
+          if (elapsed > STALE_THRESHOLD_MS) {
             isStalled = true;
+          }
+        }
+
+        // Method 2: itinerary_days-based stall detection (if days exist but no new one in 5min)
+        if (!isStalled && dayCount > 0 && dayCount < (totalDays || Infinity)) {
+          const lastDay = daysList[daysList.length - 1];
+          if (lastDay?.created_at) {
+            const lastCreated = new Date(lastDay.created_at).getTime();
+            if (Date.now() - lastCreated > DAY_STALL_THRESHOLD_MS) {
+              isStalled = true;
+            }
           }
         }
       }
@@ -267,6 +282,23 @@ export function useGenerationPoller({
       poll();
     }, interval);
 
+    // Tab visibility handler: when user returns from background, immediately poll
+    // and suppress stalled/failed transitions for a grace period
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        justResumedRef.current = true;
+        resumedAtRef.current = Date.now();
+        // Immediate fresh poll before any error state can flash
+        poll().finally(() => {
+          // Clear the resume flag after grace period
+          setTimeout(() => {
+            justResumedRef.current = false;
+          }, 5000);
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     // Realtime subscription for instant updates when new days are inserted
     const channel = supabase
       .channel(`gen-progress-${tripId}`)
@@ -300,6 +332,7 @@ export function useGenerationPoller({
 
     return () => {
       clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibility);
       supabase.removeChannel(channel);
     };
   }, [enabled, tripId, interval, poll]);
