@@ -127,18 +127,45 @@ export function ItineraryGenerator({
     enabled: serverGenActive,
     interval: 3000,
     onReady: async () => {
-      setServerGenActive(false);
+      console.log('[ItineraryGenerator] onReady fired — fetching completed itinerary');
       setPrePhase(null);
-      // Fetch the completed trip data
-      const { data: tripData } = await supabase.from('trips').select('itinerary_data').eq('id', tripId).single();
-      const itData = (tripData?.itinerary_data ?? {}) as Record<string, unknown>;
-      const completedDays = (itData.days as GeneratedDay[]) || [];
-      const gr = gateResultRef.current;
-      if (gr && gr.creditsCharged > 0) {
-        toast.success(`Trip generated! ${gr.creditsCharged} credits used`, { duration: 5000 });
+      try {
+        // Fetch the completed trip data — retry once if itinerary_data is empty
+        let completedDays: GeneratedDay[] = [];
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const { data: tripData, error: fetchError } = await supabase
+            .from('trips')
+            .select('itinerary_data')
+            .eq('id', tripId)
+            .single();
+          if (fetchError) {
+            console.error('[ItineraryGenerator] Failed to fetch trip data:', fetchError);
+            break;
+          }
+          const itData = (tripData?.itinerary_data ?? {}) as Record<string, unknown>;
+          completedDays = (itData.days as GeneratedDay[]) || [];
+          if (completedDays.length > 0) break;
+          // If empty, wait briefly and retry — backend may still be assembling
+          if (attempt === 0) {
+            console.log('[ItineraryGenerator] itinerary_data.days empty, retrying in 2s...');
+            await new Promise(r => setTimeout(r, 2000));
+          }
+        }
+        const gr = gateResultRef.current;
+        if (gr && gr.creditsCharged > 0) {
+          toast.success(`Trip generated! ${gr.creditsCharged} credits used`, { duration: 5000 });
+        }
+        // CRITICAL: Call onComplete BEFORE setting serverGenActive=false
+        // so the parent transitions before this component unmounts
+        console.log('[ItineraryGenerator] Calling onComplete with', completedDays.length, 'days');
+        onComplete(completedDays, undefined, gr?.isFirstTrip);
+      } catch (err) {
+        console.error('[ItineraryGenerator] onReady error:', err);
+        // Still try to transition — parent can reload from DB
+        onComplete([], undefined, gateResultRef.current?.isFirstTrip);
+      } finally {
+        setServerGenActive(false);
       }
-      // Always call onComplete so the parent transitions out of the generation view
-      onComplete(completedDays, undefined, gr?.isFirstTrip);
     },
     onFailed: (err) => {
       setServerGenActive(false);
