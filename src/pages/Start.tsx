@@ -2475,7 +2475,7 @@ export default function Start() {
           transportation_preferences: isMultiCity && multiCityTransports.length > 0 ? multiCityTransports as any : null,
           creation_source: isMultiCity ? 'multi_city' : 'single_city',
           status: 'draft',
-          metadata: {
+          metadata: ({
             isFirstTimeVisitor,
             firstTimePerCity: isMultiCity && Object.keys(firstTimePerCity).length > 0 ? firstTimePerCity : null,
             mustDoActivities: [
@@ -2490,7 +2490,7 @@ export default function Start() {
             celebrationDay: celebrationDay || null,
             pacing: pacing || 'balanced',
             lastUpdated: new Date().toISOString(),
-          },
+          }) as any,
         })
         .select('id')
         .single();
