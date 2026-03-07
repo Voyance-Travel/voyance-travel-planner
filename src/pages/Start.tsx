@@ -774,7 +774,7 @@ function TripDetailsStep({
             </label>
             <div className="flex flex-wrap gap-2">
               {Array.from(
-                { length: Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1 },
+                { length: Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) },
                 (_, i) => i + 1
               ).map((day) => (
                 <button

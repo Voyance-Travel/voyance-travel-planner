@@ -414,7 +414,7 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
 
   const datesValid = startDate && endDate && startDate <= endDate;
   const totalDays = startDate && endDate 
-    ? Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1 
+    ? Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) 
     : 0;
 
   return (
