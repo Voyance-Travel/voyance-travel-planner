@@ -162,13 +162,8 @@ export function GenerationPhases({
     >
       {/* Header */}
       <div className="text-center mb-6">
-        <motion.div
-          animate={{ scale: [1, 1.1, 1] }}
-          transition={{ duration: 2, repeat: Infinity }}
-          className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mb-3"
-        >
-          <Sparkles className="h-6 w-6 text-primary" />
-        </motion.div>
+        {/* Airplane/Globe Animation */}
+        <GenerationAnimation progress={displayProgress} className="mb-2" />
 
         <h2 className="text-xl font-serif font-bold text-foreground mb-1">
           {headerText}
