@@ -12,7 +12,8 @@ const config: CapacitorConfig = {
       '*.supabase.co',
       '*.supabase.in',
       'accounts.google.com',
-      'appleid.apple.com'
+      'appleid.apple.com',
+      'cdn.apple-mapkit.com'
     ]
   },
   ios: {

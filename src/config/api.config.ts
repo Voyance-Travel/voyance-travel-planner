@@ -51,7 +51,9 @@ export const CONFIG = {
     useRealFlights: true,      // Amadeus via Cloud edge function
     useRealHotels: false,      // Amadeus removed — hotels now AI-suggested via credits
     enablePayments: true,      // Stripe via Cloud edge function
-    enableMaps: !!GOOGLE_MAPS_API_KEY,
+    enableMaps: true,          // Apple MapKit JS (primary)
+    enableAppleMaps: true,     // Apple MapKit JS is now the primary map provider
+    enableGoogleMaps: false,   // Google Maps disabled, Apple Maps is primary
     enableActivities: true,    // Viator via Cloud edge function
   },
   
