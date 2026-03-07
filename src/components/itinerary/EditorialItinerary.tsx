@@ -8013,7 +8013,7 @@ function ActivityRow({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-36">
               {onRemove && (
-                <DropdownMenuItem onClick={() => onRemove(dayIndex, activityIndex)} className="text-destructive text-xs">
+                <DropdownMenuItem onClick={() => onRemove(dayIndex, activity.id)} className="text-destructive text-xs">
                   <Trash2 className="h-3 w-3 mr-1.5" />
                   Remove
                 </DropdownMenuItem>
