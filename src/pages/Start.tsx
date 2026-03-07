@@ -2930,6 +2930,13 @@ export default function Start() {
         </div>
       </section>
 
+          {/* Generation Rules — Structured Constraints */}
+          <GenerationRules
+            rules={generationRules}
+            onRulesChange={onGenerationRulesChange}
+            startDate={startDate}
+            endDate={endDate}
+          />
 
       {/* Travel DNA Prompt Dialog */}
       <Dialog open={showDNAPrompt} onOpenChange={setShowDNAPrompt}>
