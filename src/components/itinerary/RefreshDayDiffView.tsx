@@ -86,7 +86,7 @@ export function RefreshDayDiffView({
           )}
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-foreground truncate">
-              Refresh Day {dayNumber} — {hasActionableChanges ? 'Proposed Changes' : 'All Good!'}
+              Refresh Day {dayNumber}: {hasActionableChanges ? 'Proposed Changes' : 'All Good!'}
             </h3>
             {hasActionableChanges && (
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -182,7 +182,7 @@ export function RefreshDayDiffView({
                   {unchangedActivities.map((c) => (
                     <div key={c.id} className="flex items-center gap-2 text-xs text-muted-foreground py-1 px-2">
                       <span>{c.icon}</span>
-                      <span>{c.activityTitle} — no changes needed</span>
+                      <span>{c.activityTitle}, no changes needed</span>
                     </div>
                   ))}
                 </div>

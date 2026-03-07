@@ -582,7 +582,7 @@ Multi-city bookings with multiple flights will all be extracted."
                         />
                         {seg.isLayoverArrival ? (
                           <p className="text-[10px] text-amber-600 mt-0.5">
-                            Connection — continues to {getNextDestinationCity(idx)}
+                            Connection, continues to {getNextDestinationCity(idx)}
                           </p>
                         ) : idx === 0 ? (
                           <p className="text-[10px] text-muted-foreground mt-0.5">

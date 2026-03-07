@@ -553,7 +553,7 @@ export function TripDateEditor({
                           </div>
                           <div className="flex-1 min-w-0">
                             <span className="font-medium text-foreground">Day {day.dayNumber}</span>
-                            {day.theme && <span className="text-muted-foreground"> — {day.theme}</span>}
+                            {day.theme && <span className="text-muted-foreground"> · {day.theme}</span>}
                           </div>
                           <span className="text-xs text-muted-foreground shrink-0">
                             {activityCount} activit{activityCount !== 1 ? 'ies' : 'y'}

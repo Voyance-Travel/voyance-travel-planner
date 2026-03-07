@@ -469,7 +469,7 @@ export default function MultiLegFlightEditor({
             ...slot,
             isExpanded: true,
             flight: { ...slot.flight, ...matchedLeg },
-            connectionLegs: undefined, // Don't nest — we'll add as separate slots
+            connectionLegs: undefined, // Don't nest - we'll add as separate slots
           };
           changed = true;
         }

@@ -85,7 +85,7 @@ export function HelpButton({ tourActive, onRetakeTour }: HelpButtonProps) {
                   <Icon className="h-3.5 w-3.5 mt-0.5 text-primary shrink-0" />
                   <div>
                     <span className="text-xs font-medium">{label}</span>
-                    <span className="text-xs text-muted-foreground"> — {desc}</span>
+                    <span className="text-xs text-muted-foreground"> · {desc}</span>
                   </div>
                 </div>
               ))}
