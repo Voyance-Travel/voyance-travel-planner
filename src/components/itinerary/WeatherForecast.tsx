@@ -282,6 +282,15 @@ export function WeatherForecast({ destination, startDate, endDate, tripDays }: W
               </p>
             </div>
           </div>
+
+          {/* Apple Weather Attribution (required by Apple's terms) */}
+          {weather.source === 'weatherkit' && (
+            <div className="px-6 pb-3">
+              <p className="text-[10px] text-muted-foreground/60 text-center">
+                Weather data provided by  Apple Weather
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </motion.div>
