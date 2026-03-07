@@ -1528,6 +1528,7 @@ export default function TripDetail() {
                       travelers={trip.travelers || 1}
                       isEditable={false}
                       isPreview={true}
+                      itineraryStatus="generating"
                     />
                   </div>
                 </ErrorBoundary>
