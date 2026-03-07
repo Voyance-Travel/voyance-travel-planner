@@ -74,7 +74,7 @@ export function useProgressiveItinerary() {
     // Calculate total days
     const start = new Date(params.startDate);
     const end = new Date(params.endDate);
-    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
 
     setProgress({
       status: 'generating',

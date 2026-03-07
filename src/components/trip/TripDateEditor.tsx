@@ -110,7 +110,7 @@ export function TripDateEditor({
 
   const currentStart = parseLocalDate(startDate);
   const currentEnd = parseLocalDate(endDate);
-  const currentDays = differenceInDays(currentEnd, currentStart) + 1;
+  const currentDays = differenceInDays(currentEnd, currentStart);
 
   const isMultiCity = cities && cities.length > 1;
 

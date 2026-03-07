@@ -67,7 +67,7 @@ serve(async (req) => {
     const start = new Date(trip.start_date);
     const end = new Date(trip.end_date);
     const totalDays =
-      Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
     const currentDay = Math.min(
       Math.max(
         1,
