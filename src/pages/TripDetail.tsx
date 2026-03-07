@@ -34,6 +34,7 @@ import { VersionConflictDialog } from '@/components/trip/VersionConflictDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { setCachedVersion, clearCachedVersion, saveItineraryOptimistic, fetchAndCacheVersion } from '@/services/itineraryOptimisticUpdate';
 import { useScheduleNotifications } from '@/services/tripNotificationsAPI';
+import { useScrollLockCleanup } from '@/hooks/useScrollLockCleanup';
 import { useTripLearning } from '@/services/tripLearningsAPI';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Tables } from '@/integrations/supabase/types';
