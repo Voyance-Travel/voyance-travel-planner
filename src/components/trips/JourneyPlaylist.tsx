@@ -76,7 +76,7 @@ function daysBetween(start: string, end: string): number {
 
 function JourneyLegCard({ trip, isLast }: { trip: JourneyTrip; isLast: boolean }) {
   const navigate = useNavigate();
-  const { imageUrl } = useTripHeroImage(trip.destination);
+  const { imageUrl } = useTripHeroImage({ destination: trip.destination });
   const fallback = getDestinationImage(trip.destination.toLowerCase());
   const heroImg = imageUrl || fallback;
 
