@@ -53,6 +53,8 @@ import { parseEditorialDays, parseAssistantDays } from '@/utils/itineraryParser'
 import { normalizeFlightSelection } from '@/utils/normalizeFlightSelection';
 import { injectHotelActivitiesIntoDays, injectMultiHotelActivities } from '@/utils/injectHotelActivities';
 import { cn } from '@/lib/utils';
+import { JourneyBreadcrumb } from '@/components/trips/JourneyBreadcrumb';
+import { JourneyUpNext } from '@/components/trips/JourneyUpNext';
 
 type Trip = Tables<'trips'>;
 type TripActivity = Tables<'trip_activities'>;
@@ -1327,9 +1329,19 @@ export default function TripDetail() {
         <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/30 to-transparent" />
       </div>
       
+      {/* Journey Breadcrumb — only for linked journey trips */}
+      {trip.journey_id && trip.journey_order && trip.journey_total_legs && (
+        <JourneyBreadcrumb
+          journeyId={trip.journey_id}
+          journeyName={trip.journey_name}
+          journeyOrder={trip.journey_order}
+          journeyTotalLegs={trip.journey_total_legs}
+          currentTripId={trip.id}
+        />
+      )}
+
       <section className="pb-16 pt-4 sm:pt-6 relative z-10">
         <div className="max-w-4xl mx-auto px-4">
-          {/* Trip title with subtle status badge */}
           {(() => {
             const isPastTrip = isAfter(new Date(), parseLocalDate(effectiveEndDate));
             const statusLabel = isLiveTrip ? 'Active' : isPastTrip && trip.status === 'draft' ? 'Past' : (trip.status || 'draft');
@@ -2056,6 +2068,16 @@ export default function TripDetail() {
             <TripPhotoGallery tripId={trip.id} />
             </ErrorBoundary>
           </div>
+
+          {/* Journey "Up Next" portal — only for linked journey trips */}
+          {trip.journey_id && trip.journey_order && trip.journey_total_legs && (
+            <JourneyUpNext
+              journeyId={trip.journey_id}
+              journeyName={trip.journey_name}
+              journeyOrder={trip.journey_order}
+              journeyTotalLegs={trip.journey_total_legs}
+            />
+          )}
 
         </div>
       </section>
