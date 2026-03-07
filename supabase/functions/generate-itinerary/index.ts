@@ -4030,10 +4030,13 @@ Make it conversational and actionable, not a bullet list. The AI reading this sh
 }
 
 function calculateDays(startDate: string, endDate: string): number {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+  // Timezone-safe: parse as local dates to avoid UTC off-by-one
+  const [sy, sm, sd] = startDate.split('-').map(Number);
+  const [ey, em, ed] = endDate.split('-').map(Number);
+  const start = new Date(sy, sm - 1, sd);
+  const end = new Date(ey, em - 1, ed);
   // Exclusive end-date standard: endDate is departure day, not an activity day
-  return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 function formatDate(startDate: string, dayOffset: number): string {
