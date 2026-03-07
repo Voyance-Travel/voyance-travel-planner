@@ -81,6 +81,8 @@ export function useGenerationPoller({
   const autoResumeAttemptedRef = useRef(false);
   // Guard: only fire onReady once per generation cycle
   const onReadyCalledRef = useRef(false);
+  // High-water mark: completedDays should never decrease during a generation cycle
+  const completedDaysHWM = useRef(0);
 
   const poll = useCallback(async () => {
     if (!tripId) return;
@@ -123,8 +125,11 @@ export function useGenerationPoller({
       }));
       const dayCount = daysResult.count || daysList.length;
 
-      // Use the BETTER of metadata count vs itinerary_days count
-      const completedDays = Math.max(metaCompletedDays, dayCount);
+      // Use the BETTER of metadata count vs itinerary_days count,
+      // and never let completedDays decrease (high-water mark prevents backward jumps)
+      const rawCompletedDays = Math.max(metaCompletedDays, dayCount);
+      const completedDays = Math.max(rawCompletedDays, completedDaysHWM.current);
+      completedDaysHWM.current = completedDays;
       const progress = totalDays > 0 ? Math.round((completedDays / totalDays) * 100) : 0;
 
       // Check for completion — backend uses 'ready', some docs say 'generated'

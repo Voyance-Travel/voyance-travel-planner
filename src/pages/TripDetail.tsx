@@ -8,6 +8,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { format, isAfter, isBefore, differenceInDays, addDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { Loader2, Calendar, MapPin, ArrowLeft, Edit, Sparkles, CheckCircle } from 'lucide-react';
+import { GenerationPhases } from '@/components/planner/shared/GenerationPhases';
 import { TripDateEditor, type DateChangeResult } from '@/components/trip/TripDateEditor';
 import MainLayout from '@/components/layout/MainLayout';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
