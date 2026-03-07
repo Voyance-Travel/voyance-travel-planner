@@ -93,12 +93,12 @@ function SortableItem({ id, index, totalItems, isHighlighted, disabled, onMoveUp
         </div>
       )}
 
-      {/* Mobile: Up/Down reorder buttons — always visible */}
+      {/* Mobile: Up/Down reorder buttons — 44px touch targets per Apple HIG */}
       {!disabled && (
         <div
           className={cn(
             "absolute right-1 top-1/2 -translate-y-1/2 z-10",
-            "flex sm:hidden flex-col gap-0.5"
+            "flex sm:hidden flex-col gap-1"
           )}
         >
           <button
@@ -106,28 +106,28 @@ function SortableItem({ id, index, totalItems, isHighlighted, disabled, onMoveUp
             onClick={(e) => { e.stopPropagation(); onMoveUp(); }}
             disabled={index === 0}
             className={cn(
-              "flex items-center justify-center w-8 h-8 rounded-md",
-              "bg-background/90 backdrop-blur-sm border border-border/60 shadow-sm",
-              "active:bg-muted transition-colors",
+              "flex items-center justify-center w-11 h-11 rounded-lg",
+              "bg-background/95 backdrop-blur-sm border border-border/60 shadow-md",
+              "active:bg-muted active:scale-95 transition-all touch-manipulation",
               "disabled:opacity-20 disabled:pointer-events-none"
             )}
             aria-label="Move up"
           >
-            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            <ChevronUp className="h-5 w-5 text-muted-foreground" />
           </button>
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onMoveDown(); }}
             disabled={index === totalItems - 1}
             className={cn(
-              "flex items-center justify-center w-8 h-8 rounded-md",
-              "bg-background/90 backdrop-blur-sm border border-border/60 shadow-sm",
-              "active:bg-muted transition-colors",
+              "flex items-center justify-center w-11 h-11 rounded-lg",
+              "bg-background/95 backdrop-blur-sm border border-border/60 shadow-md",
+              "active:bg-muted active:scale-95 transition-all touch-manipulation",
               "disabled:opacity-20 disabled:pointer-events-none"
             )}
             aria-label="Move down"
           >
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            <ChevronDown className="h-5 w-5 text-muted-foreground" />
           </button>
         </div>
       )}
