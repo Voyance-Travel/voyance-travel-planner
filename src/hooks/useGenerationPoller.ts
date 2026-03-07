@@ -120,7 +120,7 @@ export function useGenerationPoller({
         title: d.title || `Day ${d.day_number}`,
         theme: d.theme || '',
         description: d.description || '',
-        activities: d.activities || [],
+        activities: [],
         created_at: d.created_at,
       }));
       const dayCount = daysResult.count || daysList.length;
