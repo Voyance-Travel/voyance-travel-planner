@@ -1210,7 +1210,7 @@ function FlightHotelStep({
                     </h4>
                     
                     {/* Route */}
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <Label className="text-xs text-muted-foreground">From</Label>
                         <AirportAutocomplete
@@ -1270,7 +1270,7 @@ function FlightHotelStep({
                         </Button>
                       </CollapsibleTrigger>
                       <CollapsibleContent className="space-y-3 pt-2">
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div>
                             <Label className="text-xs text-muted-foreground">Airline</Label>
                             <AirlineAutocomplete
@@ -1328,7 +1328,7 @@ function FlightHotelStep({
                               </div>
                             )}
                             <CollapsibleContent className="space-y-3 pt-2">
-                              <div className="grid grid-cols-2 gap-3">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
                                   <Label className="text-xs text-muted-foreground">From</Label>
                                   <AirportAutocomplete
@@ -1395,7 +1395,7 @@ function FlightHotelStep({
                                   />
                                 </div>
                               </div>
-                              <div className="grid grid-cols-2 gap-3">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
                                   <Label className="text-xs text-muted-foreground">Airline</Label>
                                   <AirlineAutocomplete
@@ -1451,7 +1451,7 @@ function FlightHotelStep({
                       </Button>
                     </CollapsibleTrigger>
                     <CollapsibleContent className="space-y-3 pt-3 border-t border-border mt-3">
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <Label className="text-xs text-muted-foreground">From</Label>
                           <AirportAutocomplete
