@@ -9091,7 +9091,9 @@ ${'='.repeat(60)}
     if (action === 'generate-day' || action === 'regenerate-day') {
       // Extract params BUT NOT userId from request body
       const { tripId, dayNumber, totalDays, destination, destinationCountry, date, travelers, tripType, budgetTier, preferences, previousDayActivities, keepActivities, currentActivities,
-        isMultiCity: paramIsMultiCity, isTransitionDay: paramIsTransitionDay, transitionFrom: paramTransitionFrom, transitionTo: paramTransitionTo, transitionMode: paramTransitionMode } = params;
+        isMultiCity: paramIsMultiCity, isTransitionDay: paramIsTransitionDay, transitionFrom: paramTransitionFrom, transitionTo: paramTransitionTo, transitionMode: paramTransitionMode,
+        mustDoActivities: paramMustDoActivities, interestCategories: paramInterestCategories, generationRules: paramGenerationRules,
+        pacing: paramPacing, isFirstTimeVisitor: paramIsFirstTimeVisitor } = params;
       
       // PHASE 2 FIX: Use authenticated user ID as the canonical source of truth
       // This is the critical fix - frontend calls often omit userId, but auth token is always present
@@ -9390,61 +9392,101 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
         }
       }
 
-      // Load mustDoActivities from trip metadata (user research notes / paste field)
+      // Load personalization inputs from request body first, then fall back to trip metadata
       let mustDoPrompt = '';
+      let metadata: Record<string, unknown> | null = null;
       if (tripId) {
         const { data: tripMeta } = await supabase
           .from('trips')
           .select('metadata, creation_source')
           .eq('id', tripId)
           .single();
-        const metadata = tripMeta?.metadata as Record<string, unknown> | null;
-        // Handle both array (new picker) and string (legacy textarea) formats
-        const rawMustDo = metadata?.mustDoActivities;
-        const mustDoActivities = Array.isArray(rawMustDo) ? rawMustDo.join(', ') : (rawMustDo as string || '');
-        const interestCategories = (metadata?.interestCategories as string[]) || [];
-        const isSmartFinish = metadata?.smartFinishMode === true || (metadata?.smartFinishSource || '').toString().includes('manual_builder');
-        const smartFinishRequested = !!metadata?.smartFinishRequestedAt || isSmartFinish;
-        if (mustDoActivities.trim()) {
-          const forceAllMust = !!isSmartFinish || !!smartFinishRequested;
-          const mustDoAnalysis = parseMustDoInput(mustDoActivities, destination, forceAllMust);
-          if (mustDoAnalysis.length > 0) {
-            const scheduled = scheduleMustDos(mustDoAnalysis, totalDays);
-            // Only include items relevant to this day
-            const dayItems = scheduled.scheduled.filter(s => s.assignedDay === dayNumber);
-            if (dayItems.length > 0) {
-              mustDoPrompt = `\n## 🚨 USER'S MUST-DO VENUES FOR DAY ${dayNumber} (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED these venues. You MUST include them:\n${dayItems.map(item => `- ${item.priority.name} (${item.priority.priority})`).join('\n')}\n\nRULES:\n- Include ALL listed venues by name in this day's itinerary\n- Only add AI recommendations to fill remaining slots\n`;
-            } else {
-              // No items specifically for this day, but include unschedulable ones as suggestions
-              const unscheduledItems = scheduled.unschedulable || [];
-              if (unscheduledItems.length > 0) {
-                mustDoPrompt = `\n## User's Researched Venues (try to include if appropriate)\n${unscheduledItems.map(u => `- ${u.priority.name} (${u.priority.priority})`).join('\n')}\n`;
-              }
-            }
-            console.log(`[generate-day] Must-do activities parsed: ${mustDoAnalysis.length} items, ${dayItems.length} for day ${dayNumber}`);
+        metadata = (tripMeta?.metadata as Record<string, unknown> | null) || null;
+      }
+
+      const requestMustDoText = Array.isArray(paramMustDoActivities)
+        ? paramMustDoActivities.join(', ')
+        : (typeof paramMustDoActivities === 'string' ? paramMustDoActivities : '');
+
+      const mustDoActivities = requestMustDoText || (() => {
+        const raw = metadata?.mustDoActivities;
+        return Array.isArray(raw) ? raw.join(', ') : (raw as string || '');
+      })();
+
+      const interestCategories = (
+        Array.isArray(paramInterestCategories) && paramInterestCategories.length > 0
+          ? paramInterestCategories
+          : ((metadata?.interestCategories as string[]) || [])
+      );
+
+      const genRules = (
+        Array.isArray(paramGenerationRules) && paramGenerationRules.length > 0
+          ? paramGenerationRules
+          : ((metadata?.generationRules as any[]) || [])
+      );
+
+      const effectivePacing = typeof paramPacing === 'string'
+        ? paramPacing
+        : ((metadata?.pacing as string) || 'balanced');
+
+      const effectiveIsFirstTimeVisitor = typeof paramIsFirstTimeVisitor === 'boolean'
+        ? paramIsFirstTimeVisitor
+        : ((metadata?.isFirstTimeVisitor as boolean) ?? true);
+
+      const isSmartFinish = metadata?.smartFinishMode === true || (metadata?.smartFinishSource || '').toString().includes('manual_builder');
+      const smartFinishRequested = !!metadata?.smartFinishRequestedAt || isSmartFinish;
+
+      if (mustDoActivities.trim()) {
+        const forceAllMust = !!isSmartFinish || !!smartFinishRequested;
+        const mustDoAnalysis = parseMustDoInput(mustDoActivities, destination, forceAllMust);
+        if (mustDoAnalysis.length > 0) {
+          const scheduled = scheduleMustDos(mustDoAnalysis, totalDays);
+          // Only include items relevant to this day
+          const dayItems = scheduled.scheduled.filter(s => s.assignedDay === dayNumber);
+          if (dayItems.length > 0) {
+            mustDoPrompt = `\n## 🚨 USER'S MUST-DO VENUES FOR DAY ${dayNumber} (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED these venues. You MUST include them:\n${dayItems.map(item => `- ${item.priority.name} (${item.priority.priority})`).join('\n')}\n\nRULES:\n- Include ALL listed venues by name in this day's itinerary\n- Only add AI recommendations to fill remaining slots\n`;
           } else {
-            // Raw text fallback
-            mustDoPrompt = `\n## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)\n\nThe traveler has researched these specific venues. Include as many as possible in the itinerary:\n"${mustDoActivities.trim()}"\n`;
-            console.log(`[generate-day] Must-do raw text injected (${mustDoActivities.length} chars)`);
+            // No items specifically for this day, but include unschedulable ones as suggestions
+            const unscheduledItems = scheduled.unschedulable || [];
+            if (unscheduledItems.length > 0) {
+              mustDoPrompt = `\n## User's Researched Venues (try to include if appropriate)\n${unscheduledItems.map(u => `- ${u.priority.name} (${u.priority.priority})`).join('\n')}\n`;
+            }
           }
+          console.log(`[generate-day] Must-do activities parsed: ${mustDoAnalysis.length} items, ${dayItems.length} for day ${dayNumber}`);
+        } else {
+          // Raw text fallback
+          mustDoPrompt = `\n## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)\n\nThe traveler has researched these specific venues. Include as many as possible in the itinerary:\n"${mustDoActivities.trim()}"\n`;
+          console.log(`[generate-day] Must-do raw text injected (${mustDoActivities.length} chars)`);
         }
-        // Inject interest categories into prompt
-        if (interestCategories.length > 0) {
-          const categoryLabels: Record<string, string> = {
-            history: 'History & Museums', food: 'Food & Dining', shopping: 'Shopping',
-            nature: 'Parks & Nature', culture: 'Arts & Culture', nightlife: 'Nightlife',
-          };
-          const labels = interestCategories.map(c => categoryLabels[c] || c).join(', ');
-          mustDoPrompt += `\n## USER INTERESTS\nPrioritize activities in these categories: ${labels}. Lean heavily toward these when choosing between options.\n`;
-          console.log(`[generate-day] Interest categories injected: ${labels}`);
-        }
-        // Inject structured generation rules for per-day generation
-        const genRules = (metadata?.generationRules as any[]) || [];
-        if (genRules.length > 0) {
-          mustDoPrompt += formatGenerationRules(genRules);
-          console.log(`[generate-day] Generation rules injected: ${genRules.length} rules`);
-        }
-        }
+      }
+
+      // Inject interest categories into prompt
+      if (interestCategories.length > 0) {
+        const categoryLabels: Record<string, string> = {
+          history: 'History & Museums', food: 'Food & Dining', shopping: 'Shopping',
+          nature: 'Parks & Nature', culture: 'Arts & Culture', nightlife: 'Nightlife',
+        };
+        const labels = interestCategories.map(c => categoryLabels[c] || c).join(', ');
+        mustDoPrompt += `\n## USER INTERESTS\nThe user is especially interested in: ${labels}. Weight recommendations toward these categories.\n`;
+        console.log(`[generate-day] Interest categories injected: ${labels}`);
+      }
+
+      // Inject structured generation rules for per-day generation
+      if (genRules.length > 0) {
+        mustDoPrompt += formatGenerationRules(genRules);
+        console.log(`[generate-day] Generation rules injected: ${genRules.length} rules`);
+      }
+
+      // Inject explicit visitor-type and pacing constraints
+      mustDoPrompt += `\n## VISITOR TYPE\n${effectiveIsFirstTimeVisitor ? 'Traveler is a FIRST-TIME visitor. Prioritize iconic landmarks and essential highlights for this city.' : 'Traveler is a RETURNING visitor. Prioritize hidden gems, local favorites, and deeper neighborhood exploration over tourist staples.'}\n`;
+
+      const pacingGuidance: Record<string, string> = {
+        relaxed: 'PACING = RELAXED: Fewer activities with generous downtime and slower transitions.',
+        balanced: 'PACING = BALANCED: Normal day density with a healthy mix of activities and breathing room.',
+        packed: 'PACING = PACKED: Maximize meaningful activities while keeping sequencing realistic.',
+      };
+      const pacingInstruction = pacingGuidance[(effectivePacing || 'balanced').toLowerCase()] || pacingGuidance.balanced;
+      mustDoPrompt += `\n## PACING\n${pacingInstruction}\n`;
 
       let mustHavesConstraintPrompt = '';
       let preBookedCommitmentsPrompt = '';
