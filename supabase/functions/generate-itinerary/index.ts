@@ -444,6 +444,7 @@ interface GenerationContext {
   mustDoActivities?: string;
   interestCategories?: string[];
   mustHaves?: Array<{label: string; notes?: string}>;
+  generationRules?: Array<{type: string; days?: string[]; from?: string; to?: string; reason?: string; date?: string; description?: string; hotelName?: string; additionalGuests?: number; note?: string; text?: string}>;
   /** Whether this generation is triggered by Smart Finish enrichment mode */
   isSmartFinish?: boolean;
   /** Smart Finish was requested for this trip (anchors must still be preserved) */
@@ -4133,6 +4134,8 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     interestCategories: (trip.metadata?.interestCategories as string[]) || undefined,
     // Structured must-haves checklist (schedule constraints, hotel prefs, etc.)
     mustHaves: (trip.metadata?.mustHaves as Array<{label: string; notes?: string}>) || undefined,
+    // Structured generation rules (blocked time, events, hotel changes, guest changes)
+    generationRules: (trip.metadata?.generationRules as any[]) || undefined,
     // Pre-booked commitments (shows, reservations, tours with fixed times)
     preBookedCommitments: (trip.metadata?.preBookedCommitments as PreBookedCommitment[]) || undefined,
     firstTimePerCity: trip.metadata?.firstTimePerCity || undefined,
