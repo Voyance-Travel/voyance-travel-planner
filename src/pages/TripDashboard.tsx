@@ -813,7 +813,9 @@ export default function TripDashboard() {
         });
 
         // Map owned trips
-        const mappedOwned: Trip[] = (ownedData || []).map(row => ({
+        const mappedOwned: Trip[] = (ownedData || [])
+          .filter(row => !((row.metadata as any)?.splitIntoJourney))
+          .map(row => ({
           id: row.id,
           destination: row.destination,
           name: row.name,
