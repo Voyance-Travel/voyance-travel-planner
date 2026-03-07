@@ -1,8 +1,9 @@
 /**
  * Draggable Activity List
  * 
- * Desktop: drag-and-drop via @dnd-kit with visible grip handles.
- * Mobile: tap-based up/down arrow buttons (no drag — avoids scroll conflicts).
+ * Desktop: drag-and-drop via pointer with grip handle on hover.
+ * Mobile: long-press (500ms) on the entire card to initiate drag.
+ * No up/down buttons — reordering is drag-only (menu fallback exists in ⋯).
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
@@ -11,6 +12,7 @@ import {
   closestCenter,
   KeyboardSensor,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   DragEndEvent,
@@ -25,7 +27,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, ChevronUp, ChevronDown } from 'lucide-react';
+import { GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface DraggableActivityListProps<T extends { id: string }> {
@@ -38,16 +40,12 @@ interface DraggableActivityListProps<T extends { id: string }> {
 
 interface SortableItemProps {
   id: string;
-  index: number;
-  totalItems: number;
   isHighlighted: boolean;
   disabled?: boolean;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
   children: React.ReactNode;
 }
 
-function SortableItem({ id, index, totalItems, isHighlighted, disabled, onMoveUp, onMoveDown, children }: SortableItemProps) {
+function SortableItem({ id, isHighlighted, disabled, children }: SortableItemProps) {
   const {
     attributes,
     listeners,
@@ -69,7 +67,7 @@ function SortableItem({ id, index, totalItems, isHighlighted, disabled, onMoveUp
       style={style}
       className={cn(
         "relative group",
-        isDragging && "opacity-50",
+        isDragging && "opacity-50 scale-[1.02] shadow-lg rounded-lg",
         isHighlighted && "ring-2 ring-primary ring-offset-2 rounded-lg animate-pulse"
       )}
     >
@@ -93,43 +91,14 @@ function SortableItem({ id, index, totalItems, isHighlighted, disabled, onMoveUp
         </div>
       )}
 
-      {/* Mobile: Up/Down reorder buttons — 44px touch targets per Apple HIG */}
+      {/* Mobile: entire card is the drag target via TouchSensor long-press */}
       {!disabled && (
         <div
-          className={cn(
-            "absolute right-1 top-1/2 -translate-y-1/2 z-10",
-            "flex sm:hidden flex-col gap-1"
-          )}
-        >
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onMoveUp(); }}
-            disabled={index === 0}
-            className={cn(
-              "flex items-center justify-center w-11 h-11 rounded-lg",
-              "bg-background/95 backdrop-blur-sm border border-border/60 shadow-md",
-              "active:bg-muted active:scale-95 transition-all touch-manipulation",
-              "disabled:opacity-20 disabled:pointer-events-none"
-            )}
-            aria-label="Move up"
-          >
-            <ChevronUp className="h-5 w-5 text-muted-foreground" />
-          </button>
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onMoveDown(); }}
-            disabled={index === totalItems - 1}
-            className={cn(
-              "flex items-center justify-center w-11 h-11 rounded-lg",
-              "bg-background/95 backdrop-blur-sm border border-border/60 shadow-md",
-              "active:bg-muted active:scale-95 transition-all touch-manipulation",
-              "disabled:opacity-20 disabled:pointer-events-none"
-            )}
-            aria-label="Move down"
-          >
-            <ChevronDown className="h-5 w-5 text-muted-foreground" />
-          </button>
-        </div>
+          {...attributes}
+          {...listeners}
+          className="sm:hidden absolute inset-0 z-[5]"
+          style={{ touchAction: 'auto' }}
+        />
       )}
 
       {children}
@@ -146,9 +115,18 @@ function DraggableActivityListInner<T extends { id: string }>({
 }: DraggableActivityListProps<T>) {
   const [activeId, setActiveId] = useState<string | null>(null);
 
+  // Desktop: pointer with small distance threshold
   const pointerSensor = useSensor(PointerSensor, {
     activationConstraint: {
       distance: 8,
+    },
+  });
+
+  // Mobile: long-press (500ms delay) to distinguish from scrolling
+  const touchSensor = useSensor(TouchSensor, {
+    activationConstraint: {
+      delay: 500,
+      tolerance: 5,
     },
   });
   
@@ -156,7 +134,7 @@ function DraggableActivityListInner<T extends { id: string }>({
     coordinateGetter: sortableKeyboardCoordinates,
   });
 
-  const sensors = useSensors(pointerSensor, keyboardSensor);
+  const sensors = useSensors(pointerSensor, touchSensor, keyboardSensor);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(String(event.active.id));
@@ -181,12 +159,6 @@ function DraggableActivityListInner<T extends { id: string }>({
     setActiveId(null);
   };
 
-  const moveItem = useCallback((fromIndex: number, toIndex: number) => {
-    if (toIndex < 0 || toIndex >= items.length) return;
-    const newItems = arrayMove(items, fromIndex, toIndex);
-    onReorder(newItems);
-  }, [items, onReorder]);
-
   const activeItem = activeId ? items.find((item) => item.id === activeId) : null;
   const activeIndex = activeId ? items.findIndex((item) => item.id === activeId) : -1;
 
@@ -207,12 +179,8 @@ function DraggableActivityListInner<T extends { id: string }>({
             <SortableItem 
               key={item.id} 
               id={item.id}
-              index={index}
-              totalItems={items.length}
               isHighlighted={isHighlighted}
               disabled={disabled}
-              onMoveUp={() => moveItem(index, index - 1)}
-              onMoveDown={() => moveItem(index, index + 1)}
             >
               {renderItem(item, index, item.id === activeId, isHighlighted)}
             </SortableItem>
@@ -223,7 +191,7 @@ function DraggableActivityListInner<T extends { id: string }>({
       {/* Drag Overlay - shows the item being dragged */}
       <DragOverlay>
         {activeItem && activeIndex !== -1 ? (
-          <div className="opacity-90 shadow-lg rounded-lg">
+          <div className="opacity-90 shadow-xl rounded-lg scale-[1.02]">
             {renderItem(activeItem, activeIndex, true, false)}
           </div>
         ) : null}
