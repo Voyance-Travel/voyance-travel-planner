@@ -156,7 +156,7 @@ export default function TripDetail() {
 
   const generationPoller = useGenerationPoller({
     tripId: tripId || null,
-    enabled: isServerGenerating && !generationStalled && !showGenerator,
+    enabled: isServerGenerating && !generationStalled,
     interval: 3000,
     onReady: async () => {
       if (onReadyCalledRef.current) return;
