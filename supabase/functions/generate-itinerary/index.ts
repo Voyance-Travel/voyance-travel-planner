@@ -1635,6 +1635,40 @@ Respect their travel identity. These are not suggestions — they are requiremen
   return block;
 }
 
+/** Convert structured generation rules into a prompt section */
+function formatGenerationRules(rules: Array<{type: string; days?: string[]; from?: string; to?: string; reason?: string; date?: string; description?: string; hotelName?: string; additionalGuests?: number; note?: string; text?: string}>): string {
+  if (!rules || rules.length === 0) return '';
+  const dayMap: Record<string, string> = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
+  const lines: string[] = ['\n## 🚨 RULES THE ITINERARY MUST FOLLOW\n', 'The traveler has set the following constraints. These are NON-NEGOTIABLE.\n'];
+  rules.forEach((rule, i) => {
+    const num = i + 1;
+    switch (rule.type) {
+      case 'blocked_time': {
+        const dayNames = (rule.days || []).map(d => dayMap[d] || d).join(', ');
+        lines.push(`${num}. BLOCKED TIME: On ${dayNames}, do NOT schedule any activities between ${rule.from} and ${rule.to}.${rule.reason ? ` Reason: ${rule.reason}.` : ''} Leave these hours completely free.`);
+        break;
+      }
+      case 'special_event':
+        lines.push(`${num}. SPECIAL EVENT on ${rule.date}: ${rule.description}. Adjust the day's plan accordingly.`);
+        break;
+      case 'hotel_change':
+        lines.push(`${num}. HOTEL CHANGE on ${rule.date}: The traveler is changing hotels${rule.hotelName ? ` to ${rule.hotelName}` : ''}.${rule.note ? ` ${rule.note}.` : ''} Plan check-out from old hotel and check-in at new hotel.`);
+        break;
+      case 'guest_change': {
+        const direction = (rule.additionalGuests || 0) > 0 ? 'joining' : 'leaving';
+        const count = Math.abs(rule.additionalGuests || 0);
+        lines.push(`${num}. GROUP CHANGE on ${rule.date}: ${count} traveler${count !== 1 ? 's' : ''} ${direction}.${rule.note ? ` (${rule.note})` : ''} From this date onward, plan for the new group size.`);
+        break;
+      }
+      case 'free_text':
+        lines.push(`${num}. USER CONSTRAINT: ${rule.text}`);
+        break;
+    }
+  });
+  lines.push('\nIMPORTANT: If ANY activity conflicts with the above rules, remove or reschedule it.\n');
+  return lines.join('\n');
+}
+
 
 interface NormalizedTraits {
   planning: number;    // -10 to +10
