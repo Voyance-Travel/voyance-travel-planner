@@ -1,11 +1,11 @@
 /**
  * Draggable Activity List
  * 
- * Wrapper component that adds drag-and-drop reordering to activity lists.
- * Uses @dnd-kit for accessibility-friendly drag and drop.
+ * Desktop: drag-and-drop via @dnd-kit with visible grip handles.
+ * Mobile: tap-based up/down arrow buttons (no drag — avoids scroll conflicts).
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -25,7 +25,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical } from 'lucide-react';
+import { GripVertical, ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface DraggableActivityListProps<T extends { id: string }> {
@@ -38,12 +38,16 @@ interface DraggableActivityListProps<T extends { id: string }> {
 
 interface SortableItemProps {
   id: string;
+  index: number;
+  totalItems: number;
   isHighlighted: boolean;
   disabled?: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
   children: React.ReactNode;
 }
 
-function SortableItem({ id, isHighlighted, disabled, children }: SortableItemProps) {
+function SortableItem({ id, index, totalItems, isHighlighted, disabled, onMoveUp, onMoveDown, children }: SortableItemProps) {
   const {
     attributes,
     listeners,
@@ -69,23 +73,65 @@ function SortableItem({ id, isHighlighted, disabled, children }: SortableItemPro
         isHighlighted && "ring-2 ring-primary ring-offset-2 rounded-lg animate-pulse"
       )}
     >
-      {/* Drag Handle */}
+      {/* Desktop: Drag Handle — visible on hover */}
       {!disabled && (
         <div
           {...attributes}
           {...listeners}
           className={cn(
-            "absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2",
+            "absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3",
+            "hidden sm:flex",
             "opacity-0 group-hover:opacity-100 transition-opacity",
             "cursor-grab active:cursor-grabbing",
-            "p-1.5 rounded-md bg-background border shadow-sm",
+            "items-center justify-center w-7 h-10 rounded-md bg-background border shadow-sm",
             "hover:bg-muted z-10",
             isDragging && "opacity-100"
           )}
+          style={{ touchAction: 'none' }}
         >
           <GripVertical className="h-4 w-4 text-muted-foreground" />
         </div>
       )}
+
+      {/* Mobile: Up/Down reorder buttons — always visible */}
+      {!disabled && (
+        <div
+          className={cn(
+            "absolute right-1 top-1/2 -translate-y-1/2 z-10",
+            "flex sm:hidden flex-col gap-0.5"
+          )}
+        >
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onMoveUp(); }}
+            disabled={index === 0}
+            className={cn(
+              "flex items-center justify-center w-8 h-8 rounded-md",
+              "bg-background/90 backdrop-blur-sm border border-border/60 shadow-sm",
+              "active:bg-muted transition-colors",
+              "disabled:opacity-20 disabled:pointer-events-none"
+            )}
+            aria-label="Move up"
+          >
+            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onMoveDown(); }}
+            disabled={index === totalItems - 1}
+            className={cn(
+              "flex items-center justify-center w-8 h-8 rounded-md",
+              "bg-background/90 backdrop-blur-sm border border-border/60 shadow-sm",
+              "active:bg-muted transition-colors",
+              "disabled:opacity-20 disabled:pointer-events-none"
+            )}
+            aria-label="Move down"
+          >
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </div>
+      )}
+
       {children}
     </div>
   );
@@ -135,6 +181,12 @@ function DraggableActivityListInner<T extends { id: string }>({
     setActiveId(null);
   };
 
+  const moveItem = useCallback((fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= items.length) return;
+    const newItems = arrayMove(items, fromIndex, toIndex);
+    onReorder(newItems);
+  }, [items, onReorder]);
+
   const activeItem = activeId ? items.find((item) => item.id === activeId) : null;
   const activeIndex = activeId ? items.findIndex((item) => item.id === activeId) : -1;
 
@@ -154,9 +206,13 @@ function DraggableActivityListInner<T extends { id: string }>({
           return (
             <SortableItem 
               key={item.id} 
-              id={item.id} 
+              id={item.id}
+              index={index}
+              totalItems={items.length}
               isHighlighted={isHighlighted}
               disabled={disabled}
+              onMoveUp={() => moveItem(index, index - 1)}
+              onMoveDown={() => moveItem(index, index + 1)}
             >
               {renderItem(item, index, item.id === activeId, isHighlighted)}
             </SortableItem>
