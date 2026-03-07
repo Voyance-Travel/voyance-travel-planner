@@ -129,7 +129,7 @@ export default function DynamicDestinationPhotos({
         <div className="absolute inset-0 flex items-center justify-center">
           <Loader2 className="w-5 h-5 text-white/60 animate-spin" />
         </div>
-        <div className="absolute inset-0 p-3 flex items-center">
+        <div className="absolute inset-0 p-3 flex items-center" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
           <div className="flex items-center gap-2 text-white text-sm">
             <MapPin className="w-4 h-4" />
             <span className="font-medium">{cleanDestination}</span>
