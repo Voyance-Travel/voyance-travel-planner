@@ -8160,7 +8160,29 @@ function ActivityRow({
 
       {/* Mobile: Expandable detail section */}
       {mobileExpanded && (
-        <div className="sm:hidden px-3 pb-3 pt-0 space-y-2 border-t border-border/30 animate-in slide-in-from-top-1 duration-200">
+        <div className="sm:hidden px-3 pb-3 pt-2 space-y-2 border-t border-border/30 animate-in slide-in-from-top-1 duration-200">
+          {/* Mobile activity photo */}
+          {showThumbnail && thumbnailUrl && !thumbnailError && (
+            <div className={cn(
+              "w-full h-36 rounded-lg overflow-hidden bg-muted/30",
+              !canViewPremium && "blur-md pointer-events-none"
+            )}>
+              <img
+                src={thumbnailUrl}
+                alt={activityTitle}
+                className="w-full h-full object-cover"
+                loading="eager"
+                onError={(e) => {
+                  const fallback = getActivityFallbackImage(activityType, activityTitle);
+                  if (e.currentTarget.src !== fallback) {
+                    e.currentTarget.src = fallback;
+                  } else {
+                    setThumbnailError(true);
+                  }
+                }}
+              />
+            </div>
+          )}
           {activity.duration && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Clock className="h-3 w-3" />
