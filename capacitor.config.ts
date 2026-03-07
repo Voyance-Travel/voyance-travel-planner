@@ -6,7 +6,14 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     url: 'https://bbef7015-a2df-45af-893d-7d36d59f8dcd.lovableproject.com?forceHideBadge=true',
-    cleartext: true
+    cleartext: true,
+    allowNavigation: [
+      'travelwithvoyance.com',
+      '*.supabase.co',
+      '*.supabase.in',
+      'accounts.google.com',
+      'appleid.apple.com'
+    ]
   },
   ios: {
     appendUserAgent: 'VoyanceApp'
