@@ -188,7 +188,7 @@ export function InterCityTransportEditor({
               </Field>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Total cost" icon={CreditCard}>
                 <div className="flex gap-1.5">
                   <Input
@@ -218,7 +218,7 @@ export function InterCityTransportEditor({
             </div>
 
             <Field label="Seat / class" icon={Armchair}>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <Input placeholder="Class (e.g. First)" value={details.seatClass || ''} onChange={e => update({ seatClass: e.target.value })} />
                 <Input placeholder="Seat (e.g. 12A)" value={details.seatNumber || ''} onChange={e => update({ seatNumber: e.target.value })} />
               </div>
@@ -286,7 +286,7 @@ function Field({ label, icon: Icon, children }: { label: string; icon: React.Ele
 function FlightFields({ details, onChange }: { details: TransportDetails; onChange: (p: Partial<TransportDetails>) => void }) {
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Airline" icon={Plane}>
           <Input placeholder="e.g. British Airways" value={details.carrier || ''} onChange={e => onChange({ carrier: e.target.value })} />
         </Field>
@@ -294,7 +294,7 @@ function FlightFields({ details, onChange }: { details: TransportDetails; onChan
           <Input placeholder="e.g. BA 307" value={details.flightNumber || ''} onChange={e => onChange({ flightNumber: e.target.value })} />
         </Field>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Departure airport" icon={MapPin}>
           <Input placeholder="e.g. LHR" value={details.departureAirport || ''} onChange={e => onChange({ departureAirport: e.target.value })} />
         </Field>
@@ -312,7 +312,7 @@ function TrainFields({ details, onChange }: { details: TransportDetails; onChang
       <Field label="Train service" icon={Train}>
         <Input placeholder="e.g. Eurostar, TGV, Shinkansen" value={details.carrier || ''} onChange={e => onChange({ carrier: e.target.value })} />
       </Field>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Departure station" icon={MapPin}>
           <Input placeholder="e.g. London St Pancras" value={details.departureStation || ''} onChange={e => onChange({ departureStation: e.target.value })} />
         </Field>
@@ -333,7 +333,7 @@ function BusFields({ details, onChange }: { details: TransportDetails; onChange:
       <Field label="Bus service" icon={Bus}>
         <Input placeholder="e.g. FlixBus, Megabus" value={details.carrier || ''} onChange={e => onChange({ carrier: e.target.value })} />
       </Field>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Departure point" icon={MapPin}>
           <Input placeholder="e.g. Victoria Coach Station" value={details.departureStation || ''} onChange={e => onChange({ departureStation: e.target.value })} />
         </Field>
@@ -351,7 +351,7 @@ function CarFields({ details, onChange }: { details: TransportDetails; onChange:
       <Field label="Rental company" icon={Car}>
         <Input placeholder="e.g. Hertz, Europcar" value={details.rentalCompany || ''} onChange={e => onChange({ rentalCompany: e.target.value })} />
       </Field>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Pickup location" icon={MapPin}>
           <Input placeholder="e.g. Heathrow Airport" value={details.pickupLocation || ''} onChange={e => onChange({ pickupLocation: e.target.value })} />
         </Field>
@@ -359,7 +359,7 @@ function CarFields({ details, onChange }: { details: TransportDetails; onChange:
           <Input placeholder="e.g. Paris CDG" value={details.dropoffLocation || ''} onChange={e => onChange({ dropoffLocation: e.target.value })} />
         </Field>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Car class" icon={Car}>
           <Input placeholder="e.g. Compact, SUV" value={details.carClass || ''} onChange={e => onChange({ carClass: e.target.value })} />
         </Field>
@@ -377,7 +377,7 @@ function FerryFields({ details, onChange }: { details: TransportDetails; onChang
       <Field label="Ferry operator" icon={Ship}>
         <Input placeholder="e.g. P&O Ferries, Stena Line" value={details.carrier || ''} onChange={e => onChange({ carrier: e.target.value })} />
       </Field>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Departure terminal" icon={MapPin}>
           <Input placeholder="e.g. Dover" value={details.departureTerminal || ''} onChange={e => onChange({ departureTerminal: e.target.value })} />
         </Field>

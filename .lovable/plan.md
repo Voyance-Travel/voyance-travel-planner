@@ -1,43 +1,63 @@
 
-Root cause (why this kept failing):
-1) We fixed some flight-form components, but not all remaining mobile two-column flight grids (at least `FlightDetailsModal.tsx` still has `grid-cols-2` pairs).
-2) The overlap in your screenshot is a different issue: mobile trip header is rendering both compact status text and a date-editor pill in the same row, so it gets crowded and visually overlaps/wraps.
-3) Current mobile date-editor behavior is still too “pill-like” (too wide), instead of being a tiny inline edit control.
 
-Implementation plan (no feature removal, only layout simplification):
+## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
 
-1) Hard-fix the header overlap at the source
-- File: `src/pages/TripDetail.tsx`
-- Mobile status row will become: `Draft · Mar 19–23 · 5d` + a tiny inline edit icon.
-- Remove duplicate mobile date display pressure by keeping date text only once in the status line.
-- Add robust mobile row constraints: `min-w-0`, compact gaps, `whitespace-nowrap` where needed, and prevent wrapping collisions.
+### What's Already Working (No Changes Needed)
+- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
+- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
+- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
+- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
 
-2) Make TripDateEditor truly compact on mobile
-- File: `src/components/trip/TripDateEditor.tsx`
-- Add a dedicated compact/icon-only trigger mode (not breakpoint-dependent text hiding).
-- Mobile trigger style: small circular icon button (`h-7 w-7`, minimal padding, no wide pill text).
-- Keep full date pill trigger for desktop exactly as-is.
-- Keep all date editing functionality identical (popover, validations, dialogs).
+### What's Broken — Two Things
 
-3) Finish the incomplete flight mobile grid fixes
-- Files:
-  - `src/components/itinerary/FlightDetailsModal.tsx`
-  - `src/components/itinerary/InterCityTransportEditor.tsx` (where flight/inter-city rows still use fixed 2-col pairs)
-- Replace remaining `grid grid-cols-2 gap-3` rows with `grid grid-cols-1 sm:grid-cols-2 gap-3` for all field-pair rows.
-- Keep desktop unchanged; mobile stacks fields cleanly.
+**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
 
-4) Mobile sizing polish for the specific “too large controls” complaint
-- In the affected mobile form rows, normalize to compact control scale (`h-8 text-xs` where currently oversized) for date/time pairs and adjacent controls.
+**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
 
-5) Verification checklist before closing
-- Test on narrow mobile widths (375 and 390):
-  - Generation screen header: no overlap between status line and date-edit control.
-  - Trip detail header: single clean date line + tiny edit icon.
-  - Flight edit/import/detail forms: no overlapping fields; stacked correctly on mobile.
-- Recheck desktop to confirm no regressions in existing layout/functionality.
+### Changes
 
-Files to touch in the implementation pass:
-- `src/pages/TripDetail.tsx`
-- `src/components/trip/TripDateEditor.tsx`
-- `src/components/itinerary/FlightDetailsModal.tsx`
-- `src/components/itinerary/InterCityTransportEditor.tsx`
+#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
+
+**Change A — Remove stall detector setup** (lines ~261-313):
+Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
+
+**Change B — Remove browser loop fallback** (lines ~455-469):
+Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
+
+```typescript
+// OLD:
+} catch (serverErr) {
+  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
+  const generatedDays = await generateItinerary({ ... });
+  // ... 40 lines of fallback logic
+}
+
+// NEW:
+} catch (serverErr) {
+  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
+  setPrePhase(null);
+  setHasStarted(false);
+  toast.error('Failed to start generation. Please try again.');
+  return;
+}
+```
+
+**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
+
+**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
+
+#### File 2: `src/hooks/useItineraryGeneration.ts`
+
+No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
+
+### Files to Modify
+
+| File | What |
+|------|------|
+| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
+
+### Risk Assessment
+- **Low risk**: The server-side self-chaining is already fully implemented and tested
+- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
+- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
+
