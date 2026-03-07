@@ -2814,7 +2814,6 @@ export default function Start() {
                       } else {
                         goToStep2();
                       }
-                      }
                     }}
                     onManualAuthRequired={() => {
                       // User is already authenticated via ProtectedRoute, no-op
@@ -2937,7 +2936,6 @@ export default function Start() {
               onClick={() => {
                 setShowDNAPrompt(false);
                 goToStep2();
-              }}
               }}
             >
               Skip for now
