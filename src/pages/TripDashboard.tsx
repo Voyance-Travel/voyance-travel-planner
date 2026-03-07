@@ -838,6 +838,11 @@ export default function TripDashboard() {
           isPaid: (row.metadata as Record<string, any>)?.is_paid || row.status === 'booked' || false,
           isCollaborator: false,
           collaborators: collabMap.get(row.id) || [],
+          journeyId: (row as any).journey_id || null,
+          journeyName: (row as any).journey_name || null,
+          journeyOrder: (row as any).journey_order || null,
+          journeyTotalLegs: (row as any).journey_total_legs || null,
+          transitionMode: (row as any).transition_mode || null,
         }));
 
         // Map collab trips (exclude any already owned)
@@ -864,6 +869,11 @@ export default function TripDashboard() {
               isCollaborator: true,
               ownerName: ownerMap.get(row.user_id) || null,
               collaborators: collabMap.get(row.id) || [],
+              journeyId: row.journey_id || null,
+              journeyName: row.journey_name || null,
+              journeyOrder: row.journey_order || null,
+              journeyTotalLegs: row.journey_total_legs || null,
+              transitionMode: row.transition_mode || null,
             };
           });
 
