@@ -185,27 +185,31 @@ export function useGenerationPoller({
       }
 
       // Still generating — check for stall using BOTH heartbeat and itinerary_days timestamps
+      // BUT skip stall detection during resume grace period (just came back from background tab)
+      const inResumeGrace = justResumedRef.current && (Date.now() - resumedAtRef.current < 5000);
       let isStalled = false;
 
-      // Method 1: Heartbeat-based stall detection
-      const heartbeat = meta.generation_heartbeat as string | undefined;
-      const startedAt = meta.generation_started_at as string | undefined;
-      const referenceTime = heartbeat || startedAt;
+      if (!inResumeGrace) {
+        // Method 1: Heartbeat-based stall detection
+        const heartbeat = meta.generation_heartbeat as string | undefined;
+        const startedAt = meta.generation_started_at as string | undefined;
+        const referenceTime = heartbeat || startedAt;
 
-      if (referenceTime) {
-        const elapsed = Date.now() - new Date(referenceTime).getTime();
-        if (elapsed > STALE_THRESHOLD_MS) {
-          isStalled = true;
-        }
-      }
-
-      // Method 2: itinerary_days-based stall detection (if days exist but no new one in 5min)
-      if (!isStalled && dayCount > 0 && dayCount < (totalDays || Infinity)) {
-        const lastDay = daysList[daysList.length - 1];
-        if (lastDay?.created_at) {
-          const lastCreated = new Date(lastDay.created_at).getTime();
-          if (Date.now() - lastCreated > DAY_STALL_THRESHOLD_MS) {
+        if (referenceTime) {
+          const elapsed = Date.now() - new Date(referenceTime).getTime();
+          if (elapsed > STALE_THRESHOLD_MS) {
             isStalled = true;
+          }
+        }
+
+        // Method 2: itinerary_days-based stall detection (if days exist but no new one in 5min)
+        if (!isStalled && dayCount > 0 && dayCount < (totalDays || Infinity)) {
+          const lastDay = daysList[daysList.length - 1];
+          if (lastDay?.created_at) {
+            const lastCreated = new Date(lastDay.created_at).getTime();
+            if (Date.now() - lastCreated > DAY_STALL_THRESHOLD_MS) {
+              isStalled = true;
+            }
           }
         }
       }
