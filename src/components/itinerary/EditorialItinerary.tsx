@@ -8133,55 +8133,98 @@ function ActivityRow({
   return (
     <div className={cn(
       "flex flex-col sm:flex-row sm:items-stretch group/activity hover:bg-secondary/10 transition-colors",
-      !isLast && "border-b border-border",
+      // Desktop: border separator between activities
+      !isLast && "sm:border-b sm:border-border",
       activity.isLocked && "bg-primary/5"
     )} data-tour="activity-card">
-      {/* Mobile: Compact header with time + icon */}
-      <div className="sm:hidden flex items-center gap-2 px-3 py-2 border-b border-border/50 bg-gradient-to-r from-secondary/20 to-transparent">
-        <span className="p-1 rounded bg-primary/10 text-primary">{style.icon}</span>
-        <span className="text-xs font-medium text-foreground">{formatTime(time)}</span>
-        {activity.duration && (
-          <span className="text-xs text-muted-foreground">• {activity.duration}</span>
+      {/* Mobile: Compact tappable header — time + icon + title + cost */}
+      <button
+        type="button"
+        className="sm:hidden flex items-center gap-2.5 w-full px-3 py-3 text-left active:bg-secondary/30 transition-colors"
+        onClick={() => setMobileExpanded(prev => !prev)}
+      >
+        <span className="text-xs font-semibold text-primary tabular-nums w-12 shrink-0">{formatTime(time)}</span>
+        <span className="p-1 rounded-md bg-primary/10 text-primary shrink-0">{style.icon}</span>
+        <span className="text-sm font-medium text-foreground truncate flex-1 min-w-0">{activityTitle}</span>
+        {cost > 0 && (
+          <span className="text-xs font-medium text-muted-foreground shrink-0">
+            {formatCurrency(displayCost(cost), tripCurrency)}
+          </span>
         )}
-        {/* Collaborator attribution dot (mobile) */}
-        {activity.suggestedFor && collaboratorColorMap && (() => {
-          const ids = activity.suggestedFor!.split(',').map(s => s.trim()).filter(id => collaboratorColorMap.has(id));
-          if (ids.length === 0) return null;
-          if (ids.length === 1) {
-            const attr = collaboratorColorMap.get(ids[0])!;
-            const colors = getCollaboratorColor(attr.colorIndex);
-            return (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className={cn("h-2.5 w-2.5 rounded-full shrink-0", colors.dot)} />
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">
-                  Suggested for {attr.name}
-                </TooltipContent>
-              </Tooltip>
-            );
-          }
-          // Multiple travelers — show stacked dots
-          const names = ids.map(id => collaboratorColorMap.get(id)!.name);
-          return (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex -space-x-1 shrink-0">
-                  {ids.map(id => {
-                    const attr = collaboratorColorMap.get(id)!;
-                    const colors = getCollaboratorColor(attr.colorIndex);
-                    return <span key={id} className={cn("h-2.5 w-2.5 rounded-full ring-1 ring-background", colors.dot)} />;
-                  })}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs">
-                Inspired by {names.join(' & ')}
-              </TooltipContent>
-            </Tooltip>
-          );
-        })()}
-        {activity.isLocked && <Lock className="h-3 w-3 text-primary ml-auto" />}
-      </div>
+        {activity.isLocked && <Lock className="h-3 w-3 text-primary shrink-0" />}
+        <ChevronDown className={cn(
+          "h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform duration-200",
+          mobileExpanded && "rotate-180"
+        )} />
+      </button>
+
+      {/* Mobile: Expandable detail section */}
+      {mobileExpanded && (
+        <div className="sm:hidden px-3 pb-3 pt-0 space-y-2 border-t border-border/30 animate-in slide-in-from-top-1 duration-200">
+          {activity.duration && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Clock className="h-3 w-3" />
+              <span>{activity.duration}</span>
+            </div>
+          )}
+          {activity.description && !compact && (
+            <p className={cn(
+              "text-xs text-muted-foreground leading-relaxed",
+              !canViewPremium && "blur-sm pointer-events-none select-none"
+            )}>{activity.description}</p>
+          )}
+          {(activity.location?.name || activity.location?.address) && (
+            <div className={cn(
+              "flex items-center gap-1.5 text-xs text-muted-foreground",
+              !canViewPremium && "blur-sm pointer-events-none select-none"
+            )}>
+              <MapPin className="h-3 w-3 text-primary/60 shrink-0" />
+              <span className="truncate">{activity.location?.name || activity.location?.address}</span>
+            </div>
+          )}
+          {activity.tips && !isDowntime && !isTransport && !isCheckIn && (
+            <div className={cn(!canViewPremium && "blur-sm pointer-events-none select-none")}>
+              <VoyanceInsight tip={activity.tips} />
+            </div>
+          )}
+          {/* Mobile action buttons */}
+          {isEditable && !isPreview && (
+            <div className="flex items-center gap-1 pt-1">
+              <button
+                onClick={() => onLock(dayIndex, activity.id)}
+                className={cn(
+                  "p-1.5 rounded transition-colors",
+                  activity.isLocked ? "bg-primary/10 text-primary" : "hover:bg-secondary text-muted-foreground"
+                )}
+              >
+                {activity.isLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+              </button>
+              {!activity.isLocked && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="p-1.5 rounded transition-colors hover:bg-secondary text-muted-foreground">
+                      <MoreHorizontal className="h-3.5 w-3.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="bg-background border shadow-lg z-50 min-w-[160px]">
+                    {onSwap && canViewPremium && (
+                      <DropdownMenuItem onClick={() => onSwap(dayIndex, activity)} className="cursor-pointer gap-2">
+                        <ArrowRightLeft className="h-4 w-4" /> Find Alternative
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={() => onEdit(dayIndex, activityIndex, activity)} className="cursor-pointer gap-2">
+                      <Edit3 className="h-4 w-4" /> Edit Details
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onRemove(dayIndex, activity.id)} className="cursor-pointer gap-2 text-destructive focus:text-destructive">
+                      <Trash2 className="h-4 w-4" /> Remove
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Time Column - Hidden on mobile, visible on desktop */}
       <div 
