@@ -458,7 +458,7 @@ export function AddFlightInline({
                 {(expandedLeg === idx || legs.length === 1) && (
                   <div className="p-3 space-y-3">
                     {/* Route */}
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <Label className="text-xs text-muted-foreground">From</Label>
                         <AirportAutocomplete
@@ -478,7 +478,7 @@ export function AddFlightInline({
                     </div>
 
                     {/* Date + Arrival Time */}
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <Label className="text-xs text-muted-foreground">Departure Date</Label>
                         <Input
@@ -556,7 +556,7 @@ export function AddFlightInline({
                     )}
 
                     {/* More details */}
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <Label className="text-xs text-muted-foreground">Airline</Label>
                         <Input
@@ -576,7 +576,7 @@ export function AddFlightInline({
                         />
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <Label className="text-xs text-muted-foreground">Departure Time</Label>
                         <Input
@@ -601,7 +601,7 @@ export function AddFlightInline({
                     {/* Traveler details section */}
                     <div className="pt-2 border-t border-border/50">
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">Traveler Details</p>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <Label className="text-xs text-muted-foreground">Confirmation Code</Label>
                           <Input
@@ -621,7 +621,7 @@ export function AddFlightInline({
                           />
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-3 mt-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                         <div>
                           <Label className="text-xs text-muted-foreground">Class</Label>
                           <select
@@ -646,7 +646,7 @@ export function AddFlightInline({
                           />
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-3 mt-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                         <div>
                           <Label className="text-xs text-muted-foreground">Terminal</Label>
                           <Input
@@ -666,7 +666,7 @@ export function AddFlightInline({
                           />
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-3 mt-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                         <div>
                           <Label className="text-xs text-muted-foreground">Frequent Flyer #</Label>
                           <Input
@@ -972,7 +972,7 @@ export function AddHotelInline({
             </div>
             
             {/* Check-in / Check-out Date Pickers */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">Check-in Date *</Label>
                 <Popover>
@@ -1059,7 +1059,7 @@ export function AddHotelInline({
               />
             </div>
             
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Check-in Time</Label>
                 <Input
