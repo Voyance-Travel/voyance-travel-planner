@@ -560,6 +560,16 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         </Card>
       )}
 
+      {/* Journey Budget Summary — cross-leg overview for linked trips */}
+      {journeyId && (
+        <JourneyBudgetSummary
+          journeyId={journeyId}
+          journeyName={journeyName || null}
+          currentTripId={tripId}
+          currency={settings?.budget_currency || 'USD'}
+        />
+      )}
+
       <BudgetSetupDialog
         travelers={travelers}
         settings={settings}
