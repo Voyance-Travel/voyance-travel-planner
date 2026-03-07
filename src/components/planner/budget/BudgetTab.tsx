@@ -74,6 +74,9 @@ interface BudgetTabProps {
   hasFlight?: boolean;
   /** Trip destination for AI context */
   destination?: string;
+  /** Journey fields for linked trip budget summary */
+  journeyId?: string | null;
+  journeyName?: string | null;
 }
 
 const categoryIcons: Record<BudgetCategory, React.ReactNode> = {
