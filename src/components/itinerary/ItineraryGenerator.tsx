@@ -490,7 +490,7 @@ export function ItineraryGenerator({
         if (st === 'ready' || st === 'generated') {
           // Already complete — tell parent to show itinerary
           onComplete([], undefined, false);
-        } else if (status === 'generating' || status === 'queued') {
+        } else if (st === 'generating' || st === 'queued') {
           // In progress — activate poller
           setServerGenActive(true);
         }
