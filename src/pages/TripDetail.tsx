@@ -1299,8 +1299,8 @@ export default function TripDetail() {
             Back
           </Button>
         </div>
-        {/* Subtle bottom fade for content transition */}
-        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-background to-transparent" />
+        {/* Subtle bottom fade for content transition — use a thin dark fade so it doesn't wash out the hero */}
+        <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/30 to-transparent" />
       </div>
       
       <section className="pb-16 pt-4 sm:pt-6 relative z-10">
