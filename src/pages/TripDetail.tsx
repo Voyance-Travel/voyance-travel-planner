@@ -1878,19 +1878,8 @@ export default function TripDetail() {
                     </ErrorBoundary>
                   </div>
 
-                  {/* Subtle edit-dates link */}
-                  <div className="mb-3 flex justify-end">
-                    <TripDateEditor
-                      startDate={trip.start_date}
-                      endDate={effectiveEndDate}
-                      hasItinerary={hasItinerary}
-                      flightSelection={trip.flight_selection as Record<string, unknown> | null}
-                      onDateChange={handleDateChange}
-                      days={editorDays}
-                      cities={tripCities}
-                      compact
-                    />
-                  </div>
+
+
 
                   <ErrorBoundary>
                   <EditorialItinerary

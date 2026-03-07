@@ -119,6 +119,7 @@ import { VoyanceInsight } from './VoyanceInsight';
 import { ContextualTipsPopover, type ContextualTip } from './ContextualTipsPopover';
 import { VoyancePickCallout } from './VoyancePickCallout';
 import { TransitBadge } from './TransitBadge';
+import { TripDateEditor as TripDateEditorInline } from '@/components/trip/TripDateEditor';
 import { TransitGapIndicator, computeGapMinutes } from './TransitGapIndicator';
 import { DayRouteMap } from './DayRouteMap';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
