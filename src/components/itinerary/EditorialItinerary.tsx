@@ -1114,6 +1114,8 @@ export function EditorialItinerary({
   navigateToSection,
   initialItineraryData,
   itineraryStatus,
+  journeyId,
+  journeyName,
 }: EditorialItineraryProps) {
   const queryClient = useQueryClient();
   const isActivelyGenerating = itineraryStatus === 'generating' || itineraryStatus === 'queued';
@@ -4620,6 +4622,8 @@ export function EditorialItinerary({
             hasHotel={!!(hotelSelection?.pricePerNight || hotelSelection?.name)}
             hasFlight={hasFlightData}
             destination={destination}
+            journeyId={journeyId}
+            journeyName={journeyName}
             onActivityRemove={(activityId) => {
               // Remove the activity from itinerary days when deleted from budget
               setDays(prev => {
