@@ -8,6 +8,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { format, isAfter, isBefore, differenceInDays, addDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { Loader2, Calendar, MapPin, ArrowLeft, Edit, Sparkles, CheckCircle } from 'lucide-react';
+import { GenerationPhases } from '@/components/planner/shared/GenerationPhases';
 import { TripDateEditor, type DateChangeResult } from '@/components/trip/TripDateEditor';
 import MainLayout from '@/components/layout/MainLayout';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
@@ -1382,128 +1383,52 @@ export default function TripDetail() {
             />
             </ErrorBoundary>
           ) : isServerGenerating || generationStalled ? (
-            /* Server-side generation in progress or stalled */
+            /* Server-side generation in progress or stalled — use GenerationPhases for
+               consistent animation + progress display (airplane/globe animation) */
             <div className="space-y-6">
-              {/* Progress header */}
-              <div className="flex flex-col items-center justify-center py-10 space-y-4">
-                {generationStalled ? (
-                  /* Stalled — auto-resume was attempted, show reconnecting */
-                  <>
-                    <div className="relative">
-                      <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
-                    </div>
-                    <div className="text-center space-y-3 max-w-md">
-                      <h3 className="text-xl font-serif font-semibold">Reconnecting...</h3>
-                      <p className="text-muted-foreground">
-                        Generation paused at Day {generationPoller.completedDays} of {generationPoller.totalDays}.
-                        Attempting to resume automatically.
-                      </p>
-                      {generationPoller.totalDays > 0 && (
-                        <div className="w-64 mx-auto">
-                          <Progress value={generationPoller.progress} className="h-2" />
-                        </div>
-                      )}
-                      <div className="flex gap-3 justify-center pt-2">
-                        <Button variant="outline" size="sm" onClick={handleResumeGeneration} disabled={resumingGeneration}>
-                          {resumingGeneration ? (
-                            <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Resuming…</>
-                          ) : (
-                            <>Retry manually</>
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  /* Active generation — show progress with day list */
-                  <>
-                    <div className="relative">
-                      <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                      <Sparkles className="h-4 w-4 text-primary absolute -top-1 -right-1 animate-pulse" />
-                    </div>
-                    <div className="text-center space-y-2 max-w-md">
-                    <h3 className="text-xl font-serif font-semibold">
-                        {generationPoller.completedDays > 0
-                          ? (generationPoller.totalDays > 0 && generationPoller.completedDays >= generationPoller.totalDays
-                            ? 'Finalizing your itinerary…'
-                            : `Building Day ${generationPoller.completedDays + 1} of ${generationPoller.totalDays}`)
-                          : 'Generating your itinerary…'}
-                      </h3>
-                      {generationPoller.totalDays > 0 ? (
-                        <>
-                          <p className="text-muted-foreground">
-                            {generationPoller.completedDays} of {generationPoller.totalDays} days complete
-                            {generationPoller.completedDays > 0 && generationPoller.totalDays > generationPoller.completedDays
-                              ? ` · ~${Math.ceil((generationPoller.totalDays - generationPoller.completedDays) * 1.2)} min remaining`
-                              : ''}
-                          </p>
-                          <div className="w-64 mx-auto">
-                            <Progress value={generationPoller.progress} className="h-2" />
-                          </div>
-                        </>
-                      ) : (
-                        <p className="text-muted-foreground">Starting generation…</p>
-                      )}
-                      <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 mt-4 max-w-md mx-auto">
-                        <Sparkles className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-                        <div>
-                          <p className="text-sm font-medium text-foreground">Building in the background</p>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            Feel free to leave — we'll keep building your itinerary in the background. Come back anytime to check progress.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Progressive day rendering — show completed days from itinerary_days */}
-              {generationPoller.generatedDaysList.length > 0 && (
-                <ErrorBoundary>
-                  <div className="space-y-4">
-                    <p className="text-sm text-muted-foreground text-center">
-                      Your completed days:
+              {generationStalled ? (
+                /* Stalled state — show reconnecting with retry button */
+                <div className="flex flex-col items-center justify-center py-10 space-y-4">
+                  <div className="relative">
+                    <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
+                  </div>
+                  <div className="text-center space-y-3 max-w-md">
+                    <h3 className="text-xl font-serif font-semibold">Reconnecting...</h3>
+                    <p className="text-muted-foreground">
+                      Generation paused at Day {generationPoller.completedDays} of {generationPoller.totalDays}.
+                      Attempting to resume automatically.
                     </p>
-                    <div className="space-y-2 max-w-lg mx-auto">
-                      {generationPoller.generatedDaysList.map((day) => {
-                        const activities = Array.isArray(day.activities) ? day.activities as any[] : [];
-                        return (
-                          <div
-                            key={day.day_number}
-                            className="flex items-start gap-3 p-3 rounded-lg border border-border bg-card"
-                            style={{ animation: 'fadeInUp 0.3s ease-out' }}
-                          >
-                            <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold shrink-0 mt-0.5">
-                              {day.day_number}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm truncate">{day.title}</p>
-                              {day.theme && <p className="text-xs text-muted-foreground truncate">{day.theme}</p>}
-                              {activities.length > 0 && (
-                                <div className="mt-1.5 space-y-0.5">
-                                  {activities.slice(0, 3).map((act: any, i: number) => (
-                                    <p key={i} className="text-xs text-muted-foreground truncate">
-                                      {act.startTime || act.time ? `${act.startTime || act.time} · ` : ''}
-                                      {act.title || act.name || 'Activity'}
-                                    </p>
-                                  ))}
-                                  {activities.length > 3 && (
-                                    <p className="text-xs text-muted-foreground/60">+{activities.length - 3} more</p>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                            <CheckCircle className="h-4 w-4 text-green-500 shrink-0 mt-1" />
-                          </div>
-                        );
-                      })}
+                    {generationPoller.totalDays > 0 && (
+                      <div className="w-64 mx-auto">
+                        <Progress value={generationPoller.progress} className="h-2" />
+                      </div>
+                    )}
+                    <div className="flex gap-3 justify-center pt-2">
+                      <Button variant="outline" size="sm" onClick={handleResumeGeneration} disabled={resumingGeneration}>
+                        {resumingGeneration ? (
+                          <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Resuming…</>
+                        ) : (
+                          <>Retry manually</>
+                        )}
+                      </Button>
                     </div>
                   </div>
-                </ErrorBoundary>
+                </div>
+              ) : (
+                /* Active generation — GenerationPhases with airplane animation */
+                <GenerationPhases
+                  currentStep="preparing"
+                  destination={trip.destination || ''}
+                  totalDays={generationPoller.totalDays || (differenceInDays(parseLocalDate(effectiveEndDate), parseLocalDate(trip.start_date)) + 1)}
+                  tripId={trip.id}
+                  completedDays={generationPoller.completedDays}
+                  generatedDaysList={generationPoller.generatedDaysList}
+                  isComplete={generationPoller.isReady}
+                  progress={generationPoller.progress}
+                />
               )}
 
-              {/* Also show partialDays from itinerary_data if generatedDaysList is empty */}
+              {/* Browse completed days while generating */}
               {generationPoller.generatedDaysList.length === 0 && generationPoller.partialDays.length > 0 && (
                 <ErrorBoundary>
                   <div className="space-y-4">
@@ -1523,21 +1448,6 @@ export default function TripDetail() {
                     />
                   </div>
                 </ErrorBoundary>
-              )}
-
-              {/* Skeleton for next generating day */}
-              {!generationStalled && generationPoller.completedDays < generationPoller.totalDays && (
-                <div className="border border-dashed border-border rounded-xl p-4 opacity-60 animate-pulse max-w-lg mx-auto">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">Day {generationPoller.completedDays + 1}</p>
-                      <p className="text-xs text-muted-foreground">Generating activities…</p>
-                    </div>
-                  </div>
-                </div>
               )}
             </div>
           ) : showGenerator ? (
