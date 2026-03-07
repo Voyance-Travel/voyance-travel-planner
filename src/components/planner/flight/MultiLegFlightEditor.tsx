@@ -952,7 +952,7 @@ function LegSlotCard({ slot, index, totalSlots, onUpdateFlight, onToggleExpanded
           </div>
 
           {/* Date & Times */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
             <div>
               <Label className="text-xs text-muted-foreground">Date</Label>
               <Input
