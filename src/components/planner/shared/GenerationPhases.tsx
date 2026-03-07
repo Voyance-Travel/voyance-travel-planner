@@ -150,7 +150,7 @@ export function GenerationPhases({
                     <span className="text-sm font-medium text-foreground truncate">{day.title}</span>
                   )}
                 </div>
-                {day.theme && day.theme !== day.title && (
+                {day.theme && day.theme.trim().toLowerCase() !== (day.title || '').trim().toLowerCase() && (
                   <p className="text-xs text-muted-foreground mt-0.5 truncate">{day.theme}</p>
                 )}
                 {/* Activity previews */}
