@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import ActiveTripCard from '@/components/trips/ActiveTripCard';
 import { PastTripCard } from '@/components/trips/PastTripCard';
+import JourneyPlaylist from '@/components/trips/JourneyPlaylist';
 
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
