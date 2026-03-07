@@ -195,7 +195,7 @@ export function TripDateEditor({
 
     const newStartStr = format(pendingStart, 'yyyy-MM-dd');
     const newEndStr = format(pendingEnd, 'yyyy-MM-dd');
-    const newDays = differenceInDays(pendingEnd, pendingStart) + 1;
+    const newDays = differenceInDays(pendingEnd, pendingStart);
     const daysAdded = newDays - currentDays;
     const isShiftOnly = newDays === currentDays && newStartStr !== startDate;
 
@@ -287,7 +287,7 @@ export function TripDateEditor({
   };
 
   const newDayCount = pendingStart && pendingEnd
-    ? differenceInDays(pendingEnd, pendingStart) + 1
+    ? differenceInDays(pendingEnd, pendingStart)
     : currentDays;
   const dayDelta = newDayCount - currentDays;
 
