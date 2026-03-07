@@ -147,7 +147,8 @@ const sampleItineraries = [
 function StepIndicator({ currentStep, isMultiCity }: { currentStep: number; isMultiCity?: boolean }) {
   const steps = [
     { label: 'Trip Details', step: 1 },
-    { label: isMultiCity ? 'Transportation & Hotel' : 'Flight & Hotel', step: 2 },
+    { label: 'Personalize', step: 2 },
+    { label: isMultiCity ? 'Transport & Hotel' : 'Flight & Hotel', step: 3 },
   ];
 
   return (
