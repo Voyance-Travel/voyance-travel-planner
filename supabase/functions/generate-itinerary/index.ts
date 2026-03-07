@@ -9372,9 +9372,19 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
             console.log(`[generate-day] Must-do raw text injected (${mustDoActivities.length} chars)`);
           }
         }
+        // Inject interest categories into prompt
+        if (interestCategories.length > 0) {
+          const categoryLabels: Record<string, string> = {
+            history: 'History & Museums', food: 'Food & Dining', shopping: 'Shopping',
+            nature: 'Parks & Nature', culture: 'Arts & Culture', nightlife: 'Nightlife',
+          };
+          const labels = interestCategories.map(c => categoryLabels[c] || c).join(', ');
+          mustDoPrompt += `\n## USER INTERESTS\nPrioritize activities in these categories: ${labels}. Lean heavily toward these when choosing between options.\n`;
+          console.log(`[generate-day] Interest categories injected: ${labels}`);
+        }
         }
 
-      // Load structured must-haves checklist from trip metadata
+
       let mustHavesConstraintPrompt = '';
       let preBookedCommitmentsPrompt = '';
       if (tripId) {
