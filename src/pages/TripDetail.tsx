@@ -161,6 +161,8 @@ export default function TripDetail() {
     onReady: async () => {
       if (onReadyCalledRef.current) return;
       onReadyCalledRef.current = true;
+      // If ItineraryGenerator is active, let it handle the transition via its own poller
+      const generatorHandling = showGenerator;
       setGenerationStalled(false);
       // Reload trip data to get completed itinerary
       if (!tripId) return;
