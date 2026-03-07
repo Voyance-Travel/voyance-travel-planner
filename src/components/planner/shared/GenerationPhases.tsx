@@ -4,6 +4,7 @@
  * Shows real day-by-day progress during generation with activity previews.
  */
 
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Check, Loader2, Clock } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
@@ -29,6 +30,40 @@ interface GenerationPhasesProps {
   progress?: number;
 }
 
+/** Simulated minimum progress that ticks up while waiting for the first real day */
+function useSimulatedProgress(realProgress: number, isActive: boolean) {
+  const [simulated, setSimulated] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval>>();
+
+  useEffect(() => {
+    if (!isActive) {
+      setSimulated(0);
+      return;
+    }
+
+    // When real progress arrives, stop simulation
+    if (realProgress > 0) {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      setSimulated(0);
+      return;
+    }
+
+    // Tick up slowly: 1-2% every 2s, max 15%
+    intervalRef.current = setInterval(() => {
+      setSimulated(prev => {
+        if (prev >= 15) return prev;
+        return prev + (prev < 5 ? 2 : 1);
+      });
+    }, 2000);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [realProgress, isActive]);
+
+  return realProgress > 0 ? realProgress : simulated;
+}
+
 export function GenerationPhases({
   currentStep,
   destination,
@@ -39,14 +74,25 @@ export function GenerationPhases({
   isComplete = false,
   progress: pollerProgress = 0,
 }: GenerationPhasesProps) {
-  // Calculate progress locally from props — don't rely solely on poller.progress
-  // which can be 0 when metadata.generation_total_days hasn't been set yet
-  const progress = totalDays > 0
+  // Calculate progress locally from props
+  const calculatedProgress = totalDays > 0
     ? Math.max(pollerProgress, Math.round((completedDays / totalDays) * 100))
     : pollerProgress;
+
+  const isActive = !isComplete && !!tripId;
+  const displayProgress = useSimulatedProgress(calculatedProgress, isActive);
+
   const remainingDays = Math.max(0, totalDays - completedDays);
   const nextDay = completedDays + 1;
   const allDaysDone = totalDays > 0 && completedDays >= totalDays;
+
+  // Elapsed time for "still working" reassurance
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!isActive) { setElapsed(0); return; }
+    const t = setInterval(() => setElapsed(prev => prev + 1), 1000);
+    return () => clearInterval(t);
+  }, [isActive]);
 
   // No tripId — simple preparing state
   if (!tripId) {
@@ -88,6 +134,25 @@ export function GenerationPhases({
     );
   }
 
+  // Build header text
+  const headerText = allDaysDone
+    ? 'Finalizing your itinerary…'
+    : completedDays === 0
+      ? `Building your ${destination || 'trip'}`
+      : `Building Day ${nextDay} of ${totalDays}`;
+
+  // Build subtitle with elapsed time reassurance
+  let subtitleText: string;
+  if (allDaysDone) {
+    subtitleText = 'Almost there — assembling your trip now';
+  } else if (completedDays === 0) {
+    subtitleText = elapsed > 15
+      ? 'Still working — this can take a minute for the first day…'
+      : 'Getting started...';
+  } else {
+    subtitleText = `${completedDays} ${completedDays === 1 ? 'day' : 'days'} complete · ~${Math.max(1, Math.ceil(remainingDays * 1.2))} min remaining`;
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -105,27 +170,33 @@ export function GenerationPhases({
         </motion.div>
 
         <h2 className="text-xl font-serif font-bold text-foreground mb-1">
-          {allDaysDone
-            ? 'Finalizing your itinerary…'
-            : completedDays === 0
-              ? `Building your ${destination || 'trip'}`
-              : `Building Day ${nextDay} of ${totalDays}`}
+          {headerText}
         </h2>
 
-        <p className="text-sm text-muted-foreground">
-          {allDaysDone
-            ? 'Almost there — assembling your trip now'
-            : completedDays === 0
-              ? 'Getting started...'
-              : `${completedDays} ${completedDays === 1 ? 'day' : 'days'} complete · ~${Math.max(1, Math.ceil(remainingDays * 1.2))} min remaining`}
-        </p>
+        <motion.p
+          key={subtitleText}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-sm text-muted-foreground"
+        >
+          {subtitleText}
+        </motion.p>
       </div>
 
-      {/* Progress bar */}
+      {/* Progress bar — always show when totalDays known */}
       {totalDays > 0 && (
         <div className="mb-6">
-          <Progress value={progress} className="h-2" />
-          <p className="text-xs text-muted-foreground text-right mt-1">{Math.round(progress)}%</p>
+          <Progress value={displayProgress} className="h-2" />
+          <div className="flex justify-between mt-1">
+            <motion.p
+              animate={{ opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 2, repeat: Infinity }}
+              className="text-xs text-muted-foreground"
+            >
+              {completedDays === 0 ? 'Generating...' : `${completedDays}/${totalDays} days`}
+            </motion.p>
+            <p className="text-xs text-muted-foreground">{Math.round(displayProgress)}%</p>
+          </div>
         </div>
       )}
 
