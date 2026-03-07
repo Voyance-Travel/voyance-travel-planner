@@ -95,8 +95,13 @@ export function TransitGapIndicator({ gapMinutes, transportation, hasTransitBadg
 
   // Transit/transportation slots ARE the buffer — don't warn about them
   const eitherIsTransit = isTransitCategory(currentCategory) || isTransitCategory(nextCategory);
+
+  // Hide the gap indicator entirely when adjacent to a transport activity
+  // — the compact transport row already conveys travel time
+  if (eitherIsTransit) return null;
+
   // Same-location activities don't need transit buffer
-  const skipBufferWarning = eitherIsTransit || sameLocation;
+  const skipBufferWarning = sameLocation;
 
   const isZeroGap = !skipBufferWarning && gapMinutes <= 0;
   const isTightGap = !skipBufferWarning && gapMinutes > 0 && gapMinutes < 15;

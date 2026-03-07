@@ -22,7 +22,8 @@ import {
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
-  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2, ClipboardPaste, Compass, Bus, Ship, ArrowRight, Droplets, Wrench
+  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2, ClipboardPaste, Compass, Bus, Ship, ArrowRight, Droplets, Wrench,
+  Footprints, Navigation2,
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
@@ -7944,6 +7945,85 @@ function ActivityRow({
   const thumbnailUrl = fetchedImageUrl;
   const [thumbnailError, setThumbnailError] = useState(false);
   // Library modal state removed - agent features disabled
+
+  // ── Compact transport row ─────────────────────────────────────────
+  // Transport activities (walk, taxi, metro, etc.) are rendered as a
+  // slim inline indicator instead of a full-size activity card.
+  if (isTransport) {
+    const durationText = activity.duration
+      || (activity.durationMinutes ? `${activity.durationMinutes} min` : null);
+
+    const transportIcon = (() => {
+      const t = activityTitle.toLowerCase();
+      if (t.includes('walk') || t.includes('stroll')) return <Footprints className="h-3.5 w-3.5" aria-hidden="true" />;
+      if (t.includes('taxi') || t.includes('uber') || t.includes('lyft') || t.includes('cab') || t.includes('rideshare') || t.includes('drive'))
+        return <Car className="h-3.5 w-3.5" />;
+      if (t.includes('metro') || t.includes('subway') || t.includes('train') || t.includes('tram'))
+        return <Train className="h-3.5 w-3.5" />;
+      if (t.includes('bus') || t.includes('shuttle'))
+        return <Bus className="h-3.5 w-3.5" />;
+      return <Navigation2 className="h-3.5 w-3.5" />;
+    })();
+
+    const transportCost = cost > 0 ? cost : null;
+
+    return (
+      <div
+        className={cn(
+          "flex items-center gap-2 px-4 py-2",
+          !isLast && "border-b border-border/30",
+        )}
+        data-tour="activity-card"
+      >
+        {/* Dotted timeline connector */}
+        <div className="flex flex-col items-center gap-0.5 shrink-0 text-border">
+          <div className="w-px h-2 border-l border-dashed" />
+          <div className="w-px h-2 border-l border-dashed" />
+        </div>
+
+        {/* Icon */}
+        <span className="text-muted-foreground shrink-0">{transportIcon}</span>
+
+        {/* Title */}
+        <span className="text-xs text-muted-foreground truncate min-w-0">
+          {activityTitle}
+        </span>
+
+        {/* Duration pill */}
+        {durationText && (
+          <span className="text-[10px] font-medium text-muted-foreground bg-secondary/50 rounded-full px-2 py-0.5 shrink-0 whitespace-nowrap">
+            {durationText}
+          </span>
+        )}
+
+        {/* Cost (only if > 0) */}
+        {transportCost != null && (
+          <span className="text-[10px] text-muted-foreground ml-auto shrink-0">
+            {formatCurrency(displayCost(transportCost), tripCurrency)}
+          </span>
+        )}
+
+        {/* Context menu (keep editable) */}
+        {isEditable && !activity.isLocked && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="ml-auto p-1 text-muted-foreground/50 hover:text-foreground rounded transition-colors opacity-0 group-hover/activity:opacity-100 shrink-0">
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-36">
+              {onRemove && (
+                <DropdownMenuItem onClick={() => onRemove(dayIndex, activity.id)} className="text-destructive text-xs">
+                  <Trash2 className="h-3 w-3 mr-1.5" />
+                  Remove
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className={cn(
