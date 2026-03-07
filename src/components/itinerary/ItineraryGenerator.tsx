@@ -474,6 +474,33 @@ export function ItineraryGenerator({
     }
   }, [autoStart, user, showPreferenceNudge]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // On mount / page revisit, check if generation is already in progress or complete
+  useEffect(() => {
+    if (!tripId) return;
+    let cancelled = false;
+    const checkStatus = async () => {
+      try {
+        const { data: tripRow } = await supabase
+          .from('trips')
+          .select('itinerary_status')
+          .eq('id', tripId)
+          .single();
+        if (cancelled) return;
+        const st = tripRow?.itinerary_status as string;
+        if (st === 'ready' || st === 'generated') {
+          // Already complete — tell parent to show itinerary
+          onComplete([], undefined, false);
+        } else if (st === 'generating' || st === 'queued') {
+          // In progress — activate poller
+          setServerGenActive(true);
+        }
+      } catch (e) {
+        console.warn('[ItineraryGenerator] Mount status check failed:', e);
+      }
+    };
+    checkStatus();
+    return () => { cancelled = true; };
+  }, [tripId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRetry = () => {
     reset();
