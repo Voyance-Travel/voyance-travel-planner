@@ -442,6 +442,7 @@ interface GenerationContext {
   // Phase 3: Premium features
   preBookedCommitments?: PreBookedCommitment[];
   mustDoActivities?: string;
+  interestCategories?: string[];
   mustHaves?: Array<{label: string; notes?: string}>;
   /** Whether this generation is triggered by Smart Finish enrichment mode */
   isSmartFinish?: boolean;
@@ -4122,8 +4123,14 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     jetLagSensitivity: trip.metadata?.jetLagSensitivity || 'moderate',
     // Celebration day from user selection
     celebrationDay: trip.metadata?.celebrationDay,
-    // User research notes / must-do activities from Page 2 paste field
-    mustDoActivities: trip.metadata?.mustDoActivities || undefined,
+    // User research notes / must-do activities from Page 2 paste field (can be string or array)
+    mustDoActivities: (() => {
+      const raw = trip.metadata?.mustDoActivities;
+      if (Array.isArray(raw)) return raw.join(', ');
+      return raw || undefined;
+    })(),
+    // Interest categories selected by user (e.g. ['history', 'food', 'nightlife'])
+    interestCategories: (trip.metadata?.interestCategories as string[]) || undefined,
     // Structured must-haves checklist (schedule constraints, hotel prefs, etc.)
     mustHaves: (trip.metadata?.mustHaves as Array<{label: string; notes?: string}>) || undefined,
     // Pre-booked commitments (shows, reservations, tours with fixed times)
@@ -8356,9 +8363,19 @@ ${'='.repeat(60)}
           console.log(`[Stage 1.999] ✓ User research notes injected as raw text with MANDATORY enforcement (${context.mustDoActivities.length} chars)`);
         }
       }
+      // Inject interest categories
+      if ((context as any).interestCategories && (context as any).interestCategories.length > 0) {
+        const categoryLabels: Record<string, string> = {
+          history: 'History & Museums', food: 'Food & Dining', shopping: 'Shopping',
+          nature: 'Parks & Nature', culture: 'Arts & Culture', nightlife: 'Nightlife',
+        };
+        const cats = (context as any).interestCategories as string[];
+        const labels = cats.map(c => categoryLabels[c] || c).join(', ');
+        userResearchPrompt += `\n## USER INTERESTS\nPrioritize activities in these categories: ${labels}. Lean heavily toward these when choosing between options.\n`;
+        console.log(`[Stage 1.999b] ✓ Interest categories injected: ${labels}`);
+      }
 
-      // =======================================================================
-      // STAGE 1.9991: Must-Haves Checklist Constraints
+
       // =======================================================================
       let mustHavesPrompt = "";
       if (context.mustHaves && context.mustHaves.length > 0) {
@@ -9337,7 +9354,10 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
           .eq('id', tripId)
           .single();
         const metadata = tripMeta?.metadata as Record<string, unknown> | null;
-        const mustDoActivities = (metadata?.mustDoActivities as string) || '';
+        // Handle both array (new picker) and string (legacy textarea) formats
+        const rawMustDo = metadata?.mustDoActivities;
+        const mustDoActivities = Array.isArray(rawMustDo) ? rawMustDo.join(', ') : (rawMustDo as string || '');
+        const interestCategories = (metadata?.interestCategories as string[]) || [];
         const isSmartFinish = metadata?.smartFinishMode === true || (metadata?.smartFinishSource || '').toString().includes('manual_builder');
         const smartFinishRequested = !!metadata?.smartFinishRequestedAt || isSmartFinish;
         if (mustDoActivities.trim()) {
@@ -9363,9 +9383,19 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
             console.log(`[generate-day] Must-do raw text injected (${mustDoActivities.length} chars)`);
           }
         }
+        // Inject interest categories into prompt
+        if (interestCategories.length > 0) {
+          const categoryLabels: Record<string, string> = {
+            history: 'History & Museums', food: 'Food & Dining', shopping: 'Shopping',
+            nature: 'Parks & Nature', culture: 'Arts & Culture', nightlife: 'Nightlife',
+          };
+          const labels = interestCategories.map(c => categoryLabels[c] || c).join(', ');
+          mustDoPrompt += `\n## USER INTERESTS\nPrioritize activities in these categories: ${labels}. Lean heavily toward these when choosing between options.\n`;
+          console.log(`[generate-day] Interest categories injected: ${labels}`);
+        }
         }
 
-      // Load structured must-haves checklist from trip metadata
+
       let mustHavesConstraintPrompt = '';
       let preBookedCommitmentsPrompt = '';
       if (tripId) {

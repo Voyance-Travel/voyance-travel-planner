@@ -48,6 +48,7 @@ import type { ManualFlightEntry } from '@/components/itinerary/AddBookingInline'
 import { buildFlightSelectionFromLegs, type FlightLeg } from '@/utils/normalizeFlightSelection';
 import GuestLinkModal, { type LinkedGuest } from '@/components/planner/GuestLinkModal';
 import { TripChatPlanner } from '@/components/planner/TripChatPlanner';
+import { MustSeeLandmarkPicker } from '@/components/planner/MustSeeLandmarkPicker';
 import { ManualTripPasteEntry } from '@/components/planner/ManualTripPasteEntry';
 import { TripCostEstimate } from '@/components/planner/TripCostEstimate';
 import { resolveCities } from '@/utils/cityNormalization';
@@ -942,6 +943,12 @@ function FlightHotelStep({
   setFirstTimePerCity,
   mustDoActivities,
   setMustDoActivities,
+  selectedLandmarks,
+  setSelectedLandmarks,
+  selectedCategories,
+  setSelectedCategories,
+  customMustDos,
+  setCustomMustDos,
   onSubmit,
   onBack,
   isSubmitting,
@@ -980,6 +987,12 @@ function FlightHotelStep({
   setFirstTimePerCity: (v: Record<string, boolean>) => void;
   mustDoActivities: string;
   setMustDoActivities: (v: string) => void;
+  selectedLandmarks: string[];
+  setSelectedLandmarks: (v: string[]) => void;
+  selectedCategories: string[];
+  setSelectedCategories: (v: string[]) => void;
+  customMustDos: string[];
+  setCustomMustDos: (v: string[]) => void;
   onSubmit: () => void;
   onBack: () => void;
   isSubmitting: boolean;
@@ -1814,26 +1827,35 @@ function FlightHotelStep({
             </div>
           )}
 
+          {/* Must-See Landmarks & Interest Picker */}
+          <MustSeeLandmarkPicker
+            cities={isMultiCity && multiCityDestinations.length > 0
+              ? multiCityDestinations.map(d => d.city)
+              : destination ? [destination] : []
+            }
+            selectedLandmarks={selectedLandmarks}
+            onSelectedLandmarksChange={setSelectedLandmarks}
+            selectedCategories={selectedCategories}
+            onSelectedCategoriesChange={setSelectedCategories}
+            customItems={customMustDos}
+            onCustomItemsChange={setCustomMustDos}
+          />
+
           {/* Extra Details — Optional paste field for research/notes */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <label className="flex items-center gap-2 text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
                 <MessageSquareText className="w-4 h-4" />
-                Have extra details to share?
+                Anything else?
               </label>
               <span className="text-xs text-muted-foreground/60">(optional)</span>
             </div>
             <Textarea
               value={mustDoActivities}
               onChange={(e) => setMustDoActivities(e.target.value)}
-              placeholder={`Paste notes, other AI suggestions, or must-sees...
-
-Example: "We love local food markets, sunset viewpoints, and avoiding tourist crowds. Skip the big bus tours."`}
-              className="min-h-[100px] resize-none text-sm"
+              placeholder="Paste notes, other AI suggestions, skip requests, or special requirements..."
+              className="min-h-[70px] resize-none text-sm"
             />
-            <p className="text-xs text-muted-foreground">
-              Share must-sees, skip requests, or paste any research you've gathered. Our AI will incorporate it into your itinerary.
-            </p>
           </div>
         </div>
       </div>
@@ -2227,6 +2249,9 @@ export default function Start() {
   const [isFirstTimeVisitor, setIsFirstTimeVisitor] = useState(true);
   const [firstTimePerCity, setFirstTimePerCity] = useState<Record<string, boolean>>({});
   const [mustDoActivities, setMustDoActivities] = useState('');
+  const [selectedLandmarks, setSelectedLandmarks] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [customMustDos, setCustomMustDos] = useState<string[]>([]);
 
   // Fetch user's DNA budget preference for smart defaults
   const [dnaBudgetTier, setDnaBudgetTier] = useState<string | null>(null);
@@ -2269,6 +2294,9 @@ export default function Start() {
           if (savedDraft.isFirstTimeVisitor !== undefined) setIsFirstTimeVisitor(savedDraft.isFirstTimeVisitor);
           if (savedDraft.firstTimePerCity) setFirstTimePerCity(savedDraft.firstTimePerCity);
           if (savedDraft.mustDoActivities) setMustDoActivities(savedDraft.mustDoActivities);
+          if (savedDraft.selectedLandmarks) setSelectedLandmarks(savedDraft.selectedLandmarks);
+          if (savedDraft.selectedCategories) setSelectedCategories(savedDraft.selectedCategories);
+          if (savedDraft.customMustDos) setCustomMustDos(savedDraft.customMustDos);
           if (savedDraft.destination) setDestinationSelection({ display: savedDraft.destination, cityName: savedDraft.destination });
           if (savedDraft.startDate) setStartDate(parseLocalDate(savedDraft.startDate));
           if (savedDraft.endDate) setEndDate(parseLocalDate(savedDraft.endDate));
@@ -2435,7 +2463,14 @@ export default function Start() {
           metadata: {
             isFirstTimeVisitor,
             firstTimePerCity: isMultiCity && Object.keys(firstTimePerCity).length > 0 ? firstTimePerCity : null,
-            mustDoActivities: mustDoActivities || null,
+            mustDoActivities: [
+              ...selectedLandmarks,
+              ...customMustDos,
+              ...(mustDoActivities ? [mustDoActivities] : []),
+            ].filter(Boolean).length > 0
+              ? [...selectedLandmarks, ...customMustDos, ...(mustDoActivities ? [mustDoActivities] : [])]
+              : null,
+            interestCategories: selectedCategories.length > 0 ? selectedCategories : null,
             celebrationDay: celebrationDay || null,
             pacing: pacing || 'balanced',
             lastUpdated: new Date().toISOString(),
@@ -2857,6 +2892,12 @@ export default function Start() {
                     setManualHotels={setManualHotels}
                     mustDoActivities={mustDoActivities}
                     setMustDoActivities={setMustDoActivities}
+                    selectedLandmarks={selectedLandmarks}
+                    setSelectedLandmarks={setSelectedLandmarks}
+                    selectedCategories={selectedCategories}
+                    setSelectedCategories={setSelectedCategories}
+                    customMustDos={customMustDos}
+                    setCustomMustDos={setCustomMustDos}
                     onSubmit={handleSubmit}
                     onBack={() => {
                       window.history.back();
@@ -2925,6 +2966,9 @@ export default function Start() {
                   isFirstTimeVisitor,
                   firstTimePerCity,
                   mustDoActivities,
+                  selectedLandmarks,
+                  selectedCategories,
+                  customMustDos,
                   currentStep: 1,
                 };
                 sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));

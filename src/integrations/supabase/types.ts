@@ -2166,6 +2166,33 @@ export type Database = {
         }
         Relationships: []
       }
+      city_landmarks_cache: {
+        Row: {
+          city: string
+          country: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          landmarks: Json
+        }
+        Insert: {
+          city: string
+          country?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          landmarks?: Json
+        }
+        Update: {
+          city?: string
+          country?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          landmarks?: Json
+        }
+        Relationships: []
+      }
       consent_records: {
         Row: {
           consent_type: string
