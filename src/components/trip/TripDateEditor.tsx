@@ -295,7 +295,7 @@ export function TripDateEditor({
             )}
           >
             <CalendarIcon className="w-3.5 h-3.5 text-muted-foreground" />
-            {format(currentStart, 'MMM d')} – {format(currentEnd, 'MMM d, yyyy')}
+            <span className="hidden sm:inline">{format(currentStart, 'MMM d')} – {format(currentEnd, 'MMM d, yyyy')}</span>
             <Pencil className="w-3 h-3 text-muted-foreground/60" />
           </button>
         </PopoverTrigger>

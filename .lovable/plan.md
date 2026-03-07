@@ -1,85 +1,63 @@
 
 
-## Plan: Modernize Mobile Trip Detail UI
+## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
 
-This is a large scope request with 9 changes. I'll break it into **two phases** to keep each implementation manageable and reduce risk. Phase 1 covers the high-priority bug fixes and highest-impact layout changes. Phase 2 covers polish and secondary reorganization.
+### What's Already Working (No Changes Needed)
+- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
+- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
+- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
+- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
 
----
+### What's Broken — Two Things
 
-### Phase 1 (This Implementation) — Bugs + Biggest Wins
+**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
 
-#### Change 8: Fix Flight Form Field Overlap on Mobile
-**File:** `src/components/itinerary/AddBookingInline.tsx`
+**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
 
-Replace all instances of `grid grid-cols-2 gap-3` with `grid grid-cols-1 sm:grid-cols-2 gap-3` in the flight form sections (lines 461, 481, 559, 579, 604, 624, 649, 669, 975, 1062). This is a simple find-and-replace across ~10 grid containers. Fields stack vertically on mobile, side-by-side on desktop.
+### Changes
 
-Also apply the same fix in `src/components/itinerary/FlightImportModal.tsx` (lines 511, 532, 553, 574).
+#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
 
-#### Change 9: Fix Date Display Overlap in Trip Header
-**File:** `src/pages/TripDetail.tsx`
+**Change A — Remove stall detector setup** (lines ~261-313):
+Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
 
-The mobile compact status line (line 1317) and desktop layout (line 1334) are already split with `sm:hidden` / `hidden sm:flex`. Verify no duplicate date pill exists. If the TripDateEditor renders its own date display that overlaps with the status line text, add `[&>span]:hidden` or ensure the TripDateEditor trigger on mobile only shows the pencil icon, not a full date pill.
+**Change B — Remove browser loop fallback** (lines ~455-469):
+Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
 
-**File:** `src/components/trip/TripDateEditor.tsx` — Check the trigger element. If it renders a date badge/pill, hide the text on mobile and show only the edit icon.
+```typescript
+// OLD:
+} catch (serverErr) {
+  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
+  const generatedDays = await generateItinerary({ ... });
+  // ... 40 lines of fallback logic
+}
 
-#### Change 1: Slim Down Hero Area
-**File:** `src/pages/TripDetail.tsx`
+// NEW:
+} catch (serverErr) {
+  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
+  setPrePhase(null);
+  setHasStarted(false);
+  toast.error('Failed to start generation. Please try again.');
+  return;
+}
+```
 
-The hero is already responsive (`h-40 sm:h-56 md:h-72` at line 1279). This is already compact on mobile at 160px. No change needed — already implemented.
+**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
 
-#### Change 3: Tab Bar Already Simplified
-The tab bar (EditorialItinerary.tsx lines 3665-3739) already has: sticky positioning on mobile, 3 visible tabs (Itinerary, Budget, Details) with Payments and Info in a `⋯` overflow menu via `mobileOverflow: true`. Already implemented.
+**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
 
-#### Change 2: MobileTripOverview Already Implemented
-Lines 1802-1884 of TripDetail.tsx already wrap Health + Travel Intel in the `MobileTripOverview` collapsible component with localStorage persistence. Already implemented.
+#### File 2: `src/hooks/useItineraryGeneration.ts`
 
-#### Change 4: Streamline Trip Summary Action Buttons
-**File:** `src/components/itinerary/EditorialItinerary.tsx` (lines ~3812-3960)
+No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
 
-- The "Saved ✓" indicator is already a non-button text element (line 3884)
-- Wrap the secondary actions row (Optimize, Regenerate — line 3890-3960) in a mobile-only collapsible or move into a `DropdownMenu` with a "More actions" trigger on mobile
-- Add `className="hidden sm:flex"` to the secondary actions div, and add a mobile-only `⋯` overflow button that contains the same actions
+### Files to Modify
 
-#### Change 5: Collapse Intelligence Summary on Return Visits
-**File:** `src/components/itinerary/ItineraryValueHeader.tsx` (the `ItineraryValueHeader` component rendered at line 3753)
-
-- Add localStorage check keyed by `tripId` for first-visit vs return
-- On return visits, collapse to a single summary line showing key stats
-- On first visit, show expanded with animation, then mark as seen
-
-#### Change 6: Lighten Day Headers on Mobile
-**File:** `src/components/itinerary/EditorialItinerary.tsx` — Find the day header rendering section
-
-- On mobile, move routes/lock/refresh buttons into an overflow `⋯` menu on day headers
-- Reduce the large day number styling to compact "DAY X" prefix on mobile
-- Truncate VoyanceInsight to single line with expand on mobile
-
-#### Change 7: Add Breathing Room
-**File:** `src/components/itinerary/EditorialItinerary.tsx`
-
-- Increase `space-y-6` to `space-y-8` on mobile for major sections
-- Add `p-4` instead of `p-3` inside activity cards on mobile
-- Reduce box shadows on nested cards (VoyanceInsight inside activity)
-
----
-
-### Summary of Actual Code Changes Needed
-
-| File | Changes |
-|------|---------|
-| `src/components/itinerary/AddBookingInline.tsx` | Replace ~10 `grid-cols-2` → `grid-cols-1 sm:grid-cols-2` |
-| `src/components/itinerary/FlightImportModal.tsx` | Replace ~4 `grid-cols-2` → `grid-cols-1 sm:grid-cols-2` |
-| `src/components/trip/TripDateEditor.tsx` | Hide date text on mobile trigger, show only pencil icon |
-| `src/components/itinerary/EditorialItinerary.tsx` | Collapse secondary action buttons on mobile into overflow menu; lighten day headers on mobile; add spacing; truncate VoyanceInsight on mobile |
-| `src/components/itinerary/ItineraryValueHeader.tsx` | Add localStorage-based auto-collapse on return visits |
-
-### What's Already Done (No Changes Needed)
-- Change 1 (slim hero): Already `h-40` on mobile
-- Change 2 (MobileTripOverview): Already collapsible with localStorage
-- Change 3 (tab bar): Already 3 tabs + overflow on mobile
+| File | What |
+|------|------|
+| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
 
 ### Risk Assessment
-- **Low risk**: Flight form grid fix is a class-name-only change
-- **Low risk**: Header overlap fix is CSS/conditional rendering
-- **Medium risk**: EditorialItinerary changes touch a large file but are additive (wrapping existing elements in responsive containers)
+- **Low risk**: The server-side self-chaining is already fully implemented and tested
+- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
+- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
 

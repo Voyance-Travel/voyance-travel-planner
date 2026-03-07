@@ -508,7 +508,7 @@ Multi-city bookings with multiple flights will all be extracted."
                     "px-3 pb-3 space-y-3",
                     getConnectionGroupClass(seg, idx) && "border-x border-b rounded-b-lg"
                   )}>
-                    <div className="grid grid-cols-2 gap-3 pt-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                       <div>
                         <Label className="text-xs text-muted-foreground">Airline</Label>
                         <Input
@@ -529,7 +529,7 @@ Multi-city bookings with multiple flights will all be extracted."
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <Label className="text-xs text-muted-foreground">From</Label>
                         <Input
@@ -550,7 +550,7 @@ Multi-city bookings with multiple flights will all be extracted."
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <Label className="text-xs text-muted-foreground">Departure Date</Label>
                         <Input
@@ -571,7 +571,7 @@ Multi-city bookings with multiple flights will all be extracted."
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <Label className="text-xs text-muted-foreground">Arrival Time</Label>
                         <Input

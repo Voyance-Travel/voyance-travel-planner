@@ -3887,54 +3887,92 @@ export function EditorialItinerary({
                   )}
                 </div>
 
-                {/* Secondary actions — collapsed on mobile */}
+                {/* Secondary actions — desktop inline, mobile overflow */}
                 {effectiveIsEditable && (
-                  <div className="flex items-center justify-center gap-2 flex-wrap">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => {
-                            if (entitlements?.can_optimize_routes) {
-                              openOptimizeDialog();
-                            } else {
-                              setShowRouteUpgrade(true);
-                            }
-                          }} 
-                          disabled={isOptimizing || days.length === 0}
-                          className="gap-1.5 text-xs text-muted-foreground"
-                        >
-                          {isOptimizing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Route className="h-3.5 w-3.5" />}
-                          {isOptimizing ? 'Optimizing...' : 'Optimize'}
-                          {!entitlements?.can_optimize_routes && <Lock className="h-3 w-3 ml-0.5 opacity-60" />}
-                          {entitlements?.can_optimize_routes && !routeOptCost.isFirstTrip && routeOptCost.cost > 0 && (
-                            <span className="inline-flex items-center gap-0.5 text-[10px] opacity-60 ml-0.5">
-                              <Coins className="h-2.5 w-2.5" />{routeOptCost.cost}
-                            </span>
-                          )}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>
-                          Reorders activities to minimize transit time
-                          {!routeOptCost.isFirstTrip && routeOptCost.cost > 0 && ` · ${routeOptCost.cost} credits`}
-                          {routeOptCost.isFirstTrip && ' · Free on first trip'}
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
+                  <>
+                    {/* Desktop: inline buttons */}
+                    <div className="hidden sm:flex items-center justify-center gap-2 flex-wrap">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => {
+                              if (entitlements?.can_optimize_routes) {
+                                openOptimizeDialog();
+                              } else {
+                                setShowRouteUpgrade(true);
+                              }
+                            }} 
+                            disabled={isOptimizing || days.length === 0}
+                            className="gap-1.5 text-xs text-muted-foreground"
+                          >
+                            {isOptimizing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Route className="h-3.5 w-3.5" />}
+                            {isOptimizing ? 'Optimizing...' : 'Optimize'}
+                            {!entitlements?.can_optimize_routes && <Lock className="h-3 w-3 ml-0.5 opacity-60" />}
+                            {entitlements?.can_optimize_routes && !routeOptCost.isFirstTrip && routeOptCost.cost > 0 && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] opacity-60 ml-0.5">
+                                <Coins className="h-2.5 w-2.5" />{routeOptCost.cost}
+                              </span>
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>
+                            Reorders activities to minimize transit time
+                            {!routeOptCost.isFirstTrip && routeOptCost.cost > 0 && ` · ${routeOptCost.cost} credits`}
+                            {routeOptCost.isFirstTrip && ' · Free on first trip'}
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
 
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="gap-1.5 text-xs text-muted-foreground"
-                      onClick={() => setShowRegenerateConfirm(true)}
-                      disabled={isRegenerating}
-                    >
-                      {isRegenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                      {isRegenerating ? 'Regenerating…' : 'Regenerate'}
-                    </Button>
-                  </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1.5 text-xs text-muted-foreground"
+                        onClick={() => setShowRegenerateConfirm(true)}
+                        disabled={isRegenerating}
+                      >
+                        {isRegenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                        {isRegenerating ? 'Regenerating…' : 'Regenerate'}
+                      </Button>
+                    </div>
+
+                    {/* Mobile: overflow menu */}
+                    <div className="sm:hidden flex items-center justify-center">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground">
+                            <MoreHorizontal className="h-3.5 w-3.5" />
+                            More actions
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="center" className="w-48">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              if (entitlements?.can_optimize_routes) {
+                                openOptimizeDialog();
+                              } else {
+                                setShowRouteUpgrade(true);
+                              }
+                            }}
+                            disabled={isOptimizing || days.length === 0}
+                          >
+                            {isOptimizing ? <RefreshCw className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Route className="h-3.5 w-3.5 mr-2" />}
+                            {isOptimizing ? 'Optimizing...' : 'Optimize Routes'}
+                            {!entitlements?.can_optimize_routes && <Lock className="h-3 w-3 ml-auto opacity-60" />}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => setShowRegenerateConfirm(true)}
+                            disabled={isRegenerating}
+                          >
+                            {isRegenerating ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-2" />}
+                            {isRegenerating ? 'Regenerating…' : 'Regenerate All'}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </>
                 )}
               </div>
             </div>
