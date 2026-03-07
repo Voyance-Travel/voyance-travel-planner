@@ -85,46 +85,35 @@ export function TransitBadge({
   };
 
   return (
-    <div className="mt-3 -mb-1">
-      {/* Compact inline badge */}
+    <div className="mt-1 -mb-0.5">
+      {/* Minimal inline transit indicator */}
       <div className="flex items-center gap-1.5">
         <div 
           className={cn(
-            "inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full",
-            "bg-secondary/50 border border-border/50 text-xs text-muted-foreground",
-            (transportation.instructions || onTransportModeChange) && "cursor-pointer hover:bg-secondary/80 transition-colors"
+            "inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-full",
+            "text-[11px] text-muted-foreground/70",
+            (transportation.instructions || onTransportModeChange) && "cursor-pointer hover:text-muted-foreground transition-colors"
           )}
           onClick={() => {
             if (transportation.instructions) setExpanded(!expanded);
           }}
         >
           {isChangingMode ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
+            <Loader2 className="h-2.5 w-2.5 animate-spin" />
           ) : (
-            <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1 text-muted-foreground/50">
               {icon}
-              <span className="capitalize font-medium">{transportation.method}</span>
             </span>
           )}
           
-          {transportation.distance && (
-            <>
-              <span className="text-muted-foreground/50">•</span>
-              <span>{transportation.distance}</span>
-            </>
-          )}
-          
           {transportation.duration && (
-            <>
-              <span className="text-muted-foreground/50">•</span>
-              <span>{transportation.duration}</span>
-            </>
+            <span>{transportation.duration}</span>
           )}
-          
+
           {costDisplay && (
             <>
-              <span className="text-muted-foreground/50">•</span>
-              <span className="font-medium text-foreground">{costDisplay}</span>
+              <span className="text-muted-foreground/30">·</span>
+              <span>{costDisplay}</span>
             </>
           )}
           
@@ -133,7 +122,7 @@ export function TransitBadge({
               animate={{ rotate: expanded ? 180 : 0 }}
               transition={{ duration: 0.2 }}
             >
-              <ChevronDown className="h-3 w-3" />
+              <ChevronDown className="h-2.5 w-2.5" />
             </motion.div>
           )}
         </div>
