@@ -458,10 +458,11 @@ export function useItineraryGeneration() {
   const startServerGeneration = useCallback(async (
     trip: TripDetails & { creditsCharged?: number; requestedDays?: number }
   ): Promise<{ status: string; totalDays: number }> => {
-    const startDate = new Date(trip.startDate);
-    const endDate = new Date(trip.endDate);
     // totalDays is used only for local state — the server recalculates from trip_cities for multi-city
-    const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    // Use local date parsing to avoid UTC off-by-one errors
+    const [sy, sm, sd] = trip.startDate.split('-').map(Number);
+    const [ey, em, ed] = trip.endDate.split('-').map(Number);
+    const totalDays = Math.round((new Date(ey, em - 1, ed).getTime() - new Date(sy, sm - 1, sd).getTime()) / (1000 * 60 * 60 * 24));
 
     setState({
       isGenerating: true,

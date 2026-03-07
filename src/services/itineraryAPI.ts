@@ -181,12 +181,16 @@ async function getTripDetails(tripId: string) {
 }
 
 /**
- * Calculate number of days between dates
+ * Calculate number of itinerary days between dates (timezone-safe).
+ * Uses parseLocalDate to avoid UTC off-by-one errors.
+ * A trip from March 10–13 = 3 nights = 3 itinerary days.
  */
 function calculateDays(startDate: string, endDate: string): number {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  const [sy, sm, sd] = startDate.split('-').map(Number);
+  const [ey, em, ed] = endDate.split('-').map(Number);
+  const start = new Date(sy, sm - 1, sd);
+  const end = new Date(ey, em - 1, ed);
+  return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 /**
