@@ -886,7 +886,7 @@ export function ItineraryGenerator({
         animate={{ opacity: 1, y: 0 }}
         className="py-10"
       >
-        <GenerationPhases currentStep={prePhase} destination={destination} totalDays={totalDaysEstimate} tripId={tripId} />
+        <GenerationPhases currentStep={prePhase} destination={destination} totalDays={totalDaysEstimate} tripId={tripId} completedDays={poller.completedDays} generatedDaysList={poller.generatedDaysList} isComplete={poller.isReady} progress={poller.progress} />
         <div className="flex justify-center mt-6">
           <Button
             variant="ghost"
@@ -911,7 +911,7 @@ export function ItineraryGenerator({
   if (serverGenActive) {
     return (
       <div className="py-10">
-        <GenerationPhases tripId={tripId} totalDays={totalDaysEstimate} destination={destination} currentStep="preparing" />
+        <GenerationPhases tripId={tripId} totalDays={totalDaysEstimate} destination={destination} currentStep="preparing" completedDays={poller.completedDays} generatedDaysList={poller.generatedDaysList} isComplete={poller.isReady} progress={poller.progress} />
         <div className="flex justify-center mt-6">
           <Button
             variant="ghost"

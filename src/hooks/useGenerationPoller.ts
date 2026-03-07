@@ -20,6 +20,7 @@ export interface GeneratedDaySummary {
   title: string;
   theme: string;
   description: string;
+  activities?: unknown[];
   created_at?: string;
 }
 
@@ -94,7 +95,7 @@ export function useGenerationPoller({
           .single(),
         supabase
           .from('itinerary_days')
-          .select('day_number, title, theme, description, created_at', { count: 'exact' })
+          .select('day_number, title, theme, description, activities, created_at', { count: 'exact' })
           .eq('trip_id', tripId)
           .order('day_number'),
       ]);
@@ -117,6 +118,7 @@ export function useGenerationPoller({
         title: d.title || `Day ${d.day_number}`,
         theme: d.theme || '',
         description: d.description || '',
+        activities: d.activities || [],
         created_at: d.created_at,
       }));
       const dayCount = daysResult.count || daysList.length;
