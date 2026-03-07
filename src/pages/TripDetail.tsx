@@ -7,7 +7,7 @@ import { NightsRedistributionModal } from '@/components/trip/NightsRedistributio
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { format, isAfter, isBefore, differenceInDays, addDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
-import { Loader2, Calendar, MapPin, ArrowLeft, Edit, Sparkles, CheckCircle } from 'lucide-react';
+import { Loader2, MapPin, ArrowLeft, Sparkles, CheckCircle } from 'lucide-react';
 import { GenerationPhases } from '@/components/planner/shared/GenerationPhases';
 import { TripDateEditor, type DateChangeResult } from '@/components/trip/TripDateEditor';
 import MainLayout from '@/components/layout/MainLayout';
@@ -29,7 +29,7 @@ import { useEntitlements, canViewPremiumContentForDay } from '@/hooks/useEntitle
 import { computeUnlockedDayCount } from '@/lib/voyanceFlowController';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { TripDebriefModal } from '@/components/trip/TripDebriefModal';
-import { TripConfirmationBanner } from '@/components/trip/TripConfirmationBanner';
+
 import type { SwapSuggestion } from '@/components/trip/SwapReviewDialog';
 import { VersionConflictDialog } from '@/components/trip/VersionConflictDialog';
 import { supabase } from '@/integrations/supabase/client';
@@ -1311,15 +1311,16 @@ export default function TripDetail() {
           className="!rounded-none"
         />
         </ErrorBoundary>
-        {/* Back Button - positioned on hero */}
+        {/* Back Button - icon only so hero image stays text-free */}
         <div className="absolute top-20 left-4 md:left-8 z-20">
           <Button
             variant="ghost"
+            size="icon"
             onClick={() => navigate('/profile')}
             className="bg-background/90 backdrop-blur-sm hover:bg-background shadow-sm"
+            aria-label="Back"
           >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
+            <ArrowLeft className="w-4 h-4" />
           </Button>
         </div>
         {/* Subtle bottom fade for content transition — use a thin dark fade so it doesn't wash out the hero */}
@@ -1350,23 +1351,6 @@ export default function TripDetail() {
             );
           })()}
 
-          {/* Inline confirmation buttons (only shows for draft trips within 14 days) */}
-          {!isLiveTrip && hasItinerary && (
-            <TripConfirmationBanner
-              tripId={trip.id}
-              destination={trip.destination}
-              startDate={trip.start_date}
-              endDate={effectiveEndDate}
-              currentStatus={trip.status as string}
-              hasFlightSelection={!!trip.flight_selection}
-              hasHotelSelection={!!trip.hotel_selection}
-              itineraryDays={itineraryDays}
-              onStatusUpdate={(status) => setTrip(prev => prev ? { ...prev, status } as any : null)}
-              onTripDataUpdate={(data) => setTrip(prev => prev ? { ...prev, ...data } as any : null)}
-              onApplySwaps={handleApplySwaps}
-              onRegenerateTrip={handleRegenerateTrip}
-            />
-          )}
 
           {/* Live Itinerary View for active trips */}
           {isLiveTrip ? (
@@ -1871,9 +1855,24 @@ export default function TripDetail() {
                     )}
                     </ErrorBoundary>
                   </div>
+
+                  {/* Date/day editing moved here (above day sections) */}
+                  <div className="mb-4 flex justify-end">
+                    <TripDateEditor
+                      startDate={trip.start_date}
+                      endDate={effectiveEndDate}
+                      hasItinerary={hasItinerary}
+                      flightSelection={trip.flight_selection as Record<string, unknown> | null}
+                      onDateChange={handleDateChange}
+                      days={editorDays}
+                      cities={tripCities}
+                      compact
+                      className="shrink-0"
+                    />
+                  </div>
+
                   <ErrorBoundary>
                   <EditorialItinerary
-                  tripId={trip.id}
                   destination={trip.destination}
                   destinationCountry={
                     trip.destination_country ||
