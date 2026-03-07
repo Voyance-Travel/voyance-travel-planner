@@ -173,6 +173,12 @@ interface Trip {
   isCollaborator?: boolean;
   ownerName?: string | null;
   collaborators?: TripCollaboratorInfo[];
+  // Journey fields
+  journeyId: string | null;
+  journeyName: string | null;
+  journeyOrder: number | null;
+  journeyTotalLegs: number | null;
+  transitionMode: string | null;
 }
 
 // Simplified status mapping - no more "draft" display, all future trips are "upcoming"
