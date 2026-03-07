@@ -486,8 +486,8 @@ export function ItineraryGenerator({
           .eq('id', tripId)
           .single();
         if (cancelled) return;
-        const status = tripRow?.itinerary_status;
-        if (status === 'ready' || status === 'generated') {
+        const st = tripRow?.itinerary_status as string;
+        if (st === 'ready' || st === 'generated') {
           // Already complete — tell parent to show itinerary
           onComplete([], undefined, false);
         } else if (status === 'generating' || status === 'queued') {
