@@ -2144,7 +2144,7 @@ export default function Start() {
    const [mustDoActivities, setMustDoActivities] = useState('');
    const [generationRules, setGenerationRules] = useState<GenerationRule[]>([]);
   const [selectedLandmarks, setSelectedLandmarks] = useState<string[]>([]);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedCategories] = useState<string[]>([]); // Kept for backward compat with saved metadata
   const [customMustDos, setCustomMustDos] = useState<string[]>([]);
 
   // Fetch user's DNA budget preference for smart defaults
