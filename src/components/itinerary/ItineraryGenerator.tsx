@@ -217,7 +217,7 @@ export function ItineraryGenerator({
   // Pre-calculate estimated cost for display
   const totalDaysEstimate = useMemo(() => {
     try {
-      return differenceInCalendarDays(parseLocalDate(endDate), parseLocalDate(startDate)) + 1;
+      return differenceInCalendarDays(parseLocalDate(endDate), parseLocalDate(startDate));
     } catch { return 1; }
   }, [startDate, endDate]);
   
@@ -705,7 +705,7 @@ export function ItineraryGenerator({
             </Badge>
             <Badge variant="outline" className="gap-1">
               <Clock className="h-3 w-3" />
-              {Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1} days
+              {Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24))} days
             </Badge>
             <Badge variant="outline" className="gap-1">
               <DollarSign className="h-3 w-3" />
