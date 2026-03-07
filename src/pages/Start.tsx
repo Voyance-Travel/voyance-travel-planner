@@ -2130,6 +2130,25 @@ export default function Start() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDNAPrompt, setShowDNAPrompt] = useState(false);
+
+  // Helper: advance to step 2 and push history so browser back returns to step 1
+  const goToStep2 = useCallback(() => {
+    setCurrentStep(2);
+    window.history.pushState({ step: 2 }, '', '/start?step=2');
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+  }, []);
+
+  // Listen for browser back button to return to step 1
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (currentStep === 2 && (!event.state?.step || event.state.step === 1)) {
+        setCurrentStep(1);
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [currentStep]);
   const [planMode, setPlanMode] = useState<'single' | 'multi' | 'chat' | 'manual'>('single');
 
   // Trip state
