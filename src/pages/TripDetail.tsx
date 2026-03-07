@@ -85,6 +85,7 @@ interface ItineraryDay {
 }
 
 export default function TripDetail() {
+  useScrollLockCleanup(); // Safety net: clear stale scroll locks from unmounted modals
   const { tripId } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
