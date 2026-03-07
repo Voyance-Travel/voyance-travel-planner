@@ -127,7 +127,11 @@ export function TripConfirmCard({ details, onConfirm, onEdit, isGenerating, tran
       {details.mustDoActivities && (
         <div className="text-xs">
           <span className="text-muted-foreground">Must-do: </span>
-          <span className="text-foreground">{details.mustDoActivities}</span>
+          <span className="text-foreground">
+            {Array.isArray(details.mustDoActivities) 
+              ? details.mustDoActivities.join(', ')
+              : details.mustDoActivities}
+          </span>
         </div>
       )}
 
