@@ -100,7 +100,7 @@ export function useGenerationPoller({
           .single(),
         supabase
           .from('itinerary_days')
-          .select('day_number, title, theme, description, created_at', { count: 'exact' })
+          .select('day_number, title, theme, description, activities, created_at', { count: 'exact' })
           .eq('trip_id', tripId)
           .order('day_number'),
       ]);
@@ -119,11 +119,15 @@ export function useGenerationPoller({
 
       // Get day summaries from itinerary_days table, enriched with activities from itinerary_data
       const daysList: GeneratedDaySummary[] = (daysResult.data || []).map((d: any) => {
-        // Try to find matching day in partialDays (itinerary_data.days) for activity previews
+        // Prefer activities from itinerary_days table (written per-day during generation)
+        // Fall back to itinerary_data.days for legacy compatibility
+        const dayActivities = d.activities;
         const matchingPartialDay = partialDays.find((pd: any) =>
           pd && (pd.dayNumber === d.day_number || pd.day_number === d.day_number)
         ) as any;
-        const activities = matchingPartialDay?.activities || [];
+        const activities = (Array.isArray(dayActivities) && dayActivities.length > 0)
+          ? dayActivities
+          : (matchingPartialDay?.activities || []);
 
         return {
           day_number: d.day_number,
