@@ -7569,25 +7569,25 @@ function DayCard({
                   )}>
                     {/* Mobile: Time-of-day section header */}
                     {showTimeOfDayHeader && (
-                      <div className="sm:hidden flex items-center gap-2 px-4 pt-3 pb-1">
-                        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      <div className="sm:hidden flex items-center gap-2 px-4 pt-4 pb-1.5">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-primary/60">
                           {timeOfDay}
                         </span>
-                        <div className="flex-1 h-px bg-border" />
+                        <div className="flex-1 h-px bg-primary/10" />
                       </div>
                     )}
                     {/* Mobile: Card wrapper with timeline */}
-                    <div className="sm:hidden relative pl-7 pr-2 py-1.5">
+                    <div className="sm:hidden relative pl-7 pr-2 py-2">
                       {/* Timeline line */}
                       <div className={cn(
-                        "absolute left-3 top-0 bottom-0 w-0.5 bg-border",
-                        activityIndex === 0 && "top-4",
-                        isLastActivity && "bottom-4"
+                        "absolute left-3 top-0 bottom-0 w-0.5 bg-primary/15",
+                        activityIndex === 0 && "top-5",
+                        isLastActivity && "bottom-5"
                       )} />
                       {/* Timeline dot */}
-                      <div className="absolute left-[7px] top-4 w-3 h-3 rounded-full border-2 border-primary bg-background z-10" />
+                      <div className="absolute left-[7px] top-5 w-3 h-3 rounded-full border-2 border-primary bg-background z-10 shadow-sm" />
                       {/* Card */}
-                      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+                      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden mb-1">
                         <ActivityRow
                           activity={activityToRender}
                           destination={cleanDestination}
