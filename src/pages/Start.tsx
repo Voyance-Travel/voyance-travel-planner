@@ -943,16 +943,8 @@ function FlightHotelStep({
   setIsFirstTimeVisitor,
   firstTimePerCity,
   setFirstTimePerCity,
-  mustDoActivities,
-  setMustDoActivities,
-  selectedLandmarks,
-  setSelectedLandmarks,
-  selectedCategories,
-  setSelectedCategories,
-   customMustDos,
-   generationRules,
-   onGenerationRulesChange,
-  setCustomMustDos,
+  onSubmit,
+  onBack,
   onSubmit,
   onBack,
   isSubmitting,
@@ -989,16 +981,8 @@ function FlightHotelStep({
   setIsFirstTimeVisitor: (v: boolean) => void;
   firstTimePerCity: Record<string, boolean>;
   setFirstTimePerCity: (v: Record<string, boolean>) => void;
-  mustDoActivities: string;
-  setMustDoActivities: (v: string) => void;
-  selectedLandmarks: string[];
-  setSelectedLandmarks: (v: string[]) => void;
-  selectedCategories: string[];
-  setSelectedCategories: (v: string[]) => void;
-   customMustDos: string[];
-   generationRules: GenerationRule[];
-   onGenerationRulesChange: (rules: GenerationRule[]) => void;
-  setCustomMustDos: (v: string[]) => void;
+  onSubmit: () => void;
+  onBack: () => void;
   onSubmit: () => void;
   onBack: () => void;
   isSubmitting: boolean;
@@ -2162,23 +2146,27 @@ export default function Start() {
 
   const DRAFT_STORAGE_KEY = 'voyance_start_draft';
 
-  // Current step: 1 = Trip Details, 2 = Flight & Hotel
+  // Current step: 1 = Trip Details, 2 = Personalize (optional), 3 = Flight & Hotel
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDNAPrompt, setShowDNAPrompt] = useState(false);
 
-  // Helper: advance to step 2 and push history so browser back returns to step 1
-  const goToStep2 = useCallback(() => {
-    setCurrentStep(2);
-    window.history.pushState({ step: 2 }, '', '/start?step=2');
+  // Helper: advance to a specific step and push history
+  const goToStep = useCallback((step: number) => {
+    setCurrentStep(step);
+    window.history.pushState({ step }, '', `/start?step=${step}`);
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
   }, []);
 
-  // Listen for browser back button to return to step 1
+  // Shorthand for the common Step 1 → Step 2 transition
+  const goToStep2 = useCallback(() => goToStep(2), [goToStep]);
+
+  // Listen for browser back button to navigate between steps
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
-      if (currentStep === 2 && (!event.state?.step || event.state.step === 1)) {
-        setCurrentStep(1);
+      const targetStep = event.state?.step || 1;
+      if (targetStep < currentStep) {
+        setCurrentStep(targetStep);
         window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
       }
     };
