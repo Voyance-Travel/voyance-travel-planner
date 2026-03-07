@@ -2311,6 +2311,7 @@ export default function Start() {
           if (savedDraft.selectedLandmarks) setSelectedLandmarks(savedDraft.selectedLandmarks);
           if (savedDraft.selectedCategories) setSelectedCategories(savedDraft.selectedCategories);
           if (savedDraft.customMustDos) setCustomMustDos(savedDraft.customMustDos);
+          if (savedDraft.generationRules) setGenerationRules(savedDraft.generationRules);
           if (savedDraft.destination) setDestinationSelection({ display: savedDraft.destination, cityName: savedDraft.destination });
           if (savedDraft.startDate) setStartDate(parseLocalDate(savedDraft.startDate));
           if (savedDraft.endDate) setEndDate(parseLocalDate(savedDraft.endDate));
@@ -2485,6 +2486,7 @@ export default function Start() {
               ? [...selectedLandmarks, ...customMustDos, ...(mustDoActivities ? [mustDoActivities] : [])]
               : null,
             interestCategories: selectedCategories.length > 0 ? selectedCategories : null,
+            generationRules: generationRules.length > 0 ? generationRules : null,
             celebrationDay: celebrationDay || null,
             pacing: pacing || 'balanced',
             lastUpdated: new Date().toISOString(),
@@ -2985,6 +2987,7 @@ export default function Start() {
                   selectedLandmarks,
                   selectedCategories,
                   customMustDos,
+                  generationRules,
                   currentStep: 1,
                 };
                 sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
