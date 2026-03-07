@@ -442,12 +442,23 @@ export default function TripDetail() {
       trip && 
       !loading && 
       !autoGenerateTriggered.current &&
+      !isServerGenerating &&
+      trip.itinerary_status !== 'generating' &&
+      trip.itinerary_status !== 'queued' &&
       (!hasItineraryData(trip) || trip.itinerary_status === 'failed')
     ) {
       autoGenerateTriggered.current = true;
       handleShowGenerator(true);
     }
-  }, [shouldAutoGenerate, trip, loading]);
+    // If we returned to the page while generation is in progress, clean up the URL param
+    if (shouldAutoGenerate && trip && (isServerGenerating || trip.itinerary_status === 'generating' || trip.itinerary_status === 'queued')) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('generate');
+        return next;
+      }, { replace: true });
+    }
+  }, [shouldAutoGenerate, trip, loading, isServerGenerating]);
 
   // Helper to check if trip has itinerary data
   function hasItineraryData(t: Trip | null): boolean {
