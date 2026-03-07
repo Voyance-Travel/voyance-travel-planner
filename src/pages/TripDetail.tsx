@@ -1325,8 +1325,6 @@ export default function TripDetail() {
             <ArrowLeft className="w-4 h-4" />
           </Button>
         </div>
-        {/* Subtle bottom fade for content transition — use a thin dark fade so it doesn't wash out the hero */}
-        <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/30 to-transparent" />
       </div>
       
       {/* Journey Breadcrumb — only for linked journey trips */}

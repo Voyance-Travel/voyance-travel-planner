@@ -240,13 +240,17 @@ export default function DynamicDestinationPhotos({
           className="absolute inset-0 w-full h-full object-cover"
           onError={() => { setHeroImage(null); setError(true); }}
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/50 to-transparent" />
-        <div className="absolute inset-0 p-3 flex items-center" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
-          <div className="flex items-center gap-2 text-white text-sm">
-            <MapPin className="w-4 h-4" />
-            <span className="font-medium">{cleanDestination}</span>
-          </div>
-        </div>
+        {!hideOverlayText && (
+          <>
+            <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/50 to-transparent" />
+            <div className="absolute inset-0 p-3 flex items-center" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
+              <div className="flex items-center gap-2 text-white text-sm">
+                <MapPin className="w-4 h-4" />
+                <span className="font-medium">{cleanDestination}</span>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     );
   }
@@ -261,29 +265,33 @@ export default function DynamicDestinationPhotos({
           className="absolute inset-0 w-full h-full object-cover"
           onError={() => { setHeroImage(null); setError(true); }}
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-black/20" />
-         <div className="absolute inset-0 p-5 flex items-center justify-between" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
-          <div>
-            <div className="flex items-center gap-2 text-white mb-1">
-              <MapPin className="w-5 h-5" />
-              <h3 className="text-xl font-serif font-semibold">{cleanDestination}</h3>
+        {!hideOverlayText && (
+          <>
+            <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-black/20" />
+            <div className="absolute inset-0 p-5 flex items-center justify-between" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
+              <div>
+                <div className="flex items-center gap-2 text-white mb-1">
+                  <MapPin className="w-5 h-5" />
+                  <h3 className="text-xl font-serif font-semibold">{cleanDestination}</h3>
+                </div>
+                <div className="flex items-center gap-4 text-white/80 text-sm">
+                  {formatDateRange() && (
+                    <span className="flex items-center gap-1.5">
+                      <Calendar className="w-4 h-4" />
+                      {formatDateRange()}
+                    </span>
+                  )}
+                  {travelers && (
+                    <span className="flex items-center gap-1.5">
+                      <Users className="w-4 h-4" />
+                      {travelers} traveler{travelers > 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-4 text-white/80 text-sm">
-              {formatDateRange() && (
-                <span className="flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4" />
-                  {formatDateRange()}
-                </span>
-              )}
-              {travelers && (
-                <span className="flex items-center gap-1.5">
-                  <Users className="w-4 h-4" />
-                  {travelers} traveler{travelers > 1 ? 's' : ''}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     );
   }
@@ -302,8 +310,10 @@ export default function DynamicDestinationPhotos({
         onError={() => { setHeroImage(null); setError(true); }}
       />
       
-      {/* Gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/10" />
+      {/* Gradient overlay - only when showing text */}
+      {!hideOverlayText && (
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/10" />
+      )}
       
       {/* Content overlay */}
       {!hideOverlayText && (
