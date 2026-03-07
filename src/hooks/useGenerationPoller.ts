@@ -78,6 +78,8 @@ export function useGenerationPoller({
   // Track whether we already fired onStalled / attempted auto-resume
   const stalledFiredRef = useRef(false);
   const autoResumeAttemptedRef = useRef(false);
+  // Guard: only fire onReady once per generation cycle
+  const onReadyCalledRef = useRef(false);
 
   const poll = useCallback(async () => {
     if (!tripId) return;
@@ -128,7 +130,10 @@ export function useGenerationPoller({
         stalledFiredRef.current = false;
         autoResumeAttemptedRef.current = false;
         setState({ status: 'ready', completedDays: totalDays || completedDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList });
-        onReadyRef.current?.();
+        if (!onReadyCalledRef.current) {
+          onReadyCalledRef.current = true;
+          onReadyRef.current?.();
+        }
         return;
       }
 
@@ -137,7 +142,10 @@ export function useGenerationPoller({
         stalledFiredRef.current = false;
         autoResumeAttemptedRef.current = false;
         setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList });
-        onReadyRef.current?.();
+        if (!onReadyCalledRef.current) {
+          onReadyCalledRef.current = true;
+          onReadyRef.current?.();
+        }
         return;
       }
 
@@ -237,6 +245,7 @@ export function useGenerationPoller({
       setState(prev => prev.status === 'idle' ? prev : { ...prev, status: 'idle' });
       stalledFiredRef.current = false;
       autoResumeAttemptedRef.current = false;
+      onReadyCalledRef.current = false;
       return;
     }
 
@@ -255,6 +264,7 @@ export function useGenerationPoller({
   const startPolling = useCallback(() => {
     stalledFiredRef.current = false;
     autoResumeAttemptedRef.current = false;
+    onReadyCalledRef.current = false;
     setState(prev => ({ ...prev, status: 'polling' }));
   }, []);
 

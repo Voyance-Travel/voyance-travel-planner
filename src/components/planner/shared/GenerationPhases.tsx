@@ -1,83 +1,47 @@
 /**
  * Live Generation Progress Component
- * Polls itinerary_days and shows real day-by-day progress during generation
+ * Receives polling data as props from parent (single source of truth via useGenerationPoller).
+ * Shows real day-by-day progress during generation with activity previews.
  */
 
-import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Check, Loader2, Cloud } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { Sparkles, Check, Loader2, Clock } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import type { GenerationStep } from '@/hooks/useLovableItinerary';
+import type { GeneratedDaySummary } from '@/hooks/useGenerationPoller';
+
+interface ActivityPreview {
+  title?: string;
+  name?: string;
+  time?: string;
+  start_time?: string;
+}
 
 interface GenerationPhasesProps {
   currentStep: GenerationStep;
   destination?: string;
   totalDays?: number;
   tripId?: string;
+  /** Data from useGenerationPoller — single source of truth */
+  completedDays?: number;
+  generatedDaysList?: GeneratedDaySummary[];
+  isComplete?: boolean;
+  progress?: number;
 }
 
-interface PolledDay {
-  day_number: number;
-  title: string | null;
-  theme: string | null;
-}
-
-export function GenerationPhases({ currentStep, destination, totalDays, tripId }: GenerationPhasesProps) {
-  const [days, setDays] = useState<PolledDay[]>([]);
-  const [isComplete, setIsComplete] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (!tripId) return;
-
-    const poll = async () => {
-      try {
-        const { data: currentDays } = await supabase
-          .from('itinerary_days')
-          .select('day_number, title, theme')
-          .eq('trip_id', tripId)
-          .order('day_number');
-
-        if (currentDays && currentDays.length > 0) {
-          setDays(currentDays);
-        }
-
-        const { data: trip } = await supabase
-          .from('trips')
-          .select('itinerary_status')
-          .eq('id', tripId)
-          .single();
-
-        if (trip?.itinerary_status) {
-          setStatus(trip.itinerary_status as string);
-          const s = trip.itinerary_status as string;
-          if (s === 'ready' || s === 'generated') {
-            setIsComplete(true);
-            if (intervalRef.current) {
-              clearInterval(intervalRef.current);
-              intervalRef.current = null;
-            }
-          }
-        }
-      } catch (e) {
-        // Silently continue polling
-      }
-    };
-
-    poll();
-    intervalRef.current = setInterval(poll, 5000);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [tripId]);
-
-  const completedDays = days.length;
-  const total = totalDays || 0;
-  const remainingDays = Math.max(0, total - completedDays);
-  const progress = total > 0 ? (completedDays / total) * 100 : 0;
+export function GenerationPhases({
+  currentStep,
+  destination,
+  totalDays = 0,
+  tripId,
+  completedDays = 0,
+  generatedDaysList = [],
+  isComplete = false,
+  progress = 0,
+}: GenerationPhasesProps) {
+  const remainingDays = Math.max(0, totalDays - completedDays);
   const nextDay = completedDays + 1;
+  const allDaysDone = totalDays > 0 && completedDays >= totalDays;
 
   // No tripId — simple preparing state
   if (!tripId) {
@@ -93,8 +57,8 @@ export function GenerationPhases({ currentStep, destination, totalDays, tripId }
     );
   }
 
-  // Complete state
-  if (isComplete) {
+  // Complete state (poller said ready OR all days arrived)
+  if (isComplete || allDaysDone) {
     return (
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
@@ -113,7 +77,7 @@ export function GenerationPhases({ currentStep, destination, totalDays, tripId }
           Your itinerary is ready!
         </h2>
         <p className="text-sm text-muted-foreground">
-          {total} days in {destination || 'your destination'} — loading now...
+          {totalDays} days in {destination || 'your destination'} — loading now...
         </p>
       </motion.div>
     );
@@ -136,9 +100,9 @@ export function GenerationPhases({ currentStep, destination, totalDays, tripId }
         </motion.div>
 
         <h2 className="text-xl font-serif font-bold text-foreground mb-1">
-          {completedDays === 0 && status !== 'generating'
+          {completedDays === 0
             ? `Building your ${destination || 'trip'}`
-            : `Building Day ${Math.min(nextDay, total)} of ${total}`}
+            : `Building Day ${Math.min(nextDay, totalDays)} of ${totalDays}`}
         </h2>
 
         <p className="text-sm text-muted-foreground">
@@ -149,7 +113,7 @@ export function GenerationPhases({ currentStep, destination, totalDays, tripId }
       </div>
 
       {/* Progress bar */}
-      {total > 0 && (
+      {totalDays > 0 && (
         <div className="mb-6">
           <Progress value={progress} className="h-2" />
           <p className="text-xs text-muted-foreground text-right mt-1">{Math.round(progress)}%</p>
@@ -158,34 +122,57 @@ export function GenerationPhases({ currentStep, destination, totalDays, tripId }
 
       {/* Day list */}
       <div className="space-y-2 mb-6">
-        {/* Completed days */}
-        {days.map((day) => (
-          <motion.div
-            key={day.day_number}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3 }}
-            className="flex items-start gap-3 p-3 rounded-lg bg-primary/5 border border-primary/10"
-          >
-            <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
-              <Check className="h-3.5 w-3.5 text-primary" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-primary uppercase tracking-wide">Day {day.day_number}</span>
-                {day.title && (
-                  <span className="text-sm font-medium text-foreground truncate">{day.title}</span>
+        {/* Completed days with activities */}
+        {generatedDaysList.map((day) => {
+          const activities = ((day as any).activities as ActivityPreview[] | undefined) || [];
+          const visibleActivities = activities.slice(0, 3);
+          const moreCount = Math.max(0, activities.length - 3);
+
+          return (
+            <motion.div
+              key={day.day_number}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3 }}
+              className="flex items-start gap-3 p-3 rounded-lg bg-primary/5 border border-primary/10"
+            >
+              <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
+                <Check className="h-3.5 w-3.5 text-primary" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-primary uppercase tracking-wide">Day {day.day_number}</span>
+                  {day.title && (
+                    <span className="text-sm font-medium text-foreground truncate">{day.title}</span>
+                  )}
+                </div>
+                {day.theme && day.theme !== day.title && (
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">{day.theme}</p>
+                )}
+                {/* Activity previews */}
+                {visibleActivities.length > 0 && (
+                  <div className="mt-1.5 space-y-0.5">
+                    {visibleActivities.map((act, i) => (
+                      <div key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Clock className="h-2.5 w-2.5 shrink-0" />
+                        <span className="truncate">
+                          {act.start_time || act.time ? `${act.start_time || act.time} — ` : ''}
+                          {act.title || act.name || 'Activity'}
+                        </span>
+                      </div>
+                    ))}
+                    {moreCount > 0 && (
+                      <p className="text-xs text-muted-foreground/70 pl-4">+{moreCount} more</p>
+                    )}
+                  </div>
                 )}
               </div>
-              {day.theme && (
-                <p className="text-xs text-muted-foreground mt-0.5 truncate">{day.theme}</p>
-              )}
-            </div>
-          </motion.div>
-        ))}
+            </motion.div>
+          );
+        })}
 
         {/* Currently generating day */}
-        {!isComplete && nextDay <= total && (
+        {!isComplete && !allDaysDone && nextDay <= totalDays && (
           <div className="flex items-start gap-3 p-3 rounded-lg border border-border bg-card">
             <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
               <Loader2 className="h-3.5 w-3.5 text-muted-foreground animate-spin" />
@@ -206,7 +193,7 @@ export function GenerationPhases({ currentStep, destination, totalDays, tripId }
         )}
 
         {/* Upcoming days (show max 2) */}
-        {!isComplete && Array.from({ length: Math.min(2, total - nextDay) }, (_, i) => nextDay + 1 + i).map((dayNum) => (
+        {!isComplete && !allDaysDone && Array.from({ length: Math.min(2, totalDays - nextDay) }, (_, i) => nextDay + 1 + i).map((dayNum) => (
           <div key={dayNum} className="flex items-start gap-3 p-3 rounded-lg opacity-30">
             <div className="w-6 h-6 rounded-full border border-border flex items-center justify-center shrink-0 mt-0.5">
               <span className="text-[10px] text-muted-foreground">{dayNum}</span>
@@ -223,7 +210,7 @@ export function GenerationPhases({ currentStep, destination, totalDays, tripId }
         transition={{ delay: 1 }}
         className="flex items-center gap-2 p-3 rounded-lg bg-secondary/50 border border-border"
       >
-        <Cloud className="h-4 w-4 text-muted-foreground shrink-0" />
+        <Sparkles className="h-4 w-4 text-muted-foreground shrink-0" />
         <p className="text-xs text-muted-foreground">
           Feel free to leave — we'll keep building your itinerary in the background. Come back anytime.
         </p>
