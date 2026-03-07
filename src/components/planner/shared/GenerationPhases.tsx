@@ -100,15 +100,19 @@ export function GenerationPhases({
         </motion.div>
 
         <h2 className="text-xl font-serif font-bold text-foreground mb-1">
-          {completedDays === 0
-            ? `Building your ${destination || 'trip'}`
-            : `Building Day ${Math.min(nextDay, totalDays)} of ${totalDays}`}
+          {allDaysDone
+            ? 'Finalizing your itinerary…'
+            : completedDays === 0
+              ? `Building your ${destination || 'trip'}`
+              : `Building Day ${nextDay} of ${totalDays}`}
         </h2>
 
         <p className="text-sm text-muted-foreground">
-          {completedDays === 0
-            ? 'Getting started...'
-            : `${completedDays} ${completedDays === 1 ? 'day' : 'days'} complete · ~${Math.max(1, Math.ceil(remainingDays * 1.2))} min remaining`}
+          {allDaysDone
+            ? 'Almost there — assembling your trip now'
+            : completedDays === 0
+              ? 'Getting started...'
+              : `${completedDays} ${completedDays === 1 ? 'day' : 'days'} complete · ~${Math.max(1, Math.ceil(remainingDays * 1.2))} min remaining`}
         </p>
       </div>
 
