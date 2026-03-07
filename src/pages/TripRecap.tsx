@@ -39,7 +39,7 @@ export default function TripRecap() {
 
   // Calculate trip duration
   const tripDays = trip?.start_date && trip?.end_date
-    ? differenceInDays(parseISO(trip.end_date), parseISO(trip.start_date))
+    ? differenceInDays(parseISO(trip.end_date), parseISO(trip.start_date)) + 1
     : 0;
 
   // Get cover photo
