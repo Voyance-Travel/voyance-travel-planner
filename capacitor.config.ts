@@ -7,6 +7,12 @@ const config: CapacitorConfig = {
   server: {
     url: 'https://bbef7015-a2df-45af-893d-7d36d59f8dcd.lovableproject.com?forceHideBadge=true',
     cleartext: true
+  },
+  ios: {
+    appendUserAgent: 'VoyanceApp'
+  },
+  android: {
+    appendUserAgent: 'VoyanceApp'
   }
 };
 

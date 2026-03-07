@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { isNativeApp } from '@/utils/analyticsGate';
 
 const SESSION_KEY = 'voy_session_id';
 const ADMIN_PATHS = ['/admin'];
@@ -50,7 +51,8 @@ async function trackEvent(event: {
   time_on_page_ms?: number;
   event_data?: Record<string, unknown>;
 }) {
-  // Skip admin pages
+  // Skip in native app (Apple Guideline 5.1.2(i)) and admin pages
+  if (isNativeApp()) return;
   if (ADMIN_PATHS.some(p => event.page_path.startsWith(p))) return;
 
   const utm = getUtmParams();
