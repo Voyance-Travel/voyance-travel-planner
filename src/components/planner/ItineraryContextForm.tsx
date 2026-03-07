@@ -77,6 +77,10 @@ export default function ItineraryContextForm({
   // Must-do activities
   const [mustDoActivities, setMustDoActivities] = useState('');
 
+  // Detect complex constraints in must-do text
+  const complexConstraintKeywords = /\b(school|class|work|meeting|hotel change|switching hotel|joining|arrives|leaving early|blocked|not available|unavailable|appointment|conference|seminar)\b/i;
+  const hasComplexConstraints = complexConstraintKeywords.test(mustDoActivities);
+
   const hasAnyData = hotelLocation || arrivalTime || departureTime || commitments.length > 0 || mustDoActivities;
   const showChildrenAges = childrenCount > 0 || tripType === 'family';
 
