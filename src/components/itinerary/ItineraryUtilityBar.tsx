@@ -2,18 +2,20 @@
  * Itinerary Utility Bar
  * 
  * Share / Save / Export PDF / Regenerate buttons for the itinerary.
- * Positioned below the intelligence summary.
+ * On mobile: Share + Export PDF visible, Save/Regenerate in overflow menu.
  */
 
 import { useState } from 'react';
 import { 
   Share2, Download, Save, Link2, Copy, Check, 
-  Mail, MessageCircle, FileText, RefreshCw, Loader2, AlertTriangle, Coins
+  Mail, MessageCircle, FileText, RefreshCw, Loader2, AlertTriangle, Coins, MoreHorizontal
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+
 interface ItineraryUtilityBarProps {
   tripId: string;
   tripName: string;
@@ -54,6 +56,8 @@ export function ItineraryUtilityBar({
     }
   };
 
+  const hasOverflowItems = !!onSave || !!onRegenerateItinerary;
+
   return (
     <>
       <div className={cn(
@@ -71,40 +75,69 @@ export function ItineraryUtilityBar({
           <span>Share</span>
         </Button>
 
-        {/* Save */}
-        {onSave && (
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="gap-2" 
-            onClick={onSave}
-            disabled={isSaving}
-          >
-            <Save className="h-4 w-4" />
-            <span className="hidden sm:inline">{isSaving ? 'Saving...' : 'Save'}</span>
-          </Button>
-        )}
-
-        {/* Regenerate Itinerary */}
-        {onRegenerateItinerary && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-2"
-            onClick={() => setShowRegenerateConfirm(true)}
-            disabled={isRegenerating}
-          >
-            {isRegenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            <span className="hidden sm:inline">{isRegenerating ? 'Regenerating…' : 'Regenerate'}</span>
-          </Button>
-        )}
-
-        {/* Export PDF */}
+        {/* Export PDF - visible on all sizes */}
         {onExportPDF && (
           <Button variant="ghost" size="sm" className="gap-2" onClick={handleExportPDF}>
             <FileText className="h-4 w-4" />
             <span className="hidden sm:inline">Export PDF</span>
           </Button>
+        )}
+
+        {/* Desktop: show Save and Regenerate inline */}
+        {onSave && (
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="gap-2 hidden sm:inline-flex" 
+            onClick={onSave}
+            disabled={isSaving}
+          >
+            <Save className="h-4 w-4" />
+            <span>{isSaving ? 'Saving...' : 'Save'}</span>
+          </Button>
+        )}
+
+        {onRegenerateItinerary && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-2 hidden sm:inline-flex"
+            onClick={() => setShowRegenerateConfirm(true)}
+            disabled={isRegenerating}
+          >
+            {isRegenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            <span>{isRegenerating ? 'Regenerating…' : 'Regenerate'}</span>
+          </Button>
+        )}
+
+        {/* Mobile: overflow menu for Save + Regenerate */}
+        {hasOverflowItems && (
+          <div className="sm:hidden">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                {onSave && (
+                  <DropdownMenuItem onClick={onSave} disabled={isSaving}>
+                    <Save className="h-3.5 w-3.5 mr-2" />
+                    {isSaving ? 'Saving...' : 'Save'}
+                  </DropdownMenuItem>
+                )}
+                {onRegenerateItinerary && (
+                  <DropdownMenuItem 
+                    onClick={() => setShowRegenerateConfirm(true)} 
+                    disabled={isRegenerating}
+                  >
+                    <RefreshCw className={cn("h-3.5 w-3.5 mr-2", isRegenerating && "animate-spin")} />
+                    {isRegenerating ? 'Regenerating…' : 'Regenerate'}
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         )}
       </div>
 

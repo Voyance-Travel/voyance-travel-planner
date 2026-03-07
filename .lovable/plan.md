@@ -1,60 +1,63 @@
 
 
-## Plan: Modernize Mobile Trip Detail UI — Remaining Changes
+## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
 
-### What's Already Done (from previous rounds)
-- Change 1 (Slim hero): `h-40` mobile, compact status line ✅
-- Change 2 (MobileTripOverview): Collapsible with localStorage ✅
-- Change 3 (Simplified tabs): 3 visible + "⋯" overflow on mobile ✅
-- Change 5 (Intelligence Summary collapse): Auto-collapse on return visits ✅
-- Change 8 (Flight grid overlap): Fixed with `grid-cols-1 sm:grid-cols-2` ✅
-- Change 9 (Date display overlap): Separate mobile/desktop rendering ✅
+### What's Already Working (No Changes Needed)
+- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
+- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
+- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
+- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
 
-### What Remains
+### What's Broken — Two Things
 
-#### 1. Fix Generation Progress UI in TripDetail.tsx (lines 1427-1531)
-The `ItineraryGenerator` generation bugs were fixed, but `TripDetail.tsx` has its own **separate** inline generation progress view (used when returning to a trip mid-generation) that still has the same bugs:
+**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
 
-- **Line 1457:** "Building in the cloud" → "Building in the background"
-- **Line 1436:** Off-by-one: `completedDays + 1` shows "Day 6 of 5" when done. Add guard: if `completedDays >= totalDays`, show "Finalizing your itinerary..." instead
-- **Lines 1476-1491:** Completed day cards only show title/theme. Add activity preview: show first 3 activities with times from `generatedDaysList[].activities`
+**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
 
-#### 2. Streamline Utility Bar on Mobile (Change 4)
-File: `src/components/itinerary/ItineraryUtilityBar.tsx`
+### Changes
 
-- On mobile, show only **Share** and **Export PDF** as visible buttons
-- Move **Save** (already auto-saving) and **Regenerate** into a "⋯" overflow `DropdownMenu`
-- Keep desktop layout unchanged
+#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
 
-#### 3. Lighten Day Headers on Mobile (Change 6)
-File: `src/components/itinerary/EditorialItinerary.tsx` (day header rendering)
+**Change A — Remove stall detector setup** (lines ~261-313):
+Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
 
-- On mobile, move Lock/Regenerate/Routes icons into a "⋯" overflow menu on the day header
-- Keep only the collapse chevron as a direct button
-- Reduce the large day number styling to a compact "DAY 4" prefix on mobile
+**Change B — Remove browser loop fallback** (lines ~455-469):
+Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
 
-#### 4. Breathing Room Polish (Change 7)
-File: `src/components/itinerary/EditorialItinerary.tsx`
+```typescript
+// OLD:
+} catch (serverErr) {
+  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
+  const generatedDays = await generateItinerary({ ... });
+  // ... 40 lines of fallback logic
+}
 
-- Increase gap between activity cards from `space-y-3` → `space-y-4` on mobile
-- Reduce card-within-card shadows (Voyance Insight inside activity cards)
+// NEW:
+} catch (serverErr) {
+  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
+  setPrePhase(null);
+  setHasStarted(false);
+  toast.error('Failed to start generation. Please try again.');
+  return;
+}
+```
 
-#### 5. "Join Own Trip" Notification (Change 10)
-This requires a backend check. In the edge function or database trigger that creates "member joined" notifications, add a guard: skip notification when `joining_user_id === trip.owner_id`.
+**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
+
+**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
+
+#### File 2: `src/hooks/useItineraryGeneration.ts`
+
+No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
 
 ### Files to Modify
 
-| File | Changes |
-|------|---------|
-| `src/pages/TripDetail.tsx` | Fix generation progress: text, off-by-one, activity preview |
-| `src/components/itinerary/ItineraryUtilityBar.tsx` | Mobile: 2 primary buttons + overflow |
-| `src/components/itinerary/EditorialItinerary.tsx` | Mobile day header overflow menu, spacing polish |
-| Backend notification logic (edge function or trigger) | Guard against self-join notifications |
+| File | What |
+|------|------|
+| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
 
-### Priority
-1. Generation progress fixes (visible bugs)
-2. Utility bar streamlining (button clutter)
-3. Day header overflow (visual density)
-4. Spacing polish
-5. Self-join notification (low priority)
+### Risk Assessment
+- **Low risk**: The server-side self-chaining is already fully implemented and tested
+- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
+- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
 

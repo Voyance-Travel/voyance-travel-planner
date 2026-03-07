@@ -1431,9 +1431,11 @@ export default function TripDetail() {
                       <Sparkles className="h-4 w-4 text-primary absolute -top-1 -right-1 animate-pulse" />
                     </div>
                     <div className="text-center space-y-2 max-w-md">
-                      <h3 className="text-xl font-serif font-semibold">
+                    <h3 className="text-xl font-serif font-semibold">
                         {generationPoller.completedDays > 0
-                          ? `Building Day ${generationPoller.completedDays + 1} of ${generationPoller.totalDays}`
+                          ? (generationPoller.totalDays > 0 && generationPoller.completedDays >= generationPoller.totalDays
+                            ? 'Finalizing your itinerary…'
+                            : `Building Day ${generationPoller.completedDays + 1} of ${generationPoller.totalDays}`)
                           : 'Generating your itinerary…'}
                       </h3>
                       {generationPoller.totalDays > 0 ? (
@@ -1454,7 +1456,7 @@ export default function TripDetail() {
                       <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 mt-4 max-w-md mx-auto">
                         <Sparkles className="h-5 w-5 text-primary mt-0.5 shrink-0" />
                         <div>
-                          <p className="text-sm font-medium text-foreground">Building in the cloud</p>
+                          <p className="text-sm font-medium text-foreground">Building in the background</p>
                           <p className="text-sm text-muted-foreground mt-1">
                             Feel free to leave — we'll keep building your itinerary in the background. Come back anytime to check progress.
                           </p>
@@ -1473,22 +1475,38 @@ export default function TripDetail() {
                       Your completed days:
                     </p>
                     <div className="space-y-2 max-w-lg mx-auto">
-                      {generationPoller.generatedDaysList.map((day) => (
-                        <div
-                          key={day.day_number}
-                          className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card"
-                          style={{ animation: 'fadeInUp 0.3s ease-out' }}
-                        >
-                          <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold shrink-0">
-                            {day.day_number}
+                      {generationPoller.generatedDaysList.map((day) => {
+                        const activities = Array.isArray(day.activities) ? day.activities as any[] : [];
+                        return (
+                          <div
+                            key={day.day_number}
+                            className="flex items-start gap-3 p-3 rounded-lg border border-border bg-card"
+                            style={{ animation: 'fadeInUp 0.3s ease-out' }}
+                          >
+                            <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold shrink-0 mt-0.5">
+                              {day.day_number}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm truncate">{day.title}</p>
+                              {day.theme && <p className="text-xs text-muted-foreground truncate">{day.theme}</p>}
+                              {activities.length > 0 && (
+                                <div className="mt-1.5 space-y-0.5">
+                                  {activities.slice(0, 3).map((act: any, i: number) => (
+                                    <p key={i} className="text-xs text-muted-foreground truncate">
+                                      {act.startTime || act.time ? `${act.startTime || act.time} · ` : ''}
+                                      {act.title || act.name || 'Activity'}
+                                    </p>
+                                  ))}
+                                  {activities.length > 3 && (
+                                    <p className="text-xs text-muted-foreground/60">+{activities.length - 3} more</p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <CheckCircle className="h-4 w-4 text-green-500 shrink-0 mt-1" />
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm truncate">{day.title}</p>
-                            {day.theme && <p className="text-xs text-muted-foreground truncate">{day.theme}</p>}
-                          </div>
-                          <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </ErrorBoundary>
