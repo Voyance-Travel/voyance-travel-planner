@@ -66,42 +66,31 @@ function SortableItem({ id, isHighlighted, disabled, children }: SortableItemPro
       ref={setNodeRef}
       style={style}
       className={cn(
-        "relative group",
+        "relative group flex",
         isDragging && "opacity-50 scale-[1.02] shadow-lg rounded-lg",
         isHighlighted && "ring-2 ring-primary ring-offset-2 rounded-lg animate-pulse"
       )}
     >
-      {/* Desktop: Drag Handle — visible on hover */}
+      {/* Drag handle — visible on both mobile and desktop */}
       {!disabled && (
         <div
           {...attributes}
           {...listeners}
           className={cn(
-            "absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3",
-            "hidden sm:flex",
-            "opacity-0 group-hover:opacity-100 transition-opacity",
-            "cursor-grab active:cursor-grabbing",
-            "items-center justify-center w-7 h-10 rounded-md bg-background border shadow-sm",
-            "hover:bg-muted z-10",
-            isDragging && "opacity-100"
+            "flex items-center justify-center shrink-0 w-7 self-stretch",
+            "cursor-grab active:cursor-grabbing touch-none",
+            "text-muted-foreground/40 hover:text-muted-foreground transition-colors",
+            "sm:opacity-0 sm:group-hover:opacity-100",
+            isDragging && "sm:opacity-100"
           )}
-          style={{ touchAction: 'none' }}
         >
-          <GripVertical className="h-4 w-4 text-muted-foreground" />
+          <GripVertical className="h-4 w-4" />
         </div>
       )}
 
-      {/* Mobile: entire card is the drag target via TouchSensor long-press */}
-      {!disabled && (
-        <div
-          {...attributes}
-          {...listeners}
-          className="sm:hidden absolute inset-0 z-[5]"
-          style={{ touchAction: 'auto' }}
-        />
-      )}
-
-      {children}
+      <div className="flex-1 min-w-0">
+        {children}
+      </div>
     </div>
   );
 }
