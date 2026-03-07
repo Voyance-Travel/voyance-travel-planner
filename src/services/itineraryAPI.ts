@@ -384,6 +384,7 @@ export async function generateItinerary(
         theme: data.day.theme || '',
         description: data.day.description || '',
         date: dateStr,
+        activities: data.day.activities || [],
       } as any, { onConflict: 'trip_id,day_number' }).then(res => {
         if (res.error) console.warn(`[ItineraryAPI] Failed to write day ${dayNumber} to itinerary_days:`, res.error);
       });
