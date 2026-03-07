@@ -147,8 +147,8 @@ const sampleItineraries = [
 function StepIndicator({ currentStep, isMultiCity }: { currentStep: number; isMultiCity?: boolean }) {
   const steps = [
     { label: 'Trip Details', step: 1 },
-    { label: 'Personalize', step: 2 },
-    { label: isMultiCity ? 'Transport & Hotel' : 'Flight & Hotel', step: 3 },
+    { label: isMultiCity ? 'Transport & Hotel' : 'Flight & Hotel', step: 2 },
+    { label: 'Fine-Tune', step: 3 },
   ];
 
   return (
@@ -1754,22 +1754,9 @@ function FlightHotelStep({
         <Button variant="ghost" onClick={onBack}>
           Back
         </Button>
-        <Button
-          onClick={onSubmit}
-          disabled={isSubmitting}
-          className="h-12 px-6 text-base font-medium rounded-xl shadow-lg bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
-        >
-          {isSubmitting ? (
-            <>
-              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-              Creating...
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-5 h-5 mr-2" />
-              Build My Itinerary
-            </>
-          )}
+        <Button onClick={onSubmit} className="gap-2">
+          Continue
+          <ArrowRight className="w-4 h-4" />
         </Button>
       </div>
 
@@ -2759,7 +2746,48 @@ export default function Start() {
                   />
                 )}
 
-                {currentStep === 2 && (
+                {currentStep === 2 && startDate && endDate && (
+                  <FlightHotelStep
+                    key="flight-hotel"
+                    destination={isMultiCity ? (multiCityDestinations[0]?.city || '') : destinationSelection.cityName}
+                    startDate={format(startDate, 'yyyy-MM-dd')}
+                    endDate={format(endDate, 'yyyy-MM-dd')}
+                    travelers={travelers}
+                    outboundFlight={outboundFlight}
+                    setOutboundFlight={setOutboundFlight}
+                    returnFlight={returnFlight}
+                    setReturnFlight={setReturnFlight}
+                    showReturnFlight={showReturnFlight}
+                    setShowReturnFlight={setShowReturnFlight}
+                    additionalLegs={additionalLegs}
+                    setAdditionalLegs={setAdditionalLegs}
+                    hotelChoice={hotelChoice}
+                    setHotelChoice={setHotelChoice}
+                    manualHotel={manualHotel}
+                    setManualHotel={setManualHotel}
+                    isFirstTimeVisitor={isFirstTimeVisitor}
+                    setIsFirstTimeVisitor={setIsFirstTimeVisitor}
+                    firstTimePerCity={firstTimePerCity}
+                    setFirstTimePerCity={setFirstTimePerCity}
+                    manualHotelList={manualHotelList}
+                    setManualHotelList={setManualHotelList}
+                    manualHotels={manualHotels}
+                    setManualHotels={setManualHotels}
+                    onSubmit={() => goToStep(3)}
+                    onBack={() => window.history.back()}
+                    isSubmitting={false}
+                    isMultiCity={isMultiCity}
+                    multiCityDestinations={multiCityDestinations}
+                    multiCityTransports={multiCityTransports}
+                    setMultiCityTransports={setMultiCityTransports}
+                    transportSelections={transportSelections}
+                    onTransportSelect={handleTransportSelect}
+                    onIntelligenceCapture={(intel) => setFlightIntelligence(intel)}
+                    flightIntelligence={flightIntelligence}
+                  />
+                )}
+
+                {currentStep === 3 && (
                   <motion.div
                     key="personalize"
                     initial={{ opacity: 0, x: 20 }}
@@ -2768,20 +2796,26 @@ export default function Start() {
                     transition={{ duration: 0.2 }}
                     className="space-y-6"
                   >
-                    <div className="text-center space-y-1 mb-6">
-                      <h2 className="text-xl font-serif font-semibold">Personalize your trip <span className="text-muted-foreground font-normal text-base">(optional)</span></h2>
-                      <p className="text-sm text-muted-foreground">Add landmarks, must-dos, and rules — or skip and we'll build a great trip anyway.</p>
+                    <div className="flex items-start justify-between mb-6">
+                      <div className="space-y-1">
+                        <h2 className="text-xl font-serif font-semibold">Fine-tune this trip</h2>
+                        <p className="text-sm text-muted-foreground">We've got your Travel DNA. Here are a few ways to customize this specific itinerary.</p>
+                      </div>
+                      <Button
+                        onClick={handleSubmit}
+                        disabled={isSubmitting}
+                        variant="outline"
+                        className="shrink-0 ml-4"
+                      >
+                        {isSubmitting ? (
+                          <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating...</>
+                        ) : (
+                          <>Skip & Generate <ArrowRight className="w-4 h-4 ml-1" /></>
+                        )}
+                      </Button>
                     </div>
 
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => goToStep(3)}
-                    >
-                      Skip — go to Flight & Hotel →
-                    </Button>
-
-                    <div className="space-y-4 pt-2">
+                    <div className="space-y-4">
                       {/* First-Time Visitor Toggle(s) */}
                       {isMultiCity && multiCityDestinations && multiCityDestinations.length >= 2 ? (
                         <div className="space-y-2">
@@ -2874,54 +2908,25 @@ export default function Start() {
                       <Button variant="ghost" onClick={() => window.history.back()}>
                         Back
                       </Button>
-                      <Button onClick={() => goToStep(3)}>
-                        Continue <ArrowRight className="w-4 h-4 ml-2" />
+                      <Button
+                        onClick={handleSubmit}
+                        disabled={isSubmitting}
+                        className="h-12 px-6 text-base font-medium rounded-xl shadow-lg bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
+                      >
+                        {isSubmitting ? (
+                          <>
+                            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                            Creating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-5 h-5 mr-2" />
+                            Build My Itinerary
+                          </>
+                        )}
                       </Button>
                     </div>
                   </motion.div>
-                )}
-
-                {currentStep === 3 && startDate && endDate && (
-                  <FlightHotelStep
-                    key="flight-hotel"
-                    destination={isMultiCity ? (multiCityDestinations[0]?.city || '') : destinationSelection.cityName}
-                    startDate={format(startDate, 'yyyy-MM-dd')}
-                    endDate={format(endDate, 'yyyy-MM-dd')}
-                    travelers={travelers}
-                    outboundFlight={outboundFlight}
-                    setOutboundFlight={setOutboundFlight}
-                    returnFlight={returnFlight}
-                    setReturnFlight={setReturnFlight}
-                    showReturnFlight={showReturnFlight}
-                    setShowReturnFlight={setShowReturnFlight}
-                    additionalLegs={additionalLegs}
-                    setAdditionalLegs={setAdditionalLegs}
-                    hotelChoice={hotelChoice}
-                    setHotelChoice={setHotelChoice}
-                    manualHotel={manualHotel}
-                    setManualHotel={setManualHotel}
-                    isFirstTimeVisitor={isFirstTimeVisitor}
-                    setIsFirstTimeVisitor={setIsFirstTimeVisitor}
-                    firstTimePerCity={firstTimePerCity}
-                    setFirstTimePerCity={setFirstTimePerCity}
-                    manualHotelList={manualHotelList}
-                    setManualHotelList={setManualHotelList}
-                    manualHotels={manualHotels}
-                    setManualHotels={setManualHotels}
-                    onSubmit={handleSubmit}
-                    onBack={() => {
-                      window.history.back();
-                    }}
-                    isSubmitting={isSubmitting}
-                    isMultiCity={isMultiCity}
-                    multiCityDestinations={multiCityDestinations}
-                    multiCityTransports={multiCityTransports}
-                    setMultiCityTransports={setMultiCityTransports}
-                    transportSelections={transportSelections}
-                    onTransportSelect={handleTransportSelect}
-                    onIntelligenceCapture={(intel) => setFlightIntelligence(intel)}
-                    flightIntelligence={flightIntelligence}
-                  />
                 )}
               </AnimatePresence>
             </div>
