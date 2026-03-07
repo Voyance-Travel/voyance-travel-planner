@@ -33,7 +33,7 @@ export interface WeatherData {
   currentConditions?: string;
   feelsLike?: number;
   forecast?: WeatherForecast[];
-  source?: 'weatherstack' | 'fallback';
+  source?: 'weatherkit' | 'open-meteo' | 'fallback';
 }
 
 export interface WeatherResponse {
@@ -64,7 +64,7 @@ export async function getWeather(destinationId: string): Promise<WeatherResponse
 
   // Transform the response to match existing interface
   const weatherData = data?.weather;
-  const isRealData = weatherData?.source === 'weatherstack';
+  const isRealData = weatherData?.source === 'weatherkit' || weatherData?.source === 'open-meteo';
   
   return {
     destinationId,
