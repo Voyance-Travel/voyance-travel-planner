@@ -20,6 +20,7 @@ export interface GeneratedDaySummary {
   title: string;
   theme: string;
   description: string;
+  activities?: unknown[];
   created_at?: string;
 }
 
@@ -78,6 +79,8 @@ export function useGenerationPoller({
   // Track whether we already fired onStalled / attempted auto-resume
   const stalledFiredRef = useRef(false);
   const autoResumeAttemptedRef = useRef(false);
+  // Guard: only fire onReady once per generation cycle
+  const onReadyCalledRef = useRef(false);
 
   const poll = useCallback(async () => {
     if (!tripId) return;
@@ -92,7 +95,7 @@ export function useGenerationPoller({
           .single(),
         supabase
           .from('itinerary_days')
-          .select('day_number, title, theme, description, created_at', { count: 'exact' })
+          .select('day_number, title, theme, description, activities, created_at', { count: 'exact' })
           .eq('trip_id', tripId)
           .order('day_number'),
       ]);
@@ -115,6 +118,7 @@ export function useGenerationPoller({
         title: d.title || `Day ${d.day_number}`,
         theme: d.theme || '',
         description: d.description || '',
+        activities: d.activities || [],
         created_at: d.created_at,
       }));
       const dayCount = daysResult.count || daysList.length;
@@ -128,7 +132,10 @@ export function useGenerationPoller({
         stalledFiredRef.current = false;
         autoResumeAttemptedRef.current = false;
         setState({ status: 'ready', completedDays: totalDays || completedDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList });
-        onReadyRef.current?.();
+        if (!onReadyCalledRef.current) {
+          onReadyCalledRef.current = true;
+          onReadyRef.current?.();
+        }
         return;
       }
 
@@ -137,7 +144,10 @@ export function useGenerationPoller({
         stalledFiredRef.current = false;
         autoResumeAttemptedRef.current = false;
         setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList });
-        onReadyRef.current?.();
+        if (!onReadyCalledRef.current) {
+          onReadyCalledRef.current = true;
+          onReadyRef.current?.();
+        }
         return;
       }
 
@@ -237,6 +247,7 @@ export function useGenerationPoller({
       setState(prev => prev.status === 'idle' ? prev : { ...prev, status: 'idle' });
       stalledFiredRef.current = false;
       autoResumeAttemptedRef.current = false;
+      onReadyCalledRef.current = false;
       return;
     }
 
@@ -255,6 +266,7 @@ export function useGenerationPoller({
   const startPolling = useCallback(() => {
     stalledFiredRef.current = false;
     autoResumeAttemptedRef.current = false;
+    onReadyCalledRef.current = false;
     setState(prev => ({ ...prev, status: 'polling' }));
   }, []);
 
