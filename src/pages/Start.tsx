@@ -2189,7 +2189,7 @@ export default function Start() {
           if (savedDraft.firstTimePerCity) setFirstTimePerCity(savedDraft.firstTimePerCity);
           if (savedDraft.mustDoActivities) setMustDoActivities(savedDraft.mustDoActivities);
           if (savedDraft.selectedLandmarks) setSelectedLandmarks(savedDraft.selectedLandmarks);
-          if (savedDraft.selectedCategories) setSelectedCategories(savedDraft.selectedCategories);
+          // selectedCategories removed — interest categories are no longer user-facing
           if (savedDraft.customMustDos) setCustomMustDos(savedDraft.customMustDos);
           if (savedDraft.generationRules) setGenerationRules(savedDraft.generationRules);
           if (savedDraft.destination) setDestinationSelection({ display: savedDraft.destination, cityName: savedDraft.destination });
