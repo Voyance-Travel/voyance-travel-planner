@@ -1109,6 +1109,7 @@ export function EditorialItinerary({
   onDaysChange,
   navigateToSection,
   initialItineraryData,
+  itineraryStatus,
 }: EditorialItineraryProps) {
   const queryClient = useQueryClient();
   const [rawDays, setRawDays] = useState<EditorialDay[]>(initialDays);
