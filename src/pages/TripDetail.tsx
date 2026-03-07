@@ -1528,6 +1528,7 @@ export default function TripDetail() {
                       travelers={trip.travelers || 1}
                       isEditable={false}
                       isPreview={true}
+                      itineraryStatus="generating"
                     />
                   </div>
                 </ErrorBoundary>
@@ -2028,6 +2029,7 @@ export default function TripDetail() {
                   isEditable={true}
                   isPreview={!!(trip.itinerary_data as any)?.isPreview}
                   creationSource={trip.creation_source}
+                  itineraryStatus={trip.itinerary_status}
                   onDaysChange={(updatedDays) => {
                     // Keep trip state in sync so ItineraryAssistant always sees current days
                     setTrip(prev => prev ? {

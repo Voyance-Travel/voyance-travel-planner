@@ -434,6 +434,8 @@ export interface EditorialItineraryProps {
   navigateToSection?: string | null;
   /** Raw itinerary_data object so we can restore optionSelections on page load */
   initialItineraryData?: Record<string, unknown> | null;
+  /** Current itinerary generation status — hides unlock UI during generation */
+  itineraryStatus?: string | null;
 }
 
 // =============================================================================
@@ -1107,8 +1109,10 @@ export function EditorialItinerary({
   onDaysChange,
   navigateToSection,
   initialItineraryData,
+  itineraryStatus,
 }: EditorialItineraryProps) {
   const queryClient = useQueryClient();
+  const isActivelyGenerating = itineraryStatus === 'generating' || itineraryStatus === 'queued';
   const [rawDays, setRawDays] = useState<EditorialDay[]>(initialDays);
 
   // Sanitize wrapper: ensures every activity has a valid title and filters out
@@ -4203,8 +4207,8 @@ export function EditorialItinerary({
               </div>
             </div>
             
-            {/* Bulk Unlock Banner - show when 2+ days are locked */}
-            {(() => {
+            {/* Bulk Unlock Banner - show when 2+ days are locked AND not generating */}
+            {!isActivelyGenerating && (() => {
               const lockedDayCount = days.filter(d => !canViewPremiumContentForDay(entitlements, d.dayNumber)).length;
               const unlockedCount = days.length - lockedDayCount;
               if (lockedDayCount < 2) return null;
@@ -4410,6 +4414,23 @@ export function EditorialItinerary({
                   const hasActivities = selectedDay.activities && selectedDay.activities.length > 0;
                   const canViewThisDay = canViewPremiumContentForDay(entitlements, selectedDay.dayNumber);
 
+                  // During active generation, show a generating placeholder instead of locked card
+                  if (isActivelyGenerating && isLockedDay && !hasActivities) {
+                    return (
+                      <div className="flex flex-col items-center justify-center py-12 text-center">
+                        <motion.div
+                          animate={{ opacity: [0.4, 1, 0.4] }}
+                          transition={{ duration: 1.5, repeat: Infinity }}
+                          className="text-muted-foreground"
+                        >
+                          <Sparkles className="h-8 w-8 mx-auto mb-3 text-primary" />
+                          <p className="text-sm font-medium">This day is still being created...</p>
+                          <p className="text-xs text-muted-foreground mt-1">Check back in a moment</p>
+                        </motion.div>
+                      </div>
+                    );
+                  }
+
                   // Days with no activities at all: show LockedDayCard fallback
                   if (isLockedDay && !hasActivities) {
                     return (
@@ -4542,8 +4563,8 @@ export function EditorialItinerary({
               </div>
             )}
 
-            {/* Unlock Banner - shown for preview itineraries (hidden in manual mode) */}
-            {effectiveIsPreview && (
+            {/* Unlock Banner - shown for preview itineraries (hidden in manual mode and during generation) */}
+            {effectiveIsPreview && !isActivelyGenerating && (
               <div className="mt-4">
                 <UnlockBanner
                   tripId={tripId}
