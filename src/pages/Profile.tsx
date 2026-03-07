@@ -354,7 +354,7 @@ export default function Profile() {
       if (data?.url) {
         // Opening Stripe checkout in new tab
         // Use location.href for more reliable redirect, fallback to window.open
-        window.open(data.url, '_blank');
+        window.location.href = data.url;
       } else {
         throw new Error('No checkout URL received from Stripe');
       }
@@ -381,7 +381,7 @@ export default function Profile() {
       const { data, error } = await supabase.functions.invoke('customer-portal');
       if (error) throw error;
       if (data?.url) {
-        window.open(data.url, '_blank');
+        window.location.href = data.url;
       }
     } catch (error: any) {
       console.error('Portal error:', error);

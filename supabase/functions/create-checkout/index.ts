@@ -109,7 +109,10 @@ serve(async (req) => {
       logStep("Found existing customer", { customerId });
     }
 
-    const origin = req.headers.get("origin") || "https://voyance-travel-planner.lovable.app";
+    const rawOrigin = req.headers.get("origin");
+    const origin = (rawOrigin && rawOrigin.startsWith("http"))
+      ? rawOrigin
+      : "https://travelwithvoyance.com";
     const successPath = returnPath || "/profile?success=true";
     const cancelPath = returnPath ? `${returnPath}?canceled=true` : "/profile?canceled=true";
 
