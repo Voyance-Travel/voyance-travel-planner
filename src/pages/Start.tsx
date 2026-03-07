@@ -2294,6 +2294,9 @@ export default function Start() {
           if (savedDraft.isFirstTimeVisitor !== undefined) setIsFirstTimeVisitor(savedDraft.isFirstTimeVisitor);
           if (savedDraft.firstTimePerCity) setFirstTimePerCity(savedDraft.firstTimePerCity);
           if (savedDraft.mustDoActivities) setMustDoActivities(savedDraft.mustDoActivities);
+          if (savedDraft.selectedLandmarks) setSelectedLandmarks(savedDraft.selectedLandmarks);
+          if (savedDraft.selectedCategories) setSelectedCategories(savedDraft.selectedCategories);
+          if (savedDraft.customMustDos) setCustomMustDos(savedDraft.customMustDos);
           if (savedDraft.destination) setDestinationSelection({ display: savedDraft.destination, cityName: savedDraft.destination });
           if (savedDraft.startDate) setStartDate(parseLocalDate(savedDraft.startDate));
           if (savedDraft.endDate) setEndDate(parseLocalDate(savedDraft.endDate));
