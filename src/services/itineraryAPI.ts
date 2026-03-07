@@ -266,6 +266,9 @@ export async function generateItinerary(
   const totalDays = calculateDays(trip.start_date, trip.end_date);
   const isMultiCity = !!(trip as any).is_multi_city;
   
+  // Preserve existing metadata (mustDoActivities, interestCategories, generationRules, etc.)
+  const existingMeta = ((trip as any).metadata as Record<string, unknown>) || {};
+  
   // Fetch per-city data for multi-city trips
   let dayCityMap: ReturnType<typeof buildDayCityMap> | null = null;
   let tripCities: TripCity[] = [];
@@ -281,12 +284,13 @@ export async function generateItinerary(
     }
   }
   
-  // Update trip status to generating with metadata
+  // Update trip status to generating — MERGE with existing metadata to preserve user preferences
   await supabase
     .from('trips')
     .update({ 
       itinerary_status: 'generating',
       metadata: {
+        ...existingMeta,
         generation_started_at: new Date().toISOString(),
         generation_heartbeat: new Date().toISOString(),
         generation_completed_days: 0,
