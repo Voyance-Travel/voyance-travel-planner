@@ -945,8 +945,6 @@ function FlightHotelStep({
   setFirstTimePerCity,
   onSubmit,
   onBack,
-  onSubmit,
-  onBack,
   isSubmitting,
   isMultiCity,
   multiCityDestinations,
@@ -981,8 +979,6 @@ function FlightHotelStep({
   setIsFirstTimeVisitor: (v: boolean) => void;
   firstTimePerCity: Record<string, boolean>;
   setFirstTimePerCity: (v: Record<string, boolean>) => void;
-  onSubmit: () => void;
-  onBack: () => void;
   onSubmit: () => void;
   onBack: () => void;
   isSubmitting: boolean;
