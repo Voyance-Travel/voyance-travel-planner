@@ -1846,6 +1846,14 @@ function FlightHotelStep({
             onCustomItemsChange={setCustomMustDos}
           />
 
+          {/* Generation Rules — Structured Constraints */}
+          <GenerationRules
+            rules={generationRules}
+            onRulesChange={onGenerationRulesChange}
+            startDate={startDate}
+            endDate={endDate}
+          />
+
           {/* Extra Details — Optional paste field for research/notes */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
@@ -2929,14 +2937,6 @@ export default function Start() {
           </div>
         </div>
       </section>
-
-          {/* Generation Rules — Structured Constraints */}
-          <GenerationRules
-            rules={generationRules}
-            onRulesChange={onGenerationRulesChange}
-            startDate={startDate}
-            endDate={endDate}
-          />
 
 
       {/* Travel DNA Prompt Dialog */}
