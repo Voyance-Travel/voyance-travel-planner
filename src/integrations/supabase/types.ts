@@ -4045,6 +4045,7 @@ export type Database = {
       }
       itinerary_days: {
         Row: {
+          activities: Json | null
           created_at: string
           date: string
           day_number: number
@@ -4060,6 +4061,7 @@ export type Database = {
           weather: Json | null
         }
         Insert: {
+          activities?: Json | null
           created_at?: string
           date: string
           day_number: number
@@ -4075,6 +4077,7 @@ export type Database = {
           weather?: Json | null
         }
         Update: {
+          activities?: Json | null
           created_at?: string
           date?: string
           day_number?: number
