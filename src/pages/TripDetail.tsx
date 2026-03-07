@@ -1328,6 +1328,7 @@ export default function TripDetail() {
                     onDateChange={handleDateChange}
                     days={itineraryDays.map(d => ({ dayNumber: d.dayNumber, theme: d.theme, activities: d.activities }))}
                     cities={tripCities.map(c => ({ id: c.id, city_name: c.city_name, nights: c.nights ?? undefined }))}
+                    compact
                   />
                 </div>
                 {/* Desktop: original layout */}

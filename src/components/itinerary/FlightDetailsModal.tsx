@@ -109,7 +109,7 @@ function FlightSegmentForm({
         )}
       </div>
       
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-1">
           <Label className="text-[10px] text-muted-foreground">From (Airport)</Label>
           <Input
@@ -132,7 +132,7 @@ function FlightSegmentForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-1">
           <Label className="text-[10px] text-muted-foreground">Departs</Label>
           <Input
@@ -154,7 +154,7 @@ function FlightSegmentForm({
       </div>
 
       {showDates && (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label className="text-[10px] text-muted-foreground">Departure Date</Label>
             <Input
@@ -570,7 +570,7 @@ export function FlightDetailsModal({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <Label className="text-[10px] text-muted-foreground">From City</Label>
                         <Input

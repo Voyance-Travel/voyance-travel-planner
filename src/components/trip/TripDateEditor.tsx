@@ -48,6 +48,8 @@ interface TripDateEditorProps {
   days?: Array<{ dayNumber: number; theme?: string; activities?: unknown[] }>;
   /** Cities for multi-city extend */
   cities?: Array<{ id: string; city_name: string; nights?: number }>;
+  /** Compact icon-only mode for mobile headers */
+  compact?: boolean;
   className?: string;
 }
 
@@ -59,6 +61,7 @@ export function TripDateEditor({
   onDateChange,
   days: itineraryDays,
   cities,
+  compact,
   className,
 }: TripDateEditorProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -288,16 +291,28 @@ export function TripDateEditor({
     <>
       <Popover open={isOpen} onOpenChange={handleOpenChange}>
         <PopoverTrigger asChild>
-          <button
-            className={cn(
-              'inline-flex items-center gap-2 text-sm font-medium text-foreground bg-secondary/50 hover:bg-secondary border border-border/50 rounded-full px-3 py-1.5 transition-colors cursor-pointer',
-              className
-            )}
-          >
-            <CalendarIcon className="w-3.5 h-3.5 text-muted-foreground" />
-            <span className="hidden sm:inline">{format(currentStart, 'MMM d')} – {format(currentEnd, 'MMM d, yyyy')}</span>
-            <Pencil className="w-3 h-3 text-muted-foreground/60" />
-          </button>
+          {compact ? (
+            <button
+              className={cn(
+                'inline-flex items-center justify-center h-6 w-6 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer',
+                className
+              )}
+              aria-label="Edit dates"
+            >
+              <Pencil className="w-3 h-3" />
+            </button>
+          ) : (
+            <button
+              className={cn(
+                'inline-flex items-center gap-2 text-sm font-medium text-foreground bg-secondary/50 hover:bg-secondary border border-border/50 rounded-full px-3 py-1.5 transition-colors cursor-pointer',
+                className
+              )}
+            >
+              <CalendarIcon className="w-3.5 h-3.5 text-muted-foreground" />
+              <span>{format(currentStart, 'MMM d')} – {format(currentEnd, 'MMM d, yyyy')}</span>
+              <Pencil className="w-3 h-3 text-muted-foreground/60" />
+            </button>
+          )}
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
           <div className="p-3 border-b border-border">
