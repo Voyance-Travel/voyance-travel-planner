@@ -8121,8 +8121,8 @@ function ActivityRow({
         {isEditable && !activity.isLocked && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="ml-auto p-1 text-muted-foreground/50 hover:text-foreground rounded transition-colors opacity-0 group-hover/activity:opacity-100 shrink-0">
-                <MoreHorizontal className="h-3.5 w-3.5" />
+              <button className="ml-auto min-w-[44px] min-h-[44px] flex items-center justify-center text-foreground/60 hover:text-foreground hover:bg-muted rounded-full transition-colors opacity-0 group-hover/activity:opacity-100 shrink-0 touch-manipulation">
+                <MoreHorizontal className="h-5 w-5" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-36">
@@ -8233,8 +8233,8 @@ function ActivityRow({
               {!activity.isLocked && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="p-1.5 rounded transition-colors hover:bg-secondary text-muted-foreground">
-                      <MoreHorizontal className="h-3.5 w-3.5" />
+                    <button className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full transition-colors hover:bg-secondary text-foreground/60 hover:text-foreground touch-manipulation">
+                      <MoreHorizontal className="h-5 w-5" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="bg-background border shadow-lg z-50 min-w-[160px]">
@@ -8628,11 +8628,11 @@ function ActivityRow({
                       <TooltipTrigger asChild>
                         <DropdownMenuTrigger asChild>
                           <button
-                            className="p-1.5 rounded transition-colors hover:bg-secondary text-muted-foreground"
+                            className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full transition-colors hover:bg-secondary text-foreground/60 hover:text-foreground touch-manipulation"
                             aria-label="More Options"
                             data-tour="more-actions"
                           >
-                            <MoreHorizontal className="h-3.5 w-3.5" />
+                            <MoreHorizontal className="h-5 w-5" />
                           </button>
                         </DropdownMenuTrigger>
                       </TooltipTrigger>
@@ -8762,10 +8762,10 @@ function ActivityRow({
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
-                      className="p-1.5 rounded transition-colors hover:bg-secondary text-muted-foreground"
+                      className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full transition-colors hover:bg-secondary text-foreground/60 hover:text-foreground touch-manipulation"
                       aria-label="Propose changes"
                     >
-                      <MoreHorizontal className="h-3.5 w-3.5" />
+                      <MoreHorizontal className="h-5 w-5" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="bg-background border shadow-lg z-50 min-w-[160px]">
