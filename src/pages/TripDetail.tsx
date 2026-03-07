@@ -1318,7 +1318,7 @@ export default function TripDetail() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate('/profile')}
+            onClick={() => navigate(-1)}
             className="bg-background/90 backdrop-blur-sm hover:bg-background shadow-sm"
             aria-label="Back"
           >
