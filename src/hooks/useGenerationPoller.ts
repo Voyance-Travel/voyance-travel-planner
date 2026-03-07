@@ -253,14 +253,49 @@ export function useGenerationPoller({
 
     setState(prev => ({ ...prev, status: 'polling' }));
 
-    // Initial poll
+    // Initial poll — immediate
     poll();
 
+    // Interval-based polling as fallback
     const timer = setInterval(() => {
       poll();
     }, interval);
 
-    return () => clearInterval(timer);
+    // Realtime subscription for instant updates when new days are inserted
+    const channel = supabase
+      .channel(`gen-progress-${tripId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'itinerary_days',
+          filter: `trip_id=eq.${tripId}`,
+        },
+        () => {
+          // New day inserted/updated — poll immediately for fresh state
+          poll();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'trips',
+          filter: `id=eq.${tripId}`,
+        },
+        () => {
+          // Trip status changed — poll immediately
+          poll();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(timer);
+      supabase.removeChannel(channel);
+    };
   }, [enabled, tripId, interval, poll]);
 
   const startPolling = useCallback(() => {

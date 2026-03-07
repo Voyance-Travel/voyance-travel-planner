@@ -37,8 +37,13 @@ export function GenerationPhases({
   completedDays = 0,
   generatedDaysList = [],
   isComplete = false,
-  progress = 0,
+  progress: pollerProgress = 0,
 }: GenerationPhasesProps) {
+  // Calculate progress locally from props — don't rely solely on poller.progress
+  // which can be 0 when metadata.generation_total_days hasn't been set yet
+  const progress = totalDays > 0
+    ? Math.max(pollerProgress, Math.round((completedDays / totalDays) * 100))
+    : pollerProgress;
   const remainingDays = Math.max(0, totalDays - completedDays);
   const nextDay = completedDays + 1;
   const allDaysDone = totalDays > 0 && completedDays >= totalDays;
