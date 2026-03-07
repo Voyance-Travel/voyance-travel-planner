@@ -2069,6 +2069,16 @@ export default function TripDetail() {
             </ErrorBoundary>
           </div>
 
+          {/* Journey "Up Next" portal — only for linked journey trips */}
+          {trip.journey_id && trip.journey_order && trip.journey_total_legs && (
+            <JourneyUpNext
+              journeyId={trip.journey_id}
+              journeyName={trip.journey_name}
+              journeyOrder={trip.journey_order}
+              journeyTotalLegs={trip.journey_total_legs}
+            />
+          )}
+
         </div>
       </section>
 
