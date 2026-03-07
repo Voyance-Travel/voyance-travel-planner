@@ -179,10 +179,10 @@ export function InterCityTransportEditor({
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Departure time" icon={Clock}>
-                  <Input type="time" value={details.departureTime || ''} onChange={e => update({ departureTime: e.target.value })} />
+                  <Input type="text" placeholder="e.g. 10:30 AM" value={details.departureTime || ''} onChange={e => update({ departureTime: e.target.value })} />
                 </Field>
                 <Field label="Arrival time" icon={Clock}>
-                  <Input type="time" value={details.arrivalTime || ''} onChange={e => update({ arrivalTime: e.target.value })} />
+                  <Input type="text" placeholder="e.g. 2:45 PM" value={details.arrivalTime || ''} onChange={e => update({ arrivalTime: e.target.value })} />
                 </Field>
               </div>
               <Field label="Duration" icon={Clock}>
