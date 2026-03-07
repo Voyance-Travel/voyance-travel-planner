@@ -281,10 +281,18 @@ export async function generateItinerary(
     }
   }
   
-  // Update trip status to generating
+  // Update trip status to generating with metadata
   await supabase
     .from('trips')
-    .update({ itinerary_status: 'generating' })
+    .update({ 
+      itinerary_status: 'generating',
+      metadata: {
+        generation_started_at: new Date().toISOString(),
+        generation_heartbeat: new Date().toISOString(),
+        generation_completed_days: 0,
+        generation_total_days: totalDays,
+      },
+    })
     .eq('id', tripId);
   
   const days: ItineraryDay[] = [];
@@ -348,6 +356,31 @@ export async function generateItinerary(
       // Track activities for next day to avoid repetition
       data.day.activities?.forEach((a: ItineraryActivity) => {
         previousActivities.push(a.name);
+      });
+      
+      // Write completed day to itinerary_days immediately for real-time progress
+      const dateStr = dayDate.toISOString().split('T')[0];
+      await supabase.from('itinerary_days').upsert({
+        trip_id: tripId,
+        day_number: dayNumber,
+        title: data.day.title || `Day ${dayNumber}`,
+        theme: data.day.theme || '',
+        description: data.day.description || '',
+        date: dateStr,
+      } as any, { onConflict: 'trip_id,day_number' }).then(res => {
+        if (res.error) console.warn(`[ItineraryAPI] Failed to write day ${dayNumber} to itinerary_days:`, res.error);
+      });
+      
+      // Update generation progress metadata + heartbeat
+      await supabase.from('trips').update({
+        metadata: {
+          generation_started_at: new Date().toISOString(),
+          generation_heartbeat: new Date().toISOString(),
+          generation_completed_days: dayNumber,
+          generation_total_days: totalDays,
+        },
+      }).eq('id', tripId).then(res => {
+        if (res.error) console.warn(`[ItineraryAPI] Failed to update generation progress:`, res.error);
       });
     }
   }
