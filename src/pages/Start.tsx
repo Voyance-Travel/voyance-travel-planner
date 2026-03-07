@@ -2938,6 +2938,7 @@ export default function Start() {
             endDate={endDate}
           />
 
+
       {/* Travel DNA Prompt Dialog */}
       <Dialog open={showDNAPrompt} onOpenChange={setShowDNAPrompt}>
         <DialogContent className="sm:max-w-md">
