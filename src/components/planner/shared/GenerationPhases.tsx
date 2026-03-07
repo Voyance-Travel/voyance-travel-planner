@@ -7,6 +7,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Check, Loader2, Clock } from 'lucide-react';
+import { GenerationAnimation } from './GenerationAnimation';
 import { Progress } from '@/components/ui/progress';
 import type { GenerationStep } from '@/hooks/useLovableItinerary';
 import type { GeneratedDaySummary } from '@/hooks/useGenerationPoller';
