@@ -4122,8 +4122,14 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     jetLagSensitivity: trip.metadata?.jetLagSensitivity || 'moderate',
     // Celebration day from user selection
     celebrationDay: trip.metadata?.celebrationDay,
-    // User research notes / must-do activities from Page 2 paste field
-    mustDoActivities: trip.metadata?.mustDoActivities || undefined,
+    // User research notes / must-do activities from Page 2 paste field (can be string or array)
+    mustDoActivities: (() => {
+      const raw = trip.metadata?.mustDoActivities;
+      if (Array.isArray(raw)) return raw.join(', ');
+      return raw || undefined;
+    })(),
+    // Interest categories selected by user (e.g. ['history', 'food', 'nightlife'])
+    interestCategories: (trip.metadata?.interestCategories as string[]) || undefined,
     // Structured must-haves checklist (schedule constraints, hotel prefs, etc.)
     mustHaves: (trip.metadata?.mustHaves as Array<{label: string; notes?: string}>) || undefined,
     // Pre-booked commitments (shows, reservations, tours with fixed times)
@@ -9337,7 +9343,10 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
           .eq('id', tripId)
           .single();
         const metadata = tripMeta?.metadata as Record<string, unknown> | null;
-        const mustDoActivities = (metadata?.mustDoActivities as string) || '';
+        // Handle both array (new picker) and string (legacy textarea) formats
+        const rawMustDo = metadata?.mustDoActivities;
+        const mustDoActivities = Array.isArray(rawMustDo) ? rawMustDo.join(', ') : (rawMustDo as string || '');
+        const interestCategories = (metadata?.interestCategories as string[]) || [];
         const isSmartFinish = metadata?.smartFinishMode === true || (metadata?.smartFinishSource || '').toString().includes('manual_builder');
         const smartFinishRequested = !!metadata?.smartFinishRequestedAt || isSmartFinish;
         if (mustDoActivities.trim()) {
