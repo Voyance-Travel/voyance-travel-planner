@@ -1866,12 +1866,8 @@ export default function TripDetail() {
                     </ErrorBoundary>
                   </div>
 
-                  {/* Date/day editing controls above day sections */}
-                  <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div>
-                      <h2 className="text-sm font-medium text-foreground">Trip Dates & Days</h2>
-                      <p className="text-xs text-muted-foreground">Edit dates, add days, or remove days here.</p>
-                    </div>
+                  {/* Subtle edit-dates link */}
+                  <div className="mb-3 flex justify-end">
                     <TripDateEditor
                       startDate={trip.start_date}
                       endDate={effectiveEndDate}
@@ -1881,7 +1877,6 @@ export default function TripDetail() {
                       days={editorDays}
                       cities={tripCities}
                       compact
-                      className="shrink-0"
                     />
                   </div>
 
