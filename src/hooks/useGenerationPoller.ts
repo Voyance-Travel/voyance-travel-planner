@@ -40,7 +40,7 @@ interface UseGenerationPollerOptions {
   tripId: string | null;
   /** Whether to start polling immediately */
   enabled?: boolean;
-  /** Poll interval in ms (default 3000) */
+  /** Poll interval in ms (default 2000) */
   interval?: number;
   /** Called when generation completes */
   onReady?: () => void;
@@ -62,7 +62,7 @@ const INITIAL_STATE: GenerationPollState = {
 export function useGenerationPoller({
   tripId,
   enabled = false,
-  interval = 3000,
+  interval = 2000,
   onReady,
   onFailed,
   onStalled,
