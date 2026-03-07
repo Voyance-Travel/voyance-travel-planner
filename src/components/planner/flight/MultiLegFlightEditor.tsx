@@ -996,7 +996,8 @@ function LegSlotCard({ slot, index, totalSlots, onUpdateFlight, onToggleExpanded
               <div>
                 <Label className="text-xs text-muted-foreground">Departs</Label>
                 <Input
-                  type="time"
+                  type="text"
+                  placeholder="e.g. 10:30 AM"
                   value={slot.flight.departureTime}
                   onChange={(e) => onUpdateFlight({ departureTime: e.target.value })}
                   className="text-sm"
@@ -1005,7 +1006,8 @@ function LegSlotCard({ slot, index, totalSlots, onUpdateFlight, onToggleExpanded
               <div>
                 <Label className="text-xs text-muted-foreground">Arrives</Label>
                 <Input
-                  type="time"
+                  type="text"
+                  placeholder="e.g. 2:45 PM"
                   value={slot.flight.arrivalTime}
                   onChange={(e) => onUpdateFlight({ arrivalTime: e.target.value })}
                   className="text-sm"
