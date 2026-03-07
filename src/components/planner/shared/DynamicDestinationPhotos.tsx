@@ -298,7 +298,7 @@ export default function DynamicDestinationPhotos({
 
   // Hero variant (default) - single static image, no carousel
   return (
-    <div className={`relative rounded-2xl overflow-hidden h-56 md:h-72 bg-muted ${className}`}>
+    <div className={`relative rounded-2xl overflow-hidden h-full bg-muted ${className}`}>
       {/* Single hero image - landmark-driven */}
       <motion.img
         initial={{ opacity: 0, scale: 1.02 }}
