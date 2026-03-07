@@ -348,6 +348,7 @@ export async function generateItinerary(
         generationRules,
         pacing,
         isFirstTimeVisitor,
+      },
     });
     
     if (error) {
@@ -540,6 +541,7 @@ export async function regenerateDay(
       generationRules,
       pacing,
       isFirstTimeVisitor,
+    },
   });
   
   if (error || !data?.day) {
