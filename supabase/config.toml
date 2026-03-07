@@ -183,6 +183,8 @@ project_id = "jsxplunjjvxuejeouwob"
     verify_jwt = false
   [functions.suggest-mystery-trips]
     verify_jwt = false
+  [functions.suggest-landmarks]
+    verify_jwt = false
   [functions.summarize-trip-learnings]
     verify_jwt = false
   [functions.test-email]

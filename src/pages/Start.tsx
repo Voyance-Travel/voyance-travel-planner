@@ -2227,6 +2227,9 @@ export default function Start() {
   const [isFirstTimeVisitor, setIsFirstTimeVisitor] = useState(true);
   const [firstTimePerCity, setFirstTimePerCity] = useState<Record<string, boolean>>({});
   const [mustDoActivities, setMustDoActivities] = useState('');
+  const [selectedLandmarks, setSelectedLandmarks] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [customMustDos, setCustomMustDos] = useState<string[]>([]);
 
   // Fetch user's DNA budget preference for smart defaults
   const [dnaBudgetTier, setDnaBudgetTier] = useState<string | null>(null);
@@ -2435,7 +2438,14 @@ export default function Start() {
           metadata: {
             isFirstTimeVisitor,
             firstTimePerCity: isMultiCity && Object.keys(firstTimePerCity).length > 0 ? firstTimePerCity : null,
-            mustDoActivities: mustDoActivities || null,
+            mustDoActivities: [
+              ...selectedLandmarks,
+              ...customMustDos,
+              ...(mustDoActivities ? [mustDoActivities] : []),
+            ].filter(Boolean).length > 0
+              ? [...selectedLandmarks, ...customMustDos, ...(mustDoActivities ? [mustDoActivities] : [])]
+              : null,
+            interestCategories: selectedCategories.length > 0 ? selectedCategories : null,
             celebrationDay: celebrationDay || null,
             pacing: pacing || 'balanced',
             lastUpdated: new Date().toISOString(),
