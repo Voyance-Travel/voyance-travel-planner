@@ -120,8 +120,31 @@ export function ItineraryGenerator({
     cancel,
   } = useItineraryGeneration();
 
+  // Get entitlements
+  const { data: entitlements, isPaid } = useEntitlements();
+
+  // Out of credits modal
+  const { showOutOfCredits } = useOutOfCredits();
+  const queryClient = useQueryClient();
+
+  // Get auth state
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  // Get preference completion status
+  const { data: preferenceStatus } = usePreferenceCompletion();
+  const showPreferenceNudge = preferenceStatus && 
+    (preferenceStatus.personalizationLevel === 'none' || preferenceStatus.personalizationLevel === 'basic');
+
+  const [hasStarted, setHasStarted] = useState(false);
+  const [showNudgeCard, setShowNudgeCard] = useState(true);
+  const [showGenericWarning, setShowGenericWarning] = useState(false);
+  const [showCostConfirm, setShowCostConfirm] = useState(false);
+  const [prePhase, setPrePhase] = useState<Extract<GenerationStep, 'gathering-dna' | 'personalizing' | 'preparing'> | null>(null);
+
   // Server-side generation poller — start polling as soon as generation has started
-  // (even during prePhase) so progress updates aren't missed
+  // (even during prePhase) so progress updates aren't missed and GenerationPhases
+  // doesn't remount and lose simulated progress state
   const [serverGenActive, setServerGenActive] = useState(false);
   const pollerEnabled = serverGenActive || (hasStarted && !!prePhase);
   const poller = useGenerationPoller({
@@ -181,27 +204,6 @@ export function ItineraryGenerator({
     },
   });
 
-  // Get entitlements
-  const { data: entitlements, isPaid } = useEntitlements();
-
-  // Out of credits modal
-  const { showOutOfCredits } = useOutOfCredits();
-  const queryClient = useQueryClient();
-
-  // Get auth state
-  const { user } = useAuth();
-  const navigate = useNavigate();
-
-  // Get preference completion status
-  const { data: preferenceStatus } = usePreferenceCompletion();
-  const showPreferenceNudge = preferenceStatus && 
-    (preferenceStatus.personalizationLevel === 'none' || preferenceStatus.personalizationLevel === 'basic');
-
-  const [hasStarted, setHasStarted] = useState(false);
-  const [showNudgeCard, setShowNudgeCard] = useState(true);
-  const [showGenericWarning, setShowGenericWarning] = useState(false);
-  const [showCostConfirm, setShowCostConfirm] = useState(false);
-  const [prePhase, setPrePhase] = useState<Extract<GenerationStep, 'gathering-dna' | 'personalizing' | 'preparing'> | null>(null);
   const autoStartTriggered = useRef(false);
   const gateResultRef = useRef<GateResult | null>(null);
 
