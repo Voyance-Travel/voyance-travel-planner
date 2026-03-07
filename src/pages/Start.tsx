@@ -2278,11 +2278,18 @@ export default function Start() {
           if (savedDraft.isMultiCity) setIsMultiCity(savedDraft.isMultiCity);
           if (savedDraft.multiCityDestinations) setMultiCityDestinations(savedDraft.multiCityDestinations);
           if (savedDraft.multiCityTransports) setMultiCityTransports(savedDraft.multiCityTransports);
-          setCurrentStep(savedDraft.currentStep || 2);
+          const restoredStep = savedDraft.currentStep || 2;
+          setCurrentStep(restoredStep);
           sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+          // Push history for step 2 so back button works
+          if (restoredStep === 2) {
+            window.history.replaceState({ step: 2 }, '', '/start?step=2');
+          }
         }
       } catch {}
-      window.history.replaceState({}, '', '/start');
+      if (!searchParams.get('step')) {
+        window.history.replaceState({}, '', '/start');
+      }
     }
   }, [searchParams, user]);
 
