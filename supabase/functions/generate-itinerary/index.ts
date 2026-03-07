@@ -8362,9 +8362,19 @@ ${'='.repeat(60)}
           console.log(`[Stage 1.999] ✓ User research notes injected as raw text with MANDATORY enforcement (${context.mustDoActivities.length} chars)`);
         }
       }
+      // Inject interest categories
+      if ((context as any).interestCategories && (context as any).interestCategories.length > 0) {
+        const categoryLabels: Record<string, string> = {
+          history: 'History & Museums', food: 'Food & Dining', shopping: 'Shopping',
+          nature: 'Parks & Nature', culture: 'Arts & Culture', nightlife: 'Nightlife',
+        };
+        const cats = (context as any).interestCategories as string[];
+        const labels = cats.map(c => categoryLabels[c] || c).join(', ');
+        userResearchPrompt += `\n## USER INTERESTS\nPrioritize activities in these categories: ${labels}. Lean heavily toward these when choosing between options.\n`;
+        console.log(`[Stage 1.999b] ✓ Interest categories injected: ${labels}`);
+      }
 
-      // =======================================================================
-      // STAGE 1.9991: Must-Haves Checklist Constraints
+
       // =======================================================================
       let mustHavesPrompt = "";
       if (context.mustHaves && context.mustHaves.length > 0) {
