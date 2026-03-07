@@ -50,6 +50,8 @@ interface TripDateEditorProps {
   cities?: Array<{ id: string; city_name: string; nights?: number }>;
   /** Compact icon-only mode for mobile headers */
   compact?: boolean;
+  /** Disable editing (e.g. during generation) */
+  disabled?: boolean;
   className?: string;
 }
 
@@ -62,6 +64,7 @@ export function TripDateEditor({
   days: itineraryDays,
   cities,
   compact,
+  disabled,
   className,
 }: TripDateEditorProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -112,6 +115,7 @@ export function TripDateEditor({
   const isMultiCity = cities && cities.length > 1;
 
   const handleOpenChange = (open: boolean) => {
+    if (disabled) return;
     if (open) {
       setPendingStart(currentStart);
       setPendingEnd(currentEnd);
@@ -293,8 +297,10 @@ export function TripDateEditor({
         <PopoverTrigger asChild>
           {compact ? (
             <button
+              disabled={disabled}
               className={cn(
                 'inline-flex items-center justify-center h-6 w-6 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer',
+                disabled && 'opacity-40 cursor-not-allowed hover:bg-transparent hover:text-muted-foreground',
                 className
               )}
               aria-label="Edit dates"
@@ -303,8 +309,10 @@ export function TripDateEditor({
             </button>
           ) : (
             <button
+              disabled={disabled}
               className={cn(
                 'inline-flex items-center gap-2 text-sm font-medium text-foreground bg-secondary/50 hover:bg-secondary border border-border/50 rounded-full px-3 py-1.5 transition-colors cursor-pointer',
+                disabled && 'opacity-40 cursor-not-allowed hover:bg-secondary/50',
                 className
               )}
             >
