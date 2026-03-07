@@ -8,6 +8,7 @@ import { getAppUrl } from '@/utils/getAppUrl';
 import { estimateCostSync } from '@/lib/cost-estimation';
 import { getPaymentsSummary, type PaymentsSummary } from '@/services/activityCostService';
 import { motion, AnimatePresence } from 'framer-motion';
+import { JourneySpendingSummary } from './JourneySpendingSummary';
 import { FirstUseHint } from './FirstUseHint';
 import { 
   Plane, Hotel, Camera, Check, CreditCard, ExternalLink, 
@@ -1729,6 +1730,15 @@ export function PaymentsTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Journey Spending Summary — cross-leg overview for linked trips */}
+      {journeyId && (
+        <JourneySpendingSummary
+          journeyId={journeyId}
+          journeyName={journeyName || null}
+          currentTripId={tripId}
+        />
+      )}
     </motion.div>
   );
 }
