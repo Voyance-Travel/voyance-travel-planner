@@ -40,7 +40,7 @@ interface WeatherData {
     precipitation: number;
   };
   forecast: WeatherDay[];
-  source: 'open-meteo' | 'weatherstack' | 'fallback';
+  source: 'weatherkit' | 'open-meteo' | 'fallback';
 }
 
 interface WeatherForecastProps {
@@ -189,6 +189,11 @@ export function WeatherForecast({ destination, startDate, endDate, tripDays }: W
                   <Wind className="h-4 w-4" />
                   <span>{weather.current.windSpeed} mph</span>
                 </div>
+                {weather.source === 'weatherkit' && (
+                  <Badge variant="outline" className="text-xs mt-2">
+                     Apple Weather
+                  </Badge>
+                )}
                 {weather.source === 'fallback' && (
                   <Badge variant="outline" className="text-xs mt-2">
                     Estimated
