@@ -28,6 +28,7 @@ import {
   Hotel,
   AlertTriangle,
 } from 'lucide-react';
+import { JourneyBudgetSummary } from './JourneyBudgetSummary';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -74,6 +75,9 @@ interface BudgetTabProps {
   hasFlight?: boolean;
   /** Trip destination for AI context */
   destination?: string;
+  /** Journey fields for linked trip budget summary */
+  journeyId?: string | null;
+  journeyName?: string | null;
 }
 
 const categoryIcons: Record<BudgetCategory, React.ReactNode> = {
@@ -103,7 +107,7 @@ const categoryColors: Record<BudgetCategory, string> = {
   misc: 'bg-slate-500',
 };
 
-export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, onApplyBudgetSwap, hasHotel, hasFlight, destination }: BudgetTabProps) {
+export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, onApplyBudgetSwap, hasHotel, hasFlight, destination, journeyId, journeyName }: BudgetTabProps) {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
   const syncAttempted = useRef(false);
   const { data: rawTripMembers = [] } = useTripMembers(tripId);
@@ -554,6 +558,16 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Journey Budget Summary — cross-leg overview for linked trips */}
+      {journeyId && (
+        <JourneyBudgetSummary
+          journeyId={journeyId}
+          journeyName={journeyName || null}
+          currentTripId={tripId}
+          currency={settings?.budget_currency || 'USD'}
+        />
       )}
 
       <BudgetSetupDialog

@@ -153,7 +153,7 @@ export async function splitJourneyIfNeeded(
       trip_type: originalTrip.trip_type,
       budget_tier: originalTrip.budget_tier,
       budget_total_cents: originalTrip.budget_total_cents
-        ? Math.round((originalTrip.budget_total_cents as number) / totalLegs)
+        ? Math.round((originalTrip.budget_total_cents as number) * nights / totalDays)
         : null,
       origin_city: i === 0 ? originalTrip.origin_city : destinations[i - 1].city,
       flight_selection: i === 0 ? originalTrip.flight_selection : null,

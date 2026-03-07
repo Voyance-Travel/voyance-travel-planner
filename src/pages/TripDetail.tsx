@@ -1943,6 +1943,8 @@ export default function TripDetail() {
                   isPreview={!!(trip.itinerary_data as any)?.isPreview}
                   creationSource={trip.creation_source}
                   itineraryStatus={trip.itinerary_status}
+                  journeyId={trip.journey_id}
+                  journeyName={trip.journey_name}
                   onDaysChange={(updatedDays) => {
                     // Keep trip state in sync so ItineraryAssistant always sees current days
                     setTrip(prev => prev ? {
