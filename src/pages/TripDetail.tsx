@@ -1419,7 +1419,7 @@ export default function TripDetail() {
                 <GenerationPhases
                   currentStep="preparing"
                   destination={trip.destination || ''}
-                  totalDays={generationPoller.totalDays || (differenceInDays(parseLocalDate(effectiveEndDate), parseLocalDate(trip.start_date)) + 1)}
+                  totalDays={generationPoller.totalDays || differenceInDays(parseLocalDate(effectiveEndDate), parseLocalDate(trip.start_date))}
                   tripId={trip.id}
                   completedDays={generationPoller.completedDays}
                   generatedDaysList={generationPoller.generatedDaysList}

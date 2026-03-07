@@ -24,7 +24,7 @@ export default function TripStatusCards({
   className = ''
 }: TripStatusCardsProps) {
   const tripDays = startDate && endDate 
-    ? differenceInDays(parseLocalDate(endDate), parseLocalDate(startDate)) + 1
+    ? differenceInDays(parseLocalDate(endDate), parseLocalDate(startDate))
     : null;
 
   const cards = [

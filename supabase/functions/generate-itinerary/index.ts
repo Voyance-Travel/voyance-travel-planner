@@ -3996,7 +3996,8 @@ Make it conversational and actionable, not a bullet list. The AI reading this sh
 function calculateDays(startDate: string, endDate: string): number {
   const start = new Date(startDate);
   const end = new Date(endDate);
-  return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  // Exclusive end-date standard: endDate is departure day, not an activity day
+  return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 function formatDate(startDate: string, dayOffset: number): string {
