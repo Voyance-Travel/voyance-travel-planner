@@ -172,7 +172,10 @@ export default function TripDetail() {
         setItineraryDaysCount(0); // Reset — full data is now in itinerary_data
         setShowGenerator(false); // Ensure generator view is dismissed
         setCachedVersion(tripId, (data as any).itinerary_version ?? 1);
-        toast.success('Your itinerary is ready! 🎉');
+        // Only show toast if ItineraryGenerator isn't handling it (avoids duplicate toasts)
+        if (!generatorHandling) {
+          toast.success('Your itinerary is ready! 🎉');
+        }
         if (user?.id) {
           queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
           queryClient.invalidateQueries({ queryKey: ['entitlements', user.id] });
