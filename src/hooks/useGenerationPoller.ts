@@ -9,8 +9,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-/** Stale threshold: if no heartbeat for 3 minutes, generation is considered dead */
-const STALE_THRESHOLD_MS = 3 * 60 * 1000;
+/** Stale threshold: if no heartbeat for 5 minutes, generation is considered dead */
+const STALE_THRESHOLD_MS = 5 * 60 * 1000;
 
 /** Stall threshold for itinerary_days: if no new day in 5 minutes */
 const DAY_STALL_THRESHOLD_MS = 5 * 60 * 1000;
@@ -86,6 +86,7 @@ export function useGenerationPoller({
   // Tab visibility: suppress stalled/failed transitions briefly after tab resumes
   const justResumedRef = useRef(false);
   const resumedAtRef = useRef(0);
+  const consecutiveErrorsRef = useRef(0);
 
   const poll = useCallback(async () => {
     if (!tripId) return;
@@ -173,7 +174,7 @@ export function useGenerationPoller({
 
       if (itineraryStatus === 'failed') {
         // Suppress failed transition if we just resumed from a background tab (grace period)
-        const inResumeGrace = justResumedRef.current && (Date.now() - resumedAtRef.current < 5000);
+        const inResumeGrace = justResumedRef.current && (Date.now() - resumedAtRef.current < 15000);
         if (inResumeGrace) {
           // Don't show failed yet — stay polling, the next cycle will confirm
           setState({ status: 'polling', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList });
@@ -198,7 +199,7 @@ export function useGenerationPoller({
 
       // Still generating — check for stall using BOTH heartbeat and itinerary_days timestamps
       // BUT skip stall detection during resume grace period (just came back from background tab)
-      const inResumeGrace = justResumedRef.current && (Date.now() - resumedAtRef.current < 5000);
+      const inResumeGrace = justResumedRef.current && (Date.now() - resumedAtRef.current < 15000);
       let isStalled = false;
 
       if (!inResumeGrace) {
@@ -268,9 +269,12 @@ export function useGenerationPoller({
 
       // Active generation
       stalledFiredRef.current = false;
+      consecutiveErrorsRef.current = 0; // Reset on success
       setState({ status: 'polling', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList });
     } catch (err) {
-      console.warn('[useGenerationPoller] Poll error:', err);
+      consecutiveErrorsRef.current += 1;
+      console.warn(`[useGenerationPoller] Poll error (${consecutiveErrorsRef.current}):`, err);
+      // Don't change state on first 3 consecutive failures — transient network issues
     }
   }, [tripId]);
 
@@ -305,7 +309,7 @@ export function useGenerationPoller({
           // Clear the resume flag after grace period
           setTimeout(() => {
             justResumedRef.current = false;
-          }, 5000);
+          }, 15000);
         });
       }
     };
