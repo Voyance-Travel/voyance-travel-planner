@@ -381,9 +381,9 @@ export default function PlannerBooking() {
       <Head title={`Book Trip to ${state.basics.destination} | Voyance`} />
 
       <section className="min-h-screen bg-background">
-        {/* Full-width Hero */}
+        {/* Full-width Hero (photo-only) */}
         <div className="relative h-[40vh] min-h-[320px] overflow-hidden">
-        <DynamicDestinationPhotos 
+          <DynamicDestinationPhotos 
             destination={state.basics.destination || ''} 
             startDate={state.basics.startDate || ''} 
             endDate={state.basics.endDate || ''} 
@@ -392,48 +392,44 @@ export default function PlannerBooking() {
             className="!rounded-none !h-full"
             hideOverlayText={true}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
-          
-          {/* Hero Content */}
-          <div className="absolute bottom-0 left-0 right-0 p-8 md:p-12">
-            <div className="max-w-6xl mx-auto">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-              >
-                <Badge variant="secondary" className="mb-4 gap-1.5">
-                  <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
-                  Ready to book
-                </Badge>
-                <h1 className="text-4xl md:text-6xl font-serif font-light text-foreground mb-3">
-                  {state.basics.destination}
-                </h1>
-                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-muted-foreground">
-                  <span className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4" />
-                    {state.basics.startDate && state.basics.endDate ? (
-                      <>
-                        {format(parseLocalDate(state.basics.startDate), 'MMM d')} – {format(parseLocalDate(state.basics.endDate), 'MMM d, yyyy')}
-                      </>
-                    ) : 'Dates not set'}
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <Users className="h-4 w-4" />
-                    {travelers} traveler{travelers > 1 ? 's' : ''}
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4" />
-                    {nights} nights
-                  </span>
-                </div>
-              </motion.div>
-            </div>
-          </div>
+          <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-background/70 to-transparent" />
         </div>
 
         {/* Main Content */}
         <div className="max-w-6xl mx-auto px-6 lg:px-10 py-10">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="mb-8"
+          >
+            <Badge variant="secondary" className="mb-4 gap-1.5">
+              <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
+              Ready to book
+            </Badge>
+            <h1 className="text-3xl md:text-4xl font-serif font-light text-foreground mb-3">
+              {state.basics.destination}
+            </h1>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-muted-foreground">
+              <span className="flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                {state.basics.startDate && state.basics.endDate ? (
+                  <>
+                    {format(parseLocalDate(state.basics.startDate), 'MMM d')} – {format(parseLocalDate(state.basics.endDate), 'MMM d, yyyy')}
+                  </>
+                ) : 'Dates not set'}
+              </span>
+              <span className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                {travelers} traveler{travelers > 1 ? 's' : ''}
+              </span>
+              <span className="flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                {nights} nights
+              </span>
+            </div>
+          </motion.div>
+
           <div className="grid lg:grid-cols-3 gap-8">
             
             {/* Left Column - Trip Details */}
