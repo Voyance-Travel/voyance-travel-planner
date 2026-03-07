@@ -1,29 +1,26 @@
 /**
- * MustSeeLandmarkPicker — AI-powered landmark chips + custom input
- * Tappable landmark suggestions per city with custom must-do items.
+ * MustSeeLandmarkPicker — AI-powered landmark suggestions + custom input
+ * Clean, professional layout inspired by booking sites.
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, Plus, X, Sparkles } from 'lucide-react';
+import { Loader2, Plus, X, Check } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
 interface Landmark {
   name: string;
-  emoji: string;
   category: string;
 }
 
 interface MustSeeLandmarkPickerProps {
-  /** City name(s) to fetch landmarks for */
   cities: string[];
-  /** Selected landmark names */
   selectedLandmarks: string[];
   onSelectedLandmarksChange: (landmarks: string[]) => void;
-  /** Custom user-added items */
   customItems: string[];
   onCustomItemsChange: (items: string[]) => void;
 }
@@ -48,7 +45,9 @@ export function MustSeeLandmarkPicker({
         body: { city },
       });
       if (!error && data?.landmarks) {
-        setLandmarksByCity(prev => ({ ...prev, [city]: data.landmarks }));
+        // Strip emoji field if present from API response
+        const cleaned = (data.landmarks as any[]).map(({ emoji, ...rest }) => rest);
+        setLandmarksByCity(prev => ({ ...prev, [city]: cleaned }));
       }
     } catch (e) {
       console.error(`Failed to fetch landmarks for ${city}:`, e);
@@ -84,51 +83,76 @@ export function MustSeeLandmarkPicker({
   };
 
   const hasAnyCities = cities.some(c => c.trim());
+  const filteredCities = cities.filter(c => c.trim());
 
   return (
     <div className="space-y-5">
-      {/* Must-See Landmarks per city */}
+      {/* Landmarks per city */}
       {hasAnyCities && (
         <div className="space-y-4">
-          {cities.filter(c => c.trim()).map(city => {
+          {filteredCities.map((city, idx) => {
             const cityLandmarks = landmarksByCity[city] || [];
             const isLoading = loading[city];
 
             return (
               <div key={city} className="space-y-2">
-                <label className="flex items-center gap-2 text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                  <Sparkles className="w-4 h-4" />
-                  Must-see in {city}
-                </label>
+                {/* City divider — simple text, no icons */}
+                {filteredCities.length > 1 && (
+                  <>
+                    {idx > 0 && <Separator className="my-3" />}
+                    <p className="text-xs font-medium tracking-wide uppercase text-muted-foreground">
+                      {city}
+                    </p>
+                  </>
+                )}
 
                 {isLoading ? (
                   <div className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading top attractions...
+                    Finding top attractions…
                   </div>
                 ) : cityLandmarks.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="grid gap-1.5">
                     <AnimatePresence mode="popLayout">
-                      {cityLandmarks.map(landmark => (
-                        <motion.button
-                          key={landmark.name}
-                          type="button"
-                          layout
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          exit={{ opacity: 0, scale: 0.9 }}
-                          onClick={() => toggleLandmark(landmark.name)}
-                          className={cn(
-                            'px-3 py-1.5 rounded-full text-sm border transition-all duration-200',
-                            selectedLandmarks.includes(landmark.name)
-                              ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                              : 'bg-card text-foreground border-border hover:border-primary/50'
-                          )}
-                        >
-                          <span className="mr-1.5">{landmark.emoji}</span>
-                          {landmark.name}
-                        </motion.button>
-                      ))}
+                      {cityLandmarks.map(landmark => {
+                        const isSelected = selectedLandmarks.includes(landmark.name);
+                        return (
+                          <motion.button
+                            key={landmark.name}
+                            type="button"
+                            layout
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -4 }}
+                            onClick={() => toggleLandmark(landmark.name)}
+                            className={cn(
+                              'flex items-center gap-3 w-full text-left px-3 py-2.5 rounded-lg border transition-colors duration-150',
+                              isSelected
+                                ? 'border-primary/40 bg-primary/5'
+                                : 'border-border bg-card hover:bg-muted/50'
+                            )}
+                          >
+                            {/* Checkbox indicator */}
+                            <span
+                              className={cn(
+                                'flex items-center justify-center w-5 h-5 rounded border transition-colors shrink-0',
+                                isSelected
+                                  ? 'bg-primary border-primary text-primary-foreground'
+                                  : 'border-border bg-background'
+                              )}
+                            >
+                              {isSelected && <Check className="w-3 h-3" />}
+                            </span>
+
+                            <span className="flex-1 min-w-0">
+                              <span className="text-sm text-foreground">{landmark.name}</span>
+                              {landmark.category && (
+                                <span className="ml-2 text-xs text-muted-foreground">{landmark.category}</span>
+                              )}
+                            </span>
+                          </motion.button>
+                        );
+                      })}
                     </AnimatePresence>
                   </div>
                 ) : (
@@ -144,27 +168,29 @@ export function MustSeeLandmarkPicker({
 
       {/* Custom must-do items */}
       <div className="space-y-2">
-        <label className="flex items-center gap-2 text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-          <Plus className="w-4 h-4" />
+        <label className="text-xs tracking-wide uppercase font-medium text-muted-foreground">
           Add your own must-dos
         </label>
 
         {customItems.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-2">
+          <div className="grid gap-1.5 mb-2">
             {customItems.map(item => (
-              <span
+              <div
                 key={item}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm bg-primary text-primary-foreground border border-primary"
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-primary/40 bg-primary/5"
               >
-                {item}
+                <span className="flex items-center justify-center w-5 h-5 rounded bg-primary border-primary text-primary-foreground shrink-0">
+                  <Check className="w-3 h-3" />
+                </span>
+                <span className="flex-1 text-sm text-foreground">{item}</span>
                 <button
                   type="button"
                   onClick={() => removeCustomItem(item)}
-                  className="ml-0.5 hover:opacity-70"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  <X className="h-3 w-3" />
+                  <X className="h-4 w-4" />
                 </button>
-              </span>
+              </div>
             ))}
           </div>
         )}
@@ -173,7 +199,7 @@ export function MustSeeLandmarkPicker({
           <Input
             value={customInput}
             onChange={(e) => setCustomInput(e.target.value)}
-            placeholder="e.g., Eat at Roscioli, See sunset from Piazzale..."
+            placeholder="e.g., Eat at Roscioli, See sunset from Piazzale…"
             className="text-sm"
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
@@ -190,6 +216,7 @@ export function MustSeeLandmarkPicker({
             disabled={!customInput.trim()}
             className="shrink-0"
           >
+            <Plus className="w-4 h-4 mr-1" />
             Add
           </Button>
         </div>
