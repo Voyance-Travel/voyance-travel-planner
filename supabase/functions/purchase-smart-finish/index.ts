@@ -63,7 +63,10 @@ serve(async (req) => {
       customerId = customers.data[0].id;
     }
 
-    const origin = req.headers.get("origin") || "https://voyance-travel-planner.lovable.app";
+    const rawOrigin = req.headers.get("origin");
+    const origin = (rawOrigin && rawOrigin.startsWith("http"))
+      ? rawOrigin
+      : "https://travelwithvoyance.com";
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,

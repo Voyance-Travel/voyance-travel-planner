@@ -4,9 +4,9 @@ import {
   EmbeddedCheckoutProvider,
   EmbeddedCheckout,
 } from '@stripe/react-stripe-js';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2 } from 'lucide-react';
 
 // Initialize Stripe with publishable key
 const stripePromise = loadStripe('pk_live_51RJawaJytioXyqq9n5emMW9beYC8p5gGvNyWiNlcYevo4Ibe3YkTtrNGrqA70kSRn1tAX8W8xo0E9eI9x6swFYV700LWTtv0ea');
@@ -54,29 +54,29 @@ export function EmbeddedCheckoutModal({
           priceId, 
           mode, 
           returnPath,
-          // Credit purchase fields
           productId,
           credits,
-          // Group unlock fields
           tripId,
           groupTier,
-          // Legacy day purchase fields
           days,
           packageTier,
         },
       });
 
       if (fnError) {
+        console.error('[EmbeddedCheckout] Function error:', { message: fnError.message, priceId, mode });
         throw new Error(fnError.message);
       }
 
       if (data?.error) {
+        console.error('[EmbeddedCheckout] Data error:', { error: data.error, priceId, mode });
         throw new Error(data.error);
       }
 
       return data.clientSecret;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to initialize checkout';
+      console.error('[EmbeddedCheckout] Error:', { message, err, priceId, mode });
       setError(message);
       throw err;
     }
@@ -85,35 +85,53 @@ export function EmbeddedCheckoutModal({
   const options = { fetchClientSecret };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0">
-        <DialogHeader className="p-6 pb-0">
-          <DialogTitle className="text-xl font-display">
-            Complete your purchase: {productName}
-          </DialogTitle>
-        </DialogHeader>
-        
-        <div className="p-6 pt-4">
-          {error ? (
-            <div className="text-center py-8">
-              <p className="text-destructive mb-4">{error}</p>
-              <button 
-                onClick={() => setError(null)}
-                className="text-primary hover:underline"
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto"
+        >
+          <div className="min-h-screen flex flex-col">
+            {/* Header with close button */}
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <h2 className="text-lg font-display font-medium text-foreground">
+                Complete your purchase: {productName}
+              </h2>
+              <button
+                onClick={onClose}
+                className="p-2 rounded-lg hover:bg-muted transition-colors"
+                aria-label="Close checkout"
               >
-                Try again
+                <X className="h-5 w-5 text-foreground" />
               </button>
             </div>
-          ) : (
-            <div id="checkout" className="min-h-[400px]">
-              <EmbeddedCheckoutProvider stripe={stripePromise} options={options}>
-                <EmbeddedCheckout />
-              </EmbeddedCheckoutProvider>
+
+            {/* Checkout container — full width, no overflow constraints */}
+            <div className="flex-1 p-4 md:p-6 max-w-2xl mx-auto w-full">
+              {error ? (
+                <div className="text-center py-8">
+                  <p className="text-destructive mb-4">{error}</p>
+                  <button 
+                    onClick={() => setError(null)}
+                    className="text-primary hover:underline"
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : (
+                <div id="checkout" className="min-h-[400px]">
+                  <EmbeddedCheckoutProvider stripe={stripePromise} options={options}>
+                    <EmbeddedCheckout />
+                  </EmbeddedCheckoutProvider>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
