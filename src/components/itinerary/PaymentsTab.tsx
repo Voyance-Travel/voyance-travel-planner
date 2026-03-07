@@ -60,6 +60,9 @@ interface PaymentsTabProps {
   budgetTier?: string;
   destination?: string;
   destinationCountry?: string;
+  /** Journey fields for linked trips */
+  journeyId?: string | null;
+  journeyName?: string | null;
 }
 
 interface PayableItem {
@@ -88,6 +91,8 @@ export function PaymentsTab({
   budgetTier = 'moderate',
   destination,
   destinationCountry,
+  journeyId,
+  journeyName,
 }: PaymentsTabProps) {
   const [payments, setPayments] = useState<TripPayment[]>([]);
   const [totals, setTotals] = useState<PaymentTotals>({ paid: 0, pending: 0, total: 0 });
