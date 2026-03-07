@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { toSiteImageUrlFromPhotoId } from '@/utils/unsplash';
 
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -2130,6 +2130,25 @@ export default function Start() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDNAPrompt, setShowDNAPrompt] = useState(false);
+
+  // Helper: advance to step 2 and push history so browser back returns to step 1
+  const goToStep2 = useCallback(() => {
+    setCurrentStep(2);
+    window.history.pushState({ step: 2 }, '', '/start?step=2');
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+  }, []);
+
+  // Listen for browser back button to return to step 1
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (currentStep === 2 && (!event.state?.step || event.state.step === 1)) {
+        setCurrentStep(1);
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [currentStep]);
   const [planMode, setPlanMode] = useState<'single' | 'multi' | 'chat' | 'manual'>('single');
 
   // Trip state
@@ -2259,11 +2278,18 @@ export default function Start() {
           if (savedDraft.isMultiCity) setIsMultiCity(savedDraft.isMultiCity);
           if (savedDraft.multiCityDestinations) setMultiCityDestinations(savedDraft.multiCityDestinations);
           if (savedDraft.multiCityTransports) setMultiCityTransports(savedDraft.multiCityTransports);
-          setCurrentStep(savedDraft.currentStep || 2);
+          const restoredStep = savedDraft.currentStep || 2;
+          setCurrentStep(restoredStep);
           sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+          // Push history for step 2 so back button works
+          if (restoredStep === 2) {
+            window.history.replaceState({ step: 2 }, '', '/start?step=2');
+          }
         }
       } catch {}
-      window.history.replaceState({}, '', '/start');
+      if (!searchParams.get('step')) {
+        window.history.replaceState({}, '', '/start');
+      }
     }
   }, [searchParams, user]);
 
@@ -2793,8 +2819,7 @@ export default function Start() {
                       if (!user.quizCompleted) {
                         setShowDNAPrompt(true);
                       } else {
-                        setCurrentStep(2);
-                        window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+                        goToStep2();
                       }
                     }}
                     onManualAuthRequired={() => {
@@ -2833,7 +2858,9 @@ export default function Start() {
                     mustDoActivities={mustDoActivities}
                     setMustDoActivities={setMustDoActivities}
                     onSubmit={handleSubmit}
-                    onBack={() => setCurrentStep(1)}
+                    onBack={() => {
+                      window.history.back();
+                    }}
                     isSubmitting={isSubmitting}
                     isMultiCity={isMultiCity}
                     multiCityDestinations={multiCityDestinations}
@@ -2915,8 +2942,7 @@ export default function Start() {
               className="w-full text-muted-foreground"
               onClick={() => {
                 setShowDNAPrompt(false);
-                setCurrentStep(2);
-                window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+                goToStep2();
               }}
             >
               Skip for now
