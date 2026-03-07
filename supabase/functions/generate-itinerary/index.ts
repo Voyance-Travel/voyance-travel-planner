@@ -4690,10 +4690,10 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
     }
 
     if (!hasCheckout) {
-      warnings.push('Last day should include hotel checkout');
+      errors.push('Last day MUST include hotel checkout activity');
     }
     if (!hasDeparture) {
-      warnings.push('Last day should end with airport departure');
+      errors.push('Last day MUST end with departure/airport transfer activity');
     }
   }
 
