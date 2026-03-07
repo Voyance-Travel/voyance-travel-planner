@@ -10145,7 +10145,6 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
         console.log(`[generate-day] Transition prompt injected: ${transitionDayPromptBlock.length} chars`);
       }
 
-
       // PHASE 2 FIX: Use Unified Profile Loader (Single Source of Truth)
       // This replaces 100+ lines of manual archetype/trait resolution with bugs
       // ==========================================================================
@@ -12142,10 +12141,50 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         );
       }
 
-      // Calculate total days
+      // Guard: prevent double generation if already in progress (not a resume)
+      if (!resumeFromDay) {
+        const { data: statusCheck } = await supabase.from('trips').select('itinerary_status, metadata').eq('id', tripId).single();
+        if (statusCheck?.itinerary_status === 'generating') {
+          const meta = (statusCheck.metadata as Record<string, unknown>) || {};
+          const heartbeat = meta.generation_heartbeat ? new Date(meta.generation_heartbeat as string) : null;
+          const staleThreshold = 5 * 60 * 1000; // 5 minutes
+          const isStale = !heartbeat || (Date.now() - heartbeat.getTime() > staleThreshold);
+          
+          if (!isStale) {
+            console.log(`[generate-trip] Trip ${tripId} already generating (heartbeat ${heartbeat?.toISOString()}), skipping duplicate`);
+            return new Response(
+              JSON.stringify({ success: true, status: 'already_generating', totalDays: (meta.generation_total_days as number) || 0 }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          console.log(`[generate-trip] Trip ${tripId} has stale generation (heartbeat ${heartbeat?.toISOString()}), restarting`);
+        }
+      }
+
+      // Calculate total days — for multi-city, prefer sum of nights from trip_cities
       const sDate = new Date(startDate);
       const eDate = new Date(endDate);
-      const totalDays = Math.ceil((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24));
+      let totalDays = Math.ceil((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      // For multi-city trips, override totalDays with sum of city nights to prevent
+      // date-arithmetic mismatches from producing extra/missing days
+      if (isMultiCity) {
+        try {
+          const { data: tripCitiesForCount } = await supabase
+            .from('trip_cities')
+            .select('nights, days_total')
+            .eq('trip_id', tripId);
+          if (tripCitiesForCount && tripCitiesForCount.length > 0) {
+            const sumNights = tripCitiesForCount.reduce((sum: number, c: any) => sum + ((c as any).nights || (c as any).days_total || 1), 0);
+            if (sumNights > 0 && sumNights !== totalDays) {
+              console.log(`[generate-trip] Multi-city totalDays corrected: date-based=${totalDays}, city-nights-sum=${sumNights}`);
+              totalDays = sumNights;
+            }
+          }
+        } catch (e) {
+          console.warn('[generate-trip] Could not query trip_cities for totalDays correction:', e);
+        }
+      }
 
       // Set status to generating + store metadata
       const { data: currentTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
