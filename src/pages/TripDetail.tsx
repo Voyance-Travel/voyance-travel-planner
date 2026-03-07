@@ -1943,6 +1943,10 @@ export default function TripDetail() {
                   itineraryStatus={trip.itinerary_status}
                   journeyId={trip.journey_id}
                   journeyName={trip.journey_name}
+                  onDateChange={handleDateChange}
+                  hasItinerary={hasItinerary}
+                  dateEditorFlightSelection={trip.flight_selection as Record<string, unknown> | null}
+                  dateEditorCities={tripCities}
                   onDaysChange={(updatedDays) => {
                     // Keep trip state in sync so ItineraryAssistant always sees current days
                     setTrip(prev => prev ? {
