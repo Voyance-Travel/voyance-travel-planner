@@ -22,7 +22,8 @@ import {
   Calendar, Users, ExternalLink, Route, Search, ArrowRightLeft,
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
-  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2, ClipboardPaste, Compass, Bus, Ship, ArrowRight, Droplets, Wrench
+  Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2, ClipboardPaste, Compass, Bus, Ship, ArrowRight, Droplets, Wrench,
+  Footprints, Navigation2,
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
@@ -7954,14 +7955,14 @@ function ActivityRow({
 
     const transportIcon = (() => {
       const t = activityTitle.toLowerCase();
-      if (t.includes('walk') || t.includes('stroll')) return <Footprints className="h-3.5 w-3.5" />;
+      if (t.includes('walk') || t.includes('stroll')) return <Footprints className="h-3.5 w-3.5" aria-hidden="true" />;
       if (t.includes('taxi') || t.includes('uber') || t.includes('lyft') || t.includes('cab') || t.includes('rideshare') || t.includes('drive'))
         return <Car className="h-3.5 w-3.5" />;
       if (t.includes('metro') || t.includes('subway') || t.includes('train') || t.includes('tram'))
         return <Train className="h-3.5 w-3.5" />;
       if (t.includes('bus') || t.includes('shuttle'))
         return <Bus className="h-3.5 w-3.5" />;
-      return <Navigation className="h-3.5 w-3.5" />;
+      return <Navigation2 className="h-3.5 w-3.5" />;
     })();
 
     const transportCost = cost > 0 ? cost : null;
