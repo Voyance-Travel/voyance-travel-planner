@@ -952,33 +952,61 @@ function LegSlotCard({ slot, index, totalSlots, onUpdateFlight, onToggleExpanded
           </div>
 
           {/* Date & Times */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <div className="space-y-3">
             <div>
               <Label className="text-xs text-muted-foreground">Date</Label>
-              <Input
-                type="date"
-                value={slot.flight.departureDate}
-                onChange={(e) => onUpdateFlight({ departureDate: e.target.value })}
-                className="text-sm"
-              />
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left text-sm font-normal",
+                      !slot.flight.departureDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {slot.flight.departureDate
+                      ? format(parseLocalDate(slot.flight.departureDate), 'PPP')
+                      : <span>Pick a date</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={slot.flight.departureDate ? parseLocalDate(slot.flight.departureDate) : undefined}
+                    onSelect={(date) => {
+                      if (date) {
+                        const yyyy = date.getFullYear();
+                        const mm = String(date.getMonth() + 1).padStart(2, '0');
+                        const dd = String(date.getDate()).padStart(2, '0');
+                        onUpdateFlight({ departureDate: `${yyyy}-${mm}-${dd}` });
+                      }
+                    }}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">Departs</Label>
-              <Input
-                type="time"
-                value={slot.flight.departureTime}
-                onChange={(e) => onUpdateFlight({ departureTime: e.target.value })}
-                className="text-sm"
-              />
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">Arrives</Label>
-              <Input
-                type="time"
-                value={slot.flight.arrivalTime}
-                onChange={(e) => onUpdateFlight({ arrivalTime: e.target.value })}
-                className="text-sm"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs text-muted-foreground">Departs</Label>
+                <Input
+                  type="time"
+                  value={slot.flight.departureTime}
+                  onChange={(e) => onUpdateFlight({ departureTime: e.target.value })}
+                  className="text-sm"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Arrives</Label>
+                <Input
+                  type="time"
+                  value={slot.flight.arrivalTime}
+                  onChange={(e) => onUpdateFlight({ arrivalTime: e.target.value })}
+                  className="text-sm"
+                />
+              </div>
             </div>
           </div>
 
