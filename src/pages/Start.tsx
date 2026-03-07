@@ -2879,6 +2879,12 @@ export default function Start() {
                     setManualHotels={setManualHotels}
                     mustDoActivities={mustDoActivities}
                     setMustDoActivities={setMustDoActivities}
+                    selectedLandmarks={selectedLandmarks}
+                    setSelectedLandmarks={setSelectedLandmarks}
+                    selectedCategories={selectedCategories}
+                    setSelectedCategories={setSelectedCategories}
+                    customMustDos={customMustDos}
+                    setCustomMustDos={setCustomMustDos}
                     onSubmit={handleSubmit}
                     onBack={() => {
                       window.history.back();
