@@ -147,7 +147,7 @@ export function useItineraryGeneration() {
   const generateItineraryProgressive = useCallback(async (trip: TripDetails): Promise<GeneratedDay[]> => {
     const startDate = new Date(trip.startDate);
     const endDate = new Date(trip.endDate);
-    const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    let totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
 
     // Reset cancellation flag at the start of a new generation
     cancelledRef.current = false;
@@ -170,6 +170,15 @@ export function useItineraryGeneration() {
       try {
         const cities = await getTripCities(trip.tripId);
         if (cities.length > 0) {
+          // For multi-city, derive totalDays from sum of city nights to prevent
+          // date-arithmetic mismatches (stale end_date, off-by-one) from producing
+          // extra/missing days or cycling through only some cities
+          const sumNights = cities.reduce((sum, c) => sum + (c.nights || c.days_total || 1), 0);
+          if (sumNights > 0 && sumNights !== totalDays) {
+            console.log(`[useItineraryGeneration] Multi-city totalDays corrected: date-based=${totalDays}, city-nights-sum=${sumNights}`);
+            totalDays = sumNights;
+          }
+
           // Build day→city mapping
           const map: typeof dayCityMap = [];
           for (const city of cities) {
@@ -451,6 +460,7 @@ export function useItineraryGeneration() {
   ): Promise<{ status: string; totalDays: number }> => {
     const startDate = new Date(trip.startDate);
     const endDate = new Date(trip.endDate);
+    // totalDays is used only for local state — the server recalculates from trip_cities for multi-city
     const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
 
     setState({

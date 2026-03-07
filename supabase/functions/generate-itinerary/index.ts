@@ -12142,10 +12142,30 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         );
       }
 
-      // Calculate total days
+      // Calculate total days — for multi-city, prefer sum of nights from trip_cities
       const sDate = new Date(startDate);
       const eDate = new Date(endDate);
-      const totalDays = Math.ceil((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24));
+      let totalDays = Math.ceil((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      // For multi-city trips, override totalDays with sum of city nights to prevent
+      // date-arithmetic mismatches from producing extra/missing days
+      if (isMultiCity) {
+        try {
+          const { data: tripCitiesForCount } = await supabase
+            .from('trip_cities')
+            .select('nights, days_total')
+            .eq('trip_id', tripId);
+          if (tripCitiesForCount && tripCitiesForCount.length > 0) {
+            const sumNights = tripCitiesForCount.reduce((sum: number, c: any) => sum + ((c as any).nights || (c as any).days_total || 1), 0);
+            if (sumNights > 0 && sumNights !== totalDays) {
+              console.log(`[generate-trip] Multi-city totalDays corrected: date-based=${totalDays}, city-nights-sum=${sumNights}`);
+              totalDays = sumNights;
+            }
+          }
+        } catch (e) {
+          console.warn('[generate-trip] Could not query trip_cities for totalDays correction:', e);
+        }
+      }
 
       // Set status to generating + store metadata
       const { data: currentTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
