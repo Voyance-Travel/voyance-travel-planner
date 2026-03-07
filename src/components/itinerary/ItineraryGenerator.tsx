@@ -378,10 +378,12 @@ export function ItineraryGenerator({
           setServerGenActive(true);
           return; // Don't proceed — poller's onReady/onFailed handles the rest
         } catch (serverErr) {
-          console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
-          setPrePhase(null);
-          setHasStarted(false);
-          toast.error('Failed to start generation. Please try again.');
+          console.warn('[ItineraryGenerator] Server request interrupted (likely network disconnect):', serverErr);
+          // DO NOT show an error screen or reset state.
+          // The Edge Function may have already received the request and is generating.
+          // Start polling to check if generation is actually in progress.
+          setServerGenActive(true);
+          toast('Checking generation status...', { duration: 3000 });
           return;
         }
       } else if (gateResult.mode === 'partial') {
