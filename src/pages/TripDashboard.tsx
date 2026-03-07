@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import ActiveTripCard from '@/components/trips/ActiveTripCard';
 import { PastTripCard } from '@/components/trips/PastTripCard';
+import JourneyPlaylist from '@/components/trips/JourneyPlaylist';
 
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -173,6 +174,12 @@ interface Trip {
   isCollaborator?: boolean;
   ownerName?: string | null;
   collaborators?: TripCollaboratorInfo[];
+  // Journey fields
+  journeyId: string | null;
+  journeyName: string | null;
+  journeyOrder: number | null;
+  journeyTotalLegs: number | null;
+  transitionMode: string | null;
 }
 
 // Simplified status mapping - no more "draft" display, all future trips are "upcoming"
@@ -832,6 +839,11 @@ export default function TripDashboard() {
           isPaid: (row.metadata as Record<string, any>)?.is_paid || row.status === 'booked' || false,
           isCollaborator: false,
           collaborators: collabMap.get(row.id) || [],
+          journeyId: (row as any).journey_id || null,
+          journeyName: (row as any).journey_name || null,
+          journeyOrder: (row as any).journey_order || null,
+          journeyTotalLegs: (row as any).journey_total_legs || null,
+          transitionMode: (row as any).transition_mode || null,
         }));
 
         // Map collab trips (exclude any already owned)
@@ -858,6 +870,11 @@ export default function TripDashboard() {
               isCollaborator: true,
               ownerName: ownerMap.get(row.user_id) || null,
               collaborators: collabMap.get(row.id) || [],
+              journeyId: row.journey_id || null,
+              journeyName: row.journey_name || null,
+              journeyOrder: row.journey_order || null,
+              journeyTotalLegs: row.journey_total_legs || null,
+              transitionMode: row.transition_mode || null,
             };
           });
 
@@ -1000,7 +1017,58 @@ export default function TripDashboard() {
   const completedCount = filterTrips('completed').length;
   const activeTrips = filterTrips('active');
 
-  // Group trips by destination
+  // Build renderable items: journey groups + standalone trips, sorted by date
+  type RenderItem = 
+    | { type: 'journey'; journeyId: string; journeyName: string; trips: Trip[]; sortDate: string }
+    | { type: 'standalone'; trip: Trip; sortDate: string };
+
+  const renderItems = useMemo((): RenderItem[] => {
+    const journeyMap = new Map<string, Trip[]>();
+    const standalone: Trip[] = [];
+
+    filteredTrips.forEach(trip => {
+      if (trip.journeyId) {
+        const list = journeyMap.get(trip.journeyId) || [];
+        list.push(trip);
+        journeyMap.set(trip.journeyId, list);
+      } else {
+        standalone.push(trip);
+      }
+    });
+
+    const items: RenderItem[] = [];
+
+    // Add journey groups
+    journeyMap.forEach((trips, journeyId) => {
+      const sorted = trips.sort((a, b) => (a.journeyOrder || 0) - (b.journeyOrder || 0));
+      const firstDate = sorted[0]?.startDate || '9999-12-31';
+      items.push({
+        type: 'journey',
+        journeyId,
+        journeyName: sorted[0]?.journeyName || 'Multi-City Journey',
+        trips: sorted,
+        sortDate: firstDate,
+      });
+    });
+
+    // Add standalone trips
+    standalone.forEach(trip => {
+      items.push({
+        type: 'standalone',
+        trip,
+        sortDate: trip.startDate || '9999-12-31',
+      });
+    });
+
+    // Sort by date (most recent first for upcoming, chronological for completed)
+    items.sort((a, b) => b.sortDate.localeCompare(a.sortDate));
+
+    return items;
+  }, [filteredTrips]);
+
+  const hasJourneys = renderItems.some(item => item.type === 'journey');
+
+  // Group trips by destination (legacy grouping for non-journey trips)
   const groupedTrips = useMemo(() => {
     const groups: Record<string, TripGroup> = {};
     
@@ -1197,11 +1265,31 @@ export default function TripDashboard() {
                           animate={{ opacity: 1 }}
                           className="space-y-6"
                         >
-                      {hasMultipleSameDestination ? (
-                        // Grouped view
+                      {hasJourneys ? (
+                        // Journey-aware rendering: journey playlists + standalone cards
+                        <>
+                          {renderItems.map((item, idx) => {
+                            if (item.type === 'journey') {
+                              return (
+                                <JourneyPlaylist
+                                  key={item.journeyId}
+                                  journeyName={item.journeyName}
+                                  trips={item.trips}
+                                  index={idx}
+                                />
+                              );
+                            }
+                            return (
+                              <div key={item.trip.id} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                <TripCard trip={item.trip} index={idx} onDelete={handleTripDelete} />
+                              </div>
+                            );
+                          })}
+                        </>
+                      ) : hasMultipleSameDestination ? (
+                        // Legacy grouped view
                         groupedTrips.map((group, groupIndex) => (
                           group.trips.length > 1 ? (
-                            // Collapsible folder for multiple trips
                             <Collapsible
                               key={group.key}
                               open={expandedGroups.has(group.key)}
@@ -1248,7 +1336,6 @@ export default function TripDashboard() {
                               </motion.div>
                             </Collapsible>
                           ) : (
-                            // Single trip - show as regular card
                             <motion.div
                               key={group.key}
                               initial={{ opacity: 0, y: 10 }}
