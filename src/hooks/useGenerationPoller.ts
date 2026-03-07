@@ -40,7 +40,7 @@ interface UseGenerationPollerOptions {
   tripId: string | null;
   /** Whether to start polling immediately */
   enabled?: boolean;
-  /** Poll interval in ms (default 3000) */
+  /** Poll interval in ms (default 2000) */
   interval?: number;
   /** Called when generation completes */
   onReady?: () => void;
@@ -62,7 +62,7 @@ const INITIAL_STATE: GenerationPollState = {
 export function useGenerationPoller({
   tripId,
   enabled = false,
-  interval = 3000,
+  interval = 2000,
   onReady,
   onFailed,
   onStalled,
@@ -117,15 +117,23 @@ export function useGenerationPoller({
       const itineraryData = (data.itinerary_data as Record<string, unknown>) || {};
       const partialDays = (itineraryData.days as unknown[]) || [];
 
-      // Get day summaries from itinerary_days table
-      const daysList: GeneratedDaySummary[] = (daysResult.data || []).map((d: any) => ({
-        day_number: d.day_number,
-        title: d.title || `Day ${d.day_number}`,
-        theme: d.theme || '',
-        description: d.description || '',
-        activities: [],
-        created_at: d.created_at,
-      }));
+      // Get day summaries from itinerary_days table, enriched with activities from itinerary_data
+      const daysList: GeneratedDaySummary[] = (daysResult.data || []).map((d: any) => {
+        // Try to find matching day in partialDays (itinerary_data.days) for activity previews
+        const matchingPartialDay = partialDays.find((pd: any) =>
+          pd && (pd.dayNumber === d.day_number || pd.day_number === d.day_number)
+        ) as any;
+        const activities = matchingPartialDay?.activities || [];
+
+        return {
+          day_number: d.day_number,
+          title: d.title || `Day ${d.day_number}`,
+          theme: d.theme || '',
+          description: d.description || '',
+          activities,
+          created_at: d.created_at,
+        };
+      });
       const dayCount = daysResult.count || daysList.length;
 
       // Use the BETTER of metadata count vs itinerary_days count,
