@@ -1,6 +1,6 @@
 /**
- * GenerationAnimation — Minimal compass + orbiting plane
- * Clean, premium feel using Framer Motion. No 3D, no canvas.
+ * GenerationAnimation — Airplane flying around a globe
+ * Animated SVG showing a plane orbiting Earth during itinerary generation.
  */
 
 import { motion } from 'framer-motion';
@@ -12,118 +12,123 @@ interface GenerationAnimationProps {
 }
 
 export function GenerationAnimation({ progress = 0, className }: GenerationAnimationProps) {
-  const radius = 52;
-  const circumference = 2 * Math.PI * radius;
-  const progressOffset = circumference - (progress / 100) * circumference;
-
   return (
     <div className={className}>
-      <div className="relative w-32 h-32 mx-auto">
-        <svg viewBox="0 0 120 120" className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="progressArc" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="hsl(var(--primary))" />
-              <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0.4" />
-            </linearGradient>
-          </defs>
+      <svg
+        viewBox="0 0 200 200"
+        className="w-32 h-32 mx-auto"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        {/* Globe */}
+        <circle
+          cx="100"
+          cy="100"
+          r="60"
+          className="fill-primary/5 stroke-primary/20"
+          strokeWidth="1.5"
+        />
+        {/* Globe latitude lines */}
+        <ellipse cx="100" cy="100" rx="60" ry="20" className="fill-none stroke-primary/10" strokeWidth="1" />
+        <ellipse cx="100" cy="100" rx="60" ry="40" className="fill-none stroke-primary/10" strokeWidth="1" />
+        {/* Globe longitude lines */}
+        <ellipse cx="100" cy="100" rx="20" ry="60" className="fill-none stroke-primary/10" strokeWidth="1" />
+        <ellipse cx="100" cy="100" rx="40" ry="60" className="fill-none stroke-primary/10" strokeWidth="1" />
+        {/* Equator */}
+        <ellipse cx="100" cy="100" rx="60" ry="8" className="fill-none stroke-primary/15" strokeWidth="1.5" />
 
-          {/* Dotted orbit ring */}
-          <circle
-            cx="60"
-            cy="60"
-            r={radius}
-            fill="none"
-            stroke="hsl(var(--primary))"
-            strokeOpacity="0.12"
-            strokeWidth="1.5"
-            strokeDasharray="4 6"
-          />
-
-          {/* Progress arc */}
-          {progress > 0 && (
-            <motion.circle
-              cx="60"
-              cy="60"
-              r={radius}
-              fill="none"
-              stroke="url(#progressArc)"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              initial={{ strokeDashoffset: circumference }}
-              animate={{ strokeDashoffset: progressOffset }}
-              transition={{ duration: 0.6, ease: 'easeOut' }}
-              transform="rotate(-90 60 60)"
-            />
-          )}
-
-          {/* Center compass dot */}
-          <circle cx="60" cy="60" r="3" fill="hsl(var(--primary))" fillOpacity="0.25" />
-          <circle cx="60" cy="60" r="1.5" fill="hsl(var(--primary))" fillOpacity="0.6" />
-
-          {/* Compass crosshairs */}
-          <line x1="60" y1="50" x2="60" y2="70" stroke="hsl(var(--primary))" strokeOpacity="0.1" strokeWidth="0.8" />
-          <line x1="50" y1="60" x2="70" y2="60" stroke="hsl(var(--primary))" strokeOpacity="0.1" strokeWidth="0.8" />
-        </svg>
-
-        {/* Orbiting plane */}
-        <motion.div
-          className="absolute inset-0"
-          animate={{ rotate: 360 }}
-          transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            className="absolute w-5 h-5 text-primary"
-            style={{ top: '2px', left: '50%', transform: 'translateX(-50%) rotate(90deg)' }}
-            fill="currentColor"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" />
-          </svg>
-        </motion.div>
-
-        {/* Pulsing ring */}
-        <motion.div
-          className="absolute inset-0 rounded-full border border-primary/20"
-          animate={{ scale: [1, 1.25], opacity: [0.3, 0] }}
-          transition={{ duration: 2, repeat: Infinity, ease: 'easeOut' }}
+        {/* Orbit path (visible trail) */}
+        <ellipse
+          cx="100"
+          cy="100"
+          rx="80"
+          ry="30"
+          className="fill-none stroke-primary/20"
+          strokeWidth="1"
+          strokeDasharray="4 4"
+          transform="rotate(-15 100 100)"
         />
 
-        {/* Destination pins appearing with progress */}
-        <svg viewBox="0 0 120 120" className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
-          {progress > 20 && (
-            <motion.circle
-              cx="38" cy="42" r="2.5"
-              fill="hsl(var(--primary))"
-              fillOpacity="0.6"
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 200 }}
-            />
-          )}
-          {progress > 50 && (
-            <motion.circle
-              cx="82" cy="45" r="2.5"
-              fill="hsl(var(--primary))"
-              fillOpacity="0.6"
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 200 }}
-            />
-          )}
-          {progress > 75 && (
-            <motion.circle
-              cx="75" cy="80" r="2.5"
-              fill="hsl(var(--primary))"
-              fillOpacity="0.6"
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 200 }}
-            />
-          )}
-        </svg>
-      </div>
+        {/* Progress arc — fills as generation progresses */}
+        <motion.ellipse
+          cx="100"
+          cy="100"
+          rx="80"
+          ry="30"
+          className="fill-none stroke-primary/40"
+          strokeWidth="2"
+          strokeLinecap="round"
+          transform="rotate(-15 100 100)"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: progress / 100 }}
+          transition={{ duration: 0.5, ease: 'easeOut' }}
+          style={{ strokeDasharray: 1, strokeDashoffset: 0 }}
+        />
+
+        {/* Airplane — orbits the globe */}
+        <motion.g
+          animate={{ rotate: 360 }}
+          transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
+          style={{ originX: '100px', originY: '100px' }}
+        >
+          <g transform="rotate(-15 100 100)">
+            <g transform="translate(180, 100)">
+              <g transform="rotate(0) scale(0.9)">
+                <path d="M-4,-2 L4,0 L-4,2 L-3,0 Z" className="fill-primary" />
+                <path d="M-2,-1 L0,-5 L1,-5 L0,-1" className="fill-primary/80" />
+                <path d="M-2,1 L0,5 L1,5 L0,1" className="fill-primary/80" />
+                <path d="M-4,-1 L-6,-3 L-5,-3 L-4,0" className="fill-primary/60" />
+                <path d="M-4,1 L-6,3 L-5,3 L-4,0" className="fill-primary/60" />
+              </g>
+            </g>
+          </g>
+        </motion.g>
+
+        {/* Contrail particles */}
+        {[0, 1, 2].map(i => (
+          <motion.circle
+            key={i}
+            r="1.5"
+            className="fill-primary/20"
+            animate={{
+              cx: [180, 160, 140],
+              cy: [85, 90, 95],
+              opacity: [0.4, 0.2, 0],
+              r: [1.5, 2, 2.5],
+            }}
+            transition={{
+              duration: 1.5,
+              repeat: Infinity,
+              delay: i * 0.3,
+              ease: 'easeOut',
+            }}
+          />
+        ))}
+
+        {/* Building markers on globe — appear as days complete */}
+        {progress > 0 && (
+          <motion.g initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <motion.circle cx="85" cy="80" r="3" className="fill-primary/60"
+              initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.2 }} />
+            {progress > 30 && (
+              <motion.circle cx="115" cy="90" r="3" className="fill-primary/60"
+                initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.2 }} />
+            )}
+            {progress > 60 && (
+              <motion.circle cx="95" cy="115" r="3" className="fill-primary/60"
+                initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.2 }} />
+            )}
+          </motion.g>
+        )}
+
+        {/* Pulsing ring around globe */}
+        <motion.circle
+          cx="100" cy="100" r="65"
+          className="fill-none stroke-primary/15"
+          strokeWidth="1"
+          animate={{ r: [65, 75], opacity: [0.3, 0] }}
+          transition={{ duration: 2, repeat: Infinity, ease: 'easeOut' }}
+        />
+      </svg>
     </div>
   );
 }
