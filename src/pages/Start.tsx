@@ -2904,6 +2904,8 @@ export default function Start() {
                     setSelectedCategories={setSelectedCategories}
                     customMustDos={customMustDos}
                     setCustomMustDos={setCustomMustDos}
+                    generationRules={generationRules}
+                    onGenerationRulesChange={setGenerationRules}
                     onSubmit={handleSubmit}
                     onBack={() => {
                       window.history.back();
