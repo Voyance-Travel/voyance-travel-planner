@@ -1210,51 +1210,37 @@ export function EditorialItinerary({
       }) as any;
 
     const travelCards: EditorialActivity[] = [
-      // 1 — Check-out
-      mkActivity(`travel-checkout-${dn}`, `Check out — ${from}`, {
+      // Single consolidated travel summary card
+      mkActivity(`travel-summary-${dn}`, `${from} → ${to}`, {
         __syntheticTravel: true,
-        description: `Check out of your accommodation in ${from} and prepare for departure.`,
-        startTime: '',
-        category: 'accommodation',
-        type: 'accommodation',
-      }),
-      // 2 — Head to transport hub
-      mkActivity(`travel-depart-${dn}`, `Head to ${hubLabel}`, {
-        __syntheticTravel: true,
-        description: `Travel to the ${hubLabel} for your ${transportName.toLowerCase()} to ${to}.`,
-        startTime: '',
-        category: 'transit',
-      }),
-      // 3 — The transport itself (holds seat/ticket info)
-      mkActivity(`travel-transport-${dn}`, `${transportName}: ${from} → ${to}`, {
-        __syntheticTravel: true,
+        __syntheticTravelSummary: true,
+        __travelMeta: {
+          from,
+          to,
+          transportName,
+          hubLabel,
+          carrier,
+          flightNum,
+          depTime,
+          arrTime,
+          dur,
+          seatInfo,
+          bookingRef,
+          price,
+          currency,
+        },
         description: [
-          carrier && `${carrier}`,
-          flightNum && `${flightNum}`,
-          seatInfo && `Seat: ${seatInfo}`,
-          bookingRef && `Ref: ${bookingRef}`,
-          dur && `Duration: ${dur}`,
-        ].filter(Boolean).join(' · ') || `${transportName} from ${from} to ${to}`,
+          `${transportName}${carrier ? ` · ${carrier}` : ''}${flightNum ? ` ${flightNum}` : ''}`,
+          depTime && arrTime ? `Departs ${depTime} · Arrives ${arrTime}` : depTime ? `Departs ${depTime}` : arrTime ? `Arrives ${arrTime}` : '',
+          dur ? `Duration: ${dur}` : '',
+        ].filter(Boolean).join('\n'),
         startTime: depTime,
         endTime: arrTime,
         duration: dur,
         cost: price != null ? { amount: price, currency } : undefined,
-      }),
-      // 4 — Arrival
-      mkActivity(`travel-arrive-${dn}`, `Arrive in ${to}`, {
-        __syntheticTravel: true,
-        description: `Arrive at ${to}${arrTime ? ` at ${arrTime}` : ''}. Collect luggage and head to accommodation.`,
-        startTime: arrTime || '',
         category: 'transit',
-      }),
-      // 5 — Check-in
-      mkActivity(`travel-checkin-${dn}`, `Check in — ${to}`, {
-        __syntheticTravel: true,
-        description: `Check in to your accommodation in ${to} and settle in.`,
-        startTime: '',
-        category: 'accommodation',
-        type: 'accommodation',
-      }),
+        type: 'transit',
+      } as any),
     ];
 
     return {
@@ -7570,6 +7556,59 @@ function DayCard({
                   const prevHour = parseInt(prevTime.split(':')[0], 10);
                   const prevTimeOfDay = isNaN(prevHour) ? '' : prevHour < 12 ? 'Morning' : prevHour < 17 ? 'Afternoon' : 'Evening';
                   const showTimeOfDayHeader = timeOfDay && timeOfDay !== prevTimeOfDay;
+
+                  // Compact travel summary card for consolidated transition-day activities
+                  const isTravelSummary = !!(activityToRender as any).__syntheticTravelSummary;
+                  const travelMeta = (activityToRender as any).__travelMeta;
+
+                  if (isTravelSummary && travelMeta) {
+                    const TransportIcon = travelMeta.transportName?.toLowerCase() === 'flight' ? Plane
+                      : travelMeta.transportName?.toLowerCase() === 'train' ? Train
+                      : travelMeta.transportName?.toLowerCase() === 'bus' ? Bus
+                      : travelMeta.transportName?.toLowerCase() === 'ferry' ? Ship
+                      : Car;
+
+                    return (
+                      <div className="px-2 sm:px-0 py-2">
+                        <div className="rounded-xl border-2 border-dashed border-primary/20 bg-primary/[0.03] overflow-hidden">
+                          <div className="flex items-center gap-3 px-4 py-3">
+                            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10 shrink-0">
+                              <TransportIcon className="w-4.5 h-4.5 text-primary" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-foreground">
+                                {travelMeta.from} → {travelMeta.to}
+                              </p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {[
+                                  travelMeta.transportName,
+                                  travelMeta.carrier,
+                                  travelMeta.flightNum,
+                                  travelMeta.depTime && travelMeta.arrTime
+                                    ? `${travelMeta.depTime} – ${travelMeta.arrTime}`
+                                    : travelMeta.depTime ? `Departs ${travelMeta.depTime}`
+                                    : travelMeta.arrTime ? `Arrives ${travelMeta.arrTime}` : '',
+                                  travelMeta.dur,
+                                ].filter(Boolean).join(' · ')}
+                              </p>
+                            </div>
+                            {travelMeta.price != null && (
+                              <span className="text-xs font-medium text-muted-foreground shrink-0">
+                                {travelMeta.currency === 'USD' ? '$' : travelMeta.currency}{travelMeta.price}
+                              </span>
+                            )}
+                          </div>
+                          {/* Expandable details */}
+                          {(travelMeta.seatInfo || travelMeta.bookingRef) && (
+                            <div className="px-4 pb-3 pt-0 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground border-t border-primary/10 mt-0 pt-2">
+                              {travelMeta.seatInfo && <span>Seat: {travelMeta.seatInfo}</span>}
+                              {travelMeta.bookingRef && <span>Ref: {travelMeta.bookingRef}</span>}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
 
                   return (
                   <div className={cn(
