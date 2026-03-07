@@ -9367,15 +9367,36 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
 
       // Load structured must-haves checklist from trip metadata
       let mustHavesConstraintPrompt = '';
+      let preBookedCommitmentsPrompt = '';
       if (tripId) {
         // Re-use the tripMeta we already fetched above if available, otherwise fetch
-        const metadataForMustHaves = (tripId && mustDoPrompt !== undefined) 
+        const metadataForConstraints = (tripId && mustDoPrompt !== undefined) 
           ? (await supabase.from('trips').select('metadata').eq('id', tripId).single()).data?.metadata as Record<string, unknown> | null
           : null;
-        const mustHavesList = (metadataForMustHaves?.mustHaves as Array<{label: string; notes?: string}>) || [];
+        
+        // Must-haves checklist
+        const mustHavesList = (metadataForConstraints?.mustHaves as Array<{label: string; notes?: string}>) || [];
         if (mustHavesList.length > 0) {
           mustHavesConstraintPrompt = buildMustHavesConstraintPrompt(mustHavesList, totalDays);
           console.log(`[generate-day] Must-haves checklist injected: ${mustHavesList.length} items`);
+        }
+        
+        // Pre-booked commitments (shows, reservations, tours with fixed times)
+        const preBookedList = (metadataForConstraints?.preBookedCommitments as PreBookedCommitment[]) || [];
+        if (preBookedList.length > 0) {
+          const startDate = preferences?.startDate || body.date?.split('T')[0] || '';
+          const endDate = preferences?.endDate || '';
+          const commitmentAnalysis = analyzePreBookedCommitments(preBookedList, startDate, endDate);
+          // For per-day generation, only include commitments relevant to this day's date
+          const dayDate = body.date?.split('T')[0] || '';
+          const dayAvail = commitmentAnalysis.dayBlocks.get(dayDate);
+          if (dayAvail && dayAvail.blockedPeriods.length > 0) {
+            preBookedCommitmentsPrompt = `\n## 📅 PRE-BOOKED COMMITMENTS FOR THIS DAY (NON-NEGOTIABLE)\n\nThe traveler has FIXED commitments today. You MUST schedule around them:\n${dayAvail.blockedPeriods.map(b => `- "${b.commitment.title}" from ${b.startTime} to ${b.endTime}${b.commitment.location ? ` at ${b.commitment.location}` : ''} [${b.commitment.category}]`).join('\n')}\n\nAvailable time slots:\n${dayAvail.availableSlots.map(s => `- ${s.startTime} to ${s.endTime} (${s.durationMinutes} min, ${s.period})`).join('\n')}\n\nRULES:\n- Do NOT schedule any activity during the blocked periods above\n- Include the pre-booked event AS an activity in the itinerary (category: "${dayAvail.blockedPeriods[0]?.commitment.category || 'event'}")\n- Plan activities ONLY in the available time slots\n`;
+            console.log(`[generate-day] Pre-booked commitments for day ${dayNumber}: ${dayAvail.blockedPeriods.length} events`);
+          } else if (commitmentAnalysis.promptSection) {
+            // Include full prompt as context even if no events on this specific day
+            preBookedCommitmentsPrompt = `\n## 📅 Pre-Booked Commitments (other days)\nThe traveler has pre-booked events on other days. No fixed events today — plan freely.\n`;
+          }
         }
       }
 
