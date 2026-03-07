@@ -154,8 +154,20 @@ export default function TripDetail() {
   const [itineraryDaysSummaries, setItineraryDaysSummaries] = useState<Array<{ day_number: number; title: string; theme: string }>>([]);
   const isServerGenerating = trip?.itinerary_status === 'generating' || trip?.itinerary_status === 'queued' || (itineraryDaysCount > 0 && !trip?.itinerary_data && trip?.itinerary_status !== 'ready' && (trip?.itinerary_status as string) !== 'generated');
   const [generationStalled, setGenerationStalled] = useState(false);
+  const [showStalledUI, setShowStalledUI] = useState(false);
+  const stalledTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const [resumingGeneration, setResumingGeneration] = useState(false);
   const onReadyCalledRef = useRef(false);
+
+  useEffect(() => {
+    if (generationStalled) {
+      stalledTimerRef.current = setTimeout(() => setShowStalledUI(true), 30000);
+    } else {
+      setShowStalledUI(false);
+      if (stalledTimerRef.current) clearTimeout(stalledTimerRef.current);
+    }
+    return () => { if (stalledTimerRef.current) clearTimeout(stalledTimerRef.current); };
+  }, [generationStalled]);
 
   const generationPoller = useGenerationPoller({
     tripId: tripId || null,
@@ -1380,7 +1392,7 @@ export default function TripDetail() {
             /* Server-side generation in progress or stalled — use GenerationPhases for
                consistent animation + progress display (airplane/globe animation) */
             <div className="space-y-6">
-              {generationStalled ? (
+              {showStalledUI ? (
                 /* Stalled state — show reconnecting with retry button */
                 <div className="flex flex-col items-center justify-center py-10 space-y-4">
                   <div className="relative">
