@@ -83,7 +83,7 @@ export function SignUpForm() {
     try {
       const { error } = await supabase.auth.resend({ type: 'signup', email: confirmedEmail });
       if (error) throw error;
-      toast.success('Confirmation email resent — check your inbox and spam folder.');
+      toast.success('Confirmation email resent. Check your inbox and spam folder.');
       setResendCooldown(60);
     } catch (err) {
       toast.error('Failed to resend. Please try again later.');

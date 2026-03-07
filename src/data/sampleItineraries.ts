@@ -2090,11 +2090,11 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
     },
     destinationInfo: {
       overview: "Denver, the Mile High City, sits at exactly 5,280 feet above sea level where the Great Plains meet the Rocky Mountains. Known for its 300+ days of sunshine, thriving craft beer scene (70+ breweries in metro area), and easy access to world-class outdoor recreation, Denver blends urban sophistication with mountain-town laid-back vibes. The RiNo (River North) Art District has transformed into a creative hub of street art, galleries, and innovative restaurants, while historic neighborhoods like LoHi and Capitol Hill offer distinct personalities.",
-      culturalNotes: "Denver's culture is deeply tied to the outdoors. Locals are active and health-conscious, and the city consistently ranks among the fittest in the US. The craft beer culture is serious — Colorado has more craft breweries per capita than almost any other state. Denver is casual and friendly; no need to dress up for most restaurants. The city has a growing food scene that goes well beyond steakhouses, with a strong focus on farm-to-table and diverse cuisines.",
+      culturalNotes: "Denver's culture is deeply tied to the outdoors. Locals are active and health-conscious, and the city consistently ranks among the fittest in the US. The craft beer culture is serious. Colorado has more craft breweries per capita than almost any other state. Denver is casual and friendly; no need to dress up for most restaurants. The city has a growing food scene that goes well beyond steakhouses, with a strong focus on farm-to-table and diverse cuisines.",
       bestTime: "September to October offers perfect weather (60-75°F), fall foliage, and fewer crowds. Summer (June-August) is warm and sunny but popular. Winter brings skiing access but cold city temps.",
       currency: "US Dollar (USD). Credit cards widely accepted everywhere. Tipping: 18-20% at restaurants, $1-2 per beer at bars.",
       language: "English. Spanish is widely spoken in many neighborhoods and restaurants.",
-      tips: "Drink extra water — altitude sickness is real at 5,280 feet. Take it easy on alcohol the first day. Sunscreen is essential even in cool weather (UV is 25% stronger at altitude). Layers are key: mornings can be 40°F and afternoons 75°F. The A-Line train from DEN airport to Union Station is the best way into the city ($10.50, 37 minutes)."
+      tips: "Drink extra water. Altitude sickness is real at 5,280 feet. Take it easy on alcohol the first day. Sunscreen is essential even in cool weather (UV is 25% stronger at altitude). Layers are key: mornings can be 40°F and afternoons 75°F. The A-Line train from DEN airport to Union Station is the best way into the city ($10.50, 37 minutes)."
     },
     days: [
       {
@@ -2196,7 +2196,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
           {
             id: 'denver-2-1',
             title: 'Sunrise Hike at Red Rocks',
-            description: 'Trading Post Trail before the crowds — stunning red sandstone formations',
+            description: 'Trading Post Trail before the crowds. Stunning red sandstone formations',
             time: '06:00',
             duration: '2 hours',
             type: 'activity',
@@ -2378,12 +2378,12 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
       ]
     },
     destinationInfo: {
-      overview: "New Orleans is America's most singular city — a place where French, Spanish, African, Caribbean, and Creole cultures collide in a delicious, musical celebration of life. Beyond Bourbon Street lies a deeply layered city of oak-lined boulevards, above-ground cemeteries, brass band second-lines, and some of the most important food in American history. Neighborhoods like the Bywater, Tremé, and the Garden District each tell different chapters of a complex, beautiful story.",
-      culturalNotes: "New Orleans runs on its own clock. 'NOLA time' is real — things start late and end later. Music isn't entertainment here, it's essential infrastructure. The food is sacred: know the difference between Creole (city) and Cajun (country) cuisine. Locals call it 'Nawlins' or 'New Or-lins,' never 'New Or-LEENS.'",
+      overview: "New Orleans is America's most singular city, a place where French, Spanish, African, Caribbean, and Creole cultures collide in a delicious, musical celebration of life. Beyond Bourbon Street lies a deeply layered city of oak-lined boulevards, above-ground cemeteries, brass band second-lines, and some of the most important food in American history. Neighborhoods like the Bywater, Tremé, and the Garden District each tell different chapters of a complex, beautiful story.",
+      culturalNotes: "New Orleans runs on its own clock. 'NOLA time' is real: things start late and end later. Music isn't entertainment here, it's essential infrastructure. The food is sacred: know the difference between Creole (city) and Cajun (country) cuisine. Locals call it 'Nawlins' or 'New Or-lins,' never 'New Or-LEENS.'",
       bestTime: "October to May offers the best weather and festival season. February/March is Mardi Gras. April is Jazz Fest. Summer is brutally hot and humid but hotel prices drop.",
       currency: "US Dollar (USD). Cash is helpful for street musicians, po-boy shops, and bar tips. Tipping: 20% at restaurants, $1+ per drink at bars.",
       language: "English with a unique NOLA accent. You'll hear 'Where y'at?' (How are you?) and 'making groceries' (grocery shopping).",
-      tips: "Skip Bourbon Street for live music — go to Frenchmen Street instead. Café Du Monde is best before 7 AM. Wear comfortable shoes; sidewalks are famously uneven. Take the St. Charles streetcar for a $1.25 tour of the Garden District."
+      tips: "Skip Bourbon Street for live music. Go to Frenchmen Street instead. Café Du Monde is best before 7 AM. Wear comfortable shoes; sidewalks are famously uneven. Take the St. Charles streetcar for a $1.25 tour of the Garden District."
     },
     days: [
       {
@@ -2485,7 +2485,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
           {
             id: 'nola-2-1',
             title: 'Breakfast at Elizabeth\'s',
-            description: 'Legendary Bywater breakfast — praline bacon and grits',
+            description: 'Legendary Bywater breakfast with praline bacon and grits',
             time: '09:00',
             duration: '1 hour',
             type: 'dining',
@@ -2588,7 +2588,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
           {
             id: 'nola-3-2',
             title: 'Brunch at Willie Mae\'s Scotch House',
-            description: 'America\'s best fried chicken — arrive early, there\'s always a line',
+            description: 'America\'s best fried chicken. Arrive early, there\'s always a line',
             time: '11:30',
             duration: '1 hour',
             type: 'dining',
@@ -2601,7 +2601,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
           {
             id: 'nola-3-3',
             title: 'Preservation Hall Jazz Concert',
-            description: 'Intimate, acoustic jazz in a 200-year-old venue — skip Bourbon St',
+            description: 'Intimate, acoustic jazz in a 200-year-old venue. Skip Bourbon St',
             time: '14:00',
             duration: '1 hour',
             type: 'cultural',
@@ -2639,7 +2639,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
           {
             id: 'nola-4-1',
             title: 'Early Beignets at Café Du Monde',
-            description: 'Before 7 AM — no line, just powdered sugar and chicory coffee',
+            description: 'Before 7 AM. No line, just powdered sugar and chicory coffee',
             time: '06:30',
             duration: '30 minutes',
             type: 'dining',
@@ -2718,7 +2718,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
       ]
     },
     destinationInfo: {
-      overview: "Rome is a living museum where every cobblestone tells a story spanning nearly 3,000 years. Beyond the Colosseum and Vatican, the real Rome lives in Testaccio (the original foodie district), Trastevere (bohemian nightlife), and Monti (artisan boutiques). The food is deceptively simple — carbonara, cacio e pepe, supplì — but executed with obsessive devotion to technique.",
+      overview: "Rome is a living museum where every cobblestone tells a story spanning nearly 3,000 years. Beyond the Colosseum and Vatican, the real Rome lives in Testaccio (the original foodie district), Trastevere (bohemian nightlife), and Monti (artisan boutiques). The food is deceptively simple (carbonara, cacio e pepe, supplì) but executed with obsessive devotion to technique.",
       culturalNotes: "Romans take food seriously. Never order cappuccino after 11 AM. Don't add parmesan to seafood pasta. Dinner doesn't start until 8:30 PM. 'Aperitivo' (6-8 PM) is sacred. Greet shopkeepers with 'buongiorno.' Tipping isn't expected but rounding up is appreciated.",
       bestTime: "April to June and September to October offer mild weather and manageable crowds. July-August is brutally hot. Easter week is stunning but extremely crowded.",
       currency: "Euro (EUR) - 1 USD ≈ 0.92 EUR. Credit cards accepted at most places. No tipping expected; 'coperto' (€1-3 cover charge) is already on the bill.",
@@ -2761,7 +2761,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
           {
             id: 'rome-1-3',
             title: 'Supplì Tasting in Testaccio',
-            description: 'The original Roman street food — fried rice balls with melted mozzarella',
+            description: 'The original Roman street food: fried rice balls with melted mozzarella',
             time: '14:00',
             duration: '1 hour',
             type: 'dining',
@@ -2774,7 +2774,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
           {
             id: 'rome-1-4',
             title: 'Testaccio Market Exploration',
-            description: 'Rome\'s best food market — seasonal produce, fresh pasta, local cheeses',
+            description: 'Rome\'s best food market with seasonal produce, fresh pasta, local cheeses',
             time: '15:30',
             duration: '1.5 hours',
             type: 'cultural',
@@ -2787,7 +2787,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
           {
             id: 'rome-1-5',
             title: 'Sunset Aperitivo on Hidden Terrace',
-            description: 'Rooftop bar overlooking the Forum — known only to locals',
+            description: 'Rooftop bar overlooking the Forum, known only to locals',
             time: '18:30',
             duration: '1.5 hours',
             type: 'dining',
@@ -2800,7 +2800,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
           {
             id: 'rome-1-6',
             title: 'Dinner at Da Felice',
-            description: 'The temple of Roman cooking — legendary cacio e pepe and tonnarelli',
+            description: 'The temple of Roman cooking. Legendary cacio e pepe and tonnarelli',
             time: '20:30',
             duration: '2 hours',
             type: 'dining',
@@ -2864,7 +2864,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
           {
             id: 'rome-2-4',
             title: 'Lunch at Roscioli',
-            description: 'Legendary salumeria — carbonara, burrata, curated wine list',
+            description: 'Legendary salumeria with carbonara, burrata, curated wine list',
             time: '13:30',
             duration: '90 minutes',
             type: 'dining',
@@ -2890,7 +2890,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
           {
             id: 'rome-2-6',
             title: 'Dinner at Trattoria Da Teo',
-            description: 'Family-run Trastevere gem — fiori di zucca and artichokes alla giudia',
+            description: 'Family-run Trastevere gem with fiori di zucca and artichokes alla giudia',
             time: '21:00',
             duration: '2 hours',
             type: 'dining',
@@ -2915,7 +2915,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
           {
             id: 'rome-3-1',
             title: 'Vatican Museums & Sistine Chapel',
-            description: 'First entry at 8 AM — Raphael Rooms and Michelangelo\'s ceiling',
+            description: 'First entry at 8 AM. Raphael Rooms and Michelangelo\'s ceiling',
             time: '08:00',
             duration: '3 hours',
             type: 'cultural',
@@ -2928,7 +2928,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
           {
             id: 'rome-3-2',
             title: 'Lunch at Pizzarium',
-            description: 'Gabriele Bonci\'s legendary pizza al taglio — best pizza in Rome',
+            description: 'Gabriele Bonci\'s legendary pizza al taglio. Best pizza in Rome',
             time: '12:00',
             duration: '45 minutes',
             type: 'dining',
@@ -2941,7 +2941,7 @@ export const SAMPLE_ITINERARIES: Record<string, SampleItineraryData> = {
           {
             id: 'rome-3-3',
             title: 'Gelato at Fatamorgana',
-            description: 'All-natural, creative flavors — black sesame, basil walnut',
+            description: 'All-natural, creative flavors: black sesame, basil walnut',
             time: '14:00',
             duration: '30 minutes',
             type: 'dining',

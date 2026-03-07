@@ -1375,7 +1375,7 @@ export function EditorialItinerary({
       const errorCount = result.issues.filter(i => i.severity === 'error').length;
       const warnCount = result.issues.filter(i => i.severity === 'warning').length;
       if (result.issues.length === 0) {
-        toast.success(`Day ${day.dayNumber} validated — no issues found!`);
+        toast.success(`Day ${day.dayNumber} validated, no issues found!`);
       } else {
         toast(`Day ${day.dayNumber}: ${errorCount} error${errorCount !== 1 ? 's' : ''}, ${warnCount} warning${warnCount !== 1 ? 's' : ''}`, {
           icon: '⚠️',
@@ -1775,7 +1775,7 @@ export function EditorialItinerary({
         }));
         setHasChanges(true);
         toast.success(transportCap.isFree 
-          ? `Route updated to ${newMode} (free — ${transportCap.freeRemaining - 1} free changes left)`
+          ? `Route updated to ${newMode} (free, ${transportCap.freeRemaining - 1} free changes left)`
           : `Route updated to ${newMode} (${CREDIT_COSTS.TRANSPORT_MODE_CHANGE} credits used)`
         );
       }
@@ -2437,7 +2437,7 @@ export function EditorialItinerary({
     setSwapDrawerActivity(null);
     // QA-015: Show accurate free/paid toast based on server response
     if (swapCreditResult?.freeCapUsed) {
-      toast.success(`Swapped activity (free — ${swapCreditResult.usageCount}/${swapCreditResult.freeCap} used)`);
+      toast.success(`Swapped activity (free, ${swapCreditResult.usageCount}/${swapCreditResult.freeCap} used)`);
     } else {
       toast.success(`Swapped activity (${swapCreditResult?.spent ?? CREDIT_COSTS.SWAP_ACTIVITY} credits used)`);
     }
@@ -2881,7 +2881,7 @@ export function EditorialItinerary({
               },
             });
             // Invalidate credit caches
-            toast.info('No changes needed — your itinerary is already optimized! Credits refunded.', { duration: 4000 });
+            toast.info('No changes needed. Your itinerary is already optimized! Credits refunded.', { duration: 4000 });
           } catch (refundErr) {
             console.error('Failed to refund optimization credits:', refundErr);
           }
@@ -6824,7 +6824,7 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
       if (!hasHotel) {
         return { action: 'Add hotel for personalized tips', reason: 'We\'ll calculate transfer times from the station', isMissing: true };
       }
-      return { action: 'Head to your hotel', reason: 'No customs or security — you can go straight to check-in' };
+      return { action: 'Head to your hotel', reason: 'No customs or security, so you can go straight to check-in' };
     }
     if (!hasFlight && !hasTransportArrival) {
       return { action: 'Add travel details for arrival tips', reason: 'We\'ll plan your arrival day activities', isMissing: true };
@@ -6897,10 +6897,10 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
     ? 'Your Arrival Game Plan'
     : `Arriving in ${destination}`;
   const headerSubtitle = isTrainBusArrival
-    ? `${arrivalCityInfo?.transportType === 'train' ? 'Train' : arrivalCityInfo?.transportType === 'bus' ? 'Bus' : arrivalCityInfo?.transportType === 'ferry' ? 'Ferry' : 'Drive'} arrival — Day ${dayNumber}`
+    ? `${arrivalCityInfo?.transportType === 'train' ? 'Train' : arrivalCityInfo?.transportType === 'bus' ? 'Bus' : arrivalCityInfo?.transportType === 'ferry' ? 'Ferry' : 'Drive'} arrival, Day ${dayNumber}`
     : dayNumber === 1 
       ? 'Everything you need for Day 1'
-      : `Flight arrival — Day ${dayNumber}`;
+      : `Flight arrival, Day ${dayNumber}`;
 
   return (
     <div className="border border-border bg-card rounded-lg overflow-hidden">

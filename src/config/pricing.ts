@@ -564,7 +564,7 @@ export function formatCredits(credits: number): string {
       _formatCreditsWarned = true;
       console.warn(`[formatCredits] Unreasonable credit value detected: ${credits}. Subsequent warnings suppressed.`);
     }
-    return '—';
+    return '-';
   }
   return credits.toLocaleString();
 }

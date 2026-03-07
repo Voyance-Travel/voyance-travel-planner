@@ -90,7 +90,7 @@ function computeTripProgress(trip: any): { progress?: number; label?: string; co
 
   // Failed generation
   if (itineraryStatus === 'failed') {
-    return { progress: 0, label: 'Generation failed — try again', color: 'bg-destructive' };
+    return { progress: 0, label: 'Generation failed. Try again', color: 'bg-destructive' };
   }
 
   // Currently generating

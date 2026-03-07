@@ -56,7 +56,7 @@ function activityToItinerary(activity: ParsedActivity, isSelected: boolean): Iti
   // Merge notes into description — do NOT set `tips` as that triggers VoyanceInsight badges
   // which are meant only for AI-generated content, not user's raw research notes
   const combinedDescription = [activity.description, activity.notes]
-    .filter(Boolean).join(' — ') || undefined;
+    .filter(Boolean).join(', ') || undefined;
 
   return {
     id,
@@ -98,7 +98,7 @@ function convertDay(day: ParsedDay): ItineraryDay {
   return {
     dayNumber: day.dayNumber,
     date: day.date,
-    title: day.theme ? `Day ${day.dayNumber} — ${day.theme}` : `Day ${day.dayNumber}`,
+    title: day.theme ? `Day ${day.dayNumber}: ${day.theme}` : `Day ${day.dayNumber}`,
     theme: day.theme,
     activities,
     metadata: day.dailyBudget ? { dailyBudget: day.dailyBudget } : undefined,

@@ -1151,7 +1151,7 @@ export default function TripDetail() {
         toast.error('Failed to save date changes');
       } else {
         const msg = isShiftOnly
-          ? 'Trip dates shifted — use "Refresh Day" to check for scheduling issues'
+          ? 'Trip dates shifted. Use "Refresh Day" to check for scheduling issues'
           : daysAdded > 0
             ? `${daysAdded} day${daysAdded > 1 ? 's' : ''} added${insertPosition === 'before' ? ' at the start' : ' at the end'}`
             : `${Math.abs(daysAdded)} day${Math.abs(daysAdded) > 1 ? 's' : ''} removed${archivedDays ? ' (archived)' : ''}`;
@@ -2185,7 +2185,7 @@ export default function TripDetail() {
           if (result.success) {
             toast.success('Your changes have been saved.');
           } else {
-            toast.error('Failed to save — please try again.');
+            toast.error('Failed to save. Please try again.');
           }
         }}
         onCancel={() => {

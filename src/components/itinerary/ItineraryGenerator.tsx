@@ -468,8 +468,8 @@ export function ItineraryGenerator({
           if (ok) {
             toast.info(
               daysCompleted > 0
-                ? `Generation stopped after ${daysCompleted}/${totalTrip} days — ${refundAmount} credits refunded for remaining days. Your progress has been saved.`
-                : `Generation failed — ${refundAmount} credits have been refunded.`,
+                ? `Generation stopped after ${daysCompleted}/${totalTrip} days. ${refundAmount} credits refunded for remaining days. Your progress has been saved.`
+                : `Generation failed. ${refundAmount} credits have been refunded.`,
               { duration: 6000 }
             );
             if (userId) {
@@ -843,7 +843,7 @@ export function ItineraryGenerator({
 
           <p className="text-xs text-muted-foreground mt-6">
             {isFirstTrip
-              ? 'Your first trip is free — includes activities, restaurants, transit & tips'
+              ? 'Your first trip is free! Includes activities, restaurants, transit & tips'
               : costEstimate.totalCredits > 0 
                 ? `${formatCredits(costEstimate.totalCredits)} credits for ${totalDaysEstimate} days · Day unlocks charged separately`
                 : 'Includes activities, restaurants, transportation, and local tips'

@@ -206,7 +206,7 @@ export function formatActionToast(
 ): string {
   if (result.isFree) {
     const remaining = result.freeRemaining - 1; // after this use
-    return `${actionLabel} (free — ${remaining} remaining)`;
+    return `${actionLabel} (free, ${remaining} remaining)`;
   }
   return `${actionLabel} (${result.cost} credits used)`;
 }

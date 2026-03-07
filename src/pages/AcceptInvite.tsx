@@ -75,7 +75,7 @@ function getErrorDisplay(reason?: string, fallbackError?: string) {
     case 'already_owner':
       return {
         title: 'You Own This Trip',
-        message: 'You are the owner of this trip — no need to join!',
+        message: 'You are the owner of this trip. No need to join!',
       };
     case 'trip_not_found':
       return {

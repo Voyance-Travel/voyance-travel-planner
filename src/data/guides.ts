@@ -575,9 +575,9 @@ As you seek authentic experiences, remember that "discovering" can sometimes mea
 - Support local businesses with purchases, not just photos
 - Keep actual residential areas and truly secret spots to yourself
 - Learn at least a few phrases in the local language
-- Respect the atmosphere—if locals are quiet and contemplative, match that energy
+- Respect the atmosphere. If locals are quiet and contemplative, match that energy
 
-The best hidden gems aren't specific locations but moments of connection—when you briefly transcend being a tourist and glimpse the city as locals experience it. These moments rarely appear in any guidebook but form the most lasting memories of any urban adventure.`,
+The best hidden gems aren't specific locations but moments of connection, when you briefly transcend being a tourist and glimpse the city as locals experience it. These moments rarely appear in any guidebook but form the most lasting memories of any urban adventure.`,
     datePublished: "2024-03-10T12:15:00Z",
     featured: true,
     tags: ["local travel", "city guides", "urban exploration", "hidden spots"],

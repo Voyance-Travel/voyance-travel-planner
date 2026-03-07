@@ -27,7 +27,7 @@ export default function ArchetypeDetailSheet({ archetype, open, onOpenChange }: 
   if (!archetype) return null;
 
   const handleShare = async () => {
-    const shareText = `I might be a ${archetype.name}! "${archetype.tagline}" — Discover your Travel DNA on Voyance`;
+    const shareText = `I might be a ${archetype.name}! "${archetype.tagline}" - Discover your Travel DNA on Voyance`;
     const shareUrl = `${getAppUrl()}/archetypes`;
 
     if (navigator.share) {

@@ -2719,7 +2719,7 @@ export default function Start() {
                           
                           if (!savedTrip?.is_multi_city) {
                             logger.error('[Start] GUARD: Multi-city trip saved but is_multi_city is falsy!', savedTrip);
-                            toast.error('Multi-city trip data mismatch — please try again.');
+                            toast.error('Multi-city trip data mismatch. Please try again.');
                             return;
                           }
                         }
