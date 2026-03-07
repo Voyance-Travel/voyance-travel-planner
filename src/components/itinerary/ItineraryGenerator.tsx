@@ -128,18 +128,17 @@ export function ItineraryGenerator({
     interval: 3000,
     onReady: async () => {
       setServerGenActive(false);
+      setPrePhase(null);
       // Fetch the completed trip data
       const { data: tripData } = await supabase.from('trips').select('itinerary_data').eq('id', tripId).single();
-      if (tripData?.itinerary_data) {
-        const itData = tripData.itinerary_data as Record<string, unknown>;
-        const completedDays = (itData.days as GeneratedDay[]) || [];
-        setPrePhase(null);
-        const gr = gateResultRef.current;
-        if (gr && gr.creditsCharged > 0) {
-          toast.success(`Trip generated! ${gr.creditsCharged} credits used`, { duration: 5000 });
-        }
-        onComplete(completedDays, undefined, gr?.isFirstTrip);
+      const itData = (tripData?.itinerary_data ?? {}) as Record<string, unknown>;
+      const completedDays = (itData.days as GeneratedDay[]) || [];
+      const gr = gateResultRef.current;
+      if (gr && gr.creditsCharged > 0) {
+        toast.success(`Trip generated! ${gr.creditsCharged} credits used`, { duration: 5000 });
       }
+      // Always call onComplete so the parent transitions out of the generation view
+      onComplete(completedDays, undefined, gr?.isFirstTrip);
     },
     onFailed: (err) => {
       setServerGenActive(false);
