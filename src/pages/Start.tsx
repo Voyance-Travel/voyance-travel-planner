@@ -36,6 +36,7 @@ import { ROUTES } from '@/config/routes';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { splitJourneyIfNeeded } from '@/utils/splitJourneyIfNeeded';
 
 // Import destination autocomplete and airport autocomplete
 import { DestinationAutocomplete } from '@/components/planner/shared/DestinationAutocomplete';
@@ -2530,6 +2531,40 @@ export default function Start() {
           } else {
             console.log(`[Start] Linked ${collabRows.length} guests to trip ${trip.id}`);
           }
+        }
+      }
+
+      // Check if trip should be split into a journey (8+ days, 2+ cities)
+      if (isMultiCity && multiCityDestinations.length >= 2) {
+        try {
+          const splitResult = await splitJourneyIfNeeded(
+            trip.id,
+            multiCityDestinations.map(d => ({
+              city: d.city,
+              country: d.country,
+              nights: d.nights,
+              airportCode: d.airportCode,
+            })),
+            multiCityTransports.map(t => ({
+              type: t.type,
+              fromCity: t.fromCity,
+              toCity: t.toCity,
+              departureTime: t.departureTime,
+              arrivalTime: t.arrivalTime,
+            })),
+            format(startDate, 'yyyy-MM-dd'),
+            format(endDate, 'yyyy-MM-dd'),
+          );
+
+          if (splitResult.didSplit) {
+            console.log(`[Start] Trip split into journey with ${splitResult.legCount} legs`);
+            toast.success(`Journey created: ${splitResult.legCount} legs`);
+            navigate(`/trip/${splitResult.firstLegTripId}?generate=true`);
+            return;
+          }
+        } catch (splitErr) {
+          console.warn('[Start] Journey split failed, proceeding as single trip:', splitErr);
+          // Fall through to normal navigation
         }
       }
 
