@@ -434,6 +434,8 @@ export interface EditorialItineraryProps {
   navigateToSection?: string | null;
   /** Raw itinerary_data object so we can restore optionSelections on page load */
   initialItineraryData?: Record<string, unknown> | null;
+  /** Current itinerary generation status — hides unlock UI during generation */
+  itineraryStatus?: string | null;
 }
 
 // =============================================================================
