@@ -106,7 +106,7 @@ const categoryColors: Record<BudgetCategory, string> = {
   misc: 'bg-slate-500',
 };
 
-export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, onApplyBudgetSwap, hasHotel, hasFlight, destination }: BudgetTabProps) {
+export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, onApplyBudgetSwap, hasHotel, hasFlight, destination, journeyId, journeyName }: BudgetTabProps) {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
   const syncAttempted = useRef(false);
   const { data: rawTripMembers = [] } = useTripMembers(tripId);
