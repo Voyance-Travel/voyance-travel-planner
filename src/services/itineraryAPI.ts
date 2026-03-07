@@ -272,7 +272,11 @@ export async function generateItinerary(
   
   // Preserve existing metadata (mustDoActivities, interestCategories, generationRules, etc.)
   const existingMeta = ((trip as any).metadata as Record<string, unknown>) || {};
-  
+  const mustDoActivities = (existingMeta.mustDoActivities as string[]) || [];
+  const interestCategories = (existingMeta.interestCategories as string[]) || [];
+  const generationRules = (existingMeta.generationRules as any[]) || [];
+  const pacing = (existingMeta.pacing as string) || 'balanced';
+  const isFirstTimeVisitor = (existingMeta.isFirstTimeVisitor as boolean) ?? true;
   // Fetch per-city data for multi-city trips
   let dayCityMap: ReturnType<typeof buildDayCityMap> | null = null;
   let tripCities: TripCity[] = [];
@@ -339,6 +343,11 @@ export async function generateItinerary(
         transitionTo: cityInfo?.transitionTo,
         transitionMode: cityInfo?.transitionMode,
         flightIntelligence,
+        mustDoActivities,
+        interestCategories,
+        generationRules,
+        pacing,
+        isFirstTimeVisitor,
       },
     });
     
@@ -504,10 +513,15 @@ export async function regenerateDay(
   
   // Get existing itinerary for context
   const existingItinerary = (trip.itinerary_data as unknown as Itinerary) || { days: [] };
+  const existingMeta = ((trip as any).metadata as Record<string, unknown>) || {};
+  const mustDoActivities = (existingMeta.mustDoActivities as string[]) || [];
+  const interestCategories = (existingMeta.interestCategories as string[]) || [];
+  const generationRules = (existingMeta.generationRules as any[]) || [];
+  const pacing = (existingMeta.pacing as string) || 'balanced';
+  const isFirstTimeVisitor = (existingMeta.isFirstTimeVisitor as boolean) ?? true;
   const previousActivities = existingItinerary.days
     .filter(d => d.dayNumber < dayNumber)
     .flatMap(d => d.activities?.map(a => a.name) || []);
-  
   const { data, error } = await supabase.functions.invoke('generate-itinerary', {
     body: {
       action: 'generate-day',
@@ -522,6 +536,11 @@ export async function regenerateDay(
       budgetTier: trip.budget_tier,
       preferences: input?.preferences,
       previousDayActivities: previousActivities,
+      mustDoActivities,
+      interestCategories,
+      generationRules,
+      pacing,
+      isFirstTimeVisitor,
     },
   });
   
