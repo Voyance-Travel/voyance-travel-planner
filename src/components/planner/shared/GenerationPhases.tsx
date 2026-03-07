@@ -2,13 +2,18 @@
  * Live Generation Progress Component
  * Receives polling data as props from parent (single source of truth via useGenerationPoller).
  * Shows real day-by-day progress during generation with activity previews.
+ * 
+ * KEY UX: Days are "drip-fed" to the UI — even if the poller delivers multiple days
+ * at once, they appear one at a time with staggered delays so the user sees
+ * "Day 1 ✓ → Day 2 generating → Day 2 ✓ → Day 3 generating → …" progression.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Check, Loader2, Clock } from 'lucide-react';
+import { Sparkles, Check, Loader2, Clock, PartyPopper } from 'lucide-react';
 import { GenerationAnimation } from './GenerationAnimation';
 import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/button';
 import type { GenerationStep } from '@/hooks/useLovableItinerary';
 import type { GeneratedDaySummary } from '@/hooks/useGenerationPoller';
 
@@ -65,6 +70,58 @@ function useSimulatedProgress(realProgress: number, isActive: boolean) {
   return realProgress > 0 ? realProgress : simulated;
 }
 
+/**
+ * Drip-feed hook: reveals days one at a time with delays.
+ * Even if poller jumps from 0→5 completed days, the UI shows them
+ * appearing sequentially with 700ms gaps.
+ */
+function useDripFeedDays(generatedDaysList: GeneratedDaySummary[]) {
+  const [visibleDays, setVisibleDays] = useState<GeneratedDaySummary[]>([]);
+  const queueRef = useRef<GeneratedDaySummary[]>([]);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const revealedSetRef = useRef(new Set<number>());
+
+  useEffect(() => {
+    // Find new days we haven't revealed yet
+    const newDays = generatedDaysList.filter(d => !revealedSetRef.current.has(d.day_number));
+    if (newDays.length === 0) return;
+
+    // Add to queue
+    queueRef.current = [...queueRef.current, ...newDays];
+    newDays.forEach(d => revealedSetRef.current.add(d.day_number));
+
+    // Process queue one at a time
+    const processNext = () => {
+      if (queueRef.current.length === 0) return;
+      const next = queueRef.current.shift()!;
+      setVisibleDays(prev => {
+        // Insert in order and dedupe
+        const merged = [...prev.filter(d => d.day_number !== next.day_number), next];
+        merged.sort((a, b) => a.day_number - b.day_number);
+        return merged;
+      });
+      // Schedule next reveal
+      if (queueRef.current.length > 0) {
+        timerRef.current = setTimeout(processNext, 700);
+      }
+    };
+
+    // If not already processing, start
+    if (!timerRef.current || queueRef.current.length === newDays.length) {
+      // Clear any existing timer to avoid conflicts
+      if (timerRef.current) clearTimeout(timerRef.current);
+      // Small delay before first reveal so the "generating" state is visible
+      timerRef.current = setTimeout(processNext, 400);
+    }
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [generatedDaysList]);
+
+  return visibleDays;
+}
+
 export function GenerationPhases({
   currentStep,
   destination,
@@ -75,17 +132,35 @@ export function GenerationPhases({
   isComplete = false,
   progress: pollerProgress = 0,
 }: GenerationPhasesProps) {
-  // Calculate progress locally from props
+  // Drip-feed days for smooth progressive reveal
+  const visibleDays = useDripFeedDays(generatedDaysList);
+  const visibleCompletedCount = visibleDays.length;
+
+  // Use visible count for display, real count for logic
+  const displayCompletedDays = visibleCompletedCount;
+
+  // Calculate progress from visible days (what the user sees)
   const calculatedProgress = totalDays > 0
-    ? Math.max(pollerProgress, Math.round((completedDays / totalDays) * 100))
+    ? Math.max(pollerProgress, Math.round((displayCompletedDays / totalDays) * 100))
     : pollerProgress;
 
   const isActive = !isComplete && !!tripId;
   const displayProgress = useSimulatedProgress(calculatedProgress, isActive);
 
-  const remainingDays = Math.max(0, totalDays - completedDays);
-  const nextDay = completedDays + 1;
-  const allDaysDone = totalDays > 0 && completedDays >= totalDays;
+  const remainingDays = Math.max(0, totalDays - displayCompletedDays);
+  const nextDay = displayCompletedDays + 1;
+  const allVisibleDaysDone = totalDays > 0 && displayCompletedDays >= totalDays;
+
+  // Celebration state: show "ready!" for 3 seconds before signaling parent
+  const [showCelebration, setShowCelebration] = useState(false);
+  const celebrationTriggered = useRef(false);
+
+  useEffect(() => {
+    if ((isComplete || allVisibleDaysDone) && !celebrationTriggered.current) {
+      celebrationTriggered.current = true;
+      setShowCelebration(true);
+    }
+  }, [isComplete, allVisibleDaysDone]);
 
   // Elapsed time for "still working" reassurance
   const [elapsed, setElapsed] = useState(0);
@@ -109,8 +184,8 @@ export function GenerationPhases({
     );
   }
 
-  // Complete state (poller said ready OR all days arrived)
-  if (isComplete || allDaysDone) {
+  // Celebration / Complete state
+  if (showCelebration) {
     return (
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
@@ -121,37 +196,69 @@ export function GenerationPhases({
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ type: 'spring', stiffness: 200, damping: 15 }}
-          className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4"
+          className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-5"
         >
-          <Check className="h-8 w-8 text-primary" />
+          <motion.div
+            initial={{ rotate: -20 }}
+            animate={{ rotate: [0, -10, 10, -5, 5, 0] }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+          >
+            <PartyPopper className="h-10 w-10 text-primary" />
+          </motion.div>
         </motion.div>
-        <h2 className="text-xl font-serif font-bold text-foreground mb-1">
+        <h2 className="text-2xl font-serif font-bold text-foreground mb-2">
           Your itinerary is ready!
         </h2>
-        <p className="text-sm text-muted-foreground">
-          {totalDays} days in {destination || 'your destination'} — loading now...
+        <p className="text-sm text-muted-foreground mb-6">
+          {totalDays} {totalDays === 1 ? 'day' : 'days'} in {destination || 'your destination'} — crafted just for you.
         </p>
+
+        {/* Summary of completed days */}
+        <div className="space-y-1.5 mb-6 text-left">
+          {visibleDays.map((day, i) => (
+            <motion.div
+              key={day.day_number}
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.08 }}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-primary/5"
+            >
+              <Check className="h-3.5 w-3.5 text-primary shrink-0" />
+              <span className="text-xs font-semibold text-primary uppercase tracking-wide">Day {day.day_number}</span>
+              {day.title && <span className="text-sm text-foreground truncate">{day.title}</span>}
+            </motion.div>
+          ))}
+        </div>
+
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          className="text-xs text-muted-foreground animate-pulse"
+        >
+          Loading your itinerary...
+        </motion.p>
       </motion.div>
     );
   }
 
   // Build header text
-  const headerText = allDaysDone
+  const headerText = allVisibleDaysDone
     ? 'Finalizing your itinerary…'
-    : completedDays === 0
+    : displayCompletedDays === 0
       ? `Building your ${destination || 'trip'}`
       : `Building Day ${nextDay} of ${totalDays}`;
 
   // Build subtitle with elapsed time reassurance
   let subtitleText: string;
-  if (allDaysDone) {
+  if (allVisibleDaysDone) {
     subtitleText = 'Almost there — assembling your trip now';
-  } else if (completedDays === 0) {
+  } else if (displayCompletedDays === 0) {
     subtitleText = elapsed > 15
       ? 'Still working — this can take a minute for the first day…'
       : 'Getting started...';
   } else {
-    subtitleText = `${completedDays} ${completedDays === 1 ? 'day' : 'days'} complete · ~${Math.max(1, Math.ceil(remainingDays * 1.2))} min remaining`;
+    subtitleText = `${displayCompletedDays} ${displayCompletedDays === 1 ? 'day' : 'days'} complete · ~${Math.max(1, Math.ceil(remainingDays * 1.2))} min remaining`;
   }
 
   return (
@@ -189,7 +296,7 @@ export function GenerationPhases({
               transition={{ duration: 2, repeat: Infinity }}
               className="text-xs text-muted-foreground"
             >
-              {completedDays === 0 ? 'Generating...' : `${completedDays}/${totalDays} days`}
+              {displayCompletedDays === 0 ? 'Generating...' : `${displayCompletedDays}/${totalDays} days`}
             </motion.p>
             <p className="text-xs text-muted-foreground">{Math.round(displayProgress)}%</p>
           </div>
@@ -198,58 +305,78 @@ export function GenerationPhases({
 
       {/* Day list */}
       <div className="space-y-2 mb-6">
-        {/* Completed days with activities */}
-        {generatedDaysList.map((day) => {
-          const activities = ((day as any).activities as ActivityPreview[] | undefined) || [];
-          const visibleActivities = activities.slice(0, 3);
-          const moreCount = Math.max(0, activities.length - 3);
+        {/* Completed days with activities — drip-fed */}
+        <AnimatePresence mode="popLayout">
+          {visibleDays.map((day) => {
+            const activities = ((day as any).activities as ActivityPreview[] | undefined) || [];
+            const visibleActivities = activities.slice(0, 3);
+            const moreCount = Math.max(0, activities.length - 3);
 
-          return (
-            <motion.div
-              key={day.day_number}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3 }}
-              className="flex items-start gap-3 p-3 rounded-lg bg-primary/5 border border-primary/10"
-            >
-              <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
-                <Check className="h-3.5 w-3.5 text-primary" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-primary uppercase tracking-wide">Day {day.day_number}</span>
-                  {day.title && (
-                    <span className="text-sm font-medium text-foreground truncate">{day.title}</span>
-                  )}
-                </div>
-                {day.theme && day.theme.trim().toLowerCase() !== (day.title || '').trim().toLowerCase() && (
-                  <p className="text-xs text-muted-foreground mt-0.5 truncate">{day.theme}</p>
-                )}
-                {/* Activity previews */}
-                {visibleActivities.length > 0 && (
-                  <div className="mt-1.5 space-y-0.5">
-                    {visibleActivities.map((act, i) => (
-                      <div key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Clock className="h-2.5 w-2.5 shrink-0" />
-                        <span className="truncate">
-                          {act.start_time || act.time ? `${act.start_time || act.time} — ` : ''}
-                          {act.title || act.name || 'Activity'}
-                        </span>
-                      </div>
-                    ))}
-                    {moreCount > 0 && (
-                      <p className="text-xs text-muted-foreground/70 pl-4">+{moreCount} more</p>
+            return (
+              <motion.div
+                key={`day-${day.day_number}`}
+                layout
+                initial={{ opacity: 0, y: 12, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
+                className="flex items-start gap-3 p-3 rounded-lg bg-primary/5 border border-primary/10"
+              >
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.15 }}
+                  className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center shrink-0 mt-0.5"
+                >
+                  <Check className="h-3.5 w-3.5 text-primary" />
+                </motion.div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-primary uppercase tracking-wide">Day {day.day_number}</span>
+                    {day.title && (
+                      <span className="text-sm font-medium text-foreground truncate">{day.title}</span>
                     )}
                   </div>
-                )}
-              </div>
-            </motion.div>
-          );
-        })}
+                  {day.theme && day.theme.trim().toLowerCase() !== (day.title || '').trim().toLowerCase() && (
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate">{day.theme}</p>
+                  )}
+                  {/* Activity previews */}
+                  {visibleActivities.length > 0 && (
+                    <div className="mt-1.5 space-y-0.5">
+                      {visibleActivities.map((act, i) => (
+                        <motion.div
+                          key={i}
+                          initial={{ opacity: 0, x: -6 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.2 + i * 0.1 }}
+                          className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                        >
+                          <Clock className="h-2.5 w-2.5 shrink-0" />
+                          <span className="truncate">
+                            {act.start_time || act.time ? `${act.start_time || act.time} — ` : ''}
+                            {act.title || act.name || 'Activity'}
+                          </span>
+                        </motion.div>
+                      ))}
+                      {moreCount > 0 && (
+                        <p className="text-xs text-muted-foreground/70 pl-4">+{moreCount} more</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
 
         {/* Currently generating day */}
-        {!isComplete && !allDaysDone && nextDay <= totalDays && (
-          <div className="flex items-start gap-3 p-3 rounded-lg border border-border bg-card">
+        {!isComplete && !allVisibleDaysDone && nextDay <= totalDays && (
+          <motion.div
+            key={`generating-${nextDay}`}
+            layout
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-start gap-3 p-3 rounded-lg border border-border bg-card"
+          >
             <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
               <Loader2 className="h-3.5 w-3.5 text-muted-foreground animate-spin" />
             </div>
@@ -265,11 +392,11 @@ export function GenerationPhases({
                 </motion.span>
               </div>
             </div>
-          </div>
+          </motion.div>
         )}
 
         {/* Upcoming days (show max 2) */}
-        {!isComplete && !allDaysDone && Array.from({ length: Math.min(2, totalDays - nextDay) }, (_, i) => nextDay + 1 + i).map((dayNum) => (
+        {!isComplete && !allVisibleDaysDone && Array.from({ length: Math.min(2, totalDays - nextDay) }, (_, i) => nextDay + 1 + i).map((dayNum) => (
           <div key={dayNum} className="flex items-start gap-3 p-3 rounded-lg opacity-30">
             <div className="w-6 h-6 rounded-full border border-border flex items-center justify-center shrink-0 mt-0.5">
               <span className="text-[10px] text-muted-foreground">{dayNum}</span>
