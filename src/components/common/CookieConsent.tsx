@@ -48,7 +48,12 @@ export function CookieConsent() {
       (window as any).isNativeApp ||
       navigator.userAgent.includes('VoyanceApp') ||
       (window as any).Capacitor?.isNativePlatform?.() ||
-      (window as any).webkit?.messageHandlers?.nativeApp
+      (window as any).webkit?.messageHandlers?.nativeApp ||
+      (window as any).Capacitor?.getPlatform?.() === 'ios' ||
+      (window as any).Capacitor?.getPlatform?.() === 'android' ||
+      window.matchMedia('(display-mode: standalone)').matches ||
+      window.location.protocol === 'capacitor:' ||
+      window.location.protocol === 'ionic:'
     );
     if (isNativeApp) {
       const nativePrefs: CookiePreferences = {
