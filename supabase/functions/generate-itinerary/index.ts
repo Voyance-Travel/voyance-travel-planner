@@ -12141,6 +12141,26 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         );
       }
 
+      // Guard: prevent double generation if already in progress (not a resume)
+      if (!resumeFromDay) {
+        const { data: statusCheck } = await supabase.from('trips').select('itinerary_status, metadata').eq('id', tripId).single();
+        if (statusCheck?.itinerary_status === 'generating') {
+          const meta = (statusCheck.metadata as Record<string, unknown>) || {};
+          const heartbeat = meta.generation_heartbeat ? new Date(meta.generation_heartbeat as string) : null;
+          const staleThreshold = 5 * 60 * 1000; // 5 minutes
+          const isStale = !heartbeat || (Date.now() - heartbeat.getTime() > staleThreshold);
+          
+          if (!isStale) {
+            console.log(`[generate-trip] Trip ${tripId} already generating (heartbeat ${heartbeat?.toISOString()}), skipping duplicate`);
+            return new Response(
+              JSON.stringify({ success: true, status: 'already_generating', totalDays: (meta.generation_total_days as number) || 0 }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          console.log(`[generate-trip] Trip ${tripId} has stale generation (heartbeat ${heartbeat?.toISOString()}), restarting`);
+        }
+      }
+
       // Calculate total days — for multi-city, prefer sum of nights from trip_cities
       const sDate = new Date(startDate);
       const eDate = new Date(endDate);
