@@ -7010,6 +7010,10 @@ export type Database = {
             | Database["public"]["Enums"]["itinerary_status"]
             | null
           itinerary_version: number
+          journey_id: string | null
+          journey_name: string | null
+          journey_order: number | null
+          journey_total_legs: number | null
           last_activity_at: string | null
           metadata: Json | null
           name: string
@@ -7020,6 +7024,9 @@ export type Database = {
           smart_finish_purchased_at: string | null
           start_date: string
           status: Database["public"]["Enums"]["trip_status"]
+          transition_arrival_time: string | null
+          transition_departure_time: string | null
+          transition_mode: string | null
           transportation_preferences: Json | null
           travelers: number | null
           trip_type: string | null
@@ -7065,6 +7072,10 @@ export type Database = {
             | Database["public"]["Enums"]["itinerary_status"]
             | null
           itinerary_version?: number
+          journey_id?: string | null
+          journey_name?: string | null
+          journey_order?: number | null
+          journey_total_legs?: number | null
           last_activity_at?: string | null
           metadata?: Json | null
           name: string
@@ -7075,6 +7086,9 @@ export type Database = {
           smart_finish_purchased_at?: string | null
           start_date: string
           status?: Database["public"]["Enums"]["trip_status"]
+          transition_arrival_time?: string | null
+          transition_departure_time?: string | null
+          transition_mode?: string | null
           transportation_preferences?: Json | null
           travelers?: number | null
           trip_type?: string | null
@@ -7120,6 +7134,10 @@ export type Database = {
             | Database["public"]["Enums"]["itinerary_status"]
             | null
           itinerary_version?: number
+          journey_id?: string | null
+          journey_name?: string | null
+          journey_order?: number | null
+          journey_total_legs?: number | null
           last_activity_at?: string | null
           metadata?: Json | null
           name?: string
@@ -7130,6 +7148,9 @@ export type Database = {
           smart_finish_purchased_at?: string | null
           start_date?: string
           status?: Database["public"]["Enums"]["trip_status"]
+          transition_arrival_time?: string | null
+          transition_departure_time?: string | null
+          transition_mode?: string | null
           transportation_preferences?: Json | null
           travelers?: number | null
           trip_type?: string | null
@@ -8392,6 +8413,77 @@ export type Database = {
           id: string
           name: string
         }[]
+      }
+      get_journey_trips: {
+        Args: { p_journey_id: string }
+        Returns: {
+          abandoned_at: string | null
+          agent_notes: string | null
+          arrival_transfer: Json | null
+          blended_dna: Json | null
+          budget_allocations: Json | null
+          budget_currency: string | null
+          budget_include_flight: boolean | null
+          budget_include_hotel: boolean | null
+          budget_individual_cents: Json | null
+          budget_input_mode: string | null
+          budget_tier: string | null
+          budget_total_cents: number | null
+          budget_warning_threshold: string | null
+          budget_warnings_enabled: boolean | null
+          client_id: string | null
+          created_at: string
+          creation_source: string | null
+          departure_transfer: Json | null
+          destination: string
+          destination_country: string | null
+          destinations: Json | null
+          dna_snapshot: Json | null
+          end_date: string
+          flight_intelligence: Json | null
+          flight_selection: Json | null
+          gap_analysis_result: Json | null
+          guest_edit_mode: string
+          hotel_selection: Json | null
+          id: string
+          is_agent_trip: boolean | null
+          is_free_tier_trip: boolean
+          is_multi_city: boolean | null
+          itinerary_data: Json | null
+          itinerary_status:
+            | Database["public"]["Enums"]["itinerary_status"]
+            | null
+          itinerary_version: number
+          journey_id: string | null
+          journey_name: string | null
+          journey_order: number | null
+          journey_total_legs: number | null
+          last_activity_at: string | null
+          metadata: Json | null
+          name: string
+          origin_city: string | null
+          owner_plan_tier: string | null
+          price_lock_expires_at: string | null
+          smart_finish_purchased: boolean
+          smart_finish_purchased_at: string | null
+          start_date: string
+          status: Database["public"]["Enums"]["trip_status"]
+          transition_arrival_time: string | null
+          transition_departure_time: string | null
+          transition_mode: string | null
+          transportation_preferences: Json | null
+          travelers: number | null
+          trip_type: string | null
+          unlocked_day_count: number | null
+          updated_at: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "trips"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       get_shared_trip_payload: {
         Args: { p_share_token: string }
