@@ -7557,6 +7557,59 @@ function DayCard({
                   const prevTimeOfDay = isNaN(prevHour) ? '' : prevHour < 12 ? 'Morning' : prevHour < 17 ? 'Afternoon' : 'Evening';
                   const showTimeOfDayHeader = timeOfDay && timeOfDay !== prevTimeOfDay;
 
+                  // Compact travel summary card for consolidated transition-day activities
+                  const isTravelSummary = !!(activityToRender as any).__syntheticTravelSummary;
+                  const travelMeta = (activityToRender as any).__travelMeta;
+
+                  if (isTravelSummary && travelMeta) {
+                    const TransportIcon = travelMeta.transportName?.toLowerCase() === 'flight' ? Plane
+                      : travelMeta.transportName?.toLowerCase() === 'train' ? Train
+                      : travelMeta.transportName?.toLowerCase() === 'bus' ? Bus
+                      : travelMeta.transportName?.toLowerCase() === 'ferry' ? Ship
+                      : Car;
+
+                    return (
+                      <div className="px-2 sm:px-0 py-2">
+                        <div className="rounded-xl border-2 border-dashed border-primary/20 bg-primary/[0.03] overflow-hidden">
+                          <div className="flex items-center gap-3 px-4 py-3">
+                            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10 shrink-0">
+                              <TransportIcon className="w-4.5 h-4.5 text-primary" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-foreground">
+                                {travelMeta.from} → {travelMeta.to}
+                              </p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {[
+                                  travelMeta.transportName,
+                                  travelMeta.carrier,
+                                  travelMeta.flightNum,
+                                  travelMeta.depTime && travelMeta.arrTime
+                                    ? `${travelMeta.depTime} – ${travelMeta.arrTime}`
+                                    : travelMeta.depTime ? `Departs ${travelMeta.depTime}`
+                                    : travelMeta.arrTime ? `Arrives ${travelMeta.arrTime}` : '',
+                                  travelMeta.dur,
+                                ].filter(Boolean).join(' · ')}
+                              </p>
+                            </div>
+                            {travelMeta.price != null && (
+                              <span className="text-xs font-medium text-muted-foreground shrink-0">
+                                {travelMeta.currency === 'USD' ? '$' : travelMeta.currency}{travelMeta.price}
+                              </span>
+                            )}
+                          </div>
+                          {/* Expandable details */}
+                          {(travelMeta.seatInfo || travelMeta.bookingRef) && (
+                            <div className="px-4 pb-3 pt-0 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground border-t border-primary/10 mt-0 pt-2">
+                              {travelMeta.seatInfo && <span>Seat: {travelMeta.seatInfo}</span>}
+                              {travelMeta.bookingRef && <span>Ref: {travelMeta.bookingRef}</span>}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+
                   return (
                   <div className={cn(
                     "transition-all duration-300",
