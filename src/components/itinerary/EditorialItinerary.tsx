@@ -4729,6 +4729,8 @@ export function EditorialItinerary({
             budgetTier={budgetTier}
             destination={destination}
             destinationCountry={destinationCountry}
+            journeyId={journeyId}
+            journeyName={journeyName}
           />
         )}
 

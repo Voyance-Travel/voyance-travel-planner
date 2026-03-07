@@ -8,6 +8,7 @@ import { getAppUrl } from '@/utils/getAppUrl';
 import { estimateCostSync } from '@/lib/cost-estimation';
 import { getPaymentsSummary, type PaymentsSummary } from '@/services/activityCostService';
 import { motion, AnimatePresence } from 'framer-motion';
+import { JourneySpendingSummary } from './JourneySpendingSummary';
 import { FirstUseHint } from './FirstUseHint';
 import { 
   Plane, Hotel, Camera, Check, CreditCard, ExternalLink, 
@@ -60,6 +61,9 @@ interface PaymentsTabProps {
   budgetTier?: string;
   destination?: string;
   destinationCountry?: string;
+  /** Journey fields for linked trips */
+  journeyId?: string | null;
+  journeyName?: string | null;
 }
 
 interface PayableItem {
@@ -88,6 +92,8 @@ export function PaymentsTab({
   budgetTier = 'moderate',
   destination,
   destinationCountry,
+  journeyId,
+  journeyName,
 }: PaymentsTabProps) {
   const [payments, setPayments] = useState<TripPayment[]>([]);
   const [totals, setTotals] = useState<PaymentTotals>({ paid: 0, pending: 0, total: 0 });
@@ -1724,6 +1730,15 @@ export function PaymentsTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Journey Spending Summary — cross-leg overview for linked trips */}
+      {journeyId && (
+        <JourneySpendingSummary
+          journeyId={journeyId}
+          journeyName={journeyName || null}
+          currentTripId={tripId}
+        />
+      )}
     </motion.div>
   );
 }
