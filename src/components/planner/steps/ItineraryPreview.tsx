@@ -295,15 +295,51 @@ export default function ItineraryPreview({
     setHasSetContext(true);
     setHasConsumedQuota(true);
     
-    // Fetch transport preferences from DB
-    let transportPrefs: { transportationModes?: string[]; primaryTransport?: string; hasRentalCar?: boolean } = {};
+    // Save context data (mustDoActivities, isFirstTimeVisitor, etc.) to trip metadata
+    // so the edge function can read it during generation
     try {
       const { supabase } = await import('@/integrations/supabase/client');
+      
+      // Read existing metadata first to avoid overwriting
       const { data: tripRow } = await supabase
         .from('trips')
-        .select('transportation_preferences')
+        .select('metadata, transportation_preferences')
         .eq('id', tripId)
         .single();
+      
+      const existingMetadata = (tripRow?.metadata as Record<string, unknown>) || {};
+      
+      // Merge context data into metadata
+      const metadataUpdates: Record<string, unknown> = { ...existingMetadata };
+      if (data.mustDoActivities) {
+        metadataUpdates.mustDoActivities = data.mustDoActivities;
+      }
+      if (data.isFirstTimeVisitor !== undefined) {
+        metadataUpdates.isFirstTimeVisitor = data.isFirstTimeVisitor;
+      }
+      if (data.childrenAges && data.childrenAges.length > 0) {
+        metadataUpdates.childrenAges = data.childrenAges;
+        metadataUpdates.childrenCount = data.childrenAges.length;
+      }
+      if (data.preBookedCommitments && data.preBookedCommitments.length > 0) {
+        metadataUpdates.preBookedCommitments = data.preBookedCommitments;
+      }
+      
+      // Save metadata to DB
+      await supabase
+        .from('trips')
+        .update({ metadata: metadataUpdates as any })
+        .eq('id', tripId);
+      
+      console.log('[ItineraryPreview] Context saved to metadata:', {
+        mustDoActivities: !!data.mustDoActivities,
+        isFirstTimeVisitor: data.isFirstTimeVisitor,
+        childrenAges: data.childrenAges?.length,
+        preBookedCommitments: data.preBookedCommitments?.length,
+      });
+      
+      // Extract transport preferences from same query
+      let transportPrefs: { transportationModes?: string[]; primaryTransport?: string; hasRentalCar?: boolean } = {};
       if (tripRow?.transportation_preferences) {
         const prefs = tripRow.transportation_preferences as any;
         if (Array.isArray(prefs)) {
@@ -317,17 +353,23 @@ export default function ItineraryPreview({
           };
         }
       }
-    } catch (e) {
-      console.warn('[ItineraryPreview] Could not fetch transport prefs:', e);
-    }
 
-    // Pass context to generation
-    generateItinerary({
-      hotelLocation: data.hotelLocation,
-      arrivalTime: data.arrivalTime,
-      departureTime: data.departureTime,
-      ...transportPrefs,
-    });
+      // Pass context to generation
+      generateItinerary({
+        hotelLocation: data.hotelLocation,
+        arrivalTime: data.arrivalTime,
+        departureTime: data.departureTime,
+        ...transportPrefs,
+      });
+    } catch (e) {
+      console.warn('[ItineraryPreview] Could not save context or fetch transport prefs:', e);
+      // Still proceed with generation even if metadata save fails
+      generateItinerary({
+        hotelLocation: data.hotelLocation,
+        arrivalTime: data.arrivalTime,
+        departureTime: data.departureTime,
+      });
+    }
   };
 
   // Handle skip - start generation without context
