@@ -1826,26 +1826,35 @@ function FlightHotelStep({
             </div>
           )}
 
+          {/* Must-See Landmarks & Interest Picker */}
+          <MustSeeLandmarkPicker
+            cities={isMultiCity && multiCityDestinations.length > 0
+              ? multiCityDestinations.map(d => d.city)
+              : destination ? [destination] : []
+            }
+            selectedLandmarks={selectedLandmarks}
+            onSelectedLandmarksChange={setSelectedLandmarks}
+            selectedCategories={selectedCategories}
+            onSelectedCategoriesChange={setSelectedCategories}
+            customItems={customMustDos}
+            onCustomItemsChange={setCustomMustDos}
+          />
+
           {/* Extra Details — Optional paste field for research/notes */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <label className="flex items-center gap-2 text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
                 <MessageSquareText className="w-4 h-4" />
-                Have extra details to share?
+                Anything else?
               </label>
               <span className="text-xs text-muted-foreground/60">(optional)</span>
             </div>
             <Textarea
               value={mustDoActivities}
               onChange={(e) => setMustDoActivities(e.target.value)}
-              placeholder={`Paste notes, other AI suggestions, or must-sees...
-
-Example: "We love local food markets, sunset viewpoints, and avoiding tourist crowds. Skip the big bus tours."`}
-              className="min-h-[100px] resize-none text-sm"
+              placeholder="Paste notes, other AI suggestions, skip requests, or special requirements..."
+              className="min-h-[70px] resize-none text-sm"
             />
-            <p className="text-xs text-muted-foreground">
-              Share must-sees, skip requests, or paste any research you've gathered. Our AI will incorporate it into your itinerary.
-            </p>
           </div>
         </div>
       </div>
