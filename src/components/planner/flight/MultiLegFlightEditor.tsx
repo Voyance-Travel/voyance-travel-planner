@@ -15,7 +15,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plane, Train, Bus, Car, Ship, Plus, Trash2, ChevronDown, ChevronUp,
-  ArrowRight, Upload, GripVertical, MapPin,
+  ArrowRight, Upload, GripVertical, MapPin, CalendarIcon,
 } from 'lucide-react';
 import {
   DndContext,
@@ -39,9 +39,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import { AirportAutocomplete } from '@/components/common/AirportAutocomplete';
 import { AirlineAutocomplete } from '@/components/common/AirlineAutocomplete';
 import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
+import { parseLocalDate } from '@/utils/dateUtils';
 import type { ManualFlightEntry } from '@/components/itinerary/AddBookingInline';
 import type { TripDestination } from '@/types/multiCity';
 
