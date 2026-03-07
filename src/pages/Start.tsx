@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { toSiteImageUrlFromPhotoId } from '@/utils/unsplash';
 
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -2812,8 +2812,8 @@ export default function Start() {
                       if (!user.quizCompleted) {
                         setShowDNAPrompt(true);
                       } else {
-                        setCurrentStep(2);
-                        window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+                        goToStep2();
+                      }
                       }
                     }}
                     onManualAuthRequired={() => {
@@ -2852,7 +2852,9 @@ export default function Start() {
                     mustDoActivities={mustDoActivities}
                     setMustDoActivities={setMustDoActivities}
                     onSubmit={handleSubmit}
-                    onBack={() => setCurrentStep(1)}
+                    onBack={() => {
+                      window.history.back();
+                    }}
                     isSubmitting={isSubmitting}
                     isMultiCity={isMultiCity}
                     multiCityDestinations={multiCityDestinations}
@@ -2934,8 +2936,8 @@ export default function Start() {
               className="w-full text-muted-foreground"
               onClick={() => {
                 setShowDNAPrompt(false);
-                setCurrentStep(2);
-                window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+                goToStep2();
+              }}
               }}
             >
               Skip for now
