@@ -78,7 +78,7 @@ export default function ItineraryContextForm({
   const [mustDoActivities, setMustDoActivities] = useState('');
 
   // Detect complex constraints in must-do text
-  const complexConstraintKeywords = /\b(school|class|work|meeting|hotel change|switching hotel|joining|arrives|leaving early|blocked|not available|unavailable|appointment|conference|seminar)\b/i;
+  const complexConstraintKeywords = /\b(school|class|work|meeting|hotel change|switching hotel|change hotel|moving hotel|new hotel|joining|my aunt|my mom|my friend|family joining|guest|arrives|leaving early|blocked|not available|unavailable|appointment|conference|seminar|5 hours|half.?day|morning off|afternoon off)\b/i;
   const hasComplexConstraints = complexConstraintKeywords.test(mustDoActivities);
 
   const hasAnyData = hotelLocation || arrivalTime || departureTime || commitments.length > 0 || mustDoActivities;
@@ -303,9 +303,10 @@ export default function ItineraryContextForm({
               <div>
                 <p className="font-medium text-foreground text-xs">Heads up</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Complex constraints like blocked time windows, hotel changes mid-trip, or guests joining later 
-                  are partially supported. We'll do our best to honor them, but you may need to manually adjust 
-                  the generated itinerary. For best results, also add these as pre-booked events below.
+                  Our itinerary generator works best with straightforward trips. Features like 
+                  blocked time windows, hotel changes mid-trip, and guests joining later aren't 
+                  fully supported yet. We'll do our best, but you may need to manually adjust 
+                  the generated itinerary.
                 </p>
               </div>
             </div>
