@@ -4126,6 +4126,8 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     mustDoActivities: trip.metadata?.mustDoActivities || undefined,
     // Structured must-haves checklist (schedule constraints, hotel prefs, etc.)
     mustHaves: (trip.metadata?.mustHaves as Array<{label: string; notes?: string}>) || undefined,
+    // Pre-booked commitments (shows, reservations, tours with fixed times)
+    preBookedCommitments: (trip.metadata?.preBookedCommitments as PreBookedCommitment[]) || undefined,
     firstTimePerCity: trip.metadata?.firstTimePerCity || undefined,
     // Smart Finish detection: prefer direct request body flag (avoids DB race condition),
     // then fall back to metadata checks for backward compatibility
@@ -8365,6 +8367,20 @@ ${'='.repeat(60)}
       }
 
       // =======================================================================
+      // STAGE 1.9992: Pre-Booked Commitments (fixed calendar events)
+      // =======================================================================
+      let preBookedPrompt = "";
+      if (context.preBookedCommitments && context.preBookedCommitments.length > 0) {
+        const commitmentAnalysis = analyzePreBookedCommitments(
+          context.preBookedCommitments,
+          context.startDate,
+          context.endDate
+        );
+        preBookedPrompt = commitmentAnalysis.promptSection;
+        console.log(`[Stage 1.9992] ✓ Pre-booked commitments injected: ${context.preBookedCommitments.length} items, ${commitmentAnalysis.tightDays.length} tight days`);
+      }
+
+      // =======================================================================
       // STAGE 1.9995: Trip Vibe Override — user's trip-specific intent
       // =======================================================================
       let tripVibePrompt = "";
@@ -8393,7 +8409,7 @@ ${'='.repeat(60)}
       // Order: ARCHETYPE CONSTRAINTS → INTEREST OVERRIDE → TRIP VIBE → TRIP TYPE → SKIP LIST → DIETARY ENFORCEMENT → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → HIDDEN GEMS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE → USER RESEARCH
       // NOTE: generationHierarchy includes destination essentials, archetype behavioral rules, budget guardrails (Phase 2 Fix)
       // Phase 2 Fix: Removed unifiedDNAContext - all traveler data now comes from generationHierarchy via unified profile
-      const preferenceContext = generationHierarchy + '\n\n' + interestOverridePrompt + '\n\n' + tripVibePrompt + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + (context.flightIntelligencePrompt ? '\n\n' + context.flightIntelligencePrompt : '') + tripLearningsContext + recentlyUsedContext + localEventsContext + hiddenGemsContext + voyancePicksContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + groupBlendingPromptSection + geographicPrompt + userResearchPrompt + mustHavesPrompt;
+      const preferenceContext = generationHierarchy + '\n\n' + interestOverridePrompt + '\n\n' + tripVibePrompt + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + (context.flightIntelligencePrompt ? '\n\n' + context.flightIntelligencePrompt : '') + tripLearningsContext + recentlyUsedContext + localEventsContext + hiddenGemsContext + voyancePicksContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + groupBlendingPromptSection + geographicPrompt + userResearchPrompt + mustHavesPrompt + preBookedPrompt;
 
       // STAGE 1.9999: Pre-fetch known venue hours from verified_venues cache
       try {
@@ -9351,15 +9367,36 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
 
       // Load structured must-haves checklist from trip metadata
       let mustHavesConstraintPrompt = '';
+      let preBookedCommitmentsPrompt = '';
       if (tripId) {
         // Re-use the tripMeta we already fetched above if available, otherwise fetch
-        const metadataForMustHaves = (tripId && mustDoPrompt !== undefined) 
+        const metadataForConstraints = (tripId && mustDoPrompt !== undefined) 
           ? (await supabase.from('trips').select('metadata').eq('id', tripId).single()).data?.metadata as Record<string, unknown> | null
           : null;
-        const mustHavesList = (metadataForMustHaves?.mustHaves as Array<{label: string; notes?: string}>) || [];
+        
+        // Must-haves checklist
+        const mustHavesList = (metadataForConstraints?.mustHaves as Array<{label: string; notes?: string}>) || [];
         if (mustHavesList.length > 0) {
           mustHavesConstraintPrompt = buildMustHavesConstraintPrompt(mustHavesList, totalDays);
           console.log(`[generate-day] Must-haves checklist injected: ${mustHavesList.length} items`);
+        }
+        
+        // Pre-booked commitments (shows, reservations, tours with fixed times)
+        const preBookedList = (metadataForConstraints?.preBookedCommitments as PreBookedCommitment[]) || [];
+        if (preBookedList.length > 0) {
+          const startDate = preferences?.startDate || body.date?.split('T')[0] || '';
+          const endDate = preferences?.endDate || '';
+          const commitmentAnalysis = analyzePreBookedCommitments(preBookedList, startDate, endDate);
+          // For per-day generation, only include commitments relevant to this day's date
+          const dayDate = body.date?.split('T')[0] || '';
+          const dayAvail = commitmentAnalysis.dayBlocks.get(dayDate);
+          if (dayAvail && dayAvail.blockedPeriods.length > 0) {
+            preBookedCommitmentsPrompt = `\n## 📅 PRE-BOOKED COMMITMENTS FOR THIS DAY (NON-NEGOTIABLE)\n\nThe traveler has FIXED commitments today. You MUST schedule around them:\n${dayAvail.blockedPeriods.map(b => `- "${b.commitment.title}" from ${b.startTime} to ${b.endTime}${b.commitment.location ? ` at ${b.commitment.location}` : ''} [${b.commitment.category}]`).join('\n')}\n\nAvailable time slots:\n${dayAvail.availableSlots.map(s => `- ${s.startTime} to ${s.endTime} (${s.durationMinutes} min, ${s.period})`).join('\n')}\n\nRULES:\n- Do NOT schedule any activity during the blocked periods above\n- Include the pre-booked event AS an activity in the itinerary (category: "${dayAvail.blockedPeriods[0]?.commitment.category || 'event'}")\n- Plan activities ONLY in the available time slots\n`;
+            console.log(`[generate-day] Pre-booked commitments for day ${dayNumber}: ${dayAvail.blockedPeriods.length} events`);
+          } else if (commitmentAnalysis.promptSection) {
+            // Include full prompt as context even if no events on this specific day
+            preBookedCommitmentsPrompt = `\n## 📅 Pre-Booked Commitments (other days)\nThe traveler has pre-booked events on other days. No fixed events today — plan freely.\n`;
+          }
         }
       }
 
@@ -10406,6 +10443,7 @@ ${preferenceContext}
 ${tripIntentsContext}
 ${mustDoPrompt}
 ${mustHavesConstraintPrompt}
+${preBookedCommitmentsPrompt}
 ${previousDayActivities?.length ? `\nAvoid repeating these specific venues/activities (be creative and pick DIFFERENT ones): ${previousDayActivities.join(', ')}` : ''}
 
 CRITICAL REMINDERS:
