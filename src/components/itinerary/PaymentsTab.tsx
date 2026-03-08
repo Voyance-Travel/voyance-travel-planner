@@ -403,15 +403,30 @@ export function PaymentsTab({
 
   // ─── Canonical totals from activity_costs table (single source of truth) ───
   const [canonicalSummary, setCanonicalSummary] = useState<PaymentsSummary | null>(null);
+  const [ledgerPlannedCents, setLedgerPlannedCents] = useState<number | null>(null);
   useEffect(() => {
     getPaymentsSummary(tripId).then(s => setCanonicalSummary(s));
+    // Fetch the budget ledger's planned total so Payments matches Budget tab
+    supabase
+      .from('trip_budget_summary')
+      .select('planned_total_cents')
+      .eq('trip_id', tripId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.planned_total_cents) {
+          setLedgerPlannedCents(data.planned_total_cents);
+        }
+      });
   }, [tripId]);
 
-  // Calculate totals — prefer canonical view when data exists
+  // Calculate totals — prefer ledger planned total (same source as Budget tab),
+  // then canonical view, then JS fallback
   const fallbackTotal = payableItems.reduce((sum, item) => sum + item.amountCents, 0);
-  const estimatedTotal = canonicalSummary
-    ? Math.round((canonicalSummary.total_estimated_usd || 0) * 100)
-    : fallbackTotal;
+  const estimatedTotal = ledgerPlannedCents && ledgerPlannedCents > 0
+    ? ledgerPlannedCents
+    : canonicalSummary
+      ? Math.round((canonicalSummary.total_estimated_usd || 0) * 100)
+      : fallbackTotal;
   const paidAmount = canonicalSummary
     ? Math.round((canonicalSummary.total_paid_usd || 0) * 100)
     : payableItems
