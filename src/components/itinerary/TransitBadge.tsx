@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Train, Car, ChevronDown, ChevronUp, Footprints, Bus, ArrowRightLeft, Loader2, Coins } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CREDIT_COSTS } from '@/config/pricing';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface TransitBadgeProps {
   transportation: {
