@@ -640,6 +640,11 @@ export default function Settings() {
               </Card>
             </motion.div>
 
+            {/* Social Links */}
+            <motion.div variants={itemVariants}>
+              <SocialLinksEditor />
+            </motion.div>
+
             {/* Travel Agent Mode Section - DISABLED
             <motion.div variants={itemVariants}>
               <Card className="border-primary/20">
