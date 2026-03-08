@@ -144,7 +144,9 @@ import {
   parseMustDoInput,
   scheduleMustDos,
   buildMustHavesConstraintPrompt,
+  getBlockedTimeRange,
   type MustDoPriority,
+  type ScheduledMustDo,
   type ActivityType,
 } from './must-do-priorities.ts';
 
@@ -9617,6 +9619,10 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
           const scheduled = scheduleMustDos(mustDoAnalysis, totalDays);
           // Only include items relevant to this day
           const dayItems = scheduled.scheduled.filter(s => s.assignedDay === dayNumber);
+          // Save event items for post-generation overlap stripping
+          mustDoEventItems = dayItems.filter(s => 
+            s.priority.activityType === 'all_day_event' || s.priority.activityType === 'half_day_event'
+          );
           if (dayItems.length > 0) {
             mustDoPrompt = `\n## 🚨 USER'S MUST-DO VENUES FOR DAY ${dayNumber} (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED these venues. You MUST include them:\n${dayItems.map(item => `- ${item.priority.title} (${item.priority.priority})${item.priority.activityType === 'all_day_event' ? ' [ALL-DAY EVENT — plan the ENTIRE day around this]' : item.priority.activityType === 'half_day_event' ? ' [HALF-DAY EVENT — dedicate morning or afternoon to this]' : ''}`).join('\n')}\n\nRULES:\n- Include ALL listed venues by name in this day's itinerary\n- For ALL-DAY events, the entire day should revolve around this event\n- Only add AI recommendations to fill remaining slots\n`;
           } else {
@@ -9626,7 +9632,7 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
               mustDoPrompt = `\n## User's Researched Venues (try to include if appropriate)\n${unscheduledItems.map(u => `- ${u.priority.title} (${u.priority.priority})`).join('\n')}\n`;
             }
           }
-          console.log(`[generate-day] Must-do activities parsed: ${mustDoAnalysis.length} items, ${dayItems.length} for day ${dayNumber}`);
+          console.log(`[generate-day] Must-do activities parsed: ${mustDoAnalysis.length} items, ${dayItems.length} for day ${dayNumber}, ${mustDoEventItems.length} events`);
         } else {
           // Raw text fallback
           mustDoPrompt = `\n## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)\n\nThe traveler has researched these specific venues. Include as many as possible in the itinerary:\n"${mustDoActivities.trim()}"\n`;
