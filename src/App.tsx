@@ -254,6 +254,7 @@ function AnimatedRoutes() {
         <Route path="/trip/:tripId/active" element={<ProtectedRoute><ActiveTrip /></ProtectedRoute>} />
         <Route path="/trip/:tripId/recap" element={<ProtectedRoute><TripRecap /></ProtectedRoute>} />
         <Route path="/trip/:tripId/guide" element={<ProtectedRoute><GuideBuilder /></ProtectedRoute>} />
+        <Route path="/guide/create/:tripId" element={<ProtectedRoute><GuideBuilder /></ProtectedRoute>} />
         <Route path="/trip/:tripId/travel-guide" element={<ProtectedRoute><TravelGuideBuilder /></ProtectedRoute>} />
         <Route path="/trip/:tripId/travel-guide/edit/:guideId" element={<ProtectedRoute><TravelGuideEditor /></ProtectedRoute>} />
         <Route path="/guide/:slug" element={<PublicTravelGuide />} />
