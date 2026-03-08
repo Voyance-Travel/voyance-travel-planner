@@ -1469,7 +1469,7 @@ export default function TripDetail() {
     return start <= today && end >= today;
   })();
 
-  if (isLiveTrip || isInDateWindow) {
+  if ((isLiveTrip || isInDateWindow) && searchParams.get('edit') !== 'true') {
     return <Navigate to={`/trip/${trip.id}/active`} replace />;
   }
   // Detect past trips for read-only mode and hiding Travel Intel
