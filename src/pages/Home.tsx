@@ -101,7 +101,15 @@ export default function Home() {
         {/* Divider */}
         <div className="h-px bg-border/50 mx-6 md:hidden" />
         
-        {/* Section 3: Full Control, Your Way — reassurance */}
+        {/* Section 3: Your Travel DNA — identity */}
+        <div className="py-8 md:py-0">
+          <TheInsightSection />
+        </div>
+        
+        {/* Divider */}
+        <div className="h-px bg-border/50 mx-6 md:hidden" />
+        
+        {/* Section 4: Full Control, Your Way — reassurance */}
         <div className="py-8 md:py-0">
           <CustomizationShowcase />
         </div>
@@ -109,7 +117,6 @@ export default function Home() {
         {/* ═══ COLLAPSIBLE SECTIONS: Accordions on mobile ═══ */}
         <div className="md:hidden h-8" /> {/* Spacer before accordions */}
         
-        {renderCollapsible('insight', <TheInsightSection />)}
         {renderCollapsible('archetypes', <SampleArchetype />)}
         
         {renderCollapsible('itineraries',
