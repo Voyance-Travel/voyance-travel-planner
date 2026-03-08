@@ -1457,7 +1457,6 @@ export default function TripDetail() {
   }
 
   const isLiveTrip = trip.status === 'active';
-  const [liveTripViewMode, setLiveTripViewMode] = useState<'active' | 'edit'>('active');
   const itineraryDays = transformToItineraryDays();
 
   // Compute effective end date: if itinerary has more REAL days than the stored
