@@ -1330,7 +1330,8 @@ export function EditorialItinerary({
 
   // Version history / undo for selected day
   const selectedDay = days[selectedDayIndex];
-  const { canUndoDay, isUndoing, handleUndo, refreshUndoState } = useVersionHistory({
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
+  const { canUndoDay, isUndoing, versions, isLoadingVersions, handleUndo, handleRestoreVersion, refreshUndoState, loadVersionHistory } = useVersionHistory({
     tripId,
     dayNumber: selectedDay?.dayNumber ?? 1,
     onRestore: useCallback((restoredActivities, metadata) => {
@@ -1343,6 +1344,7 @@ export function EditorialItinerary({
           ...(metadata?.theme ? { theme: metadata.theme } : {}),
         };
       }));
+      // Auto-save restored version immediately (don't leave as unsaved local state)
       setHasChanges(true);
     }, [selectedDayIndex]),
   });
