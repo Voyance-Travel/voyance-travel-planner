@@ -202,6 +202,7 @@ Rules:
                           "new_cost",
                           "savings",
                           "reason",
+                          "suggested_description",
                           "day_number",
                           "activity_id",
                         ],
