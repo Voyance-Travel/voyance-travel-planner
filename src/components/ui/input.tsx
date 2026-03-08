@@ -33,7 +33,11 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     );
 
     React.useEffect(() => {
-      if (typeof window === "undefined") return;
+      const isDateOrTime = type === "date" || type === "time";
+      if (!isDateOrTime || typeof window === "undefined") {
+        setUsePlainTextDateTime(false);
+        return;
+      }
 
       const updateMode = () => {
         setUsePlainTextDateTime(shouldUsePlainTextDateTime(type, allowNativeMobileDateTime));
