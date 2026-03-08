@@ -62,6 +62,7 @@ export function PastTripCard({ trip, index = 0 }: PastTripCardProps) {
   const navigate = useNavigate();
   const [reviewOpen, setReviewOpen] = useState(false);
   const { data: review } = useTripReview(trip.id);
+  const { data: favCount = 0 } = useGuideFavoritesCount(trip.id);
 
   const seededHero = trip.metadata?.hero_image;
   const seededHeroUrl = typeof seededHero === 'string' && seededHero.length > 0 ? seededHero : null;
