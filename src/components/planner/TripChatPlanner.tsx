@@ -52,6 +52,14 @@ export interface TripDetails {
   cities?: ChatTripCity[];
   /** Inter-city transport modes for each leg (length = cities.length - 1) */
   cityTransports?: InterCityTransportMode[];
+  /** Trip pacing inferred from conversation */
+  pacing?: 'relaxed' | 'balanced' | 'packed';
+  /** Whether this is the user's first visit to the destination */
+  isFirstTimeVisitor?: boolean;
+  /** Interest categories inferred from conversation */
+  interestCategories?: string[];
+  /** Day number of a special celebration (birthday, anniversary, etc.) */
+  celebrationDay?: number;
 }
 
 interface ChatMessage {

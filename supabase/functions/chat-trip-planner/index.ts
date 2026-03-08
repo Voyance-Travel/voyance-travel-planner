@@ -131,6 +131,12 @@ When calling extract_trip_details, you MUST extract EVERY specific detail the us
    - "need to get from US Open to JFK" → additionalNotes
    - "slow paced trip" → additionalNotes
 
+5. PACING & PERSONALIZATION — infer these from the conversation:
+   - pacing: "relaxed" if user says "slow pace", "no rush", "take it easy". "packed" if "pack it in", "see as much as possible", "ambitious". Default to "balanced".
+   - isFirstTimeVisitor: true if user says "never been", "first time", or doesn't mention prior visits. false if "going back", "last time I was there", "I know the city well".
+   - interestCategories: infer from what excites them. "we love food and nightlife" → ["food", "nightlife"]. "museums and history" → ["history", "culture"]. Valid values: history, food, shopping, nature, culture, nightlife.
+   - celebrationDay: if trip is for a birthday/anniversary, which day number the celebration falls on (e.g. "birthday is on day 3" → 3).
+
 FAILURE TO EXTRACT USER-SPECIFIED ACTIVITIES INTO mustDoActivities = THE ITINERARY WILL NOT INCLUDE THEM.
 The mustDoActivities field is the PRIMARY way user preferences flow into the itinerary. If you skip it, the user's requests are SILENTLY DROPPED.`;
 }
@@ -335,6 +341,27 @@ serve(async (req) => {
                       },
                       description:
                         "Structured list of user constraints, preferences, and requirements. CRITICAL: If the user says 'whole day for X' or 'dedicate the day to X' or 'don't plan anything else', create a full_day_event with allDay: true. If they mention specific times, include the time. If they mention flights, include as type 'flight'.",
+                    },
+                    pacing: {
+                      type: "string",
+                      enum: ["relaxed", "balanced", "packed"],
+                      description: "Trip pacing inferred from conversation. 'relaxed' = slow pace, 2-3 activities/day. 'packed' = see as much as possible, 5+ activities/day. Default to 'balanced' if not mentioned.",
+                    },
+                    isFirstTimeVisitor: {
+                      type: "boolean",
+                      description: "True if user hasn't visited the destination before or doesn't mention prior visits. False if they mention returning or knowing the area.",
+                    },
+                    interestCategories: {
+                      type: "array",
+                      items: {
+                        type: "string",
+                        enum: ["history", "food", "shopping", "nature", "culture", "nightlife"],
+                      },
+                      description: "Interest categories inferred from conversation. E.g. 'we love food and nightlife' → ['food', 'nightlife']. Only include categories the user shows genuine interest in.",
+                    },
+                    celebrationDay: {
+                      type: "number",
+                      description: "If the trip is for a birthday, anniversary, or special occasion, which day number the celebration falls on (1-indexed). Only set if user specifies or implies a particular day.",
                     },
                     cities: {
                       type: "array",

@@ -1,75 +1,63 @@
 
 
-## Unify Chat Path to Match Form Path Output
+## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
 
-### Problem Summary
-The "Just Tell Us" chat path writes 6 fewer metadata fields than the form path, and its `mustDoActivities` is a string instead of `string[]`. This means chat-sourced trips generate with zero personalization context (no pacing, no interest categories, no generation rules, no first-time-visitor flag, no celebration day).
+### What's Already Working (No Changes Needed)
+- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
+- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
+- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
+- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
+
+### What's Broken — Two Things
+
+**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
+
+**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
 
 ### Changes
 
-#### 1. Expand `extract_trip_details` tool schema (Edge Function)
-**File: `supabase/functions/chat-trip-planner/index.ts`**
+#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
 
-Add these properties to the tool's `parameters.properties`:
-- `pacing` — enum `["relaxed", "balanced", "packed"]`. Description: infer from conversation (e.g. "slow pace" → relaxed, "pack it in" → packed). Default intent: balanced.
-- `isFirstTimeVisitor` — boolean. Description: true if user hasn't visited before or doesn't mention prior visits.
-- `interestCategories` — array of strings, enum values `["history", "food", "shopping", "nature", "culture", "nightlife"]`. Description: infer from conversation topics.
-- `celebrationDay` — number (day number). Description: if trip is for a birthday/anniversary, which day the celebration falls on.
+**Change A — Remove stall detector setup** (lines ~261-313):
+Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
 
-Update the system prompt's extraction quality section to instruct the AI to infer these fields from context (e.g. "we love food and nightlife" → `interestCategories: ["food", "nightlife"]`; "never been to Rome" → `isFirstTimeVisitor: true`; "want a relaxed trip" → `pacing: "relaxed"`).
+**Change B — Remove browser loop fallback** (lines ~455-469):
+Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
 
-#### 2. Expand `TripDetails` interface
-**File: `src/components/planner/TripChatPlanner.tsx`**
+```typescript
+// OLD:
+} catch (serverErr) {
+  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
+  const generatedDays = await generateItinerary({ ... });
+  // ... 40 lines of fallback logic
+}
 
-Add to the `TripDetails` interface:
-- `pacing?: 'relaxed' | 'balanced' | 'packed'`
-- `isFirstTimeVisitor?: boolean`
-- `interestCategories?: string[]`
-- `celebrationDay?: number`
-
-#### 3. Normalize chat metadata in `Start.tsx`
-**File: `src/pages/Start.tsx` (lines ~2793-2800)**
-
-Update the chat path's `metadata` object to match the form path structure:
-
-```
-metadata: {
-  // Normalize mustDoActivities to string[] (form format)
-  mustDoActivities: details.mustDoActivities
-    ? details.mustDoActivities.split(',').map(s => s.trim()).filter(Boolean)
-    : null,
-  additionalNotes: details.additionalNotes || null,
-  flightDetails: details.flightDetails || null,
-  userConstraints: details.userConstraints || null,
-  // NEW — these 5 fields were missing from chat path
-  pacing: details.pacing || 'balanced',
-  isFirstTimeVisitor: details.isFirstTimeVisitor ?? true,
-  interestCategories: details.interestCategories?.length ? details.interestCategories : null,
-  celebrationDay: details.celebrationDay || null,
-  generationRules: null, // Chat doesn't collect structured rules
-  source: 'chat_planner',
-  lastUpdated: new Date().toISOString(),
+// NEW:
+} catch (serverErr) {
+  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
+  setPrePhase(null);
+  setHasStarted(false);
+  toast.error('Failed to start generation. Please try again.');
+  return;
 }
 ```
 
-#### 4. Add `generationRules` extraction from `userConstraints`
-**File: `src/pages/Start.tsx`** (in the chat details handler)
+**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
 
-Convert `details.userConstraints` into `generationRules` format where applicable:
-- `type: "full_day_event"` with `allDay: true` → generation rule `{ type: 'blocked_time', days: ['day_N'], from: '00:00', to: '23:59', reason: description }`
-- `type: "time_block"` → generation rule with specific time
-- `type: "avoid"` → kept as additional notes context
+**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
 
-This ensures userConstraints (which the generation engine doesn't read directly) are translated into generationRules (which it does read).
+#### File 2: `src/hooks/useItineraryGeneration.ts`
 
-### What's NOT Changing
-- The generation engine (`generate-itinerary/index.ts`) — it already reads all these metadata fields
-- The form path's trip creation logic
-- The `itineraryAPI.ts` mustDoActivities handling (it already handles both string and string[] via `Array.isArray()` check)
-- Multi-city routing, flight/hotel persistence, trip_cities insertion
+No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
 
-### Files Touched
-1. `supabase/functions/chat-trip-planner/index.ts` — 4 new tool properties + system prompt update
-2. `src/components/planner/TripChatPlanner.tsx` — 4 new TripDetails fields
-3. `src/pages/Start.tsx` — expanded metadata object + userConstraints→generationRules conversion
+### Files to Modify
+
+| File | What |
+|------|------|
+| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
+
+### Risk Assessment
+- **Low risk**: The server-side self-chaining is already fully implemented and tested
+- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
+- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
 
