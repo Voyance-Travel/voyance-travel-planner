@@ -749,6 +749,10 @@ function TodayView({
     );
   }
 
+  // Determine if the displayed day is in the past (not today)
+  const dayDate = parseLocalDate(todaysItinerary.date);
+  const isPastDay = isBefore(dayDate, new Date()) && !isToday(dayDate);
+
   return (
     <motion.div
       initial={{ opacity: 0, x: -20 }}
@@ -830,8 +834,8 @@ function TodayView({
         </CardContent>
       </Card>
 
-      {/* Trip Rescue Banner */}
-      {sentiment.needsRescue && !rescueDismissed && (
+      {/* Trip Rescue Banner — only for today */}
+      {!isPastDay && sentiment.needsRescue && !rescueDismissed && (
         <TripRescueBanner
           sentiment={sentiment}
           destination={trip.destination}
@@ -844,29 +848,39 @@ function TodayView({
         />
       )}
 
-      {/* Smart Swap Suggestion */}
-      <SmartSwapSuggestion
-        currentActivity={nowContext?.currentActivity ? {
-          id: nowContext.currentActivity.id,
-          name: nowContext.currentActivity.name,
-          startTime: nowContext.currentActivity.startTime,
-          endTime: nowContext.currentActivity.endTime,
-          location: nowContext.currentActivity.location,
-        } : null}
-        nextActivity={nowContext?.nextActivity ? {
-          id: nowContext.nextActivity.id,
-          name: nowContext.nextActivity.name,
-          startTime: nowContext.nextActivity.startTime,
-          endTime: nowContext.nextActivity.endTime,
-          duration: nowContext.nextActivity.duration,
-          location: nowContext.nextActivity.location,
-          type: nowContext.nextActivity.type,
-          category: nowContext.nextActivity.category,
-        } : null}
-        dayDate={todaysItinerary.date}
-        completedActivities={completedActivities}
-        onSwapRequest={handleSwapRequest}
-      />
+      {/* Smart Swap Suggestion — only for today */}
+      {!isPastDay && (
+        <SmartSwapSuggestion
+          currentActivity={nowContext?.currentActivity ? {
+            id: nowContext.currentActivity.id,
+            name: nowContext.currentActivity.name,
+            startTime: nowContext.currentActivity.startTime,
+            endTime: nowContext.currentActivity.endTime,
+            location: nowContext.currentActivity.location,
+          } : null}
+          nextActivity={nowContext?.nextActivity ? {
+            id: nowContext.nextActivity.id,
+            name: nowContext.nextActivity.name,
+            startTime: nowContext.nextActivity.startTime,
+            endTime: nowContext.nextActivity.endTime,
+            duration: nowContext.nextActivity.duration,
+            location: nowContext.nextActivity.location,
+            type: nowContext.nextActivity.type,
+            category: nowContext.nextActivity.category,
+          } : null}
+          dayDate={todaysItinerary.date}
+          completedActivities={completedActivities}
+          onSwapRequest={handleSwapRequest}
+        />
+      )}
+
+      {/* Past day indicator */}
+      {isPastDay && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+          <Check className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">This day has passed</span>
+        </div>
+      )}
 
       <div className="space-y-3">
         <h3 className="font-semibold text-muted-foreground text-sm uppercase tracking-wide">
@@ -962,8 +976,8 @@ function TodayView({
                         </div>
                       )}
 
-                      {/* Post-Activity Nudge (for completed, unrated activities) */}
-                      {isCompleted && !feedbackByActivity.has(activity.id) && (
+                      {/* Post-Activity Nudge (for completed, unrated activities — today only) */}
+                      {!isPastDay && isCompleted && !feedbackByActivity.has(activity.id) && (
                         <div className="mt-3">
                           <PostActivityNudge
                             activityId={activity.id}
@@ -978,64 +992,68 @@ function TodayView({
                         </div>
                       )}
 
-                      {/* Inline Rating + Guide Bookmark */}
-                      <div className="mt-3 pt-2 border-t border-border/30 flex items-center justify-between">
-                        <InlineActivityRating
-                          activityId={activity.id}
-                          tripId={trip.id}
-                          activityType={activity.type}
-                          activityCategory={activity.category}
-                          destination={trip.destination}
-                          existingRating={feedbackByActivity.get(activity.id) as any || null}
-                          onMediaPress={() => onMediaPress(activity.id, activity.name)}
-                          onVoicePress={() => onVoicePress(activity.id, activity.name)}
-                          compact
-                        />
-                        <GuideBookmarkButton
-                          activityId={activity.id}
-                          activityName={activity.name}
-                          tripId={trip.id}
-                          compact
-                        />
-                      </div>
-
-                      {/* Action Buttons */}
-                      <div className="flex items-center gap-2 mt-3">
-                        {activity.location && (
-                          <Button size="sm" variant="outline" className="h-8 gap-1.5">
-                            <Navigation className="w-3.5 h-3.5" />
-                            Directions
-                          </Button>
-                        )}
-                        {activity.voucherUrl && (
-                          <Button size="sm" variant="outline" className="h-8 gap-1.5">
-                            <QrCode className="w-3.5 h-3.5" />
-                            Show tickets
-                          </Button>
-                        )}
-                        <MemoryUploadButton
-                          tripId={trip.id}
-                          activityId={activity.id}
-                          activityName={activity.name}
-                          locationName={activity.location?.name}
-                          dayNumber={tripContext.currentDayNumber}
-                          variant="icon"
-                        />
-                        <div className="ml-auto">
-                          <CheckInButton
+                      {/* Inline Rating + Guide Bookmark — today only */}
+                      {!isPastDay && (
+                        <div className="mt-3 pt-2 border-t border-border/30 flex items-center justify-between">
+                          <InlineActivityRating
+                            activityId={activity.id}
+                            tripId={trip.id}
+                            activityType={activity.type}
+                            activityCategory={activity.category}
+                            destination={trip.destination}
+                            existingRating={feedbackByActivity.get(activity.id) as any || null}
+                            onMediaPress={() => onMediaPress(activity.id, activity.name)}
+                            onVoicePress={() => onVoicePress(activity.id, activity.name)}
+                            compact
+                          />
+                          <GuideBookmarkButton
                             activityId={activity.id}
                             activityName={activity.name}
                             tripId={trip.id}
-                            destination={trip.destination}
-                            activityType={activity.type}
-                            activityCategory={activity.category}
-                            isCheckedIn={isCompleted}
-                            isNearby={proximity.nearbyActivityId === activity.id}
-                            distanceMeters={proximity.nearbyActivityId === activity.id ? proximity.distanceMeters : null}
-                            onCheckIn={onActivityComplete}
+                            compact
                           />
                         </div>
-                      </div>
+                      )}
+
+                      {/* Action Buttons — today only */}
+                      {!isPastDay && (
+                        <div className="flex items-center gap-2 mt-3">
+                          {activity.location && (
+                            <Button size="sm" variant="outline" className="h-8 gap-1.5">
+                              <Navigation className="w-3.5 h-3.5" />
+                              Directions
+                            </Button>
+                          )}
+                          {activity.voucherUrl && (
+                            <Button size="sm" variant="outline" className="h-8 gap-1.5">
+                              <QrCode className="w-3.5 h-3.5" />
+                              Show tickets
+                            </Button>
+                          )}
+                          <MemoryUploadButton
+                            tripId={trip.id}
+                            activityId={activity.id}
+                            activityName={activity.name}
+                            locationName={activity.location?.name}
+                            dayNumber={tripContext.currentDayNumber}
+                            variant="icon"
+                          />
+                          <div className="ml-auto">
+                            <CheckInButton
+                              activityId={activity.id}
+                              activityName={activity.name}
+                              tripId={trip.id}
+                              destination={trip.destination}
+                              activityType={activity.type}
+                              activityCategory={activity.category}
+                              isCheckedIn={isCompleted}
+                              isNearby={proximity.nearbyActivityId === activity.id}
+                              distanceMeters={proximity.nearbyActivityId === activity.id ? proximity.distanceMeters : null}
+                              onCheckIn={onActivityComplete}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </CardContent>
