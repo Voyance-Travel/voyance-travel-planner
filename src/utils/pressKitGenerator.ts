@@ -18,19 +18,21 @@ export const companyInfo = {
 };
 
 export const keyStats = [
-  { label: 'Curated Destinations', value: '500+' },
-  { label: 'Travel DNA Types', value: '29' },
+  { label: 'Destinations Worldwide', value: 'Any City' },
+  { label: 'Travel DNA Archetypes', value: '27' },
   { label: 'Personalization Signals', value: '50+' },
-  { label: 'AI Itinerary Engines', value: '3' },
+  { label: 'Curated City Guides', value: '27' },
 ];
 
 export const platformCapabilities = [
-  'Unique itineraries generated from 29 distinct Travel DNA profiles',
+  'Unique itineraries shaped by 27 distinct Travel DNA archetypes',
   'Multi-factor personalization using 50+ preference signals',
   'Day-by-day activity scheduling with time-optimized routing',
-  'Flight and hotel booking integration',
+  'Real-time flight search and manual hotel integration',
   'Adaptive recommendations based on budget, pace, and interests',
-  'Destination matching using proprietary scoring algorithms',
+  'Multi-city trip splitting with per-city generation',
+  'Live trip mode with real-time activity tracking',
+  'Post-trip debrief and review system',
 ];
 
 export const leadership: { name: string; title: string; bio: string }[] = [];
@@ -38,11 +40,11 @@ export const leadership: { name: string; title: string; bio: string }[] = [];
 export const pressHighlights: string[] = [];
 
 export const brandGuidelines = {
-  primaryColor: '#6366F1', // Indigo
-  accentColor: '#EC4899', // Pink
+  primaryColor: '#274D4F', // Deep Teal (hsl 185 45% 28%)
+  accentColor: '#30997A', // Teal-Green (hsl 175 50% 38%)
   fonts: {
     display: 'Playfair Display',
-    body: 'Inter',
+    body: 'DM Sans',
   },
   usage: [
     'Always use the official Voyance logo',
@@ -78,7 +80,7 @@ export async function generatePressKitPDF(): Promise<void> {
       y = margin;
     }
     y += 8;
-    addText(title, 16, 'bold', [99, 102, 241]);
+    addText(title, 16, 'bold', [39, 77, 79]); // Deep teal matching site primary
     y += 2;
   };
 
@@ -89,7 +91,7 @@ export async function generatePressKitPDF(): Promise<void> {
   };
 
   // Title Page
-  pdf.setFillColor(99, 102, 241);
+  pdf.setFillColor(39, 77, 79); // Deep teal matching site primary
   pdf.rect(0, 0, pageWidth, 60, 'F');
   
   pdf.setTextColor(255, 255, 255);
@@ -139,8 +141,8 @@ export async function generatePressKitPDF(): Promise<void> {
   // Brand Guidelines Summary
   addSection('Brand Guidelines');
   addText('Primary Colors:', 11, 'bold');
-  addText(`Primary: ${brandGuidelines.primaryColor} (Indigo)`, 10);
-  addText(`Accent: ${brandGuidelines.accentColor} (Pink)`, 10);
+  addText(`Primary: ${brandGuidelines.primaryColor} (Deep Teal)`, 10);
+  addText(`Accent: ${brandGuidelines.accentColor} (Teal-Green)`, 10);
   y += 4;
   
   addText('Typography:', 11, 'bold');
@@ -170,7 +172,7 @@ export async function generatePressKitPDF(): Promise<void> {
   pdf.text('This press kit is for media use only.', pageWidth / 2, y + 4, { align: 'center' });
 
   // Save the PDF
-  pdf.save('Voyance-Press-Kit-2024.pdf');
+  pdf.save('Voyance-Press-Kit-2026.pdf');
 }
 
 export default generatePressKitPDF;

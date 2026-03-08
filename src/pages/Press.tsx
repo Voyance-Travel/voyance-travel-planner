@@ -37,7 +37,7 @@ export default function Press() {
       />
       
       {/* Hero */}
-      <section className="pt-32 pb-16 bg-gradient-to-br from-primary/10 via-background to-accent/10">
+      <section className="pt-32 pb-16 bg-gradient-to-br from-primary/5 via-background to-primary/5">
         <div className="max-w-4xl mx-auto px-4 text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -96,7 +96,7 @@ export default function Press() {
                 {keyStats.map((stat, index) => (
                   <div 
                     key={stat.label}
-                    className="p-4 bg-gradient-to-br from-primary/5 to-accent/5 border border-border rounded-xl"
+                    className="p-4 bg-gradient-to-br from-primary/5 to-primary/10 border border-border rounded-xl"
                   >
                     <p className="text-2xl font-bold text-primary">{stat.value}</p>
                     <p className="text-sm text-muted-foreground">{stat.label}</p>
@@ -139,7 +139,7 @@ export default function Press() {
       </section>
 
       {/* Download & Contact */}
-      <section className="py-16 bg-gradient-to-br from-primary/10 to-accent/10">
+      <section className="py-16 bg-gradient-to-br from-primary/5 to-primary/10">
         <div className="max-w-4xl mx-auto px-4">
           <div className="grid md:grid-cols-2 gap-8">
             {/* Press Kit Download */}
