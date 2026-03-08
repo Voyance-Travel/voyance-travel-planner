@@ -2934,12 +2934,12 @@ export default function Start() {
                   />
                 )}
 
-                {currentStep === 2 && startDate && endDate && (
+                {currentStep === 2 && (
                   <FlightHotelStep
                     key="flight-hotel"
                     destination={isMultiCity ? (multiCityDestinations[0]?.city || '') : destinationSelection.cityName}
-                    startDate={format(startDate, 'yyyy-MM-dd')}
-                    endDate={format(endDate, 'yyyy-MM-dd')}
+                    startDate={startDate ? format(startDate, 'yyyy-MM-dd') : ''}
+                    endDate={endDate ? format(endDate, 'yyyy-MM-dd') : ''}
                     travelers={travelers}
                     outboundFlight={outboundFlight}
                     setOutboundFlight={setOutboundFlight}
