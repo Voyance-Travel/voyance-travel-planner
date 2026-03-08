@@ -86,6 +86,9 @@ import SampleItinerary from "./pages/SampleItinerary";
 import ActiveTrip from "./pages/ActiveTrip";
 import TripRecap from "./pages/TripRecap";
 import GuideBuilder from "./pages/GuideBuilder";
+import TravelGuideBuilder from "./pages/TravelGuideBuilder";
+import TravelGuideEditor from "./pages/TravelGuideEditor";
+import PublicTravelGuide from "./pages/PublicTravelGuide";
 import Demo from "./pages/Demo";
 import BlogPost from "./pages/BlogPost";
 import MyBlogs from "./pages/MyBlogs";
@@ -251,6 +254,9 @@ function AnimatedRoutes() {
         <Route path="/trip/:tripId/active" element={<ProtectedRoute><ActiveTrip /></ProtectedRoute>} />
         <Route path="/trip/:tripId/recap" element={<ProtectedRoute><TripRecap /></ProtectedRoute>} />
         <Route path="/trip/:tripId/guide" element={<ProtectedRoute><GuideBuilder /></ProtectedRoute>} />
+        <Route path="/trip/:tripId/travel-guide" element={<ProtectedRoute><TravelGuideBuilder /></ProtectedRoute>} />
+        <Route path="/trip/:tripId/travel-guide/edit/:guideId" element={<ProtectedRoute><TravelGuideEditor /></ProtectedRoute>} />
+        <Route path="/guide/:slug" element={<PublicTravelGuide />} />
         <Route path="/trips/:tripId/confirmation" element={<TripConfirmation />} />
         
         {/* Blog Routes */}
