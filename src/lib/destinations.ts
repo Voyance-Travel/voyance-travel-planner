@@ -35,6 +35,21 @@ export interface Destination {
   localTips?: string[];
   gettingAround?: string;
   bestMonths?: string[];
+  transportData?: Array<{
+    mode: string;
+    recommended: boolean;
+    notes: string;
+    appName?: string;
+    estimatedCost?: string;
+  }>;
+  safetyTips?: string[];
+  commonScams?: string[];
+  foodScene?: string;
+  tippingCustom?: string;
+  dressCode?: string;
+  nightlifeInfo?: string;
+  bestNeighborhoods?: string[];
+  emergencyNumbers?: { police: string; ambulance: string; tourist: string };
 }
 
 export interface Activity {

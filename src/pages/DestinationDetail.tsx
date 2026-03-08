@@ -131,6 +131,12 @@ export default function DestinationDetail() {
       climateText += dbDestination.seasonality;
     }
     
+    // Parse local knowledge fields from DB
+    const dbLocalTips = (dbDestination as any).local_tips as string[] | null;
+    const dbSafetyTips = (dbDestination as any).safety_tips as string[] | null;
+    const dbCommonScams = (dbDestination as any).common_scams as string[] | null;
+    const dbBestNeighborhoods = (dbDestination as any).best_neighborhoods as string[] | null;
+
     return {
       id: dbDestination.id,
       city: dbDestination.city,
@@ -144,9 +150,17 @@ export default function DestinationDetail() {
       images: dbDestination.stock_image_url ? [dbDestination.stock_image_url] : [],
       climate: climateText || undefined,
       bestMonths,
-      gettingAround: undefined, // We'll use transportData instead
+      gettingAround: (dbDestination as any).getting_around || undefined,
       transportData,
-      localTips: undefined, // Will use fallback
+      localTips: dbLocalTips && dbLocalTips.length > 0 ? dbLocalTips : undefined,
+      safetyTips: dbSafetyTips && dbSafetyTips.length > 0 ? dbSafetyTips : undefined,
+      commonScams: dbCommonScams && dbCommonScams.length > 0 ? dbCommonScams : undefined,
+      foodScene: (dbDestination as any).food_scene || undefined,
+      tippingCustom: (dbDestination as any).tipping_custom || undefined,
+      dressCode: (dbDestination as any).dress_code || undefined,
+      nightlifeInfo: (dbDestination as any).nightlife_info || undefined,
+      bestNeighborhoods: dbBestNeighborhoods && dbBestNeighborhoods.length > 0 ? dbBestNeighborhoods : undefined,
+      emergencyNumbers: (dbDestination as any).emergency_numbers || undefined,
     };
   }, [staticDestination, dbDestination]);
   
@@ -253,13 +267,7 @@ export default function DestinationDetail() {
   const climateText = destination.climate || `Pleasant year-round. Check local weather forecasts before your visit.`;
   
   // Getting around - use structured transport data or fallback text
-  const transportData = (destination as any).transportData as Array<{
-    mode: string;
-    recommended: boolean;
-    notes: string;
-    appName?: string;
-    estimatedCost?: string;
-  }> | null;
+  const transportData = destination.transportData || null;
   
   // Local tips - use destination data or generate contextual fallback
   const localTips = destination.localTips || [
@@ -477,6 +485,13 @@ export default function DestinationDetail() {
                     
                     {transportData && transportData.length > 0 ? (
                       <div className="space-y-3">
+                        {/* Getting around summary */}
+                        {destination.gettingAround && (
+                          <p className="text-sm text-muted-foreground mb-2">
+                            {destination.gettingAround}
+                          </p>
+                        )}
+
                         {/* Recommended transport options */}
                         {transportData.filter(t => t.recommended).map((transport, idx) => {
                           const Icon = getTransportIcon(transport.mode);
@@ -510,7 +525,7 @@ export default function DestinationDetail() {
                             <p className="text-xs text-muted-foreground mb-2">Less recommended:</p>
                             <div className="flex flex-wrap gap-2">
                               {transportData.filter(t => !t.recommended).map((transport, idx) => (
-                                <span key={idx} className="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">
+                                <span key={idx} className="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground" title={transport.notes}>
                                   {transport.mode}
                                 </span>
                               ))}
@@ -520,12 +535,13 @@ export default function DestinationDetail() {
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">
-                        Various transport options available. Walking-friendly in central areas.
+                        {destination.gettingAround || 'Various transport options available. Walking-friendly in central areas.'}
                       </p>
                     )}
                   </div>
                   
-                  <div className="p-5 bg-card rounded-xl border border-border sm:col-span-2">
+                  {/* Local Tips */}
+                  <div className="p-5 bg-card rounded-xl border border-border">
                     <div className="flex items-center gap-3 mb-3">
                       <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
                         <Info className="h-5 w-5 text-muted-foreground" />
@@ -541,6 +557,76 @@ export default function DestinationDetail() {
                       ))}
                     </ul>
                   </div>
+
+                  {/* Customs & Etiquette — only show if we have real data */}
+                  {(destination.tippingCustom || destination.dressCode) && (
+                    <div className="p-5 bg-card rounded-xl border border-border">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
+                          <Wallet className="h-5 w-5 text-accent" />
+                        </div>
+                        <h3 className="font-medium">Customs & Etiquette</h3>
+                      </div>
+                      <div className="text-sm text-muted-foreground space-y-2">
+                        {destination.tippingCustom && (
+                          <p><span className="font-medium text-foreground">Tipping:</span> {destination.tippingCustom}</p>
+                        )}
+                        {destination.dressCode && (
+                          <p><span className="font-medium text-foreground">Dress code:</span> {destination.dressCode}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Food Scene — only show if we have real data */}
+                  {destination.foodScene && (
+                    <div className="p-5 bg-card rounded-xl border border-border">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center">
+                          <span className="text-lg">🍜</span>
+                        </div>
+                        <h3 className="font-medium">Food & Dining</h3>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{destination.foodScene}</p>
+                    </div>
+                  )}
+
+                  {/* Safety & Scams — only show if we have real data */}
+                  {((destination.safetyTips && destination.safetyTips.length > 0) || (destination.commonScams && destination.commonScams.length > 0)) && (
+                    <div className="p-5 bg-card rounded-xl border border-border">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
+                          <span className="text-lg">🛡️</span>
+                        </div>
+                        <h3 className="font-medium">Safety & Awareness</h3>
+                      </div>
+                      <div className="text-sm text-muted-foreground space-y-3">
+                        {destination.safetyTips && destination.safetyTips.length > 0 && (
+                          <ul className="space-y-1.5">
+                            {destination.safetyTips.map((tip, index) => (
+                              <li key={index} className="flex items-start gap-2">
+                                <span className="text-amber-500 mt-1">⚠</span>
+                                <span>{tip}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {destination.commonScams && destination.commonScams.length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium text-foreground mb-1.5">Common scams to watch for:</p>
+                            <ul className="space-y-1">
+                              {destination.commonScams.map((scam, index) => (
+                                <li key={index} className="flex items-start gap-2 text-xs">
+                                  <span className="text-red-400 mt-0.5">•</span>
+                                  <span>{scam}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </section>
 

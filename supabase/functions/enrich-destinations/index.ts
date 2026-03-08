@@ -15,6 +15,8 @@ interface Destination {
   default_transport_modes: unknown[] | null;
   known_for: string[] | null;
   points_of_interest: string[] | null;
+  local_tips: string[] | null;
+  getting_around: string | null;
 }
 
 interface EnrichedData {
@@ -67,7 +69,7 @@ serve(async (req) => {
     let query = supabase
       .from('destinations')
       .select('id, city, country, region, description, default_transport_modes, known_for, points_of_interest')
-      .or('default_transport_modes.is.null,default_transport_modes.eq.[]');
+      .or('default_transport_modes.is.null,default_transport_modes.eq.[],local_tips.is.null,local_tips.eq.[]');
     
     // Optionally filter to only featured/high-tier destinations
     if (priorityOnly) {
@@ -119,6 +121,17 @@ serve(async (req) => {
           if (enriched) {
             const updates: Record<string, unknown> = {
               default_transport_modes: enriched.transportModes,
+              local_tips: enriched.localTips,
+              safety_tips: enriched.safetyTips,
+              getting_around: enriched.gettingAround,
+              best_neighborhoods: enriched.bestNeighborhoods,
+              food_scene: enriched.foodScene,
+              nightlife_info: enriched.nightlife,
+              dress_code: enriched.dressCode,
+              tipping_custom: enriched.tippingCustom,
+              common_scams: enriched.commonScams,
+              emergency_numbers: enriched.emergencyNumbers,
+              last_local_knowledge_update: new Date().toISOString(),
               updated_at: new Date().toISOString()
             };
 

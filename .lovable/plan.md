@@ -1,48 +1,63 @@
 
 
-## Fix: Store & Display Real Local Knowledge Data
+## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
 
-### 1. Database Migration
-Add local knowledge columns to `destinations` table:
-- `local_tips`, `safety_tips`, `best_neighborhoods`, `common_scams` (JSONB, default `'[]'`)
-- `getting_around`, `food_scene`, `nightlife_info`, `dress_code`, `tipping_custom` (TEXT)
-- `emergency_numbers` (JSONB)
-- `last_local_knowledge_update` (TIMESTAMPTZ)
+### What's Already Working (No Changes Needed)
+- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
+- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
+- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
+- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
 
-### 2. Edge Function — Save All Enriched Data
-**File: `supabase/functions/enrich-destinations/index.ts`**
+### What's Broken — Two Things
 
-- **Lines 9-18**: Add `local_tips` and `getting_around` to the `Destination` interface
-- **Line 70**: Update filter to also re-enrich destinations missing local tips: `.or('default_transport_modes.is.null,default_transport_modes.eq.[],local_tips.is.null,local_tips.eq.[]')`
-- **Lines 120-133**: Expand the `updates` object to save all enriched fields (local_tips, safety_tips, getting_around, best_neighborhoods, food_scene, nightlife_info, dress_code, tipping_custom, common_scams, emergency_numbers, last_local_knowledge_update)
+**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
 
-### 3. Update Destination Type
-**File: `src/lib/destinations.ts`** (lines 23-38)
+**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
 
-Add optional fields: `transportData`, `safetyTips`, `commonScams`, `foodScene`, `tippingCustom`, `dressCode`, `nightlifeInfo`, `bestNeighborhoods`, `emergencyNumbers`
+### Changes
 
-### 4. Frontend — Map New DB Fields
-**File: `src/pages/DestinationDetail.tsx`** (lines 134-150)
+#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
 
-In the `useMemo` that converts `dbDestination`, parse and pass through the new fields (`local_tips`, `safety_tips`, `common_scams`, `best_neighborhoods`, `getting_around`, `food_scene`, `nightlife_info`, `dress_code`, `tipping_custom`, `emergency_numbers`) using type casts since types.ts auto-generates.
+**Change A — Remove stall detector setup** (lines ~261-313):
+Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
 
-### 5. Frontend — Enhanced "Getting Around" Card
-**File: `src/pages/DestinationDetail.tsx`** (lines 470-525)
+**Change B — Remove browser loop fallback** (lines ~455-469):
+Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
 
-Add `gettingAround` summary text above transport modes. Use it as fallback text when no transport data exists.
+```typescript
+// OLD:
+} catch (serverErr) {
+  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
+  const generatedDays = await generateItinerary({ ... });
+  // ... 40 lines of fallback logic
+}
 
-### 6. Frontend — Replace Local Tips Card + Add New Cards
-**File: `src/pages/DestinationDetail.tsx`** (lines 528-544)
+// NEW:
+} catch (serverErr) {
+  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
+  setPrePhase(null);
+  setHasStarted(false);
+  toast.error('Failed to start generation. Please try again.');
+  return;
+}
+```
 
-- Remove `sm:col-span-2` from Local Tips card
-- Add new cards after Local Tips (only rendered when data exists):
-  - **Customs & Etiquette** — tipping + dress code (uses `Wallet` icon already imported)
-  - **Food & Dining** — food scene summary (emoji icon)
-  - **Safety & Awareness** — safety tips + common scams (emoji icon)
+**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
 
-### Summary of files changed
-1. **DB migration** — add 11 columns to `destinations`
-2. **`supabase/functions/enrich-destinations/index.ts`** — save all enriched fields, update filter
-3. **`src/lib/destinations.ts`** — extend `Destination` interface
-4. **`src/pages/DestinationDetail.tsx`** — map new fields, enhance Getting Around, add new info cards
+**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
+
+#### File 2: `src/hooks/useItineraryGeneration.ts`
+
+No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
+
+### Files to Modify
+
+| File | What |
+|------|------|
+| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
+
+### Risk Assessment
+- **Low risk**: The server-side self-chaining is already fully implemented and tested
+- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
+- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
 
