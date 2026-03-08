@@ -14,6 +14,8 @@
 // TYPES
 // =============================================================================
 
+export type ActivityType = 'all_day_event' | 'half_day_event' | 'standard' | 'quick_stop';
+
 export interface MustDoPriority {
   id: string;
   title: string;
@@ -23,12 +25,18 @@ export interface MustDoPriority {
   activityName: string;
   /** Priority level */
   priority: 'must' | 'high' | 'nice';
+  /** Activity type classification for duration-aware scheduling */
+  activityType?: ActivityType;
   /** Preferred day number (optional) */
   preferredDay?: number;
   /** Preferred time of day */
   preferredTime?: 'morning' | 'afternoon' | 'evening' | 'any';
   /** Location for geographic clustering */
   location?: string;
+  /** Venue/location name from cross-referenced event data */
+  venueName?: string;
+  /** Event dates from cross-referenced local events */
+  eventDates?: string;
   /** Estimated duration in minutes */
   estimatedDuration?: number;
   /** Whether this typically requires advance booking */
@@ -58,6 +66,77 @@ export interface MustDoAnalysis {
   dayAssignments: Map<number, MustDoPriority[]>;
   /** Pre-built prompt section */
   promptSection: string;
+}
+
+// =============================================================================
+// EVENT TYPE PATTERNS — classifies activities by keyword into scheduling types
+// =============================================================================
+
+interface EventPattern {
+  type: ActivityType;
+  duration: number; // minutes
+  bestTime: 'morning' | 'afternoon' | 'evening' | 'any';
+  bookingRequired: boolean;
+}
+
+const EVENT_PATTERNS: Array<{ keywords: string[]; pattern: EventPattern }> = [
+  // ── All-day sporting events ──
+  { keywords: ['us open', 'u.s. open'], pattern: { type: 'all_day_event', duration: 480, bestTime: 'morning', bookingRequired: true } },
+  { keywords: ['wimbledon'], pattern: { type: 'all_day_event', duration: 480, bestTime: 'morning', bookingRequired: true } },
+  { keywords: ['french open', 'roland garros'], pattern: { type: 'all_day_event', duration: 480, bestTime: 'morning', bookingRequired: true } },
+  { keywords: ['australian open'], pattern: { type: 'all_day_event', duration: 480, bestTime: 'morning', bookingRequired: true } },
+  { keywords: ['super bowl'], pattern: { type: 'all_day_event', duration: 420, bestTime: 'afternoon', bookingRequired: true } },
+  { keywords: ['world cup'], pattern: { type: 'all_day_event', duration: 360, bestTime: 'any', bookingRequired: true } },
+  { keywords: ['olympics', 'olympic games'], pattern: { type: 'all_day_event', duration: 480, bestTime: 'morning', bookingRequired: true } },
+  { keywords: ['formula 1', 'f1 grand prix', 'grand prix'], pattern: { type: 'all_day_event', duration: 480, bestTime: 'morning', bookingRequired: true } },
+  { keywords: ['world series'], pattern: { type: 'half_day_event', duration: 240, bestTime: 'evening', bookingRequired: true } },
+  { keywords: ['nba finals', 'nfl game', 'nba game', 'nhl game', 'mlb game', 'mls game'], pattern: { type: 'half_day_event', duration: 240, bestTime: 'evening', bookingRequired: true } },
+  { keywords: ['champions league', 'premier league', 'la liga', 'serie a', 'bundesliga'], pattern: { type: 'half_day_event', duration: 240, bestTime: 'evening', bookingRequired: true } },
+  { keywords: ['rugby world cup', 'cricket world cup', 'tour de france'], pattern: { type: 'all_day_event', duration: 420, bestTime: 'morning', bookingRequired: true } },
+  
+  // ── All-day festivals & conventions ──
+  { keywords: ['coachella'], pattern: { type: 'all_day_event', duration: 480, bestTime: 'afternoon', bookingRequired: true } },
+  { keywords: ['burning man'], pattern: { type: 'all_day_event', duration: 480, bestTime: 'any', bookingRequired: true } },
+  { keywords: ['lollapalooza', 'glastonbury', 'bonnaroo', 'tomorrowland', 'ultra music'], pattern: { type: 'all_day_event', duration: 480, bestTime: 'afternoon', bookingRequired: true } },
+  { keywords: ['comic-con', 'comic con', 'comiccon'], pattern: { type: 'all_day_event', duration: 420, bestTime: 'morning', bookingRequired: true } },
+  { keywords: ['sxsw', 'south by southwest'], pattern: { type: 'all_day_event', duration: 420, bestTime: 'morning', bookingRequired: true } },
+  { keywords: ['ces ', 'consumer electronics show'], pattern: { type: 'all_day_event', duration: 420, bestTime: 'morning', bookingRequired: true } },
+  { keywords: ['oktoberfest'], pattern: { type: 'all_day_event', duration: 420, bestTime: 'morning', bookingRequired: false } },
+  { keywords: ['carnival', 'carnaval', 'mardi gras'], pattern: { type: 'all_day_event', duration: 420, bestTime: 'morning', bookingRequired: false } },
+  { keywords: ['festival'], pattern: { type: 'half_day_event', duration: 240, bestTime: 'afternoon', bookingRequired: false } },
+  { keywords: ['convention', 'expo', 'trade show', 'fan expo'], pattern: { type: 'all_day_event', duration: 360, bestTime: 'morning', bookingRequired: true } },
+
+  // ── Theme parks ──
+  { keywords: ['disneyland', 'disney world', 'magic kingdom', 'disney'], pattern: { type: 'all_day_event', duration: 480, bestTime: 'morning', bookingRequired: true } },
+  { keywords: ['universal studios', 'universal orlando', 'islands of adventure'], pattern: { type: 'all_day_event', duration: 480, bestTime: 'morning', bookingRequired: true } },
+  { keywords: ['six flags', 'cedar point', 'legoland', 'seaworld', 'busch gardens'], pattern: { type: 'all_day_event', duration: 420, bestTime: 'morning', bookingRequired: true } },
+  { keywords: ['theme park', 'amusement park', 'water park'], pattern: { type: 'all_day_event', duration: 420, bestTime: 'morning', bookingRequired: true } },
+  
+  // ── Half-day events ──
+  { keywords: ['broadway', 'west end', 'musical', 'theater show', 'theatre show'], pattern: { type: 'half_day_event', duration: 180, bestTime: 'evening', bookingRequired: true } },
+  { keywords: ['concert'], pattern: { type: 'half_day_event', duration: 210, bestTime: 'evening', bookingRequired: true } },
+  { keywords: ['opera', 'ballet', 'symphony', 'philharmonic'], pattern: { type: 'half_day_event', duration: 180, bestTime: 'evening', bookingRequired: true } },
+  { keywords: ['comedy show', 'stand-up', 'standup', 'improv show'], pattern: { type: 'half_day_event', duration: 150, bestTime: 'evening', bookingRequired: true } },
+  { keywords: ['guided tour', 'walking tour', 'food tour', 'bike tour'], pattern: { type: 'half_day_event', duration: 210, bestTime: 'morning', bookingRequired: true } },
+  { keywords: ['cooking class', 'wine tasting', 'beer tasting'], pattern: { type: 'half_day_event', duration: 180, bestTime: 'afternoon', bookingRequired: true } },
+  { keywords: ['spa day', 'hammam', 'onsen', 'thermal bath'], pattern: { type: 'half_day_event', duration: 210, bestTime: 'afternoon', bookingRequired: true } },
+  { keywords: ['game', 'match', 'bout', 'fight night'], pattern: { type: 'half_day_event', duration: 210, bestTime: 'evening', bookingRequired: true } },
+  
+  // ── Quick stops ──
+  { keywords: ['statue', 'monument', 'memorial'], pattern: { type: 'quick_stop', duration: 45, bestTime: 'any', bookingRequired: false } },
+  { keywords: ['bridge', 'viewpoint', 'lookout', 'overlook'], pattern: { type: 'quick_stop', duration: 30, bestTime: 'any', bookingRequired: false } },
+  { keywords: ['photo op', 'photo spot', 'instagram'], pattern: { type: 'quick_stop', duration: 20, bestTime: 'any', bookingRequired: false } },
+  { keywords: ['fountain', 'plaza', 'square', 'piazza'], pattern: { type: 'quick_stop', duration: 30, bestTime: 'any', bookingRequired: false } },
+];
+
+function matchEventPattern(text: string): EventPattern | null {
+  const lower = text.toLowerCase();
+  for (const { keywords, pattern } of EVENT_PATTERNS) {
+    if (keywords.some(kw => lower.includes(kw))) {
+      return pattern;
+    }
+  }
+  return null;
 }
 
 // =============================================================================
@@ -209,6 +288,9 @@ function parseItem(item: string, destination: string): MustDoPriority | null {
     preferredTime = 'evening';
   }
   
+  // Try to match event patterns FIRST (sporting events, festivals, etc.)
+  const eventMatch = matchEventPattern(normalized);
+  
   // Try to match known landmarks
   let matchedLandmark: typeof KNOWN_LANDMARKS[string] | null = null;
   let activityName = item
@@ -231,6 +313,26 @@ function parseItem(item: string, destination: string): MustDoPriority | null {
       break;
     }
   }
+
+  // Determine activity type & duration: event pattern > landmark > default
+  let activityType: ActivityType = 'standard';
+  let estimatedDuration = 120;
+  let requiresBooking = false;
+  let bestTime = preferredTime;
+
+  if (eventMatch) {
+    activityType = eventMatch.type;
+    estimatedDuration = eventMatch.duration;
+    requiresBooking = eventMatch.bookingRequired;
+    bestTime = eventMatch.bestTime;
+    // Event matches get promoted to 'must' priority — the user explicitly named this
+    priority = 'must';
+    console.log(`[MustDo] Event pattern matched: "${activityName}" → ${activityType} (${estimatedDuration}min)`);
+  } else if (matchedLandmark) {
+    estimatedDuration = matchedLandmark.duration;
+    requiresBooking = matchedLandmark.bookingRequired;
+    bestTime = matchedLandmark.bestTime;
+  }
   
   return {
     id: `mustdo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -238,9 +340,10 @@ function parseItem(item: string, destination: string): MustDoPriority | null {
     userDescription: item,
     activityName,
     priority,
-    preferredTime: matchedLandmark?.bestTime || preferredTime,
-    estimatedDuration: matchedLandmark?.duration || 120,
-    requiresBooking: matchedLandmark?.bookingRequired || false,
+    activityType,
+    preferredTime: bestTime,
+    estimatedDuration,
+    requiresBooking,
     location: matchedLandmark?.neighborhood,
   };
 }
