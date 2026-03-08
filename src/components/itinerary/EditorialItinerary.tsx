@@ -8149,7 +8149,7 @@ function ActivityRow({
           "flex items-center gap-2 px-4 py-2",
           !isLast && "border-b border-border/30",
         )}
-        data-tour="activity-card"
+        data-tour="transit-row"
       >
         {/* Dotted timeline connector */}
         <div className="flex flex-col items-center gap-0.5 shrink-0 text-border">

@@ -59,7 +59,7 @@ const TOUR_STEPS: TourStep[] = [
     title: 'Your Day, Your Way',
     description: 'Each day is a block you control. See the cost, view routes on a map, lock the day to protect it from changes, or regenerate it for fresh ideas.',
     icon: <Calendar className="h-5 w-5" />,
-    selector: '[data-tour="day-header"]',
+    selector: '[data-tour="day-picker"]',
     position: 'bottom',
   },
   {

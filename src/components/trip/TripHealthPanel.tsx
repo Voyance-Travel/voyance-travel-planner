@@ -280,7 +280,7 @@ export function TripHealthPanel({
   const totalChecklist = checklist.length;
 
   return (
-    <div className={cn('rounded-xl border border-border bg-card overflow-hidden', className)}>
+    <div className={cn('rounded-xl border border-border bg-card overflow-hidden', className)} data-tour="health-score">
       {/* Collapsed Header */}
       <button
         type="button"
