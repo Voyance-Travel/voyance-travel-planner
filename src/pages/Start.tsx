@@ -999,6 +999,10 @@ function FlightHotelStep({
   const [showHotelModal, setShowHotelModal] = useState(false);
   const [editingHotelIndex, setEditingHotelIndex] = useState<number | null>(null); // for split-stay editing
   const [editingHotelCity, setEditingHotelCity] = useState<string | null>(null);
+  const [newHotelDraft, setNewHotelDraft] = useState<ManualHotelEntry>({
+    name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00',
+    checkInDate: startDate, checkOutDate: endDate,
+  });
   const [lastImportedLegs, setLastImportedLegs] = useState<ManualFlightEntry[]>([]);
   const [importNonce, setImportNonce] = useState(0);
 
