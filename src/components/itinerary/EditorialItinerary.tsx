@@ -2565,14 +2565,24 @@ export function EditorialItinerary({
       let saved = false;
 
       if (existingTrip) {
+        // Compute updated end_date and nights from day count
+        const updatePayload: Record<string, unknown> = {
+          itinerary_data: itineraryData,
+          itinerary_status: 'ready',
+          updated_at: new Date().toISOString(),
+        };
+        try {
+          if (startDate && days.length > 0) {
+            const newEnd = addDays(parseLocalDate(startDate), days.length - 1);
+            updatePayload.end_date = `${newEnd.getFullYear()}-${String(newEnd.getMonth() + 1).padStart(2, '0')}-${String(newEnd.getDate()).padStart(2, '0')}`;
+            updatePayload.nights = days.length - 1;
+          }
+        } catch { /* keep existing dates */ }
+
         // Save to database
         const { error } = await supabase
           .from('trips')
-          .update({
-            itinerary_data: itineraryData as any,
-            itinerary_status: 'ready',
-            updated_at: new Date().toISOString()
-          })
+          .update(updatePayload as any)
           .eq('id', tripId);
 
         if (error) throw error;
@@ -2620,6 +2630,68 @@ export function EditorialItinerary({
       setIsSaving(false);
     }
   }, [days, tripId, onSave]);
+
+  // ── Add / Remove Days ──────────────────────────────────────────────────────
+
+  const handleAddDay = useCallback(() => {
+    const lastDay = days[days.length - 1];
+    let newDate: string | undefined;
+    try {
+      if (lastDay?.date) {
+        const d = addDays(parseLocalDate(lastDay.date), 1);
+        newDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      } else if (startDate) {
+        const d = addDays(parseLocalDate(startDate), days.length);
+        newDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      }
+    } catch { /* fallback: no date */ }
+
+    const newDay: EditorialDay = {
+      dayNumber: days.length + 1,
+      date: newDate,
+      title: `Day ${days.length + 1}`,
+      theme: lastDay?.city ? `Exploring ${lastDay.city}` : undefined,
+      activities: [],
+      city: lastDay?.city,
+      country: lastDay?.country,
+    };
+
+    setDays(prev => [...prev, newDay]);
+    setHasChanges(true);
+    // Navigate to the new day
+    setTimeout(() => setSelectedDayIndex(days.length), 50);
+    toast.success('Day added — add activities and save when ready.');
+  }, [days, startDate, setDays]);
+
+  const handleRemoveDay = useCallback((dayIndex: number) => {
+    if (days.length <= 1) {
+      toast.error("Can't remove the only day in your trip.");
+      return;
+    }
+    const dayTitle = days[dayIndex]?.title || days[dayIndex]?.theme || `Day ${dayIndex + 1}`;
+    if (!window.confirm(`Remove "${dayTitle}"? All activities for this day will be deleted.`)) return;
+
+    setDays(prev =>
+      prev
+        .filter((_, i) => i !== dayIndex)
+        .map((d, i) => {
+          // Re-number days and recalculate dates
+          let newDate = d.date;
+          try {
+            if (startDate) {
+              const dt = addDays(parseLocalDate(startDate), i);
+              newDate = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+            }
+          } catch { /* keep original */ }
+          return { ...d, dayNumber: i + 1, date: newDate };
+        })
+    );
+    setHasChanges(true);
+    if (selectedDayIndex >= days.length - 1) {
+      setSelectedDayIndex(Math.max(0, days.length - 2));
+    }
+    toast.success('Day removed — save to confirm.');
+  }, [days, startDate, setDays, selectedDayIndex]);
 
   // Full itinerary regeneration — now uses day-by-day pattern matching original generation
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -4339,6 +4411,24 @@ export function EditorialItinerary({
                         </button>
                       );
                     })}
+                    {/* Add Day button in day picker */}
+                    {effectiveIsEditable && !isActivelyGenerating && (
+                      <Tooltip delayDuration={200}>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={handleAddDay}
+                            className="flex flex-col items-center justify-center px-2 py-2 rounded-xl border border-dashed border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all min-w-[52px] text-muted-foreground hover:text-primary"
+                          >
+                            <Plus className="h-4 w-4" />
+                            <span className="text-[9px] font-medium mt-0.5">Add</span>
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                          <span className="text-xs">Add another day to your trip</span>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
                   </div>
                 </div>
 
@@ -4686,6 +4776,7 @@ export function EditorialItinerary({
                           onActivityRemove={handleActivityRemove}
                           onDayLock={handleDayLock}
                           onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
+                          onRemoveDay={effectiveIsEditable && !isActivelyGenerating ? () => handleRemoveDay(selectedDayIndex) : undefined}
                           onAddActivity={(afterIndex?: number) => setAddActivityModal({ dayIndex: selectedDayIndex, afterIndex })}
                           onDiscover={() => setDiscoverDrawerOpen(true)}
                           onImportActivities={() => setImportModal({ dayIndex: selectedDayIndex })}
@@ -7308,6 +7399,7 @@ interface DayCardProps {
   onActivityReorder?: (activities: EditorialActivity[]) => void; // Drag-and-drop reorder
   onDayLock: (dayIndex: number) => void;
   onDayRegenerate: () => void;
+  onRemoveDay?: () => void;
   onAddActivity: (afterIndex?: number) => void;
   onDiscover?: () => void;
   onImportActivities?: () => void;
@@ -7369,6 +7461,7 @@ function DayCard({
   onActivityReorder,
   onDayLock,
   onDayRegenerate,
+  onRemoveDay,
   onAddActivity,
   onDiscover,
   onImportActivities,
@@ -7606,6 +7699,15 @@ function DayCard({
                             <RefreshCw className={cn("h-3.5 w-3.5 mr-2", isRegenerating && "animate-spin")} />
                             Regenerate Day
                           </DropdownMenuItem>
+                        )}
+                        {onRemoveDay && totalDays > 1 && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={onRemoveDay} className="text-destructive focus:text-destructive">
+                              <Trash2 className="h-3.5 w-3.5 mr-2" />
+                              Remove Day
+                            </DropdownMenuItem>
+                          </>
                         )}
                       </>
                     )}
