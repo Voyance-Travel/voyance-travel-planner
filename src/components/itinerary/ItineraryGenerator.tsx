@@ -194,32 +194,9 @@ export function ItineraryGenerator({
       }
     },
     onFailed: async (err) => {
-      // CRITICAL: Before showing error, verify itinerary doesn't actually exist
-      try {
-        const { data: verifyTrip } = await supabase
-          .from('trips')
-          .select('itinerary_data')
-          .eq('id', tripId)
-          .single();
-        const verifyData = verifyTrip?.itinerary_data as { days?: unknown[] } | null;
-        if (verifyData?.days?.length && verifyData.days.length > 0) {
-          console.log('[ItineraryGenerator] onFailed suppressed — itinerary exists with', verifyData.days.length, 'days');
-          // Itinerary is fine — treat as success
-          setPrePhase(null);
-          const gr = gateResultRef.current;
-          await new Promise(r => setTimeout(r, 2000));
-          onComplete(verifyData.days as GeneratedDay[], undefined, gr?.isFirstTrip);
-          setServerGenActive(false);
-          return;
-        }
-      } catch (verifyErr) {
-        console.warn('[ItineraryGenerator] Could not verify DB state on failure:', verifyErr);
-      }
-
       setServerGenActive(false);
-      setPrePhase(null);
-      setHasStarted(false);
-      toast.error(`Generation failed: ${err}. Credits for ungenerated days have been refunded.`, { duration: 6000 });
+      setPrePhase('preparing');
+      await suppressErrorAndRecover('poller.onFailed', err);
       if (userId) {
         queryClient.invalidateQueries({ queryKey: ['credits', userId] });
         queryClient.invalidateQueries({ queryKey: ['entitlements', userId] });
