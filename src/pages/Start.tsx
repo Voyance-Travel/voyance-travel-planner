@@ -2470,6 +2470,7 @@ export default function Start() {
           nights: nights > 0 ? nights : 1,
           generation_status: 'pending' as const,
           days_total: days > 0 ? days : 1,
+          hotel_selection: hotelSelection && hotelSelection.length > 0 ? hotelSelection : null,
         };
         const { error: singleCityError } = await supabase.from('trip_cities').insert(singleCityRow as any);
         if (singleCityError) {
@@ -2694,7 +2695,7 @@ export default function Start() {
                               nights: city.nights,
                               generation_status: 'pending',
                               days_generated: 0,
-                              days_total: city.nights,
+                              days_total: (city.nights || 1) + 1, // Inclusive day count: nights + 1
                               transport_type: idx > 0 ? (details.cityTransports?.[idx - 1] || null) : null,
                             };
                           });
@@ -2725,7 +2726,7 @@ export default function Start() {
                             nights,
                             generation_status: 'pending',
                             days_generated: 0,
-                            days_total: nights,
+                            days_total: nights + 1, // Inclusive day count: nights + 1
                           } as any);
                           if (singleErr) {
                             logger.error('[Start] trip_cities insert failed for single-city trip:', singleErr);

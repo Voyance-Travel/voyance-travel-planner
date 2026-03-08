@@ -173,7 +173,11 @@ export function useItineraryGeneration() {
           // For multi-city, derive totalDays from sum of city nights to prevent
           // date-arithmetic mismatches (stale end_date, off-by-one) from producing
           // extra/missing days or cycling through only some cities
-          const sumNights = cities.reduce((sum, c) => sum + (c.nights || c.days_total || 1), 0);
+          // Use nights directly. If nights is missing, derive from days_total (inclusive) by subtracting 1.
+          const sumNights = cities.reduce((sum, c) => {
+            const n = c.nights || ((c.days_total || 2) - 1);
+            return sum + Math.max(1, n);
+          }, 0);
           if (sumNights > 0 && sumNights !== totalDays) {
             console.log(`[useItineraryGeneration] Multi-city totalDays corrected: date-based=${totalDays}, city-nights-sum=${sumNights}`);
             totalDays = sumNights;
@@ -182,7 +186,8 @@ export function useItineraryGeneration() {
           // Build day→city mapping
           const map: typeof dayCityMap = [];
           for (const city of cities) {
-            const nights = city.nights || city.days_total || 1;
+            // Use nights directly. If nights is missing, derive from days_total by subtracting 1.
+            const nights = city.nights || Math.max(1, ((city.days_total || 2) - 1));
             for (let n = 0; n < nights; n++) {
               const isTransition = n === 0 && city.city_order > 0 && (city as any).transition_day_mode !== 'skip';
               const prevCity = city.city_order > 0 ? cities.find(c => c.city_order === city.city_order - 1) : null;
