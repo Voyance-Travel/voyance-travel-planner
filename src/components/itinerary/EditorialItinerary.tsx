@@ -8328,18 +8328,18 @@ function ActivityRow({
               </DropdownMenuItem>
               {activityIndex > 0 && (
                 <DropdownMenuItem onClick={() => onMove(dayIndex, activity.id, 'up')} className="cursor-pointer gap-2 text-xs">
-                  <ArrowUp className="h-3 w-3" /> Move Up
+                  <MoveUp className="h-3 w-3" /> Move Up
                 </DropdownMenuItem>
               )}
               {activityIndex < totalActivities - 1 && (
                 <DropdownMenuItem onClick={() => onMove(dayIndex, activity.id, 'down')} className="cursor-pointer gap-2 text-xs">
-                  <ArrowDown className="h-3 w-3" /> Move Down
+                  <MoveDown className="h-3 w-3" /> Move Down
                 </DropdownMenuItem>
               )}
               {onMoveToDay && totalDays > 1 && (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger className="cursor-pointer gap-2 text-xs">
-                    <CalendarDays className="h-3 w-3" /> Move to Day
+                    <Calendar className="h-3 w-3" /> Move to Day
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
                     {Array.from({ length: totalDays }, (_, d) => d).filter(d => d !== dayIndex).map(d => (
