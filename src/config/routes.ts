@@ -56,6 +56,7 @@ export const ROUTES = {
     DASHBOARD: '/trip/dashboard',
     DETAIL: '/trip/:tripId',
     NEW: '/trip/new',
+    GUIDE: '/trip/:tripId/guide',
   },
   
   // Itinerary
