@@ -2045,6 +2045,7 @@ export default function TripDetail() {
                       }}
                     />
                     </ErrorBoundary>
+                    {!isPastTripView && (
                     <ErrorBoundary>
                     {tripCities.length > 1 ? (
                       tripCities.map((city) => (
@@ -2075,6 +2076,7 @@ export default function TripDetail() {
                       />
                     )}
                     </ErrorBoundary>
+                    )}
                   </div>
 
 
