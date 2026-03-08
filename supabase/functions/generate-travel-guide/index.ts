@@ -157,7 +157,7 @@ serve(async (req) => {
       const dayActivities = activities.filter((a: any) => a.itinerary_day_id === day.id);
       if (dayActivities.length === 0) continue;
 
-      daysContext += `\nDay ${day.day_number}${day.date ? ` — ${day.date}` : ''}${day.city ? ` — ${day.city}` : ''}:\n`;
+      daysContext += `\nDay ${day.day_number}${day.date ? ` — ${day.date}` : ''}${day.title ? ` — ${day.title}` : ''}:\n`;
       if (day.theme) daysContext += `  Theme: ${day.theme}\n`;
 
       for (const act of dayActivities) {
