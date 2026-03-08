@@ -353,7 +353,7 @@ export async function deleteLedgerEntry(entryId: string): Promise<boolean> {
 export async function getBudgetSummary(tripId: string, totalDays?: number): Promise<BudgetSummary | null> {
   // Get settings
   const settings = await getTripBudgetSettings(tripId);
-  if (!settings || !settings.budget_total_cents) {
+  if (!settings || !settings.budget_total_cents || settings.budget_total_cents <= 0) {
     return null;
   }
   
@@ -390,9 +390,10 @@ export async function getBudgetSummary(tripId: string, totalDays?: number): Prom
   // Include planned amounts in the used total so budget reflects itinerary estimates
   const totalUsed = totalCommitted + plannedTotal;
   
-  // Calculate remaining based on committed + planned
-  const remaining = settings.budget_total_cents - totalUsed;
-  const usedPercent = (totalUsed / settings.budget_total_cents) * 100;
+  // Calculate remaining based on committed + planned (with NaN guard)
+  const budgetTotal = settings.budget_total_cents || 0;
+  const remaining = budgetTotal - totalUsed;
+  const usedPercent = budgetTotal > 0 ? (totalUsed / budgetTotal) * 100 : 0;
   
   // Calculate daily target
   const days = totalDays || 7;

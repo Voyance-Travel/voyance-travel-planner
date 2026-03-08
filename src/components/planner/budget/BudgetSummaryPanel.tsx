@@ -52,7 +52,7 @@ export function BudgetSummaryPanel({
     }).format(cents / 100);
   };
 
-  const usedPercent = Math.min(summary.usedPercent, 150);
+  const usedPercent = summary.budgetTotalCents > 0 ? Math.min(summary.usedPercent, 150) : 0;
   const progressColor = summary.status === 'red' ? 'bg-destructive' :
                         summary.status === 'yellow' ? 'bg-yellow-500' :
                         summary.status === 'on_track' ? 'bg-primary' : 'bg-green-500';
@@ -79,7 +79,7 @@ export function BudgetSummaryPanel({
               {formatCurrency(summary.remainingCents)} remaining
             </p>
             <p className="text-xs text-muted-foreground">
-              of {formatCurrency(summary.budgetTotalCents)} total
+              of {formatCurrency(summary.budgetTotalCents || 0)} total
             </p>
           </div>
         </div>

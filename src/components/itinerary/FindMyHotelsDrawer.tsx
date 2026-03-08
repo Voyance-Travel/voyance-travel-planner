@@ -24,6 +24,7 @@ import { useSpendCredits } from '@/hooks/useSpendCredits';
 import { useDNAHotelRecommendations, type DNARecommendedHotel, type IdealHotelProfile } from '@/hooks/useDNAHotelRecommendations';
 import { CREDIT_COSTS } from '@/config/pricing';
 import { saveHotelSelection } from '@/services/supabase/trips';
+import { syncHotelToLedger } from '@/services/budgetLedgerSync';
 
 interface FindMyHotelsDrawerProps {
   tripId: string;
@@ -142,13 +143,26 @@ export function FindMyHotelsDrawer({
     if (isSavingHotel) return;
     setIsSavingHotel(true);
     try {
+      // Calculate nights for total price
+      const nights = (() => {
+        if (startDate && endDate) {
+          return Math.max(1, Math.ceil(
+            (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)
+          ));
+        }
+        return 1;
+      })();
+
       const hotelData = {
         id: hotel.id,
         name: hotel.name,
         address: hotel.neighborhood || undefined,
         starRating: hotel.stars || undefined,
         pricePerNight: hotel.pricePerNight || undefined,
+        totalPrice: hotel.pricePerNight ? hotel.pricePerNight * nights : undefined,
         imageUrl: hotel.imageUrl || undefined,
+        checkIn: startDate || undefined,
+        checkOut: endDate || undefined,
       };
 
       if (cityId) {
@@ -158,14 +172,19 @@ export function FindMyHotelsDrawer({
           .from('trip_cities')
           .update({
             hotel_selection: JSON.parse(JSON.stringify(hotelData)),
-            hotel_cost_cents: Math.round((hotel.pricePerNight || 0) * 100),
+            hotel_cost_cents: Math.round((hotelData.totalPrice || hotel.pricePerNight || 0) * 100),
           } as any)
           .eq('id', cityId);
         if (error) throw error;
       } else {
-        // Single-city: save to trips table (existing behavior)
+        // Single-city: save to trips table
         await saveHotelSelection(tripId, hotelData);
       }
+
+      // Sync hotel cost to budget ledger (non-critical)
+      await syncHotelToLedger(tripId, hotelData).catch(err => {
+        console.warn('[FindMyHotelsDrawer] Budget sync failed (non-critical):', err);
+      });
 
       setSelectedHotelId(hotel.id);
       toast.success(`${hotel.name} saved to your trip!`);
@@ -179,7 +198,7 @@ export function FindMyHotelsDrawer({
     } finally {
       setIsSavingHotel(false);
     }
-  }, [tripId, cityId, isSavingHotel, onHotelSelected]);
+  }, [tripId, cityId, startDate, endDate, isSavingHotel, onHotelSelected]);
 
   // Top 10 sorted by match score (already sorted by the hook)
   const displayHotels = recommendations.slice(0, 10);
