@@ -126,7 +126,51 @@ export default function GuideBuilder() {
     d.activities.map((a: any) => ({ id: a.id, name: `Day ${d.dayNumber}: ${a.name}` }))
   );
 
-  // Seed form
+  // Auto-select all days on load
+  useEffect(() => {
+    if (tripDays.length > 0 && selectedDays.size === 0) {
+      setSelectedDays(new Set(tripDays.map((d: any) => d.dayNumber)));
+    }
+  }, [tripDays.length]);
+
+  // Bulk add selected content to guide sections
+  const addSelectedContentToGuide = () => {
+    const newSections: any[] = [];
+
+    Array.from(selectedDays).sort((a, b) => a - b).forEach((dayNum) => {
+      const day = tripDays.find((d: any) => d.dayNumber === dayNum);
+      if (!day) return;
+
+      newSections.push({
+        id: crypto.randomUUID(),
+        sectionType: 'day_overview',
+        title: day.title,
+        body: day.theme || '',
+        linkedDayNumber: dayNum,
+        sortOrder: newSections.length,
+      });
+
+      day.activities.forEach((activity: any) => {
+        if (excludedActivities.has(activity.id)) return;
+
+        newSections.push({
+          id: crypto.randomUUID(),
+          sectionType: 'activity',
+          title: activity.title,
+          body: activity.tips || '',
+          linkedDayNumber: dayNum,
+          linkedActivityId: activity.id,
+          activitySnapshot: activity,
+          photoUrl: activity.photos?.[0] || undefined,
+          sortOrder: newSections.length,
+        });
+      });
+    });
+
+    setSections(prev => [...prev, ...newSections]);
+    toast.success(`Added ${newSections.length} sections from ${selectedDays.size} day${selectedDays.size !== 1 ? 's' : ''}`);
+  };
+
   useEffect(() => {
     if (existingGuide) {
       setForm({
