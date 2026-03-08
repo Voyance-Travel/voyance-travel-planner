@@ -23,7 +23,7 @@ import {
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
   Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2, ClipboardPaste, Compass, Bus, Ship, ArrowRight, Droplets, Wrench,
-  Footprints, Navigation2,
+  Footprints, Navigation2, History as HistoryIcon,
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
