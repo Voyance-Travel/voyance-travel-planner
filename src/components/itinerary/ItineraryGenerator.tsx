@@ -351,6 +351,8 @@ export function ItineraryGenerator({
     setHasStarted(true);
     setShowGenericWarning(false);
     setShowCostConfirm(false);
+    setGenerationIssueSince(null);
+    setShowRetryButton(false);
 
     // Pre-generation phases (matches the newer streaming UX)
     setPrePhase('gathering-dna');
@@ -615,17 +617,22 @@ export function ItineraryGenerator({
     };
     checkStatus();
 
-    // Visibility change handler: re-check status when user returns to tab
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && (serverGenActive || hasStarted)) {
-        checkStatus();
+    // Visibility/focus handlers: when user returns, re-check DB first (never show hard error)
+    const handleVisibility = async () => {
+      if (document.visibilityState === 'visible') {
+        await recoverFromDatabase().catch(() => undefined);
       }
     };
+    const handleFocus = async () => {
+      await recoverFromDatabase().catch(() => undefined);
+    };
     document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
 
     return () => {
       cancelled = true;
       document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [tripId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1011,23 +1018,19 @@ export function ItineraryGenerator({
         animate={{ opacity: 1 }}
         className="text-center py-16"
       >
-        <div className="max-w-md mx-auto">
-          <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-6">
-            <AlertCircle className="h-8 w-8 text-destructive" />
-          </div>
-          
-          <h2 className="text-xl font-semibold mb-2">Something Went Wrong</h2>
-          <p className="text-muted-foreground mb-6">{error}</p>
-          
-          <div className="flex gap-3 justify-center">
-            <Button variant="outline" onClick={() => { reset(); setHasStarted(false); }}>
-              Go Back
-            </Button>
+        <div className="max-w-md mx-auto space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+          <h2 className="text-xl font-semibold">Checking your itinerary status…</h2>
+          <p className="text-muted-foreground">
+            We’re reconnecting and verifying your generated days in the background.
+          </p>
+
+          {showRetryButton && (
             <Button onClick={handleRetry} className="gap-2">
               <RefreshCw className="h-4 w-4" />
-              Try Again
+              Generation didn't complete. Try again?
             </Button>
-          </div>
+          )}
         </div>
       </motion.div>
     );
