@@ -2043,7 +2043,18 @@ function FlightHotelStep({
                     }
                     // Save to the correct state
                     if (editingHotelCity) {
-                      setManualHotels({ ...manualHotels, [editingHotelCity]: currentHotel });
+                      const cityHotels = [...(manualHotels[editingHotelCity] || [])];
+                      const hotelWithDates = {
+                        ...currentHotel,
+                        checkInDate: currentHotel.checkInDate || (editingCityDest?.arrivalDate || startDate),
+                        checkOutDate: currentHotel.checkOutDate || (editingCityDest?.departureDate || endDate),
+                      };
+                      if (editingHotelIndex !== null && editingHotelIndex < cityHotels.length) {
+                        cityHotels[editingHotelIndex] = hotelWithDates;
+                      } else {
+                        cityHotels.push(hotelWithDates);
+                      }
+                      setManualHotels({ ...manualHotels, [editingHotelCity]: cityHotels });
                       setHotelChoice('own');
                     } else if (isListMode) {
                       if (editingHotelIndex !== null && editingHotelIndex < manualHotelList.length) {
@@ -2480,15 +2491,19 @@ export default function Start() {
             : null,
           generation_status: 'pending' as const,
           days_total: (d.nights || 1) + 1, // Inclusive day count: nights + 1
-          hotel_selection: manualHotels[d.city]?.name ? [{
-            name: manualHotels[d.city].name,
-            address: manualHotels[d.city].address,
-            neighborhood: manualHotels[d.city].neighborhood,
-            checkInTime: manualHotels[d.city].checkInTime,
-            checkOutTime: manualHotels[d.city].checkOutTime,
-            pricePerNight: manualHotels[d.city].pricePerNight || undefined,
-            source: 'manual',
-          }] : null,
+          hotel_selection: (manualHotels[d.city] && manualHotels[d.city].length > 0)
+            ? manualHotels[d.city].filter(h => h.name).map(h => ({
+                name: h.name,
+                address: h.address,
+                neighborhood: h.neighborhood,
+                checkInTime: h.checkInTime,
+                checkOutTime: h.checkOutTime,
+                checkInDate: h.checkInDate || undefined,
+                checkOutDate: h.checkOutDate || undefined,
+                pricePerNight: h.pricePerNight || undefined,
+                source: 'manual',
+              }))
+            : null,
         }));
 
         const { error: citiesError } = await supabase.from('trip_cities').insert(cityRows as any[]);
