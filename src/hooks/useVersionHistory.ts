@@ -8,6 +8,7 @@ import {
   canUndo, 
   undoLastChange, 
   getDayVersionHistory,
+  restoreVersion,
   formatVersionLabel,
   type ItineraryVersion
 } from '@/services/itineraryVersionHistory';
@@ -25,6 +26,7 @@ interface UseVersionHistoryReturn {
   versions: ItineraryVersion[];
   isLoadingVersions: boolean;
   handleUndo: () => Promise<void>;
+  handleRestoreVersion: (versionNumber: number) => Promise<void>;
   refreshUndoState: () => Promise<void>;
   loadVersionHistory: () => Promise<void>;
 }
@@ -84,7 +86,6 @@ export function useVersionHistory({
       const result = await undoLastChange(tripId, dayNumber);
       
       if (result.success && result.activities) {
-        // Notify parent to update UI
         onRestore?.(result.activities, result.metadata);
         
         toast({
@@ -92,7 +93,6 @@ export function useVersionHistory({
           description: `Day ${dayNumber} has been restored`,
         });
         
-        // Refresh undo state
         await refreshUndoState();
       } else {
         toast({
@@ -113,12 +113,49 @@ export function useVersionHistory({
     }
   }, [tripId, dayNumber, onRestore, toast, refreshUndoState]);
 
+  // Handle restoring a specific version by number
+  const handleRestoreVersion = useCallback(async (versionNumber: number) => {
+    if (!tripId) return;
+
+    setIsUndoing(true);
+    try {
+      const result = await restoreVersion(tripId, dayNumber, versionNumber);
+
+      if (result.success && result.activities) {
+        onRestore?.(result.activities, result.metadata);
+        toast({
+          title: 'Version restored',
+          description: `Day ${dayNumber} restored to version ${versionNumber}`,
+        });
+        await refreshUndoState();
+        // Refresh the version list too
+        await loadVersionHistory();
+      } else {
+        toast({
+          title: 'Restore failed',
+          description: result.error || 'Could not restore version',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('[useVersionHistory] Restore version error:', error);
+      toast({
+        title: 'Restore failed',
+        description: 'Something went wrong. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUndoing(false);
+    }
+  }, [tripId, dayNumber, onRestore, toast, refreshUndoState, loadVersionHistory]);
+
   return {
     canUndoDay,
     isUndoing,
     versions,
     isLoadingVersions,
     handleUndo,
+    handleRestoreVersion,
     refreshUndoState,
     loadVersionHistory,
   };
