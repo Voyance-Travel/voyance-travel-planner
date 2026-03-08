@@ -370,6 +370,14 @@ export default function TripRecap() {
               </Button>
             )}
             <Button 
+              variant="outline"
+              className="flex-1"
+              onClick={() => navigate(`/trip/${tripId}/travel-guide`)}
+            >
+              <BookOpen className="w-4 h-4 mr-2" />
+              Build Travel Guide
+            </Button>
+            <Button 
               className="flex-1"
               onClick={async () => {
                 if (navigator.share) {
