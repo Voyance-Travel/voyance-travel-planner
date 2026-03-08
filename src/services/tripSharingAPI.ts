@@ -116,9 +116,10 @@ export async function getTravelers(tripId: string): Promise<TravelersResponse> {
   if (error) throw new Error(error.message);
 
   // Also get trip owner
-  const { data: trip } = (await supabase
+  const tripQuery = supabase
     .from('trips')
-    .select('user_id, profiles:user_id (id, display_name, avatar_url)')
+    .select('user_id, profiles:user_id (id, display_name, avatar_url)');
+  const { data: trip } = (await (tripQuery as any)
     .eq('id', tripId)
     .single()) as { data: any };
 
