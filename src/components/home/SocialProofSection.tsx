@@ -94,6 +94,10 @@ function TestimonialCard({ testimonial }: { testimonial: typeof BETA_TESTIMONIAL
 }
 
 export default function SocialProofSection() {
+  const { data: metrics } = usePlatformMetrics();
+  const tripsBuilt = metrics?.tripsBuilt ?? FALLBACK_METRICS.tripsBuilt;
+  const destinations = metrics?.destinations ?? FALLBACK_METRICS.destinations;
+
   return (
     <section className="py-16 sm:py-24 md:py-32 bg-muted/20 relative overflow-hidden">
       <div className="max-w-6xl mx-auto px-4 sm:px-8 md:px-16">
@@ -172,19 +176,19 @@ export default function SocialProofSection() {
         >
           <div className="text-center">
             <p className="text-3xl md:text-4xl font-serif text-foreground mb-1">
-              {REAL_METRICS.tripsBuilt}
+              {tripsBuilt.toLocaleString()}
             </p>
             <p className="text-sm text-muted-foreground">Trips Built</p>
           </div>
           <div className="text-center">
             <p className="text-3xl md:text-4xl font-serif text-foreground mb-1">
-              {REAL_METRICS.archetypesAvailable}
+              29
             </p>
-            <p className="text-sm text-muted-foreground">Travel Archetypes</p>
+            <p className="text-sm text-muted-foreground">Travel DNA Profiles</p>
           </div>
           <div className="text-center">
             <p className="text-3xl md:text-4xl font-serif text-foreground mb-1">
-              {REAL_METRICS.destinations.toLocaleString()}
+              {destinations.toLocaleString()}
             </p>
             <p className="text-sm text-muted-foreground">Destinations</p>
           </div>
