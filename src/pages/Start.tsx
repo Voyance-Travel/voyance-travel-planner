@@ -1858,6 +1858,7 @@ function FlightHotelStep({
                       placeholder={accomType === 'airbnb' ? 'e.g. Cozy French Quarter Loft' : 'e.g. Beachfront Villa'}
                       value={currentHotel.name}
                       onChange={(e) => setCurrentHotel({ ...currentHotel, name: e.target.value })}
+                      className="text-xs h-8"
                     />
                   )}
                   {isHotelType && (
@@ -1873,6 +1874,7 @@ function FlightHotelStep({
                     placeholder="e.g. 15 Place Vendôme, 75001 Paris"
                     value={currentHotel.address}
                     onChange={(e) => setCurrentHotel({ ...currentHotel, address: e.target.value })}
+                    className="text-xs h-8"
                   />
                 </div>
                 
@@ -1882,6 +1884,7 @@ function FlightHotelStep({
                     placeholder="e.g. 1st Arrondissement"
                     value={currentHotel.neighborhood || ''}
                     onChange={(e) => setCurrentHotel({ ...currentHotel, neighborhood: e.target.value })}
+                    className="text-xs h-8"
                   />
                 </div>
                 
@@ -1892,7 +1895,7 @@ function FlightHotelStep({
                       type="time"
                       value={currentHotel.checkInTime || '15:00'}
                       onChange={(e) => setCurrentHotel({ ...currentHotel, checkInTime: e.target.value })}
-                      className="w-full"
+                      className="text-xs h-8 w-full"
                     />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -1901,7 +1904,7 @@ function FlightHotelStep({
                       type="time"
                       value={currentHotel.checkOutTime || '11:00'}
                       onChange={(e) => setCurrentHotel({ ...currentHotel, checkOutTime: e.target.value })}
-                      className="w-full"
+                      className="text-xs h-8 w-full"
                     />
                   </div>
                 </div>
@@ -1917,6 +1920,7 @@ function FlightHotelStep({
                         min={startDate}
                         max={endDate}
                         onChange={(e) => setCurrentHotel({ ...currentHotel, checkInDate: e.target.value })}
+                        className="text-xs h-8"
                       />
                     </div>
                     <div>
@@ -1927,6 +1931,7 @@ function FlightHotelStep({
                         min={currentHotel.checkInDate || startDate}
                         max={endDate}
                         onChange={(e) => setCurrentHotel({ ...currentHotel, checkOutDate: e.target.value })}
+                        className="text-xs h-8"
                       />
                     </div>
                   </div>
@@ -1942,7 +1947,7 @@ function FlightHotelStep({
                         type="number"
                         min={0}
                         placeholder="e.g. 450"
-                        className="pl-9"
+                        className="pl-9 text-xs h-8"
                         value={currentHotel.pricePerNight || ''}
                         onChange={(e) => setCurrentHotel({ ...currentHotel, pricePerNight: e.target.value ? Number(e.target.value) : undefined })}
                       />
