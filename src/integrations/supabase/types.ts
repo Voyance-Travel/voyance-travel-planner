@@ -3929,6 +3929,63 @@ export type Database = {
           },
         ]
       }
+      guide_manual_entries: {
+        Row: {
+          category: string
+          created_at: string
+          day_number: number
+          description: string | null
+          external_url: string | null
+          id: string
+          name: string
+          sort_order: number
+          trip_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          day_number?: number
+          description?: string | null
+          external_url?: string | null
+          id?: string
+          name: string
+          sort_order?: number
+          trip_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          day_number?: number
+          description?: string | null
+          external_url?: string | null
+          id?: string
+          name?: string
+          sort_order?: number
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guide_manual_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "guide_manual_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guide_reports: {
         Row: {
           created_at: string
