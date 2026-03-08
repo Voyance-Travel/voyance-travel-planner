@@ -17,14 +17,17 @@ import { Textarea } from '@/components/ui/textarea';
 import { motion } from 'framer-motion';
 import {
   BookOpen, ArrowLeft, Trash2, Save, Globe, Loader2, MapPin,
-  Copy, ExternalLink, EyeOff, PartyPopper, Plus, Eye, Calendar, Clock,
+  Copy, ExternalLink, EyeOff, PartyPopper, Plus, Eye, Calendar, Clock, Link2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import PublishConfirmModal from '@/components/guides/PublishConfirmModal';
 import GuideActivityCard from '@/components/guides/GuideActivityCard';
 import AddRecommendationModal from '@/components/guides/AddRecommendationModal';
+import AddContentLinkModal from '@/components/guides/AddContentLinkModal';
+import ContentLinkCard from '@/components/guides/ContentLinkCard';
 import GuidePreview from '@/components/guides/GuidePreview';
+import { useGuideContentLinks } from '@/hooks/useGuideContentLinks';
 import {
   useGuideFavorites,
   useManualEntries,
