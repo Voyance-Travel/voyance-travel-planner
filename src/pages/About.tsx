@@ -292,7 +292,7 @@ export default function About() {
       />
       
       {/* Hero Section - Your Vision */}
-      <section className="relative pt-20 pb-12 md:pt-32 md:pb-24 overflow-hidden">
+      <section className="relative pt-28 pb-20 md:pt-44 md:pb-36 lg:pt-52 lg:pb-44 overflow-hidden">
         {/* Background gradient */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-accent/5" />
         <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-primary/10 to-transparent" />
@@ -301,27 +301,27 @@ export default function About() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="max-w-3xl"
+            className="max-w-4xl"
           >
             <motion.span 
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2 }}
-              className="inline-block text-primary text-xs md:text-sm font-medium uppercase tracking-[0.2em] mb-4 md:mb-6"
+              className="inline-block text-primary text-sm md:text-base font-medium uppercase tracking-[0.2em] mb-5 md:mb-8"
             >
               Why We Exist
             </motion.span>
-            <h1 className="font-serif text-3xl md:text-6xl lg:text-7xl font-bold mb-4 md:mb-8 leading-[1.1]">
+            <h1 className="font-serif text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-bold mb-6 md:mb-10 leading-[1.08]">
               Travel{' '}
               <span className="text-primary italic">designed</span>,
               <br />
               not consumed.
             </h1>
-            <p className="text-base md:text-xl text-muted-foreground leading-relaxed max-w-2xl">
+            <p className="text-lg md:text-2xl text-muted-foreground leading-relaxed max-w-2xl">
               Voyance started because travel planning online isn't planning. It's being marketed to. 
               Endless lists. Sponsored content. 40 tabs of noise.
             </p>
-            <p className="text-base md:text-xl text-foreground font-medium mt-4 md:mt-6 max-w-2xl">
+            <p className="text-lg md:text-2xl text-foreground font-medium mt-5 md:mt-8 max-w-2xl">
               We built the opposite: research-backed itineraries designed around you, not trends.
             </p>
           </motion.div>
