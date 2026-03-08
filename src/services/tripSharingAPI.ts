@@ -568,6 +568,7 @@ export function useAcceptTripInvitation() {
     mutationFn: (tripId: string) => acceptTripInvitation(tripId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['shared-trips'] });
+      queryClient.invalidateQueries({ queryKey: ['trips-lightweight'] });
       queryClient.invalidateQueries({ queryKey: ['trips'] });
     },
   });

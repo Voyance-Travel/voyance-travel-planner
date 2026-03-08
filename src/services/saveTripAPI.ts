@@ -133,6 +133,7 @@ export function useCreateSaveTrip() {
   return useMutation({
     mutationFn: createSaveTrip,
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['trips-lightweight'] });
       queryClient.invalidateQueries({ queryKey: ['trips'] });
     },
   });

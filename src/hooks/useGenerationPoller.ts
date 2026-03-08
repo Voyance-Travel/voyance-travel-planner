@@ -323,10 +323,11 @@ export function useGenerationPoller({
     // Initial poll — immediate
     poll();
 
-    // Interval-based polling as fallback
+    // Interval-based polling as fallback (8s instead of 2s — realtime handles instant updates)
+    const fallbackInterval = Math.max(interval, 8000);
     const timer = setInterval(() => {
       poll();
-    }, interval);
+    }, fallbackInterval);
 
     // Tab visibility handler: when user returns from background, immediately poll
     // and suppress stalled/failed transitions for a grace period
@@ -345,6 +346,16 @@ export function useGenerationPoller({
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
+    // Debounce realtime-triggered polls to avoid rapid consecutive queries
+    let lastRealtimePollTime = 0;
+    const debouncedPoll = () => {
+      const now = Date.now();
+      if (now - lastRealtimePollTime > 3000) { // At most once per 3 seconds
+        lastRealtimePollTime = now;
+        poll();
+      }
+    };
+
     // Realtime subscription for instant updates when new days are inserted
     const channel = supabase
       .channel(`gen-progress-${tripId}`)
@@ -357,8 +368,8 @@ export function useGenerationPoller({
           filter: `trip_id=eq.${tripId}`,
         },
         () => {
-          // New day inserted/updated — poll immediately for fresh state
-          poll();
+          // New day inserted/updated — poll with debounce
+          debouncedPoll();
         }
       )
       .on(
@@ -370,8 +381,8 @@ export function useGenerationPoller({
           filter: `id=eq.${tripId}`,
         },
         () => {
-          // Trip status changed — poll immediately
-          poll();
+          // Trip status changed — poll with debounce
+          debouncedPoll();
         }
       )
       .on(
@@ -383,8 +394,8 @@ export function useGenerationPoller({
           filter: `trip_id=eq.${tripId}`,
         },
         () => {
-          // City generation status changed — poll immediately
-          poll();
+          // City generation status changed — poll with debounce
+          debouncedPoll();
         }
       )
       .subscribe();
