@@ -11,6 +11,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
@@ -18,6 +20,7 @@ import { motion } from 'framer-motion';
 import {
   BookOpen, ArrowLeft, Trash2, Save, Globe, Loader2, MapPin,
   Copy, ExternalLink, EyeOff, PartyPopper, Plus, Eye, Calendar, Clock, Link2,
+  CheckSquare, XSquare,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -76,6 +79,9 @@ export default function GuideBuilder() {
   const [showPreview, setShowPreview] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editNoteValue, setEditNoteValue] = useState('');
+  const [selectedDays, setSelectedDays] = useState<Set<number>>(new Set());
+  const [excludedActivities, setExcludedActivities] = useState<Set<string>>(new Set());
+  const [sections, setSections] = useState<any[]>([]);
 
   // Content links (only available after guide is saved)
   const { contentLinks, addLink, deleteLink, isAdding: isAddingLink, isDeleting: isDeletingLink } = useGuideContentLinks(existingGuide?.id);
@@ -103,10 +109,14 @@ export default function GuideBuilder() {
     return days.map((d: any) => ({
       dayNumber: d.dayNumber || d.day_number || 0,
       title: d.title || d.theme || `Day ${d.dayNumber || d.day_number}`,
+      theme: d.theme || '',
       activities: (d.activities || []).map((a: any, idx: number) => ({
         id: a.id || a.external_id || `day${d.dayNumber || d.day_number}-act${idx}`,
         name: a.title || a.name || 'Activity',
+        title: a.title || a.name || 'Activity',
         category: a.category || '',
+        tips: a.tips || '',
+        photos: a.photos || [],
       })),
     }));
   })();
@@ -116,7 +126,51 @@ export default function GuideBuilder() {
     d.activities.map((a: any) => ({ id: a.id, name: `Day ${d.dayNumber}: ${a.name}` }))
   );
 
-  // Seed form
+  // Auto-select all days on load
+  useEffect(() => {
+    if (tripDays.length > 0 && selectedDays.size === 0) {
+      setSelectedDays(new Set(tripDays.map((d: any) => d.dayNumber)));
+    }
+  }, [tripDays.length]);
+
+  // Bulk add selected content to guide sections
+  const addSelectedContentToGuide = () => {
+    const newSections: any[] = [];
+
+    Array.from(selectedDays).sort((a, b) => a - b).forEach((dayNum) => {
+      const day = tripDays.find((d: any) => d.dayNumber === dayNum);
+      if (!day) return;
+
+      newSections.push({
+        id: crypto.randomUUID(),
+        sectionType: 'day_overview',
+        title: day.title,
+        body: day.theme || '',
+        linkedDayNumber: dayNum,
+        sortOrder: newSections.length,
+      });
+
+      day.activities.forEach((activity: any) => {
+        if (excludedActivities.has(activity.id)) return;
+
+        newSections.push({
+          id: crypto.randomUUID(),
+          sectionType: 'activity',
+          title: activity.title,
+          body: activity.tips || '',
+          linkedDayNumber: dayNum,
+          linkedActivityId: activity.id,
+          activitySnapshot: activity,
+          photoUrl: activity.photos?.[0] || undefined,
+          sortOrder: newSections.length,
+        });
+      });
+    });
+
+    setSections(prev => [...prev, ...newSections]);
+    toast.success(`Added ${newSections.length} sections from ${selectedDays.size} day${selectedDays.size !== 1 ? 's' : ''}`);
+  };
+
   useEffect(() => {
     if (existingGuide) {
       setForm({
@@ -492,6 +546,150 @@ export default function GuideBuilder() {
             </div>
           </div>
         </div>
+
+        {/* Bulk Content Selection from Trip Itinerary */}
+        {tripDays.length > 0 && (
+          <Card className="border-primary/20">
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-sm flex items-center gap-2">
+                  <CheckSquare className="h-4 w-4 text-primary" />
+                  Add Trip Content
+                </h3>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={() => {
+                      setSelectedDays(new Set(tripDays.map((d: any) => d.dayNumber)));
+                      setExcludedActivities(new Set());
+                    }}
+                  >
+                    <CheckSquare className="h-3 w-3" /> Select All
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={() => setSelectedDays(new Set())}
+                  >
+                    <XSquare className="h-3 w-3" /> Select None
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-1 max-h-80 overflow-y-auto pr-1">
+                {tripDays.map((day: any) => (
+                  <div key={day.dayNumber}>
+                    <label className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors">
+                      <Checkbox
+                        checked={selectedDays.has(day.dayNumber)}
+                        onCheckedChange={() => {
+                          setSelectedDays(prev => {
+                            const next = new Set(prev);
+                            if (next.has(day.dayNumber)) next.delete(day.dayNumber);
+                            else next.add(day.dayNumber);
+                            return next;
+                          });
+                        }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">Day {day.dayNumber}: {day.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {day.activities.length} activit{day.activities.length !== 1 ? 'ies' : 'y'}
+                          {day.theme ? ` — ${day.theme}` : ''}
+                        </p>
+                      </div>
+                    </label>
+
+                    {selectedDays.has(day.dayNumber) && day.activities.length > 0 && (
+                      <div className="ml-9 space-y-0.5 mb-1">
+                        {day.activities.map((activity: any) => (
+                          <label
+                            key={activity.id}
+                            className="flex items-center gap-2 p-1.5 rounded hover:bg-muted/30 cursor-pointer transition-colors"
+                          >
+                            <Checkbox
+                              checked={!excludedActivities.has(activity.id)}
+                              onCheckedChange={() => {
+                                setExcludedActivities(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(activity.id)) next.delete(activity.id);
+                                  else next.add(activity.id);
+                                  return next;
+                                });
+                              }}
+                            />
+                            <span className="text-sm truncate">{activity.name}</span>
+                            {activity.category && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
+                                {activity.category}
+                              </Badge>
+                            )}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <Button
+                size="sm"
+                className="w-full mt-3 gap-2"
+                disabled={selectedDays.size === 0}
+                onClick={addSelectedContentToGuide}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add {selectedDays.size} Day{selectedDays.size !== 1 ? 's' : ''} to Guide
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Sections added from bulk selection */}
+        {sections.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold">
+                Guide Sections ({sections.length})
+              </h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-destructive hover:text-destructive gap-1"
+                onClick={() => setSections([])}
+              >
+                <Trash2 className="h-3 w-3" /> Clear All
+              </Button>
+            </div>
+            {sections.map((section: any) => (
+              <div key={section.id} className="flex items-start gap-3 p-3 rounded-lg border border-border bg-card">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
+                      {section.sectionType === 'day_overview' ? 'Day' : 'Activity'}
+                    </Badge>
+                    {section.linkedDayNumber && (
+                      <span className="text-[10px] text-muted-foreground">Day {section.linkedDayNumber}</span>
+                    )}
+                  </div>
+                  <p className="text-sm font-medium mt-1 truncate">{section.title}</p>
+                  {section.body && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{section.body}</p>}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                  onClick={() => setSections(prev => prev.filter(s => s.id !== section.id))}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Content grouped by day */}
         <div className="space-y-6">
