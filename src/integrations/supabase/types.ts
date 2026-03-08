@@ -3985,6 +3985,27 @@ export type Database = {
           },
         ]
       }
+      guide_follows: {
+        Row: {
+          created_at: string | null
+          followed_id: string
+          follower_id: string
+          id: string
+        }
+        Insert: {
+          created_at?: string | null
+          followed_id: string
+          follower_id: string
+          id?: string
+        }
+        Update: {
+          created_at?: string | null
+          followed_id?: string
+          follower_id?: string
+          id?: string
+        }
+        Relationships: []
+      }
       guide_manual_entries: {
         Row: {
           category: string
