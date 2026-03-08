@@ -46,6 +46,7 @@ import { useAccessibilityStore } from '@/stores/accessibility-store';
 import { ROUTES } from '@/config/routes';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import SocialLinksEditor from '@/components/profile/SocialLinksEditor';
 
 export default function Settings() {
   const { user, logout, refreshUserData } = useAuth();
