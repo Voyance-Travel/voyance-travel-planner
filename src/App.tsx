@@ -118,6 +118,18 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+// Initialize IAP on iOS
+function IAPInitializer() {
+  useEffect(() => {
+    import('@/services/iapService').then(({ isIAPAvailable, initializeIAP }) => {
+      if (isIAPAvailable()) {
+        initializeIAP().catch(console.error);
+      }
+    });
+  }, []);
+  return null;
+}
+
 // Component to initialize image preloading
 function ImagePreloaderInit() {
   useImagePreloader();
