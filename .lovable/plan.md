@@ -1,63 +1,33 @@
 
 
-## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
+## Fix: "Trips Built" Counter Shows 0 on Homepage
 
-### What's Already Working (No Changes Needed)
-- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
-- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
-- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
-- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
+**Root Cause**: The homepage queries `supabase.from('trips').select('id', { count: 'exact', head: true })` to get a live trip count. However, homepage visitors are typically **not authenticated**, and RLS policies on the `trips` table restrict visibility to trip owners/collaborators. This returns `count: 0` (not `null`), so the fallback `?? 114` never triggers — `0` is a valid non-null number.
 
-### What's Broken — Two Things
-
-**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
-
-**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
+**Fix**: Replace the live Supabase query with a **security-definer database function** that counts all trips regardless of RLS, then call it from the frontend. This is safe because we're only exposing an aggregate count, not row data.
 
 ### Changes
 
-#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
+| File | Change |
+|------|--------|
+| **Database migration** | Create a `get_platform_trip_count()` function (`SECURITY DEFINER`) that returns `SELECT COUNT(*)::int FROM trips` — bypasses RLS safely for aggregate only |
+| **Database migration** | Create a `get_platform_destination_count()` function (`SECURITY DEFINER`) that returns `SELECT COUNT(*)::int FROM destinations` |
+| `src/components/home/SocialProofSection.tsx` | Update `usePlatformMetrics` to call these RPC functions instead of direct table queries. Also add a guard: if the returned count is `0` or query errors, use `FALLBACK_METRICS` |
 
-**Change A — Remove stall detector setup** (lines ~261-313):
-Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
+### Detail
 
-**Change B — Remove browser loop fallback** (lines ~455-469):
-Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
+The two DB functions are read-only aggregates with no user data exposure — just integer counts. The frontend hook becomes:
 
 ```typescript
-// OLD:
-} catch (serverErr) {
-  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
-  const generatedDays = await generateItinerary({ ... });
-  // ... 40 lines of fallback logic
-}
-
-// NEW:
-} catch (serverErr) {
-  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
-  setPrePhase(null);
-  setHasStarted(false);
-  toast.error('Failed to start generation. Please try again.');
-  return;
-}
+const [tripsRes, destRes] = await Promise.all([
+  supabase.rpc('get_platform_trip_count'),
+  supabase.rpc('get_platform_destination_count'),
+]);
+return {
+  tripsBuilt: tripsRes.data || FALLBACK_METRICS.tripsBuilt,
+  destinations: destRes.data || FALLBACK_METRICS.destinations,
+};
 ```
 
-**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
-
-**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
-
-#### File 2: `src/hooks/useItineraryGeneration.ts`
-
-No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
-
-### Files to Modify
-
-| File | What |
-|------|------|
-| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
-
-### Risk Assessment
-- **Low risk**: The server-side self-chaining is already fully implemented and tested
-- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
-- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
+The `|| fallback` (instead of `??`) ensures that both `null` and `0` trigger the fallback, so even if the function returns 0 unexpectedly, users see a reasonable number.
 
