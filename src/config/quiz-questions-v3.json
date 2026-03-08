@@ -86,7 +86,7 @@
           "traits": {
             "novelty_seeking": 0.2,
             "flexibility": 0.4,
-            "niche_interest": 0.35
+            "niche_interest": 0.4
           }
         },
         {
@@ -94,7 +94,8 @@
           "label": "Honestly? Nowhere. A week at home with nothing planned sounds perfect.",
           "traits": {
             "restoration_need": 0.7,
-            "novelty_seeking": 0.1
+            "novelty_seeking": 0.1,
+            "healing_focus": 0.3
           }
         },
         {
@@ -245,7 +246,8 @@
           "traits": {
             "pace": 0.7,
             "flexibility": 0.8,
-            "novelty_seeking": 0.6
+            "novelty_seeking": 0.6,
+            "nature_orientation": 0.15
           }
         },
         {
@@ -253,7 +255,8 @@
           "label": "Google if there's a reservation hack or better time.",
           "traits": {
             "planning": 0.75,
-            "status_seeking": 0.5
+            "status_seeking": 0.5,
+            "niche_interest": 0.3
           }
         },
         {
@@ -262,7 +265,8 @@
           "traits": {
             "cultural_depth": 0.8,
             "novelty_seeking": 0.7,
-            "food_focus": 0.5
+            "food_focus": 0.5,
+            "art_focus": 0.35
           }
         }
       ]
@@ -426,7 +430,8 @@
           "label": "Location. I'll sacrifice space and amenities to be in the right neighborhood.",
           "traits": {
             "planning": 0.7,
-            "pace": 0.6
+            "pace": 0.6,
+            "nature_orientation": 0.2
           }
         },
         {
@@ -633,7 +638,8 @@
           "label": "I'm actually rested. I came back better than I left.",
           "traits": {
             "restoration_need": 0.9,
-            "pace": 0.2
+            "pace": 0.2,
+            "healing_focus": 0.35
           }
         },
         {
@@ -669,7 +675,8 @@
           "label": "I'm already planning the next one.",
           "traits": {
             "novelty_seeking": 0.8,
-            "pace": 0.6
+            "pace": 0.6,
+            "photo_focus": 0.3
           }
         }
       ]
