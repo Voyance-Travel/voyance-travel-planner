@@ -1863,7 +1863,13 @@ function FlightHotelStep({
         const isHotelType = accomType === 'hotel' || accomType === 'hostel';
 
         return (
-          <Dialog open={showHotelModal} onOpenChange={setShowHotelModal}>
+          <Dialog open={showHotelModal} onOpenChange={(open) => {
+            setShowHotelModal(open);
+            if (!open) {
+              setEditingHotelCity(null);
+              setEditingHotelIndex(null);
+            }
+          }}>
             <DialogContent className="sm:max-w-[450px]">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
