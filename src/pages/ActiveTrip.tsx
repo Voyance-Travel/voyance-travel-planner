@@ -834,8 +834,8 @@ function TodayView({
         </CardContent>
       </Card>
 
-      {/* Trip Rescue Banner */}
-      {sentiment.needsRescue && !rescueDismissed && (
+      {/* Trip Rescue Banner — only for today */}
+      {!isPastDay && sentiment.needsRescue && !rescueDismissed && (
         <TripRescueBanner
           sentiment={sentiment}
           destination={trip.destination}
@@ -848,29 +848,39 @@ function TodayView({
         />
       )}
 
-      {/* Smart Swap Suggestion */}
-      <SmartSwapSuggestion
-        currentActivity={nowContext?.currentActivity ? {
-          id: nowContext.currentActivity.id,
-          name: nowContext.currentActivity.name,
-          startTime: nowContext.currentActivity.startTime,
-          endTime: nowContext.currentActivity.endTime,
-          location: nowContext.currentActivity.location,
-        } : null}
-        nextActivity={nowContext?.nextActivity ? {
-          id: nowContext.nextActivity.id,
-          name: nowContext.nextActivity.name,
-          startTime: nowContext.nextActivity.startTime,
-          endTime: nowContext.nextActivity.endTime,
-          duration: nowContext.nextActivity.duration,
-          location: nowContext.nextActivity.location,
-          type: nowContext.nextActivity.type,
-          category: nowContext.nextActivity.category,
-        } : null}
-        dayDate={todaysItinerary.date}
-        completedActivities={completedActivities}
-        onSwapRequest={handleSwapRequest}
-      />
+      {/* Smart Swap Suggestion — only for today */}
+      {!isPastDay && (
+        <SmartSwapSuggestion
+          currentActivity={nowContext?.currentActivity ? {
+            id: nowContext.currentActivity.id,
+            name: nowContext.currentActivity.name,
+            startTime: nowContext.currentActivity.startTime,
+            endTime: nowContext.currentActivity.endTime,
+            location: nowContext.currentActivity.location,
+          } : null}
+          nextActivity={nowContext?.nextActivity ? {
+            id: nowContext.nextActivity.id,
+            name: nowContext.nextActivity.name,
+            startTime: nowContext.nextActivity.startTime,
+            endTime: nowContext.nextActivity.endTime,
+            duration: nowContext.nextActivity.duration,
+            location: nowContext.nextActivity.location,
+            type: nowContext.nextActivity.type,
+            category: nowContext.nextActivity.category,
+          } : null}
+          dayDate={todaysItinerary.date}
+          completedActivities={completedActivities}
+          onSwapRequest={handleSwapRequest}
+        />
+      )}
+
+      {/* Past day indicator */}
+      {isPastDay && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+          <Check className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">This day has passed</span>
+        </div>
+      )}
 
       <div className="space-y-3">
         <h3 className="font-semibold text-muted-foreground text-sm uppercase tracking-wide">
