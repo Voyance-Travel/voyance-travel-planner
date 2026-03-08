@@ -976,8 +976,8 @@ function TodayView({
                         </div>
                       )}
 
-                      {/* Post-Activity Nudge (for completed, unrated activities) */}
-                      {isCompleted && !feedbackByActivity.has(activity.id) && (
+                      {/* Post-Activity Nudge (for completed, unrated activities — today only) */}
+                      {!isPastDay && isCompleted && !feedbackByActivity.has(activity.id) && (
                         <div className="mt-3">
                           <PostActivityNudge
                             activityId={activity.id}
@@ -992,29 +992,31 @@ function TodayView({
                         </div>
                       )}
 
-                      {/* Inline Rating + Guide Bookmark */}
-                      <div className="mt-3 pt-2 border-t border-border/30 flex items-center justify-between">
-                        <InlineActivityRating
-                          activityId={activity.id}
-                          tripId={trip.id}
-                          activityType={activity.type}
-                          activityCategory={activity.category}
-                          destination={trip.destination}
-                          existingRating={feedbackByActivity.get(activity.id) as any || null}
-                          onMediaPress={() => onMediaPress(activity.id, activity.name)}
-                          onVoicePress={() => onVoicePress(activity.id, activity.name)}
-                          compact
-                        />
-                        <GuideBookmarkButton
-                          activityId={activity.id}
-                          activityName={activity.name}
-                          tripId={trip.id}
-                          compact
-                        />
-                      </div>
+                      {/* Inline Rating + Guide Bookmark — today only */}
+                      {!isPastDay && (
+                        <div className="mt-3 pt-2 border-t border-border/30 flex items-center justify-between">
+                          <InlineActivityRating
+                            activityId={activity.id}
+                            tripId={trip.id}
+                            activityType={activity.type}
+                            activityCategory={activity.category}
+                            destination={trip.destination}
+                            existingRating={feedbackByActivity.get(activity.id) as any || null}
+                            onMediaPress={() => onMediaPress(activity.id, activity.name)}
+                            onVoicePress={() => onVoicePress(activity.id, activity.name)}
+                            compact
+                          />
+                          <GuideBookmarkButton
+                            activityId={activity.id}
+                            activityName={activity.name}
+                            tripId={trip.id}
+                            compact
+                          />
+                        </div>
+                      )}
 
-                      {/* Action Buttons */}
-                      <div className="flex items-center gap-2 mt-3">
+                      {/* Action Buttons — today only */}
+                      {!isPastDay && (
                         {activity.location && (
                           <Button size="sm" variant="outline" className="h-8 gap-1.5">
                             <Navigation className="w-3.5 h-3.5" />
