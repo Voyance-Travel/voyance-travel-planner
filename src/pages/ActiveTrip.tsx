@@ -9,6 +9,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, isToday, isBefore, isAfter, differenceInMinutes, differenceInDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
+import { openMapLocation } from '@/utils/mapNavigation';
 import {
   ArrowLeft, Calendar, MapPin, Clock, ChevronRight, Sun, Moon,
   Coffee, Sunrise, Sunset, Navigation, Ticket, Bookmark,
