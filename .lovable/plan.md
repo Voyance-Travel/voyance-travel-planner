@@ -1,63 +1,60 @@
 
+Problem confirmed. I checked the live trip records and this is reproducible in production data: chat-created trips are still being saved with 2025 dates even when created in 2026.
 
-## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
+What’s actually causing it
+1) Just Tell Us date extraction (`supabase/functions/chat-trip-planner/index.ts`) does not provide the model an explicit “today/current year = 2026” anchor, so the model frequently defaults to 2025.
+2) There is no hard post-extraction date guard in the Just Tell Us path before saving.
+3) In `TripChatPlanner.tsx`, `normalizeMultiCity` uses `new Date("YYYY-MM-DD")` (UTC parsing), which can create date drift edge cases.
 
-### What's Already Working (No Changes Needed)
-- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
-- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
-- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
-- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
+Plan to fix (targeted + durable)
 
-### What's Broken — Two Things
+1) Harden Just Tell Us prompt year rules (server side)
+- File: `supabase/functions/chat-trip-planner/index.ts`
+- Add explicit runtime date context and a minimum planning year floor:
+  - `MIN_TRIP_YEAR = 2026`
+  - `effectiveYear = max(currentYear, MIN_TRIP_YEAR)`
+- Update SYSTEM_PROMPT rules to explicitly forbid 2025 and earlier for inferred/default dates.
+- Add concrete examples in prompt:
+  - “US Open” without explicit year must resolve to 2026+.
+  - If ambiguous month/day, choose `effectiveYear` or next year.
 
-**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
+2) Add a hard date-normalization safety net before confirmation (client side)
+- File: `src/components/planner/TripChatPlanner.tsx`
+- Add `normalizeExtractedDates(details)` and run it immediately after tool-call JSON parse, before `setExtractedDetails`.
+- Rules:
+  - Parse local dates with local components (not `new Date("YYYY-MM-DD")`).
+  - Force minimum year to 2026.
+  - If normalized start date is still in the past, roll both dates forward by 1 year.
+  - Preserve trip length when shifting years.
+  - Ensure `endDate >= startDate` after normalization.
 
-**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
+3) Add final guard right before DB insert (defense in depth)
+- File: `src/pages/Start.tsx` (inside `onChatDetailsExtracted`)
+- Re-run the same normalization right before writing `trips.start_date/end_date`.
+- This prevents stale/legacy UI states or future regressions from saving 2025 again.
 
-### Changes
+4) Remove UTC parsing in chat multi-city normalization
+- File: `src/components/planner/TripChatPlanner.tsx`
+- Replace:
+  - `new Date(details.startDate)` / `new Date(details.endDate)`
+- With local-date parsing helper (`parseLocalDate`) to avoid timezone drift.
 
-#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
+Technical implementation details
+- Introduce a shared helper (recommended): `src/utils/justTellUsDateGuard.ts`
+  - `parseIsoLocal(yyyyMmDd)`
+  - `formatIsoLocal(date)`
+  - `normalizeChatTripDates({ startDate, endDate }, { minYear: 2026 })`
+- Reuse this helper in both TripChatPlanner and Start page.
+- Keep all date math in local date components (`getFullYear/getMonth/getDate`) and avoid `toISOString()` for calendar-only logic.
 
-**Change A — Remove stall detector setup** (lines ~261-313):
-Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
+Validation plan
+1) Just Tell Us: “New York for the US Open, 4 days” (no year mentioned) → confirm card must show 2026+.
+2) Just Tell Us: explicit 2025 input → normalized to 2026+ (per your requirement).
+3) Multi-city Just Tell Us route with dates crossing months → nights and date range remain consistent.
+4) DB verification query after test: no new `creation_source in ('chat','multi_city')` rows saved with year 2025.
+5) Regression check: standard Start flow (non-chat) unchanged.
 
-**Change B — Remove browser loop fallback** (lines ~455-469):
-Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
-
-```typescript
-// OLD:
-} catch (serverErr) {
-  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
-  const generatedDays = await generateItinerary({ ... });
-  // ... 40 lines of fallback logic
-}
-
-// NEW:
-} catch (serverErr) {
-  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
-  setPrePhase(null);
-  setHasStarted(false);
-  toast.error('Failed to start generation. Please try again.');
-  return;
-}
-```
-
-**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
-
-**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
-
-#### File 2: `src/hooks/useItineraryGeneration.ts`
-
-No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
-
-### Files to Modify
-
-| File | What |
-|------|------|
-| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
-
-### Risk Assessment
-- **Low risk**: The server-side self-chaining is already fully implemented and tested
-- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
-- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
-
+Expected outcome
+- 2025 will no longer be persisted from Just Tell Us.
+- Users will stop getting “past trip” defaults for event-driven plans like US Open.
+- Date handling will be consistent and timezone-safe in the chat flow.
