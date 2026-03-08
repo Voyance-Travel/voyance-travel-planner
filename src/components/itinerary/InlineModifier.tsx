@@ -52,7 +52,7 @@ export function InlineModifier({
   const [pendingChange, setPendingChange] = useState<PendingChange | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const { isListening, isSupported: micSupported, toggleListening } = useSpeechRecognition({
+  const { isListening, isSupported: micSupported, toggleListening, interimTranscript } = useSpeechRecognition({
     onResult: (transcript) => {
       setInput(prev => (prev ? prev + ' ' : '') + transcript);
       if (!isExpanded) setIsExpanded(true);
