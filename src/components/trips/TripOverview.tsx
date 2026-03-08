@@ -111,6 +111,7 @@ export function TripOverview({
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'days' | 'reservations' | 'saved'>('days');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [expandedDay, setExpandedDay] = useState<number | null>(null);
 
   // Calculate trip progress
   const tripProgress = useMemo(() => {
