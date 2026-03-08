@@ -355,9 +355,9 @@ serve(async (req) => {
                       type: "array",
                       items: {
                         type: "string",
-                        enum: ["history", "food", "shopping", "nature", "culture", "nightlife"],
+                        enum: ["history", "food", "nightlife", "art", "nature", "shopping", "adventure", "culture", "relaxation", "architecture", "music", "sports", "photography", "family", "romance"],
                       },
-                      description: "Interest categories inferred from conversation. E.g. 'we love food and nightlife' → ['food', 'nightlife']. Only include categories the user shows genuine interest in.",
+                      description: "Interest categories inferred from conversation. E.g. 'we love food and nightlife' → ['food', 'nightlife']. Only include categories the user actually expressed interest in.",
                     },
                     celebrationDay: {
                       type: "number",
