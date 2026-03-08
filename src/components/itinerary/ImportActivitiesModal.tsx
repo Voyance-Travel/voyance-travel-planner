@@ -8,8 +8,9 @@ import { useState, useMemo, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ClipboardPaste, Check, RefreshCw, Merge, ArrowRight, ChevronRight, AlertTriangle } from 'lucide-react';
+import { ClipboardPaste, Check, RefreshCw, Merge, ArrowRight, ChevronRight, AlertTriangle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // =============================================================================
@@ -25,6 +26,7 @@ interface ParsedActivity {
   location?: { name?: string; address?: string };
   cost?: { amount: number; currency: string };
   included: boolean;
+  isEstimatedTime?: boolean;
 }
 
 interface ParsedGroup {
@@ -71,8 +73,9 @@ interface ImportActivitiesModalProps {
 // PARSING UTILITIES
 // =============================================================================
 
-const TIME_PATTERN = /(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/gi;
-const TIME_RANGE_PATTERN = /(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*[-–—to]+\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i;
+// Requires either :MM portion, or am/pm, or both — bare digits alone won't match
+const TIME_PATTERN = /(\d{1,2}:\d{2}\s*(?:am|pm)?|\d{1,2}\s*(?:am|pm))/gi;
+const TIME_RANGE_PATTERN = /(\d{1,2}:\d{2}\s*(?:am|pm)?|\d{1,2}\s*(?:am|pm))\s*[-–—to]+\s*(\d{1,2}:\d{2}\s*(?:am|pm)?|\d{1,2}\s*(?:am|pm))/i;
 const COST_PATTERN = /[~≈]?[$€£¥]\s*(\d+(?:\.\d{2})?)/;
 
 /** Detect "Day 1", "Day 2", "## Day 3", etc. */
@@ -112,11 +115,8 @@ function normalizeTime(raw: string): string | undefined {
     if (match12[3] === 'am' && h === 12) h = 0;
     return `${h.toString().padStart(2, '0')}:${m}`;
   }
-  const matchNum = cleaned.match(/^(\d{1,2})$/);
-  if (matchNum) {
-    const h = parseInt(matchNum[1]);
-    if (h <= 23) return `${h.toString().padStart(2, '0')}:00`;
-  }
+  // No longer match bare numbers — require :MM or am/pm
+  return undefined;
   return undefined;
 }
 
@@ -324,6 +324,27 @@ function parsePastedTextGrouped(text: string, currency: string, knownCities: str
     groups.push(currentGroup);
   }
 
+  // Post-process: assign sequential daytime defaults to untimed activities
+  for (const group of groups) {
+    let nextDefault = 9 * 60; // 9:00 AM in minutes
+    for (const activity of group.activities) {
+      if (activity.startTime) {
+        // Advance the default clock past this timed activity
+        const [h, m] = activity.startTime.split(':').map(Number);
+        const mins = h * 60 + m;
+        nextDefault = Math.max(nextDefault, mins + 90);
+      } else {
+        // Assign a reasonable daytime slot, cap at 21:00
+        const capped = Math.min(nextDefault, 21 * 60);
+        const hh = Math.floor(capped / 60).toString().padStart(2, '0');
+        const mm = (capped % 60).toString().padStart(2, '0');
+        activity.startTime = `${hh}:${mm}`;
+        activity.isEstimatedTime = true;
+        nextDefault += 90;
+      }
+    }
+  }
+
   return groups;
 }
 
@@ -398,6 +419,16 @@ export function ImportActivitiesModal({
       return {
         ...g,
         activities: g.activities.map((a, ai) => ai === activityIndex ? { ...a, included: !a.included } : a),
+      };
+    }));
+  }, []);
+
+  const updateActivityTime = useCallback((groupIndex: number, activityIndex: number, newTime: string) => {
+    setGroups(prev => prev.map((g, gi) => {
+      if (gi !== groupIndex) return g;
+      return {
+        ...g,
+        activities: g.activities.map((a, ai) => ai === activityIndex ? { ...a, startTime: newTime, isEstimatedTime: false } : a),
       };
     }));
   }, []);
@@ -569,22 +600,39 @@ export function ImportActivitiesModal({
                     {group.activities.map((activity, ai) => (
                       <div
                         key={ai}
-                        onClick={() => toggleActivity(gi, ai)}
                         className={cn(
-                          'flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all text-xs',
+                          'flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all text-xs',
                           activity.included
                             ? 'bg-primary/5'
                             : 'opacity-40 line-through'
                         )}
                       >
-                        <div className={cn(
-                          'h-4 w-4 rounded-full border-2 flex items-center justify-center shrink-0',
-                          activity.included ? 'border-primary bg-primary' : 'border-muted-foreground'
-                        )}>
+                        <div
+                          onClick={() => toggleActivity(gi, ai)}
+                          className={cn(
+                            'h-4 w-4 rounded-full border-2 flex items-center justify-center shrink-0 cursor-pointer',
+                            activity.included ? 'border-primary bg-primary' : 'border-muted-foreground'
+                          )}
+                        >
                           {activity.included && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
                         </div>
-                        <span className="flex-1 truncate">{activity.title}</span>
-                        {activity.startTime && <span className="text-muted-foreground">{activity.startTime}</span>}
+                        <span className="flex-1 truncate cursor-pointer" onClick={() => toggleActivity(gi, ai)}>{activity.title}</span>
+                        {activity.startTime && (
+                          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            {activity.isEstimatedTime && <Clock className="h-3 w-3 text-muted-foreground" />}
+                            <input
+                              type="time"
+                              value={activity.startTime}
+                              onChange={(e) => updateActivityTime(gi, ai, e.target.value)}
+                              className={cn(
+                                'w-[70px] h-6 px-1 text-xs rounded border bg-background text-foreground',
+                                activity.isEstimatedTime
+                                  ? 'border-dashed border-muted-foreground/50 italic text-muted-foreground'
+                                  : 'border-border'
+                              )}
+                            />
+                          </div>
+                        )}
                         {activity.cost && <span className="text-muted-foreground">${activity.cost.amount}</span>}
                       </div>
                     ))}
