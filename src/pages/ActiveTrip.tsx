@@ -34,6 +34,7 @@ import { SmartSwapSuggestion } from '@/components/trips/SmartSwapSuggestion';
 import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternativesDrawer';
 import { PostActivityNudge } from '@/components/feedback/PostActivityNudge';
 import { MemoryUploadButton } from '@/components/memories/MemoryUploadButton';
+import { VoiceNotePlayer } from '@/components/memories/VoiceNotePlayer';
 import { GuideBookmarkButton } from '@/components/guides/GuideBookmarkButton';
 import { MemoriesTimeline } from '@/components/memories/MemoriesTimeline';
 import { ActiveTripStats } from '@/components/trips/ActiveTripStats';
@@ -306,8 +307,8 @@ export default function ActiveTrip() {
   // Get existing feedback for inline ratings
   const { data: tripFeedback = [] } = useTripFeedback(tripId || null);
   const feedbackByActivity = useMemo(() => {
-    const map = new Map<string, string>();
-    tripFeedback.forEach(f => map.set(f.activity_id, f.rating));
+    const map = new Map<string, { rating: string; personalization_tags?: string[] | null }>();
+    tripFeedback.forEach(f => map.set(f.activity_id, { rating: f.rating, personalization_tags: f.personalization_tags }));
     return map;
   }, [tripFeedback]);
 
@@ -646,7 +647,7 @@ interface TodayViewProps {
   onCopy: (id: string, text: string) => void;
   copiedId: string | null;
   archetype?: string;
-  feedbackByActivity: Map<string, string>;
+  feedbackByActivity: Map<string, { rating: string; personalization_tags?: string[] | null }>;
   onMediaPress: (activityId: string, activityName: string) => void;
   onVoicePress: (activityId: string, activityName: string) => void;
   sentiment: import('@/hooks/useTripSentiment').TripSentiment;
@@ -1003,7 +1004,7 @@ function TodayView({
                             activityType={activity.type}
                             activityCategory={activity.category}
                             destination={trip.destination}
-                            existingRating={feedbackByActivity.get(activity.id) as any || null}
+                            existingRating={feedbackByActivity.get(activity.id)?.rating as any || null}
                             onVoicePress={() => onVoicePress(activity.id, activity.name)}
                             compact
                           />
@@ -1014,6 +1015,11 @@ function TodayView({
                             compact
                           />
                         </div>
+                      )}
+
+                      {/* Voice note indicator */}
+                      {feedbackByActivity.get(activity.id)?.personalization_tags?.includes('has_voice_note') && (
+                        <VoiceNotePlayer tripId={trip.id} activityId={activity.id} />
                       )}
 
                       {/* Action Buttons — today only */}
