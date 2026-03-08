@@ -30,6 +30,7 @@ const ACTION_MAP: Record<string, string> = {
   TRANSPORT_MODE_CHANGE: 'transport_mode_change',
   ROUTE_OPTIMIZATION: 'route_optimization',
   REGENERATE_TRIP: 'regenerate_trip',
+  GENERATE_BLOG: 'generate_blog',
 };
 
 interface SpendCreditsParams {

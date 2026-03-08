@@ -5586,6 +5586,84 @@ export type Database = {
           },
         ]
       }
+      trip_blogs: {
+        Row: {
+          content: Json
+          cover_image_url: string | null
+          created_at: string
+          destination: string | null
+          id: string
+          published_at: string | null
+          slug: string | null
+          social_links: Json | null
+          status: string
+          subtitle: string | null
+          title: string
+          traveler_count: number | null
+          trip_dates: string | null
+          trip_duration_days: number | null
+          trip_id: string
+          updated_at: string
+          user_id: string
+          view_count: number | null
+        }
+        Insert: {
+          content?: Json
+          cover_image_url?: string | null
+          created_at?: string
+          destination?: string | null
+          id?: string
+          published_at?: string | null
+          slug?: string | null
+          social_links?: Json | null
+          status?: string
+          subtitle?: string | null
+          title: string
+          traveler_count?: number | null
+          trip_dates?: string | null
+          trip_duration_days?: number | null
+          trip_id: string
+          updated_at?: string
+          user_id: string
+          view_count?: number | null
+        }
+        Update: {
+          content?: Json
+          cover_image_url?: string | null
+          created_at?: string
+          destination?: string | null
+          id?: string
+          published_at?: string | null
+          slug?: string | null
+          social_links?: Json | null
+          status?: string
+          subtitle?: string | null
+          title?: string
+          traveler_count?: number | null
+          trip_dates?: string | null
+          trip_duration_days?: number | null
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+          view_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_blogs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_blogs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_budget_ledger: {
         Row: {
           activity_id: string | null

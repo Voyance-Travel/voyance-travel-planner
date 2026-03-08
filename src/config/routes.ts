@@ -70,6 +70,14 @@ export const ROUTES = {
   CONFIRMATION: '/trips/:tripId/confirmation',
   PURCHASE_COMPLETE: '/purchase-complete/:tripId',
   
+  // Blog
+  BLOG: {
+    PUBLIC: '/blog/:slug',
+    LIST: '/blog',
+    CREATE: '/blog/create/:tripId',
+    EDIT: '/blog/edit/:blogId',
+  },
+  
   // Legal
   PRIVACY: '/privacy',
   TERMS: '/terms',
