@@ -38,6 +38,7 @@ import DestinationDetail from "./pages/DestinationDetail";
 import Guides from "./pages/Guides";
 import TravelTips from "./pages/TravelTips";
 import GuideDetail from "./pages/GuideDetail";
+import CommunityGuidePublic from "./pages/CommunityGuidePublic";
 import About from "./pages/About";
 import Archetypes from "./pages/Archetypes";
 import HowItWorks from "./pages/HowItWorks";
@@ -181,6 +182,7 @@ function AnimatedRoutes() {
         <Route path="/destination/:slug" element={<DestinationDetail />} />
         <Route path="/guides" element={<Guides />} />
         <Route path="/guides/:slug" element={<GuideDetail />} />
+        <Route path="/community-guide/:slug" element={<CommunityGuidePublic />} />
         <Route path="/travel-tips" element={<TravelTips />} />
         <Route path="/about" element={<About />} />
         <Route path="/archetypes" element={<Archetypes />} />
