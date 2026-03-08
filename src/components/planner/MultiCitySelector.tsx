@@ -18,6 +18,33 @@ import { searchDestinations, Destination } from '@/services/locationSearchAPI';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { format as dateFnsFormat } from 'date-fns';
 
+const TRAIN_DEFAULT_COUNTRIES = new Set([
+  'France', 'Germany', 'Italy', 'Spain', 'Netherlands', 'Belgium',
+  'Switzerland', 'Austria', 'Portugal', 'Czech Republic', 'Czechia',
+  'Poland', 'Greece', 'Croatia', 'Hungary', 'Denmark', 'Sweden',
+  'Norway', 'Finland', 'Ireland', 'United Kingdom', 'UK', 'England',
+  'Scotland', 'Romania', 'Bulgaria', 'Slovenia', 'Slovakia',
+  // Asia rail-friendly
+  'Japan', 'South Korea', 'Taiwan', 'China',
+  // Other
+  'Morocco',
+]);
+
+/** Pick smart transport default based on country metadata */
+function smartTransportDefault(
+  fromCountry?: string,
+  toCountry?: string,
+): InterCityTransport['type'] {
+  if (
+    fromCountry && toCountry &&
+    TRAIN_DEFAULT_COUNTRIES.has(fromCountry) &&
+    TRAIN_DEFAULT_COUNTRIES.has(toCountry)
+  ) {
+    return 'train';
+  }
+  return 'flight';
+}
+
 // Local debounce hook
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
@@ -105,11 +132,12 @@ export default function MultiCitySelector({
     // Add transport between previous city and new city
     if (destinations.length > 0) {
       const prevCity = destinations[destinations.length - 1];
+      const defaultType = smartTransportDefault(prevCity.country, country);
       const newTransport: InterCityTransport = {
         id: crypto.randomUUID(),
         fromCity: prevCity.city,
         toCity: city.trim(),
-        type: 'train',
+        type: defaultType,
         departureDate: '',
         transitionDay: 'half_and_half',
       };
@@ -155,7 +183,7 @@ export default function MultiCitySelector({
         id: crypto.randomUUID(),
         fromCity: withOrder[i].city,
         toCity: withOrder[i + 1].city,
-        type: 'train',
+        type: smartTransportDefault(withOrder[i].country, withOrder[i + 1].country),
         departureDate: '',
         transitionDay: 'half_and_half',
       });
@@ -195,11 +223,13 @@ export default function MultiCitySelector({
 
     const newTransports: InterCityTransport[] = [];
     for (let i = 0; i < newDestinations.length - 1; i++) {
+      const fromCountry = route.destinations[i]?.country;
+      const toCountry = route.destinations[i + 1]?.country;
       newTransports.push({
         id: crypto.randomUUID(),
         fromCity: newDestinations[i].city,
         toCity: newDestinations[i + 1].city,
-        type: route.region === 'Europe' ? 'train' : 'flight',
+        type: smartTransportDefault(fromCountry, toCountry),
         departureDate: '',
         transitionDay: 'half_and_half',
       });
