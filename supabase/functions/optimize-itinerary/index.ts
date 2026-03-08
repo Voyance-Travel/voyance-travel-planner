@@ -1137,6 +1137,27 @@ async function getGoogleRoutesTransitTransport(
     return null;
   }
   try {
+    // Check route cache first (only if both are coord-based)
+    if (typeof origin !== 'string' && typeof destination !== 'string') {
+      const cached = await getCachedRoute(origin.lat, origin.lng, destination.lat, destination.lng, 'TRANSIT');
+      if (cached) {
+        const durationMinutes = Math.round(cached.durationSeconds / 60);
+        const costAmount = Math.min(5, Math.max(2, Math.round(cached.distanceMeters / 5000) + 2));
+        const instructions = buildInstructionsFromCache(cached.stepsJson);
+        if (instructions) {
+          return {
+            method: 'metro',
+            duration: `${durationMinutes} min`,
+            durationMinutes,
+            distance: metersToDistanceText(cached.distanceMeters),
+            distanceMeters: cached.distanceMeters,
+            estimatedCost: { amount: costAmount, currency: 'USD' },
+            instructions,
+          };
+        }
+      }
+    }
+
     const url = 'https://routes.googleapis.com/directions/v2:computeRoutes';
     const body = {
       origin: toRoutesApiLocation(origin),
@@ -1144,7 +1165,6 @@ async function getGoogleRoutesTransitTransport(
       travelMode: 'TRANSIT',
       computeAlternativeRoutes: false,
       languageCode: 'en-US',
-      // departureTime: new Date().toISOString(), // optional; leaving unset is OK
     };
 
     const fieldMask = [
@@ -1185,8 +1205,22 @@ async function getGoogleRoutesTransitTransport(
     console.log(`[Transit] (Routes API) Extracted details: ${transitDetails.summary || 'none'}`);
 
     if (!transitDetails.summary) {
-      // If we can't get station/line data, treat as non-success so legacy/heuristics can try.
       return null;
+    }
+
+    // Cache the successful route (fire and forget)
+    if (typeof origin !== 'string' && typeof destination !== 'string') {
+      const rawDuration = route?.duration ?? leg?.duration ?? '';
+      setCachedRoute(
+        origin.lat, origin.lng, destination.lat, destination.lng, 'TRANSIT',
+        {
+          distanceMeters,
+          durationText: `${durationMinutes} min`,
+          durationSeconds: parseDurationToSeconds(rawDuration),
+          stepsJson: steps,
+          transitDetailsJson: steps.filter((s: any) => s.transitDetails),
+        }
+      ).catch(() => {});
     }
 
     const costAmount = Math.min(5, Math.max(2, Math.round(distanceMeters / 5000) + 2));
@@ -1294,6 +1328,31 @@ async function getGoogleTransport(
   }
 
   try {
+    // Check route cache for walking/driving (only if both are coord-based)
+    const googleMode = mode === 'walking' ? 'WALK' : 'DRIVE';
+    if (typeof origin !== 'string' && typeof destination !== 'string') {
+      const cached = await getCachedRoute(origin.lat, origin.lng, destination.lat, destination.lng, googleMode);
+      if (cached) {
+        const durationMinutes = Math.round(cached.durationSeconds / 60);
+        let costAmount = 0;
+        let displayMethod: string = mode;
+        let instructions: string = '';
+        if (mode === 'walking') {
+          displayMethod = 'walk';
+          instructions = `Walk ${metersToDistanceText(cached.distanceMeters)} to ${destinationName}`;
+        } else if (mode === 'driving') {
+          costAmount = Math.round(3 + (cached.distanceMeters / 1000) * 1.8);
+          displayMethod = 'uber';
+          instructions = `Take a rideshare ${metersToDistanceText(cached.distanceMeters)} to ${destinationName} (~$${costAmount})`;
+        }
+        return {
+          method: displayMethod, duration: `${durationMinutes} min`, durationMinutes,
+          distance: metersToDistanceText(cached.distanceMeters), distanceMeters: cached.distanceMeters,
+          estimatedCost: { amount: costAmount, currency: 'USD' }, instructions,
+        };
+      }
+    }
+
     const originParam = toGoogleParam(origin);
     const destParam = toGoogleParam(destination);
     const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${originParam}&destinations=${destParam}&mode=${mode}&key=${mapsApiKey}`;
@@ -1311,6 +1370,14 @@ async function getGoogleTransport(
 
     const distanceMeters = element.distance.value;
     const durationMinutes = Math.round(element.duration.value / 60);
+
+    // Cache the result (fire and forget)
+    if (typeof origin !== 'string' && typeof destination !== 'string') {
+      setCachedRoute(
+        origin.lat, origin.lng, destination.lat, destination.lng, googleMode,
+        { distanceMeters, durationText: `${durationMinutes} min`, durationSeconds: element.duration.value, stepsJson: null, transitDetailsJson: null }
+      ).catch(() => {});
+    }
 
     let costAmount = 0;
     let displayMethod: string = mode;
@@ -2405,6 +2472,18 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
+    // Probabilistic cache cleanup (~10% of requests)
+    if (Math.random() < 0.1) {
+      getSupabaseAdmin()
+        .from('route_cache')
+        .delete()
+        .lt('expires_at', new Date().toISOString())
+        .then(({ count }: any) => {
+          if (count && count > 0) console.log(`[Route Cache] Cleaned up ${count} expired entries`);
+        })
+        .catch(() => {});
+    }
+
   } catch (error) {
     console.error("[optimize-itinerary] Error:", error);
     return new Response(
