@@ -391,7 +391,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Tell us about your trip..."
+              placeholder={isListening ? (interimTranscript || 'Listening...') : 'Tell us about your trip...'}
               className="min-h-[44px] max-h-[80px] resize-none pr-16 text-sm border-0 bg-muted/50 focus-visible:ring-1"
               disabled={isStreaming}
             />
@@ -400,7 +400,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
                 type="button"
                 size="icon"
                 variant="ghost"
-                className={cn("h-7 w-7", isListening && "text-destructive")}
+                className={cn("h-7 w-7 relative", isListening && "text-destructive")}
                 onClick={() => {
                   if (!micSupported) {
                     toast.error("Voice input is not supported in this browser. Try Chrome or Edge.");
@@ -411,6 +411,9 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
                 title={isListening ? "Stop listening" : "Voice input"}
               >
                 {isListening ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+                {isListening && (
+                  <span className="absolute inset-0 rounded-md animate-ping bg-destructive/20 pointer-events-none" />
+                )}
               </Button>
               <Button
                 type="button"

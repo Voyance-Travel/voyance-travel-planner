@@ -89,7 +89,7 @@ export function ItineraryAssistant({
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { isListening, isSupported: micSupported, toggleListening } = useSpeechRecognition({
+  const { isListening, isSupported: micSupported, toggleListening, interimTranscript } = useSpeechRecognition({
     onResult: (transcript) => {
       setInputValue(prev => (prev ? prev + ' ' : '') + transcript);
     },
