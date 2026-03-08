@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MapPin, Calendar as CalendarIcon, Users, Loader2, DollarSign, 
   Sparkles, ChevronDown, ChevronUp, PartyPopper, ArrowRight, Check, Clock,
-  Eye, Gem, Utensils, Building2, Plane, Upload, Hotel, Search, PenLine, Globe, Star, Route, UserPlus, MessageSquareText, Plus
+  Eye, Gem, Utensils, Building2, Plane, Upload, Hotel, Search, PenLine, Globe, Star, Route, UserPlus, MessageSquareText, Plus, Trash2
 } from 'lucide-react';
 import { addDays as addDaysUtil } from 'date-fns';
 import MultiCitySelector from '@/components/planner/MultiCitySelector';
@@ -947,8 +947,8 @@ function FlightHotelStep({
   setManualHotel: (h: ManualHotelEntry) => void;
   manualHotelList: ManualHotelEntry[];
   setManualHotelList: (h: ManualHotelEntry[]) => void;
-  manualHotels: Record<string, ManualHotelEntry>;
-  setManualHotels: (h: Record<string, ManualHotelEntry>) => void;
+  manualHotels: Record<string, ManualHotelEntry[]>;
+  setManualHotels: (h: Record<string, ManualHotelEntry[]>) => void;
   isFirstTimeVisitor: boolean;
   setIsFirstTimeVisitor: (v: boolean) => void;
   firstTimePerCity: Record<string, boolean>;
@@ -1523,37 +1523,83 @@ function FlightHotelStep({
           </div>
 
           {isMultiCity && multiCityDestinations && multiCityDestinations.length >= 2 ? (
-            /* Multi-city: per-city hotel entry */
+            /* Multi-city: per-city hotel entry with split stay support */
             <>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {multiCityDestinations.map((dest) => {
-                  const cityHotel = manualHotels[dest.city];
+                  const cityHotels = manualHotels[dest.city] || [];
                   return (
-                    <div
-                      key={dest.city}
-                      className="flex items-center justify-between p-3 rounded-lg border border-border bg-card"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium truncate">{dest.city}</div>
-                          {cityHotel?.name ? (
-                            <div className="text-xs text-muted-foreground truncate">{cityHotel.name}</div>
-                          ) : (
-                            <div className="text-xs text-muted-foreground/60">No hotel added</div>
+                    <div key={dest.city} className="rounded-lg border border-border bg-card overflow-hidden">
+                      {/* City header */}
+                      <div className="flex items-center justify-between p-3 border-b border-border/50">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          <span className="text-sm font-medium">{dest.city}</span>
+                          {dest.nights && (
+                            <span className="text-xs text-muted-foreground">({dest.nights} nights)</span>
                           )}
                         </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs h-7"
+                          onClick={() => {
+                            setEditingHotelCity(dest.city);
+                            setEditingHotelIndex(cityHotels.length); // new entry at end
+                            setShowHotelModal(true);
+                          }}
+                        >
+                          {cityHotels.length === 0 ? 'Add Hotel' : 'Add Another'}
+                        </Button>
                       </div>
-                      <Button
-                        variant={cityHotel?.name ? 'ghost' : 'outline'}
-                        size="sm"
-                        onClick={() => {
-                          setEditingHotelCity(dest.city);
-                          setShowHotelModal(true);
-                        }}
-                      >
-                        {cityHotel?.name ? 'Edit' : 'Add'}
-                      </Button>
+
+                      {/* Hotel list for this city */}
+                      {cityHotels.length > 0 ? (
+                        <div className="divide-y divide-border/50">
+                          {cityHotels.map((hotel, idx) => (
+                            <div key={idx} className="flex items-center justify-between p-3">
+                              <div className="min-w-0 flex-1">
+                                <div className="text-sm font-medium truncate">{hotel.name}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {hotel.checkInDate && hotel.checkOutDate
+                                    ? `${new Date(hotel.checkInDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${new Date(hotel.checkOutDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                                    : hotel.address || 'No dates set'
+                                  }
+                                </div>
+                              </div>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-xs h-7"
+                                  onClick={() => {
+                                    setEditingHotelCity(dest.city);
+                                    setEditingHotelIndex(idx);
+                                    setShowHotelModal(true);
+                                  }}
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-xs h-7 text-destructive hover:text-destructive"
+                                  onClick={() => {
+                                    const updated = { ...manualHotels };
+                                    updated[dest.city] = cityHotels.filter((_, i) => i !== idx);
+                                    if (updated[dest.city].length === 0) delete updated[dest.city];
+                                    setManualHotels(updated);
+                                  }}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-3 text-xs text-muted-foreground/60">No hotel added</div>
+                      )}
                     </div>
                   );
                 })}
@@ -1769,14 +1815,32 @@ function FlightHotelStep({
       {(() => {
         // Determine which hotel entry to edit
         const isListMode = !editingHotelCity && (manualHotelList.length > 0 || editingHotelIndex !== null);
-        const currentHotel = editingHotelCity
-          ? (manualHotels[editingHotelCity] || { name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00' })
+        const isMultiCityEdit = !!editingHotelCity;
+        const multiCityHotelsForCity = isMultiCityEdit ? (manualHotels[editingHotelCity!] || []) : [];
+        const currentHotel = isMultiCityEdit
+          ? (editingHotelIndex !== null && multiCityHotelsForCity[editingHotelIndex]
+              ? multiCityHotelsForCity[editingHotelIndex]
+              : { name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00', accommodationType: 'hotel' as const })
           : isListMode && editingHotelIndex !== null && manualHotelList[editingHotelIndex]
             ? manualHotelList[editingHotelIndex]
             : (isListMode ? newHotelDraft : manualHotel);
+        // For multi-city date bounds, use city arrival/departure dates
+        const editingCityDest = isMultiCityEdit && multiCityDestinations
+          ? multiCityDestinations.find(d => d.city === editingHotelCity)
+          : null;
+        const cityDateMin = editingCityDest?.arrivalDate || startDate;
+        const cityDateMax = editingCityDest?.departureDate || endDate;
+        // Show date fields for multi-city when city has multiple hotels OR adding a new one to a city that already has one
+        const showMultiCityDates = isMultiCityEdit && (multiCityHotelsForCity.length > 0 || (editingHotelIndex !== null && editingHotelIndex > 0));
         const setCurrentHotel = (h: ManualHotelEntry) => {
-          if (editingHotelCity) {
-            setManualHotels({ ...manualHotels, [editingHotelCity]: h });
+          if (isMultiCityEdit) {
+            const cityHotels = [...multiCityHotelsForCity];
+            if (editingHotelIndex !== null && editingHotelIndex < cityHotels.length) {
+              cityHotels[editingHotelIndex] = h;
+            } else {
+              cityHotels.push(h);
+            }
+            setManualHotels({ ...manualHotels, [editingHotelCity!]: cityHotels });
           } else if (isListMode) {
             if (editingHotelIndex !== null && editingHotelIndex < manualHotelList.length) {
               const updated = [...manualHotelList];
@@ -1909,16 +1973,16 @@ function FlightHotelStep({
                   </div>
                 </div>
 
-                {/* Stay Dates — shown for split stays */}
-                {isListMode && (
+                {/* Stay Dates — shown for split stays (single-city multi-hotel or multi-city multi-hotel) */}
+                {(isListMode || showMultiCityDates) && (
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <Label className="text-xs">Check-in Date</Label>
                       <Input
                         type="date"
-                        value={currentHotel.checkInDate || startDate}
-                        min={startDate}
-                        max={endDate}
+                        value={currentHotel.checkInDate || (isMultiCityEdit ? cityDateMin : startDate)}
+                        min={isMultiCityEdit ? cityDateMin : startDate}
+                        max={isMultiCityEdit ? cityDateMax : endDate}
                         onChange={(e) => setCurrentHotel({ ...currentHotel, checkInDate: e.target.value })}
                         className="text-xs h-8"
                       />
@@ -1927,9 +1991,9 @@ function FlightHotelStep({
                       <Label className="text-xs">Check-out Date</Label>
                       <Input
                         type="date"
-                        value={currentHotel.checkOutDate || endDate}
-                        min={currentHotel.checkInDate || startDate}
-                        max={endDate}
+                        value={currentHotel.checkOutDate || (isMultiCityEdit ? cityDateMax : endDate)}
+                        min={currentHotel.checkInDate || (isMultiCityEdit ? cityDateMin : startDate)}
+                        max={isMultiCityEdit ? cityDateMax : endDate}
                         onChange={(e) => setCurrentHotel({ ...currentHotel, checkOutDate: e.target.value })}
                         className="text-xs h-8"
                       />
@@ -2123,7 +2187,7 @@ export default function Start() {
   });
   // Multi-hotel list for single-city split stays
   const [manualHotelList, setManualHotelList] = useState<ManualHotelEntry[]>([]);
-  const [manualHotels, setManualHotels] = useState<Record<string, ManualHotelEntry>>({});
+  const [manualHotels, setManualHotels] = useState<Record<string, ManualHotelEntry[]>>({});
 
   // Personalization state
   const [isFirstTimeVisitor, setIsFirstTimeVisitor] = useState(true);
