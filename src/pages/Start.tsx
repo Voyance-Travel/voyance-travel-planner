@@ -1094,7 +1094,7 @@ function FlightHotelStep({
         </p>
       </div>
 
-      <div className="max-w-xl mx-auto space-y-8">
+      <div className="max-w-xl mx-auto space-y-6 sm:space-y-8 [&_input]:h-9 sm:[&_input]:h-10 [&_textarea]:min-h-[60px]">
         {/* Flight Section */}
         <div className="space-y-3 sm:space-y-4">
           <div className="flex items-center gap-1.5">
