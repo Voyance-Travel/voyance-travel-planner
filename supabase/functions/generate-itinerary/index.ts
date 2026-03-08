@@ -4267,7 +4267,7 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
           const hotelNeighborhood = (cityHotel?.neighborhood as string) || hotelAddress;
           
           for (let n = 0; n < nights; n++) {
-            const isTransition = n === 0 && i > 0;
+            const isTransition = n === 0 && i > 0 && (city as any).transition_day_mode !== 'skip';
             const isSameCountry = isTransition && tripCities[i - 1].country === city.country;
             const defaultTransport = isSameCountry ? 'train' : 'flight';
             // transport_type may be stored on this city (correct) OR the previous city (legacy bug)
