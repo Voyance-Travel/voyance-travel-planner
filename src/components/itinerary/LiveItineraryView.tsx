@@ -499,9 +499,16 @@ export function LiveItineraryView({
 
           {/* ─── 5. Full Day Timeline ─── */}
           <div className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {isTodaySelected ? "Today's Full Schedule" : `Day ${currentDay.dayNumber} Schedule`}
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {isTodaySelected ? "Today's Full Schedule" : `Day ${currentDay.dayNumber} Schedule`}
+              </h3>
+              {isPastDay && (
+                <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                  Completed
+                </Badge>
+              )}
+            </div>
             {currentDay.activities.map((activity, index) => (
               <LiveActivityCard
                 key={activity.id}
@@ -509,8 +516,8 @@ export function LiveItineraryView({
                 status={getActivityStatus(activity, index)}
                 tripId={tripId}
                 destination={destination}
-                onMarkComplete={() => handleMarkComplete(activity.id)}
-                onSkip={() => handleSkip(activity.id)}
+                onMarkComplete={isPastDay ? undefined : () => handleMarkComplete(activity.id)}
+                onSkip={isPastDay ? undefined : () => handleSkip(activity.id)}
               />
             ))}
           </div>

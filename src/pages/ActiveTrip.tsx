@@ -749,6 +749,10 @@ function TodayView({
     );
   }
 
+  // Determine if the displayed day is in the past (not today)
+  const dayDate = parseLocalDate(todaysItinerary.date);
+  const isPastDay = isBefore(dayDate, new Date()) && !isToday(dayDate);
+
   return (
     <motion.div
       initial={{ opacity: 0, x: -20 }}
