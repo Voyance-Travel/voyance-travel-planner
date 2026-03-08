@@ -37,6 +37,14 @@ export interface TripDetails {
   hotelAddress?: string;
   mustDoActivities?: string;
   additionalNotes?: string;
+  flightDetails?: string;
+  userConstraints?: Array<{
+    type: 'full_day_event' | 'time_block' | 'avoid' | 'preference' | 'flight';
+    description: string;
+    day?: number;
+    time?: string;
+    allDay?: boolean;
+  }>;
   cities?: ChatTripCity[];
   /** Inter-city transport modes for each leg (length = cities.length - 1) */
   cityTransports?: InterCityTransportMode[];

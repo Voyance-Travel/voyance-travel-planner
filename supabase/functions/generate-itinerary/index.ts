@@ -457,6 +457,10 @@ interface GenerationContext {
   tripVibe?: string;
   /** Specific trip priorities extracted from pasted text */
   tripPriorities?: string[];
+  /** User constraints from chat planner (full-day events, time blocks, preferences) */
+  userConstraints?: Array<{type: string; description: string; day?: number; time?: string; allDay?: boolean}>;
+  /** Flight details from chat planner */
+  flightDetails?: string;
   groupArchetypes?: TravelerArchetype[];
   // Collaborator user IDs and names for suggestedFor attribution
   collaboratorTravelers?: Array<{ userId: string; name: string }>;
@@ -4188,6 +4192,10 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     smartFinishRequested: requestSmartFinishMode === true || !!trip.metadata?.smartFinishRequestedAt,
     tripVibe: trip.metadata?.tripVibe || undefined,
     tripPriorities: trip.metadata?.tripPriorities || undefined,
+    // User constraints from chat planner (full-day events, time blocks, preferences)
+    userConstraints: (trip.metadata?.userConstraints as any[]) || undefined,
+    // Flight details from chat planner
+    flightDetails: (trip.metadata?.flightDetails as string) || undefined,
   };
 
   // Set daily budget based on tier (fallback)

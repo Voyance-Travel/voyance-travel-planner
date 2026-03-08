@@ -48,6 +48,22 @@ Guidelines:
 - Never mention AI, ChatGPT, or any specific AI tool. You are Voyance.
 - If they seem ready, don't over-ask — just extract and go.
 
+USER INTENT CAPTURE — THIS IS THE MOST IMPORTANT THING YOU DO:
+When the user describes their trip, your #1 job is to faithfully capture EVERYTHING they care about. Specifically:
+
+1. **Full-day events**: If they say "whole day for the U.S. Open", "dedicate a day to Disney", "spend the entire day at the beach" — this means NO OTHER PLANNED ACTIVITIES that day. Capture as userConstraints with type "full_day_event" and allDay: true.
+
+2. **Flights**: If they mention ANY flight details (airline, times, flight number, airports), capture ALL of it in flightDetails. Don't summarize or paraphrase — keep their exact details.
+
+3. **Specific times**: "Dinner at 7:30", "we have reservations at 8pm", "the show starts at 2" — these are time-locked. Include the exact time in mustDoActivities AND in userConstraints with the time field.
+
+4. **Preferences and avoids**: "We want authentic sushi", "no tourist traps", "hidden gems only", "we love craft cocktails" — these shape the ENTIRE itinerary. Include in userConstraints as type "preference" or "avoid".
+
+5. **Don't drop anything**: If the user mentions it, it matters to them. When in doubt, include it in userConstraints rather than dropping it.
+
+The mustDoActivities field should contain a RICH, DETAILED summary of everything the user wants, not just venue names. Include their reasoning, timing preferences, and constraints. Example:
+  "Whole day at the U.S. Open (do NOT plan other activities this day). Dinner at Nobu at 7:30 PM (reservation confirmed). Want authentic sushi spots — no tourist restaurants. Flying Delta from JFK, arriving 3 PM on Day 1."
+
 LANGUAGE & OUTPUT QUALITY — MANDATORY:
 - ALL output MUST be in clean, fluent, correctly spelled English. Double-check spelling of common words.
 - For non-Latin-script destinations (China, Japan, Korea, Thailand, Arabic countries, Russia), ALWAYS use standard English transliterations or well-known English names. Examples: "Beijing" not "北京", "Chongqing" not "重庆", "Shinjuku" not "新宿".
@@ -178,7 +194,7 @@ serve(async (req) => {
               function: {
                 name: "extract_trip_details",
                 description:
-                  "Extract structured trip details from the conversation when enough information has been gathered (at minimum: destination, dates, travelers).",
+                  "Extract ALL trip details from the conversation, capturing every preference, constraint, flight detail, and specific time the user mentioned. Missing any detail the user cared about = broken trip. At minimum: destination, dates, travelers.",
                 parameters: {
                   type: "object",
                   properties: {
@@ -240,6 +256,43 @@ serve(async (req) => {
                       type: "string",
                       description:
                         "Any other relevant details the user shared",
+                    },
+                    flightDetails: {
+                      type: "string",
+                      description:
+                        "Any flight information mentioned: airline, flight number, departure/arrival times, airports. Capture verbatim. Example: 'Flying Delta DL123, departing JFK 3:00 PM Aug 15, arriving LAX 6:30 PM'",
+                    },
+                    userConstraints: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          type: {
+                            type: "string",
+                            enum: ["full_day_event", "time_block", "avoid", "preference", "flight"],
+                            description: "Type of constraint",
+                          },
+                          description: {
+                            type: "string",
+                            description: "What the user wants, in their own words",
+                          },
+                          day: {
+                            type: "number",
+                            description: "Which day number this applies to (if specified)",
+                          },
+                          time: {
+                            type: "string",
+                            description: "Specific time if mentioned (e.g., '7:30 PM', '3:00 PM')",
+                          },
+                          allDay: {
+                            type: "boolean",
+                            description: "True if user wants this to consume the ENTIRE day with no other planned activities",
+                          },
+                        },
+                        required: ["type", "description"],
+                      },
+                      description:
+                        "Structured list of user constraints, preferences, and requirements. CRITICAL: If the user says 'whole day for X' or 'dedicate the day to X' or 'don't plan anything else', create a full_day_event with allDay: true. If they mention specific times, include the time. If they mention flights, include as type 'flight'.",
                     },
                     cities: {
                       type: "array",
