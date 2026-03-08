@@ -117,7 +117,7 @@ When calling extract_trip_details, you MUST extract EVERY specific detail the us
    - "dinner at a nice restaurant" → mustDoActivities should include "dinner at upscale restaurant"
    - Capture EVERY activity mentioned, no matter how casual. If the user said it, it matters to them.
 
-2. FLIGHTS: If the user mentions ANY flight details, extract them into the flight fields:
+2. FLIGHTS: If the user mentions ANY flight details, extract them into the dedicated fields:
    - "land at LaGuardia at 8:15am" → arrivalAirport: "LGA", arrivalTime: "8:15 AM"
    - "fly out of JFK" → departureAirport: "JFK"
    - "red eye back" → departureTime: "late evening"
@@ -127,18 +127,33 @@ When calling extract_trip_details, you MUST extract EVERY specific detail the us
    - "staying at The Ritz" → hotelName: "The Ritz"
    - "hotel near Times Square" → hotelAddress: "near Times Square"
 
-4. LOGISTICS: Put transport needs, pace preferences, and logistical constraints in additionalNotes:
+4. PACING: Listen for pace indicators:
+   - "relaxed trip", "take it easy", "slow mornings", "no rush" → pacing: "relaxed"
+   - "see as much as possible", "packed schedule", "pack it in", "ambitious" → pacing: "packed"
+   - Default to "balanced" if not mentioned
+
+5. FIRST-TIME VISITOR: Listen for experience level:
+   - "never been before", "first time in" → isFirstTimeVisitor: true
+   - "been there before", "know the city well", "going back", "last time I was there" → isFirstTimeVisitor: false
+   - Default to true if not mentioned
+
+6. INTERESTS: Extract interest categories from what excites them:
+   - "love food and nightlife" → interestCategories: ["food", "nightlife"]
+   - "interested in history and architecture" → interestCategories: ["history", "architecture"]
+   - "museums and culture" → interestCategories: ["history", "culture"]
+   - Valid values: history, food, nightlife, art, nature, shopping, adventure, culture, relaxation, architecture, music, sports, photography, family, romance
+
+7. LOGISTICS & CONSTRAINTS: Put transport needs and constraints in additionalNotes:
    - "need to get from US Open to JFK" → additionalNotes
-   - "slow paced trip" → additionalNotes
+   - "traveling with elderly parent" → additionalNotes
+   - "celebrating anniversary" → also set celebrationDay if a specific day is implied
 
-5. PACING & PERSONALIZATION — infer these from the conversation:
-   - pacing: "relaxed" if user says "slow pace", "no rush", "take it easy". "packed" if "pack it in", "see as much as possible", "ambitious". Default to "balanced".
-   - isFirstTimeVisitor: true if user says "never been", "first time", or doesn't mention prior visits. false if "going back", "last time I was there", "I know the city well".
-   - interestCategories: infer from what excites them. "we love food and nightlife" → ["food", "nightlife"]. "museums and history" → ["history", "culture"]. Valid values: history, food, shopping, nature, culture, nightlife.
-   - celebrationDay: if trip is for a birthday/anniversary, which day number the celebration falls on (e.g. "birthday is on day 3" → 3).
+8. CELEBRATION: If trip is for a birthday/anniversary/special occasion:
+   - "birthday is on day 3" → celebrationDay: 3
+   - "anniversary dinner" → capture in mustDoActivities AND set celebrationDay if day is known
 
-FAILURE TO EXTRACT USER-SPECIFIED ACTIVITIES INTO mustDoActivities = THE ITINERARY WILL NOT INCLUDE THEM.
-The mustDoActivities field is the PRIMARY way user preferences flow into the itinerary. If you skip it, the user's requests are SILENTLY DROPPED.`;
+FAILURE TO EXTRACT = THE ITINERARY WON'T INCLUDE IT.
+The generation engine can only use what you extract. If you skip a field, the user's request is silently dropped.`;
 }
 
 serve(async (req) => {
