@@ -538,13 +538,17 @@ export function ItineraryGenerator({
       try {
         const { data: tripRow } = await supabase
           .from('trips')
-          .select('itinerary_status')
+          .select('itinerary_status, itinerary_data')
           .eq('id', tripId)
           .single();
         if (cancelled) return;
         const st = tripRow?.itinerary_status as string;
-        if (st === 'ready' || st === 'generated') {
-          // Already complete — tell parent to show itinerary
+        const itData = tripRow?.itinerary_data as { days?: unknown[] } | null;
+        
+        // If itinerary data exists with days, treat as complete regardless of status
+        if (itData?.days?.length && itData.days.length > 0 && st !== 'generating' && st !== 'queued') {
+          onComplete([], undefined, false);
+        } else if (st === 'ready' || st === 'generated') {
           onComplete([], undefined, false);
         } else if (st === 'generating' || st === 'queued') {
           // In progress — activate poller
@@ -555,7 +559,19 @@ export function ItineraryGenerator({
       }
     };
     checkStatus();
-    return () => { cancelled = true; };
+
+    // Visibility change handler: re-check status when user returns to tab
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && (serverGenActive || hasStarted)) {
+        checkStatus();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [tripId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRetry = () => {
