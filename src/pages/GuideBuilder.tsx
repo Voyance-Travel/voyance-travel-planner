@@ -72,9 +72,13 @@ export default function GuideBuilder() {
   const [justPublished, setJustPublished] = useState(false);
   const [addRecModalOpen, setAddRecModalOpen] = useState(false);
   const [addRecDayNumber, setAddRecDayNumber] = useState(1);
+  const [addContentLinkOpen, setAddContentLinkOpen] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editNoteValue, setEditNoteValue] = useState('');
+
+  // Content links (only available after guide is saved)
+  const { contentLinks, addLink, deleteLink, isAdding: isAddingLink, isDeleting: isDeletingLink } = useGuideContentLinks(existingGuide?.id);
 
   const isPublished = existingGuide?.status === 'published';
   const guideUrl = existingGuide
