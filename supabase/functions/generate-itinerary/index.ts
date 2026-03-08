@@ -2391,15 +2391,16 @@ const STRICT_ITINERARY_TOOL = {
                         distanceKm: { type: "number", description: "Estimated distance in kilometers between locations" },
                         estimatedCost: {
                           type: "object",
+                          description: "Estimated cost for this transport leg. OMIT entirely for walking (walking is free). Only include for paid transport like taxi, metro, bus, rideshare.",
                           properties: {
-                            amount: { type: "number" },
-                            currency: { type: "string" }
+                            amount: { type: "number", description: "Cost in local currency. Use 0 for free transport." },
+                            currency: { type: "string", description: "ISO currency code" }
                           },
                           required: ["amount", "currency"]
                         },
                         instructions: { type: "string", description: "Include specific transit lines, stations, or route details when applicable" }
                       },
-                      required: ["method", "duration", "estimatedCost", "instructions"]
+                      required: ["method", "duration"]
                     },
                     tips: { type: "string", description: "Insider tip or recommendation" },
                     contextualTips: {
@@ -4921,6 +4922,7 @@ async function generateSingleDayWithRetry(
 
   let lastError: Error | null = null;
   let lastValidation: DayValidationResult | null = null;
+  let lastGeneratedOutput: string | null = null;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -4929,12 +4931,20 @@ async function generateSingleDayWithRetry(
       // Build retry-specific prompt additions
       let retryPrompt = '';
       if (attempt > 0 && lastValidation) {
-        retryPrompt = `\n\n⚠️ PREVIOUS ATTEMPT FAILED VALIDATION. FIX THESE ISSUES:\n`;
-        if (lastValidation.errors.length > 0) {
-          retryPrompt += `ERRORS (must fix):\n${lastValidation.errors.map(e => `  - ${e}`).join('\n')}\n`;
-        }
-        if (lastValidation.warnings.length > 0) {
-          retryPrompt += `WARNINGS (should fix):\n${lastValidation.warnings.map(w => `  - ${w}`).join('\n')}\n`;
+        const errorList = lastValidation.errors.map(e => `  - ${e}`).join('\n');
+        const warningList = lastValidation.warnings.map(w => `  - ${w}`).join('\n');
+        if (lastGeneratedOutput) {
+          // Focused "fix this" prompt — sends previous output as context to avoid full regeneration
+          retryPrompt = `\n\n⚠️ YOUR PREVIOUS OUTPUT HAD VALIDATION ERRORS. Here is your previous JSON output — fix ONLY the issues listed below and return the corrected complete day JSON. Do NOT change activities that are working correctly.\n\nERRORS TO FIX:\n${errorList}${lastValidation.warnings.length > 0 ? `\n\nWARNINGS:\n${warningList}` : ''}\n\nPREVIOUS OUTPUT (fix and return):\n${lastGeneratedOutput.substring(0, 8000)}`;
+          console.log(`[Stage 2] Using focused retry prompt (${retryPrompt.length} chars vs full regen)`);
+        } else {
+          retryPrompt = `\n\n⚠️ PREVIOUS ATTEMPT FAILED VALIDATION. FIX THESE ISSUES:\n`;
+          if (lastValidation.errors.length > 0) {
+            retryPrompt += `ERRORS (must fix):\n${errorList}\n`;
+          }
+          if (lastValidation.warnings.length > 0) {
+            retryPrompt += `WARNINGS (should fix):\n${warningList}\n`;
+          }
         }
       }
 

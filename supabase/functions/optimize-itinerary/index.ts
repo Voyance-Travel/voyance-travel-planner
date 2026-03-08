@@ -1036,6 +1036,95 @@ function toRoutesApiLocation(loc: GoogleLocationInput) {
   return { location: { latLng: { latitude: loc.lat, longitude: loc.lng } } };
 }
 
+// =============================================================================
+// ROUTE CACHE — Avoid redundant Google Routes API calls
+// =============================================================================
+
+function getSupabaseAdmin() {
+  return createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    { auth: { persistSession: false } }
+  );
+}
+
+async function getCachedRoute(
+  originLat: number, originLng: number,
+  destLat: number, destLng: number,
+  travelMode: string = 'TRANSIT'
+): Promise<{
+  distanceMeters: number; durationText: string; durationSeconds: number;
+  stepsJson: any; transitDetailsJson: any;
+} | null> {
+  try {
+    const cacheKey = `${originLat.toFixed(3)},${originLng.toFixed(3)}→${destLat.toFixed(3)},${destLng.toFixed(3)}:${travelMode}`;
+    const sb = getSupabaseAdmin();
+    const { data, error } = await sb
+      .from('route_cache')
+      .select('distance_meters, duration_text, duration_seconds, steps_json, transit_details_json, hit_count')
+      .eq('cache_key', cacheKey)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle();
+    if (error || !data) return null;
+    // Increment hit count (fire and forget)
+    sb.from('route_cache').update({ hit_count: (data.hit_count || 0) + 1 }).eq('cache_key', cacheKey).then(() => {});
+    console.log(`[Transit] Cache HIT: ${cacheKey}`);
+    return {
+      distanceMeters: data.distance_meters,
+      durationText: data.duration_text,
+      durationSeconds: data.duration_seconds,
+      stepsJson: data.steps_json,
+      transitDetailsJson: data.transit_details_json,
+    };
+  } catch { return null; }
+}
+
+async function setCachedRoute(
+  originLat: number, originLng: number,
+  destLat: number, destLng: number,
+  travelMode: string,
+  route: { distanceMeters: number; durationText: string; durationSeconds: number; stepsJson: any; transitDetailsJson: any; }
+): Promise<void> {
+  try {
+    const sb = getSupabaseAdmin();
+    await sb.from('route_cache').upsert({
+      origin_lat: originLat, origin_lng: originLng,
+      dest_lat: destLat, dest_lng: destLng,
+      travel_mode: travelMode,
+      distance_meters: route.distanceMeters,
+      duration_text: route.durationText,
+      duration_seconds: route.durationSeconds,
+      steps_json: route.stepsJson,
+      transit_details_json: route.transitDetailsJson,
+      expires_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+      hit_count: 0,
+    }, { onConflict: 'cache_key' });
+  } catch (e) { console.warn('[Transit] Cache write error:', e); }
+}
+
+function parseDurationToSeconds(duration: string): number {
+  const sMatch = duration.match(/^(\d+)s$/);
+  if (sMatch) return parseInt(sMatch[1], 10);
+  const minMatch = duration.match(/(\d+)\s*min/);
+  if (minMatch) return parseInt(minMatch[1], 10) * 60;
+  return 0;
+}
+
+function buildInstructionsFromCache(stepsJson: any): string {
+  if (!stepsJson || !Array.isArray(stepsJson) || stepsJson.length === 0) return '';
+  return stepsJson
+    .filter((step: any) => step.transitDetails)
+    .map((step: any) => {
+      const d = step.transitDetails;
+      const line = d?.transitLine?.nameShort || d?.transitLine?.name || '';
+      const vehicle = d?.transitLine?.vehicle?.type || '';
+      const stops = d?.stopCount || '';
+      return `${vehicle} ${line}${stops ? ` (${stops} stops)` : ''}`.trim();
+    })
+    .filter(Boolean)
+    .join(' → ') || '';
+}
+
 async function getGoogleRoutesTransitTransport(
   origin: GoogleLocationInput,
   destination: GoogleLocationInput,
