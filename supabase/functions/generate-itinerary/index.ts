@@ -9696,11 +9696,12 @@ TRAVELER CONTEXT:
 - They need to clear customs/immigration (estimate: 1 hour)
 - Consider their energy level when planning activities
 
-REQUIRED ACTIVITY SEQUENCE (in exact order):
+REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity entry, NEVER combine into one):
 1. "Arrival at Airport" 
    - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
    - category: "transport"
    - description: "Clear customs and collect luggage"
+   - ⚠️ This MUST be its own activity block — do NOT merge with transfer or check-in
 
 2. "Airport Transfer to Hotel"
    - startTime: "${transferStart}", endTime: "${transferEnd}"
@@ -9728,11 +9729,12 @@ DO NOT plan activities before ${arrival24}. The day starts when the plane lands.
 THE FLIGHT LANDS AT ${arrival24} (${flightContext.arrivalTime || arrival24}).
 This is an AFTERNOON ARRIVAL.
 
-REQUIRED ACTIVITY SEQUENCE (in exact order):
+REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity entry, NEVER combine into one):
 1. "Arrival at Airport"
    - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
    - category: "transport"
    - description: "Clear customs and collect luggage"
+   - ⚠️ This MUST be its own activity block — do NOT merge with transfer or check-in
 
 2. "Airport Transfer to Hotel"
    - startTime: "${transferStart}", endTime: "${transferEnd}"
@@ -9759,10 +9761,11 @@ DO NOT plan activities before ${arrival24}. The day starts when the plane lands.
 THE FLIGHT LANDS AT ${arrival24} (${flightContext.arrivalTime || arrival24}).
 This is an EVENING ARRIVAL - limited time for activities today.
 
-REQUIRED ACTIVITY SEQUENCE (in exact order):
+REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity entry, NEVER combine into one):
 1. "Arrival at Airport"
    - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
    - category: "transport"
+   - ⚠️ This MUST be its own activity block — do NOT merge with transfer or check-in
 
 2. "Airport Transfer to Hotel"
    - startTime: "${transferStart}", endTime: "${transferEnd}"
