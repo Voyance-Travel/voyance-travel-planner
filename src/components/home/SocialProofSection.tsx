@@ -53,12 +53,12 @@ function usePlatformMetrics() {
     queryKey: ['platform-metrics-home'],
     queryFn: async () => {
       const [tripsRes, destRes] = await Promise.all([
-        supabase.from('trips').select('id', { count: 'exact', head: true }),
-        supabase.from('destinations').select('id', { count: 'exact', head: true }),
+        supabase.rpc('get_platform_trip_count'),
+        supabase.rpc('get_platform_destination_count'),
       ]);
       return {
-        tripsBuilt: tripsRes.count ?? FALLBACK_METRICS.tripsBuilt,
-        destinations: destRes.count ?? FALLBACK_METRICS.destinations,
+        tripsBuilt: tripsRes.data || FALLBACK_METRICS.tripsBuilt,
+        destinations: destRes.data || FALLBACK_METRICS.destinations,
       };
     },
     staleTime: 60_000 * 5, // 5 minutes
