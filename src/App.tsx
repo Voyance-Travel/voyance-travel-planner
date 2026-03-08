@@ -130,6 +130,16 @@ function IAPInitializer() {
   return null;
 }
 
+// Initialize APNs push notifications on native
+function PushInitializer() {
+  useEffect(() => {
+    import('@/services/pushService').then(({ initPushNotifications }) => {
+      initPushNotifications().catch(console.error);
+    });
+  }, []);
+  return null;
+}
+
 // Component to initialize image preloading
 function ImagePreloaderInit() {
   useImagePreloader();
