@@ -2,16 +2,30 @@
  * JourneyPlaylist — Connected timeline view for multi-city journey trips
  */
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { 
   Plane, Train, Car, Ship, Bus, Calendar, MapPin, ArrowRight, 
-  ChevronRight, Sparkles, Eye, Edit3, Globe
+  ChevronRight, Sparkles, Eye, Edit3, Globe, Trash2, Loader2
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { useTripHeroImage } from '@/hooks/useTripHeroImage';
 import { getDestinationImage } from '@/utils/destinationImages';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 // Must match the Trip interface in TripDashboard
 interface JourneyTrip {
@@ -29,12 +43,14 @@ interface JourneyTrip {
   journeyOrder: number | null;
   journeyTotalLegs: number | null;
   transitionMode: string | null;
+  isPaid?: boolean;
 }
 
 interface JourneyPlaylistProps {
   journeyName: string;
   trips: JourneyTrip[];
   index: number;
+  onDeleteJourney?: (tripIds: string[]) => void;
 }
 
 function getTransportIcon(mode: string | null) {
@@ -187,12 +203,44 @@ function TransportConnector({ mode, toCity }: { mode: string | null; toCity: str
   );
 }
 
-export default function JourneyPlaylist({ journeyName, trips, index }: JourneyPlaylistProps) {
+export default function JourneyPlaylist({ journeyName, trips, index, onDeleteJourney }: JourneyPlaylistProps) {
   const sortedTrips = [...trips].sort((a, b) => (a.journeyOrder || 0) - (b.journeyOrder || 0));
+  const [isDeleting, setIsDeleting] = useState(false);
   
   const fullStart = sortedTrips[0]?.startDate;
   const fullEnd = sortedTrips[sortedTrips.length - 1]?.endDate;
   const totalDays = fullStart && fullEnd ? daysBetween(fullStart, fullEnd) : 0;
+
+  // Check if any leg has paid bookings
+  const hasPaidLeg = trips.some(t => t.isPaid);
+
+  const handleDeleteJourney = async () => {
+    if (hasPaidLeg) {
+      toast.error('Cannot delete a journey with paid bookings');
+      return;
+    }
+
+    setIsDeleting(true);
+    const tripIds = trips.map(t => t.id);
+
+    try {
+      // Delete all legs in the journey
+      const { error } = await supabase
+        .from('trips')
+        .delete()
+        .in('id', tripIds);
+
+      if (error) throw error;
+
+      toast.success(`Deleted journey: ${journeyName}`);
+      onDeleteJourney?.(tripIds);
+    } catch (err: any) {
+      console.error('Failed to delete journey:', err);
+      toast.error('Failed to delete journey');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <motion.div
@@ -226,6 +274,44 @@ export default function JourneyPlaylist({ journeyName, trips, index }: JourneyPl
               </Badge>
             </div>
           </div>
+
+          {/* Delete Journey Button */}
+          {onDeleteJourney && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button
+                  className="w-8 h-8 rounded-full bg-muted/80 flex items-center justify-center opacity-60 hover:opacity-100 hover:bg-destructive/10 transition-all shrink-0"
+                  title={hasPaidLeg ? 'Cannot delete: has paid bookings' : 'Delete journey'}
+                  disabled={hasPaidLeg}
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+                </button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this entire journey?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete <span className="font-semibold text-foreground">{journeyName}</span> and all {sortedTrips.length} legs ({sortedTrips.map(t => t.destination).join(' → ')}). This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDeleteJourney}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 mr-2" />
+                    )}
+                    Delete Journey
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
       </div>
 
