@@ -10654,6 +10654,27 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
             const activityBudgetCents = Math.max(0, tripBudgetData.budget_total_cents - flightCents - hotelCents);
             actualDailyBudgetPerPerson = Math.round(activityBudgetCents / days / trav) / 100;
             console.log(`[generate-day] Real budget: $${tripBudgetData.budget_total_cents / 100} total → $${actualDailyBudgetPerPerson}/day/person for activities`);
+
+            // ─── PER-CITY BUDGET OVERRIDE ───
+            if (currentCityInfo?.cityName && tripId) {
+              try {
+                const { data: cityRow } = await supabase
+                  .from('trip_cities')
+                  .select('allocated_budget_cents, hotel_cost_cents, nights, days_total')
+                  .eq('trip_id', tripId)
+                  .eq('city_name', currentCityInfo.cityName)
+                  .maybeSingle();
+                if (cityRow?.allocated_budget_cents && cityRow.allocated_budget_cents > 0) {
+                  const cityNights = cityRow.nights || cityRow.days_total || 1;
+                  const cityHotelCents = cityRow.hotel_cost_cents || 0;
+                  const cityActivityCents = Math.max(0, cityRow.allocated_budget_cents - cityHotelCents);
+                  actualDailyBudgetPerPerson = Math.round(cityActivityCents / cityNights / trav) / 100;
+                  console.log(`[generate-day] Per-city budget override for "${currentCityInfo.cityName}": $${(cityRow.allocated_budget_cents/100).toFixed(2)} allocated → $${actualDailyBudgetPerPerson}/day/person`);
+                }
+              } catch (e) {
+                console.warn('[generate-day] Failed to fetch per-city budget:', e);
+              }
+            }
           }
         } catch (e) {
           console.warn('[generate-day] Failed to fetch budget:', e);
