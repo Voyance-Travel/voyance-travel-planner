@@ -70,7 +70,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     return (
       <input
         type={effectiveType}
-        inputMode={usePlainTextDateTime ? (type === "date" ? "numeric" : "decimal") : inputMode}
+        inputMode={usePlainTextDateTime ? (type === "date" ? "numeric" : "text") : inputMode}
         placeholder={effectivePlaceholder}
         pattern={effectivePattern}
         title={effectiveTitle}
