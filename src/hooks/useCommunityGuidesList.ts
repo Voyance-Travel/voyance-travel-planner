@@ -47,7 +47,7 @@ export function useCommunityGuidesList(limit = 30) {
         .in('user_id', userIds);
 
       const profileMap = new Map((profiles || []).map(p => [p.id, p]));
-      const dnaMap = new Map((dnaProfiles || []).map((d: any) => [d.user_id, d]));
+      const dnaMap = new Map(((dnaProfiles as any[]) || []).map((d: any) => [d.user_id, d]));
 
       return guides.map(g => {
         const profile = profileMap.get(g.user_id);
