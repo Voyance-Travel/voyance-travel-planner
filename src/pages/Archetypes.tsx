@@ -53,7 +53,7 @@ const CATEGORY_ORDER = ['EXPLORER', 'CONNECTOR', 'ACHIEVER', 'RESTORER', 'CURATO
 
 // All 29 archetypes grouped by category for organized display
 const ARCHETYPES_BY_CATEGORY: Record<string, string[]> = {
-  EXPLORER: ['cultural_anthropologist', 'urban_nomad', 'wilderness_pioneer', 'digital_explorer'],
+  EXPLORER: ['cultural_anthropologist', 'urban_nomad', 'wilderness_pioneer', 'digital_explorer', 'flexible_wanderer'],
   CONNECTOR: ['social_butterfly', 'family_architect', 'romantic_curator', 'story_seeker', 'community_builder'],
   ACHIEVER: ['bucket_list_conqueror', 'adrenaline_architect', 'collection_curator', 'status_seeker'],
   RESTORER: ['zen_seeker', 'slow_traveler', 'beach_therapist', 'sanctuary_seeker', 'escape_artist', 'retreat_regular'],

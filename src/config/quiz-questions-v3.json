@@ -1770,9 +1770,86 @@
         "free": 0.5
       }
     },
+    "story_seeker": {
+      "name": "Story Seeker",
+      "category": "CONNECTOR",
+      "required": {
+        "cultural_depth": { "min": 0.5 },
+        "social_energy": { "min": 0.4 },
+        "novelty_seeking": { "min": 0.5 }
+      },
+      "boosters": {
+        "cultural_depth": 1.3,
+        "social_energy": 1.0,
+        "learning_focus": 0.8,
+        "novelty_seeking": 0.6
+      },
+      "penalties": {
+        "status_seeking": { "above": 0.6, "weight": -0.8 },
+        "restoration_need": { "above": 0.7, "weight": -0.5 },
+        "planning": { "above": 0.8, "weight": -0.3 }
+      }
+    },
+    "sanctuary_seeker": {
+      "name": "Sanctuary Seeker",
+      "category": "RESTORER",
+      "required": {
+        "restoration_need": { "min": 0.7 },
+        "quality_intrinsic": { "min": 0.5 }
+      },
+      "boosters": {
+        "restoration_need": 1.5,
+        "quality_intrinsic": 1.2,
+        "nature_orientation": 0.6
+      },
+      "penalties": {
+        "social_energy": { "above": 0.7, "weight": -1.0 },
+        "adventure": { "above": 0.6, "weight": -0.8 },
+        "pace": { "above": 0.5, "weight": -1.0 },
+        "bucket_list": { "above": 0.6, "weight": -0.5 }
+      }
+    },
+    "escape_artist": {
+      "name": "Escape Artist",
+      "category": "RESTORER",
+      "required": {
+        "restoration_need": { "min": 0.5 },
+        "novelty_seeking": { "min": 0.5 }
+      },
+      "boosters": {
+        "restoration_need": 1.2,
+        "novelty_seeking": 1.0,
+        "flexibility": 0.8
+      },
+      "penalties": {
+        "planning": { "above": 0.7, "weight": -0.8 },
+        "bucket_list": { "above": 0.7, "weight": -0.8 },
+        "status_seeking": { "above": 0.6, "weight": -0.5 }
+      }
+    },
+    "curated_luxe": {
+      "name": "Curated Luxe",
+      "category": "CURATOR",
+      "required": {
+        "quality_intrinsic": { "min": 0.6 },
+        "planning": { "min": 0.5 },
+        "budget_tier": { "min": 0.5 }
+      },
+      "boosters": {
+        "quality_intrinsic": 1.5,
+        "planning": 1.0,
+        "food_focus": 0.6,
+        "cultural_depth": 0.5
+      },
+      "penalties": {
+        "flexibility": { "above": 0.8, "weight": -0.8 },
+        "adventure": { "above": 0.7, "weight": -0.5 },
+        "status_seeking": { "above": 0.7, "weight": -0.5 }
+      }
+    },
     "balanced_story_collector": {
       "name": "Balanced Story Collector",
-      "category": "TRANSFORMER",
+      "category": "EXPLORER",
       "required": {},
       "boosters": {
         "flexibility": 0.8,
