@@ -6,8 +6,9 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
-  Star, Calendar, Users, MapPin, Eye, Edit3, Sparkles,
+  Star, Calendar, Users, MapPin, Eye, Edit3, Sparkles, BookOpen,
 } from 'lucide-react';
+import { useGuideFavoritesCount } from '@/hooks/useGuideFavorites';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';

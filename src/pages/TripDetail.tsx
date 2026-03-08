@@ -40,6 +40,7 @@ import { useEntitlements, canViewPremiumContentForDay } from '@/hooks/useEntitle
 import { computeUnlockedDayCount } from '@/lib/voyanceFlowController';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { TripDebriefModal } from '@/components/trip/TripDebriefModal';
+import { GuidePromptBanner } from '@/components/trip/GuidePromptBanner';
 
 import type { SwapSuggestion } from '@/components/trip/SwapReviewDialog';
 import { VersionConflictDialog } from '@/components/trip/VersionConflictDialog';
@@ -2046,6 +2047,11 @@ export default function TripDetail() {
 
 
 
+
+                  {/* Guide Prompt Banner — only on past trips */}
+                  {isAfter(new Date(), parseLocalDate(effectiveEndDate)) && (
+                    <GuidePromptBanner tripId={trip.id} destination={trip.destination} />
+                  )}
 
                   <ErrorBoundary>
                   <EditorialItinerary
