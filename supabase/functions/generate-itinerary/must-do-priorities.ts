@@ -567,13 +567,18 @@ FAILURE TO INCLUDE ANY OF THESE IS A HARD FAILURE.
     for (const s of allDayEvents) {
       const venue = s.priority.venueName ? ` at ${s.priority.venueName}` : '';
       const dates = s.priority.eventDates ? ` (confirmed: ${s.priority.eventDates})` : '';
+      const durationHours = Math.round((s.priority.estimatedDuration || 480) / 60);
+      const { blockedStart, blockedEnd } = getBlockedTimeRange(s);
       prompt += `\n**${s.priority.title}** → Day ${s.assignedDay}${venue}${dates}
-This is an ALL-DAY commitment. Plan Day ${s.assignedDay} ENTIRELY around this event:
-- Morning: Breakfast near venue, transit to event location
-- Main event fills the core of the day (${Math.round((s.priority.estimatedDuration || 480) / 60)} hours)
-- Evening: Dinner near event venue area
-- Do NOT schedule other major sightseeing on this day
-- Only include meals, transit to/from venue, and post-event wind-down
+⏰ BLOCKED TIME: ${blockedStart}–${blockedEnd} (${durationHours} hours)
+This time window is FULLY OCCUPIED. Do NOT schedule ANY activities between ${blockedStart} and ${blockedEnd}.
+Only plan:
+- Breakfast before ${subtractMinutes(blockedStart, 30)}
+- Transit to venue ~${subtractMinutes(blockedStart, 30)}
+- THE EVENT from ${blockedStart} to ${blockedEnd}
+- Transit from venue ~${blockedEnd}
+- Dinner after ${addMinutes(blockedEnd, 30)}
+Any activity overlapping ${blockedStart}–${blockedEnd} is a HARD FAILURE.
 ${s.priority.requiresBooking ? '⚠️ TICKETS/BOOKING REQUIRED — mention this prominently\n' : ''}`;
     }
     prompt += '\n';
@@ -582,12 +587,14 @@ ${s.priority.requiresBooking ? '⚠️ TICKETS/BOOKING REQUIRED — mention this
   if (halfDayEvents.length > 0) {
     prompt += `### 🎭 HALF-DAY EVENTS (Block ${halfDayEvents.length > 1 ? 'respective' : 'the'} half of the day)\n`;
     for (const s of halfDayEvents) {
+      const durationHours = Math.round((s.priority.estimatedDuration || 180) / 60);
+      const { blockedStart, blockedEnd } = getBlockedTimeRange(s);
       const timeBlock = s.priority.preferredTime === 'evening' ? 'evening (leave afternoon free for sightseeing)' 
         : s.priority.preferredTime === 'morning' ? 'morning (leave afternoon/evening free)' 
         : `${s.priority.preferredTime || 'assigned time'} block`;
-      prompt += `- **${s.priority.title}** → Day ${s.assignedDay}, ${timeBlock} (~${Math.round((s.priority.estimatedDuration || 180) / 60)}h)`;
-      if (s.priority.requiresBooking) prompt += ` ⚠️ BOOKING REQUIRED`;
-      prompt += `\n`;
+      prompt += `- **${s.priority.title}** → Day ${s.assignedDay}, ${timeBlock} (~${durationHours}h)\n`;
+      prompt += `  ⏰ BLOCKED TIME: ${blockedStart}–${blockedEnd}. Do NOT schedule ANY other activities in this window.\n`;
+      if (s.priority.requiresBooking) prompt += `  ⚠️ BOOKING REQUIRED\n`;
     }
     prompt += `→ Fill the OTHER half of these days with sightseeing/activities.\n\n`;
   }
