@@ -145,6 +145,7 @@ import {
   scheduleMustDos,
   buildMustHavesConstraintPrompt,
   getBlockedTimeRange,
+  validateMustDosInItinerary,
   type MustDoPriority,
   type ScheduledMustDo,
   type ActivityType,
@@ -8981,6 +8982,35 @@ If the purpose is a specific event, plan at least ONE full day around that event
         console.log(`[Stage 2.7] Fixed ${gapFixCount} insufficient transit gaps across all days`);
       }
 
+      // =====================================================================
+      // STAGE 2.8: Must-Do Validation (logging only — mirrors dietary check)
+      // =====================================================================
+      if (context.mustDoActivities && context.mustDoActivities.trim()) {
+        try {
+          const forceAllMust = !!context.isSmartFinish || !!context.smartFinishRequested;
+          const mustDoCheck = parseMustDoInput(context.mustDoActivities, context.destination, forceAllMust);
+          if (mustDoCheck.length > 0) {
+            const itineraryForValidation = aiResult.days.map((d: any) => ({
+              dayNumber: d.dayNumber,
+              activities: (d.activities || []).map((a: any) => ({ title: a.title || a.name || '' })),
+            }));
+            const validation = validateMustDosInItinerary(itineraryForValidation, mustDoCheck);
+
+            if (!validation.allPresent && validation.missing.length > 0) {
+              console.warn(`[Stage 2.8] ⚠️ MISSING must-do activities in generated itinerary:`);
+              for (const m of validation.missing) {
+                console.warn(`  ❌ "${m.activityName}" (priority: ${m.priority}) — NOT FOUND in any day`);
+              }
+              console.warn(`[Stage 2.8] ${validation.found.length}/${mustDoCheck.filter(x => x.priority === 'must').length} must-priority items found, ${validation.missing.length} missing`);
+            } else {
+              console.log(`[Stage 2.8] ✓ All must-do activities verified present in itinerary (${validation.found.length} found)`);
+            }
+          }
+        } catch (mustDoValErr) {
+          console.warn('[Stage 2.8] Must-do validation error (non-blocking):', mustDoValErr);
+        }
+      }
+
       // STAGE 3: Early Save (Critical - ensures user gets itinerary)
       await earlySaveItinerary(supabase, tripId, aiResult.days);
 
@@ -11722,6 +11752,33 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             }
           } catch (vErr) {
             console.error('[generate-day] Version save error:', vErr);
+          }
+        }
+
+        // =====================================================================
+        // POST-GENERATION: Validate must-do items for this day (logging only)
+        // =====================================================================
+        if (mustDoActivities && mustDoActivities.trim()) {
+          try {
+            const forceAllMust = !!isSmartFinish || !!smartFinishRequested;
+            const dayMustDos = parseMustDoInput(mustDoActivities, destination, forceAllMust)
+              .filter(m => m.priority === 'must');
+
+            if (dayMustDos.length > 0) {
+              const dayForValidation = [{
+                dayNumber,
+                activities: (normalizedActivities || []).map((a: any) => ({ title: a.title || a.name || '' })),
+              }];
+              const dayValidation = validateMustDosInItinerary(dayForValidation, dayMustDos);
+
+              if (dayValidation.missing.length > 0) {
+                console.warn(`[generate-day] ⚠️ Day ${dayNumber} missing must-do items: ${dayValidation.missing.map(m => m.activityName).join(', ')}`);
+              } else if (dayValidation.found.length > 0) {
+                console.log(`[generate-day] ✓ Day ${dayNumber} must-do validation passed (${dayValidation.found.length} found)`);
+              }
+            }
+          } catch (valErr) {
+            console.warn('[generate-day] Must-do validation error (non-blocking):', valErr);
           }
         }
 
