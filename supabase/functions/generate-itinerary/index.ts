@@ -13143,11 +13143,11 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
               budgetTier: budgetTier || 'moderate',
               userId,
               previousDayActivities: previousActivities,
-              isMultiCity: isMultiCity || false,
-              isTransitionDay: cityInfo?.isTransitionDay || false,
-              transitionFrom: cityInfo?.transitionFrom,
-              transitionTo: cityInfo?.transitionTo,
-              transitionMode: cityInfo?.transportType,
+              isMultiCity: isMultiCity || !!journeyTransitionInfo,
+              isTransitionDay: cityInfo?.isTransitionDay || journeyTransitionInfo?.isTransitionDay || false,
+              transitionFrom: cityInfo?.transitionFrom || journeyTransitionInfo?.transitionFrom,
+              transitionTo: cityInfo?.transitionTo || journeyTransitionInfo?.transitionTo,
+              transitionMode: cityInfo?.transportType || journeyTransitionInfo?.transportType,
             }),
           });
 
