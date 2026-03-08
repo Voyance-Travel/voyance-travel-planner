@@ -1,11 +1,11 @@
 /**
  * Guide Builder Page
- * Lets users compile their guide_favorites into a community_guide.
+ * Compiles guide_favorites + manual entries into a community_guide.
  * Protected route — requires auth.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import MainLayout from '@/components/layout/MainLayout';
@@ -13,28 +13,32 @@ import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import { motion } from 'framer-motion';
 import {
-  BookOpen, ArrowLeft, GripVertical, Trash2, Save,
-  Globe, Loader2, MapPin, Copy, ExternalLink, EyeOff, Check, PartyPopper,
+  BookOpen, ArrowLeft, Trash2, Save, Globe, Loader2, MapPin,
+  Copy, ExternalLink, EyeOff, PartyPopper, Plus, Eye, Calendar, Clock,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
 import PublishConfirmModal from '@/components/guides/PublishConfirmModal';
-
-interface GuideFavorite {
-  id: string;
-  activity_id: string;
-  note: string | null;
-  sort_order: number;
-  activity?: {
-    id: string;
-    name: string;
-    description: string | null;
-    category: string | null;
-    image_url: string | null;
-    location: Record<string, any> | null;
-  };
-}
+import GuideActivityCard from '@/components/guides/GuideActivityCard';
+import AddRecommendationModal from '@/components/guides/AddRecommendationModal';
+import GuidePreview from '@/components/guides/GuidePreview';
+import {
+  useGuideFavorites,
+  useManualEntries,
+  useTripForGuide,
+  useExistingGuide,
+  mergeGuideItems,
+  groupByDay,
+} from '@/hooks/useCommunityGuide';
+import {
+  deleteGuideFavorite,
+  deleteManualEntry,
+  updateFavoriteNote,
+  createManualEntry,
+} from '@/services/communityGuidesAPI';
 
 interface GuideFormState {
   title: string;
@@ -43,66 +47,15 @@ interface GuideFormState {
   tagInput: string;
 }
 
-function useGuideFavorites(tripId: string | undefined) {
-  return useQuery({
-    queryKey: ['guide-favorites-full', tripId],
-    queryFn: async () => {
-      if (!tripId) return [];
-      // @ts-ignore - joined select
-      const { data, error } = await supabase
-        .from('guide_favorites')
-        .select('id, activity_id, note, sort_order, activity:trip_activities(id, name, description, category, image_url, location)')
-        .eq('trip_id', tripId)
-        .order('sort_order', { ascending: true });
-      if (error) throw error;
-      return (data || []) as unknown as GuideFavorite[];
-    },
-    enabled: !!tripId,
-  });
-}
-
-function useTripBasics(tripId: string | undefined) {
-  return useQuery({
-    queryKey: ['trip-basics-guide', tripId],
-    queryFn: async () => {
-      if (!tripId) return null;
-      const { data } = await supabase
-        .from('trips')
-        .select('id, name, destination, destination_country')
-        .eq('id', tripId)
-        .maybeSingle();
-      return data;
-    },
-    enabled: !!tripId,
-  });
-}
-
-function useExistingGuide(tripId: string | undefined) {
-  return useQuery({
-    queryKey: ['community-guide-trip', tripId],
-    queryFn: async () => {
-      if (!tripId) return null;
-      const { data } = await supabase
-        .from('community_guides')
-        .select('*')
-        .eq('trip_id', tripId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      return data;
-    },
-    enabled: !!tripId,
-  });
-}
-
 export default function GuideBuilder() {
   const { tripId } = useParams<{ tripId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data: trip, isLoading: tripLoading } = useTripBasics(tripId);
+  const { data: trip, isLoading: tripLoading } = useTripForGuide(tripId);
   const { data: favorites = [], isLoading: favsLoading } = useGuideFavorites(tripId);
+  const { data: manualEntries = [], isLoading: manualsLoading } = useManualEntries(tripId);
   const { data: existingGuide, isLoading: guideLoading } = useExistingGuide(tripId);
 
   const [form, setForm] = useState<GuideFormState>({
@@ -114,13 +67,29 @@ export default function GuideBuilder() {
 
   const [publishModalOpen, setPublishModalOpen] = useState(false);
   const [justPublished, setJustPublished] = useState(false);
+  const [addRecModalOpen, setAddRecModalOpen] = useState(false);
+  const [addRecDayNumber, setAddRecDayNumber] = useState(1);
+  const [showPreview, setShowPreview] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editNoteValue, setEditNoteValue] = useState('');
 
   const isPublished = existingGuide?.status === 'published';
   const guideUrl = existingGuide
     ? `${window.location.origin}/community-guides/${existingGuide.id}`
     : '';
 
-  // Seed form from existing guide or trip
+  // Merge favorites + manual entries
+  const allItems = mergeGuideItems(favorites, manualEntries);
+  const dayGroups = groupByDay(allItems);
+  const itemCount = allItems.length;
+  const canPublish = form.title.trim().length > 0 && itemCount >= 3;
+
+  // Trip duration
+  const durationDays = trip?.start_date && trip?.end_date
+    ? Math.ceil((new Date(trip.end_date).getTime() - new Date(trip.start_date).getTime()) / 86400000) + 1
+    : null;
+
+  // Seed form
   useEffect(() => {
     if (existingGuide) {
       setForm({
@@ -130,13 +99,12 @@ export default function GuideBuilder() {
         tagInput: '',
       });
     } else if (trip && !form.title) {
-      setForm(prev => ({
-        ...prev,
-        title: `${trip.destination} Travel Guide`,
-      }));
+      const defaultTitle = `${trip.destination} Travel Guide`;
+      setForm(prev => ({ ...prev, title: defaultTitle.slice(0, 100) }));
     }
   }, [existingGuide, trip]);
 
+  // Save / publish mutation
   const saveMutation = useMutation({
     mutationFn: async (publish: boolean) => {
       if (!tripId || !user) throw new Error('Missing trip or user');
@@ -145,18 +113,20 @@ export default function GuideBuilder() {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '')
-        .slice(0, 80)
-        + '-' + tripId.slice(0, 8);
+        .slice(0, 80) + '-' + tripId.slice(0, 8);
 
       const content = {
-        activities: favorites.map(f => ({
-          id: f.activity_id,
-          name: f.activity?.name,
-          description: f.activity?.description,
-          category: f.activity?.category,
-          image_url: f.activity?.image_url,
-          location: f.activity?.location,
-          note: f.note,
+        activities: allItems.map(item => ({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          category: item.category,
+          image_url: item.image_url,
+          note: item.note,
+          external_url: item.external_url,
+          is_manual: item.type === 'manual',
+          day_number: item.day_number,
+          start_time: item.start_time,
         })),
       };
 
@@ -171,23 +141,17 @@ export default function GuideBuilder() {
         content,
         slug,
         status: publish ? 'published' : 'draft',
-        published_at: publish ? new Date().toISOString() : null,
+        published_at: publish ? new Date().toISOString() : (existingGuide?.published_at || null),
         updated_at: new Date().toISOString(),
       };
 
       if (existingGuide) {
-        const { error } = await supabase
-          .from('community_guides')
-          .update(payload)
-          .eq('id', existingGuide.id);
+        const { error } = await supabase.from('community_guides').update(payload).eq('id', existingGuide.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from('community_guides')
-          .insert(payload);
+        const { error } = await supabase.from('community_guides').insert(payload);
         if (error) throw error;
       }
-
       return publish;
     },
     onSuccess: (didPublish) => {
@@ -201,16 +165,13 @@ export default function GuideBuilder() {
         toast.success('Draft saved');
       }
     },
-    onError: (err: any) => {
-      toast.error(err.message || 'Failed to save guide');
-    },
+    onError: (err: any) => toast.error(err.message || 'Failed to save guide'),
   });
 
   const unpublishMutation = useMutation({
     mutationFn: async () => {
-      if (!existingGuide) throw new Error('No guide to unpublish');
-      const { error } = await supabase
-        .from('community_guides')
+      if (!existingGuide) throw new Error('No guide');
+      const { error } = await supabase.from('community_guides')
         .update({ status: 'draft', published_at: null, updated_at: new Date().toISOString() })
         .eq('id', existingGuide.id);
       if (error) throw error;
@@ -221,31 +182,82 @@ export default function GuideBuilder() {
       setJustPublished(false);
       toast.success('Guide unpublished');
     },
-    onError: () => {
-      toast.error('Failed to unpublish');
-    },
+    onError: () => toast.error('Failed to unpublish'),
   });
 
+  // Delete item
+  const handleDelete = useCallback(async (id: string, type: 'favorite' | 'manual') => {
+    try {
+      if (type === 'favorite') {
+        await deleteGuideFavorite(id);
+        queryClient.invalidateQueries({ queryKey: ['guide-favorites-full', tripId] });
+      } else {
+        await deleteManualEntry(id);
+        queryClient.invalidateQueries({ queryKey: ['guide-manual-entries', tripId] });
+      }
+      toast.success('Removed from guide');
+    } catch {
+      toast.error('Failed to remove item');
+    }
+  }, [tripId, queryClient]);
+
+  // Edit note inline
+  const handleStartEditNote = (id: string, currentNote: string | null) => {
+    setEditingNoteId(id);
+    setEditNoteValue(currentNote || '');
+  };
+
+  const handleSaveNote = useCallback(async () => {
+    if (!editingNoteId) return;
+    try {
+      await updateFavoriteNote(editingNoteId, editNoteValue.trim() || null);
+      queryClient.invalidateQueries({ queryKey: ['guide-favorites-full', tripId] });
+      setEditingNoteId(null);
+      toast.success('Note updated');
+    } catch {
+      toast.error('Failed to update note');
+    }
+  }, [editingNoteId, editNoteValue, tripId, queryClient]);
+
+  // Add manual entry
+  const addRecMutation = useMutation({
+    mutationFn: async (entry: {
+      name: string; category: string; description: string; external_url: string; day_number: number;
+    }) => {
+      if (!tripId || !user) throw new Error('Missing data');
+      return createManualEntry({
+        trip_id: tripId,
+        user_id: user.id,
+        name: entry.name,
+        category: entry.category,
+        description: entry.description || null,
+        external_url: entry.external_url || null,
+        day_number: entry.day_number,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['guide-manual-entries', tripId] });
+      setAddRecModalOpen(false);
+      toast.success('Recommendation added!');
+    },
+    onError: () => toast.error('Failed to add recommendation'),
+  });
+
+  // Tags
   const addTag = () => {
     const tag = form.tagInput.trim();
     if (tag && !form.tags.includes(tag) && form.tags.length < 8) {
       setForm(prev => ({ ...prev, tags: [...prev.tags, tag], tagInput: '' }));
     }
   };
-
-  const removeTag = (tag: string) => {
-    setForm(prev => ({ ...prev, tags: prev.tags.filter(t => t !== tag) }));
-  };
+  const removeTag = (tag: string) => setForm(prev => ({ ...prev, tags: prev.tags.filter(t => t !== tag) }));
 
   const copyUrl = () => {
     navigator.clipboard.writeText(guideUrl);
     toast.success('Link copied!');
   };
 
-  const itemCount = favorites.length; // TODO: add manual entries count when supported
-  const canPublish = form.title.trim().length > 0 && itemCount >= 3;
-
-  const isLoading = tripLoading || favsLoading || guideLoading;
+  const isLoading = tripLoading || favsLoading || manualsLoading || guideLoading;
 
   if (isLoading) {
     return (
@@ -272,34 +284,26 @@ export default function GuideBuilder() {
     );
   }
 
-  // Success state after publish
+  // ── Published state ──
   if (justPublished || isPublished) {
-    const showSuccessBanner = justPublished;
-
     return (
       <MainLayout>
         <Head title={`Guide — ${trip.destination} | Voyance`} />
-
         <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
-          {/* Header */}
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => navigate(`/trip/${tripId}`)}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl sm:text-2xl font-serif font-bold truncate">
-                Your Published Guide
-              </h1>
+              <h1 className="text-xl sm:text-2xl font-serif font-bold truncate">Your Published Guide</h1>
               <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                 <MapPin className="h-3 w-3" />
-                {trip.destination}
-                {trip.destination_country ? `, ${trip.destination_country}` : ''}
+                {trip.destination}{trip.destination_country ? `, ${trip.destination_country}` : ''}
               </p>
             </div>
           </div>
 
-          {/* Success banner */}
-          {showSuccessBanner && (
+          {justPublished && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -313,35 +317,24 @@ export default function GuideBuilder() {
             </motion.div>
           )}
 
-          {/* Shareable URL */}
           <div className="rounded-xl border border-border bg-card p-5 space-y-3">
             <p className="text-sm font-medium text-foreground">Shareable link</p>
             <div className="flex gap-2">
               <Input value={guideUrl} readOnly className="text-xs bg-muted/50 flex-1" />
               <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={copyUrl}>
-                <Copy className="h-3.5 w-3.5" />
-                Copy
+                <Copy className="h-3.5 w-3.5" /> Copy
               </Button>
             </div>
-            <div className="flex flex-wrap gap-2 pt-1">
-              <Button variant="outline" size="sm" asChild className="gap-1.5">
-                <Link to={`/community-guides/${existingGuide?.id}`} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  View Published Guide
-                </Link>
-              </Button>
-            </div>
+            <Button variant="outline" size="sm" asChild className="gap-1.5">
+              <Link to={`/community-guides/${existingGuide?.id}`} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="h-3.5 w-3.5" /> View Published Guide
+              </Link>
+            </Button>
           </div>
 
-          {/* Edit / Unpublish */}
           <div className="flex gap-3 pt-4 border-t border-border">
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={() => { setJustPublished(false); }}
-            >
-              <Save className="h-4 w-4" />
-              Edit Guide
+            <Button variant="outline" className="gap-2" onClick={() => setJustPublished(false)}>
+              <Save className="h-4 w-4" /> Edit Guide
             </Button>
             <Button
               variant="ghost"
@@ -349,11 +342,7 @@ export default function GuideBuilder() {
               disabled={unpublishMutation.isPending}
               onClick={() => unpublishMutation.mutate()}
             >
-              {unpublishMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <EyeOff className="h-4 w-4" />
-              )}
+              {unpublishMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <EyeOff className="h-4 w-4" />}
               Unpublish
             </Button>
           </div>
@@ -362,6 +351,34 @@ export default function GuideBuilder() {
     );
   }
 
+  // ── Preview mode ──
+  if (showPreview) {
+    return (
+      <MainLayout>
+        <Head title={`Preview Guide — ${trip.destination} | Voyance`} />
+        <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+          <div className="flex items-center justify-between">
+            <Button variant="ghost" size="sm" className="gap-2" onClick={() => setShowPreview(false)}>
+              <ArrowLeft className="h-4 w-4" /> Back to Editor
+            </Button>
+            <Badge variant="secondary" className="gap-1">
+              <Eye className="h-3 w-3" /> Preview
+            </Badge>
+          </div>
+          <GuidePreview
+            title={form.title}
+            description={form.description}
+            destination={trip.destination}
+            destinationCountry={trip.destination_country}
+            tags={form.tags}
+            dayGroups={dayGroups}
+          />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  // ── Editor ──
   return (
     <MainLayout>
       <Head title={`Build Guide — ${trip.destination} | Voyance`} />
@@ -376,11 +393,24 @@ export default function GuideBuilder() {
             <h1 className="text-xl sm:text-2xl font-serif font-bold truncate">
               {existingGuide ? 'Edit Your Guide' : 'Build Your Travel Guide'}
             </h1>
-            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-              <MapPin className="h-3 w-3" />
-              {trip.destination}
-              {trip.destination_country ? `, ${trip.destination_country}` : ''}
-            </p>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+              <span className="flex items-center gap-1">
+                <MapPin className="h-3 w-3" />
+                {trip.destination}{trip.destination_country ? `, ${trip.destination_country}` : ''}
+              </span>
+              {trip.start_date && trip.end_date && (
+                <span className="flex items-center gap-1">
+                  <Calendar className="h-3 w-3" />
+                  {format(new Date(trip.start_date), 'MMM d')} – {format(new Date(trip.end_date), 'MMM d, yyyy')}
+                </span>
+              )}
+              {durationDays && (
+                <span className="flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {durationDays} day{durationDays !== 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -390,21 +420,25 @@ export default function GuideBuilder() {
             <label className="text-sm font-medium">Title</label>
             <Input
               value={form.title}
-              onChange={e => setForm(prev => ({ ...prev, title: e.target.value }))}
+              onChange={e => setForm(prev => ({ ...prev, title: e.target.value.slice(0, 100) }))}
               placeholder="My Tokyo Travel Guide"
+              maxLength={100}
               className="text-sm"
             />
+            <p className="text-xs text-muted-foreground text-right">{form.title.length}/100</p>
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Description</label>
-            <textarea
+            <label className="text-sm font-medium">Description (optional)</label>
+            <Textarea
               value={form.description}
-              onChange={e => setForm(prev => ({ ...prev, description: e.target.value }))}
+              onChange={e => setForm(prev => ({ ...prev, description: e.target.value.slice(0, 1000) }))}
               placeholder="A brief description of your guide…"
+              maxLength={1000}
               rows={3}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+              className="text-sm resize-none"
             />
+            <p className="text-xs text-muted-foreground text-right">{form.description.length}/1000</p>
           </div>
 
           <div className="space-y-2">
@@ -427,96 +461,111 @@ export default function GuideBuilder() {
                 placeholder="Add a tag…"
                 className="text-xs h-8 flex-1"
               />
-              <Button size="sm" variant="outline" onClick={addTag} className="h-8 text-xs">
-                Add
-              </Button>
+              <Button size="sm" variant="outline" onClick={addTag} className="h-8 text-xs">Add</Button>
             </div>
           </div>
         </div>
 
-        {/* Favorites list */}
-        <div className="space-y-3">
+        {/* Content grouped by day */}
+        <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold">
-              Included Activities ({favorites.length})
+              Guide Content ({itemCount} item{itemCount !== 1 ? 's' : ''})
             </h2>
           </div>
 
-          {favorites.length === 0 ? (
+          {itemCount === 0 ? (
             <div className="text-center py-10 border border-dashed border-border rounded-xl">
               <BookOpen className="h-8 w-8 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">No favorites yet</p>
+              <p className="text-sm text-muted-foreground">No items yet</p>
               <p className="text-xs text-muted-foreground/70 mt-1">
-                Go back to your trip and bookmark activities to include them here.
+                Bookmark activities from your trip or add personal recommendations.
               </p>
-              <Button variant="outline" size="sm" className="mt-4" onClick={() => navigate(`/trip/${tripId}`)}>
-                Back to Trip
-              </Button>
+              <div className="flex gap-2 justify-center mt-4">
+                <Button variant="outline" size="sm" onClick={() => navigate(`/trip/${tripId}`)}>
+                  Back to Trip
+                </Button>
+                <Button size="sm" onClick={() => { setAddRecDayNumber(1); setAddRecModalOpen(true); }} className="gap-1.5">
+                  <Plus className="h-3.5 w-3.5" /> Add Recommendation
+                </Button>
+              </div>
             </div>
           ) : (
-            <div className="space-y-2">
-              {favorites.map((fav, i) => (
-                <motion.div
-                  key={fav.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.03 }}
-                  className="flex items-start gap-3 p-3 rounded-xl border border-border bg-card"
-                >
-                  <div className="shrink-0 text-muted-foreground/40 pt-1">
-                    <GripVertical className="h-4 w-4" />
-                  </div>
-                  {fav.activity?.image_url && (
-                    <img
-                      src={fav.activity.image_url}
-                      alt={fav.activity.name || ''}
-                      className="w-14 h-14 rounded-lg object-cover shrink-0"
+            [...dayGroups.entries()].map(([day, items]) => (
+              <div key={day} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                    <Calendar className="h-3.5 w-3.5" />
+                    {day > 0 ? `Day ${day}` : 'General'}
+                  </h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs gap-1 text-muted-foreground"
+                    onClick={() => { setAddRecDayNumber(day || 1); setAddRecModalOpen(true); }}
+                  >
+                    <Plus className="h-3 w-3" /> Add Rec
+                  </Button>
+                </div>
+
+                {items.map((item, i) => (
+                  editingNoteId === item.id && item.type === 'favorite' ? (
+                    <div key={item.id} className="flex gap-2 p-3 rounded-xl border border-primary/30 bg-card">
+                      <Input
+                        value={editNoteValue}
+                        onChange={e => setEditNoteValue(e.target.value)}
+                        placeholder="Add your note…"
+                        className="text-xs flex-1"
+                        autoFocus
+                        onKeyDown={e => e.key === 'Enter' && handleSaveNote()}
+                      />
+                      <Button size="sm" onClick={handleSaveNote}>Save</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingNoteId(null)}>Cancel</Button>
+                    </div>
+                  ) : (
+                    <GuideActivityCard
+                      key={item.id}
+                      item={item}
+                      index={i}
+                      onDelete={handleDelete}
+                      onEditNote={item.type === 'favorite' ? handleStartEditNote : undefined}
                     />
-                  )}
-                  <div className="flex-1 min-w-0 space-y-0.5">
-                    <p className="text-sm font-medium truncate">
-                      {fav.activity?.name || 'Activity'}
-                    </p>
-                    {fav.activity?.category && (
-                      <Badge variant="outline" className="text-[10px]">{fav.activity.category}</Badge>
-                    )}
-                    {fav.note && (
-                      <p className="text-xs text-primary/80 italic mt-1">"{fav.note}"</p>
-                    )}
-                    {fav.activity?.description && (
-                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{fav.activity.description}</p>
-                    )}
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+                  )
+                ))}
+              </div>
+            ))
           )}
         </div>
 
         {/* Actions */}
-        {favorites.length > 0 && (
-          <div className="flex gap-3 pt-4 border-t border-border">
-            <Button
-              variant="outline"
-              className="gap-2 flex-1"
-              disabled={saveMutation.isPending || !form.title.trim()}
-              onClick={() => saveMutation.mutate(false)}
-            >
-              {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save Draft
-            </Button>
-            <Button
-              className="gap-2 flex-1"
-              disabled={saveMutation.isPending || !canPublish}
-              onClick={() => setPublishModalOpen(true)}
-            >
-              <Globe className="h-4 w-4" />
-              Publish Guide
-            </Button>
-          </div>
-        )}
+        <div className="flex flex-wrap gap-3 pt-4 border-t border-border">
+          <Button
+            variant="outline"
+            className="gap-2 flex-1 min-w-[140px]"
+            disabled={saveMutation.isPending || !form.title.trim()}
+            onClick={() => saveMutation.mutate(false)}
+          >
+            {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save Draft
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setShowPreview(true)}
+            disabled={itemCount === 0}
+          >
+            <Eye className="h-4 w-4" /> Preview
+          </Button>
+          <Button
+            className="gap-2 flex-1 min-w-[140px]"
+            disabled={saveMutation.isPending || !canPublish}
+            onClick={() => setPublishModalOpen(true)}
+          >
+            <Globe className="h-4 w-4" /> Publish Guide
+          </Button>
+        </div>
 
-        {!canPublish && favorites.length > 0 && itemCount < 3 && (
+        {!canPublish && itemCount > 0 && itemCount < 3 && (
           <p className="text-xs text-muted-foreground text-center">
             You need at least 3 items to publish. Currently: {itemCount}.
           </p>
@@ -530,6 +579,14 @@ export default function GuideBuilder() {
         isPending={saveMutation.isPending}
         title={form.title}
         itemCount={itemCount}
+      />
+
+      <AddRecommendationModal
+        open={addRecModalOpen}
+        onOpenChange={setAddRecModalOpen}
+        onSubmit={entry => addRecMutation.mutate(entry)}
+        isPending={addRecMutation.isPending}
+        defaultDayNumber={addRecDayNumber}
       />
     </MainLayout>
   );
