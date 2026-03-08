@@ -544,6 +544,64 @@ export default function GuideBuilder() {
           )}
         </div>
 
+        {/* ── My Content (content links) ── */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold flex items-center gap-2">
+                <Link2 className="h-3.5 w-3.5" />
+                Link Your Content
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Connect your YouTube videos, Instagram posts, and more to this guide
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => {
+                if (!existingGuide) {
+                  toast.info('Save your guide as a draft first to add content links.');
+                  return;
+                }
+                setAddContentLinkOpen(true);
+              }}
+            >
+              <Plus className="h-3 w-3" /> Add Content Link
+            </Button>
+          </div>
+
+          {contentLinks.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {contentLinks.map(link => (
+                <ContentLinkCard
+                  key={link.id}
+                  link={link}
+                  onDelete={async (id) => {
+                    try {
+                      await deleteLink(id);
+                      toast.success('Content link removed');
+                    } catch {
+                      toast.error('Failed to remove link');
+                    }
+                  }}
+                  isDeleting={isDeletingLink}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-6 border border-dashed border-border rounded-xl">
+              <Link2 className="h-6 w-6 text-muted-foreground/30 mx-auto mb-2" />
+              <p className="text-xs text-muted-foreground">
+                {existingGuide
+                  ? 'No content links yet. Add YouTube videos, blog posts, or social media content.'
+                  : 'Save your guide as a draft first, then add content links.'}
+              </p>
+            </div>
+          )}
+        </div>
+
         {/* Actions */}
         <div className="flex flex-wrap gap-3 pt-4 border-t border-border">
           <Button
@@ -594,6 +652,22 @@ export default function GuideBuilder() {
         onSubmit={entry => addRecMutation.mutate(entry)}
         isPending={addRecMutation.isPending}
         defaultDayNumber={addRecDayNumber}
+      />
+
+      <AddContentLinkModal
+        open={addContentLinkOpen}
+        onOpenChange={setAddContentLinkOpen}
+        onSubmit={async (data) => {
+          try {
+            await addLink(data);
+            toast.success('Content link added!');
+          } catch {
+            toast.error('Failed to add content link');
+          }
+        }}
+        isPending={isAddingLink}
+        dayNumbers={[...dayGroups.keys()].filter(d => d > 0).sort()}
+        activities={allItems.filter(i => i.id).map(i => ({ id: i.id, name: i.name }))}
       />
     </MainLayout>
   );
