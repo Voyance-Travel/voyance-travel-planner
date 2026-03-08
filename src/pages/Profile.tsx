@@ -42,6 +42,7 @@ import MemoryLane from '@/components/profile/MemoryLane';
 import EditorialPreferencesView from '@/components/profile/EditorialPreferencesView';
 import ClientAgentPortal from '@/components/profile/ClientAgentPortal';
 import CreditBalanceCard from '@/components/profile/CreditBalanceCard';
+import FollowingTab from '@/components/profile/FollowingTab';
 import ProfileHotelSearchModal from '@/components/profile/ProfileHotelSearchModal';
 import CreditPacksGrid from '@/components/profile/CreditPacksGrid';
 import { CreditEarningChecklist } from '@/components/common/CreditEarningChecklist';

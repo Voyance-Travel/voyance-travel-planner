@@ -48,7 +48,7 @@ export function useFollowing() {
       // Get travel DNA for archetype
       const { data: dnaProfiles } = await supabase
         .from('travel_dna_profiles')
-        .select('user_id, primary_archetype')
+        .select('user_id, primary_archetype_name')
         .in('user_id', creatorIds);
 
       // Get published guides (max 3 per creator for display)
@@ -80,7 +80,7 @@ export function useFollowing() {
           display_name: profile?.display_name || null,
           avatar_url: profile?.avatar_url || null,
           handle: profile?.handle || null,
-          archetype: dna?.primary_archetype || null,
+          archetype: dna?.primary_archetype_name || null,
           guides: creatorGuides.slice(0, 3).map(g => ({
             id: g.id,
             title: g.title,
