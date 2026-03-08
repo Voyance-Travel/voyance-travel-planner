@@ -5065,6 +5065,60 @@ export type Database = {
         }
         Relationships: []
       }
+      route_cache: {
+        Row: {
+          cache_key: string | null
+          created_at: string | null
+          dest_lat: number
+          dest_lng: number
+          distance_meters: number | null
+          duration_seconds: number | null
+          duration_text: string | null
+          expires_at: string | null
+          hit_count: number | null
+          id: string
+          origin_lat: number
+          origin_lng: number
+          steps_json: Json | null
+          transit_details_json: Json | null
+          travel_mode: string
+        }
+        Insert: {
+          cache_key?: string | null
+          created_at?: string | null
+          dest_lat: number
+          dest_lng: number
+          distance_meters?: number | null
+          duration_seconds?: number | null
+          duration_text?: string | null
+          expires_at?: string | null
+          hit_count?: number | null
+          id?: string
+          origin_lat: number
+          origin_lng: number
+          steps_json?: Json | null
+          transit_details_json?: Json | null
+          travel_mode?: string
+        }
+        Update: {
+          cache_key?: string | null
+          created_at?: string | null
+          dest_lat?: number
+          dest_lng?: number
+          distance_meters?: number | null
+          duration_seconds?: number | null
+          duration_text?: string | null
+          expires_at?: string | null
+          hit_count?: number | null
+          id?: string
+          origin_lat?: number
+          origin_lng?: number
+          steps_json?: Json | null
+          transit_details_json?: Json | null
+          travel_mode?: string
+        }
+        Relationships: []
+      }
       saved_items: {
         Row: {
           created_at: string
