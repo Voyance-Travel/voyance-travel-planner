@@ -15,10 +15,11 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { motion } from 'framer-motion';
 import {
-  BookOpen, ArrowLeft, Sparkles, GripVertical, Trash2, Save,
-  Globe, Loader2, MapPin, Eye, Pencil,
+  BookOpen, ArrowLeft, GripVertical, Trash2, Save,
+  Globe, Loader2, MapPin, Copy, ExternalLink, EyeOff, Check, PartyPopper,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import PublishConfirmModal from '@/components/guides/PublishConfirmModal';
 
 interface GuideFavorite {
   id: string;
@@ -111,6 +112,14 @@ export default function GuideBuilder() {
     tagInput: '',
   });
 
+  const [publishModalOpen, setPublishModalOpen] = useState(false);
+  const [justPublished, setJustPublished] = useState(false);
+
+  const isPublished = existingGuide?.status === 'published';
+  const guideUrl = existingGuide
+    ? `${window.location.origin}/community-guides/${existingGuide.id}`
+    : '';
+
   // Seed form from existing guide or trip
   useEffect(() => {
     if (existingGuide) {
@@ -178,17 +187,42 @@ export default function GuideBuilder() {
           .insert(payload);
         if (error) throw error;
       }
+
+      return publish;
     },
-    onSuccess: (_, publish) => {
+    onSuccess: (didPublish) => {
       queryClient.invalidateQueries({ queryKey: ['community-guide-trip', tripId] });
       queryClient.invalidateQueries({ queryKey: ['community-guides-published'] });
-      toast.success(publish ? 'Guide published!' : 'Draft saved');
-      if (publish) {
-        navigate(`/trip/${tripId}`);
+      if (didPublish) {
+        setPublishModalOpen(false);
+        setJustPublished(true);
+        toast.success('Guide published!');
+      } else {
+        toast.success('Draft saved');
       }
     },
     onError: (err: any) => {
       toast.error(err.message || 'Failed to save guide');
+    },
+  });
+
+  const unpublishMutation = useMutation({
+    mutationFn: async () => {
+      if (!existingGuide) throw new Error('No guide to unpublish');
+      const { error } = await supabase
+        .from('community_guides')
+        .update({ status: 'draft', published_at: null, updated_at: new Date().toISOString() })
+        .eq('id', existingGuide.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['community-guide-trip', tripId] });
+      queryClient.invalidateQueries({ queryKey: ['community-guides-published'] });
+      setJustPublished(false);
+      toast.success('Guide unpublished');
+    },
+    onError: () => {
+      toast.error('Failed to unpublish');
     },
   });
 
@@ -202,6 +236,14 @@ export default function GuideBuilder() {
   const removeTag = (tag: string) => {
     setForm(prev => ({ ...prev, tags: prev.tags.filter(t => t !== tag) }));
   };
+
+  const copyUrl = () => {
+    navigator.clipboard.writeText(guideUrl);
+    toast.success('Link copied!');
+  };
+
+  const itemCount = favorites.length; // TODO: add manual entries count when supported
+  const canPublish = form.title.trim().length > 0 && itemCount >= 3;
 
   const isLoading = tripLoading || favsLoading || guideLoading;
 
@@ -225,6 +267,96 @@ export default function GuideBuilder() {
           <Button variant="outline" asChild>
             <Link to="/trip/dashboard"><ArrowLeft className="h-4 w-4 mr-2" />Back to Trips</Link>
           </Button>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  // Success state after publish
+  if (justPublished || isPublished) {
+    const showSuccessBanner = justPublished;
+
+    return (
+      <MainLayout>
+        <Head title={`Guide — ${trip.destination} | Voyance`} />
+
+        <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
+          {/* Header */}
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => navigate(`/trip/${tripId}`)}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-xl sm:text-2xl font-serif font-bold truncate">
+                Your Published Guide
+              </h1>
+              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                <MapPin className="h-3 w-3" />
+                {trip.destination}
+                {trip.destination_country ? `, ${trip.destination_country}` : ''}
+              </p>
+            </div>
+          </div>
+
+          {/* Success banner */}
+          {showSuccessBanner && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="rounded-xl border border-primary/20 bg-primary/5 p-6 text-center space-y-3"
+            >
+              <PartyPopper className="h-10 w-10 text-primary mx-auto" />
+              <h2 className="text-lg font-serif font-bold text-foreground">Your guide is live!</h2>
+              <p className="text-sm text-muted-foreground">
+                Share it with friends or anyone planning a trip to {trip.destination}.
+              </p>
+            </motion.div>
+          )}
+
+          {/* Shareable URL */}
+          <div className="rounded-xl border border-border bg-card p-5 space-y-3">
+            <p className="text-sm font-medium text-foreground">Shareable link</p>
+            <div className="flex gap-2">
+              <Input value={guideUrl} readOnly className="text-xs bg-muted/50 flex-1" />
+              <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={copyUrl}>
+                <Copy className="h-3.5 w-3.5" />
+                Copy
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button variant="outline" size="sm" asChild className="gap-1.5">
+                <Link to={`/community-guides/${existingGuide?.id}`} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  View Published Guide
+                </Link>
+              </Button>
+            </div>
+          </div>
+
+          {/* Edit / Unpublish */}
+          <div className="flex gap-3 pt-4 border-t border-border">
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => { setJustPublished(false); }}
+            >
+              <Save className="h-4 w-4" />
+              Edit Guide
+            </Button>
+            <Button
+              variant="ghost"
+              className="gap-2 text-destructive hover:text-destructive"
+              disabled={unpublishMutation.isPending}
+              onClick={() => unpublishMutation.mutate()}
+            >
+              {unpublishMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <EyeOff className="h-4 w-4" />
+              )}
+              Unpublish
+            </Button>
+          </div>
         </div>
       </MainLayout>
     );
@@ -375,15 +507,30 @@ export default function GuideBuilder() {
             </Button>
             <Button
               className="gap-2 flex-1"
-              disabled={saveMutation.isPending || !form.title.trim()}
-              onClick={() => saveMutation.mutate(true)}
+              disabled={saveMutation.isPending || !canPublish}
+              onClick={() => setPublishModalOpen(true)}
             >
-              {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+              <Globe className="h-4 w-4" />
               Publish Guide
             </Button>
           </div>
         )}
+
+        {!canPublish && favorites.length > 0 && itemCount < 3 && (
+          <p className="text-xs text-muted-foreground text-center">
+            You need at least 3 items to publish. Currently: {itemCount}.
+          </p>
+        )}
       </div>
+
+      <PublishConfirmModal
+        open={publishModalOpen}
+        onOpenChange={setPublishModalOpen}
+        onConfirm={() => saveMutation.mutate(true)}
+        isPending={saveMutation.isPending}
+        title={form.title}
+        itemCount={itemCount}
+      />
     </MainLayout>
   );
 }
