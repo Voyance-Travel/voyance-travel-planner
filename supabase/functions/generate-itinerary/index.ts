@@ -9618,12 +9618,12 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
           // Only include items relevant to this day
           const dayItems = scheduled.scheduled.filter(s => s.assignedDay === dayNumber);
           if (dayItems.length > 0) {
-            mustDoPrompt = `\n## 🚨 USER'S MUST-DO VENUES FOR DAY ${dayNumber} (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED these venues. You MUST include them:\n${dayItems.map(item => `- ${item.priority.name} (${item.priority.priority})`).join('\n')}\n\nRULES:\n- Include ALL listed venues by name in this day's itinerary\n- Only add AI recommendations to fill remaining slots\n`;
+            mustDoPrompt = `\n## 🚨 USER'S MUST-DO VENUES FOR DAY ${dayNumber} (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED these venues. You MUST include them:\n${dayItems.map(item => `- ${item.priority.title} (${item.priority.priority})${item.priority.activityType === 'all_day_event' ? ' [ALL-DAY EVENT — plan the ENTIRE day around this]' : item.priority.activityType === 'half_day_event' ? ' [HALF-DAY EVENT — dedicate morning or afternoon to this]' : ''}`).join('\n')}\n\nRULES:\n- Include ALL listed venues by name in this day's itinerary\n- For ALL-DAY events, the entire day should revolve around this event\n- Only add AI recommendations to fill remaining slots\n`;
           } else {
             // No items specifically for this day, but include unschedulable ones as suggestions
             const unscheduledItems = scheduled.unschedulable || [];
             if (unscheduledItems.length > 0) {
-              mustDoPrompt = `\n## User's Researched Venues (try to include if appropriate)\n${unscheduledItems.map(u => `- ${u.priority.name} (${u.priority.priority})`).join('\n')}\n`;
+              mustDoPrompt = `\n## User's Researched Venues (try to include if appropriate)\n${unscheduledItems.map(u => `- ${u.priority.title} (${u.priority.priority})`).join('\n')}\n`;
             }
           }
           console.log(`[generate-day] Must-do activities parsed: ${mustDoAnalysis.length} items, ${dayItems.length} for day ${dayNumber}`);
