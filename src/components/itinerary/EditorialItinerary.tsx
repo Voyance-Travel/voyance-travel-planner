@@ -4154,7 +4154,7 @@ export function EditorialItinerary({
                     />
                   )}
                 </span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   {canUndoDay && (
                     <DayUndoButton
                       onClick={handleUndo}
@@ -4162,6 +4162,15 @@ export function EditorialItinerary({
                       showLabel
                     />
                   )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setVersionHistoryOpen(true)}
+                    className="gap-1.5 text-xs"
+                  >
+                    <History className="h-4 w-4" />
+                    <span className="hidden sm:inline">History</span>
+                  </Button>
                   <span className="text-xs text-muted-foreground">
                     Day {selectedDayIndex + 1} of {days.length}
                   </span>
