@@ -972,7 +972,7 @@ export function AddHotelInline({
             </div>
             
             {/* Check-in / Check-out Date Pickers */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">Check-in Date *</Label>
                 <Popover>
@@ -1059,7 +1059,7 @@ export function AddHotelInline({
               />
             </div>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Check-in Time</Label>
                 <Input

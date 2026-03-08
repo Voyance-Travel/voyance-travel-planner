@@ -824,7 +824,7 @@ export function ItineraryGenerator({
             </Badge>
             <Badge variant="outline" className="gap-1">
               <Clock className="h-3 w-3" />
-              {Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24))} days
+              {totalDaysEstimate} days
             </Badge>
             <Badge variant="outline" className="gap-1">
               <DollarSign className="h-3 w-3" />
