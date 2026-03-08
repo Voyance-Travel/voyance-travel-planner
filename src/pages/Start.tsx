@@ -2666,9 +2666,14 @@ export default function Start() {
                     setPacing={setPacing}
                     onChatDetailsExtracted={async (details) => {
                       // Create trip directly from extracted details — don't rely on async state updates
+                      // Hard date guard: force dates to 2026+ and never in the past
+                      const guardedDates = normalizeChatTripDates(
+                        details.startDate || '',
+                        details.endDate || '',
+                      );
                       const dest = details.destination || '';
-                      const chatStartDate = details.startDate ? parseLocalDate(details.startDate) : null;
-                      const chatEndDate = details.endDate ? parseLocalDate(details.endDate) : null;
+                      const chatStartDate = guardedDates.startDate ? parseLocalDate(guardedDates.startDate) : null;
+                      const chatEndDate = guardedDates.endDate ? parseLocalDate(guardedDates.endDate) : null;
 
                       if (!dest || !chatStartDate || !chatEndDate) {
                         toast.error('Missing trip details - please provide destination and dates');
