@@ -105,13 +105,7 @@ export function CreditNudge({ action, currentBalance, onDismiss, compact }: Cred
               <Button
                 size="sm"
                 className="gap-1.5 flex-1"
-                onClick={() => setCheckoutPack({
-                  priceId: primaryPack.priceId,
-                  name: primaryPack.name,
-                  credits: primaryPack.credits,
-                  productId: primaryPack.productId,
-                  mode: 'payment',
-                })}
+                onClick={() => handleBuyPack({ ...primaryPack, id: primaryPack.id })}
               >
                 <Zap size={13} />
                 {primaryPack.name} · {formatCredits(primaryPack.credits)} credits · ${primaryPack.price}
