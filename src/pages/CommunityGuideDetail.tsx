@@ -14,6 +14,7 @@ import { BookOpen, MapPin, Calendar, ArrowLeft, ArrowRight, Clock, Loader2, Tras
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 import CreatorCard from '@/components/guides/CreatorCard';
 import ReportGuideModal from '@/components/guides/ReportGuideModal';
 import CommunityGuideActivityCard from '@/components/guides/CommunityGuideActivityCard';
