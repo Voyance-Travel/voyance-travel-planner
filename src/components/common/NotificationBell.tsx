@@ -243,6 +243,7 @@ export function NotificationBell() {
 
   const handleDismiss = (e: React.MouseEvent, notification: TripNotification) => {
     e.stopPropagation();
+    setDismissedIds(prev => new Set(prev).add(notification.id));
     dismissMutation.mutate({
       tripId: notification.tripId,
       notificationId: notification.id,
