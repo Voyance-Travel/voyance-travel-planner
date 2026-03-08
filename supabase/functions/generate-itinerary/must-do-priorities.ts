@@ -430,22 +430,35 @@ function findBestDay(
 ): { success: boolean; day?: number; backupDay?: number; rationale?: string; reason?: string } {
   const minDay = priority.minDay ?? 1;
   const maxDay = priority.maxDay ?? totalDays;
+  const isAllDay = priority.activityType === 'all_day_event';
   
   // If user specified a day, try that first
   if (priority.preferredDay && priority.preferredDay >= minDay && priority.preferredDay <= maxDay) {
     const dayLoad = dayAssignments.get(priority.preferredDay) || [];
-    const totalDuration = dayLoad.reduce((sum, p) => sum + (p.estimatedDuration || 120), 0);
     
-    if (totalDuration + (priority.estimatedDuration || 120) <= 480) { // 8 hours max
-      return {
-        success: true,
-        day: priority.preferredDay,
-        rationale: `User preferred Day ${priority.preferredDay}`,
-      };
+    // All-day events need an EMPTY day (no other must-dos assigned)
+    if (isAllDay) {
+      const hasOtherAllDay = dayLoad.some(p => p.activityType === 'all_day_event');
+      if (!hasOtherAllDay) {
+        return {
+          success: true,
+          day: priority.preferredDay,
+          rationale: `User preferred Day ${priority.preferredDay} (all-day event, day dedicated)`,
+        };
+      }
+    } else {
+      const totalDuration = dayLoad.reduce((sum, p) => sum + (p.estimatedDuration || 120), 0);
+      if (totalDuration + (priority.estimatedDuration || 120) <= 480) {
+        return {
+          success: true,
+          day: priority.preferredDay,
+          rationale: `User preferred Day ${priority.preferredDay}`,
+        };
+      }
     }
   }
   
-  // Find day with least load
+  // Find best day
   let bestDay: number | undefined;
   let lowestLoad = Infinity;
   let backupDay: number | undefined;
@@ -457,22 +470,50 @@ function findBestDay(
     }
     
     const dayLoad = dayAssignments.get(d) || [];
-    const totalDuration = dayLoad.reduce((sum, p) => sum + (p.estimatedDuration || 120), 0);
     
-    if (totalDuration < lowestLoad) {
-      backupDay = bestDay;
-      lowestLoad = totalDuration;
-      bestDay = d;
+    // All-day events: prefer completely empty days, skip days with other all-day events
+    if (isAllDay) {
+      const hasOtherAllDay = dayLoad.some(p => p.activityType === 'all_day_event');
+      if (hasOtherAllDay) continue;
+      const totalDuration = dayLoad.reduce((sum, p) => sum + (p.estimatedDuration || 120), 0);
+      // Prefer emptier days for all-day events
+      if (totalDuration < lowestLoad) {
+        backupDay = bestDay;
+        lowestLoad = totalDuration;
+        bestDay = d;
+      }
+    } else {
+      const totalDuration = dayLoad.reduce((sum, p) => sum + (p.estimatedDuration || 120), 0);
+      // Skip days that have all-day events — don't pile activities onto event days
+      const hasAllDayEvent = dayLoad.some(p => p.activityType === 'all_day_event');
+      if (hasAllDayEvent && priority.activityType !== 'quick_stop') continue;
+      
+      if (totalDuration < lowestLoad) {
+        backupDay = bestDay;
+        lowestLoad = totalDuration;
+        bestDay = d;
+      }
     }
   }
   
-  if (bestDay && lowestLoad + (priority.estimatedDuration || 120) <= 480) {
-    return {
-      success: true,
-      day: bestDay,
-      backupDay,
-      rationale: `Assigned to Day ${bestDay} (lowest load: ${lowestLoad} min)`,
-    };
+  if (bestDay !== undefined) {
+    // All-day events always succeed if we found an available day
+    if (isAllDay) {
+      return {
+        success: true,
+        day: bestDay,
+        backupDay,
+        rationale: `ALL-DAY EVENT assigned to Day ${bestDay} (day dedicated to this event)`,
+      };
+    }
+    if (lowestLoad + (priority.estimatedDuration || 120) <= 480) {
+      return {
+        success: true,
+        day: bestDay,
+        backupDay,
+        rationale: `Assigned to Day ${bestDay} (lowest load: ${lowestLoad} min)`,
+      };
+    }
   }
   
   return {
