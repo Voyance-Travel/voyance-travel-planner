@@ -87,6 +87,8 @@ import ActiveTrip from "./pages/ActiveTrip";
 import TripRecap from "./pages/TripRecap";
 import GuideBuilder from "./pages/GuideBuilder";
 import Demo from "./pages/Demo";
+import BlogPost from "./pages/BlogPost";
+import MyBlogs from "./pages/MyBlogs";
 
 // Pages - Legal
 import Privacy from "./pages/Privacy";
@@ -197,6 +199,9 @@ function AnimatedRoutes() {
         <Route path="/help" element={<HelpCenter />} />
         <Route path="/sample-itinerary" element={<SampleItinerary />} />
         
+        {/* Public Blog */}
+        <Route path="/blog/:slug" element={<BlogPost />} />
+        
         {/* Public Share Routes */}
         <Route path="/share/:shareToken" element={<TripShare />} />
         <Route path="/intake/:intakeToken" element={<ClientIntakeForm />} />
@@ -247,6 +252,9 @@ function AnimatedRoutes() {
         <Route path="/trip/:tripId/recap" element={<ProtectedRoute><TripRecap /></ProtectedRoute>} />
         <Route path="/trip/:tripId/guide" element={<ProtectedRoute><GuideBuilder /></ProtectedRoute>} />
         <Route path="/trips/:tripId/confirmation" element={<TripConfirmation />} />
+        
+        {/* Blog Routes */}
+        <Route path="/blog" element={<ProtectedRoute><MyBlogs /></ProtectedRoute>} />
         
         {/* Itinerary Routes */}
         <Route path="/itinerary/:id" element={<ItineraryView />} />
