@@ -216,15 +216,30 @@ export default function TripDetail() {
           const itineraryDaysExist = (daysResult.count ?? 0) > 0;
 
           if (verifyData?.days?.length && verifyData.days.length > 0) {
-            console.log('[TripDetail] onFailed suppressed — itinerary_data has', verifyData.days.length, 'days');
-            setTrip(verifyTrip);
-            setShowGenerator(false);
-            setCachedVersion(tripId, (verifyTrip as any).itinerary_version ?? 1);
-            toast.success('Your itinerary is ready! 🎉');
-            if (user?.id) {
-              queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
-              queryClient.invalidateQueries({ queryKey: ['entitlements', user.id] });
+            // Check if ALL expected days are present before treating as ready
+            const tripMeta = (verifyTrip?.metadata as Record<string, unknown>) || {};
+            const expectedTotalDays = (tripMeta.generation_total_days as number) || 0;
+
+            if (expectedTotalDays > 0 && verifyData.days.length >= expectedTotalDays) {
+              // ALL days present — genuinely ready
+              console.log('[TripDetail] onFailed suppressed — itinerary_data has all', verifyData.days.length, '/', expectedTotalDays, 'days');
+              setTrip(verifyTrip);
+              setShowGenerator(false);
+              setCachedVersion(tripId, (verifyTrip as any).itinerary_version ?? 1);
+              toast.success('Your itinerary is ready! 🎉');
+              if (user?.id) {
+                queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
+                queryClient.invalidateQueries({ queryKey: ['entitlements', user.id] });
+              }
+              return;
             }
+
+            // PARTIAL data exists — some days generated but not all.
+            // Do NOT treat as ready. Trigger stalled/resume so auto-resume can
+            // pick up from where it left off.
+            console.log('[TripDetail] onFailed — partial data:', verifyData.days.length, '/', expectedTotalDays, 'days. Triggering resume.');
+            if (verifyTrip) setTrip(verifyTrip);
+            setGenerationStalled(true);
             return;
           }
 
@@ -1774,7 +1789,7 @@ export default function TripDetail() {
                         <ErrorBoundary>
                           <TripHealthPanel
                             days={editorDays}
-                            totalDaysExpected={editorDays.length}
+                            totalDaysExpected={(() => { const m = (trip?.metadata as Record<string, unknown>) || {}; const gen = (m.generation_total_days as number) || 0; return gen > 0 ? Math.max(gen, editorDays.length) : editorDays.length; })()}
                             hasFlights={!!trip.flight_selection}
                             hasHotel={
                               !!trip.hotel_selection || 
@@ -1856,7 +1871,7 @@ export default function TripDetail() {
                     <ErrorBoundary>
                     <TripHealthPanel
                       days={editorDays}
-                      totalDaysExpected={editorDays.length}
+                      totalDaysExpected={(() => { const m = (trip?.metadata as Record<string, unknown>) || {}; const gen = (m.generation_total_days as number) || 0; return gen > 0 ? Math.max(gen, editorDays.length) : editorDays.length; })()}
                       hasFlights={!!trip.flight_selection}
                       hasHotel={
                         !!trip.hotel_selection || 
