@@ -2791,10 +2791,43 @@ export default function Start() {
                               order: i + 1,
                             })) as any : null,
                             metadata: {
-                              mustDoActivities: details.mustDoActivities || null,
+                              // Normalize mustDoActivities to string[] to match form path
+                              mustDoActivities: details.mustDoActivities
+                                ? details.mustDoActivities.split(',').map((s: string) => s.trim()).filter(Boolean)
+                                : null,
                               additionalNotes: details.additionalNotes || null,
                               flightDetails: details.flightDetails || null,
                               userConstraints: details.userConstraints || null,
+                              // Personalization fields — match form path output
+                              pacing: details.pacing || 'balanced',
+                              isFirstTimeVisitor: details.isFirstTimeVisitor ?? true,
+                              interestCategories: details.interestCategories?.length ? details.interestCategories : null,
+                              celebrationDay: details.celebrationDay || null,
+                              // Convert userConstraints → generationRules format the engine reads
+                              generationRules: (() => {
+                                if (!details.userConstraints?.length) return null;
+                                const rules: Array<Record<string, unknown>> = [];
+                                for (const c of details.userConstraints) {
+                                  if (c.type === 'full_day_event' && c.allDay && c.day) {
+                                    rules.push({
+                                      type: 'blocked_time',
+                                      days: [`day_${c.day}`],
+                                      from: '00:00',
+                                      to: '23:59',
+                                      reason: c.description,
+                                    });
+                                  } else if (c.type === 'time_block' && c.day && c.time) {
+                                    rules.push({
+                                      type: 'blocked_time',
+                                      days: [`day_${c.day}`],
+                                      from: c.time,
+                                      to: c.time,
+                                      reason: c.description,
+                                    });
+                                  }
+                                }
+                                return rules.length > 0 ? rules : null;
+                              })(),
                               source: 'chat_planner',
                               lastUpdated: new Date().toISOString(),
                             },
