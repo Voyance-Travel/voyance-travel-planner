@@ -2467,6 +2467,7 @@ export default function Start() {
             generationRules: generationRules.length > 0 ? generationRules : null,
             celebrationDay: celebrationDay || null,
             pacing: pacing || 'balanced',
+            is_day_trip: !!isDayTrip,
             lastUpdated: new Date().toISOString(),
           }) as any,
         })
@@ -2858,6 +2859,7 @@ export default function Start() {
                                 interestCategories: details.interestCategories?.length ? details.interestCategories : null,
                                 celebrationDay: details.celebrationDay || null,
                                 generationRules,
+                                is_day_trip: chatStartDate && chatEndDate && differenceInDays(chatEndDate, chatStartDate) === 0,
                                 source: 'chat_planner',
                                 lastUpdated: new Date().toISOString(),
                               };
