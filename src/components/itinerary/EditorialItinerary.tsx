@@ -7460,6 +7460,7 @@ function DayCard({
   onActivityReorder,
   onDayLock,
   onDayRegenerate,
+  onRemoveDay,
   onAddActivity,
   onDiscover,
   onImportActivities,
