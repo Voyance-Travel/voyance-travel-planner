@@ -972,6 +972,12 @@ export default function TripDashboard() {
      setTrips(prev => prev.filter(t => t.id !== tripId));
    }, []);
 
+   // Handle journey deletion - remove all legs from local state
+   const handleJourneyDelete = useCallback((tripIds: string[]) => {
+     const idSet = new Set(tripIds);
+     setTrips(prev => prev.filter(t => !idSet.has(t.id)));
+   }, []);
+
   // Simplified filtering - drafts are now included in "upcoming"
   const filterTrips = (tab: TabValue): Trip[] => {
     const now = new Date();
@@ -1276,6 +1282,7 @@ export default function TripDashboard() {
                                   journeyName={item.journeyName}
                                   trips={item.trips}
                                   index={idx}
+                                  onDeleteJourney={handleJourneyDelete}
                                 />
                               );
                             }
