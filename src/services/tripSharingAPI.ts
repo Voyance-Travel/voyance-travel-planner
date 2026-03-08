@@ -116,11 +116,11 @@ export async function getTravelers(tripId: string): Promise<TravelersResponse> {
   if (error) throw new Error(error.message);
 
   // Also get trip owner
-  const { data: trip } = await supabase
+  const { data: trip } = (await supabase
     .from('trips')
-    .select('user_id, profiles:user_id (id, display_name, avatar_url)' as '*')
+    .select('user_id, profiles:user_id (id, display_name, avatar_url)')
     .eq('id', tripId)
-    .single();
+    .single()) as { data: any };
 
   const travelers: TravelerProfile[] = [];
 
