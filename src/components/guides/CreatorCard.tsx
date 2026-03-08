@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, Youtube, Instagram, Facebook, Linkedin, Globe } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { ExternalLink, Youtube, Instagram, Facebook, Linkedin, Globe, UserPlus, UserCheck, Users } from 'lucide-react';
+import { useGuideFollow } from '@/hooks/useGuideFollow';
 import type { SocialLink, SocialPlatform } from '@/services/socialLinksAPI';
 
 interface CreatorCardProps {
@@ -68,6 +70,7 @@ function useCreatorProfile(userId: string) {
 
 export default function CreatorCard({ userId }: CreatorCardProps) {
   const { data } = useCreatorProfile(userId);
+  const { isFollowing: following, followerCount, toggleFollow, canFollow } = useGuideFollow(userId);
 
   if (!data?.profile) return null;
 
@@ -87,7 +90,7 @@ export default function CreatorCard({ userId }: CreatorCardProps) {
             {(profile.display_name || '?')[0].toUpperCase()}
           </div>
         )}
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="font-semibold text-foreground truncate">
             {profile.display_name || profile.handle || 'Traveler'}
           </p>
@@ -97,6 +100,34 @@ export default function CreatorCard({ userId }: CreatorCardProps) {
             </Badge>
           )}
         </div>
+      </div>
+
+      {/* Follower count + Follow button */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-muted-foreground flex items-center gap-1">
+          <Users className="h-3 w-3" />
+          {followerCount} follower{followerCount !== 1 ? 's' : ''}
+        </span>
+        {canFollow && (
+          <Button
+            variant={following ? 'secondary' : 'outline'}
+            size="sm"
+            className="text-xs h-8"
+            onClick={toggleFollow}
+          >
+            {following ? (
+              <>
+                <UserCheck className="h-3.5 w-3.5 mr-1" />
+                Following
+              </>
+            ) : (
+              <>
+                <UserPlus className="h-3.5 w-3.5 mr-1" />
+                Follow
+              </>
+            )}
+          </Button>
+        )}
       </div>
 
       {socialLinks.length > 0 && (
