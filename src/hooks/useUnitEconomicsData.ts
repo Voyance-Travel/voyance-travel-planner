@@ -256,7 +256,7 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
 
   // Parallel fetch all data sources — cost data uses server-side RPC aggregation
   const thirtyDaysAgoISO = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const [costSummaryResult, ledgerResult, balanceResult, tripResult, profileNamesResult, tierResult, groupBudgetResult] = await Promise.all([
+  const [costSummaryResult, ledgerResult, balanceResult, tripResult, profileNamesResult, tierResult, groupBudgetResult, purchasesResult] = await Promise.all([
     supabase.rpc('get_unit_economics_summary', {
       p_start_date: thirtyDaysAgoISO,
       p_end_date: new Date().toISOString(),
@@ -267,6 +267,8 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
     supabase.from('profiles').select('id, display_name'),
     supabase.from('user_tiers').select('tier, updated_at'),
     supabase.from('group_budgets').select('tier, initial_credits, remaining_credits'),
+    // NEW: query credit_purchases as the source of truth for revenue
+    supabase.from('credit_purchases').select('user_id, credit_type, amount, remaining, source, stripe_session_id, club_tier, created_at'),
   ]);
 
   const warnings: string[] = [];
@@ -433,13 +435,51 @@ async function fetchUnitEconomicsData(): Promise<UnitEconomicsData | null> {
   const userPurchases = Object.values(userPurchaseMap).sort((a, b) => b.totalRevenue - a.totalRevenue);
 
   // ---- USER METRICS ----
-  // Count paid users: anyone with a real purchase transaction
-  const paidUsers = new Set(
+  // Count paid users from both sources, use whichever is higher
+  const purchaseEntries = purchasesResult.data || [];
+  const paidUsersFromPurchases = new Set(
+    purchaseEntries
+      .filter(e => e.source === 'stripe' && !['free', 'free_monthly', 'signup_bonus', 'referral_bonus', 'migration'].includes(e.credit_type))
+      .map(e => e.user_id)
+      .filter(Boolean)
+  ).size;
+
+  const paidUsersFromLedger = new Set(
     ledgerEntries
       .filter(e => isPurchaseEntry(e))
       .map(e => (e as any).user_id)
       .filter(Boolean)
   ).size;
+
+  const paidUsers = Math.max(paidUsersFromPurchases, paidUsersFromLedger);
+
+  // Cross-reference revenue with credit_purchases
+  const KNOWN_PRICES: Record<string, Record<number, number>> = {
+    flex: { 100: 9.00, 300: 25.00, 500: 39.00 },
+    club_base: { 300: 49.99, 800: 89.99, 1600: 149.99 },
+  };
+
+  let purchasesRevenue = 0;
+  let purchasesCount = 0;
+  for (const p of purchaseEntries) {
+    if (p.source !== 'stripe') continue;
+    if (['free', 'free_monthly', 'signup_bonus', 'referral_bonus', 'migration'].includes(p.credit_type)) continue;
+    const prices = KNOWN_PRICES[p.credit_type] || {};
+    const inferredPrice = prices[p.amount] || (p.amount * 0.05);
+    purchasesRevenue += inferredPrice;
+    purchasesCount++;
+  }
+
+  if (totalRevenue === 0 && purchasesRevenue > 0) {
+    totalRevenue = purchasesRevenue;
+    purchaseCount = purchasesCount;
+    warnings.push('Revenue estimated from credit_purchases (ledger entries missing amount data)');
+  }
+
+  // Data integrity warnings
+  if (paidUsersFromPurchases > 0 && paidUsersFromLedger === 0) {
+    warnings.push('credit_ledger has no purchase entries but credit_purchases does — ledger may not be syncing');
+  }
   
   // Outstanding credits from credit_balances (source of truth for display)
   let outstandingPurchased = 0;
