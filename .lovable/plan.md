@@ -1,63 +1,38 @@
 
 
-## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
+## Plan: Google Routes API Caching + Retry Efficiency + Schema Fix
 
-### What's Already Working (No Changes Needed)
-- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
-- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
-- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
-- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
+### Part 1: Route Cache Table
+**Database migration** to create `route_cache` with a generated `cache_key` column (rounded coords + travel mode), 14-day TTL, hit counter. Service-role-only RLS. Unique index on `cache_key`, expiry index for cleanup.
 
-### What's Broken — Two Things
+### Part 2: Route Caching in optimize-itinerary
+**File: `supabase/functions/optimize-itinerary/index.ts`**
 
-**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
+- Add a module-level `getSupabaseAdmin()` helper (same pattern as `_shared/perplexity-cache.ts`) so transport functions can access the cache without threading the client through every call.
+- Add `getCachedRoute()` and `setCachedRoute()` helpers near the top (after imports, before types).
+- Add `parseDurationToSeconds()` and `buildInstructionsFromCache()` helpers.
+- In `getGoogleRoutesTransitTransport` (line 1050): Insert cache check BEFORE the `fetch()` call. On hit, return cached result. After successful API response, write to cache (fire-and-forget).
+- In `getGoogleTransport` for walking/driving modes (line 1210): Same pattern — cache check before Distance Matrix API call, cache write after.
+- At the end of the main handler (before response): Add probabilistic cleanup (10% chance) to delete expired cache entries.
 
-**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
+### Part 3: Retry Efficiency in generate-itinerary  
+**File: `supabase/functions/generate-itinerary/index.ts`**
 
-### Changes
+- Add `let lastGeneratedOutput: string | null = null;` before the retry loop (line ~4922).
+- After the AI response is parsed into `generatedDay`, store `lastGeneratedOutput = JSON.stringify(generatedDay);`.
+- Modify the retry prompt (lines 4930-4938): When `lastGeneratedOutput` exists, append the previous output as context and instruct the AI to fix only the listed errors. This reduces input tokens on retries by ~60%.
 
-#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
+### Part 4: Make estimatedCost optional for walking
+**File: `supabase/functions/generate-itinerary/index.ts`**
 
-**Change A — Remove stall detector setup** (lines ~261-313):
-Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
+- Line 2402: Change `required: ["method", "duration", "estimatedCost", "instructions"]` to `required: ["method", "duration"]`.
+- Line 2392-2399: Update `estimatedCost` description to say "OMIT for walking. Only include for paid transport."
 
-**Change B — Remove browser loop fallback** (lines ~455-469):
-Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
+### Deployment
+Redeploy both `optimize-itinerary` and `generate-itinerary` edge functions.
 
-```typescript
-// OLD:
-} catch (serverErr) {
-  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
-  const generatedDays = await generateItinerary({ ... });
-  // ... 40 lines of fallback logic
-}
-
-// NEW:
-} catch (serverErr) {
-  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
-  setPrePhase(null);
-  setHasStarted(false);
-  toast.error('Failed to start generation. Please try again.');
-  return;
-}
-```
-
-**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
-
-**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
-
-#### File 2: `src/hooks/useItineraryGeneration.ts`
-
-No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
-
-### Files to Modify
-
-| File | What |
-|------|------|
-| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
-
-### Risk Assessment
-- **Low risk**: The server-side self-chaining is already fully implemented and tested
-- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
-- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
+### Expected Savings
+- Route caching: ~70-80% cache hit rate on re-optimizations, saving ~$0.15-0.20/trip
+- Retry efficiency: ~60% fewer input tokens on retries
+- Schema fix: ~10-15% fewer retries from eliminated walk-cost validation errors
 
