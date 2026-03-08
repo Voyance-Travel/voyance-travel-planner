@@ -322,29 +322,29 @@ export function TripDateEditor({
             </button>
           )}
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <div className="p-3 border-b border-border">
-            <p className="text-sm font-medium">
-              {picking === 'start' ? 'Select new start date' : 'Select end date'}
+        <PopoverContent className="w-auto p-0 max-w-[calc(100vw-1.5rem)]" align="start">
+          <div className="p-2 sm:p-3 border-b border-border">
+            <p className="text-xs sm:text-sm font-medium">
+              {picking === 'start' ? 'Select start date' : 'Select end date'}
             </p>
             {pendingStart && pendingEnd && (
-              <div className="flex items-center gap-2 mt-1">
-                <p className="text-xs text-muted-foreground">
+              <div className="flex items-center gap-1.5 mt-1">
+                <p className="text-[11px] sm:text-xs text-muted-foreground">
                   {newDayCount} day{newDayCount !== 1 ? 's' : ''}
                   {dayDelta !== 0 && hasItinerary && (
                     <span className={dayDelta > 0 ? 'text-primary' : 'text-destructive'}>
-                      {' '}({dayDelta > 0 ? '+' : ''}{dayDelta} day{Math.abs(dayDelta) !== 1 ? 's' : ''})
+                      {' '}({dayDelta > 0 ? '+' : ''}{dayDelta})
                     </span>
                   )}
                 </p>
                 {dayDelta !== 0 && hasItinerary && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">
+                  <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">
                     {dayDelta > 0 ? <Plus className="h-2.5 w-2.5" /> : <Minus className="h-2.5 w-2.5" />}
                     {dayDelta > 0 ? 'Extend' : 'Shorten'}
                   </span>
                 )}
                 {dayDelta === 0 && pendingStart && format(pendingStart, 'yyyy-MM-dd') !== startDate && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">
+                  <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">
                     <ArrowRightLeft className="h-2.5 w-2.5" />
                     Shift
                   </span>
@@ -356,16 +356,17 @@ export function TripDateEditor({
             mode="single"
             selected={picking === 'start' ? pendingStart : pendingEnd}
             onSelect={(day) => day && handleDayClick(day)}
-            numberOfMonths={2}
+            numberOfMonths={typeof window !== 'undefined' && window.innerWidth < 640 ? 1 : 2}
             modifiers={modifiers as any}
             modifiersStyles={modifiersStyles}
             disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+            className="pointer-events-auto"
           />
-          <div className="flex items-center justify-between p-3 border-t border-border">
-            <Button variant="ghost" size="sm" onClick={() => setIsOpen(false)}>
+          <div className="flex items-center justify-between p-2 sm:p-3 border-t border-border gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setIsOpen(false)} className="h-7 text-xs px-2 sm:px-3">
               Cancel
             </Button>
-            <Button size="sm" disabled={!canApply || isSaving} onClick={handleApply}>
+            <Button size="sm" disabled={!canApply || isSaving} onClick={handleApply} className="h-7 text-xs px-3">
               {isSaving ? 'Saving...' : 'Apply'}
             </Button>
           </div>
