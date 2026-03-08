@@ -116,6 +116,7 @@ export default function TripDetail() {
   const [paymentsRefreshKey, setPaymentsRefreshKey] = useState(0);
   const [destinationMeta, setDestinationMeta] = useState<Destination | null>(null);
   const [showDebriefModal, setShowDebriefModal] = useState(false);
+  const [liveTripViewMode, setLiveTripViewMode] = useState<'active' | 'edit'>('active');
   const [hasCollaborators, setHasCollaborators] = useState(false);
   const [conflictState, setConflictState] = useState<{
     open: boolean;
