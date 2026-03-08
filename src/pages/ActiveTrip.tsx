@@ -397,6 +397,16 @@ export default function ActiveTrip() {
                 <ArrowLeft className="w-5 h-5" />
               </Button>
               
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate(`/trip/${tripId}`)}
+                className="ml-auto gap-1.5 text-muted-foreground"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Edit
+              </Button>
+              
               <div className="text-center">
                 <h1 className="font-bold text-lg">{trip.destination}</h1>
                 <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -573,7 +583,7 @@ export default function ActiveTrip() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
               >
-                <MidTripDNA tripId={tripId || ''} />
+                <DailyBriefing tripId={tripId || ''} />
               </motion.div>
             )}
           </AnimatePresence>
