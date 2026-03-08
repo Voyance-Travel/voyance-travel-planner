@@ -71,23 +71,13 @@ async function fetchFriendsActivity(limit: number): Promise<FriendActivity[]> {
   if (friendIds.length === 0) return [];
 
   // Get friends' recent trips
-  const { data: trips, error } = (await supabase
-    .from('trips')
-    .select(`
-      id,
-      destination,
-      destination_country,
-      start_date,
-      end_date,
-      status,
-      updated_at,
-      user_id,
-      profile:profiles!trips_user_id_fkey(id, display_name, handle, avatar_url)
-    `)
+  const { data: trips, error } = await (supabase
+    .from('trips') as any)
+    .select('id, destination, destination_country, start_date, end_date, status, updated_at, user_id, profile:profiles!trips_user_id_fkey(id, display_name, handle, avatar_url)')
     .in('user_id', friendIds)
     .in('status', ['planning', 'booked', 'active', 'completed'])
     .order('updated_at', { ascending: false })
-    .limit(limit)) as { data: any[] | null; error: any };
+    .limit(limit) as { data: any[] | null; error: any };
 
   if (error || !trips) return [];
 
