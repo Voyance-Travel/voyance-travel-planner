@@ -2168,6 +2168,14 @@ export default function Start() {
   const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount);
   const [pacing, setPacing] = useState<'relaxed' | 'balanced' | 'packed'>('balanced');
   const isDayTrip = startDate && endDate && differenceInDays(endDate, startDate) === 0;
+  // Keep the step-skip ref in sync with current dates
+  goToNextAfterStep1Ref.current = () => {
+    if (isDayTrip) {
+      goToStep(3);
+    } else {
+      goToStep(2);
+    }
+  };
   const [linkedGuests, setLinkedGuests] = useState<LinkedGuest[]>([]);
   const [showGuestModal, setShowGuestModal] = useState(false);
 
