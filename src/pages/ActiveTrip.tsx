@@ -34,6 +34,7 @@ import { SmartSwapSuggestion } from '@/components/trips/SmartSwapSuggestion';
 import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternativesDrawer';
 import { PostActivityNudge } from '@/components/feedback/PostActivityNudge';
 import { MemoryUploadButton } from '@/components/memories/MemoryUploadButton';
+import { VoiceNotePlayer } from '@/components/memories/VoiceNotePlayer';
 import { GuideBookmarkButton } from '@/components/guides/GuideBookmarkButton';
 import { MemoriesTimeline } from '@/components/memories/MemoriesTimeline';
 import { ActiveTripStats } from '@/components/trips/ActiveTripStats';
@@ -1003,7 +1004,7 @@ function TodayView({
                             activityType={activity.type}
                             activityCategory={activity.category}
                             destination={trip.destination}
-                            existingRating={feedbackByActivity.get(activity.id) as any || null}
+                            existingRating={feedbackByActivity.get(activity.id)?.rating as any || null}
                             onVoicePress={() => onVoicePress(activity.id, activity.name)}
                             compact
                           />
