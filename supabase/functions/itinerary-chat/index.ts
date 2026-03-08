@@ -449,9 +449,9 @@ serve(async (req) => {
 
     // Build group context if this is a blended trip
     let groupContext = '';
-    if (blendedDnaFromTrip?.isBlended && blendedDnaFromTrip.travelerProfiles?.length > 1) {
+    if (blendedDnaFromTrip?.isBlended && blendedDnaFromTrip.travelerProfiles && blendedDnaFromTrip.travelerProfiles.length > 1) {
       const profiles = blendedDnaFromTrip.travelerProfiles;
-      const owner = profiles.find(p => p.isOwner);
+      const owner = profiles.find(p => p.isOwner) || profiles[0];
       const companions = profiles.filter(p => !p.isOwner);
       
       groupContext = `\n\n## GROUP TRIP CONTEXT
@@ -471,8 +471,8 @@ ${profiles.map(p => `- ${p.name} (${p.isOwner ? 'Trip Owner' : 'Companion'}, arc
     }
 
     // Build context string from itinerary — include MORE detail for rewrite_day
-    const itineraryDescription = itineraryContext.days.map(day => {
-      const activities = day.activities.map(a => 
+    const itineraryDescription = (itineraryContext.days || []).map(day => {
+      const activities = (day.activities || []).map(a => 
         `  ${a.index + 1}. [${a.time}] ${a.title} (${a.category || 'activity'})${a.isLocked ? ' 🔒LOCKED' : ''}${a.cost ? ` — $${a.cost}` : ''}`
       ).join('\n');
       return `Day ${day.dayNumber} (${day.date}):\n${activities}`;
@@ -487,7 +487,7 @@ ${profiles.map(p => `- ${p.name} (${p.isOwner ? 'Trip Owner' : 'Companion'}, arc
     const contextMessage = `## CURRENT ITINERARY
 Trip to ${itineraryContext.destination}
 Dates: ${itineraryContext.startDate} to ${itineraryContext.endDate}
-Total days: ${itineraryContext.days.length}
+Total days: ${(itineraryContext.days || []).length}
 ${tripType ? `Trip occasion: ${tripType}` : ''}${accommodationNote}
 
 ${itineraryDescription}
