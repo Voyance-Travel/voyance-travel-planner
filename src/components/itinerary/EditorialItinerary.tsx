@@ -2398,6 +2398,20 @@ export function EditorialItinerary({
       return;
     }
 
+    // Save version snapshot before swap for undo
+    if (tripId) {
+      const swapDay = days[target.dayIndex];
+      if (swapDay) {
+        await saveDayVersion(tripId, {
+          dayNumber: swapDay.dayNumber,
+          title: swapDay.title,
+          theme: swapDay.theme,
+          activities: swapDay.activities as unknown as ItineraryActivity[],
+        }, 'swap');
+        refreshUndoState();
+      }
+    }
+
     // Replacing activity with new selection
 
     setDays(prev => {
@@ -3002,7 +3016,21 @@ export function EditorialItinerary({
   }, []);
 
   // Handle drag-and-drop reorder of activities within a day — dynamically reassign times
-  const handleActivityReorder = useCallback((dayIndex: number, reorderedActivities: EditorialActivity[]) => {
+  const handleActivityReorder = useCallback(async (dayIndex: number, reorderedActivities: EditorialActivity[]) => {
+    // Save version snapshot before reorder for undo
+    if (tripId) {
+      const day = days[dayIndex];
+      if (day) {
+        await saveDayVersion(tripId, {
+          dayNumber: day.dayNumber,
+          title: day.title,
+          theme: day.theme,
+          activities: day.activities as unknown as ItineraryActivity[],
+        }, 'reorder');
+        refreshUndoState();
+      }
+    }
+
     // Helper: parse "HH:mm" or "H:mm AM/PM" to minutes since midnight
     const toMins = (t?: string): number | null => {
       if (!t) return null;
@@ -3127,7 +3155,21 @@ export function EditorialItinerary({
     toast.success(`Moved to Day ${toDayIndex + 1}`);
   }, [syncBudgetFromDays]);
 
-  const handleActivityRemove = useCallback((dayIndex: number, activityId: string) => {
+  const handleActivityRemove = useCallback(async (dayIndex: number, activityId: string) => {
+    // Save version snapshot before delete for undo
+    if (tripId) {
+      const day = days[dayIndex];
+      if (day) {
+        await saveDayVersion(tripId, {
+          dayNumber: day.dayNumber,
+          title: day.title,
+          theme: day.theme,
+          activities: day.activities as unknown as ItineraryActivity[],
+        }, 'delete_activity');
+        refreshUndoState();
+      }
+    }
+
     setDays(prev => {
       const updated = prev.map((day, idx) => {
         if (idx !== dayIndex) return day;
@@ -3224,6 +3266,17 @@ export function EditorialItinerary({
   const handleDayRegenerateInternal = useCallback(async (dayIndex: number, guidedPreferences?: string) => {
     const day = days[dayIndex];
     if (!day) return;
+
+    // Save version snapshot before regeneration for undo
+    if (tripId) {
+      await saveDayVersion(tripId, {
+        dayNumber: day.dayNumber,
+        title: day.title,
+        theme: day.theme,
+        activities: day.activities as unknown as ItineraryActivity[],
+      }, 'regenerate');
+      refreshUndoState();
+    }
 
     setRegeneratingDay(day.dayNumber);
     try {
