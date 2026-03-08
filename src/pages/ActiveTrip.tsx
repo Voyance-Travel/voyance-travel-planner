@@ -33,6 +33,7 @@ import { SmartSwapSuggestion } from '@/components/trips/SmartSwapSuggestion';
 import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternativesDrawer';
 import { PostActivityNudge } from '@/components/feedback/PostActivityNudge';
 import { MemoryUploadButton } from '@/components/memories/MemoryUploadButton';
+import { GuideBookmarkButton } from '@/components/guides/GuideBookmarkButton';
 import { MemoriesTimeline } from '@/components/memories/MemoriesTimeline';
 import { ActiveTripStats } from '@/components/trips/ActiveTripStats';
 import TripChat from '@/components/chat/TripChat';
@@ -977,8 +978,8 @@ function TodayView({
                         </div>
                       )}
 
-                      {/* Inline Rating */}
-                      <div className="mt-3 pt-2 border-t border-border/30">
+                      {/* Inline Rating + Guide Bookmark */}
+                      <div className="mt-3 pt-2 border-t border-border/30 flex items-center justify-between">
                         <InlineActivityRating
                           activityId={activity.id}
                           tripId={trip.id}
@@ -988,6 +989,11 @@ function TodayView({
                           existingRating={feedbackByActivity.get(activity.id) as any || null}
                           onMediaPress={() => onMediaPress(activity.id, activity.name)}
                           onVoicePress={() => onVoicePress(activity.id, activity.name)}
+                          compact
+                        />
+                        <GuideBookmarkButton
+                          activityId={activity.id}
+                          tripId={trip.id}
                           compact
                         />
                       </div>
