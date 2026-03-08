@@ -8,12 +8,13 @@ import { supabase } from '@/integrations/supabase/client';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
-import { BookOpen, MapPin, Heart, Eye, Calendar, ArrowLeft, Share2 } from 'lucide-react';
+import { BookOpen, MapPin, Heart, Eye, Calendar, ArrowLeft, Share2, UserPlus, UserCheck, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { Loader2 } from 'lucide-react';
+import { useGuideFollow } from '@/hooks/useGuideFollow';
 
 interface CommunityGuideDetail {
   id: string;
@@ -70,6 +71,7 @@ export default function CommunityGuidePublic() {
   const { slug } = useParams<{ slug: string }>();
   const { data: guide, isLoading, error } = useCommunityGuideBySlug(slug);
   const { data: author } = useGuideAuthor(guide?.user_id);
+  const { isFollowing: following, followerCount, toggleFollow, canFollow } = useGuideFollow(guide?.user_id);
 
   if (isLoading) {
     return (
@@ -158,7 +160,7 @@ export default function CommunityGuidePublic() {
         </div>
       </section>
 
-      {/* Meta bar */}
+      {/* Meta bar + Creator card */}
       <section className="border-b border-border">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between text-xs text-muted-foreground">
           <div className="flex items-center gap-4">
@@ -172,6 +174,12 @@ export default function CommunityGuidePublic() {
                 </span>
               </div>
             )}
+            {followerCount > 0 && (
+              <span className="flex items-center gap-1 text-muted-foreground">
+                <Users className="h-3 w-3" />
+                {followerCount} follower{followerCount !== 1 ? 's' : ''}
+              </span>
+            )}
             {guide.published_at && (
               <span className="flex items-center gap-1">
                 <Calendar className="h-3 w-3" />
@@ -180,6 +188,26 @@ export default function CommunityGuidePublic() {
             )}
           </div>
           <div className="flex items-center gap-3">
+            {canFollow && (
+              <Button
+                variant={following ? 'secondary' : 'outline'}
+                size="sm"
+                className="h-7 text-xs gap-1.5"
+                onClick={toggleFollow}
+              >
+                {following ? (
+                  <>
+                    <UserCheck className="h-3.5 w-3.5" />
+                    Following
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="h-3.5 w-3.5" />
+                    Follow
+                  </>
+                )}
+              </Button>
+            )}
             {guide.view_count > 0 && (
               <span className="flex items-center gap-1">
                 <Eye className="h-3 w-3" /> {guide.view_count}
