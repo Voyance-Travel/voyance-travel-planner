@@ -223,11 +223,13 @@ export default function MultiCitySelector({
 
     const newTransports: InterCityTransport[] = [];
     for (let i = 0; i < newDestinations.length - 1; i++) {
+      const fromCountry = route.destinations[i]?.country;
+      const toCountry = route.destinations[i + 1]?.country;
       newTransports.push({
         id: crypto.randomUUID(),
         fromCity: newDestinations[i].city,
         toCity: newDestinations[i + 1].city,
-        type: route.region === 'Europe' ? 'train' : 'flight',
+        type: smartTransportDefault(fromCountry, toCountry),
         departureDate: '',
         transitionDay: 'half_and_half',
       });
