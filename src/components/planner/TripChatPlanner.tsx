@@ -17,6 +17,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { sanitizeAIOutput } from '@/utils/textSanitizer';
 import { TripConfirmCard, type InterCityTransportMode } from './TripConfirmCard';
 import { resolveCities, type NormalizedCity } from '@/utils/cityNormalization';
+import { normalizeChatTripDates } from '@/utils/justTellUsDateGuard';
+import { parseLocalDate } from '@/utils/dateUtils';
 
 export interface ChatTripCity {
   name: string;
@@ -59,8 +61,8 @@ const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-trip-pl
  */
 function normalizeMultiCity(details: TripDetails): TripDetails {
   if (!details.startDate || !details.endDate) return details;
-  const start = new Date(details.startDate);
-  const end = new Date(details.endDate);
+  const start = parseLocalDate(details.startDate);
+  const end = parseLocalDate(details.endDate);
   const resolved = resolveCities(details, start, end);
   if (resolved.length > 1) {
     details.cities = resolved;
@@ -200,6 +202,13 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
       if (isToolCall && toolCallArgs) {
         try {
           let details = JSON.parse(toolCallArgs) as TripDetails;
+
+          // Hard date guard: force dates to 2026+ and never in the past
+          if (details.startDate && details.endDate) {
+            const normalized = normalizeChatTripDates(details.startDate, details.endDate);
+            details.startDate = normalized.startDate;
+            details.endDate = normalized.endDate;
+          }
 
           // Safety net: if AI didn't populate cities[] but destination has multiple cities,
           // try to extract from the conversation history as well

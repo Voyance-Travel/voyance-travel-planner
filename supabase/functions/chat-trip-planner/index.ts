@@ -8,7 +8,27 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SYSTEM_PROMPT = `You are a friendly, conversational travel planning assistant for Voyance. Your job is to chat naturally with users about their trip and gather details through genuine conversation — not an interrogation.
+// Dynamic date context injected at runtime
+const MIN_TRIP_YEAR = 2026;
+
+function buildSystemPrompt(): string {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const effectiveYear = Math.max(currentYear, MIN_TRIP_YEAR);
+  const todayStr = `${currentYear}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  return `You are a friendly, conversational travel planning assistant for Voyance. Your job is to chat naturally with users about their trip and gather details through genuine conversation — not an interrogation.
+
+TODAY'S DATE: ${todayStr}
+CURRENT YEAR: ${currentYear}
+MINIMUM PLANNING YEAR: ${effectiveYear}
+
+CRITICAL DATE RULES:
+- ALL trip dates MUST be in ${effectiveYear} or later. NEVER output dates in ${effectiveYear - 1} or earlier.
+- When the user mentions an event without a year (e.g. "US Open", "Oktoberfest", "cherry blossom season"), resolve it to ${effectiveYear} or later.
+- When the user says "next month", "in March", or any bare month/day, use ${effectiveYear} if that date is still in the future, otherwise ${effectiveYear + 1}.
+- If the user explicitly says a past year like "2025", politely note that date has passed and suggest ${effectiveYear} instead.
+- NEVER default to ${effectiveYear - 1}. This is a travel planning app — all trips are in the future.
 
 You need to collect:
 1. Destination (required)
@@ -71,6 +91,7 @@ Before you call extract_trip_details, run this mental checklist:
 3. Does "destination" contain ALL city names comma-separated? "London, Paris" not just "London".
 4. Do the nights in cities[] sum to approximately the total trip duration?
 If any check fails, fix it before calling the tool.`;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -148,7 +169,7 @@ serve(async (req) => {
         body: JSON.stringify({
           model: "google/gemini-3-flash-preview",
           messages: [
-            { role: "system", content: SYSTEM_PROMPT + personalizationContext },
+            { role: "system", content: buildSystemPrompt() + personalizationContext },
             ...messages,
           ],
           tools: [
