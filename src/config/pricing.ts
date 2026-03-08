@@ -28,6 +28,7 @@ export const CREDIT_COSTS = {
 
   // Route optimization (credit-gated with re-optimization discount)
   ROUTE_OPTIMIZATION: 20,
+  GENERATE_BLOG: 20,            // AI travel blog generation
   NEARBY_SUGGESTIONS: 0,
   LOCAL_EVENTS: 0,
   PDF_EXPORT: 0,
