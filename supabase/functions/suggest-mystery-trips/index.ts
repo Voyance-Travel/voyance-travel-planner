@@ -7,6 +7,82 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ─── SAFETY: Countries with active conflict, sanctions, or severe travel restrictions ───
+// Review quarterly. Covers US State Dept "Do Not Travel" + major sanction targets.
+const UNSAFE_DESTINATIONS: Record<string, string> = {
+  'russia': 'Active sanctions, visa near-impossible for US/EU citizens',
+  'ukraine': 'Active conflict zone',
+  'yemen': 'Active conflict zone, extreme danger',
+  'syria': 'Active conflict zone',
+  'afghanistan': 'Extreme danger, no consular services',
+  'north korea': 'Travel banned for US citizens',
+  'iran': 'Severe travel restrictions for US/UK citizens',
+  'somalia': 'Extreme danger, active conflict',
+  'south sudan': 'Active conflict, extreme danger',
+  'libya': 'Active conflict zone',
+  'iraq': 'High risk, limited safe zones',
+  'myanmar': 'Active conflict, civil war',
+  'venezuela': 'Do not travel advisory',
+  'haiti': 'Do not travel advisory, kidnapping risk',
+  'sudan': 'Active conflict zone',
+};
+
+// ─── Airport code → country mapping for inferring user origin ───
+const AIRPORT_TO_COUNTRY: Record<string, string> = {
+  // US
+  'JFK': 'US', 'LAX': 'US', 'ORD': 'US', 'SFO': 'US', 'MIA': 'US', 'ATL': 'US',
+  'DFW': 'US', 'DEN': 'US', 'SEA': 'US', 'BOS': 'US', 'IAD': 'US', 'EWR': 'US',
+  'IAH': 'US', 'PHX': 'US', 'LAS': 'US', 'MCO': 'US', 'MSP': 'US', 'DTW': 'US',
+  'PHL': 'US', 'CLT': 'US', 'BWI': 'US', 'SAN': 'US', 'TPA': 'US', 'PDX': 'US',
+  'HNL': 'US', 'SLC': 'US', 'AUS': 'US', 'RDU': 'US', 'BNA': 'US', 'STL': 'US',
+  // UK
+  'LHR': 'UK', 'LGW': 'UK', 'STN': 'UK', 'MAN': 'UK', 'EDI': 'UK', 'BHX': 'UK',
+  // Canada
+  'YYZ': 'CA', 'YVR': 'CA', 'YUL': 'CA', 'YOW': 'CA', 'YYC': 'CA',
+  // Australia
+  'SYD': 'AU', 'MEL': 'AU', 'BNE': 'AU', 'PER': 'AU',
+  // Europe
+  'CDG': 'FR', 'AMS': 'NL', 'FRA': 'DE', 'MUC': 'DE', 'BER': 'DE',
+  'BCN': 'ES', 'MAD': 'ES', 'FCO': 'IT', 'MXP': 'IT',
+  'ZRH': 'CH', 'VIE': 'AT', 'CPH': 'DK', 'ARN': 'SE', 'OSL': 'NO', 'HEL': 'FI',
+  'DUB': 'IE', 'LIS': 'PT', 'BRU': 'BE', 'PRG': 'CZ', 'BUD': 'HU', 'WAW': 'PL',
+  'ATH': 'GR', 'IST': 'TR',
+  // Asia
+  'NRT': 'JP', 'HND': 'JP', 'KIX': 'JP', 'ICN': 'KR', 'SIN': 'SG',
+  'HKG': 'HK', 'BKK': 'TH', 'KUL': 'MY', 'CGK': 'ID', 'DPS': 'ID',
+  'PEK': 'CN', 'PVG': 'CN', 'TPE': 'TW', 'DEL': 'IN', 'BOM': 'IN',
+  // Middle East
+  'DXB': 'AE', 'DOH': 'QA', 'AUH': 'AE',
+  // Latin America
+  'MEX': 'MX', 'CUN': 'MX', 'GRU': 'BR', 'GIG': 'BR', 'EZE': 'AR', 'BOG': 'CO', 'LIM': 'PE',
+  // Africa
+  'JNB': 'ZA', 'CPT': 'ZA', 'CAI': 'EG', 'NBO': 'KE',
+  // NZ
+  'AKL': 'NZ',
+};
+
+const COUNTRY_LABELS: Record<string, string> = {
+  'US': 'United States', 'UK': 'United Kingdom', 'CA': 'Canada', 'AU': 'Australia',
+  'FR': 'France', 'DE': 'Germany', 'NL': 'Netherlands', 'ES': 'Spain', 'IT': 'Italy',
+  'CH': 'Switzerland', 'AT': 'Austria', 'DK': 'Denmark', 'SE': 'Sweden', 'NO': 'Norway',
+  'FI': 'Finland', 'IE': 'Ireland', 'PT': 'Portugal', 'BE': 'Belgium', 'CZ': 'Czech Republic',
+  'HU': 'Hungary', 'PL': 'Poland', 'GR': 'Greece', 'TR': 'Turkey',
+  'JP': 'Japan', 'KR': 'South Korea', 'SG': 'Singapore', 'HK': 'Hong Kong',
+  'TH': 'Thailand', 'MY': 'Malaysia', 'ID': 'Indonesia', 'CN': 'China', 'TW': 'Taiwan',
+  'IN': 'India', 'AE': 'UAE', 'QA': 'Qatar',
+  'MX': 'Mexico', 'BR': 'Brazil', 'AR': 'Argentina', 'CO': 'Colombia', 'PE': 'Peru',
+  'ZA': 'South Africa', 'EG': 'Egypt', 'KE': 'Kenya', 'NZ': 'New Zealand',
+};
+
+function inferOriginCountry(homeAirport: string | null): { code: string; label: string } {
+  if (homeAirport) {
+    const upper = homeAirport.toUpperCase().trim();
+    const code = AIRPORT_TO_COUNTRY[upper] || 'US';
+    return { code, label: COUNTRY_LABELS[code] || code };
+  }
+  return { code: 'US', label: 'United States' };
+}
+
 interface TravelDNA {
   primary_archetype_name: string | null;
   secondary_archetype_name: string | null;
@@ -65,8 +141,8 @@ serve(async (req) => {
 
     console.log(`[suggest-mystery-trips] Generating suggestions for user: ${user.id}`);
 
-    // Fetch user data in parallel (including enrichment/feedback data)
-    const [travelDnaResult, preferencesResult, pastTripsResult, destinationsResult, enrichmentResult, previousSuggestionsResult] = await Promise.all([
+    // Fetch user data in parallel (including enrichment/feedback data + profile for origin)
+    const [travelDnaResult, preferencesResult, pastTripsResult, destinationsResult, enrichmentResult, previousSuggestionsResult, profileResult] = await Promise.all([
       supabase
         .from('travel_dna_profiles')
         .select('primary_archetype_name, secondary_archetype_name, trait_scores, emotional_drivers')
@@ -100,6 +176,12 @@ serve(async (req) => {
         .eq('enrichment_type', 'mystery_trip_shown')
         .order('created_at', { ascending: false })
         .limit(15),
+      // Get user's home_airport for origin inference
+      supabase
+        .from('profiles')
+        .select('home_airport')
+        .eq('id', user.id)
+        .maybeSingle(),
     ]);
 
     const travelDna: TravelDNA | null = travelDnaResult.data;
@@ -108,6 +190,10 @@ serve(async (req) => {
     const destinations = destinationsResult.data || [];
     const enrichmentData: UserEnrichment[] = enrichmentResult.data || [];
     const previouslyShown = (previousSuggestionsResult.data || []).map(s => s.entity_name?.toLowerCase()).filter(Boolean);
+
+    // Infer user origin from home airport
+    const userOrigin = inferOriginCountry(profileResult.data?.home_airport || null);
+    console.log(`[suggest-mystery-trips] User origin: ${userOrigin.label} (from airport: ${profileResult.data?.home_airport || 'none'})`);
 
     // Build sets of destinations to exclude
     const pastDestinations = pastTrips.map(t => t.destination?.toLowerCase()).filter(Boolean);
@@ -140,16 +226,23 @@ serve(async (req) => {
 
     console.log(`[suggest-mystery-trips] Suppressed destinations: ${suppressedDestinations.length}, Top dislikes: ${topDislikes.join(', ')}`);
 
-    // Filter available destinations
+    // Filter available destinations (past + suppressed + SAFETY)
     const availableDestinations = destinations.filter(d => {
       const cityLower = d.city?.toLowerCase();
-      const entityId = `${cityLower}_${d.country?.toLowerCase()}`;
+      const countryLower = d.country?.toLowerCase();
+      const entityId = `${cityLower}_${countryLower}`;
       
       // Exclude past trips
       if (pastDestinations.includes(cityLower)) return false;
       
       // Exclude suppressed destinations
       if (suppressedDestinations.includes(entityId)) return false;
+
+      // ─── SAFETY: Exclude conflict zones, sanctioned countries ───
+      if (countryLower && UNSAFE_DESTINATIONS[countryLower]) {
+        console.log(`[suggest-mystery-trips] Excluded ${d.city}, ${d.country}: ${UNSAFE_DESTINATIONS[countryLower]}`);
+        return false;
+      }
       
       return true;
     });
@@ -175,21 +268,39 @@ serve(async (req) => {
     // Shuffle available destinations to reduce AI bias toward top-of-list picks
     const shuffled = [...destinationList].sort(() => Math.random() - 0.5);
 
-    const systemPrompt = `You are a travel expert for Voyance, a personalized travel planning service. 
+    const systemPrompt = `You are a travel expert for Voyance, a personalized travel planning service.
 Your task is to suggest exactly 3 destinations that would be PERFECT for this specific traveler based on their unique Travel DNA and preferences.
 
-IMPORTANT: 
+TRAVELER ORIGIN: ${userOrigin.label}
+
+CRITICAL SAFETY RULES — NEVER VIOLATE:
+1. NEVER suggest destinations with active conflict zones, wars, or civil unrest
+2. NEVER suggest destinations where travelers from ${userOrigin.label} face sanctions, travel bans, or extreme visa difficulty
+3. NEVER suggest destinations with "Do Not Travel" advisories from the US State Department
+4. NEVER suggest destinations that would be dangerous, politically sensitive, or impractical for a ${userOrigin.label} citizen
+5. Prefer destinations where ${userOrigin.label} citizens can travel visa-free or with easy eVisa/visa-on-arrival
+
+PERSONALIZATION RULES:
 - VARIETY IS CRITICAL: Pick surprising, diverse destinations across different regions and vibes. Never cluster all 3 in the same region.
 - Choose destinations that genuinely match their personality and travel style
 - AVOID destinations that match their known dislikes (listed below)
 - Provide a compelling, personalized reason for each suggestion (2-3 sentences max)
 - The reason should feel personal, like "Based on your love of culture and relaxed pace, you'd thrive in..."
 - Avoid generic descriptions - make it feel like you KNOW this traveler
-- Do NOT repeat previously shown destinations (listed below)`;
+- Do NOT repeat previously shown destinations (listed below)
 
-    const userPrompt = `Based on this traveler's profile, suggest 3 perfect mystery getaway destinations:
+SELECTION RULES:
+- You MUST choose ONLY from the AVAILABLE DESTINATIONS list provided. Do NOT invent destinations outside this list.
+- If the list doesn't have enough good matches, still pick the best 3 from the list.
+- Consider the destination's cost_tier vs the user's budget preference.
+- Consider climate preferences and best_time_to_visit.`;
+
+    const userPrompt = `Based on this traveler's profile, suggest 3 perfect mystery getaway destinations.
+The traveler is from ${userOrigin.label}.
 
 ${userProfile}
+
+${preferences?.preferred_regions?.length ? `IMPORTANT — PREFERRED REGIONS: This traveler has explicitly said they prefer: ${preferences.preferred_regions.join(', ')}. At least 1 of your 3 suggestions should be in or near one of these regions, unless they've already been everywhere there.` : ''}
 
 PAST DESTINATIONS TO EXCLUDE (they've been here):
 ${pastDestinations.length > 0 ? pastDestinations.join(', ') : 'None'}
@@ -200,10 +311,10 @@ ${suppressedDestinations.length > 0 ? suppressedDestinations.map(id => id.replac
 PREVIOUSLY SUGGESTED DESTINATIONS TO EXCLUDE (already shown recently — DO NOT repeat these):
 ${previouslyShown.length > 0 ? previouslyShown.join(', ') : 'None'}
 
-AVAILABLE DESTINATIONS TO CHOOSE FROM:
+AVAILABLE DESTINATIONS TO CHOOSE FROM (you MUST pick from this list ONLY):
 ${JSON.stringify(shuffled.slice(0, 30), null, 2)}
 
-Return EXACTLY 3 destinations as JSON. Pick different destinations than the previously suggested ones.`;
+Return EXACTLY 3 destinations as JSON. Pick different destinations than the previously suggested ones. All 3 must be safe and practical for a ${userOrigin.label} traveler.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -213,7 +324,7 @@ Return EXACTLY 3 destinations as JSON. Pick different destinations than the prev
       },
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
-        temperature: 1.2,
+        temperature: 0.9,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -292,7 +403,21 @@ Return EXACTLY 3 destinations as JSON. Pick different destinations than the prev
     }
 
     const parsed = JSON.parse(toolCall.function.arguments);
-    const suggestions = parsed.suggestions;
+    let suggestions = parsed.suggestions;
+
+    // ─── Post-AI safety validation — catch any that slipped through ───
+    suggestions = suggestions.filter((s: any) => {
+      const countryLower = s.country?.toLowerCase();
+      if (countryLower && UNSAFE_DESTINATIONS[countryLower]) {
+        console.warn(`[suggest-mystery-trips] AI suggested unsafe destination despite instructions: ${s.city}, ${s.country}. Filtering out.`);
+        return false;
+      }
+      return true;
+    });
+
+    if (suggestions.length < 3) {
+      console.warn(`[suggest-mystery-trips] Only ${suggestions.length} safe suggestions after filtering. User gets partial results.`);
+    }
 
     // Enrich suggestions with images from destination data
     const enrichedSuggestions = suggestions.map((s: any) => {
