@@ -42,7 +42,7 @@ const INTELLIGENCE_LAYERS = [
 
 // Real metrics from actual database
 const REAL_METRICS = {
-  tripsBuilt: 61,            // Total trips created
+  tripsBuilt: 114,           // Total trips created
   archetypesAvailable: 29,   // Our complete archetype system
   destinations: 2246,        // Destinations in our database
 };
