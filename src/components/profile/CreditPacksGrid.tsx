@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { EmbeddedCheckoutModal } from '@/components/checkout';
 import { cn } from '@/lib/utils';
+import { isIAPAvailable, purchaseByPackId } from '@/services/iapService';
 
 interface CheckoutConfig {
   priceId: string;
@@ -41,7 +42,7 @@ const CreditPacksGrid = React.forwardRef<HTMLDivElement, CreditPacksGridProps>(f
   const navigate = useNavigate();
 
   const openCheckout = async (
-    pack: { priceId: string; productId: string; credits: number; name: string },
+    pack: { priceId: string; productId: string; credits: number; name: string; id?: string },
     planKey: string
   ) => {
     setLoadingPlan(planKey);
@@ -52,6 +53,19 @@ const CreditPacksGrid = React.forwardRef<HTMLDivElement, CreditPacksGridProps>(f
         navigate('/signin?redirect=/profile');
         return;
       }
+
+      // iOS native IAP path
+      if (isIAPAvailable() && pack.id) {
+        const result = await purchaseByPackId(pack.id);
+        if (result.success) {
+          toast({ title: 'Purchase complete!', description: `${formatCredits(result.credits || pack.credits)} credits added to your balance.` });
+        } else if (result.error !== 'cancelled') {
+          toast({ title: 'Purchase failed', description: result.error || 'Please try again.', variant: 'destructive' });
+        }
+        return;
+      }
+
+      // Web: Stripe Embedded Checkout
       setCheckoutConfig({ 
         priceId: pack.priceId, 
         mode: 'payment', 

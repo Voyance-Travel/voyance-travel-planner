@@ -15,6 +15,8 @@ import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/config/routes';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { isIAPAvailable, purchaseByPackId } from '@/services/iapService';
+import { useToast } from '@/hooks/use-toast';
 
 interface CreditQuickBuyProps {
   currentBalance: number;
@@ -84,7 +86,22 @@ export function CreditQuickBuy({ currentBalance, tripId, children }: CreditQuick
     staleTime: 30_000,
   });
 
-  const handleBuy = (pack: typeof FLEXIBLE_CREDITS[number]) => {
+  const { toast } = useToast();
+
+  const handleBuy = async (pack: typeof FLEXIBLE_CREDITS[number]) => {
+    // iOS native IAP path
+    if (isIAPAvailable()) {
+      setOpen(false);
+      const result = await purchaseByPackId(pack.id);
+      if (result.success) {
+        toast({ title: 'Purchase complete!', description: `${formatCredits(result.credits || pack.credits)} credits added.` });
+      } else if (result.error !== 'cancelled') {
+        toast({ title: 'Purchase failed', description: result.error || 'Please try again.', variant: 'destructive' });
+      }
+      return;
+    }
+
+    // Web: Stripe
     setOpen(false);
     setCheckoutConfig({
       priceId: pack.priceId,
