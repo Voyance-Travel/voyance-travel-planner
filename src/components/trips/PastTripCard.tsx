@@ -86,7 +86,7 @@ export function PastTripCard({ trip, index = 0 }: PastTripCardProps) {
         {/* Hero image */}
         <div
           className="relative h-44 sm:h-56 overflow-hidden cursor-pointer"
-          onClick={() => trip.hasItineraryData ? navigate(`/itinerary/${trip.id}`) : navigate(`/trip/${trip.id}`)}
+          onClick={() => navigate(`/trip/${trip.id}`)}
         >
           <img
             src={imageUrl}
@@ -195,8 +195,8 @@ export function PastTripCard({ trip, index = 0 }: PastTripCardProps) {
           <div className="flex gap-2 pt-1">
             {trip.hasItineraryData && (
               <Button
-                onClick={() => navigate(`/itinerary/${trip.id}`)}
-                variant="outline"
+              onClick={() => navigate(`/trip/${trip.id}`)}
+              variant="outline"
                 size="sm"
                 className="flex-1 gap-1.5 text-xs h-9"
               >

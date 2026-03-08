@@ -301,8 +301,8 @@ function TripCard({ trip, index = 0, onDelete }: { trip: Trip; index?: number; o
   const travelersCount = typeof trip.travelers === 'number' ? trip.travelers : 1;
 
   const handleCardClick = () => {
-    if (hasItinerary && displayStatus === 'upcoming') {
-      navigate(`/itinerary/${trip.id}`);
+    if (displayStatus === 'active') {
+      navigate(`/trip/${trip.id}/active`);
     } else {
       navigate(`/trip/${trip.id}`);
     }

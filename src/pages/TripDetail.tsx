@@ -4,7 +4,7 @@ import { getTripCities } from '@/services/tripCitiesService';
 import type { TripCity } from '@/types/tripCity';
 import { checkRedistributionNeeded, applyNightsRedistribution, type NightsRedistribution } from '@/utils/syncTripCitiesNights';
 import { NightsRedistributionModal } from '@/components/trip/NightsRedistributionModal';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Navigate } from 'react-router-dom';
 import { format, isAfter, isBefore, differenceInDays, addDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { Loader2, MapPin, ArrowLeft, Sparkles, CheckCircle, Coins, Calendar } from 'lucide-react';
@@ -1458,6 +1458,20 @@ export default function TripDetail() {
   }
 
   const isLiveTrip = trip.status === 'active';
+
+  // Redirect active trips (by status OR date window) to the dedicated ActiveTrip page
+  const isInDateWindow = (() => {
+    if (!trip.start_date || !trip.end_date) return false;
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const start = parseLocalDate(trip.start_date);
+    const end = parseLocalDate(trip.end_date);
+    return start <= today && end >= today;
+  })();
+
+  if (isLiveTrip || isInDateWindow) {
+    return <Navigate to={`/trip/${trip.id}/active`} replace />;
+  }
   // Detect past trips for read-only mode and hiding Travel Intel
   const itineraryDays = transformToItineraryDays();
 
