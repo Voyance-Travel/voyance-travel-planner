@@ -156,6 +156,9 @@ export function GenerationPhases({
   generatedDaysList = [],
   isComplete = false,
   progress: pollerProgress = 0,
+  currentCity,
+  isMultiCity = false,
+  tripCities = [],
 }: GenerationPhasesProps) {
   const visibleDays = useDripFeedDays(generatedDaysList);
   const visibleCompletedCount = visibleDays.length;
