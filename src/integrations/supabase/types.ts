@@ -5763,6 +5763,7 @@ export type Database = {
       trip_cities: {
         Row: {
           activity_cost_cents: number | null
+          allocated_budget_cents: number | null
           arrival_date: string | null
           arrival_transfer: Json | null
           city_name: string
@@ -5794,6 +5795,7 @@ export type Database = {
         }
         Insert: {
           activity_cost_cents?: number | null
+          allocated_budget_cents?: number | null
           arrival_date?: string | null
           arrival_transfer?: Json | null
           city_name: string
@@ -5825,6 +5827,7 @@ export type Database = {
         }
         Update: {
           activity_cost_cents?: number | null
+          allocated_budget_cents?: number | null
           arrival_date?: string | null
           arrival_transfer?: Json | null
           city_name?: string
