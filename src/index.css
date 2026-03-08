@@ -538,6 +538,23 @@ html.a11y-no-color-only [data-state="checked"] {
     max-width: 100% !important;
   }
 
+  /* Compact all date/time fields on mobile */
+  input[type="date"],
+  input[type="time"],
+  input[data-mobile-plain-datetime="true"] {
+    min-height: 2.25rem;
+    height: 2.25rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    padding-top: 0.375rem;
+    padding-bottom: 0.375rem;
+  }
+
+  input[data-mobile-plain-datetime="true"] {
+    letter-spacing: 0.01em;
+    font-variant-numeric: tabular-nums;
+  }
+
   /* Ensure dialogs don't overflow viewport */
   [role="dialog"] {
     max-width: 95vw !important;
