@@ -120,7 +120,9 @@ export default function Home() {
           </ScrollTarget>
         )}
         
-        {renderCollapsible('social', <SocialProofSection />)}
+        <ScrollTarget id="why-we-built" className="scroll-mt-16">
+          {renderCollapsible('social', <SocialProofSection />)}
+        </ScrollTarget>
         {renderCollapsible('pricing', <FreeTierSection />)}
         
         {/* Final CTA — always visible */}
