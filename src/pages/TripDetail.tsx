@@ -677,13 +677,15 @@ export default function TripDetail() {
         setTrip(tripData);
 
         // Check itinerary_days count for generation state detection
+        let itineraryDaysDbCount = 0;
         try {
           const { data: daysSummary, count: daysCount } = await supabase
             .from('itinerary_days')
             .select('day_number, title, theme', { count: 'exact' })
             .eq('trip_id', tripId)
             .order('day_number');
-          setItineraryDaysCount(daysCount || 0);
+          itineraryDaysDbCount = daysCount || 0;
+          setItineraryDaysCount(itineraryDaysDbCount);
           setItineraryDaysSummaries((daysSummary || []).map((d: any) => ({
             day_number: d.day_number,
             title: d.title || `Day ${d.day_number}`,
@@ -697,7 +699,7 @@ export default function TripDetail() {
         // If itinerary_status is 'ready' but day count < expected, trigger stalled/resume
         if (tripData.itinerary_status === 'ready' || (tripData.itinerary_status as string) === 'generated') {
           const itinData = tripData.itinerary_data as { days?: unknown[] } | null;
-          const actualDays = Math.max(itinData?.days?.length ?? 0, daysCount || 0);
+          const actualDays = Math.max(itinData?.days?.length ?? 0, itineraryDaysDbCount);
           const meta = (tripData.metadata as Record<string, unknown>) || {};
           let expectedTotal = (meta.generation_total_days as number) || 0;
           if (expectedTotal <= 0 && tripData.start_date && tripData.end_date) {
