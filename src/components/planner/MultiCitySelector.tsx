@@ -116,6 +116,16 @@ export default function MultiCitySelector({
   const addDestination = useCallback((city: string, country?: string) => {
     if (!city.trim()) return;
 
+    // Duplicate check — use city+country for disambiguation (e.g. London UK vs London Ontario)
+    const key = `${city.trim().toLowerCase()}|${(country || '').trim().toLowerCase()}`;
+    const alreadyExists = destinations.some(
+      d => `${d.city.trim().toLowerCase()}|${(d.country || '').trim().toLowerCase()}` === key
+    );
+    if (alreadyExists) {
+      toast.info(`${city} is already in your trip. Want to extend your stay? Increase the nights instead.`);
+      return;
+    }
+
     const newDestination: TripDestination = {
       id: crypto.randomUUID(),
       city: city.trim(),
