@@ -8,7 +8,7 @@ import { ScrollToTop } from "@/components/common/ScrollToTop";
 import { OfflineBanner } from "@/components/common/OfflineBanner";
 import { ConnectionRecoveryBanner } from "@/components/common/ConnectionRecoveryBanner";
 import { useImagePreloader } from "@/hooks/useImagePreloader";
-import { CookieConsent } from "@/components/common/CookieConsent";
+
 import { PageTransition } from '@/components/layout/PageTransition';
 import { useJourneyStore } from '@/stores/journey-store';
 import { MonthlyCreditsChecker } from '@/components/common/MonthlyCreditsChecker';
@@ -298,7 +298,7 @@ const App = () => (
               <BrowserRouter>
                 <OfflineBanner />
                 <ConnectionRecoveryBanner />
-                <CookieConsent />
+                
                 <ScrollToTop />
                 <JourneyTracker />
                 <MonthlyCreditsChecker />
