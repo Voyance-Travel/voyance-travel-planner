@@ -29,6 +29,12 @@ interface GenerationPhasesProps {
   generatedDaysList?: GeneratedDaySummary[];
   isComplete?: boolean;
   progress?: number;
+  /** Current city being generated (multi-city) */
+  currentCity?: string | null;
+  /** Whether this is a multi-city trip */
+  isMultiCity?: boolean;
+  /** Per-city generation status for multi-city progress display */
+  tripCities?: Array<{ city_name: string; generation_status: string }>;
 }
 
 const STATUS_MESSAGES = [
