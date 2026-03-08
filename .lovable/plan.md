@@ -1,41 +1,63 @@
 
 
-## Plan: Smart Optimize Button Visibility + Meaningful Feedback
+## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
 
-### Overview
-Add a `needsOptimization` dirty flag that controls Optimize button visibility. The button is hidden on fresh itineraries and only appears after the user makes route-affecting changes (reorder, add, remove, move between days). After optimization runs, the flag clears and the button disappears again.
+### What's Already Working (No Changes Needed)
+- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
+- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
+- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
+- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
 
-### Changes — Single File: `src/components/itinerary/EditorialItinerary.tsx`
+### What's Broken — Two Things
 
-**1. Add state** (line ~1460, after `optimizePrefs`):
-- Add `const [needsOptimization, setNeedsOptimization] = useState(false);`
+**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
 
-**2. Set dirty flag in mutation handlers** — add `setNeedsOptimization(true)` at end of:
-- `handleActivityReorder` (line ~3106, after `setHasChanges(true)`)
-- `handleMoveToDay` (line ~3157, after `setHasChanges(true)`)
-- `handleActivityRemove` (line ~3185, after `setHasChanges(true)`)
-- `handleAddActivity` (line ~3487, after `setHasChanges(true)`)
+**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
 
-**3. Clear flag + improve feedback in `handleOptimize`** (lines ~2917-2937):
-- No-changes branch (line ~2917): add `setNeedsOptimization(false)` before the toast; update toast text to "Your routes are already optimized! Credits refunded."
-- Success branch (line ~2934): add `setNeedsOptimization(false)` after `setHasChanges(true)`; replace single toast line with human-friendly summary building parts array (routes reordered, transit updated, costs refreshed)
+### Changes
 
-**4. Conditionally render Optimize button**:
-- Desktop (lines ~3988-4020): wrap the `<Tooltip>` block in `{needsOptimization && (...)}`
-- Mobile dropdown (lines ~4044-4057): wrap the `<DropdownMenuItem>` in `{needsOptimization && (...)}`
+#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
 
-**5. Add pulse indicator on desktop button**:
-- After the `<Route>` icon (line ~4003), insert a pulsing dot (`<span>` with `animate-ping` inner span + solid outer span, both `bg-primary`, `h-2 w-2`)
+**Change A — Remove stall detector setup** (lines ~261-313):
+Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
 
-### What won't change
-- Lock/unlock handlers — no dirty flag
-- Initial load / generation — flag starts `false`
-- Credit spending / refund logic — untouched
-- `handleImportActivities` — could also set the flag but keeping scope minimal; can add later
+**Change B — Remove browser loop fallback** (lines ~455-469):
+Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
 
-### Expected behavior
-- Fresh itinerary → no Optimize button
-- Drag reorder / add / remove / move activity → Optimize appears with pulse dot
-- Run Optimize → meaningful toast → button disappears
-- Run Optimize with no changes → "already optimized, credits refunded" → button disappears
+```typescript
+// OLD:
+} catch (serverErr) {
+  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
+  const generatedDays = await generateItinerary({ ... });
+  // ... 40 lines of fallback logic
+}
+
+// NEW:
+} catch (serverErr) {
+  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
+  setPrePhase(null);
+  setHasStarted(false);
+  toast.error('Failed to start generation. Please try again.');
+  return;
+}
+```
+
+**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
+
+**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
+
+#### File 2: `src/hooks/useItineraryGeneration.ts`
+
+No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
+
+### Files to Modify
+
+| File | What |
+|------|------|
+| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
+
+### Risk Assessment
+- **Low risk**: The server-side self-chaining is already fully implemented and tested
+- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
+- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
 
