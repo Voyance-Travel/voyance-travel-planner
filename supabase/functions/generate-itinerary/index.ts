@@ -4749,6 +4749,82 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
   };
 }
 
+/**
+ * POST-VALIDATION: Strip duplicate activities from a day.
+ * Uses similarity logic to actually REMOVE duplicates instead of just logging errors.
+ * Keeps the first occurrence, removes subsequent ones.
+ */
+function deduplicateActivities(day: StrictDay): { day: StrictDay; removed: string[] } {
+  if (!day.activities || day.activities.length <= 1) {
+    return { day, removed: [] };
+  }
+
+  const removed: string[] = [];
+  const kept: StrictActivity[] = [];
+  const seenConcepts = new Set<string>();
+  const seenLocations = new Set<string>();
+  const seenTitles = new Set<string>();
+
+  const normalizeText = (input: string): string => {
+    return (input || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  const extractConcept = (title: string): string => {
+    const conceptPart = normalizeText(title).split(/\s+at\s+|\s+with\s+|\s+@\s+|\s+in\s+/i)[0];
+    return conceptPart
+      .replace(/\b(class|tour|experience|visit|workshop|session|lesson|masterclass)\b/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  const repeatableCategories = ['transport', 'accommodation', 'downtime', 'free_time'];
+
+  for (const act of day.activities) {
+    const category = (act.category || '').toLowerCase();
+
+    // Always keep logistics/transport/accommodation — these naturally repeat
+    if (repeatableCategories.includes(category)) {
+      kept.push(act);
+      continue;
+    }
+
+    const concept = extractConcept(act.title || '');
+    const locationKey = normalizeText(act.location?.name || '') + '|' + normalizeText(act.location?.address || '');
+    const normalTitle = normalizeText(act.title || '');
+
+    // Check 1: Exact same normalized title — duplicate regardless of location
+    if (normalTitle.length > 5 && seenTitles.has(normalTitle)) {
+      removed.push(act.title || 'untitled');
+      continue;
+    }
+
+    // Check 2: Same concept at same location — hard duplicate
+    if (concept.length > 3 && seenConcepts.has(concept) && locationKey.length > 3 && seenLocations.has(locationKey)) {
+      removed.push(act.title || 'untitled');
+      continue;
+    }
+
+    // Track for future comparisons
+    if (normalTitle.length > 5) seenTitles.add(normalTitle);
+    if (concept.length > 3) seenConcepts.add(concept);
+    if (locationKey.length > 3) seenLocations.add(locationKey);
+
+    kept.push(act);
+  }
+
+  if (removed.length > 0) {
+    return { day: { ...day, activities: kept }, removed };
+  }
+
+  return { day, removed: [] };
+}
+
 // Generate a single day with retry logic
 async function generateSingleDayWithRetry(
   context: GenerationContext,
@@ -5855,6 +5931,13 @@ Generate activities for this day following ALL constraints above.`;
       const isLastAttempt = attempt === maxRetries;
       const smartFinishBlocksReturn = context.isSmartFinish && hasHardErrors;
       if (validation.isValid || (isLastAttempt && !smartFinishBlocksReturn)) {
+        // POST-VALIDATION: Strip any duplicate activities that slipped through
+        const { day: dedupedDay, removed: removedDupes } = deduplicateActivities(generatedDay);
+        if (removedDupes.length > 0) {
+          console.warn(`[Stage 2] Day ${dayNumber}: Removed ${removedDupes.length} duplicate(s): ${removedDupes.join(', ')}`);
+          generatedDay = dedupedDay;
+        }
+
         // Tag day with multi-city info
         if (context.isMultiCity && dayCity) {
           generatedDay.city = dayCity.cityName;
