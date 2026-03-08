@@ -132,6 +132,7 @@ import { ImportActivitiesModal, type ImportMode } from './ImportActivitiesModal'
 import { useVersionHistory } from '@/hooks/useVersionHistory';
 import { saveDayVersion } from '@/services/itineraryVersionHistory';
 import { DayUndoButton } from '@/components/planner/DayUndoButton';
+import { VersionHistoryDrawer } from '@/components/planner/VersionHistoryDrawer';
 import { SmartFinishBanner } from './SmartFinishBanner';
 import { InterCityTransportEditor } from './InterCityTransportEditor';
 import { useUpdateCityTransport } from '@/hooks/useTripCities';
