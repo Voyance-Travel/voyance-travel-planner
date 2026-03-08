@@ -2072,6 +2072,7 @@ export default function TripDetail() {
                     )}
                     </ErrorBoundary>
                   </div>
+  const isPastTrip = isAfter(new Date(), parseLocalDate(effectiveEndDate));
 
 
 
