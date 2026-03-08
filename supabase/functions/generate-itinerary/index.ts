@@ -4385,7 +4385,7 @@ interface DayValidationResult {
 }
 
 // Validate a single generated day for quality and correctness
-function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boolean, isLastDay: boolean, totalDays: number, previousDays: StrictDay[] = [], isSmartFinish: boolean = false): DayValidationResult {
+function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boolean, isLastDay: boolean, totalDays: number, previousDays: StrictDay[] = [], isSmartFinish: boolean = false, isDayTrip: boolean = false): DayValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -4689,7 +4689,7 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
     }
   }
 
-  if (isFirstDay) {
+  if (isFirstDay && !isDayTrip) {
     const hasArrival = day.activities?.some(a => 
       (a.title || '').toLowerCase().includes('arrival') || 
       ((a.category === 'transport') && (a.title || '').toLowerCase().includes('airport'))
@@ -5903,7 +5903,7 @@ Generate activities for this day following ALL constraints above.`;
         }
       }
 
-      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish);
+      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish, !!context.isDayTrip);
 
       // Transition day validation: MUST contain at least one inter-city transport activity
       if (isTransitionDay && dayCity?.transitionFrom && dayCity?.transitionTo) {
