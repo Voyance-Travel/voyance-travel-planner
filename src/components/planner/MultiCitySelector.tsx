@@ -4,7 +4,7 @@
  * Polished component for adding multiple cities with nights allocation
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Plus, ChevronUp, ChevronDown, Trash2, Globe, Train, Plane as PlaneIcon, Car, Bus, Sparkles, Clock, ArrowDown, ArrowRightLeft, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -15,6 +15,8 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TripDestination, InterCityTransport, TransitionDayMode, POPULAR_ROUTES, PopularRoute, calculateTotalNights } from '@/types/multiCity';
 import { searchDestinations, Destination } from '@/services/locationSearchAPI';
+import { parseLocalDate } from '@/utils/dateUtils';
+import { format as dateFnsFormat } from 'date-fns';
 
 // Local debounce hook
 function useDebounce<T>(value: T, delay: number): T {
@@ -50,6 +52,24 @@ export default function MultiCitySelector({
   const [showAllTemplates, setShowAllTemplates] = useState(false);
 
   const totalNights = calculateTotalNights(destinations);
+  // Calculate arrival/departure dates for each city based on startDate + accumulated nights
+  const cityDates = useMemo(() => {
+    if (!startDate) return null;
+    const tripStart = parseLocalDate(startDate);
+    if (isNaN(tripStart.getTime())) return null;
+    let current = new Date(tripStart);
+    return destinations.map((city) => {
+      const arrival = new Date(current);
+      current = new Date(current);
+      current.setDate(current.getDate() + city.nights);
+      const departure = new Date(current);
+      return {
+        arrival: dateFnsFormat(arrival, 'MMM d'),
+        departure: dateFnsFormat(departure, 'MMM d'),
+      };
+    });
+  }, [startDate, destinations]);
+
   const displayedRoutes = showAllTemplates ? POPULAR_ROUTES : POPULAR_ROUTES.slice(0, 3);
   
   const debouncedQuery = useDebounce(newCity, 300);
@@ -323,7 +343,7 @@ export default function MultiCitySelector({
                               </button>
                             </div>
 
-                            {/* City Info */}
+                             {/* City Info */}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
                                 <span className="font-semibold text-lg">{destination.city}</span>
@@ -331,6 +351,11 @@ export default function MultiCitySelector({
                                   <span className="text-sm text-muted-foreground">{destination.country}</span>
                                 )}
                               </div>
+                              {cityDates?.[index] && (
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  {cityDates[index].arrival} — {cityDates[index].departure}
+                                </p>
+                              )}
                             </div>
 
                             {/* Nights Selector - Pill Style */}
