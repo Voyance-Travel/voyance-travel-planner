@@ -1,64 +1,63 @@
 
 
-# Itinerary Version History — Audit & Fix Plan
+## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
 
-## Current State
+### What's Already Working (No Changes Needed)
+- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
+- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
+- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
+- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
 
-The version history system has the building blocks (DB table with auto-incrementing versions, undo button, restore logic) but has **critical gaps** that make it unreliable:
+### What's Broken — Two Things
 
-### Gap 1: Versions NOT saved before destructive operations
-`saveDayVersion()` is only called in **2 places**:
-- Before **flight sync** (`before_flight_sync`)
-- Before **activity import** (`before_import`)
+**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
 
-It is **NOT called before**:
-- **Day regeneration** — the most common destructive operation
-- **Activity swap** — replaces an activity with an alternative
-- **Activity add/delete** — modifies the day
-- **Drag-and-drop reorder** — changes activity order
-- **Time edits with cascade** — shifts multiple activities
+**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
 
-This means the undo button often has nothing useful to restore.
+### Changes
 
-### Gap 2: Restore is UI-only, not persisted
-When `onRestore` fires, it calls `setDays()` and `setHasChanges(true)` — updating local state. But it does **not** trigger an auto-save. The user must manually hit "Save" or the changes are lost on refresh. This is fragile — a user hits undo, sees the old version, refreshes, and it's gone.
+#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
 
-### Gap 3: No version history UI for browsing
-`loadVersionHistory()` and `formatVersionLabel()` exist in the hook/service but are never exposed in the UI. Users can only do "undo last" — they can't browse or pick a specific version to restore.
+**Change A — Remove stall detector setup** (lines ~261-313):
+Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
 
----
+**Change B — Remove browser loop fallback** (lines ~455-469):
+Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
 
-## Fix Plan
+```typescript
+// OLD:
+} catch (serverErr) {
+  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
+  const generatedDays = await generateItinerary({ ... });
+  // ... 40 lines of fallback logic
+}
 
-### 1. Add `saveDayVersion` before all destructive operations
-In `EditorialItinerary.tsx`, add version snapshots before:
-- **`handleDayRegenerateInternal`** — save before calling the edge function (~line 3225, action: `'regenerate'`)
-- **Activity swap handler** — save before replacing the activity (action: `'swap'`)
-- **Activity delete** — save before removing (action: `'delete_activity'`)
-- **Drag-and-drop reorder** — save before reorder commit (action: `'reorder'`)
+// NEW:
+} catch (serverErr) {
+  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
+  setPrePhase(null);
+  setHasStarted(false);
+  toast.error('Failed to start generation. Please try again.');
+  return;
+}
+```
 
-This ensures every meaningful change has a restorable previous state.
+**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
 
-### 2. Auto-save after restore
-In the `onRestore` callback (~line 1335), after updating local state, trigger the existing `handleSave` (or a lightweight direct DB write) so the restored version is persisted immediately — not left as unsaved local state.
+**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
 
-### 3. Add version history browser (lightweight)
-Create a small `VersionHistoryDrawer` component:
-- Triggered from a "History" option next to the undo button
-- Lists last 10 versions using `loadVersionHistory()` + `formatVersionLabel()`
-- Each row shows action label + timestamp
-- Click to preview/restore that specific version
-- Uses the existing `restoreVersion()` service function
+#### File 2: `src/hooks/useItineraryGeneration.ts`
 
-### 4. Refresh undo state after saves
-After each `saveDayVersion` call, call `refreshUndoState()` so the undo button appears immediately (currently it only checks on mount/day change).
+No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
 
----
+### Files to Modify
 
-## Files to modify
-- **`src/components/itinerary/EditorialItinerary.tsx`** — add `saveDayVersion` calls before regen/swap/delete/reorder; auto-save on restore; wire up history drawer
-- **`src/components/planner/VersionHistoryDrawer.tsx`** — new component for browsing version history
-- **`src/hooks/useVersionHistory.ts`** — minor: expose `loadVersionHistory` and add auto-save callback option
+| File | What |
+|------|------|
+| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
 
-No database changes needed — the `itinerary_versions` table and auto-increment trigger already exist.
+### Risk Assessment
+- **Low risk**: The server-side self-chaining is already fully implemented and tested
+- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
+- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
 

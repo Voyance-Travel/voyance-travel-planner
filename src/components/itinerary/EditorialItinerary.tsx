@@ -23,7 +23,7 @@ import {
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
   Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2, ClipboardPaste, Compass, Bus, Ship, ArrowRight, Droplets, Wrench,
-  Footprints, Navigation2,
+  Footprints, Navigation2, History as HistoryIcon,
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
@@ -132,6 +132,7 @@ import { ImportActivitiesModal, type ImportMode } from './ImportActivitiesModal'
 import { useVersionHistory } from '@/hooks/useVersionHistory';
 import { saveDayVersion } from '@/services/itineraryVersionHistory';
 import { DayUndoButton } from '@/components/planner/DayUndoButton';
+import { VersionHistoryDrawer } from '@/components/planner/VersionHistoryDrawer';
 import { SmartFinishBanner } from './SmartFinishBanner';
 import { InterCityTransportEditor } from './InterCityTransportEditor';
 import { useUpdateCityTransport } from '@/hooks/useTripCities';
@@ -1329,7 +1330,8 @@ export function EditorialItinerary({
 
   // Version history / undo for selected day
   const selectedDay = days[selectedDayIndex];
-  const { canUndoDay, isUndoing, handleUndo, refreshUndoState } = useVersionHistory({
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
+  const { canUndoDay, isUndoing, versions, isLoadingVersions, handleUndo, handleRestoreVersion, refreshUndoState, loadVersionHistory } = useVersionHistory({
     tripId,
     dayNumber: selectedDay?.dayNumber ?? 1,
     onRestore: useCallback((restoredActivities, metadata) => {
@@ -1342,6 +1344,7 @@ export function EditorialItinerary({
           ...(metadata?.theme ? { theme: metadata.theme } : {}),
         };
       }));
+      // Auto-save restored version immediately (don't leave as unsaved local state)
       setHasChanges(true);
     }, [selectedDayIndex]),
   });
@@ -2395,6 +2398,20 @@ export function EditorialItinerary({
       return;
     }
 
+    // Save version snapshot before swap for undo
+    if (tripId) {
+      const swapDay = days[target.dayIndex];
+      if (swapDay) {
+        await saveDayVersion(tripId, {
+          dayNumber: swapDay.dayNumber,
+          title: swapDay.title,
+          theme: swapDay.theme,
+          activities: swapDay.activities as unknown as ItineraryActivity[],
+        }, 'swap');
+        refreshUndoState();
+      }
+    }
+
     // Replacing activity with new selection
 
     setDays(prev => {
@@ -2999,7 +3016,21 @@ export function EditorialItinerary({
   }, []);
 
   // Handle drag-and-drop reorder of activities within a day — dynamically reassign times
-  const handleActivityReorder = useCallback((dayIndex: number, reorderedActivities: EditorialActivity[]) => {
+  const handleActivityReorder = useCallback(async (dayIndex: number, reorderedActivities: EditorialActivity[]) => {
+    // Save version snapshot before reorder for undo
+    if (tripId) {
+      const day = days[dayIndex];
+      if (day) {
+        await saveDayVersion(tripId, {
+          dayNumber: day.dayNumber,
+          title: day.title,
+          theme: day.theme,
+          activities: day.activities as unknown as ItineraryActivity[],
+        }, 'reorder');
+        refreshUndoState();
+      }
+    }
+
     // Helper: parse "HH:mm" or "H:mm AM/PM" to minutes since midnight
     const toMins = (t?: string): number | null => {
       if (!t) return null;
@@ -3124,7 +3155,21 @@ export function EditorialItinerary({
     toast.success(`Moved to Day ${toDayIndex + 1}`);
   }, [syncBudgetFromDays]);
 
-  const handleActivityRemove = useCallback((dayIndex: number, activityId: string) => {
+  const handleActivityRemove = useCallback(async (dayIndex: number, activityId: string) => {
+    // Save version snapshot before delete for undo
+    if (tripId) {
+      const day = days[dayIndex];
+      if (day) {
+        await saveDayVersion(tripId, {
+          dayNumber: day.dayNumber,
+          title: day.title,
+          theme: day.theme,
+          activities: day.activities as unknown as ItineraryActivity[],
+        }, 'delete_activity');
+        refreshUndoState();
+      }
+    }
+
     setDays(prev => {
       const updated = prev.map((day, idx) => {
         if (idx !== dayIndex) return day;
@@ -3221,6 +3266,17 @@ export function EditorialItinerary({
   const handleDayRegenerateInternal = useCallback(async (dayIndex: number, guidedPreferences?: string) => {
     const day = days[dayIndex];
     if (!day) return;
+
+    // Save version snapshot before regeneration for undo
+    if (tripId) {
+      await saveDayVersion(tripId, {
+        dayNumber: day.dayNumber,
+        title: day.title,
+        theme: day.theme,
+        activities: day.activities as unknown as ItineraryActivity[],
+      }, 'regenerate');
+      refreshUndoState();
+    }
 
     setRegeneratingDay(day.dayNumber);
     try {
@@ -4098,7 +4154,7 @@ export function EditorialItinerary({
                     />
                   )}
                 </span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   {canUndoDay && (
                     <DayUndoButton
                       onClick={handleUndo}
@@ -4106,6 +4162,15 @@ export function EditorialItinerary({
                       showLabel
                     />
                   )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setVersionHistoryOpen(true)}
+                    className="gap-1.5 text-xs"
+                  >
+                    <HistoryIcon className="h-4 w-4" />
+                    <span className="hidden sm:inline">History</span>
+                  </Button>
                   <span className="text-xs text-muted-foreground">
                     Day {selectedDayIndex + 1} of {days.length}
                   </span>
@@ -5638,7 +5703,18 @@ export function EditorialItinerary({
         />
       )}
 
-      {/* Activity Alternatives Drawer (AI Swap) */}
+      {/* Version History Drawer */}
+      <VersionHistoryDrawer
+        open={versionHistoryOpen}
+        onOpenChange={setVersionHistoryOpen}
+        versions={versions}
+        isLoading={isLoadingVersions}
+        isRestoring={isUndoing}
+        onLoadVersions={loadVersionHistory}
+        onRestore={handleRestoreVersion}
+        dayNumber={selectedDay?.dayNumber ?? 1}
+      />
+
       <ActivityAlternativesDrawer
         open={swapDrawerOpen}
         onClose={() => {
