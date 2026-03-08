@@ -183,7 +183,7 @@ export default function MultiCitySelector({
         id: crypto.randomUUID(),
         fromCity: withOrder[i].city,
         toCity: withOrder[i + 1].city,
-        type: 'train',
+        type: smartTransportDefault(withOrder[i].country, withOrder[i + 1].country),
         departureDate: '',
         transitionDay: 'half_and_half',
       });
