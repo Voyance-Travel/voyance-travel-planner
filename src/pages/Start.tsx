@@ -2790,22 +2790,15 @@ export default function Start() {
                               nights: c.nights,
                               order: i + 1,
                             })) as any : null,
-                            metadata: {
+                            metadata: (() => {
                               // Normalize mustDoActivities to string[] to match form path
-                              mustDoActivities: details.mustDoActivities
+                              const mustDo = details.mustDoActivities
                                 ? details.mustDoActivities.split(',').map((s: string) => s.trim()).filter(Boolean)
-                                : null,
-                              additionalNotes: details.additionalNotes || null,
-                              flightDetails: details.flightDetails || null,
-                              userConstraints: details.userConstraints || null,
-                              // Personalization fields — match form path output
-                              pacing: details.pacing || 'balanced',
-                              isFirstTimeVisitor: details.isFirstTimeVisitor ?? true,
-                              interestCategories: details.interestCategories?.length ? details.interestCategories : null,
-                              celebrationDay: details.celebrationDay || null,
+                                : null;
+
                               // Convert userConstraints → generationRules format the engine reads
-                              generationRules: (() => {
-                                if (!details.userConstraints?.length) return null;
+                              let generationRules: Array<Record<string, unknown>> | null = null;
+                              if (details.userConstraints?.length) {
                                 const rules: Array<Record<string, unknown>> = [];
                                 for (const c of details.userConstraints) {
                                   if (c.type === 'full_day_event' && c.allDay && c.day) {
@@ -2826,11 +2819,23 @@ export default function Start() {
                                     });
                                   }
                                 }
-                                return rules.length > 0 ? rules : null;
-                              })(),
-                              source: 'chat_planner',
-                              lastUpdated: new Date().toISOString(),
-                            },
+                                generationRules = rules.length > 0 ? rules : null;
+                              }
+
+                              return {
+                                mustDoActivities: mustDo,
+                                additionalNotes: details.additionalNotes || null,
+                                flightDetails: details.flightDetails || null,
+                                userConstraints: details.userConstraints || null,
+                                pacing: details.pacing || 'balanced',
+                                isFirstTimeVisitor: details.isFirstTimeVisitor ?? true,
+                                interestCategories: details.interestCategories?.length ? details.interestCategories : null,
+                                celebrationDay: details.celebrationDay || null,
+                                generationRules,
+                                source: 'chat_planner',
+                                lastUpdated: new Date().toISOString(),
+                              };
+                            })() as any,
                           })
                           .select('id')
                           .single();
