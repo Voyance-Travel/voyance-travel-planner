@@ -145,6 +145,7 @@ import {
   scheduleMustDos,
   buildMustHavesConstraintPrompt,
   type MustDoPriority,
+  type ActivityType,
 } from './must-do-priorities.ts';
 
 import {
@@ -442,6 +443,7 @@ interface GenerationContext {
   // Phase 3: Premium features
   preBookedCommitments?: PreBookedCommitment[];
   mustDoActivities?: string;
+  additionalNotes?: string;
   interestCategories?: string[];
   mustHaves?: Array<{label: string; notes?: string}>;
   generationRules?: Array<{type: string; days?: string[]; from?: string; to?: string; reason?: string; date?: string; description?: string; hotelName?: string; additionalGuests?: number; note?: string; text?: string}>;
@@ -4167,6 +4169,8 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
       if (Array.isArray(raw)) return raw.join(', ');
       return raw || undefined;
     })(),
+    // "Anything else" / additional notes from planner
+    additionalNotes: (trip.metadata?.additionalNotes as string) || undefined,
     // Interest categories selected by user (e.g. ['history', 'food', 'nightlife'])
     interestCategories: (trip.metadata?.interestCategories as string[]) || undefined,
     // Structured must-haves checklist (schedule constraints, hotel prefs, etc.)
