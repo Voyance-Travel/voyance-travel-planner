@@ -1718,22 +1718,7 @@ export function EditorialItinerary({
     const activity = day?.activities.find(a => a.id === activityId);
     if (!activity?.transportation) return;
 
-    // Check free cap first, then charge credits if needed
-    if (!transportCap.isFree) {
-      if (totalCredits < CREDIT_COSTS.TRANSPORT_MODE_CHANGE) {
-        toast.error(`Need ${CREDIT_COSTS.TRANSPORT_MODE_CHANGE} credits to change transport mode`);
-        return;
-      }
-    }
-    try {
-      await spendCredits.mutateAsync({
-        action: 'TRANSPORT_MODE_CHANGE',
-        tripId,
-        metadata: { activityId, newMode },
-      });
-    } catch {
-      if (!transportCap.isFree) return;
-    }
+    // Transport mode changes are free — no credit charge
 
     setChangingTransportActivityId(activityId);
     try {
@@ -1792,10 +1777,11 @@ export function EditorialItinerary({
           };
         }));
         setHasChanges(true);
-        toast.success(transportCap.isFree 
-          ? `Route updated to ${newMode} (free, ${transportCap.freeRemaining - 1} free changes left)`
-          : `Route updated to ${newMode} (${CREDIT_COSTS.TRANSPORT_MODE_CHANGE} credits used)`
-        );
+        const modeLabels: Record<string, string> = {
+          walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus',
+          uber: 'Rideshare', taxi: 'Taxi', train: 'Train',
+        };
+        toast.success(`Updated to ${modeLabels[newMode] || newMode}`);
       }
     } catch (err) {
       console.error('Transport mode change error:', err);

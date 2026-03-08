@@ -1,7 +1,7 @@
 /**
  * Transit Badge Component
  * Collapsed by default — shows a thin dotted line with icon + duration.
- * Expands on tap to reveal full details, cost, instructions, and mode switcher.
+ * Expands on tap to reveal full details, instructions, and mode switcher.
  */
 
 import { useState } from 'react';
@@ -21,7 +21,6 @@ interface TransitBadgeProps {
   tripCurrency: string;
   displayCost: (amountInUSD: number) => number;
   showDetails?: boolean;
-  /** When provided, shows transport mode switcher */
   onTransportModeChange?: (newMode: string) => Promise<void>;
   isChangingMode?: boolean;
 }
@@ -55,8 +54,9 @@ const transportIcons: Record<string, React.ReactNode> = {
 
 const AVAILABLE_MODES = [
   { value: 'walking', label: 'Walk', icon: <Footprints className="h-3.5 w-3.5" /> },
-  { value: 'bus', label: 'Bus', icon: <Bus className="h-3.5 w-3.5" /> },
   { value: 'metro', label: 'Metro', icon: <Train className="h-3.5 w-3.5" /> },
+  { value: 'bus', label: 'Bus', icon: <Bus className="h-3.5 w-3.5" /> },
+  { value: 'uber', label: 'Rideshare', icon: <Car className="h-3.5 w-3.5" /> },
   { value: 'taxi', label: 'Taxi', icon: <Car className="h-3.5 w-3.5" /> },
 ];
 
@@ -69,15 +69,15 @@ export function TransitBadge({
   isChangingMode = false,
 }: TransitBadgeProps) {
   const isMobile = useIsMobile();
-  // On mobile, always start collapsed regardless of showDetails prop
   const [expanded, setExpanded] = useState(isMobile ? false : showDetails);
   
   const icon = transportIcons[transportation.method.toLowerCase()] || <MapPin className="h-2.5 w-2.5" />;
-  const costDisplay = transportation.estimatedCost?.amount && transportation.estimatedCost.amount > 0
+  const currentMode = transportation.method.toLowerCase();
+  const isWalking = ['walk', 'walking'].includes(currentMode);
+
+  const costDisplay = !isWalking && transportation.estimatedCost?.amount && transportation.estimatedCost.amount > 0
     ? formatCurrency(displayCost(transportation.estimatedCost.amount), tripCurrency)
     : null;
-
-  const currentMode = transportation.method.toLowerCase();
 
   const handleModeSelect = async (mode: string) => {
     if (mode === currentMode || !onTransportModeChange) return;
@@ -86,7 +86,7 @@ export function TransitBadge({
 
   return (
     <div className="mt-1 mb-0">
-      {/* Collapsed: thin dotted line with icon + duration */}
+      {/* Collapsed: thin dotted line with icon + duration + tap to expand */}
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
@@ -97,7 +97,7 @@ export function TransitBadge({
       >
         {/* Left dashed line */}
         <div className="flex-1 border-t border-dashed border-border/30" />
-        
+
         {/* Icon + duration pill */}
         <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 group-hover:text-muted-foreground transition-colors shrink-0">
           {isChangingMode ? (
@@ -107,6 +107,18 @@ export function TransitBadge({
           )}
           {transportation.duration && (
             <span>{transportation.duration}</span>
+          )}
+          {costDisplay && (
+            <>
+              <span className="text-muted-foreground/30">·</span>
+              <span>{costDisplay}</span>
+            </>
+          )}
+          {isWalking && (
+            <>
+              <span className="text-muted-foreground/30">·</span>
+              <span className="text-green-600/70">Free</span>
+            </>
           )}
           <motion.div
             animate={{ rotate: expanded ? 180 : 0 }}
@@ -120,7 +132,7 @@ export function TransitBadge({
         <div className="flex-1 border-t border-dashed border-border/30" />
       </button>
 
-      {/* Expanded: full details */}
+      {/* Expanded: details + mode picker */}
       <AnimatePresence>
         {expanded && (
           <motion.div
@@ -131,62 +143,6 @@ export function TransitBadge({
             className="overflow-hidden"
           >
             <div className="py-1.5 px-3 ml-4 space-y-2">
-              {/* Method + distance + cost row */}
-              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                <span className="inline-flex items-center gap-1 font-medium capitalize">
-                  {icon}
-                  {transportation.method}
-                </span>
-                {transportation.distance && (
-                  <>
-                    <span className="text-muted-foreground/30">·</span>
-                    <span>{transportation.distance}</span>
-                  </>
-                )}
-                {transportation.duration && (
-                  <>
-                    <span className="text-muted-foreground/30">·</span>
-                    <span>{transportation.duration}</span>
-                  </>
-                )}
-                {costDisplay && (
-                  <>
-                    <span className="text-muted-foreground/30">·</span>
-                    <span>{costDisplay}</span>
-                  </>
-                )}
-              </div>
-
-              {/* Mode picker — always visible when expanded and editable */}
-              {onTransportModeChange && (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {AVAILABLE_MODES.map(mode => {
-                    const isActive = mode.value === currentMode || 
-                      (currentMode === 'walk' && mode.value === 'walking');
-                    return (
-                      <button
-                        key={mode.value}
-                        onClick={() => handleModeSelect(mode.value)}
-                        disabled={isActive || isChangingMode}
-                        className={cn(
-                          "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs border transition-colors",
-                          isActive
-                            ? "bg-primary/10 text-primary border-primary/30 font-medium"
-                            : "bg-background border-border hover:border-primary/50 hover:text-foreground text-muted-foreground"
-                        )}
-                      >
-                        {isChangingMode && mode.value === currentMode ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          mode.icon
-                        )}
-                        {mode.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
               {/* Instructions */}
               {transportation.instructions && (
                 <div className="pl-3 border-l-2 border-primary/20 space-y-1.5">
@@ -208,6 +164,35 @@ export function TransitBadge({
                       {transportation.instructions}
                     </p>
                   )}
+                </div>
+              )}
+
+              {/* Mode picker — always visible when expanded and editable */}
+              {onTransportModeChange && !isChangingMode && (
+                <div className="pt-1">
+                  <p className="text-[10px] text-muted-foreground/60 mb-1.5">Change transport:</p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {AVAILABLE_MODES.map(mode => {
+                      const isActive = mode.value === currentMode ||
+                        (currentMode === 'walk' && mode.value === 'walking');
+                      return (
+                        <button
+                          key={mode.value}
+                          onClick={() => handleModeSelect(mode.value)}
+                          disabled={isActive}
+                          className={cn(
+                            "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs border transition-colors",
+                            isActive
+                              ? "bg-primary/10 text-primary border-primary/30 font-medium"
+                              : "bg-background border-border hover:border-primary/50 hover:text-foreground text-muted-foreground"
+                          )}
+                        >
+                          {mode.icon}
+                          {mode.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>

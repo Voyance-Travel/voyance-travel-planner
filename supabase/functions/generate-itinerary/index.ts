@@ -360,6 +360,11 @@ function sanitizeGeneratedDay(day: any, dayNumber: number): any {
       }
       if (act.transportation && typeof act.transportation === 'object') {
         if (act.transportation.instructions) act.transportation.instructions = sanitizeAITextField(act.transportation.instructions) || undefined;
+        // Walking is always free — override any AI-hallucinated cost
+        const method = (act.transportation.method || '').toLowerCase();
+        if (method === 'walk' || method === 'walking') {
+          act.transportation.estimatedCost = { amount: 0, currency: act.transportation.estimatedCost?.currency || 'USD' };
+        }
       }
       if (act.voyanceInsight) act.voyanceInsight = sanitizeAITextField(act.voyanceInsight) || undefined;
       if (act.bestTime) act.bestTime = sanitizeAITextField(act.bestTime) || undefined;

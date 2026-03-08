@@ -2154,6 +2154,18 @@ serve(async (req) => {
             console.log(`[optimize-itinerary] No routing info at all for leg "${from.title}" → "${to.title}", using estimated transport`);
           }
         }
+
+        // Safety: walking is always free, regardless of data source
+        const finalMethod = (activities[i].transportation?.method || '').toLowerCase();
+        if ((finalMethod === 'walk' || finalMethod === 'walking') && activities[i].transportation?.estimatedCost) {
+          activities[i] = {
+            ...activities[i],
+            transportation: {
+              ...activities[i].transportation!,
+              estimatedCost: { amount: 0, currency: activities[i].transportation!.estimatedCost?.currency || 'USD' },
+            },
+          };
+        }
       }
 
       // Step 8: Photo enrichment - REMOVED per user feedback (unreliable, expensive)
