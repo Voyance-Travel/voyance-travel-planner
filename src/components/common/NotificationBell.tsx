@@ -167,6 +167,7 @@ function useRespondToFriendRequest() {
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
