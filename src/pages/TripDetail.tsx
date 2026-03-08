@@ -198,19 +198,25 @@ export default function TripDetail() {
       }
     },
     onFailed: async (err) => {
-      setGenerationStalled(false);
-      
-      // CRITICAL: Before showing error, verify itinerary doesn't actually exist in DB
+      // NEVER show a "Generation failed" error toast to the user.
+      // The backend sometimes sets itinerary_status='failed' due to transient issues
+      // (edge function timeouts, AI rate limits, chain breaks) even when generation
+      // is partially complete or can be auto-resumed.
+      console.warn('[TripDetail] onFailed fired but suppressing error toast. Error:', err);
+
       if (tripId) {
         try {
-          const { data: verifyTrip } = await supabase
-            .from('trips')
-            .select('*, itinerary_data')
-            .eq('id', tripId)
-            .single();
+          const [tripResult, daysResult] = await Promise.all([
+            supabase.from('trips').select('*, itinerary_data').eq('id', tripId).single(),
+            supabase.from('itinerary_days').select('id', { count: 'exact', head: true }).eq('trip_id', tripId),
+          ]);
+
+          const verifyTrip = tripResult.data;
           const verifyData = verifyTrip?.itinerary_data as { days?: unknown[] } | null;
+          const itineraryDaysExist = (daysResult.count ?? 0) > 0;
+
           if (verifyData?.days?.length && verifyData.days.length > 0) {
-            console.log('[TripDetail] onFailed suppressed — itinerary exists with', verifyData.days.length, 'days');
+            console.log('[TripDetail] onFailed suppressed — itinerary_data has', verifyData.days.length, 'days');
             setTrip(verifyTrip);
             setShowGenerator(false);
             setCachedVersion(tripId, (verifyTrip as any).itinerary_version ?? 1);
@@ -221,14 +227,25 @@ export default function TripDetail() {
             }
             return;
           }
-          // Trip truly failed — update local state
+
+          if (itineraryDaysExist) {
+            console.log('[TripDetail] onFailed suppressed — itinerary_days has data, triggering resume');
+            if (verifyTrip) setTrip(verifyTrip);
+            setGenerationStalled(true);
+            return;
+          }
+
+          console.log('[TripDetail] onFailed — no data found, showing stalled/retry UI');
           if (verifyTrip) setTrip(verifyTrip);
+          setGenerationStalled(true);
         } catch (e) {
-          console.warn('[TripDetail] Could not verify DB state on failure:', e);
+          console.warn('[TripDetail] onFailed recovery check failed:', e);
+          setGenerationStalled(true);
         }
+      } else {
+        setGenerationStalled(true);
       }
-      
-      toast.error(`Generation failed: ${err}. Credits for ungenerated days have been refunded.`, { duration: 6000 });
+
       if (user?.id) {
         queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
         queryClient.invalidateQueries({ queryKey: ['entitlements', user.id] });
