@@ -83,7 +83,7 @@ async function fetchFriendsActivity(limit: number): Promise<FriendActivity[]> {
       updated_at,
       user_id,
       profile:profiles!trips_user_id_fkey(id, display_name, handle, avatar_url)
-    `)
+    ` as '*')
     .in('user_id', friendIds)
     .in('status', ['planning', 'booked', 'active', 'completed'])
     .order('updated_at', { ascending: false })
