@@ -9,6 +9,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, isToday, isBefore, isAfter, differenceInMinutes, differenceInDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
+import { openMapLocation } from '@/utils/mapNavigation';
 import {
   ArrowLeft, Calendar, MapPin, Clock, ChevronRight, Sun, Moon,
   Coffee, Sunrise, Sunset, Navigation, Ticket, Bookmark,
@@ -327,6 +328,7 @@ export default function ActiveTrip() {
     setRescueDismissed(true);
     // The actual pace adjustment would be handled by the itinerary system
   }, []);
+
 
 
   const handleActivityComplete = useCallback((activityId: string) => {
@@ -1019,7 +1021,14 @@ function TodayView({
                       {!isPastDay && (
                         <div className="flex items-center gap-2 mt-3">
                           {activity.location && (
-                            <Button size="sm" variant="outline" className="h-8 gap-1.5">
+                            <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => {
+                              openMapLocation({
+                                name: activity.location?.name || activity.name,
+                                address: activity.location?.address,
+                                lat: activity.location?.lat,
+                                lng: activity.location?.lng,
+                              });
+                            }}>
                               <Navigation className="w-3.5 h-3.5" />
                               Directions
                             </Button>
