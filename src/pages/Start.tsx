@@ -772,8 +772,8 @@ function TripDetailsStep({
             animate={{ opacity: 1, height: 'auto' }}
             className="space-y-3"
           >
-            <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground flex items-center gap-2">
-              <PartyPopper className="h-4 w-4 text-amber-500" />
+             <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground flex items-center gap-1.5">
+               <PartyPopper className="h-3.5 w-3.5 text-amber-500" />
               Which day is the celebration?
             </label>
             <div className="flex flex-wrap gap-2">
@@ -1094,12 +1094,12 @@ function FlightHotelStep({
         </p>
       </div>
 
-      <div className="max-w-xl mx-auto space-y-8">
+      <div className="max-w-xl mx-auto space-y-6 sm:space-y-8 [&_input]:h-9 sm:[&_input]:h-10 [&_textarea]:min-h-[60px]">
         {/* Flight Section */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Plane className="h-4 w-4 text-muted-foreground" />
-            <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+        <div className="space-y-3 sm:space-y-4">
+          <div className="flex items-center gap-1.5">
+            <Plane className="h-3.5 w-3.5 text-muted-foreground" />
+            <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
               {isMultiCity ? 'Transportation Details' : 'Flight Details'}
               <span className="text-muted-foreground/60 ml-1">(optional)</span>
             </label>
@@ -1166,7 +1166,7 @@ function FlightHotelStep({
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-4 p-4 rounded-xl border border-border bg-card">
+                <div className="space-y-3 p-3 sm:p-4 rounded-xl border border-border bg-card">
                   {/* Import button at top */}
                   <div className="flex justify-center border-b border-border pb-3">
                     <Button 
@@ -1182,13 +1182,13 @@ function FlightHotelStep({
 
                   {/* Outbound Flight */}
                   <div className="space-y-3">
-                    <h4 className="font-medium text-sm flex items-center gap-2">
+                    <h4 className="font-medium text-xs sm:text-sm flex items-center gap-1.5">
                       <ArrowRight className="h-4 w-4" />
                       Outbound Flight
                     </h4>
                     
                     {/* Route */}
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
                       <div>
                         <Label className="text-xs text-muted-foreground">From</Label>
                         <AirportAutocomplete
@@ -1249,7 +1249,7 @@ function FlightHotelStep({
                         </Button>
                       </CollapsibleTrigger>
                       <CollapsibleContent className="space-y-3 pt-2">
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-2 gap-2 sm:gap-3">
                           <div>
                             <Label className="text-xs text-muted-foreground">Airline</Label>
                             <AirlineAutocomplete
@@ -1275,7 +1275,7 @@ function FlightHotelStep({
                   {/* Connection / Additional Legs */}
                   {additionalLegs.length > 0 && (
                     <div className="space-y-3 border-t border-border pt-3">
-                      <h4 className="font-medium text-sm flex items-center gap-2 text-muted-foreground">
+                      <h4 className="font-medium text-xs sm:text-sm flex items-center gap-1.5 text-muted-foreground">
                         <Plane className="h-3.5 w-3.5" />
                         Connection Flights ({additionalLegs.length})
                       </h4>
@@ -1307,7 +1307,7 @@ function FlightHotelStep({
                               </div>
                             )}
                             <CollapsibleContent className="space-y-3 pt-2">
-                              <div className="grid grid-cols-2 gap-3">
+                               <div className="grid grid-cols-2 gap-2 sm:gap-3">
                                 <div>
                                   <Label className="text-xs text-muted-foreground">From</Label>
                                   <AirportAutocomplete
@@ -1376,7 +1376,7 @@ function FlightHotelStep({
                                   </div>
                                 </div>
                               </div>
-                              <div className="grid grid-cols-2 gap-3">
+                               <div className="grid grid-cols-2 gap-2 sm:gap-3">
                                 <div>
                                   <Label className="text-xs text-muted-foreground">Airline</Label>
                                   <AirlineAutocomplete
@@ -1432,7 +1432,7 @@ function FlightHotelStep({
                       </Button>
                     </CollapsibleTrigger>
                     <CollapsibleContent className="space-y-3 pt-3 border-t border-border mt-3">
-                      <div className="grid grid-cols-2 gap-3">
+                       <div className="grid grid-cols-2 gap-2 sm:gap-3">
                         <div>
                           <Label className="text-xs text-muted-foreground">From</Label>
                           <AirportAutocomplete
@@ -1513,10 +1513,10 @@ function FlightHotelStep({
         </div>
 
         {/* Hotel Section */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-muted-foreground" />
-            <label className="text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
+        <div className="space-y-3 sm:space-y-4">
+          <div className="flex items-center gap-1.5">
+            <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+            <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
               {isMultiCity ? 'Where will you stay in each city?' : 'Where will you stay?'}
               <span className="text-muted-foreground/60 ml-1">(optional)</span>
             </label>
@@ -1608,7 +1608,7 @@ function FlightHotelStep({
           ) : (
             /* Single city: support multiple hotels (split stays) */
             <>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
                 {/* I have my own */}
                 <button
                   type="button"
@@ -1765,7 +1765,7 @@ function FlightHotelStep({
 
         {/* Inter-City Transport Comparison — only for multi-city trips */}
         {isMultiCity && multiCityDestinations && multiCityDestinations.length >= 2 && (
-          <div className="space-y-4 pt-4 border-t border-border">
+          <div className="space-y-3 sm:space-y-4 pt-3 sm:pt-4 border-t border-border">
             <InterCityTransportComparison
               transitions={multiCityDestinations.slice(0, -1).map((dest, i) => ({
                 fromCity: dest.city,
@@ -1881,10 +1881,10 @@ function FlightHotelStep({
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="space-y-4 py-4">
+              <div className="space-y-3 py-3 sm:space-y-4 sm:py-4">
                 {/* Accommodation Type Selector */}
                 <div>
-                  <Label className="text-xs mb-1.5 block">Type of Stay</Label>
+                  <Label className="text-[10px] sm:text-xs mb-1 block text-muted-foreground">Type of Stay</Label>
                   <div className="flex gap-2 flex-wrap">
                     {([
                       { value: 'hotel', label: 'Hotel' },
@@ -1960,7 +1960,7 @@ function FlightHotelStep({
                 
                 <div className="flex w-full gap-4">
                   <div className="flex-1 min-w-0">
-                    <Label className="text-xs mb-1 block">Check-in Time</Label>
+                    <Label className="text-[10px] sm:text-xs mb-0.5 block text-muted-foreground">Check-in Time</Label>
                     <Input
                       type="time"
                       value={currentHotel.checkInTime || '15:00'}
@@ -1969,7 +1969,7 @@ function FlightHotelStep({
                     />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <Label className="text-xs mb-1 block">Check-out Time</Label>
+                    <Label className="text-[10px] sm:text-xs mb-0.5 block text-muted-foreground">Check-out Time</Label>
                     <Input
                       type="time"
                       value={currentHotel.checkOutTime || '11:00'}
@@ -1981,7 +1981,7 @@ function FlightHotelStep({
 
                 {/* Stay Dates — shown for split stays (single-city multi-hotel or multi-city multi-hotel) */}
                 {(isListMode || showMultiCityDates) && (
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3">
                     <div>
                       <Label className="text-xs">Check-in Date</Label>
                       <Input
@@ -2010,7 +2010,7 @@ function FlightHotelStep({
                 {/* Price & Budget Inclusion */}
                 <div className="space-y-3 pt-3 border-t border-border">
                   <div>
-                    <Label className="text-xs">Hotel Total Price</Label>
+                    <Label className="text-[10px] sm:text-xs text-muted-foreground">Hotel Total Price</Label>
                     <div className="relative">
                       <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
@@ -2902,7 +2902,7 @@ export default function Start() {
                       </Button>
                     </div>
 
-                    <div className="space-y-4">
+                     <div className="space-y-3 sm:space-y-4">
                       {/* First-Time Visitor Toggle(s) */}
                       {isMultiCity && multiCityDestinations && multiCityDestinations.length >= 2 ? (
                         <div className="space-y-2">
@@ -2975,8 +2975,8 @@ export default function Start() {
                       {/* Anything else? */}
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
-                          <label className="flex items-center gap-2 text-xs tracking-[0.2em] uppercase font-medium text-muted-foreground">
-                            <MessageSquareText className="w-4 h-4" />
+                          <label className="flex items-center gap-1.5 text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
+                            <MessageSquareText className="w-3.5 h-3.5" />
                             Anything else?
                           </label>
                           <span className="text-xs text-muted-foreground/60">(optional)</span>
