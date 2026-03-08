@@ -541,7 +541,7 @@ export function parseItineraryDays(
   }
   
   // Filter null/undefined days BEFORE mapping
-  return rawDays
+  const parsedDays = rawDays
     .filter((day, idx): day is NonNullable<typeof day> => {
       if (day === null || day === undefined) {
         console.warn(`[itineraryParser] Skipping null/undefined day at index ${idx}`);
@@ -550,6 +550,24 @@ export function parseItineraryDays(
       return true;
     })
     .map((day, idx) => parseSingleDay(day, idx, tripStartDate));
+  
+  // Deduplicate days by dayNumber — keep LAST occurrence (most recently generated)
+  // This prevents duplicate "Day 1" entries from partial regeneration or overnight flight issues
+  const dayMap = new Map<number, ParsedDay>();
+  for (const day of parsedDays) {
+    dayMap.set(day.dayNumber, day);
+  }
+  const deduped = Array.from(dayMap.values()).sort((a, b) => a.dayNumber - b.dayNumber);
+  
+  if (deduped.length < parsedDays.length) {
+    console.warn(`[itineraryParser] Deduplicated ${parsedDays.length - deduped.length} duplicate day(s)`);
+  }
+  
+  // Recalculate dates based on sequential index after dedup (authoritative dates)
+  return deduped.map((day, idx) => ({
+    ...day,
+    date: calculateDayDate(tripStartDate, idx) || day.date,
+  }));
 }
 
 /**
