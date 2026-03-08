@@ -4117,65 +4117,175 @@ export type Database = {
           },
         ]
       }
+      guide_sections: {
+        Row: {
+          activity_category: string | null
+          activity_cost: string | null
+          activity_location: string | null
+          activity_rating: number | null
+          activity_tips: string | null
+          activity_title: string | null
+          body: string | null
+          created_at: string | null
+          guide_id: string
+          id: string
+          linked_activity_id: string | null
+          linked_day_number: number | null
+          photo_url: string | null
+          section_type: string
+          sort_order: number
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          activity_category?: string | null
+          activity_cost?: string | null
+          activity_location?: string | null
+          activity_rating?: number | null
+          activity_tips?: string | null
+          activity_title?: string | null
+          body?: string | null
+          created_at?: string | null
+          guide_id: string
+          id?: string
+          linked_activity_id?: string | null
+          linked_day_number?: number | null
+          photo_url?: string | null
+          section_type: string
+          sort_order?: number
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          activity_category?: string | null
+          activity_cost?: string | null
+          activity_location?: string | null
+          activity_rating?: number | null
+          activity_tips?: string | null
+          activity_title?: string | null
+          body?: string | null
+          created_at?: string | null
+          guide_id?: string
+          id?: string
+          linked_activity_id?: string | null
+          linked_day_number?: number | null
+          photo_url?: string | null
+          section_type?: string
+          sort_order?: number
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guide_sections_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "guides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guides: {
         Row: {
+          archetype: string | null
           author: string | null
           category: string | null
           content: Json | null
           created_at: string
           destination_city: string | null
           destination_country: string | null
+          duration_days: number | null
           excerpt: string | null
           featured: boolean | null
+          guide_type: string | null
           id: string
           image_url: string | null
+          like_count: number | null
           published: boolean | null
           reading_time: number | null
           slug: string
+          status: string | null
           subtitle: string | null
           tags: Json | null
           title: string
+          trip_id: string | null
           updated_at: string
+          user_id: string | null
+          vibe_tags: Json | null
+          view_count: number | null
         }
         Insert: {
+          archetype?: string | null
           author?: string | null
           category?: string | null
           content?: Json | null
           created_at?: string
           destination_city?: string | null
           destination_country?: string | null
+          duration_days?: number | null
           excerpt?: string | null
           featured?: boolean | null
+          guide_type?: string | null
           id?: string
           image_url?: string | null
+          like_count?: number | null
           published?: boolean | null
           reading_time?: number | null
           slug: string
+          status?: string | null
           subtitle?: string | null
           tags?: Json | null
           title: string
+          trip_id?: string | null
           updated_at?: string
+          user_id?: string | null
+          vibe_tags?: Json | null
+          view_count?: number | null
         }
         Update: {
+          archetype?: string | null
           author?: string | null
           category?: string | null
           content?: Json | null
           created_at?: string
           destination_city?: string | null
           destination_country?: string | null
+          duration_days?: number | null
           excerpt?: string | null
           featured?: boolean | null
+          guide_type?: string | null
           id?: string
           image_url?: string | null
+          like_count?: number | null
           published?: boolean | null
           reading_time?: number | null
           slug?: string
+          status?: string | null
           subtitle?: string | null
           tags?: Json | null
           title?: string
+          trip_id?: string | null
           updated_at?: string
+          user_id?: string | null
+          vibe_tags?: Json | null
+          view_count?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "guides_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "guides_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       iap_transactions: {
         Row: {
