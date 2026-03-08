@@ -36,6 +36,7 @@ export interface BudgetSuggestion {
   new_cost: number; // cents
   savings: number; // cents
   reason: string;
+  suggested_description?: string; // experience-focused description of the replacement
   day_number: number;
   activity_id: string;
 }
@@ -343,20 +344,22 @@ export function BudgetCoach({
                   {suggestions.map((s, i) => {
                     const isApplied = appliedIds.has(s.activity_id);
                     const isLocked = lockedActivityIds.has(s.activity_id);
-                    // Once on target, collapse remaining unapplied
-                    if (isNowOnTarget && !isApplied) return null;
+                    // When on target, de-emphasize remaining unapplied instead of hiding
+                    const isDeemphasized = isNowOnTarget && !isApplied;
 
                     return (
                       <motion.div
                         key={`${s.activity_id}-${i}`}
                         initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
+                        animate={{ opacity: isDeemphasized ? 0.5 : 1, x: 0 }}
                         transition={{ delay: i * 0.05 }}
                         className={cn(
                           'flex items-start gap-3 p-3 rounded-lg border transition-colors',
                           isApplied
                             ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
-                            : 'bg-card border-border hover:border-primary/30'
+                            : isDeemphasized
+                              ? 'bg-muted/50 border-border'
+                              : 'bg-card border-border hover:border-primary/30'
                         )}
                       >
                         {/* Number */}
@@ -411,9 +414,9 @@ export function BudgetCoach({
                           </span>
                         ) : (
                           <Button
-                            variant={isApplied ? 'ghost' : 'default'}
+                            variant={isApplied ? 'ghost' : isDeemphasized ? 'outline' : 'default'}
                             size="sm"
-                            disabled={isApplied}
+                            disabled={isApplied || isDeemphasized}
                             onClick={() => handleApply(s)}
                             className={cn(
                               'flex-shrink-0',

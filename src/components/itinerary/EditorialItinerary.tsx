@@ -4786,7 +4786,7 @@ export function EditorialItinerary({
                         ...act,
                         title: suggestion.suggested_swap,
                         name: suggestion.suggested_swap,
-                        description: suggestion.reason,
+                        description: suggestion.suggested_description || suggestion.suggested_swap,
                         cost: typeof act.cost === 'object' && act.cost !== null
                           ? { ...(act.cost as any), amount: newCostWhole }
                           : newCostWhole,
