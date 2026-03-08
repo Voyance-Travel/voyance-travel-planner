@@ -1,74 +1,63 @@
 
 
-## Bug Fix: Trip Delete Silently Fails Due to Missing RLS DELETE Policies on Child Tables
+## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
 
-### Root Cause
-When deleting a trip, PostgreSQL CASCADE tries to delete child rows from related tables. Several child tables have **RLS enabled** but **no DELETE policy for authenticated users** — only service-role policies. This causes the CASCADE (and thus the entire trip DELETE) to silently fail. The trip is removed from local state (`setTrips`), but the DB delete never commits, so the trip reappears on next load.
+### What's Already Working (No Changes Needed)
+- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
+- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
+- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
+- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
 
-Confirmed: The Mallorca trip (`af57d82b...`) still exists in the database with child rows in `trip_notifications` (3), `trip_action_usage` (2), `trip_cost_tracking` (1), and `trip_budget_ledger` (38).
+### What's Broken — Two Things
 
-### Fix: Database Migration
+**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
 
-Add DELETE policies to all child tables that are missing them. Each policy allows the **trip owner** to cascade-delete child rows:
+**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
 
-```sql
--- Tables with RLS enabled but no user-facing DELETE policy:
+### Changes
 
--- trip_notifications (has service-role ALL only)
-CREATE POLICY "Trip owners can delete notifications"
-ON public.trip_notifications FOR DELETE TO authenticated
-USING (trip_id IN (SELECT id FROM public.trips WHERE user_id = auth.uid()));
+#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
 
--- trip_cost_tracking (has SET NULL FK, but still needs policy if rows exist)
-CREATE POLICY "Trip owners can delete cost tracking"
-ON public.trip_cost_tracking FOR DELETE TO authenticated
-USING (trip_id IN (SELECT id FROM public.trips WHERE user_id = auth.uid()));
+**Change A — Remove stall detector setup** (lines ~261-313):
+Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
 
--- trip_action_usage
-CREATE POLICY "Trip owners can delete action usage"
-ON public.trip_action_usage FOR DELETE TO authenticated
-USING (trip_id IN (SELECT id FROM public.trips WHERE user_id = auth.uid()));
+**Change B — Remove browser loop fallback** (lines ~455-469):
+Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
 
--- trip_complexity (has service-role ALL only)
-CREATE POLICY "Trip owners can delete complexity"
-ON public.trip_complexity FOR DELETE TO authenticated
-USING (trip_id IN (SELECT id FROM public.trips WHERE user_id = auth.uid()));
+```typescript
+// OLD:
+} catch (serverErr) {
+  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
+  const generatedDays = await generateItinerary({ ... });
+  // ... 40 lines of fallback logic
+}
 
--- trip_day_summaries
-CREATE POLICY "Trip owners can delete day summaries"
-ON public.trip_day_summaries FOR DELETE TO authenticated
-USING (trip_id IN (SELECT id FROM public.trips WHERE user_id = auth.uid()));
-
--- trip_departure_summaries
-CREATE POLICY "Trip owners can delete departure summaries"
-ON public.trip_departure_summaries FOR DELETE TO authenticated
-USING (trip_id IN (SELECT id FROM public.trips WHERE user_id = auth.uid()));
-
--- feedback_prompt_log
-CREATE POLICY "Trip owners can delete feedback prompts"
-ON public.feedback_prompt_log FOR DELETE TO authenticated
-USING (trip_id IN (SELECT id FROM public.trips WHERE user_id = auth.uid()));
-
--- itinerary_customization_requests
-CREATE POLICY "Trip owners can delete customization requests"
-ON public.itinerary_customization_requests FOR DELETE TO authenticated
-USING (trip_id IN (SELECT id FROM public.trips WHERE user_id = auth.uid()));
-
--- trip_feedback_responses
-CREATE POLICY "Trip owners can delete feedback responses"
-ON public.trip_feedback_responses FOR DELETE TO authenticated
-USING (trip_id IN (SELECT id FROM public.trips WHERE user_id = auth.uid()));
-
--- trip_learnings
-CREATE POLICY "Trip owners can delete learnings"
-ON public.trip_learnings FOR DELETE TO authenticated
-USING (trip_id IN (SELECT id FROM public.trips WHERE user_id = auth.uid()));
+// NEW:
+} catch (serverErr) {
+  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
+  setPrePhase(null);
+  setHasStarted(false);
+  toast.error('Failed to start generation. Please try again.');
+  return;
+}
 ```
 
-### No Frontend Changes Needed
-The delete logic in `TripDashboard.tsx` is correct — it calls `supabase.from('trips').delete().eq('id', trip.id)` and handles `onDelete` properly. The only issue was the silent RLS failure on cascade.
+**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
 
-### Summary
-- **1 file**: Database migration adding 10 DELETE policies
-- **0 frontend changes**
+**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
+
+#### File 2: `src/hooks/useItineraryGeneration.ts`
+
+No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
+
+### Files to Modify
+
+| File | What |
+|------|------|
+| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
+
+### Risk Assessment
+- **Low risk**: The server-side self-chaining is already fully implemented and tested
+- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
+- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
 
