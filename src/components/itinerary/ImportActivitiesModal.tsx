@@ -423,6 +423,16 @@ export function ImportActivitiesModal({
     }));
   }, []);
 
+  const updateActivityTime = useCallback((groupIndex: number, activityIndex: number, newTime: string) => {
+    setGroups(prev => prev.map((g, gi) => {
+      if (gi !== groupIndex) return g;
+      return {
+        ...g,
+        activities: g.activities.map((a, ai) => ai === activityIndex ? { ...a, startTime: newTime, isEstimatedTime: false } : a),
+      };
+    }));
+  }, []);
+
   const handleImport = useCallback(() => {
     // Group by target day index, merging groups that target the same day
     const byDay = new Map<number, { activities: ParsedActivity[]; mode: ImportMode }>();
