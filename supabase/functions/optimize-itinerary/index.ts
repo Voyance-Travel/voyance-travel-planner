@@ -2177,6 +2177,26 @@ serve(async (req) => {
         gapsInserted += activities.length - beforeCount;
       }
 
+      // Step 9.5: Strip any duplicate activities (safety net)
+      const beforeDedup = activities.length;
+      const seenTitles = new Set<string>();
+      activities = activities.filter(act => {
+        const cat = (act.category || act.type || '').toLowerCase();
+        if (['transport', 'accommodation', 'downtime', 'free_time'].includes(cat) || act.timeBlockType === 'downtime') {
+          return true;
+        }
+        const key = (act.title || '').toLowerCase().trim();
+        if (key.length > 5 && seenTitles.has(key)) {
+          console.warn(`[optimize-itinerary] Removed duplicate: "${act.title}"`);
+          return false;
+        }
+        if (key.length > 5) seenTitles.add(key);
+        return true;
+      });
+      if (activities.length < beforeDedup) {
+        console.log(`[optimize-itinerary] Dedup removed ${beforeDedup - activities.length} duplicate(s) on day ${day.dayNumber}`);
+      }
+
       // Step 10: Calculate day metadata
       const realActivities = activities.filter(a => a.timeBlockType !== 'downtime');
       const totalDayCost = activities.reduce((sum, a) => {
