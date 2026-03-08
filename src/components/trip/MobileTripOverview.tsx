@@ -42,6 +42,13 @@ export function MobileTripOverview({
     } catch { /* ignore */ }
   }, [storageKey]);
 
+  // Listen for tour requesting expansion
+  useEffect(() => {
+    const handleTourExpand = () => setIsExpanded(true);
+    window.addEventListener('tour-expand-mobile-overview', handleTourExpand);
+    return () => window.removeEventListener('tour-expand-mobile-overview', handleTourExpand);
+  }, []);
+
   const summaryText = [
     `${daysPlanned}/${totalDays} days`,
     cityCount > 1 ? `${cityCount} cities` : null,
