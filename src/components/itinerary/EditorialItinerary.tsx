@@ -4411,6 +4411,24 @@ export function EditorialItinerary({
                         </button>
                       );
                     })}
+                    {/* Add Day button in day picker */}
+                    {effectiveIsEditable && !isActivelyGenerating && (
+                      <Tooltip delayDuration={200}>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={handleAddDay}
+                            className="flex flex-col items-center justify-center px-2 py-2 rounded-xl border border-dashed border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all min-w-[52px] text-muted-foreground hover:text-primary"
+                          >
+                            <Plus className="h-4 w-4" />
+                            <span className="text-[9px] font-medium mt-0.5">Add</span>
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                          <span className="text-xs">Add another day to your trip</span>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
                   </div>
                 </div>
 
