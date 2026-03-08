@@ -475,7 +475,7 @@ ${profiles.map(p => `- ${p.name} (${p.isOwner ? 'Trip Owner' : 'Companion'}, arc
       const activities = (day.activities || []).map(a => 
         `  ${a.index + 1}. [${a.time}] ${a.title} (${a.category || 'activity'})${a.isLocked ? ' 🔒LOCKED' : ''}${a.cost ? ` — $${a.cost}` : ''}`
       ).join('\n');
-      return `Day ${day.dayNumber} (${day.date}):\n${activities}`;
+      return `Day ${day.dayNumber} (${day.date}):\n${activities || '  (generating...)'}`;
     }).join('\n\n');
 
     // Build accommodation context
