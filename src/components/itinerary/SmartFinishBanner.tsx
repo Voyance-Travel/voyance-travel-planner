@@ -53,11 +53,33 @@ const severityIcon = {
 };
 
 const ENRICHMENT_FEATURES = [
-  { icon: Wand2, label: 'Full Voyance itinerary' },
-  { icon: Star, label: 'DNA-matched picks' },
-  { icon: Route, label: 'Optimized route & timing' },
-  { icon: MapPin, label: 'Verified venues & tips' },
+  { icon: Star, label: 'Hidden gems & local favorites' },
+  { icon: Wand2, label: 'DNA-matched experiences' },
+  { icon: Route, label: 'Optimized routes & timing' },
+  { icon: MapPin, label: 'Verified insider picks' },
 ];
+
+const categoryLabels: Record<string, string> = {
+  hidden_gem: 'Hidden Gem',
+  better_alternative: 'Better Option',
+  insider_timing: 'Timing Hack',
+  experience_upgrade: 'Upgrade',
+  local_favorite: 'Local Pick',
+  // Keep old categories as fallback
+  pacing: 'Pacing',
+  meals: 'Meals',
+  wellness: 'Wellness',
+  timing: 'Timing',
+  weather: 'Weather',
+};
+
+const categoryIcons: Record<string, React.ReactNode> = {
+  hidden_gem: <Star className="h-4 w-4 text-amber-500" />,
+  better_alternative: <Zap className="h-4 w-4 text-blue-500" />,
+  insider_timing: <Info className="h-4 w-4 text-green-500" />,
+  experience_upgrade: <Sparkles className="h-4 w-4 text-purple-500" />,
+  local_favorite: <MapPin className="h-4 w-4 text-rose-500" />,
+};
 
 export function SmartFinishBanner({
   tripId,
@@ -452,7 +474,7 @@ export function SmartFinishBanner({
                   className="inline-flex items-center gap-1.5 mt-2 text-xs text-amber-600 dark:text-amber-400 hover:underline"
                 >
                   <AlertTriangle className="h-3 w-3" />
-                  {analysis.gapCount} gap{analysis.gapCount !== 1 ? 's' : ''} found - review details
+                  {analysis.gapCount} insider tip{analysis.gapCount !== 1 ? 's' : ''} found — see what you're missing
                   <ChevronRight className="h-3 w-3" />
                 </button>
               )}
@@ -514,15 +536,12 @@ export function SmartFinishBanner({
               </div>
               <div>
                 <DialogTitle className="text-base">
-                  Here's what we found
+                  What You're Missing
                 </DialogTitle>
                 <DialogDescription className="text-xs mt-0.5">
                   {analysis?.dnaArchetype && `Based on your ${analysis.dnaArchetype} profile, `}
-                  we spotted{' '}
-                  <span className="font-semibold text-amber-600 dark:text-amber-400">
-                    {analysis?.gapCount ?? 0} potential gap{(analysis?.gapCount ?? 0) !== 1 ? 's' : ''}
-                  </span>{' '}
-                  in your itinerary.
+                  we analyzed your itinerary against local knowledge.
+                  {analysis?.gapCount ? ' Here\'s what could make this trip even better:' : ''}
                 </DialogDescription>
               </div>
             </div>
@@ -535,14 +554,14 @@ export function SmartFinishBanner({
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.06 }}
-                className="flex items-start gap-2.5 p-2.5 rounded-lg bg-muted/50"
+                className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/50 border border-border/50"
               >
-                {severityIcon[gap.severity]}
+                {categoryIcons[gap.category] || severityIcon[gap.severity]}
                 <div className="flex-1 min-w-0">
                   <span className="text-sm text-foreground leading-snug">{gap.hint}</span>
                   {gap.category && (
-                    <Badge variant="outline" className="ml-2 text-[10px] align-middle">
-                      {gap.category}
+                    <Badge variant="outline" className="ml-2 text-[10px] align-middle capitalize">
+                      {categoryLabels[gap.category] || gap.category}
                     </Badge>
                   )}
                 </div>
