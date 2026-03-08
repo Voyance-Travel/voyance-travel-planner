@@ -6,7 +6,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar, Users, CheckCircle2, AlertCircle, Loader2, UserPlus } from 'lucide-react';
+import { MapPin, Calendar, Users, CheckCircle2, AlertCircle, Loader2, UserPlus, X } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -16,7 +16,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { saveReturnPath } from '@/utils/authReturnPath';
-import { savePendingInviteToken, peekPendingInviteToken } from '@/utils/inviteTokenPersistence';
+import { savePendingInviteToken, clearPendingInviteToken, peekPendingInviteToken } from '@/utils/inviteTokenPersistence';
 import logger from '@/lib/logger';
 import { guardedGetSession } from '@/lib/authSessionGuard';
 import MainLayout from '@/components/layout/MainLayout';
@@ -25,6 +25,8 @@ interface InviteInfo {
   valid: boolean;
   reason?: string;
   error?: string;
+  tripId?: string;
+  ownerId?: string;
   tripName?: string;
   destination?: string;
   startDate?: string;
@@ -42,6 +44,18 @@ interface AcceptResult {
   tripId?: string;
   alreadyMember?: boolean;
 }
+
+/** Terminal reason codes that should clear the persisted token */
+const TERMINAL_REASONS = new Set([
+  'token_not_found',
+  'invalid_token',
+  'expired',
+  'trip_full',
+  'invite_limit_reached',
+  'already_member',
+  'already_owner',
+  'trip_not_found',
+]);
 
 /** Map backend reason codes to user-friendly error messages */
 function getErrorDisplay(reason?: string, fallbackError?: string) {
@@ -107,12 +121,17 @@ export default function AcceptInvite() {
   const queryToken = searchParams.get('inviteToken');
   const token = routeToken || queryToken || peekPendingInviteToken();
 
-  // Persist token immediately on mount for durability
+  // Persist token ONLY when user is not authenticated (needed for auth handoff).
+  // When authenticated, clear persisted token — we're resolving it now and it should not re-trigger.
   useEffect(() => {
     if (token) {
-      savePendingInviteToken(token);
+      if (!user) {
+        savePendingInviteToken(token);
+      } else {
+        clearPendingInviteToken();
+      }
     }
-  }, [token]);
+  }, [token, user]);
 
   // If we have a persisted token but no route param, normalize URL
   useEffect(() => {
@@ -121,11 +140,15 @@ export default function AcceptInvite() {
     }
   }, [routeToken, token, navigate]);
 
+  // Detect if current user is the trip owner
+  const isOwner = !!(user && inviteInfo?.valid && inviteInfo.ownerId === user.id);
+
   // Fetch invite info
   useEffect(() => {
     if (!token) {
       setError('Invalid invite link');
       setLoading(false);
+      clearPendingInviteToken();
       return;
     }
 
@@ -144,6 +167,10 @@ export default function AcceptInvite() {
           if (!info.valid) {
             logger.warn('[invite] Invalid invite', { reason: info.reason, token: token?.slice(0, 8) });
             setError(info.error || 'Invalid invite');
+            // Clear persisted token on terminal outcomes
+            if (info.reason && TERMINAL_REASONS.has(info.reason)) {
+              clearPendingInviteToken();
+            }
           } else {
             logger.info('[invite] Valid invite displayed', { trip: info.tripName });
           }
@@ -151,6 +178,7 @@ export default function AcceptInvite() {
       } catch (err) {
         logger.error('[invite] Error fetching invite:', err);
         setError('Unable to load invite details');
+        // Don't clear token on network errors — allow retry
       } finally {
         setLoading(false);
       }
@@ -176,7 +204,7 @@ export default function AcceptInvite() {
     logger.info('[invite] Accept attempt', { token: token?.slice(0, 8), userId: user?.id?.slice(0, 8) });
 
     try {
-      // Change 2: Ensure auth token is valid before RPC call
+      // Ensure auth token is valid before RPC call
       const { data: sessionData } = await guardedGetSession();
       if (!sessionData?.session) {
         logger.warn('[invite] No valid session, redirecting to sign-in');
@@ -194,6 +222,7 @@ export default function AcceptInvite() {
 
       if (result?.success) {
         logger.info('[invite] Accept succeeded', { tripId: result.tripId, alreadyMember: result.alreadyMember });
+        clearPendingInviteToken();
         setAccepted(true);
         toast.success(result.alreadyMember ? 'You\'re already a member!' : 'You\'ve joined the trip!');
         
@@ -207,9 +236,12 @@ export default function AcceptInvite() {
         logger.warn('[invite] Accept failed', { reason: result?.reason });
         const errorDisplay = getErrorDisplay(result?.reason, result?.error);
         setError(errorDisplay.message);
+        // Clear token on terminal accept failures
+        if (result?.reason && TERMINAL_REASONS.has(result.reason)) {
+          clearPendingInviteToken();
+        }
       }
     } catch (err: any) {
-      // Change 3: Structured error logging
       logger.error('[invite] Accept error:', {
         message: err?.message,
         code: err?.code,
@@ -219,18 +251,26 @@ export default function AcceptInvite() {
         raw: err,
       });
       setError('Failed to accept invite. Please try again.');
+      // Don't clear token on transient errors
     } finally {
       setAccepting(false);
       acceptingRef.current = false;
     }
   };
 
-  const handleSignIn = () => {
-    redirectToInviteAuth('signin');
+  const handleDecline = () => {
+    clearPendingInviteToken();
+    toast('Invite declined');
+    navigate('/trip/dashboard', { replace: true });
   };
 
-  const handleSignUp = () => {
-    redirectToInviteAuth('signup');
+  const handleGoToTrip = () => {
+    clearPendingInviteToken();
+    if (inviteInfo?.tripId) {
+      navigate(`/trip/${inviteInfo.tripId}`, { replace: true });
+    } else {
+      navigate('/trip/dashboard', { replace: true });
+    }
   };
 
   if (loading || authLoading) {
@@ -249,6 +289,9 @@ export default function AcceptInvite() {
       error || inviteInfo?.error
     );
     
+    // Special case: already_owner — show "Open Trip" instead of generic error
+    const showOpenTrip = inviteInfo?.reason === 'already_owner' && inviteInfo?.tripId;
+    
     return (
       <MainLayout>
         <div className="min-h-[60vh] flex items-center justify-center px-4">
@@ -266,9 +309,17 @@ export default function AcceptInvite() {
                   Reason: {inviteInfo.reason}
                 </p>
               )}
-              <Button onClick={() => navigate('/')}>
-                Go Home
-              </Button>
+              <div className="flex gap-3 justify-center">
+                {showOpenTrip ? (
+                  <Button onClick={handleGoToTrip}>
+                    Open Your Trip
+                  </Button>
+                ) : (
+                  <Button onClick={() => navigate('/trip/dashboard', { replace: true })}>
+                    Go to Dashboard
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -362,21 +413,43 @@ export default function AcceptInvite() {
               </div>
 
               {user ? (
-                <Button 
-                  className="w-full" 
-                  size="lg"
-                  onClick={handleAccept}
-                  disabled={accepting || acceptingRef.current}
-                >
-                  {accepting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Joining...
-                    </>
-                  ) : (
-                    'Join This Trip'
-                  )}
-                </Button>
+                isOwner ? (
+                  // Owner opened their own invite link
+                  <div className="space-y-3">
+                    <p className="text-sm text-center text-muted-foreground">
+                      This is your trip — no need to join!
+                    </p>
+                    <Button className="w-full" size="lg" onClick={handleGoToTrip}>
+                      Open Your Trip
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <Button 
+                      className="w-full" 
+                      size="lg"
+                      onClick={handleAccept}
+                      disabled={accepting || acceptingRef.current}
+                    >
+                      {accepting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Joining...
+                        </>
+                      ) : (
+                        'Join This Trip'
+                      )}
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      className="w-full text-muted-foreground"
+                      onClick={handleDecline}
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      No thanks
+                    </Button>
+                  </div>
+                )
               ) : (
                 <div className="space-y-3">
                   <p className="text-sm text-center text-muted-foreground">

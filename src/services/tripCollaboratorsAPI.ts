@@ -104,6 +104,11 @@ export async function addTripCollaborator({ tripId, userId, permission = 'edit',
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
+  // Prevent self-collaboration
+  if (userId === user.id) {
+    throw new Error('You cannot add yourself as a collaborator on your own trip');
+  }
+
   // Check if already a collaborator
   const { data: existing } = await supabase
     .from('trip_collaborators')
