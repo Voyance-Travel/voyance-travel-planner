@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Loader2, CheckCircle, MapPin, Clock, DollarSign, RefreshCw, Star, Image, Wallet, Lightbulb, AlertCircle, LogIn, Coins, Cloud, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -87,7 +87,7 @@ const STATUS_MESSAGES = {
   generating: 'Crafting your perfect itinerary...',
   enriching: 'Adding photos and details...',
   complete: 'Your itinerary is ready!',
-  error: 'Something went wrong',
+  error: 'Checking generation status...',
 };
 
 export function ItineraryGenerator({
