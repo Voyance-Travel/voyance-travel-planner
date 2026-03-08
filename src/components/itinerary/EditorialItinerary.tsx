@@ -4110,6 +4110,12 @@ export function EditorialItinerary({
                 <div className="flex-1 overflow-x-auto scrollbar-hide">
                   <div className="flex gap-1.5" data-tour="day-picker">
                     {days.map((day, index) => {
+                      // Check if day has real (non-structural) activities
+                      const dayHasRealActivities = (day.activities || []).some((a: any) => {
+                        const cat = (a.category || a.type || '').toLowerCase();
+                        return !['check-in', 'check-out', 'hotel', 'accommodation'].includes(cat);
+                      });
+                      const isDayEmpty = !dayHasRealActivities;
                       // Compute date from startDate + dayNumber for reliable cross-month handling
                       let dayDate: Date | null = null;
                       try {
@@ -4203,6 +4209,14 @@ export function EditorialItinerary({
                             <Badge variant={isSelected ? 'secondary' : 'default'} className="text-[9px] mt-1 px-1.5 py-0">
                               Today
                             </Badge>
+                          )}
+                          {isDayEmpty && !isTodayDay && !(day.metadata?.isLocked && !isManualMode) && (
+                            <span className={cn(
+                              'text-[9px] mt-0.5 font-medium',
+                              isSelected ? 'text-primary-foreground/70' : 'text-amber-500'
+                            )}>
+                              Unplanned
+                            </span>
                           )}
                         </button>
                       );
