@@ -243,7 +243,7 @@ export default function ItineraryShowcase() {
   const [activeDestination, setActiveDestination] = useState('Denver');
 
   return (
-    <section className="py-24 px-6 bg-muted/30">
+    <section className="py-24 px-6 bg-background">
       <div className="max-w-7xl mx-auto">
         {/* Section Header */}
         <motion.div 

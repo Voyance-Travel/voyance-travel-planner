@@ -7,9 +7,9 @@ export default function TheInsightSection() {
   const { insight } = strangerCopy.homepage;
 
   return (
-    <section className="py-16 sm:py-24 md:py-32 relative overflow-hidden">
-      {/* Background with accent */}
-      <div className="absolute inset-0 bg-gradient-to-b from-background via-primary/5 to-background" />
+    <section className="py-16 sm:py-24 md:py-32 relative overflow-hidden bg-muted/30">
+      {/* Background accent */}
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/5 to-transparent" />
       
       {/* Decorative circles */}
       <div className="absolute -left-32 top-1/4 w-64 h-64 bg-primary/10 rounded-full blur-3xl" />

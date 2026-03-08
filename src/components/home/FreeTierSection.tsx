@@ -33,7 +33,7 @@ const FREE_TIER_STEPS = [
 
 export default function FreeTierSection() {
   return (
-    <section className="relative py-12 sm:py-16 bg-muted/20 overflow-hidden">
+    <section className="relative py-12 sm:py-16 bg-background overflow-hidden">
       <div className="max-w-4xl mx-auto px-4 sm:px-8 text-center">
         {/* Simplified callout */}
         <motion.div

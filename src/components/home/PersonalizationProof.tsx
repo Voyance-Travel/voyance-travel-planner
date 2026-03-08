@@ -243,7 +243,7 @@ export default function PersonalizationProof() {
   const active = ARCHETYPES[activeIdx];
 
   return (
-    <section className="py-16 md:py-24 bg-gradient-to-b from-muted/30 to-background">
+    <section className="py-16 md:py-24 bg-background">
       <div className="container max-w-5xl mx-auto px-4">
         {/* Header */}
         <motion.div
