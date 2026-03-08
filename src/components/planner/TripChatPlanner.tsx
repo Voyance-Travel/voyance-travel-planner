@@ -61,8 +61,8 @@ const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-trip-pl
  */
 function normalizeMultiCity(details: TripDetails): TripDetails {
   if (!details.startDate || !details.endDate) return details;
-  const start = new Date(details.startDate);
-  const end = new Date(details.endDate);
+  const start = parseLocalDate(details.startDate);
+  const end = parseLocalDate(details.endDate);
   const resolved = resolveCities(details, start, end);
   if (resolved.length > 1) {
     details.cities = resolved;
