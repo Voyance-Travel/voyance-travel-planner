@@ -1,18 +1,14 @@
 /**
  * Live Generation Progress Component
- * Receives polling data as props from parent (single source of truth via useGenerationPoller).
- * Shows real day-by-day progress during generation with activity previews.
- * 
- * KEY UX: Days are "drip-fed" to the UI — even if the poller delivers multiple days
- * at once, they appear one at a time with staggered delays so the user sees
- * "Day 1 ✓ → Day 2 generating → Day 2 ✓ → Day 3 generating → …" progression.
+ * Shows polished day-by-day progress during itinerary generation.
+ * Features: shimmer progress bar, rotating status messages,
+ * glowing active day card, skeleton pending cards.
  */
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Check, Loader2, Clock, PartyPopper } from 'lucide-react';
 import { GenerationAnimation } from './GenerationAnimation';
-import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import type { GenerationStep } from '@/hooks/useLovableItinerary';
 import type { GeneratedDaySummary } from '@/hooks/useGenerationPoller';
@@ -29,12 +25,22 @@ interface GenerationPhasesProps {
   destination?: string;
   totalDays?: number;
   tripId?: string;
-  /** Data from useGenerationPoller — single source of truth */
   completedDays?: number;
   generatedDaysList?: GeneratedDaySummary[];
   isComplete?: boolean;
   progress?: number;
 }
+
+const STATUS_MESSAGES = [
+  "Finding hidden gems locals love...",
+  "Mapping the best dining spots...",
+  "Optimizing your daily routes...",
+  "Adding curated local experiences...",
+  "Checking best timing for each spot...",
+  "Discovering off-the-beaten-path finds...",
+  "Balancing must-sees with local favorites...",
+  "Planning the perfect pace for each day...",
+];
 
 /** Simulated minimum progress that ticks up while waiting for the first real day */
 function useSimulatedProgress(realProgress: number, isActive: boolean) {
@@ -42,39 +48,25 @@ function useSimulatedProgress(realProgress: number, isActive: boolean) {
   const intervalRef = useRef<ReturnType<typeof setInterval>>();
 
   useEffect(() => {
-    if (!isActive) {
-      setSimulated(0);
-      return;
-    }
-
-    // When real progress arrives, stop simulation
+    if (!isActive) { setSimulated(0); return; }
     if (realProgress > 0) {
       if (intervalRef.current) clearInterval(intervalRef.current);
       setSimulated(0);
       return;
     }
-
-    // Tick up faster initially for better perceived responsiveness: 3% every 1.5s, max 18%
     intervalRef.current = setInterval(() => {
       setSimulated(prev => {
         if (prev >= 18) return prev;
         return prev + (prev < 6 ? 3 : prev < 12 ? 2 : 1);
       });
     }, 1500);
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [realProgress, isActive]);
 
   return realProgress > 0 ? realProgress : simulated;
 }
 
-/**
- * Drip-feed hook: reveals days one at a time with delays.
- * Even if poller jumps from 0→5 completed days, the UI shows them
- * appearing sequentially with 700ms gaps.
- */
+/** Drip-feed hook: reveals days one at a time with delays */
 function useDripFeedDays(generatedDaysList: GeneratedDaySummary[]) {
   const [visibleDays, setVisibleDays] = useState<GeneratedDaySummary[]>([]);
   const queueRef = useRef<GeneratedDaySummary[]>([]);
@@ -82,44 +74,71 @@ function useDripFeedDays(generatedDaysList: GeneratedDaySummary[]) {
   const revealedSetRef = useRef(new Set<number>());
 
   useEffect(() => {
-    // Find new days we haven't revealed yet
     const newDays = generatedDaysList.filter(d => !revealedSetRef.current.has(d.day_number));
     if (newDays.length === 0) return;
-
-    // Add to queue
     queueRef.current = [...queueRef.current, ...newDays];
     newDays.forEach(d => revealedSetRef.current.add(d.day_number));
 
-    // Process queue one at a time
     const processNext = () => {
       if (queueRef.current.length === 0) return;
       const next = queueRef.current.shift()!;
       setVisibleDays(prev => {
-        // Insert in order and dedupe
         const merged = [...prev.filter(d => d.day_number !== next.day_number), next];
         merged.sort((a, b) => a.day_number - b.day_number);
         return merged;
       });
-      // Schedule next reveal
       if (queueRef.current.length > 0) {
         timerRef.current = setTimeout(processNext, 700);
       }
     };
 
-    // If not already processing, start
     if (!timerRef.current || queueRef.current.length === newDays.length) {
-      // Clear any existing timer to avoid conflicts
       if (timerRef.current) clearTimeout(timerRef.current);
-      // Small delay before first reveal so the "generating" state is visible
       timerRef.current = setTimeout(processNext, 400);
     }
 
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, [generatedDaysList]);
 
   return visibleDays;
+}
+
+/** Rotating status message hook */
+function useRotatingMessage() {
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIndex(prev => (prev + 1) % STATUS_MESSAGES.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+  return STATUS_MESSAGES[index];
+}
+
+/** Shimmer progress bar component */
+function ShimmerProgressBar({ progress }: { progress: number }) {
+  return (
+    <div className="w-full h-2.5 rounded-full bg-muted/60 overflow-hidden relative">
+      <motion.div
+        className="h-full rounded-full relative overflow-hidden"
+        style={{
+          background: 'linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)), hsl(var(--primary)))',
+        }}
+        animate={{ width: `${Math.max(2, progress)}%` }}
+        transition={{ duration: 0.6, ease: 'easeOut' }}
+      >
+        {/* Shimmer overlay */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: 'linear-gradient(90deg, transparent 0%, hsla(0,0%,100%,0.3) 50%, transparent 100%)',
+            backgroundSize: '200% 100%',
+            animation: 'shimmer 2s infinite linear',
+          }}
+        />
+      </motion.div>
+    </div>
+  );
 }
 
 export function GenerationPhases({
@@ -132,14 +151,10 @@ export function GenerationPhases({
   isComplete = false,
   progress: pollerProgress = 0,
 }: GenerationPhasesProps) {
-  // Drip-feed days for smooth progressive reveal
   const visibleDays = useDripFeedDays(generatedDaysList);
   const visibleCompletedCount = visibleDays.length;
-
-  // Use visible count for display, real count for logic
   const displayCompletedDays = visibleCompletedCount;
 
-  // Calculate progress from visible days (what the user sees)
   const calculatedProgress = totalDays > 0
     ? Math.max(pollerProgress, Math.round((displayCompletedDays / totalDays) * 100))
     : pollerProgress;
@@ -151,7 +166,9 @@ export function GenerationPhases({
   const nextDay = displayCompletedDays + 1;
   const allVisibleDaysDone = totalDays > 0 && displayCompletedDays >= totalDays;
 
-  // Celebration state: show "ready!" for 3 seconds before signaling parent
+  const rotatingMessage = useRotatingMessage();
+
+  // Celebration state
   const [showCelebration, setShowCelebration] = useState(false);
   const celebrationTriggered = useRef(false);
 
@@ -162,7 +179,7 @@ export function GenerationPhases({
     }
   }, [isComplete, allVisibleDaysDone]);
 
-  // Elapsed time for "still working" reassurance
+  // Elapsed time
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     if (!isActive) { setElapsed(0); return; }
@@ -170,7 +187,7 @@ export function GenerationPhases({
     return () => clearInterval(t);
   }, [isActive]);
 
-  // No tripId — simple preparing state
+  // No tripId — preparing
   if (!tripId) {
     return (
       <motion.div
@@ -178,13 +195,13 @@ export function GenerationPhases({
         animate={{ opacity: 1 }}
         className="w-full max-w-lg mx-auto px-4 text-center py-12"
       >
-        <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+        <GenerationAnimation progress={0} className="mb-4" />
         <p className="text-muted-foreground">Preparing your trip...</p>
       </motion.div>
     );
   }
 
-  // Celebration / Complete state
+  // Celebration / Complete
   if (showCelebration) {
     return (
       <motion.div
@@ -213,7 +230,6 @@ export function GenerationPhases({
           {totalDays} {totalDays === 1 ? 'day' : 'days'} in {destination || 'your destination'}, crafted just for you.
         </p>
 
-        {/* Summary of completed days */}
         <div className="space-y-1.5 mb-6 text-left">
           {visibleDays.map((day, i) => (
             <motion.div
@@ -242,24 +258,20 @@ export function GenerationPhases({
     );
   }
 
-  // Build header text
+  // Dynamic subtitle based on progress
+  const getSubtitle = () => {
+    if (allVisibleDaysDone) return 'Almost there, adding final touches';
+    if (displayProgress < 25) return 'Crafting a personalized experience';
+    if (displayProgress < 50) return 'Curating your perfect days';
+    if (displayProgress < 75) return `${displayCompletedDays} ${displayCompletedDays === 1 ? 'day' : 'days'} complete · ~${Math.max(1, Math.ceil(remainingDays * 1.2))} min remaining`;
+    return 'Almost there, adding final touches';
+  };
+
   const headerText = allVisibleDaysDone
     ? 'Finalizing your itinerary…'
     : displayCompletedDays === 0
       ? `Building your ${destination || 'trip'}`
       : `Building Day ${nextDay} of ${totalDays}`;
-
-  // Build subtitle with elapsed time reassurance
-  let subtitleText: string;
-  if (allVisibleDaysDone) {
-    subtitleText = 'Almost there, assembling your trip now';
-  } else if (displayCompletedDays === 0) {
-    subtitleText = elapsed > 15
-      ? 'Still working. This can take a minute for the first day…'
-      : 'Getting started...';
-  } else {
-    subtitleText = `${displayCompletedDays} ${displayCompletedDays === 1 ? 'day' : 'days'} complete · ~${Math.max(1, Math.ceil(remainingDays * 1.2))} min remaining`;
-  }
 
   return (
     <motion.div
@@ -267,30 +279,33 @@ export function GenerationPhases({
       animate={{ opacity: 1 }}
       className="w-full max-w-lg mx-auto px-4"
     >
-      {/* Header */}
+      {/* Header with animation */}
       <div className="text-center mb-6">
-        {/* Airplane/Globe Animation */}
-        <GenerationAnimation progress={displayProgress} className="mb-2" />
+        <GenerationAnimation progress={displayProgress} className="mb-3" />
 
         <h2 className="text-xl font-serif font-bold text-foreground mb-1">
           {headerText}
         </h2>
 
-        <motion.p
-          key={subtitleText}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-sm text-muted-foreground"
-        >
-          {subtitleText}
-        </motion.p>
+        <AnimatePresence mode="wait">
+          <motion.p
+            key={getSubtitle()}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.3 }}
+            className="text-sm text-muted-foreground"
+          >
+            {getSubtitle()}
+          </motion.p>
+        </AnimatePresence>
       </div>
 
-      {/* Progress bar — always show when totalDays known */}
+      {/* Shimmer progress bar */}
       {totalDays > 0 && (
-        <div className="mb-6">
-          <Progress value={displayProgress} className="h-2" />
-          <div className="flex justify-between mt-1">
+        <div className="mb-4">
+          <ShimmerProgressBar progress={displayProgress} />
+          <div className="flex justify-between mt-1.5">
             <motion.p
               animate={{ opacity: [0.5, 1, 0.5] }}
               transition={{ duration: 2, repeat: Infinity }}
@@ -298,14 +313,30 @@ export function GenerationPhases({
             >
               {displayCompletedDays === 0 ? 'Generating...' : `${displayCompletedDays}/${totalDays} days`}
             </motion.p>
-            <p className="text-xs text-muted-foreground">{Math.round(displayProgress)}%</p>
+            <p className="text-xs text-muted-foreground font-medium">{Math.round(displayProgress)}%</p>
           </div>
         </div>
       )}
 
+      {/* Rotating status message */}
+      <div className="mb-5 h-5 flex items-center justify-center overflow-hidden">
+        <AnimatePresence mode="wait">
+          <motion.p
+            key={rotatingMessage}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.4 }}
+            className="text-xs text-muted-foreground italic text-center"
+          >
+            {rotatingMessage}
+          </motion.p>
+        </AnimatePresence>
+      </div>
+
       {/* Day list */}
       <div className="space-y-2 mb-6">
-        {/* Completed days with activities — drip-fed */}
+        {/* Completed days */}
         <AnimatePresence mode="popLayout">
           {visibleDays.map((day) => {
             const activities = ((day as any).activities as ActivityPreview[] | undefined) || [];
@@ -339,7 +370,6 @@ export function GenerationPhases({
                   {day.theme && day.theme.trim().toLowerCase() !== (day.title || '').trim().toLowerCase() && (
                     <p className="text-xs text-muted-foreground mt-0.5 truncate">{day.theme}</p>
                   )}
-                  {/* Activity previews */}
                   {visibleActivities.length > 0 && (
                     <div className="mt-1.5 space-y-0.5">
                       {visibleActivities.map((act, i) => (
@@ -368,40 +398,78 @@ export function GenerationPhases({
           })}
         </AnimatePresence>
 
-        {/* Currently generating day */}
+        {/* Currently generating day — glowing card with spinner */}
         {!isComplete && !allVisibleDaysDone && nextDay <= totalDays && (
           <motion.div
             key={`generating-${nextDay}`}
             layout
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex items-start gap-3 p-3 rounded-lg border border-border bg-card"
+            className="flex items-start gap-3 p-3 rounded-lg border border-primary/20 bg-card relative overflow-hidden"
+            style={{
+              animation: 'cardGlow 2s ease-in-out infinite',
+            }}
           >
-            <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
-              <Loader2 className="h-3.5 w-3.5 text-muted-foreground animate-spin" />
+            {/* Subtle shimmer bg */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background: 'linear-gradient(90deg, transparent 0%, hsl(var(--primary) / 0.03) 50%, transparent 100%)',
+                backgroundSize: '200% 100%',
+                animation: 'shimmer 3s infinite linear',
+              }}
+            />
+            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5 relative z-10">
+              <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
             </div>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 relative z-10">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Day {nextDay}</span>
+                <span className="text-xs font-semibold text-primary uppercase tracking-wide">Day {nextDay}</span>
                 <motion.span
                   animate={{ opacity: [0.4, 1, 0.4] }}
                   transition={{ duration: 1.5, repeat: Infinity }}
                   className="text-sm text-muted-foreground"
                 >
-                  Generating...
+                  Generating activities...
                 </motion.span>
               </div>
             </div>
           </motion.div>
         )}
 
-        {/* Upcoming days (show max 2) */}
+        {/* Upcoming days — skeleton shimmer bars */}
         {!isComplete && !allVisibleDaysDone && Array.from({ length: Math.min(2, totalDays - nextDay) }, (_, i) => nextDay + 1 + i).map((dayNum) => (
-          <div key={dayNum} className="flex items-start gap-3 p-3 rounded-lg opacity-30">
-            <div className="w-6 h-6 rounded-full border border-border flex items-center justify-center shrink-0 mt-0.5">
+          <div key={dayNum} className="flex items-start gap-3 p-3 rounded-lg opacity-40">
+            <div className="w-6 h-6 rounded-full border border-border/60 flex items-center justify-center shrink-0 mt-0.5">
               <span className="text-[10px] text-muted-foreground">{dayNum}</span>
             </div>
-            <div className="h-4 w-32 rounded bg-muted/50" />
+            <div className="flex-1 space-y-2">
+              <div
+                className="h-3 w-28 rounded-full bg-muted/60 overflow-hidden"
+              >
+                <div
+                  className="h-full w-full"
+                  style={{
+                    background: 'linear-gradient(90deg, transparent 0%, hsl(var(--muted-foreground) / 0.08) 50%, transparent 100%)',
+                    backgroundSize: '200% 100%',
+                    animation: 'shimmer 2s infinite linear',
+                  }}
+                />
+              </div>
+              <div
+                className="h-2.5 w-20 rounded-full bg-muted/40 overflow-hidden"
+              >
+                <div
+                  className="h-full w-full"
+                  style={{
+                    background: 'linear-gradient(90deg, transparent 0%, hsl(var(--muted-foreground) / 0.06) 50%, transparent 100%)',
+                    backgroundSize: '200% 100%',
+                    animation: 'shimmer 2s infinite linear',
+                    animationDelay: '0.3s',
+                  }}
+                />
+              </div>
+            </div>
           </div>
         ))}
       </div>
