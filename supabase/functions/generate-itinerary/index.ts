@@ -4780,7 +4780,7 @@ async function generateSingleDayWithRetry(
     '9. VARIETY PER DAY: Mix sightseeing, cultural sites, museums, outdoor activities, dining',
     '10. **ACTIVITY TITLE NAMING — CRITICAL**: The "title" field MUST be the venue or experience name ONLY. NEVER append the category, type, or a repeated word. Examples of WRONG titles: "Barton Springs Pool Pool", "Zilker Botanical Garden Garden", "Franklin Barbecue Barbecue", "Cosmic Coffee Coffee & Beer", "Record shopping shopping". CORRECT titles: "Barton Springs Pool", "Zilker Botanical Garden", "Franklin Barbecue", "Cosmic Coffee + Beer Garden". If the place name already contains the activity type (e.g., "Pool", "Garden", "Barbecue", "Coffee"), do NOT add it again.',
     '11. **DINING TITLE — CRITICAL**: For ALL dining/restaurant activities (category: "dining"), the "title" MUST be the restaurant or cafe name. NEVER use the neighborhood, district, or area as the title. Put the neighborhood in the "neighborhood" field instead. WRONG: { title: "Gaslamp Quarter", description: "Juniper & Ivy" }. WRONG: { title: "La Jolla", description: "The Taco Stand fish tacos" }. WRONG: { title: "Balboa Park", description: "The Prado restaurant" }. RIGHT: { title: "Juniper & Ivy", neighborhood: "Gaslamp Quarter" }. RIGHT: { title: "The Taco Stand", description: "fish tacos", neighborhood: "La Jolla" }. RIGHT: { title: "The Prado", neighborhood: "Balboa Park" }.',
-    isFirstDay ? '12. DAY 1 MUST start with: Arrival → Transfer → Check-in (in that order)' : '',
+    isFirstDay ? '12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with THREE SEPARATE activity blocks (NEVER combine them into one): (a) "Arrival at Airport" (category: transport), (b) "Airport Transfer to Hotel" (category: transport), (c) "Hotel Check-in" (category: accommodation). Each MUST be its own entry with its own startTime/endTime. NEVER create a single "Arrive and check in" block.' : '',
     isLastDay && context.totalDays > 1 ? '12. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
   ].filter(Boolean).join('\n');
 
@@ -8610,6 +8610,84 @@ ${'='.repeat(60)}
       }
 
       // =======================================================================
+      // STAGE 2.55: Split Combined Arrival Blocks
+      // If the AI returned a single "Arrive and check in" block for Day 1,
+      // split it into 3 separate activities: arrival, transfer, check-in
+      // =======================================================================
+      if (aiResult.days.length > 0) {
+        const day1 = aiResult.days[0];
+        if (day1.activities && day1.activities.length > 0) {
+          const combinedIdx = day1.activities.findIndex((a: any) => {
+            const t = (a.title || '').toLowerCase();
+            return (
+              (t.includes('arrive') && t.includes('check')) ||
+              (t.includes('arrival') && t.includes('check-in')) ||
+              (t.includes('arrive') && t.includes('hotel') && !t.includes('transfer')) ||
+              t === 'arrive and check in' ||
+              t === 'arrive and check-in' ||
+              t === 'arrival and check-in'
+            );
+          });
+          
+          if (combinedIdx !== -1) {
+            const combined = day1.activities[combinedIdx];
+            const startMin = parseTimeToMinutes(combined.startTime) || 0;
+            const arrivalEnd = minutesToHHMM(startMin + 30);
+            const transferStart = minutesToHHMM(startMin + 45);
+            const transferDuration = 45; // default transfer duration
+            const transferEnd = minutesToHHMM(startMin + 45 + transferDuration);
+            const checkInStart = minutesToHHMM(startMin + 45 + transferDuration + 15);
+            const checkInEnd = minutesToHHMM(startMin + 45 + transferDuration + 45);
+            
+            const hotelN = flightHotelResult?.hotelName || 'Hotel';
+            const hotelA = flightHotelResult?.hotelAddress || '';
+            const airportN = 'Airport';
+            
+            console.log(`[Stage 2.55] Splitting combined arrival block: "${combined.title}" into 3 activities`);
+            
+            const splitActivities = [
+              {
+                ...combined,
+                title: `Arrival at ${airportN}`,
+                description: 'Clear customs/immigration and collect luggage',
+                startTime: combined.startTime,
+                endTime: arrivalEnd,
+                category: 'transport',
+                type: 'transport',
+                location: { name: airportN },
+              },
+              {
+                ...combined,
+                id: `${combined.id}-transfer`,
+                title: `Airport Transfer to ${hotelN}`,
+                description: `Take a taxi or private transfer from ${airportN} to ${hotelN}`,
+                startTime: transferStart,
+                endTime: transferEnd,
+                category: 'transport',
+                type: 'transport',
+                location: { name: hotelN, address: hotelA },
+              },
+              {
+                ...combined,
+                id: `${combined.id}-checkin`,
+                title: 'Hotel Check-in',
+                description: 'Check in, freshen up, and get oriented to the area',
+                startTime: checkInStart,
+                endTime: checkInEnd,
+                category: 'accommodation',
+                type: 'accommodation',
+                location: { name: hotelN, address: hotelA },
+              },
+            ];
+            
+            day1.activities.splice(combinedIdx, 1, ...splitActivities);
+            aiResult.days[0] = day1;
+            console.log(`[Stage 2.55] ✓ Split into: Arrival (${combined.startTime}-${arrivalEnd}), Transfer (${transferStart}-${transferEnd}), Check-in (${checkInStart}-${checkInEnd})`);
+          }
+        }
+      }
+
+      // =======================================================================
       // STAGE 2.6: Personalization Validation (Phase 3)
       // Validate itinerary against user preferences before saving
       // =======================================================================
@@ -9618,11 +9696,12 @@ TRAVELER CONTEXT:
 - They need to clear customs/immigration (estimate: 1 hour)
 - Consider their energy level when planning activities
 
-REQUIRED ACTIVITY SEQUENCE (in exact order):
+REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity entry, NEVER combine into one):
 1. "Arrival at Airport" 
    - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
    - category: "transport"
    - description: "Clear customs and collect luggage"
+   - ⚠️ This MUST be its own activity block — do NOT merge with transfer or check-in
 
 2. "Airport Transfer to Hotel"
    - startTime: "${transferStart}", endTime: "${transferEnd}"
@@ -9650,11 +9729,12 @@ DO NOT plan activities before ${arrival24}. The day starts when the plane lands.
 THE FLIGHT LANDS AT ${arrival24} (${flightContext.arrivalTime || arrival24}).
 This is an AFTERNOON ARRIVAL.
 
-REQUIRED ACTIVITY SEQUENCE (in exact order):
+REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity entry, NEVER combine into one):
 1. "Arrival at Airport"
    - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
    - category: "transport"
    - description: "Clear customs and collect luggage"
+   - ⚠️ This MUST be its own activity block — do NOT merge with transfer or check-in
 
 2. "Airport Transfer to Hotel"
    - startTime: "${transferStart}", endTime: "${transferEnd}"
@@ -9681,10 +9761,11 @@ DO NOT plan activities before ${arrival24}. The day starts when the plane lands.
 THE FLIGHT LANDS AT ${arrival24} (${flightContext.arrivalTime || arrival24}).
 This is an EVENING ARRIVAL - limited time for activities today.
 
-REQUIRED ACTIVITY SEQUENCE (in exact order):
+REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity entry, NEVER combine into one):
 1. "Arrival at Airport"
    - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
    - category: "transport"
+   - ⚠️ This MUST be its own activity block — do NOT merge with transfer or check-in
 
 2. "Airport Transfer to Hotel"
    - startTime: "${transferStart}", endTime: "${transferEnd}"
