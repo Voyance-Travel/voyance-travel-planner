@@ -5298,6 +5298,75 @@ export type Database = {
           },
         ]
       }
+      travel_guides: {
+        Row: {
+          content: string
+          cover_image_url: string | null
+          created_at: string | null
+          destination: string
+          id: string
+          published_at: string | null
+          selected_activities: Json | null
+          selected_photos: string[] | null
+          slug: string
+          social_links: Json | null
+          status: string
+          title: string
+          trip_id: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          cover_image_url?: string | null
+          created_at?: string | null
+          destination?: string
+          id?: string
+          published_at?: string | null
+          selected_activities?: Json | null
+          selected_photos?: string[] | null
+          slug: string
+          social_links?: Json | null
+          status?: string
+          title: string
+          trip_id: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          content?: string
+          cover_image_url?: string | null
+          created_at?: string | null
+          destination?: string
+          id?: string
+          published_at?: string | null
+          selected_activities?: Json | null
+          selected_photos?: string[] | null
+          slug?: string
+          social_links?: Json | null
+          status?: string
+          title?: string
+          trip_id?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "travel_guides_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "travel_guides_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       travel_intel_cache: {
         Row: {
           created_at: string
