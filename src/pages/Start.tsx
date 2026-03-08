@@ -2989,7 +2989,21 @@ export default function Start() {
                     setManualHotelList={setManualHotelList}
                     manualHotels={manualHotels}
                     setManualHotels={setManualHotels}
-                    onSubmit={() => goToStep(3)}
+                    onSubmit={() => {
+                      const legsToCheck = [outboundFlight, ...(showReturnFlight ? [returnFlight] : []), ...additionalLegs];
+                      for (const leg of legsToCheck) {
+                        const hasAnyData = !!(
+                          leg.departureAirport || leg.arrivalAirport ||
+                          leg.departureTime || leg.arrivalTime ||
+                          leg.airline || leg.flightNumber
+                        );
+                        if (hasAnyData && (!leg.departureAirport || !leg.arrivalAirport)) {
+                          toast.error('Please add both departure and arrival airports for your flight, or clear the flight fields to skip.');
+                          return;
+                        }
+                      }
+                      goToStep(3);
+                    }}
                     onBack={() => window.history.back()}
                     isSubmitting={false}
                     isMultiCity={isMultiCity}
