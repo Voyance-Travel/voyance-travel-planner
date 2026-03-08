@@ -1,20 +1,15 @@
 /**
  * Itinerary Intelligence Summary
  * 
- * Displays quantified value at the top of each itinerary with expandable details:
- * - X Voyance Finds (hidden gems)
- * - Y Timing Hacks
- * - Z Local Picks (insider alternatives)
- * - W Insider Tips
- * 
- * Each badge is expandable to show specifics. Includes savings calculation.
+ * Collapsible on mobile (default collapsed), expanded on desktop.
+ * Shows quantified value with expandable detail badges.
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Sparkles, Clock, MapPinOff, Target, TrendingUp, ChevronDown, ChevronUp,
-  AlertTriangle, Lightbulb, MapPin, DollarSign
+  Sparkles, Clock, Target, TrendingUp, ChevronDown, ChevronUp,
+  Lightbulb, MapPin, DollarSign
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -33,10 +28,9 @@ export interface ItineraryValueStats {
   touristTrapsAvoided: number;
   insiderTips: number;
   estimatedSavings?: {
-    time: string;  // e.g., "3+ hours"
-    money?: string; // e.g., "~$150"
+    time: string;
+    money?: string;
   };
-  // Expandable details
   voyanceFindsDetails?: IntelligenceDetail[];
   timingDetails?: IntelligenceDetail[];
   trapsAvoidedDetails?: IntelligenceDetail[];
@@ -64,12 +58,12 @@ export function ItineraryValueHeader({
                    stats.touristTrapsAvoided > 0 ||
                    stats.insiderTips > 0;
 
-  // On mobile: default collapsed. On desktop: default expanded.
+  // Mobile: collapsed by default. Desktop: expanded.
   const [isExpanded, setIsExpanded] = useState(!isMobile);
 
   if (!hasValue) return null;
 
-  // Build summary line for collapsed state
+  // Summary line for collapsed state
   const summaryParts: string[] = [];
   if (stats.voyanceFinds > 0) summaryParts.push(`${stats.voyanceFinds} finds`);
   if (stats.timingOptimizations > 0) summaryParts.push(`${stats.timingOptimizations} timing hacks`);
@@ -120,76 +114,86 @@ export function ItineraryValueHeader({
             transition={{ duration: 0.25 }}
             className="overflow-hidden"
           >
-
-      {/* Metric Badges Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-border/50">
-        {stats.voyanceFinds > 0 && (
-          <ExpandableBadge
-            icon={<Sparkles className="h-4 w-4" />}
-            value={stats.voyanceFinds}
-            label="Voyance Finds"
-            subtitle="Hidden gems you wouldn't find alone"
-            color="primary"
-            details={stats.voyanceFindsDetails}
-          />
-        )}
-        {stats.timingOptimizations > 0 && (
-          <ExpandableBadge
-            icon={<Clock className="h-4 w-4" />}
-            value={stats.timingOptimizations}
-            label="Timing Hacks"
-            subtitle="Scheduled to beat crowds"
-            color="accent"
-            details={stats.timingDetails}
-          />
-        )}
-        {stats.touristTrapsAvoided > 0 && (
-          <ExpandableBadge
-            icon={<Sparkles className="h-4 w-4" />}
-            value={stats.touristTrapsAvoided}
-            label="Local Picks"
-            subtitle="Insider alternatives included"
-            color="primary"
-            details={stats.trapsAvoidedDetails}
-          />
-        )}
-        {stats.insiderTips > 0 && (
-          <ExpandableBadge
-            icon={<Target className="h-4 w-4" />}
-            value={stats.insiderTips}
-            label="Insider Tips"
-            subtitle="Local execution advice"
-            color="gold"
-            details={stats.insiderTipsDetails}
-          />
-        )}
-      </div>
-
-      {/* Savings Result */}
-      {stats.estimatedSavings && (
-        <div className="p-4 bg-primary/5 border-t border-border/50">
-          <div className="flex items-center justify-center gap-3 flex-wrap">
-            <div className="flex items-center gap-1.5 text-primary font-medium">
-              <TrendingUp className="h-4 w-4" />
-              <span className="text-sm">Result:</span>
+            {/* Destination subtitle */}
+            <div className="px-3 sm:px-5 pt-2 pb-1 text-center">
+              <p className="text-xs text-muted-foreground">
+                Your {destination}
+                {archetype && <span> · {archetype} style</span>}
+              </p>
             </div>
-            <div className="flex items-center gap-3 text-sm">
-              <span className="font-semibold text-foreground">
-                {stats.estimatedSavings.time} saved
-              </span>
-              {stats.estimatedSavings.money && (
-                <>
-                  <span className="text-muted-foreground">+</span>
-                  <span className="font-semibold text-foreground">
-                    {stats.estimatedSavings.money}
-                  </span>
-                </>
+
+            {/* Metric Badges Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-border/50">
+              {stats.voyanceFinds > 0 && (
+                <ExpandableBadge
+                  icon={<Sparkles className="h-4 w-4" />}
+                  value={stats.voyanceFinds}
+                  label="Voyance Finds"
+                  subtitle="Hidden gems you wouldn't find alone"
+                  color="primary"
+                  details={stats.voyanceFindsDetails}
+                />
               )}
-              <span className="text-muted-foreground">vs. typical itinerary</span>
+              {stats.timingOptimizations > 0 && (
+                <ExpandableBadge
+                  icon={<Clock className="h-4 w-4" />}
+                  value={stats.timingOptimizations}
+                  label="Timing Hacks"
+                  subtitle="Scheduled to beat crowds"
+                  color="accent"
+                  details={stats.timingDetails}
+                />
+              )}
+              {stats.touristTrapsAvoided > 0 && (
+                <ExpandableBadge
+                  icon={<Sparkles className="h-4 w-4" />}
+                  value={stats.touristTrapsAvoided}
+                  label="Local Picks"
+                  subtitle="Insider alternatives included"
+                  color="primary"
+                  details={stats.trapsAvoidedDetails}
+                />
+              )}
+              {stats.insiderTips > 0 && (
+                <ExpandableBadge
+                  icon={<Target className="h-4 w-4" />}
+                  value={stats.insiderTips}
+                  label="Insider Tips"
+                  subtitle="Local execution advice"
+                  color="gold"
+                  details={stats.insiderTipsDetails}
+                />
+              )}
             </div>
-          </div>
-        </div>
-      )}
+
+            {/* Savings Result */}
+            {stats.estimatedSavings && (
+              <div className="p-4 bg-primary/5 border-t border-border/50">
+                <div className="flex items-center justify-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-1.5 text-primary font-medium">
+                    <TrendingUp className="h-4 w-4" />
+                    <span className="text-sm">Result:</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="font-semibold text-foreground">
+                      {stats.estimatedSavings.time} saved
+                    </span>
+                    {stats.estimatedSavings.money && (
+                      <>
+                        <span className="text-muted-foreground">+</span>
+                        <span className="font-semibold text-foreground">
+                          {stats.estimatedSavings.money}
+                        </span>
+                      </>
+                    )}
+                    <span className="text-muted-foreground">vs. typical itinerary</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
