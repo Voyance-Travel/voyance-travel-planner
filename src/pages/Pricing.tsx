@@ -199,7 +199,7 @@ export default function Pricing() {
         <div className="relative max-w-3xl mx-auto px-4 text-center">
           <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="text-xs font-medium tracking-widest text-primary uppercase mb-4">Pricing</motion.p>
           <motion.h1 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="text-3xl sm:text-4xl md:text-5xl font-serif font-medium text-foreground mb-5 text-balance">Your first trip is on us. Full power, every detail.</motion.h1>
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="text-muted-foreground text-base sm:text-lg max-w-xl mx-auto leading-relaxed">2 full days with addresses, photos, costs, tips, and booking links - completely free. After that, use credits to unlock future trips.</motion.p>
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="text-muted-foreground text-base sm:text-lg max-w-xl mx-auto leading-relaxed">2 full days with addresses, photos, costs, tips, and booking links. Completely free. After that, use credits to unlock future trips.</motion.p>
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="mt-8">
             <Button asChild size="lg"><Link to={ROUTES.QUIZ}>Start Free<ArrowRight className="ml-2 h-4 w-4" /></Link></Button>
             <p className="text-xs text-muted-foreground mt-3">No credit card required</p>
