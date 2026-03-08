@@ -3841,6 +3841,33 @@ export type Database = {
         }
         Relationships: []
       }
+      iap_transactions: {
+        Row: {
+          created_at: string | null
+          id: string
+          product_id: string
+          status: string | null
+          transaction_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          product_id: string
+          status?: string | null
+          transaction_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          product_id?: string
+          status?: string | null
+          transaction_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       image_votes: {
         Row: {
           created_at: string
