@@ -4761,11 +4761,11 @@ export function EditorialItinerary({
 
 
             {/* FLIGHT SECTION - Editorial Style */}
-            <section className="space-y-5" data-section="flights">
+            <section className="space-y-3 sm:space-y-5" data-section="flights">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/10">
-                    <Plane className="h-5 w-5 text-primary" />
+                  <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/10">
+                    <Plane className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                   </div>
                   <div>
                     <h3 className="font-serif text-lg font-semibold text-foreground">Flights</h3>
@@ -4789,7 +4789,7 @@ export function EditorialItinerary({
                   {flightCost > 0 && (
                     <div className="text-right">
                       <p className="text-xs text-muted-foreground">Total</p>
-                      <p className="font-serif text-xl font-semibold text-foreground">{formatCurrency(displayCost(flightCost), tripCurrency)}</p>
+                      <p className="font-serif text-base sm:text-xl font-semibold text-foreground">{formatCurrency(displayCost(flightCost), tripCurrency)}</p>
                     </div>
                   )}
                 </div>
@@ -4820,10 +4820,10 @@ export function EditorialItinerary({
                 </div>
               ) : (
                 /* Empty State - Add Flight CTA */
-                <div className="rounded-xl border border-dashed border-primary/30 bg-gradient-to-br from-primary/5 to-transparent p-6">
-                  <div className="flex flex-col sm:flex-row items-center gap-4">
-                    <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
-                      <Plane className="h-7 w-7 text-primary" />
+                <div className="rounded-xl border border-dashed border-primary/30 bg-gradient-to-br from-primary/5 to-transparent p-4 sm:p-6">
+                  <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
+                    <div className="h-10 w-10 sm:h-14 sm:w-14 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
+                      <Plane className="h-5 w-5 sm:h-7 sm:w-7 text-primary" />
                     </div>
                     <div className="flex-1 text-center sm:text-left">
                       <h4 className="font-medium text-foreground mb-1">No flights added yet</h4>
@@ -4865,7 +4865,7 @@ export function EditorialItinerary({
                     <Hotel className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <h3 className="font-serif text-lg font-semibold text-foreground">Accommodation</h3>
+                    <h3 className="font-serif text-base sm:text-lg font-semibold text-foreground">Accommodation</h3>
                     <p className="text-xs text-muted-foreground">
                       {allHotels && allHotels.length > 0
                         ? `${allHotels.length} ${allHotels.length === 1 ? 'city' : 'cities'}`
@@ -4888,7 +4888,7 @@ export function EditorialItinerary({
                   {hotelCost > 0 && !allHotels?.length && (
                     <div className="text-right">
                       <p className="text-xs text-muted-foreground">Total</p>
-                      <p className="font-serif text-xl font-semibold text-foreground">{formatCurrency(displayCost(hotelCost), tripCurrency)}</p>
+                      <p className="font-serif text-base sm:text-xl font-semibold text-foreground">{formatCurrency(displayCost(hotelCost), tripCurrency)}</p>
                     </div>
                   )}
                 </div>
@@ -5139,7 +5139,7 @@ export function EditorialItinerary({
                 <div className="rounded-xl border border-border bg-card overflow-hidden group">
                   {/* Hotel Image Header */}
                   <div 
-                    className="relative h-48 bg-muted/30 cursor-pointer overflow-hidden" 
+                    className="relative h-36 sm:h-48 bg-muted/30 cursor-pointer overflow-hidden" 
                     onClick={() => {
                       if (hotelSelection?.images && hotelSelection.images.length > 0) {
                         setHotelGalleryOpen(true);
@@ -5177,7 +5177,7 @@ export function EditorialItinerary({
                     )}
                     
                     <div className="absolute bottom-0 left-0 right-0 p-4">
-                      <h4 className="font-serif text-xl font-semibold text-white mb-1">{hotelSelection.name}</h4>
+                      <h4 className="font-serif text-base sm:text-xl font-semibold text-white mb-1">{hotelSelection.name}</h4>
                       {hotelSelection.rating && (
                         <div className="flex items-center gap-1.5">
                           <div className="flex items-center">
@@ -5191,7 +5191,7 @@ export function EditorialItinerary({
                     </div>
                   </div>
                   
-                  <div className="p-4 space-y-4">
+                  <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
                     <div className="flex flex-wrap gap-2">
                       <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/50 text-sm">
                         <span className="text-muted-foreground">Check-in:</span>
@@ -5260,9 +5260,9 @@ export function EditorialItinerary({
                 </div>
               ) : (
                 /* Empty State - Add Hotel CTA */
-                <div className="rounded-xl border border-dashed border-primary/30 bg-gradient-to-br from-primary/5 to-transparent p-6">
-                  <div className="flex flex-col sm:flex-row items-center gap-4">
-                    <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
+                <div className="rounded-xl border border-dashed border-primary/30 bg-gradient-to-br from-primary/5 to-transparent p-4 sm:p-6">
+                  <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
+                    <div className="h-10 w-10 sm:h-14 sm:w-14 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
                       <Hotel className="h-7 w-7 text-primary" />
                     </div>
                     <div className="flex-1 text-center sm:text-left">
@@ -6928,19 +6928,19 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
   return (
     <div className="border border-border bg-card rounded-lg overflow-hidden">
       {/* Header */}
-      <div className="p-4 border-b border-border bg-secondary/30">
+      <div className="p-3 sm:p-4 border-b border-border bg-secondary/30">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-primary/10 rounded-full">
             {headerIcon}
           </div>
           <div>
-            <h3 className="font-serif text-lg font-medium">{headerTitle}</h3>
+            <h3 className="font-serif text-base sm:text-lg font-medium">{headerTitle}</h3>
             <p className="text-sm text-muted-foreground">{headerSubtitle}</p>
           </div>
         </div>
       </div>
 
-      <div className="p-4 space-y-4">
+      <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
         {/* Train/Bus Arrival Section */}
         {isTrainBusArrival && hasTransportArrival ? (
           <>
@@ -7337,7 +7337,7 @@ function DayCard({
           </div>
 
           {/* Day Actions */}
-            <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide pl-10 sm:pl-0">
+            <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto scrollbar-hide pl-8 sm:pl-0">
               {allLocked && (
                 <Badge variant="outline" className="text-xs font-medium border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0 gap-1">
                   <Check className="h-3 w-3" />
@@ -7800,7 +7800,7 @@ function DayCard({
                 </div>
               ) : (
                 <div className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-6 text-muted-foreground">
+                  <div className="flex items-center gap-3 sm:gap-6 text-muted-foreground">
                     {day.estimatedWalkingTime && (
                       <span className="flex items-center gap-1.5">
                         <Route className="h-4 w-4" />

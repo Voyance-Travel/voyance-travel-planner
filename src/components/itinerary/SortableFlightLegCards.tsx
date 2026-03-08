@@ -128,9 +128,9 @@ function SortableFlightCard({
             </div>
           )}
 
-          <div className="flex-1 p-4">
+          <div className="flex-1 p-3 sm:p-4">
             {/* Header row */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2 sm:mb-3 gap-1.5 sm:gap-2">
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant={isFirst ? 'secondary' : 'outline'} className={cn("text-xs font-medium", !isFirst && `border-${accentColor}/30 text-${accentColor}`)}>
                   {legLabel}
@@ -161,9 +161,9 @@ function SortableFlightCard({
             </div>
             
             {/* Route visualization */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               <div className="text-center min-w-[60px]">
-                <p className="text-xl font-semibold tracking-tight">{leg.departure?.time || '--:--'}</p>
+                <p className="text-base sm:text-xl font-semibold tracking-tight">{leg.departure?.time || '--:--'}</p>
                 <p className={`text-xs font-medium text-${accentColor}`}>{getAirportDisplay(leg.departure?.airport || '')}</p>
               </div>
               
@@ -183,14 +183,14 @@ function SortableFlightCard({
               </div>
               
               <div className="text-center min-w-[60px]">
-                <p className="text-xl font-semibold tracking-tight">{leg.arrival?.time || '--:--'}</p>
+                <p className="text-base sm:text-xl font-semibold tracking-tight">{leg.arrival?.time || '--:--'}</p>
                 <p className={`text-xs font-medium text-${accentColor}`}>{getAirportDisplay(leg.arrival?.airport || '')}</p>
               </div>
             </div>
             
             {/* Details row */}
             {(leg.cabinClass || leg.seat || leg.confirmationCode || leg.terminal || leg.gate || leg.baggageInfo || leg.frequentFlyerNumber || leg.boardingPassUrl) && (
-              <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
+              <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-border/50 space-y-1.5 sm:space-y-2">
                 {(leg.confirmationCode || leg.seat || leg.cabinClass) && (
                   <div className="flex items-center gap-3 flex-wrap">
                     {leg.confirmationCode && (
@@ -226,7 +226,7 @@ function SortableFlightCard({
 
             {/* Mark buttons */}
             {totalLegs > 1 && (
-              <div className="mt-3 pt-3 border-t border-border/50 flex items-center gap-2 flex-wrap">
+              <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-border/50 flex items-center gap-1.5 sm:gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => onMarkLeg(idx, 'isDestinationArrival')}
