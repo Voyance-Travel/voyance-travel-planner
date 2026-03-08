@@ -124,6 +124,8 @@ export interface HotelSelection {
   currency?: string;
   roomType?: string;
   imageUrl?: string;
+  checkIn?: string;
+  checkOut?: string;
 }
 
 export interface TripCreateInput {
