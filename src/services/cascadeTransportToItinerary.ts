@@ -165,9 +165,19 @@ function shiftDayAfter(
 
   const activities = [...(day.activities || [])];
   
-  // Add arrival/check-in block if label provided
+  // Check if a check-in or arrival activity already exists in the day
   const arrivalBlocks: any[] = [];
-  if (arrivalLabel) {
+  const existingCheckin = (day.activities || []).find((act: any) =>
+    act.title?.toLowerCase().includes('check in') ||
+    act.title?.toLowerCase().includes('check-in') ||
+    act.title?.toLowerCase().includes('checkin') ||
+    act.title?.toLowerCase().includes('arrive') ||
+    act.category === 'accommodation' ||
+    act.isTransportBlock
+  );
+
+  if (arrivalLabel && !existingCheckin) {
+    // Only add generic check-in block if one doesn't already exist
     const checkinBlock = {
       id: `transport-arrive-${day.dayNumber}`,
       name: `Arrive & Check In`,
@@ -234,8 +244,13 @@ function shiftDayAfter(
     
     // Skip activities whose original end was before the new earliest start
     if (origStart !== null && (origStart + duration) < earliestMinutes) {
-      // Only remove if it's not a critical structural activity (meals etc)
-      if (act.category !== 'dining' && act.category !== 'restaurant') {
+      // Keep critical structural activities: meals, check-in, accommodation
+      const isStructural = act.category === 'dining' || act.category === 'restaurant' ||
+        act.category === 'accommodation' ||
+        act.title?.toLowerCase().includes('check in') ||
+        act.title?.toLowerCase().includes('check-in') ||
+        act.title?.toLowerCase().includes('hotel');
+      if (!isStructural) {
         change.removedActivities.push(act.name || act.title || 'Activity');
         continue;
       }
