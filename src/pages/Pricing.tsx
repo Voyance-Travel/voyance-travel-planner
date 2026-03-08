@@ -248,7 +248,7 @@ export default function Pricing() {
       </section>
 
       {/* EVERY TRIP AFTER */}
-      <section className="py-12 sm:py-16">
+      <section className="py-8 sm:py-10">
         <div className="max-w-4xl mx-auto px-4">
           <motion.div initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-10">
             <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-2">Every Trip After</h2>
@@ -269,7 +269,7 @@ export default function Pricing() {
       </section>
 
       {/* WHAT CREDITS UNLOCK */}
-      <section className="py-12 sm:py-16">
+      <section className="py-8 sm:py-10">
         <div className="max-w-4xl mx-auto px-4">
           <motion.div initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-10">
             <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground mb-2">What Credits Unlock</h2>
