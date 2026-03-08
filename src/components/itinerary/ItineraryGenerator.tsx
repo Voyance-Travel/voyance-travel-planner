@@ -193,7 +193,29 @@ export function ItineraryGenerator({
         setServerGenActive(false);
       }
     },
-    onFailed: (err) => {
+    onFailed: async (err) => {
+      // CRITICAL: Before showing error, verify itinerary doesn't actually exist
+      try {
+        const { data: verifyTrip } = await supabase
+          .from('trips')
+          .select('itinerary_data')
+          .eq('id', tripId)
+          .single();
+        const verifyData = verifyTrip?.itinerary_data as { days?: unknown[] } | null;
+        if (verifyData?.days?.length && verifyData.days.length > 0) {
+          console.log('[ItineraryGenerator] onFailed suppressed — itinerary exists with', verifyData.days.length, 'days');
+          // Itinerary is fine — treat as success
+          setPrePhase(null);
+          const gr = gateResultRef.current;
+          await new Promise(r => setTimeout(r, 2000));
+          onComplete(verifyData.days as GeneratedDay[], undefined, gr?.isFirstTrip);
+          setServerGenActive(false);
+          return;
+        }
+      } catch (verifyErr) {
+        console.warn('[ItineraryGenerator] Could not verify DB state on failure:', verifyErr);
+      }
+
       setServerGenActive(false);
       setPrePhase(null);
       setHasStarted(false);
@@ -516,13 +538,17 @@ export function ItineraryGenerator({
       try {
         const { data: tripRow } = await supabase
           .from('trips')
-          .select('itinerary_status')
+          .select('itinerary_status, itinerary_data')
           .eq('id', tripId)
           .single();
         if (cancelled) return;
         const st = tripRow?.itinerary_status as string;
-        if (st === 'ready' || st === 'generated') {
-          // Already complete — tell parent to show itinerary
+        const itData = tripRow?.itinerary_data as { days?: unknown[] } | null;
+        
+        // If itinerary data exists with days, treat as complete regardless of status
+        if (itData?.days?.length && itData.days.length > 0 && st !== 'generating' && st !== 'queued') {
+          onComplete([], undefined, false);
+        } else if (st === 'ready' || st === 'generated') {
           onComplete([], undefined, false);
         } else if (st === 'generating' || st === 'queued') {
           // In progress — activate poller
@@ -533,7 +559,19 @@ export function ItineraryGenerator({
       }
     };
     checkStatus();
-    return () => { cancelled = true; };
+
+    // Visibility change handler: re-check status when user returns to tab
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && (serverGenActive || hasStarted)) {
+        checkStatus();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [tripId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRetry = () => {

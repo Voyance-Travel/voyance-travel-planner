@@ -173,6 +173,33 @@ export function useGenerationPoller({
       }
 
       if (itineraryStatus === 'failed') {
+        // CRITICAL: Before reporting failure, check if itinerary data actually exists
+        // The status may be stale while the data was successfully written
+        if (partialDays.length > 0 && totalDays > 0 && partialDays.length >= totalDays) {
+          console.log('[useGenerationPoller] Status is "failed" but itinerary_data has all days — treating as ready');
+          stalledFiredRef.current = false;
+          autoResumeAttemptedRef.current = false;
+          setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList });
+          if (!onReadyCalledRef.current) {
+            onReadyCalledRef.current = true;
+            onReadyRef.current?.();
+          }
+          return;
+        }
+
+        // Also check itinerary_days table — if all days exist there, generation succeeded
+        if (totalDays > 0 && dayCount >= totalDays) {
+          console.log('[useGenerationPoller] Status is "failed" but itinerary_days has all days — treating as ready');
+          stalledFiredRef.current = false;
+          autoResumeAttemptedRef.current = false;
+          setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList });
+          if (!onReadyCalledRef.current) {
+            onReadyCalledRef.current = true;
+            onReadyRef.current?.();
+          }
+          return;
+        }
+
         // Suppress failed transition if we just resumed from a background tab (grace period)
         const inResumeGrace = justResumedRef.current && (Date.now() - resumedAtRef.current < 15000);
         if (inResumeGrace) {
