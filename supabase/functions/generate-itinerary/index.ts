@@ -4247,6 +4247,7 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
         .order('city_order', { ascending: true });
       
       if (tripCities && tripCities.length >= 2) {
+        resolvedTripCities = tripCities; // Store for per-city budget override
         const dayMap: MultiCityDayInfo[] = [];
         for (let i = 0; i < tripCities.length; i++) {
           const city = tripCities[i];
@@ -4288,6 +4289,27 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
         context.multiCityDayMap = dayMap.slice(0, totalDays);
         tripCitiesResolved = true;
         console.log(`[Stage 1] Multi-city day map (from trip_cities): ${context.multiCityDayMap.map(d => `${d.cityName}${d.isTransitionDay ? '(T)' : ''}`).join(' → ')}`);
+
+        // ─── PER-CITY BUDGET OVERRIDE ───
+        if (budgetTotalCents && budgetTotalCents > 0 && resolvedTripCities) {
+          // Build a city-name → daily budget map for use in day generation
+          const perCityDailyBudget: Record<string, number> = {};
+          const travelers = context.travelers || 1;
+          for (const city of resolvedTripCities) {
+            const allocatedCents = (city as any).allocated_budget_cents;
+            if (allocatedCents && allocatedCents > 0) {
+              const cityNights = city.nights || city.days_total || 1;
+              const cityHotelCents = city.hotel_cost_cents || 0;
+              const cityActivityBudgetCents = Math.max(0, allocatedCents - cityHotelCents);
+              const dailyPerPerson = Math.round(cityActivityBudgetCents / cityNights / travelers) / 100;
+              perCityDailyBudget[city.city_name] = dailyPerPerson;
+              console.log(`[Stage 1] City "${city.city_name}" budget: $${(allocatedCents/100).toFixed(2)} total, $${dailyPerPerson}/day/person for activities`);
+            }
+          }
+          if (Object.keys(perCityDailyBudget).length > 0) {
+            context.perCityDailyBudget = perCityDailyBudget;
+          }
+        }
       }
     } catch (e) {
       console.warn(`[Stage 1] Failed to query trip_cities, falling back to destinations JSONB:`, e);
