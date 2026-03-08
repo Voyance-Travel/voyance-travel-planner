@@ -2565,14 +2565,24 @@ export function EditorialItinerary({
       let saved = false;
 
       if (existingTrip) {
+        // Compute updated end_date and nights from day count
+        const updatePayload: Record<string, unknown> = {
+          itinerary_data: itineraryData,
+          itinerary_status: 'ready',
+          updated_at: new Date().toISOString(),
+        };
+        try {
+          if (startDate && days.length > 0) {
+            const newEnd = addDays(parseLocalDate(startDate), days.length - 1);
+            updatePayload.end_date = `${newEnd.getFullYear()}-${String(newEnd.getMonth() + 1).padStart(2, '0')}-${String(newEnd.getDate()).padStart(2, '0')}`;
+            updatePayload.nights = days.length - 1;
+          }
+        } catch { /* keep existing dates */ }
+
         // Save to database
         const { error } = await supabase
           .from('trips')
-          .update({
-            itinerary_data: itineraryData as any,
-            itinerary_status: 'ready',
-            updated_at: new Date().toISOString()
-          })
+          .update(updatePayload as any)
           .eq('id', tripId);
 
         if (error) throw error;
