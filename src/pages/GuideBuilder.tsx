@@ -291,6 +291,23 @@ export default function GuideBuilder() {
     onError: () => toast.error('Failed to unpublish'),
   });
 
+  // Delete guide mutation
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (!existingGuide) throw new Error('No guide to delete');
+      await supabase.from('guide_sections').delete().eq('guide_id', existingGuide.id);
+      const { error } = await supabase.from('community_guides').delete().eq('id', existingGuide.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['community-guide-trip', tripId] });
+      queryClient.invalidateQueries({ queryKey: ['community-guides-published'] });
+      toast.success('Guide deleted');
+      navigate(`/trip/${tripId}`);
+    },
+    onError: () => toast.error('Failed to delete guide'),
+  });
+
   // Delete item
   const handleDelete = useCallback(async (id: string, type: 'favorite' | 'manual') => {
     try {
@@ -452,7 +469,19 @@ export default function GuideBuilder() {
               Unpublish
             </Button>
           </div>
-        </div>
+            <Button
+              variant="ghost"
+              className="gap-2 text-destructive hover:text-destructive"
+              disabled={deleteMutation.isPending}
+              onClick={() => {
+                if (!confirm('Delete this guide permanently? This cannot be undone.')) return;
+                deleteMutation.mutate();
+              }}
+            >
+              {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Delete
+            </Button>
+          </div>
       </MainLayout>
     );
   }
