@@ -22,8 +22,6 @@ import { scrollToTop } from '@/utils/scrollUtils';
 
 // Sections that collapse into accordions on mobile (detail/reference content)
 const COLLAPSIBLE_SECTIONS = [
-  { key: 'insight', title: 'Your Travel Identity', teaser: "You're not generic. Your trip shouldn't be either" },
-  { key: 'archetypes', title: 'Your Travel DNA', teaser: 'Explore 29 unique traveler archetypes' },
   { key: 'itineraries', title: 'Sample Itineraries', teaser: 'Real trip plans with intelligence metrics' },
   { key: 'social', title: 'What Travelers Say', teaser: 'Beta tester quotes and platform intelligence' },
   { key: 'pricing', title: 'Pricing & Credits', teaser: '150 free credits monthly. No credit card required' },
