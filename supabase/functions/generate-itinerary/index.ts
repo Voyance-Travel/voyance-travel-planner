@@ -12347,19 +12347,32 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       }
 
       // Set status to generating + store metadata
-      const { data: currentTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
+      // CRITICAL: Clear itinerary_data.days when starting fresh (not resuming)
+      // to prevent duplicate days from a previous failed/partial generation
+      const { data: currentTrip } = await supabase.from('trips').select('metadata, itinerary_data').eq('id', tripId).single();
       const existingMeta = (currentTrip?.metadata as Record<string, unknown>) || {};
-      await supabase.from('trips').update({
+      const isResume = resumeFromDay && resumeFromDay > 1;
+      
+      const updatePayload: Record<string, unknown> = {
         itinerary_status: 'generating',
         metadata: {
           ...existingMeta,
           generation_started_at: new Date().toISOString(),
           generation_total_days: totalDays,
-          generation_completed_days: resumeFromDay ? (resumeFromDay - 1) : 0,
+          generation_completed_days: isResume ? (resumeFromDay - 1) : 0,
           generation_error: null,
           generation_heartbeat: new Date().toISOString(),
         },
-      }).eq('id', tripId);
+      };
+      
+      // If starting fresh (not resume), clear existing days to prevent duplicates
+      if (!isResume) {
+        const existingItData = (currentTrip?.itinerary_data as Record<string, unknown>) || {};
+        updatePayload.itinerary_data = { ...existingItData, days: [], status: 'generating' };
+        console.log(`[generate-trip] Clearing existing itinerary_data.days for fresh generation`);
+      }
+      
+      await supabase.from('trips').update(updatePayload).eq('id', tripId);
 
       // Determine starting day (for resume support)
       const effectiveStartDay = resumeFromDay && resumeFromDay > 1 ? resumeFromDay : 1;
@@ -12656,7 +12669,10 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       }
 
       // Day generated successfully — save it
-      const updatedDays = [...existingDays, dayResult];
+      // CRITICAL: Replace any existing day with the same dayNumber to prevent duplicates
+      // This handles retries, regeneration, and resume scenarios safely.
+      const filteredExisting = existingDays.filter((d: any) => d?.dayNumber !== dayNumber);
+      const updatedDays = [...filteredExisting, dayResult].sort((a: any, b: any) => (a.dayNumber || 0) - (b.dayNumber || 0));
       const partialItinerary = {
         days: updatedDays,
         status: dayNumber >= totalDays ? 'ready' : 'generating',
