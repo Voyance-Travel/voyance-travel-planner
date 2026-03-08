@@ -114,7 +114,7 @@ export function DestinationAutocomplete({
         }}
         onBlur={() => setTimeout(() => setIsOpen(false), 300)}
         className={cn(
-          'h-12 pl-8 text-base bg-transparent border-0 border-b rounded-none focus:ring-0 font-sans',
+          'h-12 pl-8 text-base bg-transparent border-0 border-b rounded-none focus:ring-0 font-sans truncate',
           showValidationHint ? 'border-destructive' : 'border-border focus:border-primary'
         )}
       />

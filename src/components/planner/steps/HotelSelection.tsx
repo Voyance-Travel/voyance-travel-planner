@@ -193,7 +193,7 @@ export default function HotelSelection({
         <h1 className="text-3xl font-display font-medium text-slate-900 mb-2">
           Where will you stay?
         </h1>
-        <p className="text-slate-600">
+        <p className="text-slate-600 truncate max-w-full">
           Hotels in {formData.destination} • {nights} nights
         </p>
       </div>

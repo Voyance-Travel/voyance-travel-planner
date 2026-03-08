@@ -541,11 +541,11 @@ export default function TripContext({
             <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-6 text-white shadow-xl">
               <h3 className="text-sm font-medium text-slate-400 mb-3">Your Trip</h3>
               <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
                     <Compass className="w-4 h-4" />
                   </div>
-                  <span className="font-medium">{formData.destination}</span>
+                  <span className="font-medium truncate">{formData.destination}</span>
                 </div>
                 <div className="flex items-center gap-3 text-slate-300">
                   <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
