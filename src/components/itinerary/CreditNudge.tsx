@@ -38,6 +38,7 @@ export function CreditNudge({ action, currentBalance, onDismiss, compact }: Cred
     productId: string;
     mode: 'payment';
   } | null>(null);
+  const { toast } = useToast();
 
   const cost = CREDIT_COSTS[action];
   const deficit = cost - currentBalance;
@@ -49,6 +50,20 @@ export function CreditNudge({ action, currentBalance, onDismiss, compact }: Cred
   const primaryPack = showQuickTopUp ? BOOST_PACK : recommended;
 
   if (!primaryPack) return null;
+
+  const handleBuyPack = async (pack: { priceId: string; name: string; credits: number; productId: string; id?: string }) => {
+    if (isIAPAvailable() && pack.id) {
+      const result = await purchaseByPackId(pack.id);
+      if (result.success) {
+        toast({ title: 'Purchase complete!', description: `${formatCredits(result.credits || pack.credits)} credits added.` });
+        onDismiss();
+      } else if (result.error !== 'cancelled') {
+        toast({ title: 'Purchase failed', description: result.error || 'Please try again.', variant: 'destructive' });
+      }
+      return;
+    }
+    setCheckoutPack({ priceId: pack.priceId, name: pack.name, credits: pack.credits, productId: pack.productId, mode: 'payment' });
+  };
 
   return (
     <>
