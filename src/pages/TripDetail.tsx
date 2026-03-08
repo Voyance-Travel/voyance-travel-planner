@@ -295,6 +295,7 @@ export default function TripDetail() {
     if (!tripId || !trip) return;
     setResumingGeneration(true);
     setGenerationStalled(false);
+    onReadyCalledRef.current = false; // Reset so onReady can fire again for this new attempt
 
     const meta = (trip.metadata as Record<string, unknown>) || {};
     const completedDays = (meta.generation_completed_days as number) || 0;
