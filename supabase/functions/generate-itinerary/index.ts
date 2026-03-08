@@ -144,7 +144,9 @@ import {
   parseMustDoInput,
   scheduleMustDos,
   buildMustHavesConstraintPrompt,
+  getBlockedTimeRange,
   type MustDoPriority,
+  type ScheduledMustDo,
   type ActivityType,
 } from './must-do-priorities.ts';
 
@@ -9568,6 +9570,7 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
 
       // Load personalization inputs from request body first, then fall back to trip metadata
       let mustDoPrompt = '';
+      let mustDoEventItems: ScheduledMustDo[] = [];
       let metadata: Record<string, unknown> | null = null;
       if (tripId) {
         const { data: tripMeta } = await supabase
@@ -9617,8 +9620,17 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
           const scheduled = scheduleMustDos(mustDoAnalysis, totalDays);
           // Only include items relevant to this day
           const dayItems = scheduled.scheduled.filter(s => s.assignedDay === dayNumber);
+          // Save event items for post-generation overlap stripping
+          mustDoEventItems = dayItems.filter(s => 
+            s.priority.activityType === 'all_day_event' || s.priority.activityType === 'half_day_event'
+          );
           if (dayItems.length > 0) {
-            mustDoPrompt = `\n## 🚨 USER'S MUST-DO VENUES FOR DAY ${dayNumber} (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED these venues. You MUST include them:\n${dayItems.map(item => `- ${item.priority.title} (${item.priority.priority})${item.priority.activityType === 'all_day_event' ? ' [ALL-DAY EVENT — plan the ENTIRE day around this]' : item.priority.activityType === 'half_day_event' ? ' [HALF-DAY EVENT — dedicate morning or afternoon to this]' : ''}`).join('\n')}\n\nRULES:\n- Include ALL listed venues by name in this day's itinerary\n- For ALL-DAY events, the entire day should revolve around this event\n- Only add AI recommendations to fill remaining slots\n`;
+            // Build blocked time info for events
+            const blockedTimeLines = mustDoEventItems.map(ev => {
+              const { blockedStart, blockedEnd } = getBlockedTimeRange(ev);
+              return `⏰ BLOCKED TIME for "${ev.priority.title}": ${blockedStart}–${blockedEnd}. Do NOT schedule ANY activities in this window.`;
+            }).join('\n');
+            mustDoPrompt = `\n## 🚨 USER'S MUST-DO VENUES FOR DAY ${dayNumber} (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED these venues. You MUST include them:\n${dayItems.map(item => `- ${item.priority.title} (${item.priority.priority})${item.priority.activityType === 'all_day_event' ? ' [ALL-DAY EVENT — plan the ENTIRE day around this]' : item.priority.activityType === 'half_day_event' ? ' [HALF-DAY EVENT — dedicate morning or afternoon to this]' : ''}`).join('\n')}\n${blockedTimeLines ? '\n' + blockedTimeLines + '\n' : ''}\nRULES:\n- Include ALL listed venues by name in this day's itinerary\n- For ALL-DAY events, the entire day should revolve around this event\n- Any activity overlapping a BLOCKED TIME window is a HARD FAILURE\n- Only add AI recommendations to fill remaining slots OUTSIDE blocked windows\n`;
           } else {
             // No items specifically for this day, but include unschedulable ones as suggestions
             const unscheduledItems = scheduled.unschedulable || [];
@@ -9626,7 +9638,7 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
               mustDoPrompt = `\n## User's Researched Venues (try to include if appropriate)\n${unscheduledItems.map(u => `- ${u.priority.title} (${u.priority.priority})`).join('\n')}\n`;
             }
           }
-          console.log(`[generate-day] Must-do activities parsed: ${mustDoAnalysis.length} items, ${dayItems.length} for day ${dayNumber}`);
+          console.log(`[generate-day] Must-do activities parsed: ${mustDoAnalysis.length} items, ${dayItems.length} for day ${dayNumber}, ${mustDoEventItems.length} events`);
         } else {
           // Raw text fallback
           mustDoPrompt = `\n## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)\n\nThe traveler has researched these specific venues. Include as many as possible in the itinerary:\n"${mustDoActivities.trim()}"\n`;
@@ -11205,7 +11217,56 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         generatedDay.activities = normalizedActivities;
 
         // =======================================================================
-        // TRANSITION DAY POST-GENERATION GUARD: Ensure inter-city travel exists
+        // MUST-DO EVENT OVERLAP STRIPPING
+        // If this day has all-day or half-day events, remove any non-structural
+        // activities that overlap the blocked time window
+        // =======================================================================
+        if (mustDoEventItems.length > 0) {
+          const beforeCount = normalizedActivities.length;
+          for (const eventItem of mustDoEventItems) {
+            const { blockedStart, blockedEnd } = getBlockedTimeRange(eventItem);
+            const blockedStartMins = parseTimeToMinutes(blockedStart);
+            const blockedEndMins = parseTimeToMinutes(blockedEnd);
+            if (blockedStartMins === null || blockedEndMins === null) continue;
+
+            const eventTitleLower = eventItem.priority.title.toLowerCase();
+            normalizedActivities = normalizedActivities.filter((act: any) => {
+              // Always keep the event itself (fuzzy title match)
+              const actTitle = (act.title || '').toLowerCase();
+              if (actTitle.includes(eventTitleLower) || eventTitleLower.includes(actTitle)) return true;
+              // Always keep structural categories: transit, transport, hotel, meals
+              const cat = (act.category || '').toLowerCase();
+              if (['transport', 'transportation', 'transit', 'hotel', 'accommodation'].includes(cat)) return true;
+              // Keep meals (breakfast before event, dinner after)
+              if (cat === 'food' || cat === 'dining' || cat === 'restaurant' || cat === 'meal') {
+                // Keep if meal ends before blocked start or starts after blocked end
+                const mealStart = parseTimeToMinutes(act.startTime);
+                const mealEnd = parseTimeToMinutes(act.endTime);
+                if (mealStart !== null && mealEnd !== null) {
+                  if (mealEnd <= blockedStartMins || mealStart >= blockedEndMins) return true;
+                }
+                // Meal overlaps the event window — drop it
+                return false;
+              }
+              // For all other activities, check time overlap
+              const actStart = parseTimeToMinutes(act.startTime);
+              const actEnd = parseTimeToMinutes(act.endTime);
+              if (actStart === null || actEnd === null) return true; // can't determine, keep
+              // Remove if overlaps: activity starts before event ends AND ends after event starts
+              if (actStart < blockedEndMins && actEnd > blockedStartMins) {
+                console.log(`[generate-day] 🗑️ Removing "${act.title}" (${act.startTime}-${act.endTime}) — overlaps blocked time ${blockedStart}-${blockedEnd} for "${eventItem.priority.title}"`);
+                return false;
+              }
+              return true;
+            });
+          }
+          const removed = beforeCount - normalizedActivities.length;
+          if (removed > 0) {
+            console.log(`[generate-day] ✓ Stripped ${removed} activities overlapping must-do event time blocks`);
+            generatedDay.activities = normalizedActivities;
+          }
+        }
+
         // If AI omitted the travel activity, inject deterministic fallback
         // =======================================================================
         if (resolvedIsTransitionDay && resolvedTransitionFrom && resolvedTransitionTo) {
