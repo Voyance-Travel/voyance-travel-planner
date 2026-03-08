@@ -2373,26 +2373,32 @@ export default function Start() {
       if (hotelChoice === 'own') {
         if (manualHotelList.length > 0) {
           // Multi-hotel (split stay)
+          const tripStartStr = startDate ? format(startDate, 'yyyy-MM-dd') : undefined;
+          const tripEndStr = endDate ? format(endDate, 'yyyy-MM-dd') : undefined;
           hotelSelection = manualHotelList.map(h => ({
             name: h.name,
-            address: h.address,
-            neighborhood: h.neighborhood,
-            checkInTime: h.checkInTime,
-            checkOutTime: h.checkOutTime,
-            checkInDate: h.checkInDate,
-            checkOutDate: h.checkOutDate,
+            address: h.address || '',
+            neighborhood: h.neighborhood || '',
+            checkInTime: h.checkInTime || '15:00',
+            checkOutTime: h.checkOutTime || '11:00',
+            checkInDate: h.checkInDate || tripStartStr,
+            checkOutDate: h.checkOutDate || tripEndStr,
             pricePerNight: h.pricePerNight || undefined,
             source: 'manual',
           }));
           includeHotelInBudget = manualHotelList.some(h => h.includeInBudget && h.pricePerNight && h.pricePerNight > 0);
         } else if (manualHotel.name) {
           // Single hotel (legacy)
+          const singleTripStart = startDate ? format(startDate, 'yyyy-MM-dd') : undefined;
+          const singleTripEnd = endDate ? format(endDate, 'yyyy-MM-dd') : undefined;
           hotelSelection = [{
             name: manualHotel.name,
-            address: manualHotel.address,
-            neighborhood: manualHotel.neighborhood,
-            checkInTime: manualHotel.checkInTime,
-            checkOutTime: manualHotel.checkOutTime,
+            address: manualHotel.address || '',
+            neighborhood: manualHotel.neighborhood || '',
+            checkInTime: manualHotel.checkInTime || '15:00',
+            checkOutTime: manualHotel.checkOutTime || '11:00',
+            checkInDate: manualHotel.checkInDate || singleTripStart,
+            checkOutDate: manualHotel.checkOutDate || singleTripEnd,
             pricePerNight: manualHotel.pricePerNight || undefined,
             source: 'manual',
           }];
@@ -2504,12 +2510,12 @@ export default function Start() {
           hotel_selection: (manualHotels[d.city] && manualHotels[d.city].length > 0)
             ? manualHotels[d.city].filter(h => h.name).map(h => ({
                 name: h.name,
-                address: h.address,
-                neighborhood: h.neighborhood,
-                checkInTime: h.checkInTime,
-                checkOutTime: h.checkOutTime,
-                checkInDate: h.checkInDate || undefined,
-                checkOutDate: h.checkOutDate || undefined,
+                address: h.address || '',
+                neighborhood: h.neighborhood || '',
+                checkInTime: h.checkInTime || '15:00',
+                checkOutTime: h.checkOutTime || '11:00',
+                checkInDate: h.checkInDate || d.arrivalDate || undefined,
+                checkOutDate: h.checkOutDate || d.departureDate || undefined,
                 pricePerNight: h.pricePerNight || undefined,
                 source: 'manual',
               }))
