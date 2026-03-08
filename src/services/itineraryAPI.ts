@@ -273,7 +273,18 @@ export async function generateItinerary(
   
   // Preserve existing metadata (mustDoActivities, interestCategories, generationRules, etc.)
   const existingMeta = ((trip as any).metadata as Record<string, unknown>) || {};
-  const mustDoActivities = (existingMeta.mustDoActivities as string[]) || [];
+  const mustDoActivities = (() => {
+    const raw = existingMeta.mustDoActivities;
+    const notes = existingMeta.additionalNotes;
+    const parts: string[] = [];
+    if (raw) {
+      parts.push(Array.isArray(raw) ? raw.join(', ') : String(raw));
+    }
+    if (notes && typeof notes === 'string' && notes.trim()) {
+      parts.push(`Additional context: ${notes.trim()}`);
+    }
+    return parts.length > 0 ? parts.join('\n') : '';
+  })();
   const interestCategories = (existingMeta.interestCategories as string[]) || [];
   const generationRules = (existingMeta.generationRules as any[]) || [];
   const pacing = (existingMeta.pacing as string) || 'balanced';
@@ -516,7 +527,18 @@ export async function regenerateDay(
   // Get existing itinerary for context
   const existingItinerary = (trip.itinerary_data as unknown as Itinerary) || { days: [] };
   const existingMeta = ((trip as any).metadata as Record<string, unknown>) || {};
-  const mustDoActivities = (existingMeta.mustDoActivities as string[]) || [];
+  const mustDoActivities = (() => {
+    const raw = existingMeta.mustDoActivities;
+    const notes = existingMeta.additionalNotes;
+    const parts: string[] = [];
+    if (raw) {
+      parts.push(Array.isArray(raw) ? raw.join(', ') : String(raw));
+    }
+    if (notes && typeof notes === 'string' && notes.trim()) {
+      parts.push(`Additional context: ${notes.trim()}`);
+    }
+    return parts.length > 0 ? parts.join('\n') : '';
+  })();
   const interestCategories = (existingMeta.interestCategories as string[]) || [];
   const generationRules = (existingMeta.generationRules as any[]) || [];
   const pacing = (existingMeta.pacing as string) || 'balanced';

@@ -69,6 +69,17 @@ export function TripConfirmCard({ details, onConfirm, onEdit, isGenerating, tran
   if (details.hotelName) {
     rows.push({ icon: <Hotel className="h-3.5 w-3.5" />, label: 'Hotel', value: details.hotelName });
   }
+  if (details.arrivalAirport || details.arrivalTime) {
+    const flightIn = [details.arrivalAirport, details.arrivalTime].filter(Boolean).join(' at ');
+    rows.push({ icon: <Plane className="h-3.5 w-3.5" />, label: 'Arriving', value: flightIn });
+  }
+  if (details.departureAirport || details.departureTime) {
+    const flightOut = [details.departureAirport, details.departureTime].filter(Boolean).join(' at ');
+    rows.push({ icon: <Plane className="h-3.5 w-3.5" />, label: 'Departing', value: flightOut });
+  }
+  if (details.mustDoActivities) {
+    rows.push({ icon: <CheckCircle2 className="h-3.5 w-3.5" />, label: 'Must-do', value: details.mustDoActivities });
+  }
   if (details.tripType) {
     rows.push({ icon: <Sparkles className="h-3.5 w-3.5" />, label: 'Trip type', value: details.tripType });
   }
@@ -124,16 +135,6 @@ export function TripConfirmCard({ details, onConfirm, onEdit, isGenerating, tran
         </div>
       )}
 
-      {details.mustDoActivities && (
-        <div className="text-xs">
-          <span className="text-muted-foreground">Must-do: </span>
-          <span className="text-foreground">
-            {Array.isArray(details.mustDoActivities) 
-              ? details.mustDoActivities.join(', ')
-              : details.mustDoActivities}
-          </span>
-        </div>
-      )}
 
       {details.additionalNotes && (
         <div className="text-xs text-muted-foreground italic line-clamp-2">
