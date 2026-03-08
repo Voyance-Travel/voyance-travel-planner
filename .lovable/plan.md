@@ -1,63 +1,68 @@
 
 
-## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
+## Problem Analysis
 
-### What's Already Working (No Changes Needed)
-- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
-- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
-- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
-- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
+After tracing the full pipeline, I found three root causes for why user-specified activities like "U.S. Open" get ignored:
 
-### What's Broken — Two Things
+### Root Cause 1: No Activity Type Intelligence
+`parseMustDoInput()` in `must-do-priorities.ts` only recognizes items from a hardcoded `KNOWN_LANDMARKS` database (Colosseum, Central Park, etc.). Anything not in that list — sporting events, concerts, festivals, conventions — defaults to a generic 120-minute activity with no type classification. The U.S. Open is an all-day event but gets treated like a 2-hour museum visit.
 
-**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
+### Root Cause 2: Local Events Intelligence is Disconnected from Must-Dos
+Stage 1.9 fetches local events via Perplexity (and correctly finds the U.S. Open), but this data is injected into the prompt with weak "incorporate if relevant" language. Meanwhile, the user's must-do text saying "U.S. Open" goes through a separate path. There is zero cross-referencing — the system never connects "user wants U.S. Open" with "U.S. Open is happening Aug 25-Sep 8."
 
-**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
+### Root Cause 3: No Duration-Aware Day Blocking
+The scheduling algorithm (`findBestDay`) treats everything as a slottable activity. It doesn't understand that an all-day event like a tennis tournament needs to BE the day — with meals and transit planned around it, not squeezed in alongside 5 other sightseeing stops.
 
-### Changes
+---
 
-#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
+## Plan
 
-**Change A — Remove stall detector setup** (lines ~261-313):
-Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
+### 1. Add Event Type Classification to Must-Do Parser
+**File:** `supabase/functions/generate-itinerary/must-do-priorities.ts`
 
-**Change B — Remove browser loop fallback** (lines ~455-469):
-Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
+Add an `EVENT_PATTERNS` dictionary that recognizes common event types by keyword matching:
+- **All-day events** (sporting events, festivals, conventions, theme parks): `us open, wimbledon, super bowl, coachella, comic-con, formula 1, world cup, olympics, disney, universal studios...` → duration 360-480 min, `activityType: 'all_day_event'`
+- **Half-day events** (concerts, shows, guided tours): `concert, broadway, show, opera, game...` → duration 180-240 min, `activityType: 'half_day_event'`  
+- **Quick stops** (historic sites, viewpoints, photo ops): `statue, monument, bridge, viewpoint...` → duration 30-90 min, `activityType: 'quick_stop'`
 
-```typescript
-// OLD:
-} catch (serverErr) {
-  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
-  const generatedDays = await generateItinerary({ ... });
-  // ... 40 lines of fallback logic
-}
+Update `parseItem()` to check `EVENT_PATTERNS` before `KNOWN_LANDMARKS`, setting correct `estimatedDuration` and a new `activityType` field on `MustDoPriority`.
 
-// NEW:
-} catch (serverErr) {
-  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
-  setPrePhase(null);
-  setHasStarted(false);
-  toast.error('Failed to start generation. Please try again.');
-  return;
-}
+### 2. Cross-Reference Must-Dos with Discovered Local Events
+**File:** `supabase/functions/generate-itinerary/index.ts` (around line 8420-8435)
+
+After both `localEventsContext` (Stage 1.9) and `mustDoActivities` (Stage 1.999) are available, add a cross-reference step:
+- For each parsed must-do item, fuzzy-match against `fetchedLocalEvents` names
+- If matched: inherit the event's dates, location, and type; promote to `priority: 'must'`; set `activityType` to `'all_day_event'` or `'half_day_event'` based on event type
+- Inject a stronger prompt section: "The user SPECIFICALLY requested [X] AND it is confirmed happening on [dates] at [location]. Dedicate Day N to this event."
+
+### 3. Duration-Aware Day Scheduling
+**File:** `supabase/functions/generate-itinerary/must-do-priorities.ts`
+
+Update `findBestDay()` and `buildMustDoPrompt()`:
+- If `activityType === 'all_day_event'`: assign the activity to a full day, mark that day as "event day" in the prompt, instruct AI to plan meals/transit around the event venue only
+- If `activityType === 'half_day_event'`: block morning or evening, let AI fill the other half
+- If `activityType === 'quick_stop'`: inject as "weave into nearest geographically convenient day"
+
+Update the prompt builder to emit type-specific instructions:
+```
+### 🏟️ ALL-DAY EVENT: U.S. Open (Day 3)
+This is an ALL-DAY commitment. Plan Day 3 ENTIRELY around this event:
+- Morning: Breakfast near venue, transit to USTA Billie Jean King National Tennis Center
+- 10:00-18:00: U.S. Open (main event)
+- Evening: Dinner near Flushing/Corona area
+- Do NOT schedule other sightseeing on this day
 ```
 
-**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
+### 4. Add "Anything Else" / Additional Notes to Generation Context
+**File:** `supabase/functions/generate-itinerary/index.ts`
 
-**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
+Check whether `trip.metadata` has an `additionalNotes` or similar field from the planner form. If so, inject it alongside `mustDoActivities` with explicit instructions that free-text trip purpose statements ("this trip is for the U.S. Open") should be treated as must-do anchors.
 
-#### File 2: `src/hooks/useItineraryGeneration.ts`
+---
 
-No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
-
-### Files to Modify
-
-| File | What |
-|------|------|
-| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
-
-### Risk Assessment
-- **Low risk**: The server-side self-chaining is already fully implemented and tested
-- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
-- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
+### Summary of Changes
+| File | Change |
+|------|--------|
+| `must-do-priorities.ts` | Add `EVENT_PATTERNS` dictionary, `activityType` field, duration-aware scheduling, type-specific prompt templates |
+| `generate-itinerary/index.ts` | Cross-reference must-dos with local events, inject `additionalNotes`, strengthen prompt for matched events |
 
