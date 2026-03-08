@@ -17,6 +17,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { sanitizeAIOutput } from '@/utils/textSanitizer';
 import { TripConfirmCard, type InterCityTransportMode } from './TripConfirmCard';
 import { resolveCities, type NormalizedCity } from '@/utils/cityNormalization';
+import { normalizeChatTripDates } from '@/utils/justTellUsDateGuard';
+import { parseLocalDate } from '@/utils/dateUtils';
 
 export interface ChatTripCity {
   name: string;
