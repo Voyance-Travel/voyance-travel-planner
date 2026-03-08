@@ -1963,6 +1963,7 @@ export default function TripDetail() {
                         </ErrorBoundary>
                       }
                       travelIntelCards={
+                        !isPastTripView ? (
                         <ErrorBoundary>
                           {tripCities.length > 1 ? (
                             tripCities.map((city) => (
@@ -1993,6 +1994,7 @@ export default function TripDetail() {
                             />
                           )}
                         </ErrorBoundary>
+                        ) : null
                       }
                       daysPlanned={editorDays.filter((d: any) => {
                         const acts = d.activities || [];
