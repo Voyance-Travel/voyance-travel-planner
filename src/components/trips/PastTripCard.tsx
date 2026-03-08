@@ -86,7 +86,7 @@ export function PastTripCard({ trip, index = 0 }: PastTripCardProps) {
         {/* Hero image */}
         <div
           className="relative h-44 sm:h-56 overflow-hidden cursor-pointer"
-          onClick={() => trip.hasItineraryData ? navigate(`/itinerary/${trip.id}`) : navigate(`/trip/${trip.id}`)}
+          onClick={() => navigate(`/trip/${trip.id}`)}
         >
           <img
             src={imageUrl}

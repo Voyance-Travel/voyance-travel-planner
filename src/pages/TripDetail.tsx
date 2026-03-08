@@ -1458,6 +1458,20 @@ export default function TripDetail() {
   }
 
   const isLiveTrip = trip.status === 'active';
+
+  // Redirect active trips (by status OR date window) to the dedicated ActiveTrip page
+  const isInDateWindow = (() => {
+    if (!trip.start_date || !trip.end_date) return false;
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const start = parseLocalDate(trip.start_date);
+    const end = parseLocalDate(trip.end_date);
+    return start <= today && end >= today;
+  })();
+
+  if (isLiveTrip || isInDateWindow) {
+    return <Navigate to={`/trip/${trip.id}/active`} replace />;
+  }
   // Detect past trips for read-only mode and hiding Travel Intel
   const itineraryDays = transformToItineraryDays();
 
