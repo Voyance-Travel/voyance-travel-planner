@@ -96,6 +96,26 @@ export default function GuideBuilder() {
     ? Math.ceil((new Date(trip.end_date).getTime() - new Date(trip.start_date).getTime()) / 86400000) + 1
     : null;
 
+  // Extract days and activities from trip itinerary_data
+  const tripDays = (() => {
+    const itData = trip?.itinerary_data as any;
+    const days = itData?.days || [];
+    return days.map((d: any) => ({
+      dayNumber: d.dayNumber || d.day_number || 0,
+      title: d.title || d.theme || `Day ${d.dayNumber || d.day_number}`,
+      activities: (d.activities || []).map((a: any, idx: number) => ({
+        id: a.id || a.external_id || `day${d.dayNumber || d.day_number}-act${idx}`,
+        name: a.title || a.name || 'Activity',
+        category: a.category || '',
+      })),
+    }));
+  })();
+
+  const itineraryDayNumbers: number[] = tripDays.map((d: any) => d.dayNumber).filter((n: number) => n > 0).sort((a: number, b: number) => a - b);
+  const itineraryActivities: { id: string; name: string }[] = tripDays.flatMap((d: any) =>
+    d.activities.map((a: any) => ({ id: a.id, name: `Day ${d.dayNumber}: ${a.name}` }))
+  );
+
   // Seed form
   useEffect(() => {
     if (existingGuide) {
@@ -666,8 +686,8 @@ export default function GuideBuilder() {
           }
         }}
         isPending={isAddingLink}
-        dayNumbers={[...dayGroups.keys()].filter(d => d > 0).sort()}
-        activities={allItems.filter(i => i.id).map(i => ({ id: i.id, name: i.name }))}
+        dayNumbers={itineraryDayNumbers.length > 0 ? itineraryDayNumbers : [...dayGroups.keys()].filter(d => d > 0).sort()}
+        activities={itineraryActivities.length > 0 ? itineraryActivities : allItems.filter(i => i.id).map(i => ({ id: i.id, name: i.name }))}
       />
     </MainLayout>
   );

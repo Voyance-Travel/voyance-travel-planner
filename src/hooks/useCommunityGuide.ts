@@ -57,7 +57,7 @@ export function useTripForGuide(tripId: string | undefined) {
       if (!tripId) return null;
       const { data } = await supabase
         .from('trips')
-        .select('id, name, destination, destination_country, start_date, end_date, travelers')
+        .select('id, name, destination, destination_country, start_date, end_date, travelers, itinerary_data')
         .eq('id', tripId)
         .maybeSingle();
       return data;
