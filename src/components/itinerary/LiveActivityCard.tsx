@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { openMapLocation } from '@/utils/mapNavigation';
 import { motion } from 'framer-motion';
 import { 
   Clock, MapPin, Check, Play, CircleDot, 
@@ -87,11 +88,18 @@ export function LiveActivityCard({
 
   const handleOpenMaps = () => {
     if (activity.location?.lat && activity.location?.lng) {
-      const url = `https://www.google.com/maps/dir/?api=1&destination=${activity.location.lat},${activity.location.lng}`;
-      window.open(url, '_blank');
+      openMapLocation({
+        name: activity.name,
+        lat: activity.location.lat,
+        lng: activity.location.lng,
+      });
     } else if (activity.location?.address) {
-      const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(activity.location.address)}`;
-      window.open(url, '_blank');
+      openMapLocation({
+        name: activity.name,
+        address: activity.location.address,
+      });
+    } else if (activity.location?.name) {
+      openMapLocation({ name: activity.location.name });
     }
     onGetDirections?.();
   };
