@@ -1309,6 +1309,20 @@ export default function TripDetail() {
 
         // Sync trip_cities nights/dates
         await syncCitiesAfterDateChange(result);
+
+        // After adding days, prompt user to generate content
+        if (daysAdded > 0) {
+          const totalDaysNow = days.length;
+          const newDayNumbers = insertPosition === 'before'
+            ? Array.from({ length: daysAdded }, (_, i) => i + 1)
+            : Array.from({ length: daysAdded }, (_, i) => totalDaysNow - daysAdded + i + 1);
+          setGenerateNewDaysPrompt({
+            open: true,
+            daysAdded,
+            insertPosition: insertPosition || 'after',
+            dayNumbers: newDayNumbers,
+          });
+        }
       }
     } catch (err) {
       console.error('[TripDetail] Date change error:', err);
