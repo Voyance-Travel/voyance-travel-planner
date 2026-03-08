@@ -66,7 +66,7 @@ export function TripStats({ tripId, tripDays }: TripStatsProps) {
     { icon: Utensils, value: stats.meals, label: 'Meals', color: 'text-orange-500' },
     { icon: MapPin, value: stats.neighborhoods, label: 'Neighborhoods', color: 'text-blue-500' },
     { icon: Camera, value: stats.photos, label: 'Photos', color: 'text-pink-500', show: stats.photos > 0 },
-    { icon: Footprints, value: `${Math.round(estimatedSteps / 1000)}k`, label: 'Steps (est.)', color: 'text-teal-500' },
+    { icon: Footprints, value: `${Math.round(estimatedSteps / 1000)}k`, label: 'Est. Walking', color: 'text-teal-500' },
   ].filter(item => item.show !== false);
 
   return (
