@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { ChevronDown } from 'lucide-react';
 import { 
   Search, DollarSign, MessageSquare, ExternalLink, 
   Clock, MapPin, Star, Sparkles, ArrowRightLeft, Check,
@@ -353,6 +354,22 @@ export default function CustomizationShowcase() {
             <FeatureCard key={feature.id} feature={feature} index={index} />
           ))}
         </div>
+
+        {/* Scroll to Why We Built This */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          className="flex justify-center mt-10 md:mt-14"
+        >
+          <button
+            onClick={() => document.getElementById('why-we-built')?.scrollIntoView({ behavior: 'smooth' })}
+            className="flex flex-col items-center gap-1 text-muted-foreground hover:text-foreground transition-colors group"
+          >
+            <span className="text-xs tracking-wide">See why travelers love it</span>
+            <ChevronDown className="w-4 h-4 animate-bounce group-hover:text-primary" />
+          </button>
+        </motion.div>
       </div>
     </section>
   );
