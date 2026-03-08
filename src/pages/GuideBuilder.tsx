@@ -11,6 +11,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
@@ -18,6 +20,7 @@ import { motion } from 'framer-motion';
 import {
   BookOpen, ArrowLeft, Trash2, Save, Globe, Loader2, MapPin,
   Copy, ExternalLink, EyeOff, PartyPopper, Plus, Eye, Calendar, Clock, Link2,
+  CheckSquare, XSquare,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -76,6 +79,9 @@ export default function GuideBuilder() {
   const [showPreview, setShowPreview] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editNoteValue, setEditNoteValue] = useState('');
+  const [selectedDays, setSelectedDays] = useState<Set<number>>(new Set());
+  const [excludedActivities, setExcludedActivities] = useState<Set<string>>(new Set());
+  const [sections, setSections] = useState<any[]>([]);
 
   // Content links (only available after guide is saved)
   const { contentLinks, addLink, deleteLink, isAdding: isAddingLink, isDeleting: isDeletingLink } = useGuideContentLinks(existingGuide?.id);
@@ -103,10 +109,14 @@ export default function GuideBuilder() {
     return days.map((d: any) => ({
       dayNumber: d.dayNumber || d.day_number || 0,
       title: d.title || d.theme || `Day ${d.dayNumber || d.day_number}`,
+      theme: d.theme || '',
       activities: (d.activities || []).map((a: any, idx: number) => ({
         id: a.id || a.external_id || `day${d.dayNumber || d.day_number}-act${idx}`,
         name: a.title || a.name || 'Activity',
+        title: a.title || a.name || 'Activity',
         category: a.category || '',
+        tips: a.tips || '',
+        photos: a.photos || [],
       })),
     }));
   })();
