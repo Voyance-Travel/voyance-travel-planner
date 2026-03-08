@@ -48,7 +48,7 @@ import { CreditEarningChecklist } from '@/components/common/CreditEarningCheckli
 import { useCredits, useRefreshCredits } from '@/hooks/useCredits';
 import { getTripStats, TripStats } from '@/services/userAPI';
 import { getArchetypeNarrative } from '@/data/archetypeNarratives';
-type TabType = 'overview' | 'trips' | 'friends' | 'subscription' | 'preferences' | 'agent';
+type TabType = 'overview' | 'trips' | 'friends' | 'following' | 'subscription' | 'preferences' | 'agent';
 
 // Use the centralized pricing config from src/config/pricing.ts
 // New pricing model: Day-based packages (Essential/Complete)
@@ -253,7 +253,7 @@ export default function Profile() {
   useEffect(() => {
     // Handle tab query param
     const tabParam = searchParams.get('tab');
-    if (tabParam && ['overview', 'trips', 'friends', 'subscription', 'preferences'].includes(tabParam)) {
+    if (tabParam && ['overview', 'trips', 'friends', 'following', 'subscription', 'preferences'].includes(tabParam)) {
       setActiveTab(tabParam as TabType);
     }
     
@@ -430,6 +430,7 @@ export default function Profile() {
     { id: 'trips' as const, label: 'My Trips' },
     // { id: 'agent' as const, label: 'My Agent' }, // Agent feature disabled
     { id: 'friends' as const, label: 'Friends' },
+    { id: 'following' as const, label: 'Following' },
     { id: 'subscription' as const, label: 'Credits' },
     { id: 'preferences' as const, label: 'Preferences' },
   ];
@@ -979,6 +980,10 @@ export default function Profile() {
               </p>
             </div>
           </motion.div>
+        )}
+
+        {activeTab === 'following' && (
+          <FollowingTab />
         )}
 
         {activeTab === 'preferences' && (
