@@ -80,8 +80,8 @@ export default function EditorialProgressTracker({
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
         <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between">
-          <div>
-            <h3 className="text-white font-serif text-xl font-semibold">{destination}</h3>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-white font-serif text-lg sm:text-xl font-semibold truncate">{destination}</h3>
             {dateInfo && (
               <p className="text-white/80 text-sm">
                 {dateInfo.range} · {dateInfo.nights} nights

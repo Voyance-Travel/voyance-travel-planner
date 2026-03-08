@@ -528,6 +528,24 @@ html.a11y-no-color-only [data-state="checked"] {
 }
 
 
+/* ── Mobile responsive safeguards ──────────────────────────────── */
+@media (max-width: 640px) {
+  html, body {
+    overflow-x: hidden;
+  }
+
+  input, select, textarea {
+    max-width: 100% !important;
+  }
+
+  /* Ensure dialogs don't overflow viewport */
+  [role="dialog"] {
+    max-width: 95vw !important;
+    max-height: 90vh !important;
+    overflow-y: auto;
+  }
+}
+
 @keyframes fadeInUp {
   from {
     opacity: 0;

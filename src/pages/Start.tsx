@@ -146,9 +146,9 @@ const sampleItineraries = [
 // Progress Step Indicator
 function StepIndicator({ currentStep, isMultiCity }: { currentStep: number; isMultiCity?: boolean }) {
   const steps = [
-    { label: 'Trip Details', step: 1 },
-    { label: isMultiCity ? 'Transport & Hotel' : 'Flight & Hotel', step: 2 },
-    { label: 'Fine-Tune', step: 3 },
+    { label: 'Trip Details', shortLabel: 'Details', step: 1 },
+    { label: isMultiCity ? 'Transport & Hotel' : 'Flight & Hotel', shortLabel: isMultiCity ? 'Transport' : 'Flight', step: 2 },
+    { label: 'Fine-Tune', shortLabel: 'Tune', step: 3 },
   ];
 
   return (
@@ -170,11 +170,12 @@ function StepIndicator({ currentStep, isMultiCity }: { currentStep: number; isMu
             </div>
             <span
               className={cn(
-                'text-[10px] sm:text-xs mt-1 font-medium whitespace-nowrap',
+                'text-[10px] sm:text-xs mt-1 font-medium',
                 currentStep === s.step ? 'text-primary' : 'text-muted-foreground'
               )}
             >
-              {s.label}
+              <span className="hidden xs:inline sm:inline">{s.label}</span>
+              <span className="inline xs:hidden sm:hidden">{s.shortLabel}</span>
             </span>
           </div>
           {idx < steps.length - 1 && (
