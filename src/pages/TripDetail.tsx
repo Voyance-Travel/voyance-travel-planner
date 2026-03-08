@@ -279,14 +279,22 @@ export default function TripDetail() {
 
     const meta = (trip.metadata as Record<string, unknown>) || {};
     const completedDays = (meta.generation_completed_days as number) || 0;
-    const totalDays = (meta.generation_total_days as number) || 0;
+    // Recompute expected days from canonical trip dates instead of trusting
+    // potentially stale/inflated metadata.generation_total_days
+    const canonicalTotalDays = trip.start_date && trip.end_date
+      ? differenceInDays(parseLocalDate(trip.end_date), parseLocalDate(trip.start_date)) + 1
+      : 0;
+    const metaTotalDays = (meta.generation_total_days as number) || 0;
+    // Use canonical date-derived count as source of truth; fall back to metadata only if dates are missing
+    const totalDays = canonicalTotalDays > 0 ? canonicalTotalDays : metaTotalDays;
 
     try {
-      // Reset status to generating with fresh heartbeat
+      // Reset status to generating with fresh heartbeat + normalize total days
       await supabase.from('trips').update({
         itinerary_status: 'generating',
         metadata: {
           ...meta,
+          generation_total_days: totalDays, // Normalize to canonical count
           generation_error: null,
           generation_heartbeat: new Date().toISOString(),
           generation_started_at: new Date().toISOString(),
@@ -697,18 +705,32 @@ export default function TripDetail() {
 
         // Self-heal: detect corrupted ready+partial state
         // If itinerary_status is 'ready' but day count < expected, trigger stalled/resume
+        // Also correct inflated metadata.generation_total_days from canonical dates
         if (tripData.itinerary_status === 'ready' || (tripData.itinerary_status as string) === 'generated') {
           const itinData = tripData.itinerary_data as { days?: unknown[] } | null;
           const actualDays = Math.max(itinData?.days?.length ?? 0, itineraryDaysDbCount);
           const meta = (tripData.metadata as Record<string, unknown>) || {};
-          let expectedTotal = (meta.generation_total_days as number) || 0;
-          if (expectedTotal <= 0 && tripData.start_date && tripData.end_date) {
+          // Always recompute from canonical dates first
+          let expectedTotal = 0;
+          if (tripData.start_date && tripData.end_date) {
             try {
               expectedTotal = differenceInDays(
                 parseLocalDate(tripData.end_date),
                 parseLocalDate(tripData.start_date)
               ) + 1;
             } catch { expectedTotal = 0; }
+          }
+          // Fall back to metadata only if dates don't yield a valid count
+          if (expectedTotal <= 0) {
+            expectedTotal = (meta.generation_total_days as number) || 0;
+          }
+          // Correct inflated metadata if it disagrees with canonical dates
+          const metaTotal = (meta.generation_total_days as number) || 0;
+          if (expectedTotal > 0 && metaTotal > 0 && metaTotal !== expectedTotal && tripId) {
+            console.warn(`[TripDetail] Self-heal: correcting metadata.generation_total_days from ${metaTotal} to ${expectedTotal}`);
+            supabase.from('trips').update({
+              metadata: { ...meta, generation_total_days: expectedTotal },
+            }).eq('id', tripId).then(() => {});
           }
           if (expectedTotal > 0 && actualDays > 0 && actualDays < expectedTotal) {
             console.warn(`[TripDetail] Self-heal: trip marked ready but only ${actualDays}/${expectedTotal} days. Triggering resume.`);
@@ -992,7 +1014,11 @@ export default function TripDetail() {
           return;
         }
       } catch (e) {
-        console.warn('[TripDetail] handleGenerationComplete guard check failed, proceeding:', e);
+        // FAIL-CLOSED: If we can't verify day count, do NOT finalize as ready.
+        // Trigger stalled/resume so the user can retry safely.
+        console.warn('[TripDetail] handleGenerationComplete guard check failed — failing closed, triggering resume:', e);
+        setGenerationStalled(true);
+        return;
       }
     }
 
@@ -1400,15 +1426,18 @@ export default function TripDetail() {
   const isLiveTrip = trip.status === 'active';
   const itineraryDays = transformToItineraryDays();
 
-  // Compute effective end date: if itinerary has more days than start_date→end_date suggests,
-  // derive end_date from start_date + (numDays - 1) to fix stale/incorrect end_date values
+  // Compute effective end date: if itinerary has more REAL days than the stored
+  // date range, derive end_date from start_date + (numDays - 1).
+  // IMPORTANT: Use inclusive day count (differenceInDays + 1) for comparison,
+  // and only correct when itinerary has real activities (not placeholder scaffolding).
   const effectiveEndDate = (() => {
-    const storedDayCount = differenceInDays(parseLocalDate(trip.end_date), parseLocalDate(trip.start_date));
-    const itineraryDayCount = itineraryDays.length;
-    if (itineraryDayCount > 1 && itineraryDayCount > storedDayCount) {
+    const storedDayCountInclusive = differenceInDays(parseLocalDate(trip.end_date), parseLocalDate(trip.start_date)) + 1;
+    // Only count days that have at least one activity (not empty placeholders)
+    const realDayCount = itineraryDays.filter(d => d.activities && d.activities.length > 0).length;
+    if (realDayCount > 1 && realDayCount > storedDayCountInclusive) {
       const start = parseLocalDate(trip.start_date);
       const corrected = new Date(start);
-      corrected.setDate(corrected.getDate() + itineraryDayCount);
+      corrected.setDate(corrected.getDate() + realDayCount - 1); // -1 because inclusive
       return format(corrected, 'yyyy-MM-dd');
     }
     return trip.end_date;
@@ -1570,7 +1599,7 @@ export default function TripDetail() {
               destination={trip.destination}
               destinationCountry={trip.destination_country || undefined}
               startDate={trip.start_date}
-              endDate={effectiveEndDate}
+              endDate={trip.end_date}
               travelers={trip.travelers || 1}
               tripType={trip.trip_type || undefined}
               budgetTier={trip.budget_tier || undefined}

@@ -1,68 +1,63 @@
 
-You’re absolutely right — the current behavior proves the previous fix was incomplete. I traced this to two concrete regressions and one missing safeguard.
 
-## What I confirmed from code + data
+## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
 
-1) **Overcharge to 5 days is real and reproducible in data**
-- Recent trips have `start_date=2026-04-10`, `end_date=2026-04-13` (4 inclusive days) but `metadata.generation_total_days=5`.
-- This is coming from `TripDetail.tsx` passing an inflated `effectiveEndDate` into `ItineraryGenerator`.
+### What's Already Working (No Changes Needed)
+- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
+- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
+- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
+- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
 
-2) **Why `effectiveEndDate` inflates by +1**
-- In `TripDetail.tsx`, current correction logic compares:
-  - `storedDayCount = differenceInDays(end,start)` (nights)
-  - `itineraryDayCount` (days)
-- Then it sets corrected end date using `+ itineraryDayCount` instead of `+ (itineraryDayCount - 1)`.
-- Because placeholder day arrays are created even before generation, this correction is triggered too early and pushes end date forward by one day.
+### What's Broken — Two Things
 
-3) **Why trips are ending “ready” with only 1 day**
-- `handleGenerationComplete` in `TripDetail.tsx` is still fail-open on guard errors (catch path proceeds to write `itinerary_status='ready'`).
-- In production data, I can see trips with `itinerary_status='ready'`, `generation_total_days=5`, but only 1–2 days actually stored.
+**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
 
-## Implementation plan
+**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
 
-### 1) Stop day drift at source in `TripDetail.tsx`
-- Fix `effectiveEndDate` calculation:
-  - Use inclusive stored days (`differenceInDays + 1`) for comparison.
-  - Only correct end date when there are **real generated days**, not placeholder empty-day scaffolding.
-  - If correcting, compute with `start + (itineraryDayCount - 1)`.
-- For generation specifically, pass canonical `trip.end_date` to `ItineraryGenerator` (not derived display date).
+### Changes
 
-### 2) Make completion finalization fail-closed in `TripDetail.tsx`
-- Harden `handleGenerationComplete`:
-  - Compute `expectedTotalDays` from metadata, fallback to inclusive date range.
-  - Compute `actualDays` from max of:
-    - `generatedDays.length`
-    - `itinerary_days` table count
-    - existing `trips.itinerary_data.days.length`
-  - Only persist `itinerary_status='ready'` when `actualDays >= expectedTotalDays`.
-- If validation query fails, do **not** finalize; set stalled/resume state instead.
+#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
 
-### 3) Fix resume path to avoid propagating wrong totals
-- In `handleResumeGeneration`, don’t trust stale `metadata.generation_total_days` blindly.
-- Recompute expected days from canonical trip dates (and keep multi-city-safe behavior if needed), then use that for `requestedDays`.
-- Optionally normalize metadata total days before resuming so poller/UI denominator is corrected.
+**Change A — Remove stall detector setup** (lines ~261-313):
+Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
 
-### 4) Self-heal already-corrupted trips
-- On trip load, if `itinerary_status='ready'` but `actual < expected`, keep existing stalled behavior but also:
-  - recompute expected days from canonical dates,
-  - correct inconsistent metadata denominator where safe,
-  - route user into resume instead of rendering as complete.
+**Change B — Remove browser loop fallback** (lines ~455-469):
+Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
 
-## Files to update
-- `src/pages/TripDetail.tsx` (primary; all fixes above)
-- (Only if needed after code review) `src/components/itinerary/ItineraryGenerator.tsx` for an extra defensive check around completion callback path
+```typescript
+// OLD:
+} catch (serverErr) {
+  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
+  const generatedDays = await generateItinerary({ ... });
+  // ... 40 lines of fallback logic
+}
 
-## Validation plan (focused on your exact report)
+// NEW:
+} catch (serverErr) {
+  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
+  setPrePhase(null);
+  setHasStarted(false);
+  toast.error('Failed to start generation. Please try again.');
+  return;
+}
+```
 
-1) Create a **3-night / 4-day** single-city trip (Apr 10–13).
-2) In generator confirmation:
-- day chip and cost breakdown both show 4 days.
-3) Trigger generation:
-- charge reflects 4 days, not 5.
-4) During generation:
-- if interrupted after day 1, trip does **not** get finalized as ready.
-- UI shows stalled/resume with correct denominator (4).
-5) Resume:
-- continues from next day and completes all 4 days.
-6) Regression check:
-- open previously corrupted trip(s) showing ready+partial; confirm auto-detect and resume instead of fake completion.
+**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
+
+**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
+
+#### File 2: `src/hooks/useItineraryGeneration.ts`
+
+No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
+
+### Files to Modify
+
+| File | What |
+|------|------|
+| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
+
+### Risk Assessment
+- **Low risk**: The server-side self-chaining is already fully implemented and tested
+- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
+- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
+
