@@ -42,12 +42,28 @@ const INTELLIGENCE_LAYERS = [
   { icon: Brain, label: "Learning loop", description: "Gets smarter from every trip rated" },
 ];
 
-// Real metrics from actual database
-const REAL_METRICS = {
-  tripsBuilt: 114,           // Total trips created
-  archetypesAvailable: 29,   // Our complete archetype system
-  destinations: 2246,        // Destinations in our database
+// Fallback metrics (used while loading)
+const FALLBACK_METRICS = {
+  tripsBuilt: 114,
+  destinations: 2246,
 };
+
+function usePlatformMetrics() {
+  return useQuery({
+    queryKey: ['platform-metrics-home'],
+    queryFn: async () => {
+      const [tripsRes, destRes] = await Promise.all([
+        supabase.from('trips').select('id', { count: 'exact', head: true }),
+        supabase.from('destinations').select('id', { count: 'exact', head: true }),
+      ]);
+      return {
+        tripsBuilt: tripsRes.count ?? FALLBACK_METRICS.tripsBuilt,
+        destinations: destRes.count ?? FALLBACK_METRICS.destinations,
+      };
+    },
+    staleTime: 60_000 * 5, // 5 minutes
+  });
+}
 
 function TestimonialCard({ testimonial }: { testimonial: typeof BETA_TESTIMONIALS[0] }) {
   return (
