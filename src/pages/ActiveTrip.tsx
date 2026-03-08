@@ -13,7 +13,7 @@ import { openMapLocation } from '@/utils/mapNavigation';
 import {
   ArrowLeft, Calendar, MapPin, Clock, ChevronRight, Sun, Moon,
   Coffee, Sunrise, Sunset, Navigation, Ticket, Bookmark,
-  QrCode, Copy, Check, ExternalLink, Sparkles, AlertCircle
+  QrCode, Copy, Check, ExternalLink, Sparkles, AlertCircle, Pencil
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -39,7 +39,7 @@ import { GuideBookmarkButton } from '@/components/guides/GuideBookmarkButton';
 import { MemoriesTimeline } from '@/components/memories/MemoriesTimeline';
 import { ActiveTripStats } from '@/components/trips/ActiveTripStats';
 import TripChat from '@/components/chat/TripChat';
-import { MidTripDNA } from '@/components/trips/MidTripDNA';
+import { MidTripDNA as DailyBriefing } from '@/components/trips/MidTripDNA';
 import type { ItineraryActivity as DrawerItineraryActivity } from '@/types/itinerary';
 import { ActivityMediaCapture } from '@/components/feedback/ActivityMediaCapture';
 import { useFeedbackTrigger } from '@/hooks/useFeedbackTrigger';
