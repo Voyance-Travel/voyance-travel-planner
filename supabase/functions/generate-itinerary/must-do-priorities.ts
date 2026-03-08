@@ -536,6 +536,34 @@ function getTimeForPreference(pref?: 'morning' | 'afternoon' | 'evening' | 'any'
   }
 }
 
+/** Compute the blocked start/end times for an all-day or half-day event */
+export function getBlockedTimeRange(s: ScheduledMustDo): { blockedStart: string; blockedEnd: string } {
+  const startTime = s.assignedTime || getTimeForPreference(s.priority.preferredTime);
+  const durationMins = s.priority.estimatedDuration || (s.priority.activityType === 'all_day_event' ? 480 : 180);
+  const startMins = parseHHMM(startTime);
+  const endMins = Math.min(startMins + durationMins, 23 * 60 + 30); // cap at 23:30
+  return { blockedStart: startTime, blockedEnd: minsToHHMM(endMins) };
+}
+
+function parseHHMM(time: string): number {
+  const [h, m] = time.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+function minsToHHMM(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function subtractMinutes(time: string, mins: number): string {
+  return minsToHHMM(Math.max(parseHHMM(time) - mins, 0));
+}
+
+function addMinutes(time: string, mins: number): string {
+  return minsToHHMM(Math.min(parseHHMM(time) + mins, 23 * 60 + 59));
+}
+
 // =============================================================================
 // PROMPT BUILDER
 // =============================================================================
