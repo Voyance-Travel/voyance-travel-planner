@@ -1,14 +1,13 @@
 /**
- * iOS In-App Purchase Service (StoreKit 2 via Capacitor)
+ * iOS In-App Purchase Service (StoreKit 2 via @capgo/native-purchases)
  * 
  * Handles native IAP on iOS. On web or Android, falls back to Stripe.
- * Uses @capawesome/capacitor-in-app-purchases for StoreKit 2 integration.
  */
 
 import { Capacitor } from '@capacitor/core';
 
 // Lazy-loaded native module
-let InAppPurchasesModule: any = null;
+let NativePurchasesModule: any = null;
 let initialized = false;
 
 // Apple IAP Product IDs — must match App Store Connect products
@@ -61,22 +60,14 @@ export async function initializeIAP(): Promise<void> {
   if (!isIAPAvailable() || initialized) return;
 
   try {
-    const mod = await import('@capawesome/capacitor-in-app-purchases');
-    InAppPurchasesModule = mod.InAppPurchases;
+    const mod = await import('@capgo/native-purchases');
+    NativePurchasesModule = mod.NativePurchases;
 
-    await InAppPurchasesModule.initialize();
-
-    // Listen for purchase updates
-    InAppPurchasesModule.addListener('purchaseUpdated', async (purchase: any) => {
-      console.log('[IAP] Purchase updated:', purchase.transactionState, purchase.productId);
-
-      if (purchase.transactionState === 'purchased' || purchase.transactionState === 1) {
-        await validateAndFulfill(purchase);
-      }
-    });
+    // Initialize the plugin
+    await NativePurchasesModule.initialize();
 
     initialized = true;
-    console.log('[IAP] StoreKit 2 initialized');
+    console.log('[IAP] StoreKit 2 initialized via @capgo/native-purchases');
   } catch (err) {
     console.error('[IAP] Failed to initialize:', err);
   }
@@ -86,12 +77,12 @@ export async function initializeIAP(): Promise<void> {
  * Get available products from the App Store
  */
 export async function getProducts(): Promise<any[]> {
-  if (!isIAPAvailable() || !InAppPurchasesModule) return [];
+  if (!isIAPAvailable() || !NativePurchasesModule) return [];
 
   try {
-    const { products } = await InAppPurchasesModule.getProducts({
-      productIds: Object.values(IAP_PRODUCTS),
-      productType: 'consumable',
+    const { products } = await NativePurchasesModule.getProducts({
+      productIdentifiers: Object.values(IAP_PRODUCTS),
+      productType: 'inapp', // consumable
     });
     return products || [];
   } catch (err) {
@@ -101,28 +92,40 @@ export async function getProducts(): Promise<any[]> {
 }
 
 /**
- * Purchase a product by Apple product ID
+ * Purchase a product by Apple product ID.
  * Returns { success, error?, credits? }
  */
 export async function purchaseProduct(
   productId: string
 ): Promise<{ success: boolean; error?: string; credits?: number }> {
-  if (!isIAPAvailable() || !InAppPurchasesModule) {
+  if (!isIAPAvailable() || !NativePurchasesModule) {
     return { success: false, error: 'In-App Purchases not available' };
   }
 
   try {
-    await InAppPurchasesModule.purchaseProduct({
-      productId,
-      productType: 'consumable',
+    const result = await NativePurchasesModule.purchaseProduct({
+      productIdentifier: productId,
+      productType: 'inapp',
     });
 
-    // Purchase result comes through the listener, but we return optimistically
+    // Validate receipt server-side
+    if (result?.transactionId) {
+      await validateAndFulfill({
+        receipt: result.receipt || result.receiptData,
+        productId,
+        transactionId: result.transactionId,
+      });
+    }
+
     const credits = PRODUCT_CREDITS[productId] || 0;
     return { success: true, credits };
   } catch (err: any) {
     // User cancelled
-    if (err?.code === 'USER_CANCELLED' || err?.message?.includes('cancel')) {
+    if (
+      err?.code === 'USER_CANCELLED' ||
+      err?.code === 'PAYMENT_CANCELLED' ||
+      err?.message?.toLowerCase()?.includes('cancel')
+    ) {
       return { success: false, error: 'cancelled' };
     }
     console.error('[IAP] Purchase error:', err);
@@ -146,15 +149,19 @@ export async function purchaseByPackId(
 /**
  * Validate receipt server-side and fulfill credits
  */
-async function validateAndFulfill(purchase: any): Promise<void> {
+async function validateAndFulfill(purchase: {
+  receipt?: string;
+  productId: string;
+  transactionId: string;
+}): Promise<void> {
   try {
     const { supabase } = await import('@/integrations/supabase/client');
 
     const { data, error } = await supabase.functions.invoke('validate-iap-receipt', {
       body: {
-        receiptData: purchase.receipt || purchase.receiptData,
+        receiptData: purchase.receipt,
         productId: purchase.productId,
-        transactionId: purchase.transactionId || purchase.transactionIdentifier,
+        transactionId: purchase.transactionId,
       },
     });
 
@@ -166,10 +173,12 @@ async function validateAndFulfill(purchase: any): Promise<void> {
     if (data?.success) {
       console.log('[IAP] Credits fulfilled:', data.credits);
 
-      // Finish the transaction
-      await InAppPurchasesModule.finishTransaction({
-        transactionId: purchase.transactionId || purchase.transactionIdentifier,
-      });
+      // Finish the transaction so Apple knows we've processed it
+      if (NativePurchasesModule?.finishTransaction) {
+        await NativePurchasesModule.finishTransaction({
+          transactionIdentifier: purchase.transactionId,
+        });
+      }
     }
   } catch (err) {
     console.error('[IAP] Validate & fulfill error:', err);
