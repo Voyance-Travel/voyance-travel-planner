@@ -4168,7 +4168,7 @@ export function EditorialItinerary({
                     onClick={() => setVersionHistoryOpen(true)}
                     className="gap-1.5 text-xs"
                   >
-                    <History className="h-4 w-4" />
+                    <HistoryIcon className="h-4 w-4" />
                     <span className="hidden sm:inline">History</span>
                   </Button>
                   <span className="text-xs text-muted-foreground">
