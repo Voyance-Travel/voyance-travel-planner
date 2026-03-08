@@ -4207,7 +4207,7 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     premium: 300,
     luxury: 500
   };
-  context.dailyBudget = budgetMap[context.budgetTier || 'standard'] || 150;
+   context.dailyBudget = budgetMap[context.budgetTier || 'standard'] || 150;
 
   // Override with ACTUAL user-set budget if available
   const budgetTotalCents = trip.budget_total_cents;
@@ -4227,6 +4227,9 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     console.log(`[Stage 1] User budget: $${budgetTotalCents / 100} total, $${actualDailyPerPerson}/day/person for activities (after flight=$${flightCents / 100}, hotel=$${hotelCents / 100})`);
   }
 
+  // Store tripCities ref for per-city budget override (populated later in multi-city block)
+  let resolvedTripCities: any[] | null = null;
+
   // =========================================================================
   // MULTI-CITY SUPPORT: Build day→city mapping from destinations or trip_cities
   // =========================================================================
@@ -4244,6 +4247,7 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
         .order('city_order', { ascending: true });
       
       if (tripCities && tripCities.length >= 2) {
+        resolvedTripCities = tripCities; // Store for per-city budget override
         const dayMap: MultiCityDayInfo[] = [];
         for (let i = 0; i < tripCities.length; i++) {
           const city = tripCities[i];
@@ -4285,6 +4289,27 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
         context.multiCityDayMap = dayMap.slice(0, totalDays);
         tripCitiesResolved = true;
         console.log(`[Stage 1] Multi-city day map (from trip_cities): ${context.multiCityDayMap.map(d => `${d.cityName}${d.isTransitionDay ? '(T)' : ''}`).join(' → ')}`);
+
+        // ─── PER-CITY BUDGET OVERRIDE ───
+        if (budgetTotalCents && budgetTotalCents > 0 && resolvedTripCities) {
+          // Build a city-name → daily budget map for use in day generation
+          const perCityDailyBudget: Record<string, number> = {};
+          const travelers = context.travelers || 1;
+          for (const city of resolvedTripCities) {
+            const allocatedCents = (city as any).allocated_budget_cents;
+            if (allocatedCents && allocatedCents > 0) {
+              const cityNights = city.nights || city.days_total || 1;
+              const cityHotelCents = city.hotel_cost_cents || 0;
+              const cityActivityBudgetCents = Math.max(0, allocatedCents - cityHotelCents);
+              const dailyPerPerson = Math.round(cityActivityBudgetCents / cityNights / travelers) / 100;
+              perCityDailyBudget[city.city_name] = dailyPerPerson;
+              console.log(`[Stage 1] City "${city.city_name}" budget: $${(allocatedCents/100).toFixed(2)} total, $${dailyPerPerson}/day/person for activities`);
+            }
+          }
+          if (Object.keys(perCityDailyBudget).length > 0) {
+            context.perCityDailyBudget = perCityDailyBudget;
+          }
+        }
       }
     } catch (e) {
       console.warn(`[Stage 1] Failed to query trip_cities, falling back to destinations JSONB:`, e);
@@ -10629,6 +10654,27 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
             const activityBudgetCents = Math.max(0, tripBudgetData.budget_total_cents - flightCents - hotelCents);
             actualDailyBudgetPerPerson = Math.round(activityBudgetCents / days / trav) / 100;
             console.log(`[generate-day] Real budget: $${tripBudgetData.budget_total_cents / 100} total → $${actualDailyBudgetPerPerson}/day/person for activities`);
+
+            // ─── PER-CITY BUDGET OVERRIDE ───
+            if (resolvedDestination && tripId) {
+              try {
+                const { data: cityRow } = await supabase
+                  .from('trip_cities')
+                  .select('allocated_budget_cents, hotel_cost_cents, nights, days_total')
+                  .eq('trip_id', tripId)
+                  .eq('city_name', resolvedDestination)
+                  .maybeSingle();
+                if (cityRow?.allocated_budget_cents && cityRow.allocated_budget_cents > 0) {
+                  const cityNights = cityRow.nights || cityRow.days_total || 1;
+                  const cityHotelCents = cityRow.hotel_cost_cents || 0;
+                  const cityActivityCents = Math.max(0, cityRow.allocated_budget_cents - cityHotelCents);
+                  actualDailyBudgetPerPerson = Math.round(cityActivityCents / cityNights / trav) / 100;
+                  console.log(`[generate-day] Per-city budget override for "${resolvedDestination}": $${(cityRow.allocated_budget_cents/100).toFixed(2)} allocated → $${actualDailyBudgetPerPerson}/day/person`);
+                }
+              } catch (e) {
+                console.warn('[generate-day] Failed to fetch per-city budget:', e);
+              }
+            }
           }
         } catch (e) {
           console.warn('[generate-day] Failed to fetch budget:', e);

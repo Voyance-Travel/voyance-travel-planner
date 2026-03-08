@@ -1,0 +1,1 @@
+ALTER TABLE trip_cities ADD COLUMN IF NOT EXISTS allocated_budget_cents INTEGER DEFAULT 0;

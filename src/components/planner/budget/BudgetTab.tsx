@@ -28,7 +28,7 @@ import {
   Hotel,
   AlertTriangle,
 } from 'lucide-react';
-import { JourneyBudgetSummary } from './JourneyBudgetSummary';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -37,12 +37,14 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { useTripBudget } from '@/hooks/useTripBudget';
+import { JourneyBudgetSummary } from './JourneyBudgetSummary';
 import { BudgetSetupDialog } from './BudgetSetupDialog';
 import { BudgetWarning } from './BudgetWarning';
 import { BudgetCoach, type BudgetSuggestion } from './BudgetCoach';
 import { useTripMembers } from '@/services/tripBudgetAPI';
 import { useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import type { BudgetCategory } from '@/services/tripBudgetService';
+import { getCityBudgetBreakdown } from '@/services/tripBudgetService';
 
 interface ItineraryActivity {
   id: string;
@@ -178,6 +180,13 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     syncFromItinerary,
     refetch,
   } = useTripBudget({ tripId, totalDays, enabled: true });
+
+  // Per-city budget breakdown for multi-city trips
+  const { data: cityBudgets } = useQuery({
+    queryKey: ['cityBudgetBreakdown', tripId],
+    queryFn: () => getCityBudgetBreakdown(tripId),
+    enabled: !!tripId && hasBudget,
+  });
 
   // Auto-sync itinerary costs to budget ledger when days are provided
   useEffect(() => {
@@ -501,6 +510,43 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           </div>
         </CardContent>
       </Card>
+
+      {/* Multi-City Budget Breakdown */}
+      {cityBudgets && cityBudgets.length > 1 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-medium flex items-center gap-2">
+              <PieChart className="h-4 w-4" />
+              Budget by City
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {cityBudgets.map(city => {
+              const usedPercent = city.allocatedBudgetCents > 0
+                ? Math.min((city.spentCents / city.allocatedBudgetCents) * 100, 100)
+                : 0;
+              const isOver = city.remainingCents < 0;
+              return (
+                <div key={city.cityId} className="p-3 rounded-lg border bg-card">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-sm font-medium">{city.cityName}</span>
+                    <span className={cn("text-xs", isOver ? "text-destructive" : "text-muted-foreground")}>
+                      {isOver ? 'Over by ' : ''}{formatCurrency(Math.abs(city.remainingCents))} {isOver ? '' : 'remaining'}
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mb-2">
+                    {city.nights} night{city.nights !== 1 ? 's' : ''} — {formatCurrency(city.allocatedBudgetCents)} allocated
+                  </div>
+                  <Progress
+                    value={usedPercent}
+                    className="h-1.5"
+                  />
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Recent Expenses */}
       {ledger.length > 0 && (
