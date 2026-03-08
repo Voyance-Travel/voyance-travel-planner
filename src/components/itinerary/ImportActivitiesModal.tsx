@@ -26,6 +26,7 @@ interface ParsedActivity {
   location?: { name?: string; address?: string };
   cost?: { amount: number; currency: string };
   included: boolean;
+  isEstimatedTime?: boolean;
 }
 
 interface ParsedGroup {
@@ -72,8 +73,9 @@ interface ImportActivitiesModalProps {
 // PARSING UTILITIES
 // =============================================================================
 
-const TIME_PATTERN = /(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/gi;
-const TIME_RANGE_PATTERN = /(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*[-–—to]+\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i;
+// Requires either :MM portion, or am/pm, or both — bare digits alone won't match
+const TIME_PATTERN = /(\d{1,2}:\d{2}\s*(?:am|pm)?|\d{1,2}\s*(?:am|pm))/gi;
+const TIME_RANGE_PATTERN = /(\d{1,2}:\d{2}\s*(?:am|pm)?|\d{1,2}\s*(?:am|pm))\s*[-–—to]+\s*(\d{1,2}:\d{2}\s*(?:am|pm)?|\d{1,2}\s*(?:am|pm))/i;
 const COST_PATTERN = /[~≈]?[$€£¥]\s*(\d+(?:\.\d{2})?)/;
 
 /** Detect "Day 1", "Day 2", "## Day 3", etc. */
@@ -113,11 +115,8 @@ function normalizeTime(raw: string): string | undefined {
     if (match12[3] === 'am' && h === 12) h = 0;
     return `${h.toString().padStart(2, '0')}:${m}`;
   }
-  const matchNum = cleaned.match(/^(\d{1,2})$/);
-  if (matchNum) {
-    const h = parseInt(matchNum[1]);
-    if (h <= 23) return `${h.toString().padStart(2, '0')}:00`;
-  }
+  // No longer match bare numbers — require :MM or am/pm
+  return undefined;
   return undefined;
 }
 
