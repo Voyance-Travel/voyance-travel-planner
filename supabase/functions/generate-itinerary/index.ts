@@ -2906,7 +2906,7 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
   try {
     const { data: trip, error } = await supabase
       .from('trips')
-      .select('flight_selection, hotel_selection, is_multi_city, flight_intelligence')
+      .select('flight_selection, hotel_selection, is_multi_city, flight_intelligence, journey_id')
       .eq('id', tripId)
       .maybeSingle();
 
@@ -3125,7 +3125,8 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
     }
     
     // Multi-city fallback: read from trip_cities if trips.hotel_selection is empty
-    if (!hotel && trip.is_multi_city) {
+    // Also check journey legs — they have is_multi_city=false but may still have trip_cities hotel data
+    if (!hotel && (trip.is_multi_city || trip.journey_id)) {
       try {
         const { data: tripCities } = await supabase
           .from('trip_cities')
@@ -13032,6 +13033,42 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         }
       }
 
+      // ─── JOURNEY LEG TRANSITION DETECTION ───
+      // Journey-split legs have is_multi_city=false but may need transition day
+      // context for day 1 (arriving from previous leg's city).
+      let journeyTransitionInfo: { isTransitionDay: boolean; transitionFrom?: string; transitionTo?: string; transportType?: string } | null = null;
+      if (!isMultiCity && dayNumber === 1) {
+        try {
+          const { data: tripRow } = await supabase
+            .from('trips')
+            .select('journey_id, journey_order, transition_mode, transition_departure_time, transition_arrival_time, destination')
+            .eq('id', tripId)
+            .single();
+
+          if (tripRow?.journey_id && tripRow.journey_order && tripRow.journey_order > 1) {
+            // Find the previous leg to get the origin city
+            const { data: prevLeg } = await supabase
+              .from('trips')
+              .select('destination')
+              .eq('journey_id', tripRow.journey_id)
+              .eq('journey_order', tripRow.journey_order - 1)
+              .single();
+
+            if (prevLeg?.destination) {
+              journeyTransitionInfo = {
+                isTransitionDay: true,
+                transitionFrom: prevLeg.destination,
+                transitionTo: tripRow.destination || destination,
+                transportType: tripRow.transition_mode || undefined,
+              };
+              console.log(`[generate-trip-day] Journey leg ${tripRow.journey_order}: transition from ${prevLeg.destination} via ${tripRow.transition_mode || 'unknown'}`);
+            }
+          }
+        } catch (e) {
+          console.warn('[generate-trip-day] Could not resolve journey transition context:', e);
+        }
+      }
+
       const cityInfo = dayCityMap?.[dayNumber - 1];
 
       // Load existing days from itinerary_data (for context)
@@ -13106,11 +13143,11 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
               budgetTier: budgetTier || 'moderate',
               userId,
               previousDayActivities: previousActivities,
-              isMultiCity: isMultiCity || false,
-              isTransitionDay: cityInfo?.isTransitionDay || false,
-              transitionFrom: cityInfo?.transitionFrom,
-              transitionTo: cityInfo?.transitionTo,
-              transitionMode: cityInfo?.transportType,
+              isMultiCity: isMultiCity || !!journeyTransitionInfo,
+              isTransitionDay: cityInfo?.isTransitionDay || journeyTransitionInfo?.isTransitionDay || false,
+              transitionFrom: cityInfo?.transitionFrom || journeyTransitionInfo?.transitionFrom,
+              transitionTo: cityInfo?.transitionTo || journeyTransitionInfo?.transitionTo,
+              transitionMode: cityInfo?.transportType || journeyTransitionInfo?.transportType,
             }),
           });
 
