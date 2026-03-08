@@ -1,35 +1,63 @@
 
 
-## Problem
+## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
 
-Transport activities (e.g. "Private car to MoMO") are rendered as compact inline rows that have two issues:
+### What's Already Working (No Changes Needed)
+- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
+- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
+- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
+- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
 
-1. **Mobile: action button is invisible.** The `...` menu uses `opacity-0 group-hover/activity:opacity-100`, but the parent `div` doesn't have the `group/activity` class, AND hover doesn't work on touch devices. Result: the remove button literally cannot be reached on mobile.
+### What's Broken — Two Things
 
-2. **Desktop: only Remove in menu, no Edit.** Even when you can hover to reveal the `...` button on desktop, the dropdown only contains "Remove" — no "Edit Details", no "Move Up/Down", no "Move to Day".
+**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
 
-3. **Travel Summary cards** (synthetic inter-city transport) have zero action buttons at all — no way to remove or edit them.
+**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
 
-## Plan
+### Changes
 
-### Fix 1: Make transport row actions accessible on mobile and add full action set
+#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
 
-**File:** `src/components/itinerary/EditorialItinerary.tsx` (lines 8281-8336)
+**Change A — Remove stall detector setup** (lines ~261-313):
+Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
 
-- Add `group/activity` class to the transport row wrapper so hover detection works on desktop
-- Make the `...` button always visible on mobile (`sm:opacity-0 sm:group-hover/activity:opacity-100` instead of `opacity-0 group-hover/activity:opacity-100`)
-- Add Edit and Move options to the dropdown menu (matching what regular activities get): Edit Details, Move Up, Move Down, Move to Day, Remove
+**Change B — Remove browser loop fallback** (lines ~455-469):
+Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
 
-### Fix 2: Add action menu to Travel Summary cards
+```typescript
+// OLD:
+} catch (serverErr) {
+  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
+  const generatedDays = await generateItinerary({ ... });
+  // ... 40 lines of fallback logic
+}
 
-**File:** `src/components/itinerary/EditorialItinerary.tsx` (lines 7717-7763)
+// NEW:
+} catch (serverErr) {
+  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
+  setPrePhase(null);
+  setHasStarted(false);
+  toast.error('Failed to start generation. Please try again.');
+  return;
+}
+```
 
-- Add a `...` dropdown in the top-right of the travel summary card with Remove action
-- This lets users delete synthetic inter-city transport cards they don't want
+**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
 
-### Files Modified
+**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
 
-| File | Change |
-|------|--------|
-| `src/components/itinerary/EditorialItinerary.tsx` | Fix transport row action visibility on mobile, add full action menu (edit/move/remove), add remove action to travel summary cards |
+#### File 2: `src/hooks/useItineraryGeneration.ts`
+
+No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
+
+### Files to Modify
+
+| File | What |
+|------|------|
+| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
+
+### Risk Assessment
+- **Low risk**: The server-side self-chaining is already fully implemented and tested
+- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
+- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
 
