@@ -4,13 +4,13 @@
  */
 
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
   MapPin, Calendar, Users, Star, Heart, Share2, 
   Camera, MessageSquare, ChevronRight, Download,
   Sparkles, ArrowLeft, Plus, BookmarkPlus, Image as ImageIcon,
-  ThumbsUp, ThumbsDown
+  ThumbsUp, ThumbsDown, BookOpen
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,6 +29,7 @@ import { format, differenceInDays, parseISO } from 'date-fns';
 
 export default function TripRecap() {
   const { tripId } = useParams<{ tripId: string }>();
+  const navigate = useNavigate();
   const { data: trip, isLoading: tripLoading } = useTrip(tripId);
   const { photos } = useTripPhotos(tripId || '');
   const { data: learning } = useTripLearning(tripId || '');
@@ -368,6 +369,14 @@ export default function TripRecap() {
                 Share Feedback
               </Button>
             )}
+            <Button 
+              variant="outline"
+              className="flex-1"
+              onClick={() => navigate(`/trip/${tripId}/travel-guide`)}
+            >
+              <BookOpen className="w-4 h-4 mr-2" />
+              Build Travel Guide
+            </Button>
             <Button 
               className="flex-1"
               onClick={async () => {
