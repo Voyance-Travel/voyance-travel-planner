@@ -6,8 +6,9 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
-  Star, Calendar, Users, MapPin, Eye, Edit3, Sparkles,
+  Star, Calendar, Users, MapPin, Eye, Edit3, Sparkles, BookOpen,
 } from 'lucide-react';
+import { useGuideFavoritesCount } from '@/hooks/useGuideFavorites';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -61,6 +62,7 @@ export function PastTripCard({ trip, index = 0 }: PastTripCardProps) {
   const navigate = useNavigate();
   const [reviewOpen, setReviewOpen] = useState(false);
   const { data: review } = useTripReview(trip.id);
+  const { data: favCount = 0 } = useGuideFavoritesCount(trip.id);
 
   const seededHero = trip.metadata?.hero_image;
   const seededHeroUrl = typeof seededHero === 'string' && seededHero.length > 0 ? seededHero : null;
@@ -211,6 +213,17 @@ export function PastTripCard({ trip, index = 0 }: PastTripCardProps) {
               <Edit3 className="h-3.5 w-3.5" />
               {hasReview ? 'Edit Review' : 'Add Review'}
             </Button>
+            {favCount > 0 && (
+              <Button
+                onClick={() => navigate(`/trip/${trip.id}/guide`)}
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs h-9"
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+                Build Guide
+              </Button>
+            )}
           </div>
         </div>
       </motion.div>
