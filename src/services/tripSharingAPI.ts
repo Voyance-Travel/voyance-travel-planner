@@ -238,6 +238,42 @@ export async function saveActivity(input: {
 }
 
 /**
+ * Unsave (remove) an activity
+ */
+export async function unsaveActivity(activityId: string): Promise<{ success: boolean }> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  const { error } = await supabase
+    .from('saved_items')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('item_id', activityId)
+    .eq('item_type', 'activity');
+
+  if (error) throw new Error(error.message);
+  return { success: true };
+}
+
+/**
+ * Check if an activity is saved by the current user
+ */
+export async function isActivitySaved(activityId: string): Promise<boolean> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  const { data } = await supabase
+    .from('saved_items')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('item_id', activityId)
+    .eq('item_type', 'activity')
+    .maybeSingle();
+
+  return !!data;
+}
+
+/**
  * Get saved activities
  */
 export async function getSavedActivities(): Promise<{
@@ -487,6 +523,27 @@ export function useSaveActivity() {
   });
 }
 
+export function useToggleSaveActivity() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ activityId, destinationId, isSaved }: {
+      activityId: string;
+      destinationId: string;
+      isSaved: boolean;
+    }) => {
+      if (isSaved) {
+        return unsaveActivity(activityId);
+      } else {
+        return saveActivity({ activityId, destinationId });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-activities'] });
+    },
+  });
+}
+
 export function useGroupFavorites(tripId: string | undefined) {
   return useQuery({
     queryKey: ['group-favorites', tripId],
@@ -526,6 +583,8 @@ const tripSharingAPI = {
   removeTraveler,
   updateTravelerPermissions,
   saveActivity,
+  unsaveActivity,
+  isActivitySaved,
   getSavedActivities,
   getGroupFavorites,
   acceptTripInvitation,

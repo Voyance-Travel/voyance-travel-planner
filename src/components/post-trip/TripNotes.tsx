@@ -106,8 +106,7 @@ export function TripNotes({ tripId, destination }: TripNotesProps) {
 
     setNotes([data as TripNote, ...notes]);
     setNewNote({ note_type: 'memory', content: '', location: '', day_number: undefined });
-    setShowAddNote(false);
-    toast.success('Note saved!');
+    toast.success('Note saved! Add another or close when done.');
   }
 
   async function deleteNote(noteId: string) {
@@ -272,11 +271,11 @@ export function TripNotes({ tripId, destination }: TripNotesProps) {
             </div>
 
             <div className="flex gap-3 pt-2">
-              <Button variant="outline" className="flex-1" onClick={() => setShowAddNote(false)}>
-                Cancel
-              </Button>
               <Button className="flex-1" onClick={addNote} disabled={!newNote.content.trim()}>
                 Save Note
+              </Button>
+              <Button variant="outline" className="flex-1" onClick={() => setShowAddNote(false)}>
+                Done
               </Button>
             </div>
           </div>
