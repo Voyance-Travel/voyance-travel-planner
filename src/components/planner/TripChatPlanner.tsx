@@ -203,6 +203,13 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
         try {
           let details = JSON.parse(toolCallArgs) as TripDetails;
 
+          // Hard date guard: force dates to 2026+ and never in the past
+          if (details.startDate && details.endDate) {
+            const normalized = normalizeChatTripDates(details.startDate, details.endDate);
+            details.startDate = normalized.startDate;
+            details.endDate = normalized.endDate;
+          }
+
           // Safety net: if AI didn't populate cities[] but destination has multiple cities,
           // try to extract from the conversation history as well
           if ((!details.cities || details.cities.length <= 1) && details.destination) {
