@@ -2621,6 +2621,68 @@ export function EditorialItinerary({
     }
   }, [days, tripId, onSave]);
 
+  // ── Add / Remove Days ──────────────────────────────────────────────────────
+
+  const handleAddDay = useCallback(() => {
+    const lastDay = days[days.length - 1];
+    let newDate: string | undefined;
+    try {
+      if (lastDay?.date) {
+        const d = addDays(parseLocalDate(lastDay.date), 1);
+        newDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      } else if (startDate) {
+        const d = addDays(parseLocalDate(startDate), days.length);
+        newDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      }
+    } catch { /* fallback: no date */ }
+
+    const newDay: EditorialDay = {
+      dayNumber: days.length + 1,
+      date: newDate,
+      title: `Day ${days.length + 1}`,
+      theme: lastDay?.city ? `Exploring ${lastDay.city}` : undefined,
+      activities: [],
+      city: lastDay?.city,
+      country: lastDay?.country,
+    };
+
+    setDays(prev => [...prev, newDay]);
+    setHasChanges(true);
+    // Navigate to the new day
+    setTimeout(() => setSelectedDayIndex(days.length), 50);
+    toast.success('Day added — add activities and save when ready.');
+  }, [days, startDate, setDays]);
+
+  const handleRemoveDay = useCallback((dayIndex: number) => {
+    if (days.length <= 1) {
+      toast.error("Can't remove the only day in your trip.");
+      return;
+    }
+    const dayTitle = days[dayIndex]?.title || days[dayIndex]?.theme || `Day ${dayIndex + 1}`;
+    if (!window.confirm(`Remove "${dayTitle}"? All activities for this day will be deleted.`)) return;
+
+    setDays(prev =>
+      prev
+        .filter((_, i) => i !== dayIndex)
+        .map((d, i) => {
+          // Re-number days and recalculate dates
+          let newDate = d.date;
+          try {
+            if (startDate) {
+              const dt = addDays(parseLocalDate(startDate), i);
+              newDate = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+            }
+          } catch { /* keep original */ }
+          return { ...d, dayNumber: i + 1, date: newDate };
+        })
+    );
+    setHasChanges(true);
+    if (selectedDayIndex >= days.length - 1) {
+      setSelectedDayIndex(Math.max(0, days.length - 2));
+    }
+    toast.success('Day removed — save to confirm.');
+  }, [days, startDate, setDays, selectedDayIndex]);
+
   // Full itinerary regeneration — now uses day-by-day pattern matching original generation
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
