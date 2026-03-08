@@ -110,7 +110,7 @@ export default function DestinationEntry() {
         destination: data?.destination || targetDest,
         days: data?.days || [],
         totalDays: data?.totalDays || 7,
-        archetypeUsed: data?.archetypeUsed || "Slow Traveler",
+        archetypeUsed: data?.archetypeUsed || "Present Traveler",
         archetypeTagline: data?.archetypeTagline || "Fewer things, done well.",
         budgetEstimate: data?.budgetEstimate,
         paymentInfo: data?.paymentInfo,
