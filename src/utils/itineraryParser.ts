@@ -551,21 +551,43 @@ export function parseItineraryDays(
     })
     .map((day, idx) => parseSingleDay(day, idx, tripStartDate));
   
-  // Deduplicate days by dayNumber — keep LAST occurrence (most recently generated)
-  // This prevents duplicate "Day 1" entries from partial regeneration or overnight flight issues
-  const dayMap = new Map<number, ParsedDay>();
+  // === LAYER 2: HARD DEDUPLICATION — by dayNumber AND by date ===
+  
+  // Step 1: Deduplicate by dayNumber — keep entry with more activities
+  const byDayNumber = new Map<number, ParsedDay>();
   for (const day of parsedDays) {
-    dayMap.set(day.dayNumber, day);
+    const existing = byDayNumber.get(day.dayNumber);
+    if (!existing || (day.activities?.length || 0) > (existing.activities?.length || 0)) {
+      byDayNumber.set(day.dayNumber, day);
+    }
   }
-  const deduped = Array.from(dayMap.values()).sort((a, b) => a.dayNumber - b.dayNumber);
+  let deduped = Array.from(byDayNumber.values());
+  
+  // Step 2: Deduplicate by date — if two days share the same date, keep the one with more activities
+  const byDate = new Map<string, ParsedDay>();
+  for (const day of deduped) {
+    const dateKey = day.date || `fallback-day-${day.dayNumber}`;
+    const existing = byDate.get(dateKey);
+    if (!existing || (day.activities?.length || 0) > (existing.activities?.length || 0)) {
+      byDate.set(dateKey, day);
+    }
+  }
+  deduped = Array.from(byDate.values());
+  
+  // Step 3: Sort chronologically and re-number sequentially (1, 2, 3...)
+  deduped.sort((a, b) => {
+    if (a.date && b.date) return new Date(a.date).getTime() - new Date(b.date).getTime();
+    return a.dayNumber - b.dayNumber;
+  });
   
   if (deduped.length < parsedDays.length) {
     console.warn(`[itineraryParser] Deduplicated ${parsedDays.length - deduped.length} duplicate day(s)`);
   }
   
-  // Recalculate dates based on sequential index after dedup (authoritative dates)
+  // Step 4: Re-assign sequential dayNumbers and authoritative dates
   return deduped.map((day, idx) => ({
     ...day,
+    dayNumber: idx + 1,
     date: calculateDayDate(tripStartDate, idx) || day.date,
   }));
 }

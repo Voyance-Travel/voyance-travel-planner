@@ -12672,7 +12672,36 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       // CRITICAL: Replace any existing day with the same dayNumber to prevent duplicates
       // This handles retries, regeneration, and resume scenarios safely.
       const filteredExisting = existingDays.filter((d: any) => d?.dayNumber !== dayNumber);
-      const updatedDays = [...filteredExisting, dayResult].sort((a: any, b: any) => (a.dayNumber || 0) - (b.dayNumber || 0));
+      
+      // === LAYER 1: HARD VALIDATION — deduplicate by date AND dayNumber ===
+      const candidateDays = [...filteredExisting, dayResult];
+      
+      // Deduplicate by date — if two days share the same date, keep the one with more activities
+      const byDate = new Map<string, any>();
+      for (const d of candidateDays) {
+        if (!d) continue;
+        const dateKey = d.date || `day-${d.dayNumber}`;
+        const existing = byDate.get(dateKey);
+        if (!existing || (d.activities?.length || 0) >= (existing.activities?.length || 0)) {
+          byDate.set(dateKey, d);
+        } else {
+          console.warn(`[generate-trip-day] Removing duplicate date ${dateKey} (kept version with ${existing.activities?.length || 0} activities)`);
+        }
+      }
+      
+      // Re-number sequentially by date order to ensure no gaps/repeats
+      const updatedDays = Array.from(byDate.values())
+        .sort((a: any, b: any) => {
+          // Sort by date first, fallback to dayNumber
+          const dateA = a.date ? new Date(a.date).getTime() : (a.dayNumber || 0);
+          const dateB = b.date ? new Date(b.date).getTime() : (b.dayNumber || 0);
+          return dateA - dateB;
+        })
+        .map((d: any, idx: number) => ({ ...d, dayNumber: idx + 1 }));
+      
+      if (updatedDays.length !== candidateDays.length) {
+        console.warn(`[generate-trip-day] Day deduplication removed ${candidateDays.length - updatedDays.length} duplicate(s)`);
+      }
       const partialItinerary = {
         days: updatedDays,
         status: dayNumber >= totalDays ? 'ready' : 'generating',
@@ -12684,6 +12713,41 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       const meta = (metaTrip?.metadata as Record<string, unknown>) || {};
       const currentUnlocked = (metaTrip as any)?.unlocked_day_count ?? 0;
       const newUnlocked = Math.max(currentUnlocked, dayNumber);
+
+      // === LAYER 4: Verify last day exists when generation is complete ===
+      if (dayNumber >= totalDays && startDate && endDate) {
+        const lastExpectedDate = endDate; // endDate is already YYYY-MM-DD
+        const hasLastDay = updatedDays.some((d: any) => d.date === lastExpectedDate);
+        if (!hasLastDay && updatedDays.length < totalDays) {
+          console.warn(`[generate-trip-day] Last day (${lastExpectedDate}) missing — adding placeholder`);
+          updatedDays.push({
+            dayNumber: totalDays,
+            date: lastExpectedDate,
+            theme: 'Departure Day',
+            description: 'Check out and head to the airport.',
+            activities: [
+              { id: `checkout-${totalDays}`, title: 'Hotel Checkout', category: 'accommodation', startTime: '10:00', endTime: '10:30', type: 'structural', timeBlockType: 'logistics' },
+              { id: `transfer-${totalDays}`, title: 'Airport Transfer', category: 'transportation', startTime: '11:00', endTime: '12:00', type: 'structural', timeBlockType: 'logistics' },
+              { id: `departure-${totalDays}`, title: 'Departure', category: 'transportation', startTime: '13:00', type: 'structural', timeBlockType: 'logistics' },
+            ],
+            status: 'placeholder',
+          });
+          // Re-sort and re-number after adding
+          updatedDays.sort((a: any, b: any) => {
+            const dateA = a.date ? new Date(a.date).getTime() : (a.dayNumber || 0);
+            const dateB = b.date ? new Date(b.date).getTime() : (b.dayNumber || 0);
+            return dateA - dateB;
+          });
+          updatedDays.forEach((d: any, idx: number) => { d.dayNumber = idx + 1; });
+          // Update partialItinerary days reference
+          partialItinerary.days = updatedDays;
+        }
+        
+        // Final assertion: day count must match expected
+        if (updatedDays.length !== totalDays) {
+          console.error(`[generate-trip-day] ⚠️ Day count mismatch: got ${updatedDays.length}, expected ${totalDays}`);
+        }
+      }
 
       if (dayNumber >= totalDays) {
         // All days complete — set status to ready
