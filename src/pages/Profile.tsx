@@ -43,6 +43,7 @@ import EditorialPreferencesView from '@/components/profile/EditorialPreferencesV
 import ClientAgentPortal from '@/components/profile/ClientAgentPortal';
 import CreditBalanceCard from '@/components/profile/CreditBalanceCard';
 import FollowingTab from '@/components/profile/FollowingTab';
+import FavoritePlaces from '@/components/profile/FavoritePlaces';
 import ProfileHotelSearchModal from '@/components/profile/ProfileHotelSearchModal';
 import CreditPacksGrid from '@/components/profile/CreditPacksGrid';
 import { CreditEarningChecklist } from '@/components/common/CreditEarningChecklist';
@@ -739,6 +740,9 @@ export default function Profile() {
                 </div>
               </div>
             )}
+
+            {/* Favorite Places */}
+            <FavoritePlaces />
 
             {/* Memory Lane - Past Trip Reviews */}
             <MemoryLane className="mt-12" />
