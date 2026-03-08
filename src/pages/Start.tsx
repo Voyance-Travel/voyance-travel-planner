@@ -170,12 +170,12 @@ function StepIndicator({ currentStep, isMultiCity }: { currentStep: number; isMu
             </div>
             <span
               className={cn(
-                'text-[10px] sm:text-xs mt-1 font-medium',
+                'text-[10px] sm:text-xs mt-1 font-medium text-center',
                 currentStep === s.step ? 'text-primary' : 'text-muted-foreground'
               )}
             >
-              <span className="hidden xs:inline sm:inline">{s.label}</span>
-              <span className="inline xs:hidden sm:hidden">{s.shortLabel}</span>
+              <span className="hidden xs:inline">{s.label}</span>
+              <span className="xs:hidden">{s.shortLabel}</span>
             </span>
           </div>
           {idx < steps.length - 1 && (
