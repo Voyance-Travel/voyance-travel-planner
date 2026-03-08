@@ -91,6 +91,7 @@ Before you call extract_trip_details, run this mental checklist:
 3. Does "destination" contain ALL city names comma-separated? "London, Paris" not just "London".
 4. Do the nights in cities[] sum to approximately the total trip duration?
 If any check fails, fix it before calling the tool.`;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
