@@ -1,51 +1,63 @@
 
 
-## Plan: Fix Must-Do Activities Being Ignored in Generation
+## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
 
-### Root Causes Found
+### What's Already Working (No Changes Needed)
+- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
+- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
+- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
+- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
 
-There are **three distinct bugs** causing the US Open (and all must-do activities) to be silently dropped:
+### What's Broken — Two Things
 
-**Bug 1 — `.name` property doesn't exist (critical)**
-In the generate-trip-day path (line 9621), the code references `item.priority.name`, but `MustDoPriority` has no `name` field — it has `title` and `activityName`. So the per-day prompt injects `"- undefined (must)"` which the LLM ignores completely. Same bug on line 9626.
+**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
 
-**Bug 2 — `additionalNotes` completely ignored in per-day generation**
-The full-trip path (line 8490) injects `additionalNotes` into the prompt. But the generate-trip-day path (the one actually used for server-side generation) **never reads `additionalNotes` from trip metadata**. So when the user writes an entire paragraph about the US Open in "Anything else?", it's completely lost during per-day generation.
-
-**Bug 3 — Array join uses `, ` but parser splits on `\n`**
-`mustDoActivities` array is joined with `', '` (lines 4169, 9582, 9587), but `parseMustDoInput` splits on `\n` (line 202). For a single item like "US Open" this actually works, but for multiple items they get concatenated into one unparseable string.
+**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
 
 ### Changes
 
-#### File 1: `supabase/functions/generate-itinerary/index.ts`
+#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
 
-**Fix A — Property name bug (lines 9621, 9626):**
-Change `item.priority.name` → `item.priority.title` in both places within the generate-trip-day must-do prompt builder.
+**Change A — Remove stall detector setup** (lines ~261-313):
+Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
 
-**Fix B — Inject `additionalNotes` into generate-trip-day path (~after line 9696):**
-Read `metadata?.additionalNotes` and inject it into the day prompt, same as the full-trip path does at line 8490. Also run it through `parseMustDoInput()` to detect any events the user described in prose (defense-in-depth), merging detected items into the must-do pipeline if they aren't already present from `mustDoActivities`.
+**Change B — Remove browser loop fallback** (lines ~455-469):
+Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
 
-**Fix C — Array join delimiter (lines 4169, 9582, 9587):**
-Change `raw.join(', ')` → `raw.join('\n')` in all three locations so the parser can split items correctly.
+```typescript
+// OLD:
+} catch (serverErr) {
+  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
+  const generatedDays = await generateItinerary({ ... });
+  // ... 40 lines of fallback logic
+}
 
-#### File 2: `supabase/functions/generate-itinerary/must-do-priorities.ts`
+// NEW:
+} catch (serverErr) {
+  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
+  setPrePhase(null);
+  setHasStarted(false);
+  toast.error('Failed to start generation. Please try again.');
+  return;
+}
+```
 
-**Fix D — Also split on commas (line 244):**
-Change `line.split(';')` → `line.split(/[;,]/)` as defense-in-depth for any remaining comma-joined input.
+**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
 
-**Fix E — Strip conversational prefixes before pattern matching (~line 292):**
-Before calling `matchEventPattern`, strip prefixes like "attending the", "going to the", "here for the", "tickets to" so "attending the US Open" still matches the "us open" event pattern.
+**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
 
-### Files Modified
+#### File 2: `src/hooks/useItineraryGeneration.ts`
 
-| File | Changes |
-|------|---------|
-| `supabase/functions/generate-itinerary/index.ts` | Fix `.name` → `.title` (2 spots), inject `additionalNotes` into per-day path, change array join to `\n` (3 spots) |
-| `supabase/functions/generate-itinerary/must-do-priorities.ts` | Add comma splitting, add prefix stripping before event matching |
+No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
+
+### Files to Modify
+
+| File | What |
+|------|------|
+| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
 
 ### Risk Assessment
-- **Bug 1 fix**: Zero risk — fixing an undefined property reference
-- **Bug 2 fix**: Low risk — adding data that was always intended to be there
-- **Bug 3 fix**: Low risk — `\n` is the delimiter the parser already expects
-- **Fixes D/E**: Additive only — more things match, nothing breaks existing matches
+- **Low risk**: The server-side self-chaining is already fully implemented and tested
+- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
+- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
 
