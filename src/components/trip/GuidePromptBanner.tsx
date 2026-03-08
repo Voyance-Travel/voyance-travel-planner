@@ -44,7 +44,7 @@ export function GuidePromptBanner({ tripId, destination }: GuidePromptBannerProp
               variant="outline"
               size="sm"
               className="mt-3 gap-1.5 text-xs h-8"
-              onClick={() => navigate(`/guides/${guide?.slug}`)}
+              onClick={() => navigate(`/community-guide/${guide?.slug}`)}
             >
               <ExternalLink className="h-3.5 w-3.5" />
               View Your Published Guide
