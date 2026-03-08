@@ -52,6 +52,24 @@ export default function MultiCitySelector({
   const [showAllTemplates, setShowAllTemplates] = useState(false);
 
   const totalNights = calculateTotalNights(destinations);
+  // Calculate arrival/departure dates for each city based on startDate + accumulated nights
+  const cityDates = useMemo(() => {
+    if (!startDate) return null;
+    const tripStart = parseLocalDate(startDate);
+    if (isNaN(tripStart.getTime())) return null;
+    let current = new Date(tripStart);
+    return destinations.map((city) => {
+      const arrival = new Date(current);
+      current = new Date(current);
+      current.setDate(current.getDate() + city.nights);
+      const departure = new Date(current);
+      return {
+        arrival: dateFnsFormat(arrival, 'MMM d'),
+        departure: dateFnsFormat(departure, 'MMM d'),
+      };
+    });
+  }, [startDate, destinations]);
+
   const displayedRoutes = showAllTemplates ? POPULAR_ROUTES : POPULAR_ROUTES.slice(0, 3);
   
   const debouncedQuery = useDebounce(newCity, 300);
