@@ -1017,6 +1017,11 @@ function TodayView({
                         </div>
                       )}
 
+                      {/* Voice note indicator */}
+                      {feedbackByActivity.get(activity.id)?.personalization_tags?.includes('has_voice_note') && (
+                        <VoiceNotePlayer tripId={trip.id} activityId={activity.id} />
+                      )}
+
                       {/* Action Buttons — today only */}
                       {!isPastDay && (
                         <div className="flex items-center gap-2 mt-3">
