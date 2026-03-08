@@ -12672,7 +12672,36 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       // CRITICAL: Replace any existing day with the same dayNumber to prevent duplicates
       // This handles retries, regeneration, and resume scenarios safely.
       const filteredExisting = existingDays.filter((d: any) => d?.dayNumber !== dayNumber);
-      const updatedDays = [...filteredExisting, dayResult].sort((a: any, b: any) => (a.dayNumber || 0) - (b.dayNumber || 0));
+      
+      // === LAYER 1: HARD VALIDATION — deduplicate by date AND dayNumber ===
+      const candidateDays = [...filteredExisting, dayResult];
+      
+      // Deduplicate by date — if two days share the same date, keep the one with more activities
+      const byDate = new Map<string, any>();
+      for (const d of candidateDays) {
+        if (!d) continue;
+        const dateKey = d.date || `day-${d.dayNumber}`;
+        const existing = byDate.get(dateKey);
+        if (!existing || (d.activities?.length || 0) >= (existing.activities?.length || 0)) {
+          byDate.set(dateKey, d);
+        } else {
+          console.warn(`[generate-trip-day] Removing duplicate date ${dateKey} (kept version with ${existing.activities?.length || 0} activities)`);
+        }
+      }
+      
+      // Re-number sequentially by date order to ensure no gaps/repeats
+      const updatedDays = Array.from(byDate.values())
+        .sort((a: any, b: any) => {
+          // Sort by date first, fallback to dayNumber
+          const dateA = a.date ? new Date(a.date).getTime() : (a.dayNumber || 0);
+          const dateB = b.date ? new Date(b.date).getTime() : (b.dayNumber || 0);
+          return dateA - dateB;
+        })
+        .map((d: any, idx: number) => ({ ...d, dayNumber: idx + 1 }));
+      
+      if (updatedDays.length !== candidateDays.length) {
+        console.warn(`[generate-trip-day] Day deduplication removed ${candidateDays.length - updatedDays.length} duplicate(s)`);
+      }
       const partialItinerary = {
         days: updatedDays,
         status: dayNumber >= totalDays ? 'ready' : 'generating',
