@@ -145,12 +145,14 @@ const sampleItineraries = [
 ];
 
 // Progress Step Indicator
-function StepIndicator({ currentStep, isMultiCity }: { currentStep: number; isMultiCity?: boolean }) {
-  const steps = [
+function StepIndicator({ currentStep, isMultiCity, isDayTrip }: { currentStep: number; isMultiCity?: boolean; isDayTrip?: boolean }) {
+  const allSteps = [
     { label: 'Trip Details', shortLabel: 'Details', step: 1 },
     { label: isMultiCity ? 'Transport & Hotel' : 'Flight & Hotel', shortLabel: isMultiCity ? 'Transport' : 'Flight', step: 2 },
     { label: 'Fine-Tune', shortLabel: 'Tune', step: 3 },
   ];
+  // Day trips skip step 2 entirely
+  const steps = isDayTrip ? allSteps.filter(s => s.step !== 2) : allSteps;
 
   return (
     <div className="flex items-center justify-center gap-2 mb-6 sm:mb-8">
@@ -2128,8 +2130,10 @@ export default function Start() {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
   }, []);
 
-  // Shorthand for the common Step 1 → Step 2 transition
-  const goToStep2 = useCallback(() => goToStep(2), [goToStep]);
+  // Shorthand for the common Step 1 → Step 2 transition (skips step 2 for day trips)
+  // Uses a ref-based check since startDate/endDate are declared later
+  const goToNextAfterStep1Ref = useRef<() => void>(() => goToStep(2));
+  const goToNextAfterStep1 = useCallback(() => goToNextAfterStep1Ref.current(), []);
 
   // Listen for browser back button to navigate between steps
   useEffect(() => {
@@ -2163,6 +2167,15 @@ export default function Start() {
   const [celebrationDay, setCelebrationDay] = useState<number | undefined>();
   const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount);
   const [pacing, setPacing] = useState<'relaxed' | 'balanced' | 'packed'>('balanced');
+  const isDayTrip = startDate && endDate && differenceInDays(endDate, startDate) === 0;
+  // Keep the step-skip ref in sync with current dates
+  goToNextAfterStep1Ref.current = () => {
+    if (isDayTrip) {
+      goToStep(3);
+    } else {
+      goToStep(2);
+    }
+  };
   const [linkedGuests, setLinkedGuests] = useState<LinkedGuest[]>([]);
   const [showGuestModal, setShowGuestModal] = useState(false);
 
@@ -2670,7 +2683,7 @@ export default function Start() {
       <section className="min-h-screen py-8 px-4">
         <div className="max-w-5xl mx-auto">
           {/* Progress Indicator */}
-          <StepIndicator currentStep={currentStep} isMultiCity={isMultiCity} />
+          <StepIndicator currentStep={currentStep} isMultiCity={isMultiCity} isDayTrip={!!isDayTrip} />
 
           {/* Main content with sidebar */}
           <div className="flex gap-12">
@@ -2938,7 +2951,7 @@ export default function Start() {
                       if (!user.quizCompleted) {
                         setShowDNAPrompt(true);
                       } else {
-                        goToStep2();
+                        goToNextAfterStep1();
                       }
                     }}
                     onManualAuthRequired={() => {
@@ -3203,7 +3216,7 @@ export default function Start() {
               className="w-full text-muted-foreground"
               onClick={() => {
                 setShowDNAPrompt(false);
-                goToStep2();
+                goToNextAfterStep1();
               }}
             >
               Skip for now
