@@ -51,17 +51,6 @@ export default function ValueFirstHero({ onScrollToDemo }: ValueFirstHeroProps) 
         AI-Powered Planning
       </motion.div>
 
-      {/* Scroll indicator - Desktop only */}
-      <motion.div
-        className="absolute bottom-8 left-1/2 -translate-x-1/2 text-white/60 hidden md:flex"
-        animate={{ y: [0, 6, 0] }}
-        transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
-      >
-        <div className="flex flex-col items-center gap-2">
-          <span className="text-xs tracking-wide uppercase">Scroll</span>
-          <div className="w-px h-8 bg-gradient-to-b from-white/50 to-transparent" />
-        </div>
-      </motion.div>
     </section>
   );
 }
