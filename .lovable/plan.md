@@ -1,63 +1,38 @@
 
+Goal: Ensure active-trip entry points always open the dedicated “today-focused” ActiveTrip page, not full multi-day itinerary.
 
-## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
+What I found in code:
+- `ActiveTripCard` already routes “Today’s Plan” to `/trip/${trip.id}/active` (correct).
+- `TripDashboard` card click already routes active trips to `/trip/${trip.id}/active` (correct).
+- `TripDetail` already redirects active/in-date-window trips to `/trip/${trip.id}/active` (safety net already present).
+- Remaining gap: `src/pages/ItineraryView.tsx` still blindly redirects `/itinerary/:id` → `/trip/:id` without checking active status.
 
-### What's Already Working (No Changes Needed)
-- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
-- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
-- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
-- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
+Implementation plan:
+1. Update legacy itinerary redirect logic
+   - File: `src/pages/ItineraryView.tsx`
+   - Add trip lookup (`useTrip(id)`) and redirect logic:
+     - If trip is active (or falls within today between start/end dates), redirect to `/trip/${id}/active`.
+     - Otherwise redirect to `/trip/${id}`.
+   - Add lightweight loading guard so redirect target is chosen after trip data is known (prevents wrong first redirect).
 
-### What's Broken — Two Things
+2. Keep existing active-route behavior as-is (no changes unless mismatch found)
+   - `src/components/trips/ActiveTripCard.tsx` remains `/trip/${trip.id}/active`.
+   - `src/pages/TripDashboard.tsx` active click behavior remains `/trip/${trip.id}/active`.
+   - `src/pages/TripDetail.tsx` active safety redirect remains in place.
 
-**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
+3. Regression coverage
+   - Add/adjust route behavior test in `src/test/navigation.test.ts` (or existing routing test area) for:
+     - Active trip on `/itinerary/:id` resolves to `/trip/:id/active`.
+     - Non-active trip on `/itinerary/:id` resolves to `/trip/:id`.
 
-**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
+Technical details:
+- Reuse existing date logic conventions (`parseLocalDate`, inclusive day-window check) so behavior matches `TripDetail`.
+- No database/schema/auth changes.
+- No UI redesign; routing-only fix.
 
-### Changes
-
-#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
-
-**Change A — Remove stall detector setup** (lines ~261-313):
-Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
-
-**Change B — Remove browser loop fallback** (lines ~455-469):
-Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
-
-```typescript
-// OLD:
-} catch (serverErr) {
-  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
-  const generatedDays = await generateItinerary({ ... });
-  // ... 40 lines of fallback logic
-}
-
-// NEW:
-} catch (serverErr) {
-  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
-  setPrePhase(null);
-  setHasStarted(false);
-  toast.error('Failed to start generation. Please try again.');
-  return;
-}
-```
-
-**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
-
-**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
-
-#### File 2: `src/hooks/useItineraryGeneration.ts`
-
-No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
-
-### Files to Modify
-
-| File | What |
-|------|------|
-| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
-
-### Risk Assessment
-- **Low risk**: The server-side self-chaining is already fully implemented and tested
-- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
-- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
-
+Validation checklist after implementation:
+1. Active trip → “Today’s Plan” opens `/trip/{id}/active`.
+2. Active trip card click opens `/trip/{id}/active`.
+3. Direct `/itinerary/{id}` for active trip redirects to `/trip/{id}/active`.
+4. Direct `/itinerary/{id}` for upcoming/completed trip redirects to `/trip/{id}`.
+5. Non-active trip flows remain unchanged.
