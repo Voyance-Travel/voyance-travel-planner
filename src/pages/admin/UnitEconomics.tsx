@@ -1062,6 +1062,8 @@ export default function UnitEconomics() {
       case 'users': return <UsersTab data={econData} />;
       case 'credits': return <CreditsTab data={econData} />;
       case 'forecast': return <ForecastTab data={econData} />;
+      case 'projections': return <ProjectionsTab data={econData} />;
+      case 'credit-economics': return <CreditEconomicsTab data={econData} />;
     }
   };
 
