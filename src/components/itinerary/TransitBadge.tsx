@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Train, Car, ChevronDown, ChevronUp, Footprints, Bus, ArrowRightLeft, Loader2, Coins } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CREDIT_COSTS } from '@/config/pricing';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface TransitBadgeProps {
   transportation: {
@@ -68,7 +69,9 @@ export function TransitBadge({
   onTransportModeChange,
   isChangingMode = false,
 }: TransitBadgeProps) {
-  const [expanded, setExpanded] = useState(showDetails);
+  const isMobile = useIsMobile();
+  // On mobile, always start collapsed regardless of showDetails prop
+  const [expanded, setExpanded] = useState(isMobile ? false : showDetails);
   const [showModePicker, setShowModePicker] = useState(false);
   
   const icon = transportIcons[transportation.method.toLowerCase()] || <MapPin className="h-2.5 w-2.5" />;
