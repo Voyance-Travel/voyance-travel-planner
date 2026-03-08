@@ -6634,12 +6634,18 @@ function FlightSyncWarning({ flightArrivalTime, day1FirstActivity, onSyncDay1, i
   
   if (!isArrivalActivity) return null;
   
-  // Calculate difference in hours
-  const diffMins = Math.abs(flightMins - activityMins);
-  const diffHours = diffMins / 60;
-  
-  // If times differ by more than 1 hour, show warning
-  if (diffHours <= 1) return null;
+  // Calculate the EXPECTED earliest activity time (arrival + customs/transit buffer)
+  const FLIGHT_BUFFER_MINS = 105; // 1h customs + 45m transit — same as cascadeTransportToItinerary
+  const expectedEarliest = flightMins + FLIGHT_BUFFER_MINS;
+
+  // The warning should only fire if:
+  // 1. First activity starts BEFORE the expected earliest (schedule is too early), OR
+  // 2. First activity starts more than 3 hours AFTER the expected earliest (unreasonable gap)
+  const activityIsBeforeExpected = activityMins < (flightMins + 30); // Activity before arrival + 30m = definitely wrong
+  const gapFromExpected = activityMins - expectedEarliest;
+  const unreasonableGap = gapFromExpected > 180; // More than 3 hours after expected = suspicious
+
+  if (!activityIsBeforeExpected && !unreasonableGap) return null;
   
   const formatTime = (mins: number) => {
     const h = Math.floor(mins / 60);
