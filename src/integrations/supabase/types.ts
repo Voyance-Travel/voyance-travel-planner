@@ -2924,8 +2924,10 @@ export type Database = {
           airport_lookup_codes: string | null
           airport_transfer_minutes: number | null
           alternative_names: Json | null
+          best_neighborhoods: Json | null
           best_time_to_visit: string | null
           city: string
+          common_scams: Json | null
           coordinates: Json | null
           cost_tier: string | null
           country: string
@@ -2934,22 +2936,30 @@ export type Database = {
           currency_data: Json | null
           default_transport_modes: Json | null
           description: string | null
+          dress_code: string | null
           dynamic_currency_conversion: Json | null
           dynamic_weather: Json | null
+          emergency_numbers: Json | null
           enrichment_priority: number | null
           enrichment_status: Json | null
           featured: boolean | null
+          food_scene: string | null
+          getting_around: string | null
           google_place_id: string | null
           id: string
           known_for: Json | null
           last_content_update: string | null
           last_currency_update: string | null
           last_enriched: string | null
+          last_local_knowledge_update: string | null
           last_weather_update: string | null
+          local_tips: Json | null
+          nightlife_info: string | null
           points_of_interest: Json | null
           population: number | null
           region: string | null
           safe_search_keywords: Json | null
+          safety_tips: Json | null
           seasonal_events: Json | null
           seasonality: string | null
           stock_image_url: string | null
@@ -2957,6 +2967,7 @@ export type Database = {
           temperature_range: string | null
           tier: number | null
           timezone: string | null
+          tipping_custom: string | null
           updated_at: string
           weather_data: Json | null
         }
@@ -2965,8 +2976,10 @@ export type Database = {
           airport_lookup_codes?: string | null
           airport_transfer_minutes?: number | null
           alternative_names?: Json | null
+          best_neighborhoods?: Json | null
           best_time_to_visit?: string | null
           city: string
+          common_scams?: Json | null
           coordinates?: Json | null
           cost_tier?: string | null
           country: string
@@ -2975,22 +2988,30 @@ export type Database = {
           currency_data?: Json | null
           default_transport_modes?: Json | null
           description?: string | null
+          dress_code?: string | null
           dynamic_currency_conversion?: Json | null
           dynamic_weather?: Json | null
+          emergency_numbers?: Json | null
           enrichment_priority?: number | null
           enrichment_status?: Json | null
           featured?: boolean | null
+          food_scene?: string | null
+          getting_around?: string | null
           google_place_id?: string | null
           id?: string
           known_for?: Json | null
           last_content_update?: string | null
           last_currency_update?: string | null
           last_enriched?: string | null
+          last_local_knowledge_update?: string | null
           last_weather_update?: string | null
+          local_tips?: Json | null
+          nightlife_info?: string | null
           points_of_interest?: Json | null
           population?: number | null
           region?: string | null
           safe_search_keywords?: Json | null
+          safety_tips?: Json | null
           seasonal_events?: Json | null
           seasonality?: string | null
           stock_image_url?: string | null
@@ -2998,6 +3019,7 @@ export type Database = {
           temperature_range?: string | null
           tier?: number | null
           timezone?: string | null
+          tipping_custom?: string | null
           updated_at?: string
           weather_data?: Json | null
         }
@@ -3006,8 +3028,10 @@ export type Database = {
           airport_lookup_codes?: string | null
           airport_transfer_minutes?: number | null
           alternative_names?: Json | null
+          best_neighborhoods?: Json | null
           best_time_to_visit?: string | null
           city?: string
+          common_scams?: Json | null
           coordinates?: Json | null
           cost_tier?: string | null
           country?: string
@@ -3016,22 +3040,30 @@ export type Database = {
           currency_data?: Json | null
           default_transport_modes?: Json | null
           description?: string | null
+          dress_code?: string | null
           dynamic_currency_conversion?: Json | null
           dynamic_weather?: Json | null
+          emergency_numbers?: Json | null
           enrichment_priority?: number | null
           enrichment_status?: Json | null
           featured?: boolean | null
+          food_scene?: string | null
+          getting_around?: string | null
           google_place_id?: string | null
           id?: string
           known_for?: Json | null
           last_content_update?: string | null
           last_currency_update?: string | null
           last_enriched?: string | null
+          last_local_knowledge_update?: string | null
           last_weather_update?: string | null
+          local_tips?: Json | null
+          nightlife_info?: string | null
           points_of_interest?: Json | null
           population?: number | null
           region?: string | null
           safe_search_keywords?: Json | null
+          safety_tips?: Json | null
           seasonal_events?: Json | null
           seasonality?: string | null
           stock_image_url?: string | null
@@ -3039,6 +3071,7 @@ export type Database = {
           temperature_range?: string | null
           tier?: number | null
           timezone?: string | null
+          tipping_custom?: string | null
           updated_at?: string
           weather_data?: Json | null
         }
