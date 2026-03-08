@@ -9570,6 +9570,7 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
 
       // Load personalization inputs from request body first, then fall back to trip metadata
       let mustDoPrompt = '';
+      let mustDoEventItems: ScheduledMustDo[] = [];
       let metadata: Record<string, unknown> | null = null;
       if (tripId) {
         const { data: tripMeta } = await supabase
