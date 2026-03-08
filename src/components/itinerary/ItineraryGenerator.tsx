@@ -461,10 +461,10 @@ export function ItineraryGenerator({
         // For first trip: cap endDate to only generate `daysToGenerate` days
         let effectiveEndDate = endDate;
         if (daysToGenerate < totalRequestedDays) {
-          // Exclusive end-date standard: endDate = startDate + daysToGenerate (departure day)
+          // Inclusive end-date: endDate = startDate + (daysToGenerate - 1). Backend adds +1 to date diff.
           // Use local date parsing to avoid UTC timezone issues
           const [y, m, d] = startDate.split('-').map(Number);
-          const cappedEnd = new Date(y, m - 1, d + daysToGenerate);
+          const cappedEnd = new Date(y, m - 1, d + daysToGenerate - 1);
           effectiveEndDate = `${cappedEnd.getFullYear()}-${String(cappedEnd.getMonth() + 1).padStart(2, '0')}-${String(cappedEnd.getDate()).padStart(2, '0')}`;
         }
 
