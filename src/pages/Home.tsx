@@ -22,8 +22,6 @@ import { scrollToTop } from '@/utils/scrollUtils';
 
 // Sections that collapse into accordions on mobile (detail/reference content)
 const COLLAPSIBLE_SECTIONS = [
-  { key: 'insight', title: 'Your Travel Identity', teaser: "You're not generic. Your trip shouldn't be either" },
-  { key: 'archetypes', title: 'Your Travel DNA', teaser: 'Explore 29 unique traveler archetypes' },
   { key: 'itineraries', title: 'Sample Itineraries', teaser: 'Real trip plans with intelligence metrics' },
   { key: 'social', title: 'What Travelers Say', teaser: 'Beta tester quotes and platform intelligence' },
   { key: 'pricing', title: 'Pricing & Credits', teaser: '150 free credits monthly. No credit card required' },
@@ -101,7 +99,7 @@ export default function Home() {
         {/* Divider */}
         <div className="h-px bg-border/50 mx-6 md:hidden" />
         
-        {/* Section 3: Your Travel DNA — identity */}
+        {/* Section 3: Your Travel DNA — identity (flows from personalization) */}
         <div className="py-8 md:py-0">
           <TheInsightSection />
         </div>
@@ -109,15 +107,21 @@ export default function Home() {
         {/* Divider */}
         <div className="h-px bg-border/50 mx-6 md:hidden" />
         
-        {/* Section 4: Full Control, Your Way — reassurance */}
+        {/* Section 4: Archetype cards — extends the DNA topic */}
+        <div className="py-8 md:py-0">
+          <SampleArchetype />
+        </div>
+        
+        {/* Divider */}
+        <div className="h-px bg-border/50 mx-6 md:hidden" />
+        
+        {/* Section 5: Full Control, Your Way — reassurance */}
         <div className="py-8 md:py-0">
           <CustomizationShowcase />
         </div>
         
         {/* ═══ COLLAPSIBLE SECTIONS: Accordions on mobile ═══ */}
         <div className="md:hidden h-8" /> {/* Spacer before accordions */}
-        
-        {renderCollapsible('archetypes', <SampleArchetype />)}
         
         {renderCollapsible('itineraries',
           <ScrollTarget id="demo-section" className="scroll-mt-16">
