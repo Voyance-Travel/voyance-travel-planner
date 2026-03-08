@@ -999,6 +999,10 @@ function FlightHotelStep({
   const [showHotelModal, setShowHotelModal] = useState(false);
   const [editingHotelIndex, setEditingHotelIndex] = useState<number | null>(null); // for split-stay editing
   const [editingHotelCity, setEditingHotelCity] = useState<string | null>(null);
+  const [newHotelDraft, setNewHotelDraft] = useState<ManualHotelEntry>({
+    name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00',
+    checkInDate: startDate, checkOutDate: endDate,
+  });
   const [lastImportedLegs, setLastImportedLegs] = useState<ManualFlightEntry[]>([]);
   const [importNonce, setImportNonce] = useState(0);
 
@@ -1590,6 +1594,10 @@ function FlightHotelStep({
                     // If no hotels yet, open modal for first hotel
                     if (manualHotelList.length === 0 && !manualHotel.name) {
                       setEditingHotelIndex(null);
+                      setNewHotelDraft({
+                        name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00',
+                        checkInDate: startDate, checkOutDate: endDate,
+                      });
                       setShowHotelModal(true);
                     }
                   }}
@@ -1713,6 +1721,10 @@ function FlightHotelStep({
                         }
                         setEditingHotelIndex(null); // null = new hotel
                         setEditingHotelCity(null);
+                        setNewHotelDraft({
+                          name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00',
+                          checkInDate: startDate, checkOutDate: endDate,
+                        });
                         setShowHotelModal(true);
                       }}
                     >
@@ -1782,7 +1794,7 @@ function FlightHotelStep({
           ? (manualHotels[editingHotelCity] || { name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00' })
           : isListMode && editingHotelIndex !== null && manualHotelList[editingHotelIndex]
             ? manualHotelList[editingHotelIndex]
-            : (isListMode ? { name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00', checkInDate: startDate, checkOutDate: endDate } as ManualHotelEntry : manualHotel);
+            : (isListMode ? newHotelDraft : manualHotel);
         const setCurrentHotel = (h: ManualHotelEntry) => {
           if (editingHotelCity) {
             setManualHotels({ ...manualHotels, [editingHotelCity]: h });
@@ -1791,8 +1803,10 @@ function FlightHotelStep({
               const updated = [...manualHotelList];
               updated[editingHotelIndex] = h;
               setManualHotelList(updated);
+            } else {
+              // New hotel — update draft state
+              setNewHotelDraft(h);
             }
-            // For new hotels, we store temporarily via the modal save handler
           } else {
             setManualHotel(h);
           }
@@ -1892,7 +1906,7 @@ function FlightHotelStep({
                   />
                 </div>
                 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <Label className="text-xs">Check-in Time</Label>
                     <Input
@@ -1913,7 +1927,7 @@ function FlightHotelStep({
 
                 {/* Stay Dates — shown for split stays */}
                 {isListMode && (
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <Label className="text-xs">Check-in Date</Label>
                       <Input
