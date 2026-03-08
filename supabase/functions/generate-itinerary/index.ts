@@ -145,6 +145,7 @@ import {
   scheduleMustDos,
   buildMustHavesConstraintPrompt,
   type MustDoPriority,
+  type ActivityType,
 } from './must-do-priorities.ts';
 
 import {
@@ -442,6 +443,7 @@ interface GenerationContext {
   // Phase 3: Premium features
   preBookedCommitments?: PreBookedCommitment[];
   mustDoActivities?: string;
+  additionalNotes?: string;
   interestCategories?: string[];
   mustHaves?: Array<{label: string; notes?: string}>;
   generationRules?: Array<{type: string; days?: string[]; from?: string; to?: string; reason?: string; date?: string; description?: string; hotelName?: string; additionalGuests?: number; note?: string; text?: string}>;
@@ -4167,6 +4169,8 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
       if (Array.isArray(raw)) return raw.join(', ');
       return raw || undefined;
     })(),
+    // "Anything else" / additional notes from planner
+    additionalNotes: (trip.metadata?.additionalNotes as string) || undefined,
     // Interest categories selected by user (e.g. ['history', 'food', 'nightlife'])
     interestCategories: (trip.metadata?.interestCategories as string[]) || undefined,
     // Structured must-haves checklist (schedule constraints, hotel prefs, etc.)
@@ -8423,15 +8427,77 @@ ${'='.repeat(60)}
         // Keep all user itinerary anchors as must-have when Smart Finish was requested.
         const forceAllMust = !!context.isSmartFinish || !!context.smartFinishRequested;
         const mustDoAnalysis = parseMustDoInput(context.mustDoActivities, context.destination, forceAllMust);
+        
+        // ═══════════════════════════════════════════════════════════════════════
+        // CROSS-REFERENCE: Match must-do items against discovered local events
+        // If a user says "U.S. Open" and Perplexity found the U.S. Open event,
+        // inherit the event's dates/location and promote to all-day event.
+        // ═══════════════════════════════════════════════════════════════════════
+        if (mustDoAnalysis.length > 0 && fetchedLocalEvents.length > 0) {
+          console.log(`[Stage 1.999] Cross-referencing ${mustDoAnalysis.length} must-dos against ${fetchedLocalEvents.length} local events...`);
+          for (const mustDo of mustDoAnalysis) {
+            const mustDoLower = mustDo.activityName.toLowerCase();
+            const mustDoWords = mustDoLower.split(/\s+/).filter(w => w.length > 2);
+            
+            // Fuzzy match: check if any local event name shares 2+ significant words with the must-do
+            for (const event of fetchedLocalEvents) {
+              const eventLower = (event.name || '').toLowerCase();
+              const matchingWords = mustDoWords.filter(w => eventLower.includes(w));
+              
+              // Match if 2+ words match, or if must-do name is contained in event name (or vice versa)
+              if (matchingWords.length >= 2 || eventLower.includes(mustDoLower) || mustDoLower.includes(eventLower)) {
+                // Promote to must priority with event data
+                mustDo.priority = 'must';
+                mustDo.venueName = event.location || undefined;
+                mustDo.eventDates = event.dates || undefined;
+                
+                // If not already classified as an event, promote to at least half-day
+                if (!mustDo.activityType || mustDo.activityType === 'standard') {
+                  const eventType = (event.type || '').toLowerCase();
+                  if (['sports', 'festival', 'convention'].includes(eventType)) {
+                    mustDo.activityType = 'all_day_event';
+                    mustDo.estimatedDuration = 420;
+                  } else {
+                    mustDo.activityType = 'half_day_event';
+                    mustDo.estimatedDuration = Math.max(mustDo.estimatedDuration || 120, 210);
+                  }
+                }
+                
+                mustDo.requiresBooking = true;
+                console.log(`[Stage 1.999] ✓ Cross-ref match: "${mustDo.activityName}" ↔ event "${event.name}" → ${mustDo.activityType} at ${mustDo.venueName || 'TBD'}`);
+                break;
+              }
+            }
+          }
+        }
+        
         if (mustDoAnalysis.length > 0) {
           const scheduled = scheduleMustDos(mustDoAnalysis, context.totalDays);
           userResearchPrompt = scheduled.promptSection;
-          console.log(`[Stage 1.999] ✓ User research notes parsed: ${mustDoAnalysis.length} items (forceAllMust=${forceAllMust}), ${scheduled.scheduled.length} scheduled`);
+          const eventCount = mustDoAnalysis.filter(m => m.activityType === 'all_day_event' || m.activityType === 'half_day_event').length;
+          console.log(`[Stage 1.999] ✓ User research notes parsed: ${mustDoAnalysis.length} items (forceAllMust=${forceAllMust}), ${scheduled.scheduled.length} scheduled, ${eventCount} classified as events`);
         } else {
           // Raw text fallback — inject as-is with MANDATORY + ENRICHMENT language
           userResearchPrompt = `\n## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED and CHOSEN these specific venues. You MUST include ALL of them in the itinerary. These are NON-NEGOTIABLE. Do NOT substitute your own recommendations for these.\n\n"${context.mustDoActivities.trim()}"\n\nRULES:\n- EVERY venue/restaurant listed above MUST appear by name in the final itinerary\n- Only add AI recommendations to fill REMAINING empty meal/activity slots\n- If a user-specified venue conflicts with another, keep the user's venue and move the other\n- Respect any "skip" or "avoid" requests\n\n## 🧭 SMART FINISH ENRICHMENT — ADD VALUE\nThe user's list is a STARTING POINT. You MUST add significant value:\n- Add exact street addresses, opening hours, booking URLs for every venue\n- Add transit directions between activities (walk/metro/taxi with duration & cost)\n- Fill ALL meal gaps (breakfast, lunch, dinner, coffee stops)\n- Add 2-4 DNA-matched activities per day between user venues\n- Add insider tips for each user-specified venue\n- Flag any activity that doesn't match the traveler's DNA with a "dnaFlag" field\n`;
           console.log(`[Stage 1.999] ✓ User research notes injected as raw text with MANDATORY enforcement (${context.mustDoActivities.length} chars)`);
         }
+      }
+      
+      // ═══════════════════════════════════════════════════════════════════════
+      // STAGE 1.999a: Inject "Anything Else" / Additional Notes as trip anchors
+      // Users type trip purpose here (e.g., "this trip is for the U.S. Open")
+      // ═══════════════════════════════════════════════════════════════════════
+      if (context.additionalNotes && context.additionalNotes.trim()) {
+        const notes = context.additionalNotes.trim();
+        userResearchPrompt += `\n## 🎯 TRAVELER'S TRIP PURPOSE / ADDITIONAL NOTES
+The traveler provided these additional notes about their trip. These describe the PRIMARY PURPOSE or special requirements:
+
+"${notes}"
+
+CRITICAL: If these notes describe a specific event, activity, or purpose (e.g., "going for the U.S. Open", "attending a wedding", "here for a conference"), this MUST be treated as a NON-NEGOTIABLE anchor for the trip. Dedicate appropriate days to it.
+If the purpose is a specific event, plan at least ONE full day around that event. The rest of the trip should complement this primary purpose.
+`;
+        console.log(`[Stage 1.999a] ✓ Additional notes / trip purpose injected (${notes.length} chars)`);
       }
       // Inject interest categories
       if ((context as any).interestCategories && (context as any).interestCategories.length > 0) {
