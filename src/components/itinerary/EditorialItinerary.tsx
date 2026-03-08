@@ -5656,6 +5656,7 @@ export function EditorialItinerary({
                 neighborhood: '',
                 checkInTime: hotelSelection.checkInTime || '15:00',
                 checkOutTime: hotelSelection.checkOutTime || '11:00',
+                totalPrice: hotelSelection.totalPrice,
               } : undefined}
             />
           </DialogContent>
