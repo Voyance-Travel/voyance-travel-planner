@@ -191,7 +191,6 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=1200',
     'https://images.unsplash.com/photo-1518235925288-1db0fee2e487?w=1200',
   ],
-  ],
   'baltimore': [
     'https://images.unsplash.com/photo-1572120360610-d971b9d7767c?w=1200', // Inner Harbor
     'https://images.unsplash.com/photo-1588859211408-94e55a9f2f00?w=1200', // Baltimore skyline
