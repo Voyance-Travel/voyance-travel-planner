@@ -84,7 +84,7 @@ export function CommunityGuidesGrid() {
           transition={{ delay: index * 0.04 }}
           className="group bg-card rounded-2xl overflow-hidden border border-border hover:border-primary/40 hover:shadow-lg transition-all"
         >
-          <Link to={guide.slug ? `/guides/${guide.slug}` : '#'}>
+          <Link to={guide.slug ? `/community-guide/${guide.slug}` : '#'}>
             {/* Cover image */}
             <div className="aspect-[16/10] overflow-hidden relative bg-muted">
               {guide.cover_image_url ? (
