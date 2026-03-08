@@ -142,6 +142,97 @@ export function ItineraryGenerator({
   const [showCostConfirm, setShowCostConfirm] = useState(false);
   const [prePhase, setPrePhase] = useState<Extract<GenerationStep, 'gathering-dna' | 'personalizing' | 'preparing'> | null>(null);
 
+  const fetchCompletedDaysFromBackend = useCallback(async (): Promise<GeneratedDay[]> => {
+    if (!tripId) return [];
+
+    let expectedTotalDays = 0;
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const { data: tripData, error: fetchError } = await supabase
+        .from('trips')
+        .select('itinerary_data, metadata, start_date, end_date')
+        .eq('id', tripId)
+        .single();
+
+      if (fetchError) {
+        console.error('[ItineraryGenerator] Failed to fetch trip data:', fetchError);
+        break;
+      }
+
+      const meta = (tripData?.metadata as Record<string, unknown>) || {};
+      expectedTotalDays = (meta.generation_total_days as number) || 0;
+      if (expectedTotalDays <= 0 && tripData?.start_date && tripData?.end_date) {
+        expectedTotalDays = differenceInCalendarDays(
+          parseLocalDate(tripData.end_date),
+          parseLocalDate(tripData.start_date)
+        ) + 1;
+      }
+
+      const itData = (tripData?.itinerary_data ?? {}) as Record<string, unknown>;
+      const itineraryDays = Array.isArray(itData.days) ? (itData.days as GeneratedDay[]) : [];
+
+      if (itineraryDays.length > 0 && (expectedTotalDays <= 0 || itineraryDays.length >= expectedTotalDays)) {
+        return itineraryDays;
+      }
+
+      if (attempt < 4) {
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    }
+
+    const { data: dayRows, error: daysError } = await supabase
+      .from('itinerary_days')
+      .select('day_number, date, title, theme, activities')
+      .eq('trip_id', tripId)
+      .order('day_number', { ascending: true });
+
+    if (daysError || !dayRows?.length) {
+      if (daysError) {
+        console.error('[ItineraryGenerator] Failed to fetch fallback itinerary_days:', daysError);
+      }
+      return [];
+    }
+
+    const fallbackDays: GeneratedDay[] = dayRows.map((row: any) => {
+      const rawActivities = Array.isArray(row.activities) ? row.activities : [];
+
+      return {
+        dayNumber: row.day_number,
+        date: row.date || '',
+        title: row.title || `Day ${row.day_number}`,
+        theme: row.theme || row.title || '',
+        activities: rawActivities.map((activity: any, idx: number) => {
+          const locationValue = activity?.location;
+          const normalizedLocation = typeof locationValue === 'string'
+            ? locationValue
+            : {
+                name: locationValue?.name || '',
+                address: locationValue?.address || '',
+                coordinates: locationValue?.coordinates,
+              };
+
+          return {
+            id: activity?.id || `day-${row.day_number}-activity-${idx + 1}`,
+            title: activity?.title || activity?.name || 'Activity',
+            name: activity?.name || activity?.title || 'Activity',
+            description: activity?.description || '',
+            category: activity?.category || activity?.type || 'activity',
+            startTime: activity?.startTime || activity?.start_time || activity?.time || '',
+            endTime: activity?.endTime || activity?.end_time || '',
+            location: normalizedLocation,
+            bookingRequired: Boolean(activity?.bookingRequired ?? activity?.booking_required ?? false),
+          };
+        }),
+      } as GeneratedDay;
+    });
+
+    if (expectedTotalDays > 0 && fallbackDays.length < expectedTotalDays) {
+      return [];
+    }
+
+    return fallbackDays;
+  }, [tripId]);
+
   // Server-side generation poller — start polling as soon as generation has started
   // (even during prePhase) so progress updates aren't missed and GenerationPhases
   // doesn't remount and lose simulated progress state
@@ -155,27 +246,7 @@ export function ItineraryGenerator({
       console.log('[ItineraryGenerator] onReady fired — fetching completed itinerary');
       setPrePhase(null);
       try {
-        // Fetch the completed trip data — retry once if itinerary_data is empty
-        let completedDays: GeneratedDay[] = [];
-        for (let attempt = 0; attempt < 2; attempt++) {
-          const { data: tripData, error: fetchError } = await supabase
-            .from('trips')
-            .select('itinerary_data')
-            .eq('id', tripId)
-            .single();
-          if (fetchError) {
-            console.error('[ItineraryGenerator] Failed to fetch trip data:', fetchError);
-            break;
-          }
-          const itData = (tripData?.itinerary_data ?? {}) as Record<string, unknown>;
-          completedDays = (itData.days as GeneratedDay[]) || [];
-          if (completedDays.length > 0) break;
-          // If empty, wait briefly and retry — backend may still be assembling
-          if (attempt === 0) {
-            console.log('[ItineraryGenerator] itinerary_data.days empty, retrying in 2s...');
-            await new Promise(r => setTimeout(r, 2000));
-          }
-        }
+        const completedDays = await fetchCompletedDaysFromBackend();
         const gr = gateResultRef.current;
         if (gr && gr.creditsCharged > 0) {
           toast.success(`Trip generated! ${gr.creditsCharged} credits used`, { duration: 5000 });
