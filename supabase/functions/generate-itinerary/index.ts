@@ -3125,7 +3125,8 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
     }
     
     // Multi-city fallback: read from trip_cities if trips.hotel_selection is empty
-    if (!hotel && trip.is_multi_city) {
+    // Also check journey legs — they have is_multi_city=false but may still have trip_cities hotel data
+    if (!hotel && (trip.is_multi_city || trip.journey_id)) {
       try {
         const { data: tripCities } = await supabase
           .from('trip_cities')
