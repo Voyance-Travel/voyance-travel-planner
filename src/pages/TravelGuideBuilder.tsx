@@ -32,7 +32,7 @@ interface ItineraryDay {
   id: string;
   day_number: number;
   date: string;
-  city: string | null;
+  title: string | null;
   theme: string | null;
 }
 
@@ -88,7 +88,7 @@ export default function TravelGuideBuilder() {
     async function load() {
       setLoading(true);
       const [daysRes, activitiesRes, notesRes, photosRes] = await Promise.all([
-        supabase.from('itinerary_days').select('id, day_number, date, city, theme').eq('trip_id', tripId!).order('day_number'),
+        supabase.from('itinerary_days').select('id, day_number, date, title, theme').eq('trip_id', tripId!).order('day_number'),
         supabase.from('trip_activities').select('id, title, description, type, start_time, itinerary_day_id').eq('trip_id', tripId!).order('start_time'),
         supabase.from('trip_notes').select('id').eq('trip_id', tripId!),
         supabase.from('trip_photos').select('id').eq('trip_id', tripId!),
@@ -241,7 +241,7 @@ export default function TravelGuideBuilder() {
                   {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                   <span className="font-medium">📅 Day {day.day_number}</span>
                   {day.date && <span className="text-sm text-muted-foreground">— {day.date}</span>}
-                  {day.city && <span className="text-sm text-muted-foreground">· {day.city}</span>}
+                  {day.title && <span className="text-sm text-muted-foreground">· {day.title}</span>}
                 </div>
                 <span className="text-xs text-muted-foreground">
                   {daySelectedCount}/{dayActivities.length}
