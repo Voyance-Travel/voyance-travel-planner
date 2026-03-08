@@ -3929,6 +3929,41 @@ export type Database = {
           },
         ]
       }
+      guide_reports: {
+        Row: {
+          created_at: string
+          details: string | null
+          guide_id: string
+          id: string
+          reason: string
+          reporter_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          details?: string | null
+          guide_id: string
+          id?: string
+          reason: string
+          reporter_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          details?: string | null
+          guide_id?: string
+          id?: string
+          reason?: string
+          reporter_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guide_reports_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "community_guides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guides: {
         Row: {
           author: string | null
