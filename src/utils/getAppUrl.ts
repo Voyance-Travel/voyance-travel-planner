@@ -1,27 +1,25 @@
 /**
  * Returns the canonical public URL for the app.
  * 
- * In production (published site), this returns window.location.origin.
- * In preview/dev environments, this returns the published URL so that
- * shareable links (invites, referrals, etc.) always work for recipients.
+ * All shareable links (invites, referrals, guides, archetypes, intake forms)
+ * always point to the production custom domain so recipients can access them.
+ * Auth-related flows (OAuth, password reset) use window.location.origin directly
+ * and are NOT routed through this utility.
  */
 
-const PUBLISHED_URL = 'https://voyance-travel-planner.lovable.app';
+const PUBLISHED_URL = 'https://travelwithvoyance.com';
 
 export function getAppUrl(): string {
   if (typeof window === 'undefined') return PUBLISHED_URL;
 
   const origin = window.location.origin;
 
-  // If we're on the published domain or a custom domain, use it directly
-  if (
-    origin === PUBLISHED_URL ||
-    origin.includes('travelwithvoyance.com') ||
-    origin.startsWith('http://localhost')
-  ) {
+  // Production custom domain — use as-is
+  if (origin.includes('travelwithvoyance.com')) {
     return origin;
   }
 
-  // Otherwise (preview URLs, deploy previews, etc.) use the published URL
+  // All other environments (Capacitor, Lovable preview, localhost)
+  // → always use the production domain for shareable links
   return PUBLISHED_URL;
 }
