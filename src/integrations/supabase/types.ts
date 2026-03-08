@@ -8910,6 +8910,8 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      get_platform_destination_count: { Args: never; Returns: number }
+      get_platform_trip_count: { Args: never; Returns: number }
       get_shared_trip_payload: {
         Args: { p_share_token: string }
         Returns: Json
