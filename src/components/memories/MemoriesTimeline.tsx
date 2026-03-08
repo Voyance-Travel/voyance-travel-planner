@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useTripMemories, useDeleteMemory, type TripMemory } from '@/services/tripMemoriesAPI';
 import { MemoryUploadButton } from './MemoryUploadButton';
+import { VoiceNotesList } from './VoiceNotesList';
 import { cn } from '@/lib/utils';
 
 interface MemoriesTimelineProps {
@@ -94,7 +95,7 @@ export function MemoriesTimeline({ tripId, tripName, className }: MemoriesTimeli
             </div>
             <h3 className="font-semibold mb-1">No memories yet</h3>
             <p className="text-sm text-muted-foreground max-w-xs">
-              Capture photos during your trip to build a beautiful memory timeline
+              Capture photos and voice notes during your trip to build a beautiful memory timeline
             </p>
           </CardContent>
         </Card>
@@ -162,6 +163,9 @@ export function MemoriesTimeline({ tripId, tripName, className }: MemoriesTimeli
           </div>
         </div>
       ))}
+
+      {/* Voice Notes */}
+      <VoiceNotesList tripId={tripId} />
 
       {/* Lightbox */}
       <AnimatePresence>
