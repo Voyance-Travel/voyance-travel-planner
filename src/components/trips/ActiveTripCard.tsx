@@ -333,7 +333,7 @@ export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
             variant="default"
             className="h-auto py-4 flex-col gap-2"
           >
-            <Link to={`/itinerary/${trip.id}`}>
+            <Link to={`/trip/${trip.id}`}>
               <Calendar className="h-5 w-5" />
               <span className="text-sm font-medium">Today's Plan</span>
             </Link>
