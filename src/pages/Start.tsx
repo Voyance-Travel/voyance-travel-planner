@@ -2739,6 +2739,8 @@ export default function Start() {
                             metadata: {
                               mustDoActivities: details.mustDoActivities || null,
                               additionalNotes: details.additionalNotes || null,
+                              flightDetails: details.flightDetails || null,
+                              userConstraints: details.userConstraints || null,
                               source: 'chat_planner',
                               lastUpdated: new Date().toISOString(),
                             },

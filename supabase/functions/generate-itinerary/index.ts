@@ -457,6 +457,10 @@ interface GenerationContext {
   tripVibe?: string;
   /** Specific trip priorities extracted from pasted text */
   tripPriorities?: string[];
+  /** User constraints from chat planner (full-day events, time blocks, preferences) */
+  userConstraints?: Array<{type: string; description: string; day?: number; time?: string; allDay?: boolean}>;
+  /** Flight details from chat planner */
+  flightDetails?: string;
   groupArchetypes?: TravelerArchetype[];
   // Collaborator user IDs and names for suggestedFor attribution
   collaboratorTravelers?: Array<{ userId: string; name: string }>;
@@ -4188,6 +4192,10 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     smartFinishRequested: requestSmartFinishMode === true || !!trip.metadata?.smartFinishRequestedAt,
     tripVibe: trip.metadata?.tripVibe || undefined,
     tripPriorities: trip.metadata?.tripPriorities || undefined,
+    // User constraints from chat planner (full-day events, time blocks, preferences)
+    userConstraints: (trip.metadata?.userConstraints as any[]) || undefined,
+    // Flight details from chat planner
+    flightDetails: (trip.metadata?.flightDetails as string) || undefined,
   };
 
   // Set daily budget based on tier (fallback)
@@ -8480,7 +8488,7 @@ ${'='.repeat(60)}
           console.log(`[Stage 1.999] ✓ User research notes parsed: ${mustDoAnalysis.length} items (forceAllMust=${forceAllMust}), ${scheduled.scheduled.length} scheduled, ${eventCount} classified as events`);
         } else {
           // Raw text fallback — inject as-is with MANDATORY + ENRICHMENT language
-          userResearchPrompt = `\n## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED and CHOSEN these specific venues. You MUST include ALL of them in the itinerary. These are NON-NEGOTIABLE. Do NOT substitute your own recommendations for these.\n\n"${context.mustDoActivities.trim()}"\n\nRULES:\n- EVERY venue/restaurant listed above MUST appear by name in the final itinerary\n- Only add AI recommendations to fill REMAINING empty meal/activity slots\n- If a user-specified venue conflicts with another, keep the user's venue and move the other\n- Respect any "skip" or "avoid" requests\n\n## 🧭 SMART FINISH ENRICHMENT — ADD VALUE\nThe user's list is a STARTING POINT. You MUST add significant value:\n- Add exact street addresses, opening hours, booking URLs for every venue\n- Add transit directions between activities (walk/metro/taxi with duration & cost)\n- Fill ALL meal gaps (breakfast, lunch, dinner, coffee stops)\n- Add 2-4 DNA-matched activities per day between user venues\n- Add insider tips for each user-specified venue\n- Flag any activity that doesn't match the traveler's DNA with a "dnaFlag" field\n`;
+          userResearchPrompt = `\n## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED and CHOSEN these specific venues. You MUST include ALL of them in the itinerary. These are NON-NEGOTIABLE. Do NOT substitute your own recommendations for these.\n\n"${context.mustDoActivities.trim()}"\n\nRULES:\n- EVERY venue/restaurant listed above MUST appear by name in the final itinerary\n- Only add AI recommendations to fill REMAINING empty meal/activity slots\n- If a user-specified venue conflicts with another, keep the user's venue and move the other\n- Respect any "skip" or "avoid" requests\n- If the user mentions a FULL-DAY EVENT (e.g., "whole day at the U.S. Open"), do NOT plan other activities around it. That day has ONE purpose.\n- If the user mentions FLIGHT DETAILS, account for arrival/departure times on first/last days\n- If the user mentions SPECIFIC TIMES (e.g., "dinner at 7:30"), those times are LOCKED\n- User preferences like "authentic sushi" or "no tourist traps" apply to ALL venue selections\n\n## 🧭 SMART FINISH ENRICHMENT — ADD VALUE\nThe user's list is a STARTING POINT. You MUST add significant value:\n- Add exact street addresses, opening hours, booking URLs for every venue\n- Add transit directions between activities (walk/metro/taxi with duration & cost)\n- Fill ALL meal gaps (breakfast, lunch, dinner, coffee stops)\n- Add 2-4 DNA-matched activities per day between user venues\n- Add insider tips for each user-specified venue\n- Flag any activity that doesn't match the traveler's DNA with a "dnaFlag" field\n`;
           console.log(`[Stage 1.999] ✓ User research notes injected as raw text with MANDATORY enforcement (${context.mustDoActivities.length} chars)`);
         }
       }
@@ -8511,6 +8519,59 @@ If the purpose is a specific event, plan at least ONE full day around that event
         const labels = cats.map(c => categoryLabels[c] || c).join(', ');
         userResearchPrompt += `\n## USER INTERESTS\nPrioritize activities in these categories: ${labels}. Lean heavily toward these when choosing between options.\n`;
         console.log(`[Stage 1.999b] ✓ Interest categories injected: ${labels}`);
+      }
+
+      // =======================================================================
+      // STAGE 1.9993: User Constraints from Chat Planner
+      // Convert structured user constraints into generation rules
+      // =======================================================================
+      let userConstraintPrompt = "";
+      if (context.userConstraints && context.userConstraints.length > 0) {
+        const constraintLines: string[] = [];
+        constraintLines.push(`\n${'='.repeat(60)}`);
+        constraintLines.push(`🚨 USER'S EXPLICIT CONSTRAINTS — THESE OVERRIDE ALL OTHER RULES`);
+        constraintLines.push(`${'='.repeat(60)}`);
+        constraintLines.push(`The traveler specifically stated these requirements. They OVERRIDE pacing rules, activity count targets, and all other system defaults.\n`);
+
+        for (const constraint of context.userConstraints) {
+          switch (constraint.type) {
+            case 'full_day_event':
+              constraintLines.push(`⭐ FULL-DAY EVENT${constraint.day ? ` (Day ${constraint.day})` : ''}: "${constraint.description}"`);
+              constraintLines.push(`   → This event consumes the ENTIRE day. Do NOT add other activities, meals, or experiences to this day.`);
+              constraintLines.push(`   → The only additions allowed: transit to/from the event, and possibly a late dinner AFTER if appropriate.`);
+              constraintLines.push(`   → Do NOT apply normal pacing rules to this day. The user explicitly chose to spend it on this one thing.\n`);
+              break;
+            case 'time_block':
+              constraintLines.push(`⏰ TIME-LOCKED${constraint.day ? ` (Day ${constraint.day})` : ''}: "${constraint.description}"${constraint.time ? ` at ${constraint.time}` : ''}`);
+              constraintLines.push(`   → This activity is locked to this exact time. Build the rest of the day AROUND it.\n`);
+              break;
+            case 'avoid':
+              constraintLines.push(`🚫 AVOID: "${constraint.description}"`);
+              constraintLines.push(`   → Do NOT include anything matching this preference in any day.\n`);
+              break;
+            case 'preference':
+              constraintLines.push(`💎 PREFERENCE: "${constraint.description}"`);
+              constraintLines.push(`   → This should influence venue/activity selection across ALL days.\n`);
+              break;
+            case 'flight':
+              constraintLines.push(`✈️ FLIGHT${constraint.day ? ` (Day ${constraint.day})` : ''}: "${constraint.description}"${constraint.time ? ` at ${constraint.time}` : ''}`);
+              constraintLines.push(`   → Account for this flight in the day's schedule. Include airport transit time.\n`);
+              break;
+          }
+        }
+
+        constraintLines.push(`\n⚠️ HIERARCHY: User constraints > Trip vibe > DNA archetype > System pacing rules`);
+        constraintLines.push(`If a user constraint conflicts with a pacing rule, the user constraint ALWAYS wins.`);
+        constraintLines.push(`${'='.repeat(60)}\n`);
+        userConstraintPrompt = constraintLines.join('\n');
+        console.log(`[Stage 1.9993] ✓ User constraints injected: ${context.userConstraints.length} constraints`);
+      }
+
+      // Inject flight details into context
+      let flightDetailsPrompt = "";
+      if (context.flightDetails) {
+        flightDetailsPrompt = `\n## ✈️ USER'S FLIGHT INFORMATION\n${context.flightDetails}\n\nAccount for arrival/departure times when planning the first and last days. Include airport transit.\n`;
+        console.log(`[Stage 1.9993b] ✓ Flight details injected: ${context.flightDetails.length} chars`);
       }
 
       // Inject structured generation rules
@@ -8566,10 +8627,10 @@ If the purpose is a specific event, plan at least ONE full day around that event
       }
 
       // Combine all context for maximum personalization
-      // Order: ARCHETYPE CONSTRAINTS → INTEREST OVERRIDE → TRIP VIBE → TRIP TYPE → SKIP LIST → DIETARY ENFORCEMENT → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → HIDDEN GEMS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE → USER RESEARCH
+      // Order: USER CONSTRAINTS (highest priority) → FLIGHT DETAILS → ARCHETYPE CONSTRAINTS → INTEREST OVERRIDE → TRIP VIBE → TRIP TYPE → SKIP LIST → DIETARY ENFORCEMENT → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → HIDDEN GEMS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE → USER RESEARCH
       // NOTE: generationHierarchy includes destination essentials, archetype behavioral rules, budget guardrails (Phase 2 Fix)
       // Phase 2 Fix: Removed unifiedDNAContext - all traveler data now comes from generationHierarchy via unified profile
-      const preferenceContext = generationHierarchy + '\n\n' + interestOverridePrompt + '\n\n' + tripVibePrompt + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + (context.flightIntelligencePrompt ? '\n\n' + context.flightIntelligencePrompt : '') + tripLearningsContext + recentlyUsedContext + localEventsContext + hiddenGemsContext + voyancePicksContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + groupBlendingPromptSection + geographicPrompt + userResearchPrompt + mustHavesPrompt + preBookedPrompt;
+      const preferenceContext = userConstraintPrompt + '\n\n' + flightDetailsPrompt + '\n\n' + generationHierarchy + '\n\n' + interestOverridePrompt + '\n\n' + tripVibePrompt + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + (context.flightIntelligencePrompt ? '\n\n' + context.flightIntelligencePrompt : '') + tripLearningsContext + recentlyUsedContext + localEventsContext + hiddenGemsContext + voyancePicksContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + groupBlendingPromptSection + geographicPrompt + userResearchPrompt + mustHavesPrompt + preBookedPrompt;
 
       // STAGE 1.9999: Pre-fetch known venue hours from verified_venues cache
       try {
