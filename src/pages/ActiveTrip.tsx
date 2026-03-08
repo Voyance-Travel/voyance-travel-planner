@@ -413,10 +413,10 @@ export default function ActiveTrip() {
             </div>
 
             {/* View Tabs */}
-            <div className="flex gap-4 pb-3">
+            <div className="flex gap-3 pb-3 overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}>
               {(['today', 'overview', 'nearby', 'memories', 'stats', 'dna', 'chat'] as ViewType[]).map(v => {
                 const labels: Record<ViewType, string> = {
-                  today: 'Today', overview: 'Trip', nearby: 'Nearby', memories: '📸', stats: '📊', dna: '🧬', chat: '💬'
+                  today: 'Today', overview: 'Trip', nearby: 'Nearby', memories: 'Memories', stats: 'Stats', dna: 'DNA', chat: 'Chat'
                 };
                 return (
                   <button
