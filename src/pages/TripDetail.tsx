@@ -705,18 +705,32 @@ export default function TripDetail() {
 
         // Self-heal: detect corrupted ready+partial state
         // If itinerary_status is 'ready' but day count < expected, trigger stalled/resume
+        // Also correct inflated metadata.generation_total_days from canonical dates
         if (tripData.itinerary_status === 'ready' || (tripData.itinerary_status as string) === 'generated') {
           const itinData = tripData.itinerary_data as { days?: unknown[] } | null;
           const actualDays = Math.max(itinData?.days?.length ?? 0, itineraryDaysDbCount);
           const meta = (tripData.metadata as Record<string, unknown>) || {};
-          let expectedTotal = (meta.generation_total_days as number) || 0;
-          if (expectedTotal <= 0 && tripData.start_date && tripData.end_date) {
+          // Always recompute from canonical dates first
+          let expectedTotal = 0;
+          if (tripData.start_date && tripData.end_date) {
             try {
               expectedTotal = differenceInDays(
                 parseLocalDate(tripData.end_date),
                 parseLocalDate(tripData.start_date)
               ) + 1;
             } catch { expectedTotal = 0; }
+          }
+          // Fall back to metadata only if dates don't yield a valid count
+          if (expectedTotal <= 0) {
+            expectedTotal = (meta.generation_total_days as number) || 0;
+          }
+          // Correct inflated metadata if it disagrees with canonical dates
+          const metaTotal = (meta.generation_total_days as number) || 0;
+          if (expectedTotal > 0 && metaTotal > 0 && metaTotal !== expectedTotal && tripId) {
+            console.warn(`[TripDetail] Self-heal: correcting metadata.generation_total_days from ${metaTotal} to ${expectedTotal}`);
+            supabase.from('trips').update({
+              metadata: { ...meta, generation_total_days: expectedTotal },
+            }).eq('id', tripId).then(() => {});
           }
           if (expectedTotal > 0 && actualDays > 0 && actualDays < expectedTotal) {
             console.warn(`[TripDetail] Self-heal: trip marked ready but only ${actualDays}/${expectedTotal} days. Triggering resume.`);
