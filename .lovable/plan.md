@@ -1,149 +1,63 @@
 
 
-## Multi-City Generation: Per-City Progress Tracking
+## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
 
-### What's Actually Happening
-The backend **already auto-chains** day-by-day across all cities (London → Paris → Rome). The self-chain loop in `generate-trip-day` works correctly. The problem is purely a **progress visibility** issue — users can't see which city is generating, and the `trip_cities.generation_status` column (which already exists in the DB) is never updated.
+### What's Already Working (No Changes Needed)
+- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
+- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
+- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
+- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
 
-### Database
-No migration needed — `trip_cities.generation_status` column already exists with default `'pending'`.
+### What's Broken — Two Things
+
+**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
+
+**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
 
 ### Changes
 
-**File 1: `supabase/functions/generate-itinerary/index.ts`**
+#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
 
-**A. Heartbeat includes current city (line ~12845-12857)**
-Add `generation_current_city: cityInfo?.cityName || null` to the metadata heartbeat write. The `cityInfo` from `dayCityMap` is already resolved at this point.
+**Change A — Remove stall detector setup** (lines ~261-313):
+Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
 
-**B. Mark city 'generating' on first day of each city (after heartbeat, ~12857)**
-When `dayNumber` is the first day of a new city (detected by comparing `dayCityMap[dayNumber-1]` vs `dayCityMap[dayNumber-2]`), update `trip_cities` row:
-```sql
-UPDATE trip_cities SET generation_status = 'generating' WHERE trip_id = ? AND city_name = ?
-```
+**Change B — Remove browser loop fallback** (lines ~455-469):
+Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
 
-**C. Mark city 'generated' on last day of each city (after day save, ~13091-13123)**
-After saving a day, check if next day belongs to a different city. If so, mark current city as `'generated'`. On final day (`dayNumber >= totalDays`), also mark last city as `'generated'`. Add to both the completion branch and the self-chain branch:
 ```typescript
-if (isMultiCity && dayCityMap) {
-  const cityInfo = dayCityMap[dayNumber - 1];
-  const nextCityInfo = dayNumber < totalDays ? dayCityMap[dayNumber] : null;
-  if (cityInfo && (!nextCityInfo || nextCityInfo.cityName !== cityInfo.cityName)) {
-    await supabase.from('trip_cities')
-      .update({ generation_status: 'generated' } as any)
-      .eq('trip_id', tripId)
-      .eq('city_name', cityInfo.cityName);
-  }
+// OLD:
+} catch (serverErr) {
+  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
+  const generatedDays = await generateItinerary({ ... });
+  // ... 40 lines of fallback logic
+}
+
+// NEW:
+} catch (serverErr) {
+  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
+  setPrePhase(null);
+  setHasStarted(false);
+  toast.error('Failed to start generation. Please try again.');
+  return;
 }
 ```
 
-**D. Include current city in both metadata writes (lines ~13097-13103 and ~13117-13122)**
-Add `generation_current_city: null` (completion) or `generation_current_city: dayCityMap?.[dayNumber]?.cityName || null` (self-chain) to both metadata update blocks.
+**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
 
----
+**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
 
-**File 2: `src/hooks/useGenerationPoller.ts`**
+#### File 2: `src/hooks/useItineraryGeneration.ts`
 
-**A. Add `currentCity` to `GenerationPollState` interface (line ~27)**
-```typescript
-currentCity?: string | null;
-```
+No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
 
-**B. Extract current city from metadata in poll (line ~113)**
-```typescript
-const currentCity = (meta.generation_current_city as string) || null;
-```
+### Files to Modify
 
-**C. Pass `currentCity` through all `setState` calls**
-Add `currentCity` to every `setState({...})` call (polling, ready, failed, stalled states).
+| File | What |
+|------|------|
+| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
 
-**D. Add `trip_cities` subscription to realtime channel (line ~346)**
-Add a second `postgres_changes` listener for `trip_cities` table filtered by `trip_id`:
-```typescript
-.on('postgres_changes', {
-  event: 'UPDATE',
-  schema: 'public',
-  table: 'trip_cities',
-  filter: `trip_id=eq.${tripId}`,
-}, () => { poll(); })
-```
-
----
-
-**File 3: `src/components/planner/shared/GenerationPhases.tsx`**
-
-**A. Add props for multi-city progress (line ~23)**
-```typescript
-interface GenerationPhasesProps {
-  // ... existing
-  currentCity?: string | null;
-  isMultiCity?: boolean;
-  tripCities?: Array<{ city_name: string; generation_status: string }>;
-}
-```
-
-**B. Show current city in header text (line ~273-277)**
-Update `headerText` to include city name when multi-city:
-```typescript
-const headerText = allVisibleDaysDone
-  ? 'Finalizing your itinerary…'
-  : displayCompletedDays === 0
-    ? `Crafting Day 1 of ${totalDays > 0 ? totalDays : 'your trip'}${currentCity ? ` — ${currentCity}` : ''}`
-    : `Building Day ${nextDay} of ${totalDays}${currentCity ? ` — ${currentCity}` : ''}`;
-```
-
-**C. Add city checklist below progress bar (after line ~322)**
-For multi-city trips, show a horizontal row of city badges with status icons:
-- ✓ green check = `generated`
-- ⟳ spinning = `generating`  
-- ○ muted circle = `pending`
-
-```tsx
-{isMultiCity && tripCities && tripCities.length > 1 && (
-  <div className="flex items-center gap-2 mb-4 justify-center flex-wrap">
-    {tripCities.map((city, i) => (
-      <div key={i} className="flex items-center gap-1 text-xs">
-        {city.generation_status === 'generated' ? (
-          <Check className="h-3 w-3 text-green-500" />
-        ) : city.generation_status === 'generating' ? (
-          <Loader2 className="h-3 w-3 text-primary animate-spin" />
-        ) : (
-          <div className="h-3 w-3 rounded-full border border-muted-foreground/40" />
-        )}
-        <span className={city.generation_status === 'generated' ? 'text-green-600 font-medium' : 'text-muted-foreground'}>
-          {city.city_name}
-        </span>
-      </div>
-    ))}
-  </div>
-)}
-```
-
----
-
-**File 4: `src/components/itinerary/ItineraryGenerator.tsx` (line ~1136-1145)**
-
-Pass new props to `GenerationPhases`:
-- Fetch `tripCities` using the existing `useTripCities` hook (already imported patterns exist)
-- Pass `currentCity={poller.currentCity}`, `isMultiCity={isMultiCity}`, `tripCities={tripCitiesData}`
-
-**File 5: `src/pages/TripDetail.tsx` (line ~1623-1632)**
-
-Same — pass `currentCity`, `isMultiCity`, `tripCities` to the `GenerationPhases` component used in the TripDetail generation view.
-
----
-
-### What stays the same
-- Day-by-day self-chaining logic — already works across cities
-- AI prompts, credit deduction, enrichment — unchanged
-- Stall detection and auto-resume — unchanged
-- totalDays calculation — backend already writes corrected value to `generation_total_days` and poller already reads it
-
-### Files to modify
-| File | Change |
-|------|--------|
-| `supabase/functions/generate-itinerary/index.ts` | Add city tracking to heartbeat + mark city generating/generated |
-| `src/hooks/useGenerationPoller.ts` | Expose `currentCity`, subscribe to `trip_cities` realtime |
-| `src/components/planner/shared/GenerationPhases.tsx` | Show city name in header + city checklist |
-| `src/components/itinerary/ItineraryGenerator.tsx` | Pass city props to GenerationPhases |
-| `src/pages/TripDetail.tsx` | Pass city props to GenerationPhases |
+### Risk Assessment
+- **Low risk**: The server-side self-chaining is already fully implemented and tested
+- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
+- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
 
