@@ -2373,6 +2373,27 @@ export type Database = {
         }
         Relationships: []
       }
+      creator_follows: {
+        Row: {
+          created_at: string
+          creator_id: string
+          follower_id: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          creator_id: string
+          follower_id: string
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          creator_id?: string
+          follower_id?: string
+          id?: string
+        }
+        Relationships: []
+      }
       credit_balances: {
         Row: {
           created_at: string
