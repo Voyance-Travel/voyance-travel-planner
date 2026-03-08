@@ -2585,6 +2585,7 @@ export default function Start() {
             })),
             format(startDate, 'yyyy-MM-dd'),
             format(endDate, 'yyyy-MM-dd'),
+            manualHotels,
           );
 
           if (splitResult.didSplit) {
