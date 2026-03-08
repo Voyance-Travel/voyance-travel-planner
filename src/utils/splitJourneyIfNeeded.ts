@@ -14,6 +14,17 @@ interface Destination {
   airportCode?: string;
 }
 
+interface HotelData {
+  name?: string;
+  address?: string;
+  neighborhood?: string;
+  checkInTime?: string;
+  checkOutTime?: string;
+  pricePerNight?: number;
+  includeInBudget?: boolean;
+  accommodationType?: string;
+}
+
 interface TransportInfo {
   type?: string;
   fromCity?: string;
@@ -68,6 +79,7 @@ export async function splitJourneyIfNeeded(
   transports: TransportInfo[],
   startDate: string,
   endDate: string,
+  hotelsByCity?: Record<string, HotelData[]>,
 ): Promise<SplitResult> {
   // Check conditions: 8+ days AND 2+ cities
   const totalDays = daysBetween(startDate, endDate);
@@ -157,7 +169,17 @@ export async function splitJourneyIfNeeded(
         : null,
       origin_city: i === 0 ? originalTrip.origin_city : destinations[i - 1].city,
       flight_selection: i === 0 ? originalTrip.flight_selection : null,
-      hotel_selection: null, // Will be populated from trip_cities
+      hotel_selection: hotelsByCity?.[dest.city]?.length
+        ? hotelsByCity[dest.city].filter(h => h.name).map(h => ({
+            name: h.name,
+            address: h.address || '',
+            neighborhood: h.neighborhood || '',
+            checkInTime: h.checkInTime || '15:00',
+            checkOutTime: h.checkOutTime || '11:00',
+            pricePerNight: h.pricePerNight || undefined,
+            source: 'manual',
+          }))
+        : null,
       is_multi_city: false,
       destinations: [dest] as any,
       creation_source: 'journey_split',
@@ -216,6 +238,17 @@ export async function splitJourneyIfNeeded(
       days_total: nights,
       transport_type: i > 0 && transports[i - 1] ? transports[i - 1].type : null,
       transport_details: i > 0 && transports[i - 1] ? transports[i - 1] as any : null,
+      hotel_selection: hotelsByCity?.[dest.city]?.length
+        ? hotelsByCity[dest.city].filter(h => h.name).map(h => ({
+            name: h.name,
+            address: h.address || '',
+            neighborhood: h.neighborhood || '',
+            checkInTime: h.checkInTime || '15:00',
+            checkOutTime: h.checkOutTime || '11:00',
+            pricePerNight: h.pricePerNight || undefined,
+            source: 'manual',
+          }))
+        : null,
     });
 
     dateOffset += nights;
