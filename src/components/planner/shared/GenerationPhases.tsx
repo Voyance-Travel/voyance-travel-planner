@@ -264,7 +264,7 @@ export function GenerationPhases({
   // Dynamic subtitle based on progress
   const getSubtitle = () => {
     if (allVisibleDaysDone) return 'Almost there, adding final touches';
-    if (displayProgress < 25) return 'Crafting a personalized experience';
+    if (displayCompletedDays === 0) return 'Researching destinations, restaurants & hidden gems';
     if (displayProgress < 50) return 'Curating your perfect days';
     if (displayProgress < 75) return `${displayCompletedDays} ${displayCompletedDays === 1 ? 'day' : 'days'} complete · ~${Math.max(1, Math.ceil(remainingDays * 1.2))} min remaining`;
     return 'Almost there, adding final touches';
@@ -273,7 +273,7 @@ export function GenerationPhases({
   const headerText = allVisibleDaysDone
     ? 'Finalizing your itinerary…'
     : displayCompletedDays === 0
-      ? `Building your ${destination || 'trip'}`
+      ? `Crafting Day 1 of ${totalDays > 0 ? totalDays : 'your trip'}`
       : `Building Day ${nextDay} of ${totalDays}`;
 
   return (
@@ -314,7 +314,7 @@ export function GenerationPhases({
               transition={{ duration: 2, repeat: Infinity }}
               className="text-xs text-muted-foreground"
             >
-              {displayCompletedDays === 0 ? 'Generating...' : `${displayCompletedDays}/${totalDays} days`}
+              {displayCompletedDays === 0 ? 'Working on Day 1...' : `${displayCompletedDays}/${totalDays} days`}
             </motion.p>
             <p className="text-xs text-muted-foreground font-medium">{Math.round(displayProgress)}%</p>
           </div>
