@@ -379,36 +379,6 @@ export default function PersonalizationProof() {
           </motion.div>
         </AnimatePresence>
 
-        {/* Comparison Stats */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ delay: 0.1 }}
-          className="mt-8 flex flex-wrap justify-center gap-6 md:gap-10 text-center"
-        >
-          {[
-            { 
-              label: 'Activities per day', 
-              values: ARCHETYPES.map(a => a.activities.length),
-            },
-            { 
-              label: 'Daily budget', 
-              values: ARCHETYPES.map(a => `$${a.dailyBudget}`),
-            },
-            { 
-              label: 'Day starts at', 
-              values: ARCHETYPES.map(a => a.firstActivity),
-            },
-          ].map((stat) => (
-            <div key={stat.label} className="px-3">
-              <p className="text-lg md:text-xl font-bold text-foreground">
-                {stat.values.join(' / ')}
-              </p>
-              <p className="text-xs text-muted-foreground">{stat.label}</p>
-            </div>
-          ))}
-        </motion.div>
 
         {/* CTA */}
         <motion.div
