@@ -10,7 +10,7 @@
  * Each badge is expandable to show specifics. Includes savings calculation.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, Clock, MapPinOff, Target, TrendingUp, ChevronDown, ChevronUp,
