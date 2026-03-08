@@ -116,6 +116,7 @@ export default function TripDetail() {
   const [paymentsRefreshKey, setPaymentsRefreshKey] = useState(0);
   const [destinationMeta, setDestinationMeta] = useState<Destination | null>(null);
   const [showDebriefModal, setShowDebriefModal] = useState(false);
+  const [liveTripViewMode, setLiveTripViewMode] = useState<'active' | 'edit'>('active');
   const [hasCollaborators, setHasCollaborators] = useState(false);
   const [conflictState, setConflictState] = useState<{
     open: boolean;
@@ -1540,9 +1541,36 @@ export default function TripDetail() {
             );
           })()}
 
+          {/* Active/Edit Toggle for live trips */}
+          {isLiveTrip && (
+            <div className="flex items-center gap-1 bg-muted rounded-lg p-1 w-fit mb-4">
+              <button
+                onClick={() => setLiveTripViewMode('active')}
+                className={cn(
+                  'px-4 py-1.5 rounded-md text-sm font-medium transition-all',
+                  liveTripViewMode === 'active'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                Active
+              </button>
+              <button
+                onClick={() => setLiveTripViewMode('edit')}
+                className={cn(
+                  'px-4 py-1.5 rounded-md text-sm font-medium transition-all',
+                  liveTripViewMode === 'edit'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                Edit
+              </button>
+            </div>
+          )}
 
           {/* Live Itinerary View for active trips */}
-          {isLiveTrip ? (
+          {isLiveTrip && liveTripViewMode === 'active' ? (
             <ErrorBoundary>
             <LiveItineraryView
               tripId={trip.id}
