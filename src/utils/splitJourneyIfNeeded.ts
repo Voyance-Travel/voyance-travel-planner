@@ -235,7 +235,7 @@ export async function splitJourneyIfNeeded(
       departure_date: departureDate,
       nights,
       generation_status: 'pending' as const,
-      days_total: nights,
+      days_total: nights + 1, // Inclusive day count: nights + 1 (matches single-city convention)
       transport_type: i > 0 && transports[i - 1] ? transports[i - 1].type : null,
       transport_details: i > 0 && transports[i - 1] ? transports[i - 1] as any : null,
       hotel_selection: hotelsByCity?.[dest.city]?.length
