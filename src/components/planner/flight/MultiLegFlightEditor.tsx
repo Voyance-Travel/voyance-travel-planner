@@ -849,35 +849,41 @@ function LegSlotCard({ slot, index, totalSlots, onUpdateFlight, onToggleExpanded
       </button>
       </div>{/* end header flex */}
 
-      {/* Star controls for marking destination arrival / departure */}
+      {/* Star controls for marking destination arrival / departure — filtered by leg type */}
       {showStarControls && totalSlots >= 2 && (
         <div className="flex items-center gap-2 px-4 pb-2 pt-1">
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onMarkArrival?.(); }}
-            className={cn(
-              "inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md border transition-colors",
-              slot.flight.isDestinationArrival
-                ? "bg-primary/10 border-primary/30 text-primary font-medium"
-                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
-            )}
-          >
-            <MapPin className={cn("h-3 w-3", slot.flight.isDestinationArrival && "text-primary")} />
-            {slot.flight.isDestinationArrival ? 'Destination arrival ✓' : 'Mark as destination arrival'}
-          </button>
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onMarkDeparture?.(); }}
-            className={cn(
-              "inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md border transition-colors",
-              slot.flight.isDestinationDeparture
-                ? "bg-accent/80 border-accent text-accent-foreground font-medium"
-                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
-            )}
-          >
-            <Plane className={cn("h-3 w-3", slot.flight.isDestinationDeparture && "text-accent-foreground")} />
-            {slot.flight.isDestinationDeparture ? 'Departure from dest ✓' : 'Mark as departure from destination'}
-          </button>
+          {/* Show "destination arrival" on outbound, inter-city, and custom legs — NOT on return legs */}
+          {slot.legType !== 'return' && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onMarkArrival?.(); }}
+              className={cn(
+                "inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md border transition-colors",
+                slot.flight.isDestinationArrival
+                  ? "bg-primary/10 border-primary/30 text-primary font-medium"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )}
+            >
+              <MapPin className={cn("h-3 w-3", slot.flight.isDestinationArrival && "text-primary")} />
+              {slot.flight.isDestinationArrival ? 'Destination arrival ✓' : 'Mark as destination arrival'}
+            </button>
+          )}
+          {/* Show "departure from destination" on return, inter-city, and custom legs — NOT on outbound legs */}
+          {slot.legType !== 'outbound' && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onMarkDeparture?.(); }}
+              className={cn(
+                "inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md border transition-colors",
+                slot.flight.isDestinationDeparture
+                  ? "bg-accent/80 border-accent text-accent-foreground font-medium"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )}
+            >
+              <Plane className={cn("h-3 w-3", slot.flight.isDestinationDeparture && "text-accent-foreground")} />
+              {slot.flight.isDestinationDeparture ? 'Departure from dest ✓' : 'Mark as departure from destination'}
+            </button>
+          )}
         </div>
       )}
       {/* Expanded content */}
