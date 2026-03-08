@@ -600,24 +600,42 @@ export function ImportActivitiesModal({
                     {group.activities.map((activity, ai) => (
                       <div
                         key={ai}
-                        onClick={() => toggleActivity(gi, ai)}
                         className={cn(
-                          'flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all text-xs',
+                          'flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all text-xs',
                           activity.included
                             ? 'bg-primary/5'
                             : 'opacity-40 line-through'
                         )}
                       >
-                        <div className={cn(
-                          'h-4 w-4 rounded-full border-2 flex items-center justify-center shrink-0',
-                          activity.included ? 'border-primary bg-primary' : 'border-muted-foreground'
-                        )}>
+                        <div
+                          onClick={() => toggleActivity(gi, ai)}
+                          className={cn(
+                            'h-4 w-4 rounded-full border-2 flex items-center justify-center shrink-0 cursor-pointer',
+                            activity.included ? 'border-primary bg-primary' : 'border-muted-foreground'
+                          )}
+                        >
                           {activity.included && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
                         </div>
-                        <span className="flex-1 truncate">{activity.title}</span>
-                        {activity.startTime && <span className="text-muted-foreground">{activity.startTime}</span>}
+                        <span className="flex-1 truncate cursor-pointer" onClick={() => toggleActivity(gi, ai)}>{activity.title}</span>
+                        {activity.startTime && (
+                          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            {activity.isEstimatedTime && <Clock className="h-3 w-3 text-muted-foreground" />}
+                            <input
+                              type="time"
+                              value={activity.startTime}
+                              onChange={(e) => updateActivityTime(gi, ai, e.target.value)}
+                              className={cn(
+                                'w-[70px] h-6 px-1 text-xs rounded border bg-background text-foreground',
+                                activity.isEstimatedTime
+                                  ? 'border-dashed border-muted-foreground/50 italic text-muted-foreground'
+                                  : 'border-border'
+                              )}
+                            />
+                          </div>
+                        )}
                         {activity.cost && <span className="text-muted-foreground">${activity.cost.amount}</span>}
                       </div>
+                    ))}
                     ))}
                   </div>
                 </div>
