@@ -104,12 +104,8 @@ const everythingIncluded = [
   ]},
 ];
 
-const sampleDay = [
-  { time: '9:00 AM', name: 'La Boqueria Market', rating: '4.7', type: 'Food market' as string | null },
-  { time: '11:30 AM', name: 'Gothic Quarter Walk', rating: '4.8', type: 'Historic district' as string | null },
-  { time: '2:00 PM', name: 'Can Culleretes', rating: '4.5', type: 'Traditional Catalan' as string | null, booking: 'Booking recommended' },
-  { time: '4:30 PM', name: 'Park Güell', rating: '4.6', type: null, booking: 'Booking required' },
-];
+
+
 
 const faqs = [
   { q: 'How do credits work?', a: 'Credits unlock your full itinerary - all days plus actionable details like addresses, costs, and booking links. Your first trip is free with everything included.' },
@@ -425,36 +421,6 @@ export default function Pricing() {
         </div>
       </section>
 
-      {/* SAMPLE DAY */}
-      <section className="py-12 sm:py-16 bg-muted/30">
-        <div className="max-w-2xl mx-auto px-4">
-          <motion.div initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-6">
-            <p className="text-xs font-medium tracking-widest text-primary uppercase mb-2">Example</p>
-            <h2 className="text-xl sm:text-2xl font-serif font-medium text-foreground">Your First Trip: Sample Day</h2>
-            <p className="text-sm text-muted-foreground mt-2">Everything below is included free on your first trip:</p>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="bg-card border border-border rounded-2xl overflow-hidden">
-            <div className="divide-y divide-border">
-              {sampleDay.map((stop, i) => (
-                <div key={i} className="flex gap-4 p-4">
-                  <span className="text-xs text-muted-foreground font-mono whitespace-nowrap pt-0.5">{stop.time}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground text-sm">{stop.name}</p>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
-                      <span className="text-xs text-muted-foreground flex items-center gap-1"><Star className="h-3 w-3 text-primary" /> {stop.rating}</span>
-                      {stop.type && <span className="text-xs text-muted-foreground">{stop.type}</span>}
-                      {stop.booking && <span className="text-xs text-primary flex items-center gap-1"><Ticket className="h-3 w-3" /> {stop.booking}</span>}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="p-4 bg-primary/5 border-t border-primary/10">
-              <p className="text-xs text-primary text-center font-medium">✓ Addresses, costs, photos, tips, and booking links - all included on your first trip.</p>
-            </div>
-          </motion.div>
-        </div>
-      </section>
 
       {/* OR BUILD IT YOURSELF */}
       <section className="py-12 sm:py-16">
