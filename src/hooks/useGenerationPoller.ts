@@ -34,6 +34,8 @@ export interface GenerationPollState {
   partialDays: unknown[];
   /** Day summaries from itinerary_days table for the progress UI */
   generatedDaysList: GeneratedDaySummary[];
+  /** Current city being generated (multi-city trips) */
+  currentCity?: string | null;
 }
 
 interface UseGenerationPollerOptions {
@@ -113,6 +115,7 @@ export function useGenerationPoller({
       const meta = (data.metadata as Record<string, unknown>) || {};
       const metaCompletedDays = (meta.generation_completed_days as number) || 0;
       const totalDays = (meta.generation_total_days as number) || 0;
+      const currentCity = (meta.generation_current_city as string) || null;
 
       // Extract partial days from itinerary_data
       const itineraryData = (data.itinerary_data as Record<string, unknown>) || {};
@@ -152,7 +155,7 @@ export function useGenerationPoller({
       if (itineraryStatus === 'ready' || itineraryStatus === 'generated') {
         stalledFiredRef.current = false;
         autoResumeAttemptedRef.current = false;
-        setState({ status: 'ready', completedDays: totalDays || completedDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList });
+        setState({ status: 'ready', completedDays: totalDays || completedDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
         if (!onReadyCalledRef.current) {
           onReadyCalledRef.current = true;
           onReadyRef.current?.();
@@ -164,7 +167,7 @@ export function useGenerationPoller({
       if (totalDays > 0 && dayCount >= totalDays && data.itinerary_data) {
         stalledFiredRef.current = false;
         autoResumeAttemptedRef.current = false;
-        setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList });
+        setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
         if (!onReadyCalledRef.current) {
           onReadyCalledRef.current = true;
           onReadyRef.current?.();

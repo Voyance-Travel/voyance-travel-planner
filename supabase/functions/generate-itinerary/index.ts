@@ -12842,7 +12842,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         }
       }
 
-      // Update heartbeat before generating
+      // Update heartbeat before generating (includes current city for multi-city progress)
       {
         const hbMeta = (tripCheck.metadata as Record<string, unknown>) || {};
         await supabase.from('trips').update({
@@ -12852,8 +12852,21 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             generation_current_day: dayNumber,
             generation_completed_days: dayNumber - 1,
             generation_total_days: totalDays,
+            generation_current_city: cityInfo?.cityName || null,
           },
         }).eq('id', tripId);
+      }
+
+      // ─── PER-CITY STATUS: Mark city as 'generating' on first day ───
+      if (isMultiCity && dayCityMap && cityInfo) {
+        const prevCityInfo = dayNumber > 1 ? dayCityMap[dayNumber - 2] : null;
+        if (!prevCityInfo || prevCityInfo.cityName !== cityInfo.cityName) {
+          await supabase.from('trip_cities')
+            .update({ generation_status: 'generating' } as any)
+            .eq('trip_id', tripId)
+            .eq('city_name', cityInfo.cityName);
+          console.log(`[generate-trip-day] City "${cityInfo.cityName}" generation started`);
+        }
       }
 
       // Generate this single day
@@ -13088,6 +13101,19 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         }
       }
 
+      // ─── PER-CITY STATUS: Mark city as 'generated' on last day of each city ───
+      if (isMultiCity && dayCityMap) {
+        const currentCityInfo = dayCityMap[dayNumber - 1];
+        const nextCityInfo = dayNumber < totalDays ? dayCityMap[dayNumber] : null;
+        if (currentCityInfo && (!nextCityInfo || nextCityInfo.cityName !== currentCityInfo.cityName)) {
+          await supabase.from('trip_cities')
+            .update({ generation_status: 'generated' } as any)
+            .eq('trip_id', tripId)
+            .eq('city_name', currentCityInfo.cityName);
+          console.log(`[generate-trip-day] City "${currentCityInfo.cityName}" generation complete`);
+        }
+      }
+
       if (dayNumber >= totalDays) {
         // All days complete — set status to ready
         await supabase.from('trips').update({
@@ -13100,6 +13126,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             generation_completed_at: new Date().toISOString(),
             generation_heartbeat: new Date().toISOString(),
             generation_total_days: totalDays,
+            generation_current_city: null,
           },
         }).eq('id', tripId);
 
@@ -13111,6 +13138,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         );
       } else {
         // More days remain — save progress and self-chain to next day
+        const nextCityName = dayCityMap?.[dayNumber]?.cityName || null;
         await supabase.from('trips').update({
           itinerary_data: partialItinerary,
           unlocked_day_count: newUnlocked,
@@ -13119,6 +13147,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             generation_completed_days: dayNumber,
             generation_heartbeat: new Date().toISOString(),
             generation_total_days: totalDays,
+            generation_current_city: nextCityName,
           },
         }).eq('id', tripId);
 
