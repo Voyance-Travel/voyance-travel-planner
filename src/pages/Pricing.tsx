@@ -104,12 +104,8 @@ const everythingIncluded = [
   ]},
 ];
 
-const sampleDay = [
-  { time: '9:00 AM', name: 'La Boqueria Market', rating: '4.7', type: 'Food market' as string | null },
-  { time: '11:30 AM', name: 'Gothic Quarter Walk', rating: '4.8', type: 'Historic district' as string | null },
-  { time: '2:00 PM', name: 'Can Culleretes', rating: '4.5', type: 'Traditional Catalan' as string | null, booking: 'Booking recommended' },
-  { time: '4:30 PM', name: 'Park Güell', rating: '4.6', type: null, booking: 'Booking required' },
-];
+
+
 
 const faqs = [
   { q: 'How do credits work?', a: 'Credits unlock your full itinerary - all days plus actionable details like addresses, costs, and booking links. Your first trip is free with everything included.' },
