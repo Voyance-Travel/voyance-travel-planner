@@ -2882,9 +2882,11 @@ export function EditorialItinerary({
           tripId,
           destination,
           days: filteredDays,
-          enableRouteOptimization: true,
-          enableRealTransport: true,
-          enableCostLookup: true,
+          enableRouteOptimization: false,  // Don't reorder activities
+          enableRealTransport: true,        // DO update transport between activities
+          enableCostLookup: true,           // DO update cost estimates
+          enableGapFilling: false,          // Don't insert free time blocks
+          enableTagGeneration: false,       // Skip tag regeneration
           // Pass user transport preferences
           transportPreferences: {
             allowedModes: prefs.transportModes,
