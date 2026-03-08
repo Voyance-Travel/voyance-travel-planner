@@ -1235,9 +1235,8 @@ function FlightHotelStep({
                     </div>
 
                     {/* Date & Times */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-3">
-                      <div className="col-span-2 sm:col-span-1">
-                      
+                    <div className="space-y-3">
+                      <div>
                         <Label className="text-xs text-muted-foreground">Date</Label>
                         <Input
                           type="date"
@@ -1246,23 +1245,25 @@ function FlightHotelStep({
                           className="text-xs h-8"
                         />
                       </div>
-                      <div>
-                        <Label className="text-xs text-muted-foreground">Departs</Label>
-                        <Input
-                          type="time"
-                          value={outboundFlight.departureTime}
-                          onChange={(e) => setOutboundFlight({ ...outboundFlight, departureTime: e.target.value })}
-                          className="text-xs h-8"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-xs text-muted-foreground">Arrives *</Label>
-                        <Input
-                          type="time"
-                          value={outboundFlight.arrivalTime}
-                          onChange={(e) => setOutboundFlight({ ...outboundFlight, arrivalTime: e.target.value })}
-                          className="text-xs h-8"
-                        />
+                      <div className="flex w-full gap-4">
+                        <div className="flex-1 min-w-0">
+                          <Label className="text-xs text-muted-foreground mb-1 block">Departs</Label>
+                          <Input
+                            type="time"
+                            value={outboundFlight.departureTime}
+                            onChange={(e) => setOutboundFlight({ ...outboundFlight, departureTime: e.target.value })}
+                            className="text-xs h-8 w-full"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <Label className="text-xs text-muted-foreground mb-1 block">Arrives *</Label>
+                          <Input
+                            type="time"
+                            value={outboundFlight.arrivalTime}
+                            onChange={(e) => setOutboundFlight({ ...outboundFlight, arrivalTime: e.target.value })}
+                            className="text-xs h-8 w-full"
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -1359,8 +1360,8 @@ function FlightHotelStep({
                                   />
                                 </div>
                               </div>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-3">
-                                <div className="col-span-2 sm:col-span-1">
+                              <div className="space-y-3">
+                                <div>
                                   <Label className="text-xs text-muted-foreground">Date</Label>
                                   <Input
                                     type="date"
@@ -1373,31 +1374,33 @@ function FlightHotelStep({
                                     className="text-xs h-8"
                                   />
                                 </div>
-                                <div>
-                                  <Label className="text-xs text-muted-foreground">Departs</Label>
-                                  <Input
-                                    type="time"
-                                    value={leg.departureTime}
-                                    onChange={(e) => {
-                                      const updated = [...additionalLegs];
-                                      updated[idx] = { ...updated[idx], departureTime: e.target.value };
-                                      setAdditionalLegs(updated);
-                                    }}
-                                    className="text-xs h-8"
-                                  />
-                                </div>
-                                <div>
-                                  <Label className="text-xs text-muted-foreground">Arrives</Label>
-                                  <Input
-                                    type="time"
-                                    value={leg.arrivalTime}
-                                    onChange={(e) => {
-                                      const updated = [...additionalLegs];
-                                      updated[idx] = { ...updated[idx], arrivalTime: e.target.value };
-                                      setAdditionalLegs(updated);
-                                    }}
-                                    className="text-xs h-8"
-                                  />
+                                <div className="flex w-full gap-4">
+                                  <div className="flex-1 min-w-0">
+                                    <Label className="text-xs text-muted-foreground mb-1 block">Departs</Label>
+                                    <Input
+                                      type="time"
+                                      value={leg.departureTime}
+                                      onChange={(e) => {
+                                        const updated = [...additionalLegs];
+                                        updated[idx] = { ...updated[idx], departureTime: e.target.value };
+                                        setAdditionalLegs(updated);
+                                      }}
+                                      className="text-xs h-8 w-full"
+                                    />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <Label className="text-xs text-muted-foreground mb-1 block">Arrives</Label>
+                                    <Input
+                                      type="time"
+                                      value={leg.arrivalTime}
+                                      onChange={(e) => {
+                                        const updated = [...additionalLegs];
+                                        updated[idx] = { ...updated[idx], arrivalTime: e.target.value };
+                                        setAdditionalLegs(updated);
+                                      }}
+                                      className="text-xs h-8 w-full"
+                                    />
+                                  </div>
                                 </div>
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1474,8 +1477,8 @@ function FlightHotelStep({
                           />
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-3">
-                        <div className="col-span-2 sm:col-span-1">
+                      <div className="space-y-3">
+                        <div>
                           <Label className="text-xs text-muted-foreground">Date</Label>
                           <Input
                             type="date"
@@ -1484,23 +1487,25 @@ function FlightHotelStep({
                             className="text-xs h-8"
                           />
                         </div>
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Departs *</Label>
-                          <Input
-                            type="time"
-                            value={returnFlight.departureTime}
-                            onChange={(e) => setReturnFlight({ ...returnFlight, departureTime: e.target.value })}
-                            className="text-xs h-8"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Arrives</Label>
-                          <Input
-                            type="time"
-                            value={returnFlight.arrivalTime}
-                            onChange={(e) => setReturnFlight({ ...returnFlight, arrivalTime: e.target.value })}
-                            className="text-xs h-8"
-                          />
+                        <div className="flex w-full gap-4">
+                          <div className="flex-1 min-w-0">
+                            <Label className="text-xs text-muted-foreground mb-1 block">Departs *</Label>
+                            <Input
+                              type="time"
+                              value={returnFlight.departureTime}
+                              onChange={(e) => setReturnFlight({ ...returnFlight, departureTime: e.target.value })}
+                              className="text-xs h-8 w-full"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <Label className="text-xs text-muted-foreground mb-1 block">Arrives</Label>
+                            <Input
+                              type="time"
+                              value={returnFlight.arrivalTime}
+                              onChange={(e) => setReturnFlight({ ...returnFlight, arrivalTime: e.target.value })}
+                              className="text-xs h-8 w-full"
+                            />
+                          </div>
                         </div>
                       </div>
                     </CollapsibleContent>
@@ -1907,21 +1912,23 @@ function FlightHotelStep({
                   />
                 </div>
                 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-xs">Check-in Time</Label>
+                <div className="flex w-full gap-4">
+                  <div className="flex-1 min-w-0">
+                    <Label className="text-xs mb-1 block">Check-in Time</Label>
                     <Input
                       type="time"
                       value={currentHotel.checkInTime || '15:00'}
                       onChange={(e) => setCurrentHotel({ ...currentHotel, checkInTime: e.target.value })}
+                      className="w-full"
                     />
                   </div>
-                  <div>
-                    <Label className="text-xs">Check-out Time</Label>
+                  <div className="flex-1 min-w-0">
+                    <Label className="text-xs mb-1 block">Check-out Time</Label>
                     <Input
                       type="time"
                       value={currentHotel.checkOutTime || '11:00'}
                       onChange={(e) => setCurrentHotel({ ...currentHotel, checkOutTime: e.target.value })}
+                      className="w-full"
                     />
                   </div>
                 </div>
