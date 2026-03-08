@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TripDestination, InterCityTransport, TransitionDayMode, POPULAR_ROUTES, PopularRoute, calculateTotalNights } from '@/types/multiCity';
 import { searchDestinations, Destination } from '@/services/locationSearchAPI';
+import { toast } from 'sonner';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { format as dateFnsFormat } from 'date-fns';
 
