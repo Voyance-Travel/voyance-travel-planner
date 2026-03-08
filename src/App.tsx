@@ -242,6 +242,7 @@ function AnimatedRoutes() {
         <Route path="/trip/:tripId" element={<ProtectedRoute><TripDetail /></ProtectedRoute>} />
         <Route path="/trip/:tripId/active" element={<ProtectedRoute><ActiveTrip /></ProtectedRoute>} />
         <Route path="/trip/:tripId/recap" element={<ProtectedRoute><TripRecap /></ProtectedRoute>} />
+        <Route path="/trip/:tripId/guide" element={<ProtectedRoute><GuideBuilder /></ProtectedRoute>} />
         <Route path="/trips/:tripId/confirmation" element={<TripConfirmation />} />
         
         {/* Itinerary Routes */}
