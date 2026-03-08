@@ -19,13 +19,13 @@ export const companyInfo = {
 
 export const keyStats = [
   { label: 'Curated Destinations', value: '500+' },
-  { label: 'Travel DNA Types', value: '25' },
+  { label: 'Travel DNA Types', value: '29' },
   { label: 'Personalization Signals', value: '50+' },
   { label: 'AI Itinerary Engines', value: '3' },
 ];
 
 export const platformCapabilities = [
-  'Unique itineraries generated from 25 distinct Travel DNA profiles',
+  'Unique itineraries generated from 29 distinct Travel DNA profiles',
   'Multi-factor personalization using 50+ preference signals',
   'Day-by-day activity scheduling with time-optimized routing',
   'Flight and hotel booking integration',
