@@ -322,6 +322,35 @@ export default function CommunityGuideDetail() {
             </Button>
           </div>
 
+          {/* Delete (owner only) */}
+          {currentUserId && guide!.user_id === currentUserId && (
+            <div className="pt-4 border-t border-border flex justify-center">
+              <Button
+                variant="destructive"
+                size="sm"
+                className="gap-2"
+                disabled={deleting}
+                onClick={async () => {
+                  if (!confirm('Delete this guide? This cannot be undone.')) return;
+                  setDeleting(true);
+                  try {
+                    await supabase.from('guide_sections').delete().eq('guide_id', guide!.id);
+                    const { error } = await supabase.from('community_guides').delete().eq('id', guide!.id);
+                    if (error) throw error;
+                    toast.success('Guide deleted');
+                    navigate('/guides?tab=community');
+                  } catch {
+                    toast.error('Failed to delete guide');
+                    setDeleting(false);
+                  }
+                }}
+              >
+                {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                Delete Guide
+              </Button>
+            </div>
+          )}
+
           {/* Report */}
           <div className="flex justify-center pt-4">
             <ReportGuideModal guideId={guide!.id} />
