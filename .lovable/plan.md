@@ -1,63 +1,58 @@
 
 
-## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
+## Fix: Active Trip Experience — Focus on "Right Now" + Lock Past Days
 
-### What's Already Working (No Changes Needed)
-- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
-- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
-- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
-- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
+### Problems Identified
 
-### What's Broken — Two Things
+1. **ActiveTripCard navigates to `/trip/${id}` (full TripDetail)**, not `/trip/${id}/active` (the living companion). The dedicated ActiveTrip page exists but is never linked to from the dashboard.
 
-**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
+2. **No past-day locking**: In both `LiveItineraryView` and `ActiveTrip`'s `TodayView`, past days still show swap buttons, check-in buttons, "Mark Done" actions, and SmartSwapSuggestion banners. Once a day has passed, it should be read-only.
 
-**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
+3. **ActiveTrip "Today" view is too dense**: It shows the full day schedule with every activity card expanded, plus rating widgets, feedback prompts, media capture, and check-in buttons for ALL activities. The user wants a focused "right now" experience — where you are, where you're going next, quick actions, and a compact timeline below.
 
 ### Changes
 
-#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
+**File 1: `src/components/trips/ActiveTripCard.tsx`**
+- Change the "Today's Plan" button link from `/trip/${id}` to `/trip/${id}/active`
+- Change the "View full trip details" link at the bottom to stay as `/trip/${id}` (that's the full view)
 
-**Change A — Remove stall detector setup** (lines ~261-313):
-Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
+**File 2: `src/pages/ActiveTrip.tsx` — TodayView component**
+- Add `isPastDay` check using `isToday(parseLocalDate(todaysItinerary.date))` and `isBefore()`
+- When viewing a past day: hide SmartSwapSuggestion, hide CheckInButton, hide swap actions, hide "Mark Done" buttons, show a "This day has passed" badge instead
+- Restructure TodayView to be more focused:
+  - The NOW card stays prominent (already good)
+  - The "Up Next" section stays
+  - The full activity list becomes a compact timeline (smaller cards, no expanded action bars for non-current activities)
+  - Hide feedback/rating widgets for activities that aren't current or just completed
 
-**Change B — Remove browser loop fallback** (lines ~455-469):
-Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
+**File 3: `src/components/itinerary/LiveItineraryView.tsx`**
+- Add past-day detection: when a selected day is in the past, disable swap/skip/complete actions on all activity cards
+- In `getActivityStatus`: past days already return 'completed' — but the UI still renders action buttons. Add a `isPastDay` prop to `LiveActivityCard` or conditionally hide actions
 
-```typescript
-// OLD:
-} catch (serverErr) {
-  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
-  const generatedDays = await generateItinerary({ ... });
-  // ... 40 lines of fallback logic
-}
+**File 4: `src/components/trips/SmartSwapSuggestion.tsx`**
+- Add an early return if the `dayDate` is in the past (before today). No swap suggestions for completed days.
 
-// NEW:
-} catch (serverErr) {
-  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
-  setPrePhase(null);
-  setHasStarted(false);
-  toast.error('Failed to start generation. Please try again.');
-  return;
-}
+### Past-Day Logic (shared across files)
 ```
+const dayDate = parseLocalDate(day.date);
+const isPastDay = isBefore(dayDate, startOfDay(new Date())) && !isToday(dayDate);
+```
+When `isPastDay` is true:
+- No swap suggestions
+- No check-in / mark done buttons
+- No rescue banners
+- Activities render in a read-only, subdued style
+- Show a small "Completed" indicator on the day
 
-**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
+### Summary of Navigation Fix
+| From | Current Target | New Target |
+|------|---------------|------------|
+| ActiveTripCard "Today's Plan" | `/trip/${id}` | `/trip/${id}/active` |
+| ActiveTripCard "View full trip details" | `/trip/${id}` | `/trip/${id}` (unchanged) |
 
-**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
-
-#### File 2: `src/hooks/useItineraryGeneration.ts`
-
-No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
-
-### Files to Modify
-
-| File | What |
-|------|------|
-| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
-
-### Risk Assessment
-- **Low risk**: The server-side self-chaining is already fully implemented and tested
-- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
-- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
+### What stays the same
+- ActiveTrip page structure (tabs: Today, Trip, Nearby, Memories, Stats, DNA, Chat)
+- TripDetail page and its LiveItineraryView usage
+- All feedback/sentiment/rescue infrastructure (just conditionally hidden for past days)
+- Offline caching and trip loading logic
 
