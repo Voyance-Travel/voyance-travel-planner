@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { EmbeddedCheckoutModal } from './EmbeddedCheckoutModal';
 import { ROUTES } from '@/config/routes';
 import { useCredits } from '@/hooks/useCredits';
+import { isIAPAvailable, purchaseByPackId } from '@/services/iapService';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { toast as sonnerToast } from 'sonner';
 
@@ -83,6 +84,18 @@ export function UpgradePrompt({
         toast({ title: "Sign in first", description: "Create an account to get started." });
         navigate('/signin?redirect=/pricing');
         onClose();
+        return;
+      }
+
+      // iOS native IAP path
+      if (isIAPAvailable()) {
+        const result = await purchaseByPackId(pack.id);
+        if (result.success) {
+          toast({ title: 'Purchase complete!', description: `${formatCredits(result.credits || pack.credits)} credits added.` });
+          onClose();
+        } else if (result.error !== 'cancelled') {
+          toast({ title: 'Purchase failed', description: result.error || 'Please try again.', variant: 'destructive' });
+        }
         return;
       }
       
