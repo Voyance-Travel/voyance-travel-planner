@@ -52,7 +52,7 @@ export function InlineModifier({
   const [pendingChange, setPendingChange] = useState<PendingChange | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const { isListening, isSupported: micSupported, toggleListening } = useSpeechRecognition({
+  const { isListening, isSupported: micSupported, toggleListening, interimTranscript } = useSpeechRecognition({
     onResult: (transcript) => {
       setInput(prev => (prev ? prev + ' ' : '') + transcript);
       if (!isExpanded) setIsExpanded(true);
@@ -293,10 +293,10 @@ export function InlineModifier({
                 <Input
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder={proposeMode
+                  placeholder={isListening ? (interimTranscript || 'Listening...') : (proposeMode
                     ? 'Suggest a change, e.g. "Add more food spots"'
                     : 'Try "Make day 3 lighter" or "Add more food spots"'
-                  }
+                  )}
                   disabled={isProcessing}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
@@ -323,9 +323,12 @@ export function InlineModifier({
                     toggleListening();
                   }}
                   title={isListening ? "Stop listening" : "Voice input"}
-                  className="shrink-0"
+                  className="shrink-0 relative"
                 >
                   {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                  {isListening && (
+                    <span className="absolute inset-0 rounded-md animate-ping bg-destructive/20 pointer-events-none" />
+                  )}
                 </Button>
                 <Button
                   onClick={handleSubmit}

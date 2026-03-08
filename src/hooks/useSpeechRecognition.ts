@@ -20,6 +20,8 @@ interface UseSpeechRecognitionOptions {
   onInterim?: (transcript: string) => void;
   /** Called on any error */
   onError?: (error: string) => void;
+  /** Silence timeout in ms before auto-stopping (default 8000) */
+  silenceTimeout?: number;
 }
 
 // Extend Window for webkit prefix
@@ -48,11 +50,12 @@ function getSpeechRecognition(): SpeechRecognitionConstructor | null {
 export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) {
   const {
     lang = 'en-US',
-    continuous = false,
+    continuous = true,
     interimResults = true,
     onResult,
     onInterim,
     onError,
+    silenceTimeout = 8000,
   } = options;
 
   const [isListening, setIsListening] = useState(false);
@@ -60,9 +63,17 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
   const [interimTranscript, setInterimTranscript] = useState('');
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const stoppedManuallyRef = useRef(false);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setIsSupported(!!getSpeechRecognition());
+  }, []);
+
+  const clearSilenceTimer = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
   }, []);
 
   const startListening = useCallback(() => {
@@ -76,6 +87,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
     if (recognitionRef.current) {
       recognitionRef.current.abort();
     }
+    clearSilenceTimer();
 
     const recognition = new SpeechRecognitionClass();
     recognition.continuous = continuous;
@@ -84,12 +96,30 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
 
     stoppedManuallyRef.current = false;
 
+    const resetSilenceTimer = () => {
+      clearSilenceTimer();
+      if (silenceTimeout > 0) {
+        silenceTimerRef.current = setTimeout(() => {
+          stoppedManuallyRef.current = true;
+          try {
+            recognition.stop();
+          } catch {
+            // already stopped
+          }
+        }, silenceTimeout);
+      }
+    };
+
     recognition.onstart = () => {
       setIsListening(true);
       setInterimTranscript('');
+      resetSilenceTimer();
     };
 
     recognition.onresult = (event: any) => {
+      // User is speaking — reset the silence timeout
+      resetSilenceTimer();
+
       let interim = '';
       let final = '';
 
@@ -118,6 +148,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
       // 'no-speech' and 'aborted' are not real errors
       if (errorType === 'no-speech' || errorType === 'aborted') {
         setIsListening(false);
+        clearSilenceTimer();
         return;
       }
       onError?.(errorType === 'not-allowed' 
@@ -125,9 +156,11 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
         : `Speech recognition error: ${errorType}`
       );
       setIsListening(false);
+      clearSilenceTimer();
     };
 
     recognition.onend = () => {
+      clearSilenceTimer();
       setIsListening(false);
       setInterimTranscript('');
       // If continuous and not manually stopped, restart
@@ -147,16 +180,17 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
     } catch (e: any) {
       onError?.(e.message || 'Failed to start speech recognition');
     }
-  }, [lang, continuous, interimResults, onResult, onInterim, onError]);
+  }, [lang, continuous, interimResults, onResult, onInterim, onError, silenceTimeout, clearSilenceTimer]);
 
   const stopListening = useCallback(() => {
     stoppedManuallyRef.current = true;
+    clearSilenceTimer();
     if (recognitionRef.current) {
       recognitionRef.current.stop();
     }
     setIsListening(false);
     setInterimTranscript('');
-  }, []);
+  }, [clearSilenceTimer]);
 
   const toggleListening = useCallback(() => {
     if (isListening) {
@@ -169,11 +203,12 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      clearSilenceTimer();
       if (recognitionRef.current) {
         recognitionRef.current.abort();
       }
     };
-  }, []);
+  }, [clearSilenceTimer]);
 
   return {
     isListening,
