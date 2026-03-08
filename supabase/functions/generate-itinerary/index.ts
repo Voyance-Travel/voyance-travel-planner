@@ -4166,7 +4166,7 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     // User research notes / must-do activities from Page 2 paste field (can be string or array)
     mustDoActivities: (() => {
       const raw = trip.metadata?.mustDoActivities;
-      if (Array.isArray(raw)) return raw.join(', ');
+      if (Array.isArray(raw)) return raw.join('\n');
       return raw || undefined;
     })(),
     // "Anything else" / additional notes from planner
@@ -9579,12 +9579,12 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
       }
 
       const requestMustDoText = Array.isArray(paramMustDoActivities)
-        ? paramMustDoActivities.join(', ')
+        ? paramMustDoActivities.join('\n')
         : (typeof paramMustDoActivities === 'string' ? paramMustDoActivities : '');
 
       const mustDoActivities = requestMustDoText || (() => {
         const raw = metadata?.mustDoActivities;
-        return Array.isArray(raw) ? raw.join(', ') : (raw as string || '');
+        return Array.isArray(raw) ? raw.join('\n') : (raw as string || '');
       })();
 
       const interestCategories = (
@@ -9692,6 +9692,38 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
           } else if (commitmentAnalysis.promptSection) {
             // Include full prompt as context even if no events on this specific day
             preBookedCommitmentsPrompt = `\n## 📅 Pre-Booked Commitments (other days)\nThe traveler has pre-booked events on other days. No fixed events today — plan freely.\n`;
+          }
+        }
+      }
+
+      // ═══════════════════════════════════════════════════════════════════════
+      // Inject "Anything Else" / Additional Notes into per-day generation
+      // This was previously only in the full-trip path — Bug 2 fix
+      // ═══════════════════════════════════════════════════════════════════════
+      let additionalNotesPrompt = '';
+      const additionalNotes = (metadata?.additionalNotes as string) || '';
+      if (additionalNotes.trim()) {
+        additionalNotesPrompt = `\n## 🎯 TRAVELER'S TRIP PURPOSE / ADDITIONAL NOTES
+The traveler provided these additional notes about their trip. These describe the PRIMARY PURPOSE or special requirements:
+
+"${additionalNotes.trim()}"
+
+CRITICAL: If these notes describe a specific event, activity, or purpose (e.g., "going for the U.S. Open", "attending a wedding", "here for a conference"), this MUST be treated as a NON-NEGOTIABLE anchor for the trip. Dedicate appropriate days to it.
+If the purpose is a specific event, plan at least ONE full day around that event. The rest of the trip should complement this primary purpose.
+`;
+        console.log(`[generate-day] Additional notes / trip purpose injected (${additionalNotes.trim().length} chars)`);
+
+        // Defense-in-depth: parse additionalNotes for events that should be in the must-do pipeline
+        if (!mustDoPrompt.trim()) {
+          const detectedFromNotes = parseMustDoInput(additionalNotes, destination, false);
+          const eventItems = detectedFromNotes.filter(p => p.activityType === 'all_day_event' || p.activityType === 'half_day_event');
+          if (eventItems.length > 0) {
+            const scheduled = scheduleMustDos(eventItems, totalDays);
+            const dayItems = scheduled.scheduled.filter(s => s.assignedDay === dayNumber);
+            if (dayItems.length > 0) {
+              mustDoPrompt = `\n## 🚨 EVENT DETECTED FROM TRIP PURPOSE (MANDATORY)\n\nThe traveler's trip purpose includes a specific event. You MUST plan this day around it:\n${dayItems.map(item => `- ${item.priority.title} (${item.priority.priority})${item.priority.activityType === 'all_day_event' ? ' [ALL-DAY EVENT — plan the ENTIRE day around this]' : ' [HALF-DAY EVENT]'}`).join('\n')}\n\nRULES:\n- This event is the PRIMARY purpose of the trip\n- Plan the entire day around this event\n- Supporting activities (meals, transport) should complement the event\n`;
+              console.log(`[generate-day] Event detected from additionalNotes: ${eventItems.map(e => e.title).join(', ')} — assigned to day ${dayNumber}`);
+            }
           }
         }
       }

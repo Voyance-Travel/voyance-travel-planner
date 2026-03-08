@@ -241,7 +241,7 @@ export function parseMustDoInput(
       continue;
     }
 
-    const subItems = line.split(';').map(s => s.trim()).filter(Boolean);
+    const subItems = line.split(/[;,]/).map(s => s.trim()).filter(Boolean);
     for (const sub of subItems) {
       const cleaned = sub.replace(/^\s*-\s*/, '').trim();
       if (!cleaned || cleaned.length < 2) continue;
@@ -288,8 +288,13 @@ function parseItem(item: string, destination: string): MustDoPriority | null {
     preferredTime = 'evening';
   }
   
+  // Strip conversational prefixes before event matching for better pattern detection
+  const strippedForMatching = normalized
+    .replace(/^(attending|going to|visit|see|watch|go to|here for|tickets?\s+(to|for))\s+(the\s+)?/i, '')
+    .trim();
+
   // Try to match event patterns FIRST (sporting events, festivals, etc.)
-  const eventMatch = matchEventPattern(normalized);
+  const eventMatch = matchEventPattern(strippedForMatching) || matchEventPattern(normalized);
   
   // Try to match known landmarks
   let matchedLandmark: typeof KNOWN_LANDMARKS[string] | null = null;
