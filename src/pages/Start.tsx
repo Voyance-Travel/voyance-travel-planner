@@ -320,6 +320,8 @@ function DateRangePicker({
   };
 
   const nightCount = startDate && endDate ? differenceInDays(endDate, startDate) : null;
+  const isDayTrip = nightCount === 0;
+  const tripDays = nightCount !== null ? Math.max(nightCount, 1) : null;
 
   return (
     <div className="space-y-1.5 sm:space-y-2">
@@ -338,7 +340,12 @@ function DateRangePicker({
             <span className="flex items-center gap-1.5">
               <CalendarIcon className="h-4 w-4 opacity-50" />
               {startDate && endDate
-                ? `${format(startDate, 'MMM d')} → ${format(endDate, 'MMM d')}${nightCount ? ` (${nightCount} nights)` : ''}`
+                ? <>
+                    {`${format(startDate, 'MMM d')} → ${format(endDate, 'MMM d')}`}
+                    {isDayTrip
+                      ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-800 ml-1.5">Day Trip</span>
+                      : nightCount ? ` (${nightCount} night${nightCount === 1 ? '' : 's'})` : ''}
+                  </>
                 : startDate
                   ? `${format(startDate, 'MMM d')} → select end`
                   : 'Select dates'}
@@ -2564,9 +2571,9 @@ export default function Start() {
           country: null,
           arrival_date: format(startDate, 'yyyy-MM-dd'),
           departure_date: format(endDate, 'yyyy-MM-dd'),
-          nights: nights > 0 ? nights : 1,
+          nights: nights,
           generation_status: 'pending' as const,
-          days_total: days > 0 ? days : 1,
+          days_total: Math.max(days, 1),
           hotel_selection: hotelSelection && hotelSelection.length > 0 ? hotelSelection : null,
         };
         const { error: singleCityError } = await supabase.from('trip_cities').insert(singleCityRow as any);
