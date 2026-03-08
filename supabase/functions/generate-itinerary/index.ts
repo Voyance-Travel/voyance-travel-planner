@@ -11212,7 +11212,56 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         generatedDay.activities = normalizedActivities;
 
         // =======================================================================
-        // TRANSITION DAY POST-GENERATION GUARD: Ensure inter-city travel exists
+        // MUST-DO EVENT OVERLAP STRIPPING
+        // If this day has all-day or half-day events, remove any non-structural
+        // activities that overlap the blocked time window
+        // =======================================================================
+        if (mustDoEventItems.length > 0) {
+          const beforeCount = normalizedActivities.length;
+          for (const eventItem of mustDoEventItems) {
+            const { blockedStart, blockedEnd } = getBlockedTimeRange(eventItem);
+            const blockedStartMins = parseTimeToMinutes(blockedStart);
+            const blockedEndMins = parseTimeToMinutes(blockedEnd);
+            if (blockedStartMins === null || blockedEndMins === null) continue;
+
+            const eventTitleLower = eventItem.priority.title.toLowerCase();
+            normalizedActivities = normalizedActivities.filter((act: any) => {
+              // Always keep the event itself (fuzzy title match)
+              const actTitle = (act.title || '').toLowerCase();
+              if (actTitle.includes(eventTitleLower) || eventTitleLower.includes(actTitle)) return true;
+              // Always keep structural categories: transit, transport, hotel, meals
+              const cat = (act.category || '').toLowerCase();
+              if (['transport', 'transportation', 'transit', 'hotel', 'accommodation'].includes(cat)) return true;
+              // Keep meals (breakfast before event, dinner after)
+              if (cat === 'food' || cat === 'dining' || cat === 'restaurant' || cat === 'meal') {
+                // Keep if meal ends before blocked start or starts after blocked end
+                const mealStart = parseTimeToMinutes(act.startTime);
+                const mealEnd = parseTimeToMinutes(act.endTime);
+                if (mealStart !== null && mealEnd !== null) {
+                  if (mealEnd <= blockedStartMins || mealStart >= blockedEndMins) return true;
+                }
+                // Meal overlaps the event window — drop it
+                return false;
+              }
+              // For all other activities, check time overlap
+              const actStart = parseTimeToMinutes(act.startTime);
+              const actEnd = parseTimeToMinutes(act.endTime);
+              if (actStart === null || actEnd === null) return true; // can't determine, keep
+              // Remove if overlaps: activity starts before event ends AND ends after event starts
+              if (actStart < blockedEndMins && actEnd > blockedStartMins) {
+                console.log(`[generate-day] 🗑️ Removing "${act.title}" (${act.startTime}-${act.endTime}) — overlaps blocked time ${blockedStart}-${blockedEnd} for "${eventItem.priority.title}"`);
+                return false;
+              }
+              return true;
+            });
+          }
+          const removed = beforeCount - normalizedActivities.length;
+          if (removed > 0) {
+            console.log(`[generate-day] ✓ Stripped ${removed} activities overlapping must-do event time blocks`);
+            generatedDay.activities = normalizedActivities;
+          }
+        }
+
         // If AI omitted the travel activity, inject deterministic fallback
         // =======================================================================
         if (resolvedIsTransitionDay && resolvedTransitionFrom && resolvedTransitionTo) {
