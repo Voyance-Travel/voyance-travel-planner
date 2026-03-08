@@ -72,7 +72,7 @@ export default function TheInsightSection() {
           </p>
         </motion.div>
 
-        {/* 27 Archetypes badge */}
+        {/* 29 Travel DNA badge */}
         <motion.div
           initial={{ opacity: 0, scale: 0.8 }}
           whileInView={{ opacity: 1, scale: 1 }}
@@ -82,7 +82,7 @@ export default function TheInsightSection() {
         >
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-full border border-primary/20">
             <span className="text-primary font-bold">29</span>
-            <span className="text-sm text-muted-foreground">Travel Archetypes</span>
+            <span className="text-sm text-muted-foreground">Travel DNA Profiles</span>
           </div>
         </motion.div>
       </div>
