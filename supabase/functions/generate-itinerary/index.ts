@@ -8634,14 +8634,14 @@ ${'='.repeat(60)}
             const startMin = parseTimeToMinutes(combined.startTime) || 0;
             const arrivalEnd = minutesToHHMM(startMin + 30);
             const transferStart = minutesToHHMM(startMin + 45);
-            const transferDuration = flightHotelResult?.context?.transferMinutes || 45;
+            const transferDuration = 45; // default transfer duration
             const transferEnd = minutesToHHMM(startMin + 45 + transferDuration);
             const checkInStart = minutesToHHMM(startMin + 45 + transferDuration + 15);
             const checkInEnd = minutesToHHMM(startMin + 45 + transferDuration + 45);
             
-            const hotelN = flightHotelResult?.context?.hotelName || 'Hotel';
-            const hotelA = flightHotelResult?.context?.hotelAddress || '';
-            const airportN = flightHotelResult?.context?.arrivalAirport || 'Airport';
+            const hotelN = flightHotelResult?.hotelName || 'Hotel';
+            const hotelA = flightHotelResult?.hotelAddress || '';
+            const airportN = 'Airport';
             
             console.log(`[Stage 2.55] Splitting combined arrival block: "${combined.title}" into 3 activities`);
             
