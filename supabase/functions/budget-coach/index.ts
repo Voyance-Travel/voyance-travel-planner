@@ -107,6 +107,7 @@ Suggest 5-8 specific cost-cutting swaps. For each:
 2. Suggest a cheaper alternative that gives a similar experience
 3. The new_cost MUST come from the reference pricing above, not from your own estimates
 4. Calculate the exact savings
+5. Write a suggested_description that reads like an itinerary activity description — focus on the experience, not the budget reasoning
 
 Types of swaps to consider:
 - Private/guided tours → general admission or self-guided
@@ -178,7 +179,12 @@ Rules:
                           reason: {
                             type: "string",
                             description:
-                              "Brief explanation of why this swap works",
+                              "Brief explanation of why this swap saves money (shown in coach panel only)",
+                          },
+                          suggested_description: {
+                            type: "string",
+                            description:
+                              "A short, experience-focused description of the replacement activity as it should appear on the itinerary card (e.g. 'Grab gourmet sandwiches from Lenwich and enjoy a picnic in Central Park'). Do NOT include budget reasoning here.",
                           },
                           day_number: {
                             type: "number",
