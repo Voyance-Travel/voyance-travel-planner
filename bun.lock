@@ -9,6 +9,7 @@
         "@capacitor/cli": "^8.0.1",
         "@capacitor/core": "^8.0.1",
         "@capacitor/ios": "^8.0.1",
+        "@capacitor/push-notifications": "^8.0.2",
         "@capgo/native-purchases": "^8.2.0",
         "@dnd-kit/core": "^6.3.1",
         "@dnd-kit/sortable": "^10.0.0",
@@ -295,6 +296,8 @@
     "@capacitor/core": ["@capacitor/core@8.0.1", "", { "dependencies": { "tslib": "^2.1.0" } }, "sha512-5UqSWxGMp/B8KhYu7rAijqNtYslhcLh+TrbfU48PfdMDsPfaU/VY48sMNzC22xL8BmoFoql/3SKyP+pavTOvOA=="],
 
     "@capacitor/ios": ["@capacitor/ios@8.0.1", "", { "peerDependencies": { "@capacitor/core": "^8.0.0" } }, "sha512-pDxwQtx3n07DBhRKFGvYh4g00ruIsT7HxPm6IIT+tJD8VuTNgwgWYmEOZzfHkG6mZuCe03KqCsuD+aVmg5Rctg=="],
+
+    "@capacitor/push-notifications": ["@capacitor/push-notifications@8.0.2", "", { "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, "sha512-mej8Eh4EU4JXbaeyMX2l+4NNK6IdY5iRsEXpBOTHLD29fuCACBP7kOJTiJv6piw134zdlbFH0rR+sDKHIiFOFg=="],
 
     "@capgo/native-purchases": ["@capgo/native-purchases@8.2.0", "", { "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, "sha512-66NnsEyXiemdY2gVioGE3+19iQEfwHQM9BoJElFJ5oan2Geoc+4FDN9yUZBJTzx5X9TtwlHml0UTUqsWsv4nLQ=="],
 
