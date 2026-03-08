@@ -118,6 +118,7 @@ import { validateItinerary, matchesSkipList, type ValidationIssue } from '@/util
 import { VoyanceInsight } from './VoyanceInsight';
 import { ContextualTipsPopover, type ContextualTip } from './ContextualTipsPopover';
 import { VoyancePickCallout } from './VoyancePickCallout';
+import { GuideBookmarkButton } from '@/components/guides/GuideBookmarkButton';
 import { TransitBadge } from './TransitBadge';
 import { TripDateEditor as TripDateEditorInline } from '@/components/trip/TripDateEditor';
 import { TransitGapIndicator, computeGapMinutes } from './TransitGapIndicator';
@@ -7731,6 +7732,7 @@ function DayCard({
                           collaboratorColorMap={collaboratorColorMap}
                           aiLocked={aiLocked}
                           compact={compactCards}
+                          isPastTrip={isPastTrip}
                         />
                       </div>
                     </div>
@@ -7773,6 +7775,7 @@ function DayCard({
                         collaboratorColorMap={collaboratorColorMap}
                         aiLocked={aiLocked}
                         compact={compactCards}
+                        isPastTrip={isPastTrip}
                       />
                     </div>
                     {/* Compact transit gap indicator between activities */}
@@ -7977,6 +7980,8 @@ interface ActivityRowProps {
   guestMustPropose?: boolean;
   /** Compact card mode — hides description, full address, inline ratings, booking badges */
   compact?: boolean;
+  /** Whether this is a past trip — shows guide bookmark button */
+  isPastTrip?: boolean;
 }
 
 function ActivityRow({
@@ -8016,6 +8021,7 @@ function ActivityRow({
   aiLocked,
   guestMustPropose,
   compact = false,
+  isPastTrip = false,
 }: ActivityRowProps) {
   const [showProposeReplacement, setShowProposeReplacement] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState(false);
@@ -8897,6 +8903,15 @@ function ActivityRow({
                   }}
                 />
               </div>
+            )}
+            {/* Guide bookmark button — shown on past trips for bookmarkable activities */}
+            {isPastTrip && !isTransport && !isDowntime && (
+              <GuideBookmarkButton
+                activityId={activity.id}
+                activityName={activityTitle}
+                tripId={tripId}
+                compact
+              />
             )}
           </div>
         </div>
