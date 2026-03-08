@@ -404,20 +404,24 @@ export function PaymentsTab({
   // ─── Canonical totals from activity_costs table (single source of truth) ───
   const [canonicalSummary, setCanonicalSummary] = useState<PaymentsSummary | null>(null);
   const [ledgerPlannedCents, setLedgerPlannedCents] = useState<number | null>(null);
-  useEffect(() => {
-    getPaymentsSummary(tripId).then(s => setCanonicalSummary(s));
-    // Fetch the budget ledger's planned total so Payments matches Budget tab
-    supabase
-      .from('trip_budget_summary')
-      .select('planned_total_cents')
-      .eq('trip_id', tripId)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data?.planned_total_cents) {
-          setLedgerPlannedCents(data.planned_total_cents);
-        }
-      });
+  const fetchSummary = useCallback(async () => {
+    const [summary] = await Promise.all([
+      getPaymentsSummary(tripId),
+      supabase
+        .from('trip_budget_summary')
+        .select('planned_total_cents')
+        .eq('trip_id', tripId)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data?.planned_total_cents) {
+            setLedgerPlannedCents(data.planned_total_cents);
+          }
+        }),
+    ]);
+    setCanonicalSummary(summary);
   }, [tripId]);
+
+  useEffect(() => { fetchSummary(); }, [fetchSummary]);
 
   // Calculate totals — prefer ledger planned total (same source as Budget tab),
   // then canonical view, then JS fallback
@@ -545,13 +549,19 @@ export function PaymentsTab({
         updated_at: new Date().toISOString(),
       } as TripPayment;
       setPayments(prev => [...prev, optimisticPayment]);
+      // Optimistic summary update for instant UI feedback
+      setCanonicalSummary(prev => prev ? {
+        ...prev,
+        total_paid_usd: (prev.total_paid_usd || 0) + markPaidModal.amountCents / 100,
+      } : null);
 
       toast.success('Marked as paid');
       setMarkPaidModal(null);
       setExternalRef('');
       setSelectedMemberId('');
-      // Background refetch to sync real IDs
+      // Background refetch to sync real IDs and summary
       fetchPayments(300);
+      fetchSummary();
     } catch (err) {
       console.error('Error marking paid:', err);
       toast.error('Failed to update');
@@ -600,6 +610,7 @@ export function PaymentsTab({
       setNewExpenseAmount('');
       setNewExpenseType('flight');
       await fetchPayments(150);
+      await fetchSummary();
     } catch (err) {
       console.error('Error adding expense:', err);
       toast.error('Failed to add expense');
@@ -627,6 +638,7 @@ export function PaymentsTab({
 
       toast.success('Payment unmarked');
       await fetchPayments(150);
+      await fetchSummary();
     } catch (err) {
       console.error('Error unmarking payment:', err);
       toast.error('Failed to update');
@@ -762,6 +774,7 @@ export function PaymentsTab({
       setAssignMemberId('');
       setAssignMemberIds([]);
       await fetchPayments(150);
+      await fetchSummary();
     } catch (err) {
       console.error('Error assigning member:', err);
       toast.error(`Failed to assign: ${err instanceof Error ? err.message : 'Unknown error'}`);
