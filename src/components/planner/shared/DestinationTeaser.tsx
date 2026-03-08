@@ -149,10 +149,10 @@ export default function DestinationTeaser({
         />
         <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/40 to-transparent" />
         <div className="absolute inset-0 p-4 flex items-center">
-          <div>
-            <div className="flex items-center gap-2 text-white/80 text-sm mb-1">
-              <MapPin className="w-4 h-4" />
-              <span className="font-medium">{destination}</span>
+          <div className="min-w-0 max-w-full">
+            <div className="flex items-center gap-2 text-white/80 text-sm mb-1 min-w-0">
+              <MapPin className="w-4 h-4 flex-shrink-0" />
+              <span className="font-medium truncate">{destination}</span>
             </div>
             {formatDateRange() && (
               <p className="text-white/60 text-xs">{formatDateRange()}</p>
@@ -212,12 +212,12 @@ export default function DestinationTeaser({
         ))}
       </div>
       
-      <div className="absolute inset-0 p-6 flex flex-col justify-end">
-        <div className="flex items-end justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-white mb-2">
-              <MapPin className="w-5 h-5" />
-              <h2 className="text-2xl font-display font-medium">{destination}</h2>
+      <div className="absolute inset-0 p-4 sm:p-6 flex flex-col justify-end">
+        <div className="flex items-end justify-between gap-3 min-w-0">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-white mb-2 min-w-0">
+              <MapPin className="w-5 h-5 flex-shrink-0" />
+              <h2 className="text-xl sm:text-2xl font-display font-medium truncate">{destination}</h2>
             </div>
             <div className="flex items-center gap-4 text-white/80 text-sm">
               {formatDateRange() && (
