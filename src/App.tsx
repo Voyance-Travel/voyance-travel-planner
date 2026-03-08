@@ -291,6 +291,7 @@ const App = () => (
             <TooltipProvider>
               <ImagePreloaderInit />
               <IAPInitializer />
+              <PushInitializer />
               <GlobalErrorHandler />
               <Toaster />
               <Sonner />
