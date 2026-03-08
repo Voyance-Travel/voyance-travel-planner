@@ -18,6 +18,33 @@ import { searchDestinations, Destination } from '@/services/locationSearchAPI';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { format as dateFnsFormat } from 'date-fns';
 
+const TRAIN_DEFAULT_COUNTRIES = new Set([
+  'France', 'Germany', 'Italy', 'Spain', 'Netherlands', 'Belgium',
+  'Switzerland', 'Austria', 'Portugal', 'Czech Republic', 'Czechia',
+  'Poland', 'Greece', 'Croatia', 'Hungary', 'Denmark', 'Sweden',
+  'Norway', 'Finland', 'Ireland', 'United Kingdom', 'UK', 'England',
+  'Scotland', 'Romania', 'Bulgaria', 'Slovenia', 'Slovakia',
+  // Asia rail-friendly
+  'Japan', 'South Korea', 'Taiwan', 'China',
+  // Other
+  'Morocco',
+]);
+
+/** Pick smart transport default based on country metadata */
+function smartTransportDefault(
+  fromCountry?: string,
+  toCountry?: string,
+): InterCityTransport['type'] {
+  if (
+    fromCountry && toCountry &&
+    TRAIN_DEFAULT_COUNTRIES.has(fromCountry) &&
+    TRAIN_DEFAULT_COUNTRIES.has(toCountry)
+  ) {
+    return 'train';
+  }
+  return 'flight';
+}
+
 // Local debounce hook
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
