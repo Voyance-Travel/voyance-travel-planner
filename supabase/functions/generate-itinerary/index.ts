@@ -5611,6 +5611,9 @@ Generate activities for this day following ALL constraints above.`;
       generatedDay.date = date;
       generatedDay.title = generatedDay.title || generatedDay.theme || `Day ${dayNumber}`;
 
+      // Store output for focused retry prompts (reduces token waste by ~60%)
+      try { lastGeneratedOutput = JSON.stringify(generatedDay).substring(0, 10000); } catch { lastGeneratedOutput = null; }
+
       // Normalize activities
       generatedDay.activities = generatedDay.activities.map((act, idx) => {
         // CRITICAL: Convert costs from local currency to USD
