@@ -108,7 +108,7 @@ export function ActiveTripStats({
     },
     {
       icon: Footprints,
-      label: 'Steps (est.)',
+      label: 'Est. Walking',
       value: `${Math.round(stats.estimatedSteps / 1000)}k`,
       subValue: `~${stats.walkingKm} km walked`,
       color: 'text-teal-500',
