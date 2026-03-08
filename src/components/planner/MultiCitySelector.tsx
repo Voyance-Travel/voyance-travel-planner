@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TripDestination, InterCityTransport, TransitionDayMode, POPULAR_ROUTES, PopularRoute, calculateTotalNights } from '@/types/multiCity';
 import { searchDestinations, Destination } from '@/services/locationSearchAPI';
+import { toast } from 'sonner';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { format as dateFnsFormat } from 'date-fns';
 
@@ -115,6 +116,16 @@ export default function MultiCitySelector({
 
   const addDestination = useCallback((city: string, country?: string) => {
     if (!city.trim()) return;
+
+    // Duplicate check — use city+country for disambiguation (e.g. London UK vs London Ontario)
+    const key = `${city.trim().toLowerCase()}|${(country || '').trim().toLowerCase()}`;
+    const alreadyExists = destinations.some(
+      d => `${d.city.trim().toLowerCase()}|${(d.country || '').trim().toLowerCase()}` === key
+    );
+    if (alreadyExists) {
+      toast.info(`${city} is already in your trip. Want to extend your stay? Increase the nights instead.`);
+      return;
+    }
 
     const newDestination: TripDestination = {
       id: crypto.randomUUID(),
