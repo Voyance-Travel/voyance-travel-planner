@@ -280,6 +280,7 @@ const App = () => (
           <OutOfCreditsProvider>
             <TooltipProvider>
               <ImagePreloaderInit />
+              <IAPInitializer />
               <GlobalErrorHandler />
               <Toaster />
               <Sonner />
