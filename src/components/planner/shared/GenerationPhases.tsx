@@ -279,11 +279,12 @@ export function GenerationPhases({
     return 'Almost there, adding final touches';
   };
 
+  const cityLabel = isMultiCity && currentCity ? ` — ${currentCity}` : '';
   const headerText = allVisibleDaysDone
     ? 'Finalizing your itinerary…'
     : displayCompletedDays === 0
-      ? `Crafting Day 1 of ${totalDays > 0 ? totalDays : 'your trip'}`
-      : `Building Day ${nextDay} of ${totalDays}`;
+      ? `Crafting Day 1 of ${totalDays > 0 ? totalDays : 'your trip'}${cityLabel}`
+      : `Building Day ${nextDay} of ${totalDays}${cityLabel}`;
 
   return (
     <motion.div
@@ -327,6 +328,26 @@ export function GenerationPhases({
             </motion.p>
             <p className="text-xs text-muted-foreground font-medium">{Math.round(displayProgress)}%</p>
           </div>
+        </div>
+      )}
+
+      {/* Multi-city progress checklist */}
+      {isMultiCity && tripCities.length > 1 && (
+        <div className="flex items-center gap-3 mb-4 justify-center flex-wrap">
+          {tripCities.map((city, i) => (
+            <div key={i} className="flex items-center gap-1 text-xs">
+              {city.generation_status === 'generated' ? (
+                <Check className="h-3 w-3 text-green-500" />
+              ) : city.generation_status === 'generating' ? (
+                <Loader2 className="h-3 w-3 text-primary animate-spin" />
+              ) : (
+                <div className="h-3 w-3 rounded-full border border-muted-foreground/40" />
+              )}
+              <span className={city.generation_status === 'generated' ? 'text-green-600 font-medium' : 'text-muted-foreground'}>
+                {city.city_name}
+              </span>
+            </div>
+          ))}
         </div>
       )}
 
