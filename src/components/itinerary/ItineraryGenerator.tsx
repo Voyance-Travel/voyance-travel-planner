@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Loader2, CheckCircle, MapPin, Clock, DollarSign, RefreshCw, Star, Image, Wallet, Lightbulb, AlertCircle, LogIn, Coins, Cloud, Check } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle, MapPin, Clock, DollarSign, RefreshCw, Star, Image, Wallet, Lightbulb, LogIn, Coins, Cloud, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -87,7 +87,7 @@ const STATUS_MESSAGES = {
   generating: 'Crafting your perfect itinerary...',
   enriching: 'Adding photos and details...',
   complete: 'Your itinerary is ready!',
-  error: 'Something went wrong',
+  error: 'Checking generation status...',
 };
 
 export function ItineraryGenerator({
@@ -194,32 +194,9 @@ export function ItineraryGenerator({
       }
     },
     onFailed: async (err) => {
-      // CRITICAL: Before showing error, verify itinerary doesn't actually exist
-      try {
-        const { data: verifyTrip } = await supabase
-          .from('trips')
-          .select('itinerary_data')
-          .eq('id', tripId)
-          .single();
-        const verifyData = verifyTrip?.itinerary_data as { days?: unknown[] } | null;
-        if (verifyData?.days?.length && verifyData.days.length > 0) {
-          console.log('[ItineraryGenerator] onFailed suppressed — itinerary exists with', verifyData.days.length, 'days');
-          // Itinerary is fine — treat as success
-          setPrePhase(null);
-          const gr = gateResultRef.current;
-          await new Promise(r => setTimeout(r, 2000));
-          onComplete(verifyData.days as GeneratedDay[], undefined, gr?.isFirstTrip);
-          setServerGenActive(false);
-          return;
-        }
-      } catch (verifyErr) {
-        console.warn('[ItineraryGenerator] Could not verify DB state on failure:', verifyErr);
-      }
-
       setServerGenActive(false);
-      setPrePhase(null);
-      setHasStarted(false);
-      toast.error(`Generation failed: ${err}. Credits for ungenerated days have been refunded.`, { duration: 6000 });
+      setPrePhase('preparing');
+      await suppressErrorAndRecover('poller.onFailed', err);
       if (userId) {
         queryClient.invalidateQueries({ queryKey: ['credits', userId] });
         queryClient.invalidateQueries({ queryKey: ['entitlements', userId] });
@@ -264,6 +241,84 @@ export function ItineraryGenerator({
 
   // State for partial generation
   const [partialDays, setPartialDays] = useState<number | null>(null);
+  const [generationIssueSince, setGenerationIssueSince] = useState<number | null>(null);
+  const [showRetryButton, setShowRetryButton] = useState(false);
+  const recoveryInFlightRef = useRef(false);
+
+  const recoverFromDatabase = useCallback(async () => {
+    const [tripResult, dayResult] = await Promise.all([
+      supabase
+        .from('trips')
+        .select('itinerary_status, itinerary_data')
+        .eq('id', tripId)
+        .maybeSingle(),
+      supabase
+        .from('itinerary_days')
+        .select('id', { count: 'exact', head: true })
+        .eq('trip_id', tripId),
+    ]);
+
+    const itineraryData = (tripResult.data?.itinerary_data as { days?: GeneratedDay[] } | null) ?? null;
+    const existingDays = itineraryData?.days ?? [];
+
+    if (existingDays.length > 0) {
+      setGenerationIssueSince(null);
+      setShowRetryButton(false);
+      setPrePhase(null);
+      setServerGenActive(false);
+      setHasStarted(false);
+      onComplete(existingDays, undefined, gateResultRef.current?.isFirstTrip);
+      return 'ready' as const;
+    }
+
+    const dayCount = dayResult.count ?? 0;
+    const status = String(tripResult.data?.itinerary_status || '').toLowerCase();
+    if (dayCount > 0 || status === 'generating' || status === 'queued' || status === 'ready' || status === 'generated') {
+      setHasStarted(true);
+      setPrePhase('preparing');
+      setServerGenActive(true);
+      setShowRetryButton(false);
+      return 'in_progress' as const;
+    }
+
+    return 'missing' as const;
+  }, [tripId, onComplete]);
+
+  const suppressErrorAndRecover = useCallback(async (source: string, err?: unknown) => {
+    console.warn(`[ItineraryGenerator] Suppressing generation error (${source})`, err);
+    if (recoveryInFlightRef.current) return;
+    recoveryInFlightRef.current = true;
+    try {
+      const result = await recoverFromDatabase();
+      if (result !== 'ready') {
+        setHasStarted(true);
+        setPrePhase('preparing');
+        setServerGenActive(result === 'in_progress');
+        setGenerationIssueSince(prev => prev ?? Date.now());
+      }
+    } catch (recoveryErr) {
+      console.warn('[ItineraryGenerator] Recovery check failed, continuing loading state:', recoveryErr);
+      setHasStarted(true);
+      setPrePhase('preparing');
+      setServerGenActive(true);
+      setGenerationIssueSince(prev => prev ?? Date.now());
+    } finally {
+      recoveryInFlightRef.current = false;
+    }
+  }, [recoverFromDatabase]);
+
+  // Show retry CTA only if no itinerary exists for 5+ minutes after a suppressed failure
+  useEffect(() => {
+    if (!generationIssueSince) return;
+    const timer = window.setInterval(async () => {
+      const result = await recoverFromDatabase().catch(() => 'in_progress' as const);
+      if (result === 'missing' && Date.now() - generationIssueSince >= 5 * 60 * 1000) {
+        setShowRetryButton(true);
+      }
+    }, 15000);
+
+    return () => clearInterval(timer);
+  }, [generationIssueSince, recoverFromDatabase]);
 
   // Show cost confirmation before generating (for non-first-trip users)
   const handleGenerateClick = () => {
@@ -296,6 +351,8 @@ export function ItineraryGenerator({
     setHasStarted(true);
     setShowGenericWarning(false);
     setShowCostConfirm(false);
+    setGenerationIssueSince(null);
+    setShowRetryButton(false);
 
     // Pre-generation phases (matches the newer streaming UX)
     setPrePhase('gathering-dna');
@@ -335,11 +392,10 @@ export function ItineraryGenerator({
           generateDays: 0,
         };
       } else {
-        // Server/network error — surface as generic error, NOT "out of credits"
+        // Server/network error — suppress hard errors and recover from DB state
         console.error('[ItineraryGenerator] Gate error (server/network):', err);
         cancel();
-        setPrePhase(null);
-        toast.error('Something went wrong while preparing your trip. Please try again in a moment.');
+        await suppressErrorAndRecover('authorize', err);
         return;
       }
     }
@@ -388,8 +444,7 @@ export function ItineraryGenerator({
       } catch (err) {
         console.error('[ItineraryGenerator] Partial spend error:', err);
         cancel();
-        setPrePhase(null);
-        toast.error('Something went wrong. Please try again.');
+        await suppressErrorAndRecover('partial_spend', err);
         return;
       }
     }
@@ -499,19 +554,16 @@ export function ItineraryGenerator({
               queryClient.invalidateQueries({ queryKey: ['entitlements', userId] });
             }
           } else {
-            toast.error('Generation failed and automatic refund could not be processed. Please contact support.', { duration: 8000 });
+            toast('Generation paused while we verify your saved itinerary.', { duration: 5000 });
           }
         } else {
           // All days generated but something else failed (e.g. final save) — no refund needed
-          toast.info('Generation completed but had a minor issue. Your itinerary has been saved.');
+          toast('Generation completed. Finalizing your itinerary view…');
         }
       } else {
-        // If useItineraryGeneration didn't already set the error, surface it
-        if (status !== 'error') {
-          toast.error('Generation failed. Please try again.');
-        }
+        // Suppress hard errors and keep loading while verifying DB state
       }
-      setHasStarted(false);
+      await suppressErrorAndRecover('handle_generate', err);
     }
   };
 
@@ -545,32 +597,30 @@ export function ItineraryGenerator({
         const st = tripRow?.itinerary_status as string;
         const itData = tripRow?.itinerary_data as { days?: unknown[] } | null;
         
-        // If itinerary data exists with days, treat as complete regardless of status
-        if (itData?.days?.length && itData.days.length > 0 && st !== 'generating' && st !== 'queued') {
-          onComplete([], undefined, false);
-        } else if (st === 'ready' || st === 'generated') {
-          onComplete([], undefined, false);
-        } else if (st === 'generating' || st === 'queued') {
-          // In progress — activate poller
-          setServerGenActive(true);
-        }
+        // Always recover from DB-first state (never call onComplete with empty days)
+        await recoverFromDatabase();
       } catch (e) {
         console.warn('[ItineraryGenerator] Mount status check failed:', e);
       }
     };
     checkStatus();
 
-    // Visibility change handler: re-check status when user returns to tab
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && (serverGenActive || hasStarted)) {
-        checkStatus();
+    // Visibility/focus handlers: when user returns, re-check DB first (never show hard error)
+    const handleVisibility = async () => {
+      if (document.visibilityState === 'visible') {
+        await recoverFromDatabase().catch(() => undefined);
       }
     };
+    const handleFocus = async () => {
+      await recoverFromDatabase().catch(() => undefined);
+    };
     document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
 
     return () => {
       cancelled = true;
       document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [tripId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -956,23 +1006,19 @@ export function ItineraryGenerator({
         animate={{ opacity: 1 }}
         className="text-center py-16"
       >
-        <div className="max-w-md mx-auto">
-          <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-6">
-            <AlertCircle className="h-8 w-8 text-destructive" />
-          </div>
-          
-          <h2 className="text-xl font-semibold mb-2">Something Went Wrong</h2>
-          <p className="text-muted-foreground mb-6">{error}</p>
-          
-          <div className="flex gap-3 justify-center">
-            <Button variant="outline" onClick={() => { reset(); setHasStarted(false); }}>
-              Go Back
-            </Button>
+        <div className="max-w-md mx-auto space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+          <h2 className="text-xl font-semibold">Checking your itinerary status…</h2>
+          <p className="text-muted-foreground">
+            We’re reconnecting and verifying your generated days in the background.
+          </p>
+
+          {showRetryButton && (
             <Button onClick={handleRetry} className="gap-2">
               <RefreshCw className="h-4 w-4" />
-              Try Again
+              Generation didn't complete. Try again?
             </Button>
-          </div>
+          )}
         </div>
       </motion.div>
     );

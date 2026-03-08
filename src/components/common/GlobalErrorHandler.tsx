@@ -7,34 +7,42 @@ import toast from '@/utils/simpleToast';
  */
 export function GlobalErrorHandler() {
   useEffect(() => {
+    const isSuppressedRoute = () => {
+      const path = window.location.pathname.toLowerCase();
+      const query = window.location.search.toLowerCase();
+      return path.includes('/itinerary') || query.includes('generate=true');
+    };
+
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      // Log error for debugging
       console.error('Unhandled Promise Rejection:', event.reason);
-      
-      // Extract error message
+
+      if (isSuppressedRoute()) {
+        console.log('[GlobalErrorHandler] Suppressing global error UI on itinerary generation route');
+        event.preventDefault();
+        return;
+      }
+
       let message = 'An unexpected error occurred. Please try again.';
       if (event.reason instanceof Error) {
-        // Don't expose internal error details to users, but log them
         console.error('Error details:', event.reason.message, event.reason.stack);
       } else if (typeof event.reason === 'string') {
         console.error('Error string:', event.reason);
       }
-      
-      // Show user-friendly toast
+
       toast.error(message);
-      
-      // Prevent the default browser error handling (which can crash the app)
       event.preventDefault();
     };
 
     const handleError = (event: ErrorEvent) => {
-      // Log error for debugging
       console.error('Global Error:', event.error || event.message);
-      
-      // Show user-friendly toast for uncaught errors
+
+      if (isSuppressedRoute()) {
+        console.log('[GlobalErrorHandler] Suppressing global error toast on itinerary generation route');
+        event.preventDefault();
+        return;
+      }
+
       toast.error('Something went wrong. Please refresh the page.');
-      
-      // Prevent default to avoid duplicate error reporting
       event.preventDefault();
     };
 

@@ -495,12 +495,12 @@ export function useItineraryGeneration() {
 
     if (error) {
       const errMsg = error.message || String(error);
-      setState(prev => ({ ...prev, isGenerating: false, error: errMsg, status: 'error' }));
+      // Do not flip UI into hard error state here; caller will verify DB first.
       throw new Error(errMsg);
     }
 
     if (data?.error) {
-      setState(prev => ({ ...prev, isGenerating: false, error: data.error, status: 'error' }));
+      // Do not flip UI into hard error state here; caller will verify DB first.
       throw new Error(data.error);
     }
 

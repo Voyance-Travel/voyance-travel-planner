@@ -26,6 +26,16 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   render(): ReactNode {
     if (this.state.hasError) {
+      const isGenerationRoute = typeof window !== 'undefined' && (
+        window.location.pathname.toLowerCase().includes('/itinerary') ||
+        window.location.search.toLowerCase().includes('generate=true')
+      );
+
+      if (isGenerationRoute) {
+        console.log('[ErrorBoundary] Suppressing fallback UI on itinerary generation route');
+        return this.props.fallback ?? null;
+      }
+
       return (
         this.props.fallback || (
           <div className="p-6 bg-destructive/10 rounded-lg border border-destructive/20 text-center">
