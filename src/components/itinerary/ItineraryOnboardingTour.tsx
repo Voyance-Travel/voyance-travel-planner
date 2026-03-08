@@ -105,6 +105,18 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
   const activePopup = usePopupCoordination(state => state.activePopup);
   const { user } = useAuth();
 
+  // Listen for "retake tour" event from HelpButton
+  useEffect(() => {
+    const handleRetake = () => {
+      setCurrentStep(0);
+      setShowBanner(false);
+      setIsVisible(true);
+      requestPopup('itinerary_tour');
+    };
+    window.addEventListener('retake-itinerary-tour', handleRetake);
+    return () => window.removeEventListener('retake-itinerary-tour', handleRetake);
+  }, [requestPopup]);
+
   // Show tour only once per user — check localStorage (fast) then DB (durable)
   useEffect(() => {
     if (!user) return;
@@ -387,5 +399,7 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
 export function useResetItineraryTour() {
   return useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
+    // Dispatch event so the ItineraryOnboardingTour component re-triggers
+    window.dispatchEvent(new CustomEvent('retake-itinerary-tour'));
   }, []);
 }
