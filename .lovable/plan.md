@@ -1,63 +1,50 @@
 
 
-## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
+## Fix: "Just Tell Us" Chat Planner — Honor User Intent Over System Rules
 
-### What's Already Working (No Changes Needed)
-- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
-- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
-- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
-- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
+Four files need changes to capture user intent (flights, full-day events, time-locked activities, preferences) and inject them as highest-priority constraints into itinerary generation.
 
-### What's Broken — Two Things
+### File 1: `supabase/functions/chat-trip-planner/index.ts`
 
-**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
+**System prompt (after line 49)**: Add "USER INTENT CAPTURE" section instructing the AI to capture full-day events as `userConstraints` with `allDay: true`, flight details in `flightDetails`, specific times in both `mustDoActivities` and `userConstraints`, and preferences/avoids as constraint types.
 
-**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
+**Tool description (line 181)**: Change from "Extract structured trip details..." to "Extract ALL trip details from the conversation, capturing every preference, constraint, flight detail, and specific time..."
 
-### Changes
+**Tool schema (after `additionalNotes`, line 243)**: Add two new properties:
+- `flightDetails` (string) — verbatim flight info
+- `userConstraints` (array of objects) — each with `type` (enum: full_day_event, time_block, avoid, preference, flight), `description`, optional `day`, `time`, `allDay`
 
-#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
+### File 2: `src/components/planner/TripChatPlanner.tsx`
 
-**Change A — Remove stall detector setup** (lines ~261-313):
-Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
+**TripDetails interface (line 29-43)**: Add `flightDetails?: string` and `userConstraints?: Array<{type, description, day?, time?, allDay?}>` to the interface. No other changes — fields pass through to `onDetailsExtracted`.
 
-**Change B — Remove browser loop fallback** (lines ~455-469):
-Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
+### File 3: `src/pages/Start.tsx`
 
-```typescript
-// OLD:
-} catch (serverErr) {
-  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
-  const generatedDays = await generateItinerary({ ... });
-  // ... 40 lines of fallback logic
-}
+**Metadata object (lines 2739-2744)**: Add `flightDetails: details.flightDetails || null` and `userConstraints: details.userConstraints || null` to the metadata being inserted into the trips table.
 
-// NEW:
-} catch (serverErr) {
-  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
-  setPrePhase(null);
-  setHasStarted(false);
-  toast.error('Failed to start generation. Please try again.');
-  return;
-}
-```
+### File 4: `supabase/functions/generate-itinerary/index.ts`
 
-**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
+**GenerationContext interface (~line 451)**: Add `userConstraints` and `flightDetails` fields.
 
-**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
+**Context building (~line 4183)**: Read `userConstraints` and `flightDetails` from `trip.metadata`.
 
-#### File 2: `src/hooks/useItineraryGeneration.ts`
+**New Stage 1.9993 (after line 8520, after generation rules)**: Build `userConstraintPrompt` by iterating `context.userConstraints` and formatting each type:
+- `full_day_event` → "ENTIRE day consumed, no other activities"
+- `time_block` → "locked to exact time, build around it"
+- `avoid` → "do NOT include matching items"
+- `preference` → "influences venue selection across ALL days"
+- `flight` → "account for arrival/departure + airport transit"
 
-No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
+Also build `flightDetailsPrompt` from `context.flightDetails`.
 
-### Files to Modify
+**preferenceContext assembly (line 8572)**: Prepend `userConstraintPrompt + flightDetailsPrompt` at the START of the combined context string (before `generationHierarchy`), so user constraints have highest priority.
 
-| File | What |
-|------|------|
-| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
+**Raw text fallback (line 8483)**: Add rules about honoring full-day events, flight details, specific times, and preferences within the raw mustDoActivities text.
 
-### Risk Assessment
-- **Low risk**: The server-side self-chaining is already fully implemented and tested
-- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
-- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
+### What stays the same
+- `must-do-priorities.ts` parsing logic unchanged
+- `TripConfirmCard` display unchanged
+- All other edge functions unchanged
+- Generation rules system unchanged (user constraints supplement, not replace)
+- Response shape from chat planner unchanged (new fields are additive)
 
