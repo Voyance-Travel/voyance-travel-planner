@@ -132,11 +132,12 @@ export default function MultiCitySelector({
     // Add transport between previous city and new city
     if (destinations.length > 0) {
       const prevCity = destinations[destinations.length - 1];
+      const defaultType = smartTransportDefault(prevCity.country, country);
       const newTransport: InterCityTransport = {
         id: crypto.randomUUID(),
         fromCity: prevCity.city,
         toCity: city.trim(),
-        type: 'train',
+        type: defaultType,
         departureDate: '',
         transitionDay: 'half_and_half',
       };
