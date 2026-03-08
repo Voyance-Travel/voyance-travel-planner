@@ -195,8 +195,8 @@ export function PastTripCard({ trip, index = 0 }: PastTripCardProps) {
           <div className="flex gap-2 pt-1">
             {trip.hasItineraryData && (
               <Button
-                onClick={() => navigate(`/itinerary/${trip.id}`)}
-                variant="outline"
+              onClick={() => navigate(`/trip/${trip.id}`)}
+              variant="outline"
                 size="sm"
                 className="flex-1 gap-1.5 text-xs h-9"
               >

@@ -4,7 +4,7 @@ import { getTripCities } from '@/services/tripCitiesService';
 import type { TripCity } from '@/types/tripCity';
 import { checkRedistributionNeeded, applyNightsRedistribution, type NightsRedistribution } from '@/utils/syncTripCitiesNights';
 import { NightsRedistributionModal } from '@/components/trip/NightsRedistributionModal';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Navigate } from 'react-router-dom';
 import { format, isAfter, isBefore, differenceInDays, addDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { Loader2, MapPin, ArrowLeft, Sparkles, CheckCircle, Coins, Calendar } from 'lucide-react';
