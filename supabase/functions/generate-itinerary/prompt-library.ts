@@ -1160,6 +1160,10 @@ export function buildDepartureDayPrompt(
     const transferTime = minutesToHHMM(flight.departureTimeMins - 150); // 2.5 hours before
     lines.push(`   2. "Transfer to Airport" at ${transferTime} (category: transport)`);
     lines.push(`   3. "Departure from Airport" endTime: ${flight.departureTime24} (category: transport)`);
+    lines.push('');
+    lines.push(`   🚫 DO NOT generate any additional airport-related activities.`);
+    lines.push(`   The above 3 items are the ONLY checkout/transfer/departure entries.`);
+    lines.push(`   Do NOT add extra "Head to Airport", "Go to Airport", or duplicate transfer/departure entries.`);
   }
   lines.push('');
   

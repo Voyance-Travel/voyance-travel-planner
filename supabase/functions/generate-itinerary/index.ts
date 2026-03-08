@@ -5732,7 +5732,37 @@ Generate activities for this day following ALL constraints above.`;
         }
       }
 
-      // Validate the generated day - pass previousDays for trip-wide uniqueness checks
+      // ==========================================================================
+      // DEPARTURE DAY DEDUP: Remove duplicate airport/transfer/departure entries
+      // The AI sometimes generates extra "Head to Airport" or duplicate transfers
+      // ==========================================================================
+      if (isLastDay && generatedDay.activities.length > 2) {
+        const airportKeywords = ['airport', 'departure transfer', 'flight departure', 'depart from'];
+        const airportActivities = generatedDay.activities.filter(a => {
+          const t = (a.title || '').toLowerCase();
+          return airportKeywords.some(kw => t.includes(kw));
+        });
+
+        if (airportActivities.length > 2) {
+          // Keep only the last 2 airport-related activities (Transfer + Departure)
+          // Remove earlier duplicates like "Head to Airport"
+          const toRemoveIds = new Set<string>();
+          const airportToKeep = airportActivities.slice(-2);
+          for (const act of airportActivities) {
+            if (!airportToKeep.includes(act)) {
+              toRemoveIds.add(act.id);
+            }
+          }
+          if (toRemoveIds.size > 0) {
+            const removedTitles = generatedDay.activities
+              .filter(a => toRemoveIds.has(a.id))
+              .map(a => a.title);
+            console.log(`[Stage 2] Day ${dayNumber}: Removing ${toRemoveIds.size} duplicate airport activities: ${removedTitles.join(', ')}`);
+            generatedDay.activities = generatedDay.activities.filter(a => !toRemoveIds.has(a.id));
+          }
+        }
+      }
+
       const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish);
 
       // Transition day validation: MUST contain at least one inter-city transport activity
