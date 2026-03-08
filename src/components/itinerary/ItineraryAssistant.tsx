@@ -659,7 +659,7 @@ export function ItineraryAssistant({
                 ref={inputRef}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value.slice(0, MAX_MESSAGE_LENGTH))}
-                placeholder="Ask to swap an activity, adjust pacing..."
+                placeholder={isListening ? (interimTranscript || 'Listening...') : 'Ask to swap an activity, adjust pacing...'}
                 disabled={isLoading || isExecuting}
                 maxLength={MAX_MESSAGE_LENGTH}
                 className="flex-1"
@@ -676,8 +676,12 @@ export function ItineraryAssistant({
                   toggleListening();
                 }}
                 title={isListening ? "Stop listening" : "Voice input"}
+                className="relative"
               >
                 {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                {isListening && (
+                  <span className="absolute inset-0 rounded-md animate-ping bg-destructive/20 pointer-events-none" />
+                )}
               </Button>
               <Button 
                 type="submit" 
