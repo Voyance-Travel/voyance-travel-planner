@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, ThumbsUp, Meh, ThumbsDown, Camera, Mic } from 'lucide-react';
+import { Heart, ThumbsUp, Meh, ThumbsDown, Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSubmitFeedback, type FeedbackRating } from '@/services/activityFeedbackAPI';
 
@@ -16,7 +16,6 @@ interface InlineActivityRatingProps {
   activityCategory?: string;
   destination?: string;
   existingRating?: FeedbackRating | null;
-  onMediaPress?: () => void;
   onVoicePress?: () => void;
   compact?: boolean;
 }
@@ -35,7 +34,6 @@ export function InlineActivityRating({
   activityCategory,
   destination,
   existingRating,
-  onMediaPress,
   onVoicePress,
   compact = false,
 }: InlineActivityRatingProps) {
@@ -88,25 +86,16 @@ export function InlineActivityRating({
         </motion.button>
       ))}
 
-      {/* Media buttons */}
-      {(onMediaPress || onVoicePress) && (
-        <div className="flex items-center gap-0.5 ml-1 border-l border-border/50 pl-1">
-          {onMediaPress && (
-            <button
-              onClick={onMediaPress}
-              className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-all"
-            >
-              <Camera className="w-3.5 h-3.5" />
-            </button>
-          )}
-          {onVoicePress && (
-            <button
-              onClick={onVoicePress}
-              className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-all"
-            >
-              <Mic className="w-3.5 h-3.5" />
-            </button>
-          )}
+      {/* Voice note button */}
+      {onVoicePress && (
+        <div className="flex items-center ml-1 border-l border-border/50 pl-1">
+          <button
+            onClick={onVoicePress}
+            className="flex items-center gap-1 px-2 h-7 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-all text-xs"
+          >
+            <Mic className="w-3.5 h-3.5" />
+            <span>Note</span>
+          </button>
         </div>
       )}
 

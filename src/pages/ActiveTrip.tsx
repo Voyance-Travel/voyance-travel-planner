@@ -1004,7 +1004,6 @@ function TodayView({
                             activityCategory={activity.category}
                             destination={trip.destination}
                             existingRating={feedbackByActivity.get(activity.id) as any || null}
-                            onMediaPress={() => onMediaPress(activity.id, activity.name)}
                             onVoicePress={() => onVoicePress(activity.id, activity.name)}
                             compact
                           />
