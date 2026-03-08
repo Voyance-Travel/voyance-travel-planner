@@ -81,7 +81,6 @@ export function TransitBadge({
 
   const handleModeSelect = async (mode: string) => {
     if (mode === currentMode || !onTransportModeChange) return;
-    setShowModePicker(false);
     await onTransportModeChange(mode);
   };
 
