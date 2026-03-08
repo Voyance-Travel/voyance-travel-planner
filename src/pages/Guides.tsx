@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
@@ -11,6 +12,8 @@ import { guides, getAllCategories } from '@/data/guides';
 import { CommunityGuidesGrid } from '@/components/guides/CommunityGuidesGrid';
 
 export default function Guides() {
+  const [searchParams] = useSearchParams();
+  const defaultTab = searchParams.get('tab') === 'community' ? 'community' : 'voyance';
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   
   const categories = ['All', ...getAllCategories()];
@@ -81,7 +84,7 @@ export default function Guides() {
       {/* Discovery Tabs */}
       <section className="pb-16">
         <div className="max-w-7xl mx-auto px-4">
-          <Tabs defaultValue="voyance" className="w-full">
+          <Tabs defaultValue={defaultTab} className="w-full">
             <TabsList className="mb-6 bg-muted/50">
               <TabsTrigger value="voyance" className="gap-1.5">
                 <BookOpen className="h-3.5 w-3.5" />
