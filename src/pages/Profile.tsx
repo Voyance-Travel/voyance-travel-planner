@@ -135,7 +135,7 @@ function computeTripProgress(trip: any): { progress?: number; label?: string; co
 }
 
 // Transform API trip to display format
-function transformTrip(trip: any): DisplayTrip {
+function transformTrip(trip: any, ratingMap?: Map<string, number>): DisplayTrip {
   const startDate = trip.start_date ? parseLocalDate(trip.start_date) : null;
   const endDate = trip.end_date ? parseLocalDate(trip.end_date) : null;
   const now = new Date();
@@ -171,7 +171,7 @@ function transformTrip(trip: any): DisplayTrip {
     progress,
     progressLabel,
     progressColor,
-    rating: status === 'completed' ? 4 : undefined,
+    rating: status === 'completed' ? (ratingMap?.get(trip.id) || undefined) : undefined,
   };
 }
 
@@ -216,13 +216,25 @@ export default function Profile() {
       if (!user?.id) return;
       setIsLoadingTrips(true);
       try {
-        const { data, error } = await supabase
-          .from('trips')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
+        const [{ data, error }, { data: learnings }] = await Promise.all([
+          supabase
+            .from('trips')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('trip_learnings')
+            .select('trip_id, overall_rating')
+            .eq('user_id', user.id),
+        ]);
         if (error) throw error;
-        if (data) setTrips(data.map(transformTrip));
+        const ratingMap = new Map<string, number>();
+        learnings?.forEach((l: any) => {
+          if (l.overall_rating && l.overall_rating > 0) {
+            ratingMap.set(l.trip_id, l.overall_rating);
+          }
+        });
+        if (data) setTrips(data.map(t => transformTrip(t, ratingMap)));
       } catch (error) {
         console.error('Failed to load trips:', error);
       } finally {
