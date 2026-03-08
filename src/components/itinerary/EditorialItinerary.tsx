@@ -1458,6 +1458,9 @@ export function EditorialItinerary({
   // Optimize preferences dialog state
   const [showOptimizeDialog, setShowOptimizeDialog] = useState(false);
   const [optimizePrefs, setOptimizePrefs] = useState<OptimizePreferences | null>(null);
+  // Track whether user has made changes that would benefit from re-optimization
+  // Starts false for fresh itineraries (already optimized during generation)
+  const [needsOptimization, setNeedsOptimization] = useState(false);
   const [showRouteUpgrade, setShowRouteUpgrade] = useState(false);
 
   // AI Swap (Activity Alternatives) state
@@ -2914,7 +2917,8 @@ export function EditorialItinerary({
               },
             });
             // Invalidate credit caches
-            toast.info('No changes needed. Your itinerary is already optimized! Credits refunded.', { duration: 4000 });
+            setNeedsOptimization(false);
+            toast.info('Your routes are already optimized! Credits refunded.', { duration: 4000 });
           } catch (refundErr) {
             console.error('Failed to refund optimization credits:', refundErr);
           }
@@ -2932,8 +2936,18 @@ export function EditorialItinerary({
             };
           }));
           setHasChanges(true);
-          
-          toast.success(`Optimized! ${meta.routesChanged || 0} routes reordered, ${meta.transportCalculated || 0} transit legs calculated`);
+          setNeedsOptimization(false);
+
+          const parts: string[] = [];
+          if ((meta.routesChanged || 0) > 0) parts.push(`${meta.routesChanged} day${meta.routesChanged > 1 ? 's' : ''} reordered for shorter routes`);
+          if ((meta.transportCalculated || 0) > 0) parts.push(`${meta.transportCalculated} transit directions updated`);
+          if ((meta.costsLookedUp || 0) > 0) parts.push(`${meta.costsLookedUp} costs refreshed`);
+
+          if (parts.length > 0) {
+            toast.success(`Routes optimized! ${parts.join(', ')}.`);
+          } else {
+            toast.success('Routes optimized!');
+          }
         }
       }
     } catch (err) {
@@ -3104,6 +3118,7 @@ export function EditorialItinerary({
       return newDays;
     });
     setHasChanges(true);
+    setNeedsOptimization(true);
   }, [syncBudgetFromDays]);
 
   // Move activity to a different day
@@ -3155,6 +3170,7 @@ export function EditorialItinerary({
       return updated;
     });
     setHasChanges(true);
+    setNeedsOptimization(true);
     toast.success(`Moved to Day ${toDayIndex + 1}`);
   }, [syncBudgetFromDays]);
 
@@ -3183,6 +3199,7 @@ export function EditorialItinerary({
       return updated;
     });
     setHasChanges(true);
+    setNeedsOptimization(true);
     toast.success('Activity removed');
   }, [syncBudgetFromDays]);
 
@@ -3485,6 +3502,7 @@ export function EditorialItinerary({
       return updated;
     });
     setHasChanges(true);
+    setNeedsOptimization(true);
     setAddActivityModal(null);
     toast.success('Activity added!');
   }, [tripCurrency, spendCredits, tripId, days, syncBudgetFromDays]);
@@ -3985,39 +4003,45 @@ export function EditorialItinerary({
                   <>
                     {/* Desktop: inline buttons */}
                     <div className="hidden sm:flex items-center justify-center gap-2 flex-wrap">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => {
-                              if (entitlements?.can_optimize_routes) {
-                                openOptimizeDialog();
-                              } else {
-                                setShowRouteUpgrade(true);
-                              }
-                            }} 
-                            disabled={isOptimizing || days.length === 0}
-                            className="gap-1.5 text-xs text-muted-foreground"
-                          >
-                            {isOptimizing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Route className="h-3.5 w-3.5" />}
-                            {isOptimizing ? 'Optimizing...' : 'Optimize'}
-                            {!entitlements?.can_optimize_routes && <Lock className="h-3 w-3 ml-0.5 opacity-60" />}
-                            {entitlements?.can_optimize_routes && !routeOptCost.isFirstTrip && routeOptCost.cost > 0 && (
-                              <span className="inline-flex items-center gap-0.5 text-[10px] opacity-60 ml-0.5">
-                                <Coins className="h-2.5 w-2.5" />{routeOptCost.cost}
+                      {needsOptimization && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => {
+                                if (entitlements?.can_optimize_routes) {
+                                  openOptimizeDialog();
+                                } else {
+                                  setShowRouteUpgrade(true);
+                                }
+                              }} 
+                              disabled={isOptimizing || days.length === 0}
+                              className="gap-1.5 text-xs text-muted-foreground"
+                            >
+                              {isOptimizing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Route className="h-3.5 w-3.5" />}
+                              <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
                               </span>
-                            )}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>
-                            Reorders activities to minimize transit time
-                            {!routeOptCost.isFirstTrip && routeOptCost.cost > 0 && ` · ${routeOptCost.cost} credits`}
-                            {routeOptCost.isFirstTrip && ' · Free on first trip'}
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
+                              {isOptimizing ? 'Optimizing...' : 'Optimize'}
+                              {!entitlements?.can_optimize_routes && <Lock className="h-3 w-3 ml-0.5 opacity-60" />}
+                              {entitlements?.can_optimize_routes && !routeOptCost.isFirstTrip && routeOptCost.cost > 0 && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] opacity-60 ml-0.5">
+                                  <Coins className="h-2.5 w-2.5" />{routeOptCost.cost}
+                                </span>
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>
+                              Reorders activities to minimize transit time
+                              {!routeOptCost.isFirstTrip && routeOptCost.cost > 0 && ` · ${routeOptCost.cost} credits`}
+                              {routeOptCost.isFirstTrip && ' · Free on first trip'}
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
 
                       <Button
                         variant="ghost"
@@ -4041,20 +4065,22 @@ export function EditorialItinerary({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="center" className="w-48">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              if (entitlements?.can_optimize_routes) {
-                                openOptimizeDialog();
-                              } else {
-                                setShowRouteUpgrade(true);
-                              }
-                            }}
-                            disabled={isOptimizing || days.length === 0}
-                          >
-                            {isOptimizing ? <RefreshCw className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Route className="h-3.5 w-3.5 mr-2" />}
-                            {isOptimizing ? 'Optimizing...' : 'Optimize Routes'}
-                            {!entitlements?.can_optimize_routes && <Lock className="h-3 w-3 ml-auto opacity-60" />}
-                          </DropdownMenuItem>
+                          {needsOptimization && (
+                            <DropdownMenuItem
+                              onClick={() => {
+                                if (entitlements?.can_optimize_routes) {
+                                  openOptimizeDialog();
+                                } else {
+                                  setShowRouteUpgrade(true);
+                                }
+                              }}
+                              disabled={isOptimizing || days.length === 0}
+                            >
+                              {isOptimizing ? <RefreshCw className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Route className="h-3.5 w-3.5 mr-2" />}
+                              {isOptimizing ? 'Optimizing...' : 'Optimize Routes'}
+                              {!entitlements?.can_optimize_routes && <Lock className="h-3 w-3 ml-auto opacity-60" />}
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem
                             onClick={() => setShowRegenerateConfirm(true)}
                             disabled={isRegenerating}
