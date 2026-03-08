@@ -12416,10 +12416,17 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             .select('nights, days_total')
             .eq('trip_id', tripId);
           if (tripCitiesForCount && tripCitiesForCount.length > 0) {
-            const sumNights = tripCitiesForCount.reduce((sum: number, c: any) => sum + ((c as any).nights || (c as any).days_total || 1), 0);
-            if (sumNights > 0 && sumNights !== totalDays) {
-              console.log(`[generate-trip] Multi-city totalDays corrected: date-based=${totalDays}, city-nights-sum=${sumNights}`);
-              totalDays = sumNights;
+            // days_total now stores inclusive day count; fall back to nights+1 for legacy rows
+            const sumDays = tripCitiesForCount.reduce((sum: number, c: any) => {
+              const dt = (c as any).days_total;
+              const n = (c as any).nights;
+              // If days_total is set, trust it (already inclusive after fix).
+              // Otherwise derive from nights + 1.
+              return sum + (dt || ((n || 1) + 1));
+            }, 0);
+            if (sumDays > 0 && sumDays !== totalDays) {
+              console.log(`[generate-trip] Multi-city totalDays corrected: date-based=${totalDays}, city-days-sum=${sumDays}`);
+              totalDays = sumDays;
             }
           }
         } catch (e) {

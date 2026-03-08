@@ -217,7 +217,7 @@ export function ItineraryGenerator({
   // Pre-calculate estimated cost for display
   const totalDaysEstimate = useMemo(() => {
     try {
-      return differenceInCalendarDays(parseLocalDate(endDate), parseLocalDate(startDate));
+      return differenceInCalendarDays(parseLocalDate(endDate), parseLocalDate(startDate)) + 1;
     } catch { return 1; }
   }, [startDate, endDate]);
   
@@ -361,7 +361,7 @@ export function ItineraryGenerator({
     await new Promise(resolve => setTimeout(resolve, 800));
 
     // Calculate trip days for the gate
-    const totalDays = differenceInCalendarDays(parseLocalDate(endDate), parseLocalDate(startDate));
+    const totalDays = differenceInCalendarDays(parseLocalDate(endDate), parseLocalDate(startDate)) + 1;
     const cities = isMultiCity ? [] : [destination]; // Multi-city cities resolved inside gate if needed
 
     // PRE-AUTHORIZE: Check credits and deduct if affordable
