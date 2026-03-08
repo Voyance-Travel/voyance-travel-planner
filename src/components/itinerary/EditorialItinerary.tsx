@@ -4281,7 +4281,7 @@ export function EditorialItinerary({
                     <span className="hidden sm:inline">History</span>
                   </Button>
                   <span className="text-xs text-muted-foreground">
-                    Day {selectedDayIndex + 1} of {days.length}
+                    {days.length === 1 ? 'Day Trip' : `Day ${selectedDayIndex + 1} of ${days.length}`}
                   </span>
                 </div>
               </div>

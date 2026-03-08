@@ -474,6 +474,8 @@ interface GenerationContext {
   blendedDnaSnapshot?: Record<string, unknown> | null;
   // Celebration day: User-specified day for birthday/anniversary celebration (1-indexed)
   celebrationDay?: number;
+  // Day trip flag (single day, no overnight)
+  isDayTrip?: boolean;
   // Multi-city support
   isMultiCity?: boolean;
   multiCityDayMap?: MultiCityDayInfo[];
@@ -4154,6 +4156,7 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
   }
 
   const totalDays = calculateDays(trip.start_date, trip.end_date);
+  const isDayTrip = totalDays === 1 && trip.start_date === trip.end_date;
 
   const context: GenerationContext = {
     tripId: trip.id,
@@ -4162,7 +4165,8 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     destinationCountry: trip.destination_country,
     startDate: trip.start_date,
     endDate: trip.end_date,
-    totalDays,
+    totalDays: Math.max(totalDays, 1),
+    isDayTrip,
     travelers: trip.travelers || 1,
     childrenCount: trip.metadata?.childrenCount || 0,
     childrenAges: trip.metadata?.childrenAges || [],
@@ -4381,7 +4385,7 @@ interface DayValidationResult {
 }
 
 // Validate a single generated day for quality and correctness
-function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boolean, isLastDay: boolean, totalDays: number, previousDays: StrictDay[] = [], isSmartFinish: boolean = false): DayValidationResult {
+function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boolean, isLastDay: boolean, totalDays: number, previousDays: StrictDay[] = [], isSmartFinish: boolean = false, isDayTrip: boolean = false): DayValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -4685,7 +4689,7 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
     }
   }
 
-  if (isFirstDay) {
+  if (isFirstDay && !isDayTrip) {
     const hasArrival = day.activities?.some(a => 
       (a.title || '').toLowerCase().includes('arrival') || 
       ((a.category === 'transport') && (a.title || '').toLowerCase().includes('airport'))
@@ -4903,8 +4907,9 @@ async function generateSingleDayWithRetry(
     '9. VARIETY PER DAY: Mix sightseeing, cultural sites, museums, outdoor activities, dining',
     '10. **ACTIVITY TITLE NAMING — CRITICAL**: The "title" field MUST be the venue or experience name ONLY. NEVER append the category, type, or a repeated word. Examples of WRONG titles: "Barton Springs Pool Pool", "Zilker Botanical Garden Garden", "Franklin Barbecue Barbecue", "Cosmic Coffee Coffee & Beer", "Record shopping shopping". CORRECT titles: "Barton Springs Pool", "Zilker Botanical Garden", "Franklin Barbecue", "Cosmic Coffee + Beer Garden". If the place name already contains the activity type (e.g., "Pool", "Garden", "Barbecue", "Coffee"), do NOT add it again.',
     '11. **DINING TITLE — CRITICAL**: For ALL dining/restaurant activities (category: "dining"), the "title" MUST be the restaurant or cafe name. NEVER use the neighborhood, district, or area as the title. Put the neighborhood in the "neighborhood" field instead. WRONG: { title: "Gaslamp Quarter", description: "Juniper & Ivy" }. WRONG: { title: "La Jolla", description: "The Taco Stand fish tacos" }. WRONG: { title: "Balboa Park", description: "The Prado restaurant" }. RIGHT: { title: "Juniper & Ivy", neighborhood: "Gaslamp Quarter" }. RIGHT: { title: "The Taco Stand", description: "fish tacos", neighborhood: "La Jolla" }. RIGHT: { title: "The Prado", neighborhood: "Balboa Park" }.',
-    isFirstDay ? '12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with THREE SEPARATE activity blocks (NEVER combine them into one): (a) "Arrival at Airport" (category: transport), (b) "Airport Transfer to Hotel" (category: transport), (c) "Hotel Check-in" (category: accommodation). Each MUST be its own entry with its own startTime/endTime. NEVER create a single "Arrive and check in" block.' : '',
-    isLastDay && context.totalDays > 1 ? '12. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
+    !context.isDayTrip && isFirstDay ? '12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with THREE SEPARATE activity blocks (NEVER combine them into one): (a) "Arrival at Airport" (category: transport), (b) "Airport Transfer to Hotel" (category: transport), (c) "Hotel Check-in" (category: accommodation). Each MUST be its own entry with its own startTime/endTime. NEVER create a single "Arrive and check in" block.' : '',
+    !context.isDayTrip && isLastDay && context.totalDays > 1 ? '12. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
+    context.isDayTrip ? `12. **DAY TRIP — CRITICAL**: This is a DAY TRIP (single day, no overnight stay). Plan activities from morning to evening only (roughly 09:00 to 21:00). Do NOT include hotel check-in, hotel check-out, airport arrival, or airport departure blocks. Do NOT include overnight activities. Focus on making the most of one full day. Include breakfast, lunch, and dinner recommendations. Keep travel times between activities short.` : '',
   ].filter(Boolean).join('\n');
 
   // Build list of previous experience types for stricter rejection
@@ -5898,7 +5903,7 @@ Generate activities for this day following ALL constraints above.`;
         }
       }
 
-      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish);
+      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish, !!context.isDayTrip);
 
       // Transition day validation: MUST contain at least one inter-city transport activity
       if (isTransitionDay && dayCity?.transitionFrom && dayCity?.transitionTo) {
