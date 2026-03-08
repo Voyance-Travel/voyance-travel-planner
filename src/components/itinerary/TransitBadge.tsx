@@ -69,7 +69,9 @@ export function TransitBadge({
   onTransportModeChange,
   isChangingMode = false,
 }: TransitBadgeProps) {
-  const [expanded, setExpanded] = useState(showDetails);
+  const isMobile = useIsMobile();
+  // On mobile, always start collapsed regardless of showDetails prop
+  const [expanded, setExpanded] = useState(isMobile ? false : showDetails);
   const [showModePicker, setShowModePicker] = useState(false);
   
   const icon = transportIcons[transportation.method.toLowerCase()] || <MapPin className="h-2.5 w-2.5" />;
