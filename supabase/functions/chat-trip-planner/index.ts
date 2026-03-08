@@ -106,7 +106,33 @@ Before you call extract_trip_details, run this mental checklist:
 2. If YES → the "cities" array MUST contain ALL of them with nights. If you leave cities empty, those cities are LOST FOREVER.
 3. Does "destination" contain ALL city names comma-separated? "London, Paris" not just "London".
 4. Do the nights in cities[] sum to approximately the total trip duration?
-If any check fails, fix it before calling the tool.`;
+If any check fails, fix it before calling the tool.
+
+EXTRACTION QUALITY — CRITICAL:
+When calling extract_trip_details, you MUST extract EVERY specific detail the user mentioned:
+
+1. ACTIVITIES & EVENTS: Put ALL specific activities, events, shows, matches, restaurants, and venues into mustDoActivities as a comma-separated list. Include time constraints.
+   - "I want to go to the US Open from 9am to 6pm" → mustDoActivities: "US Open tennis 9am-6pm"
+   - "comedy show Friday night" → mustDoActivities should include "comedy show Friday evening"
+   - "dinner at a nice restaurant" → mustDoActivities should include "dinner at upscale restaurant"
+   - Capture EVERY activity mentioned, no matter how casual. If the user said it, it matters to them.
+
+2. FLIGHTS: If the user mentions ANY flight details, extract them into the flight fields:
+   - "land at LaGuardia at 8:15am" → arrivalAirport: "LGA", arrivalTime: "8:15 AM"
+   - "fly out of JFK" → departureAirport: "JFK"
+   - "red eye back" → departureTime: "late evening"
+
+3. HOTEL: Extract hotel name AND location/neighborhood:
+   - "stay in Midtown Manhattan" → hotelAddress: "Midtown Manhattan"
+   - "staying at The Ritz" → hotelName: "The Ritz"
+   - "hotel near Times Square" → hotelAddress: "near Times Square"
+
+4. LOGISTICS: Put transport needs, pace preferences, and logistical constraints in additionalNotes:
+   - "need to get from US Open to JFK" → additionalNotes
+   - "slow paced trip" → additionalNotes
+
+FAILURE TO EXTRACT USER-SPECIFIED ACTIVITIES INTO mustDoActivities = THE ITINERARY WILL NOT INCLUDE THEM.
+The mustDoActivities field is the PRIMARY way user preferences flow into the itinerary. If you skip it, the user's requests are SILENTLY DROPPED.`;
 }
 
 serve(async (req) => {
@@ -245,17 +271,33 @@ serve(async (req) => {
                     },
                     hotelAddress: {
                       type: "string",
-                      description: "Hotel address if mentioned",
+                      description: "Hotel address, neighborhood, or area if mentioned (e.g., 'Midtown Manhattan', 'near Times Square', '123 Main St')",
+                    },
+                    arrivalAirport: {
+                      type: "string",
+                      description: "Arrival airport code or name if mentioned (e.g., 'LGA', 'LaGuardia', 'Heathrow')",
+                    },
+                    arrivalTime: {
+                      type: "string",
+                      description: "Flight arrival time at destination if mentioned (e.g., '8:15 AM', '08:15')",
+                    },
+                    departureAirport: {
+                      type: "string",
+                      description: "Departure airport code or name for the return flight if mentioned (e.g., 'JFK', 'Heathrow')",
+                    },
+                    departureTime: {
+                      type: "string",
+                      description: "Return flight departure time if mentioned (e.g., '6:00 PM', '18:00')",
                     },
                     mustDoActivities: {
                       type: "string",
                       description:
-                        "Any must-do activities, restrictions, or requirements mentioned",
+                        "Comma-separated list of SPECIFIC activities, events, venues, and experiences the user wants to do. Include time constraints when mentioned. Examples: 'US Open tennis 9am-6pm both days, comedy show Friday night, dinner at Carbone, visit Central Park morning'. Be exhaustive — capture EVERY specific activity, event, restaurant, show, or experience the user mentions. This is the MOST IMPORTANT field for itinerary quality.",
                     },
                     additionalNotes: {
                       type: "string",
                       description:
-                        "Any other relevant details the user shared",
+                        "Logistical details, transport preferences, pace preferences, or constraints that don't fit other fields. Examples: 'need to get from US Open to JFK', 'want a slow-paced trip', 'traveling with elderly parent'. Do NOT put specific activities or events here — those go in mustDoActivities.",
                     },
                     flightDetails: {
                       type: "string",

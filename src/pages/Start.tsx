@@ -2745,6 +2745,25 @@ export default function Start() {
                           source: 'manual',
                         }] : null;
 
+                        // Build flight_selection from chat-extracted flight details
+                        const flightSelection = (details.arrivalAirport || details.arrivalTime || details.departureAirport || details.departureTime) ? {
+                          departure: {
+                            arrival: {
+                              time: details.arrivalTime || undefined,
+                              airport: details.arrivalAirport || undefined,
+                            },
+                          },
+                          return: {
+                            departure: {
+                              time: details.departureTime || undefined,
+                              airport: details.departureAirport || undefined,
+                            },
+                          },
+                          arrivalAirport: details.arrivalAirport || undefined,
+                          departureAirport: details.departureAirport || undefined,
+                          source: 'chat',
+                        } : null;
+
                         const { data: trip, error } = await supabase
                           .from('trips')
                           .insert({
@@ -2758,6 +2777,7 @@ export default function Start() {
                             budget_tier: chatBudget ? (chatBudget < 750 ? 'budget' : chatBudget < 2000 ? 'moderate' : chatBudget < 4000 ? 'premium' : 'luxury') : (dnaBudgetTier || 'moderate'),
                             budget_total_cents: chatBudget ? chatBudget * 100 : null,
                             hotel_selection: hotelSelection,
+                            flight_selection: flightSelection,
                             creation_source: isChatMultiCity ? 'multi_city' : 'chat',
                             status: 'draft',
                             is_multi_city: isChatMultiCity ? true : null,

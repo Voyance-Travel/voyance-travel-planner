@@ -35,6 +35,10 @@ export interface TripDetails {
   budgetAmount?: number;
   hotelName?: string;
   hotelAddress?: string;
+  arrivalAirport?: string;
+  arrivalTime?: string;
+  departureAirport?: string;
+  departureTime?: string;
   mustDoActivities?: string;
   additionalNotes?: string;
   flightDetails?: string;
