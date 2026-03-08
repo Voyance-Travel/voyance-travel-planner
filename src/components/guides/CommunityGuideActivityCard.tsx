@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
-import { MapPin, ExternalLink, Utensils, Camera, Music, ShoppingBag, Landmark, Waves, TreePine } from 'lucide-react';
+import { MapPin, ExternalLink, Utensils, Camera, Music, ShoppingBag, Landmark, Waves, TreePine, Youtube, Instagram, Globe } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import type { GuideContentLink } from '@/services/guideContentLinksAPI';
 
 interface Activity {
   id?: string;
@@ -11,14 +12,17 @@ interface Activity {
   note?: string;
   image_url?: string;
   url?: string;
+  external_url?: string;
   is_manual?: boolean;
-  location?: { name?: string; address?: string };
+  location?: { lat?: number; lng?: number; name?: string; address?: string };
   day_number?: number;
+  start_time?: string;
 }
 
 interface Props {
   activity: Activity;
   index: number;
+  contentLinks?: GuideContentLink[];
 }
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
@@ -36,18 +40,25 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   outdoor: <TreePine className="w-3.5 h-3.5" />,
 };
 
-export default function CommunityGuideActivityCard({ activity, index }: Props) {
+const CONTENT_PLATFORM_LABELS: Record<string, { icon: React.ReactNode; label: string }> = {
+  youtube: { icon: <Youtube className="w-3 h-3" />, label: 'Watch on YouTube' },
+  instagram: { icon: <Instagram className="w-3 h-3" />, label: 'See on Instagram' },
+};
+
+export default function CommunityGuideActivityCard({ activity, index, contentLinks }: Props) {
   const name = activity.name || activity.title || 'Activity';
   const categoryIcon = activity.category
     ? CATEGORY_ICONS[activity.category.toLowerCase()] || null
     : null;
+  const linkUrl = activity.url || activity.external_url;
 
   return (
     <motion.div
+      id={activity.id ? `guide-activity-${activity.id}` : undefined}
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.03 }}
-      className="flex gap-4 p-4 rounded-xl border border-border bg-card hover:border-primary/20 transition-colors"
+      className="flex gap-4 p-4 rounded-xl border border-border bg-card hover:border-primary/20 transition-colors scroll-mt-20"
     >
       {activity.image_url && (
         <img
@@ -89,9 +100,9 @@ export default function CommunityGuideActivityCard({ activity, index }: Props) {
               {activity.location.name}
             </span>
           )}
-          {activity.url && (
+          {linkUrl && (
             <a
-              href={activity.url}
+              href={linkUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="text-[11px] text-primary hover:underline flex items-center gap-1"
@@ -101,6 +112,31 @@ export default function CommunityGuideActivityCard({ activity, index }: Props) {
             </a>
           )}
         </div>
+
+        {/* Inline content links tied to this activity */}
+        {contentLinks && contentLinks.length > 0 && (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {contentLinks.map((cl) => {
+              const config = CONTENT_PLATFORM_LABELS[cl.platform] || {
+                icon: <Globe className="w-3 h-3" />,
+                label: `View on ${cl.platform}`,
+              };
+              return (
+                <a
+                  key={cl.id}
+                  href={cl.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                >
+                  {config.icon}
+                  {config.label}
+                  <ExternalLink className="w-2.5 h-2.5 opacity-50" />
+                </a>
+              );
+            })}
+          </div>
+        )}
       </div>
     </motion.div>
   );

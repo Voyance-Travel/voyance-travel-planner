@@ -3,20 +3,25 @@
  * Public route — no auth required.
  * /community-guides/:guideId
  */
+import { lazy, Suspense, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
-import { BookOpen, MapPin, Calendar, ArrowLeft, ArrowRight, Clock } from 'lucide-react';
+import { BookOpen, MapPin, Calendar, ArrowLeft, ArrowRight, Clock, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import CreatorCard from '@/components/guides/CreatorCard';
 import ReportGuideModal from '@/components/guides/ReportGuideModal';
 import CommunityGuideActivityCard from '@/components/guides/CommunityGuideActivityCard';
+import CreatorContentSection from '@/components/guides/CreatorContentSection';
+import { fetchGuideContentLinks, type GuideContentLink } from '@/services/guideContentLinksAPI';
+
+// Lazy-load map to avoid SSR issues with leaflet
+const GuideTripMap = lazy(() => import('@/components/guides/GuideTripMap'));
 
 interface GuideData {
   id: string;
@@ -69,6 +74,14 @@ function useTripDuration(tripId: string | undefined) {
   });
 }
 
+function useContentLinks(guideId: string | undefined) {
+  return useQuery({
+    queryKey: ['guide-content-links', guideId],
+    queryFn: () => fetchGuideContentLinks(guideId!),
+    enabled: !!guideId,
+  });
+}
+
 interface Activity {
   id?: string;
   name?: string;
@@ -78,9 +91,11 @@ interface Activity {
   note?: string;
   image_url?: string;
   url?: string;
+  external_url?: string;
   is_manual?: boolean;
-  location?: { name?: string; address?: string };
+  location?: { lat?: number; lng?: number; name?: string; address?: string };
   day_number?: number;
+  start_time?: string;
 }
 
 function groupByDay(activities: Activity[]): Map<number, Activity[]> {
@@ -97,9 +112,28 @@ export default function CommunityGuideDetail() {
   const { guideId } = useParams<{ guideId: string }>();
   const { data: guide, isLoading } = useGuideById(guideId);
   const { data: tripInfo } = useTripDuration(guide?.trip_id);
+  const { data: contentLinks = [] } = useContentLinks(guide?.id);
 
   // 404 if not found or unpublished
   const is404 = !isLoading && (!guide || guide.status !== 'published');
+
+  const activities = useMemo(() => {
+    return (guide?.content?.activities || []) as Activity[];
+  }, [guide]);
+
+  const dayGroups = useMemo(() => groupByDay(activities), [activities]);
+
+  // Build a map of activity_id → content links for that activity
+  const activityContentMap = useMemo(() => {
+    const map = new Map<string, GuideContentLink[]>();
+    for (const link of contentLinks) {
+      if (link.activity_id) {
+        if (!map.has(link.activity_id)) map.set(link.activity_id, []);
+        map.get(link.activity_id)!.push(link);
+      }
+    }
+    return map;
+  }, [contentLinks]);
 
   if (isLoading) {
     return (
@@ -130,9 +164,6 @@ export default function CommunityGuideDetail() {
     );
   }
 
-  const activities = (guide!.content?.activities || []) as Activity[];
-  const dayGroups = groupByDay(activities);
-
   const durationDays =
     tripInfo?.start_date && tripInfo?.end_date
       ? Math.ceil(
@@ -141,6 +172,10 @@ export default function CommunityGuideDetail() {
         ) + 1
       : null;
 
+  const durationLabel = durationDays
+    ? `${durationDays - 1} night${durationDays - 1 !== 1 ? 's' : ''} in ${guide!.destination || 'destination'}`
+    : null;
+
   const ogImage = guide!.cover_image_url || undefined;
   const ogTitle = `${guide!.title} | Voyance Community Guide`;
   const ogDesc =
@@ -148,7 +183,11 @@ export default function CommunityGuideDetail() {
 
   return (
     <MainLayout>
-      <Head title={ogTitle} description={ogDesc} />
+      <Head
+        title={ogTitle}
+        description={ogDesc}
+        ogImage={ogImage}
+      />
 
       {/* Hero */}
       <section className="relative">
@@ -178,10 +217,10 @@ export default function CommunityGuideDetail() {
                     {guide!.destination_country ? `, ${guide!.destination_country}` : ''}
                   </Badge>
                 )}
-                {durationDays && (
+                {durationLabel && (
                   <Badge variant="secondary" className="gap-1">
                     <Clock className="h-3 w-3" />
-                    {durationDays} day{durationDays !== 1 ? 's' : ''}
+                    {durationLabel}
                   </Badge>
                 )}
               </div>
@@ -213,6 +252,22 @@ export default function CommunityGuideDetail() {
             </div>
           )}
 
+          {/* Trip Map */}
+          {activities.some((a) => a.location?.lat != null && a.location?.lng != null) && (
+            <Suspense
+              fallback={
+                <div className="h-[320px] rounded-xl bg-muted flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              }
+            >
+              <GuideTripMap activities={activities} />
+            </Suspense>
+          )}
+
+          {/* Creator's Content */}
+          <CreatorContentSection guideId={guide!.id} />
+
           {/* Activities grouped by day */}
           {dayGroups.size > 0 ? (
             [...dayGroups.entries()].map(([day, items]) => (
@@ -233,6 +288,7 @@ export default function CommunityGuideDetail() {
                     key={activity.id || `${day}-${i}`}
                     activity={activity}
                     index={i}
+                    contentLinks={activity.id ? activityContentMap.get(activity.id) : undefined}
                   />
                 ))}
               </div>

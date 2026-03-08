@@ -3877,6 +3877,62 @@ export type Database = {
         }
         Relationships: []
       }
+      guide_content_links: {
+        Row: {
+          activity_id: string | null
+          activity_name: string | null
+          created_at: string
+          day_number: number | null
+          description: string | null
+          guide_id: string
+          id: string
+          platform: string
+          sort_order: number
+          title: string | null
+          updated_at: string
+          url: string
+          user_id: string
+        }
+        Insert: {
+          activity_id?: string | null
+          activity_name?: string | null
+          created_at?: string
+          day_number?: number | null
+          description?: string | null
+          guide_id: string
+          id?: string
+          platform: string
+          sort_order?: number
+          title?: string | null
+          updated_at?: string
+          url: string
+          user_id: string
+        }
+        Update: {
+          activity_id?: string | null
+          activity_name?: string | null
+          created_at?: string
+          day_number?: number | null
+          description?: string | null
+          guide_id?: string
+          id?: string
+          platform?: string
+          sort_order?: number
+          title?: string | null
+          updated_at?: string
+          url?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guide_content_links_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "community_guides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guide_favorites: {
         Row: {
           activity_id: string
