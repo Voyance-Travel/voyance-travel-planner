@@ -3963,13 +3963,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "guide_favorites_activity_id_fkey"
-            columns: ["activity_id"]
-            isOneToOne: false
-            referencedRelation: "trip_activities"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "guide_favorites_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
