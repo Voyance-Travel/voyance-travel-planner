@@ -36,6 +36,8 @@ import { getDestinationByCity } from '@/services/supabase/destinations';
 import { getAttractionsByDestination } from '@/services/supabase/attractions';
 import { getActivitiesByDestination as getDbActivities } from '@/services/supabase/activities';
 import { useAuth } from '@/contexts/AuthContext';
+import { useIsSaved, useToggleSaveDestination } from '@/hooks/useSaveDestination';
+import { toast } from 'sonner';
 import { formatEnumDisplay } from '@/utils/textFormatting';
 import { handleImageError } from '@/utils/imageFallback';
 import { useCachedDestinationImage } from '@/hooks/useCachedImage';
@@ -47,7 +49,9 @@ export default function DestinationDetail() {
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
-  const [isSaved, setIsSaved] = useState(false);
+  const destinationId = slug || '';
+  const { data: isSaved } = useIsSaved(destinationId);
+  const toggleSaveMutation = useToggleSaveDestination();
   const [activeCategory, setActiveCategory] = useState<string>('all');
   
   // Reviews drawer state
@@ -306,7 +310,19 @@ export default function DestinationDetail() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.5 }}
-            onClick={() => setIsSaved(!isSaved)}
+            onClick={() => {
+              if (!destination) return;
+              toggleSaveMutation.mutate({
+                itemId: destinationId,
+                data: {
+                  city: destination.city,
+                  country: destination.country,
+                  region: destination.region,
+                  tagline: destination.tagline,
+                  imageUrl: destination.imageUrl,
+                },
+              });
+            }}
             className={`w-12 h-12 rounded-full backdrop-blur-md flex items-center justify-center transition-colors ${
               isSaved ? 'bg-accent text-accent-foreground' : 'bg-white/20 text-white hover:bg-white/30'
             }`}
@@ -317,6 +333,16 @@ export default function DestinationDetail() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.6 }}
+            onClick={async () => {
+              const url = `${window.location.origin}/destination/${destinationId}`;
+              const shareData = { title: `${destination?.city}, ${destination?.country}`, url };
+              if (navigator.share) {
+                try { await navigator.share(shareData); } catch { /* cancelled */ }
+              } else {
+                await navigator.clipboard.writeText(url);
+                toast.success('Link copied to clipboard');
+              }
+            }}
             className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md text-white flex items-center justify-center hover:bg-white/30 transition-colors"
           >
             <Share2 className="h-5 w-5" />
