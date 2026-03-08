@@ -84,6 +84,7 @@ import ItineraryView from "./pages/ItineraryView";
 import SampleItinerary from "./pages/SampleItinerary";
 import ActiveTrip from "./pages/ActiveTrip";
 import TripRecap from "./pages/TripRecap";
+import GuideBuilder from "./pages/GuideBuilder";
 import Demo from "./pages/Demo";
 
 // Pages - Legal
