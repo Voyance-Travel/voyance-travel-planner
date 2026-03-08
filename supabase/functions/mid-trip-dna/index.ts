@@ -4,7 +4,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 serve(async (req) => {
@@ -29,74 +29,41 @@ serve(async (req) => {
     const { tripId } = await req.json();
     if (!tripId) throw new Error("tripId required");
 
-    // Load trip, feedback, DNA profile in parallel
-    const [tripRes, feedbackRes, dnaRes, memoriesRes] = await Promise.all([
+    // Load trip and DNA profile in parallel (no feedback/memories needed)
+    const [tripRes, dnaRes] = await Promise.all([
       supabase
         .from("trips")
-        .select(
-          "destination, start_date, end_date, travelers, itinerary_data, metadata"
-        )
+        .select("destination, start_date, end_date, travelers, itinerary_data, metadata")
         .eq("id", tripId)
         .single(),
-      supabase
-        .from("activity_feedback")
-        .select("rating, activity_category, activity_type, feedback_tags, personalization_tags")
-        .eq("trip_id", tripId)
-        .eq("user_id", user.id),
       supabase
         .from("travel_dna_profiles")
         .select("primary_archetype_name, trait_scores, travel_dna_v2")
         .eq("user_id", user.id)
         .maybeSingle(),
-      supabase
-        .from("trip_memories")
-        .select("id")
-        .eq("trip_id", tripId)
-        .eq("user_id", user.id),
     ]);
 
     const trip = tripRes.data;
     if (!trip) throw new Error("Trip not found");
 
-    const feedback = feedbackRes.data || [];
     const dnaProfile = dnaRes.data;
-    const memoriesCount = memoriesRes.data?.length || 0;
 
     // Calculate trip progress
     const now = new Date();
     const start = new Date(trip.start_date);
     const end = new Date(trip.end_date);
-    const totalDays =
-      Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
     const currentDay = Math.min(
-      Math.max(
-        1,
-        Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) +
-          1
-      ),
+      Math.max(1, Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1),
       totalDays
     );
 
-    // Analyze feedback patterns
-    const ratingCounts = { loved: 0, liked: 0, okay: 0, disliked: 0 };
-    const categoryPrefs: Record<string, { loved: number; total: number }> = {};
-
-    for (const f of feedback) {
-      const r = f.rating as keyof typeof ratingCounts;
-      if (r in ratingCounts) ratingCounts[r]++;
-
-      const cat = f.activity_category || f.activity_type || "other";
-      if (!categoryPrefs[cat]) categoryPrefs[cat] = { loved: 0, total: 0 };
-      categoryPrefs[cat].total++;
-      if (r === "loved" || r === "liked") categoryPrefs[cat].loved++;
-    }
-
-    // Get current archetype
-    const currentArchetype =
+    // Get archetype
+    const archetype =
       dnaProfile?.primary_archetype_name ||
       (dnaProfile?.travel_dna_v2 as any)?.primary_archetype_name ||
       (trip.metadata as any)?.archetype ||
-      "unknown";
+      "Explorer";
 
     // Get trait scores
     const traitScores =
@@ -104,48 +71,40 @@ serve(async (req) => {
       (dnaProfile?.travel_dna_v2 as any)?.trait_scores ||
       {};
 
-    // Count activities from itinerary
-    let totalActivities = 0;
+    // Summarize itinerary activities for context
+    const activitySummary: string[] = [];
     if (trip.itinerary_data && typeof trip.itinerary_data === "object") {
       const itin = trip.itinerary_data as any;
       const days = itin.days || itin.itinerary || [];
       if (Array.isArray(days)) {
         for (const day of days) {
           const acts = day.activities || [];
-          totalActivities += Array.isArray(acts) ? acts.length : 0;
+          if (Array.isArray(acts)) {
+            for (const act of acts) {
+              const title = act.title || act.name || "";
+              const category = act.category || "";
+              if (title) activitySummary.push(`${title} (${category})`);
+            }
+          }
         }
       }
     }
 
-    // Build prompt
-    const topCategories = Object.entries(categoryPrefs)
-      .sort(([, a], [, b]) => b.loved / b.total - a.loved / a.total)
-      .slice(0, 5)
-      .map(([cat, stats]) => `${cat}: ${stats.loved}/${stats.total} positive`)
-      .join(", ");
+    const prompt = `Generate fun, personality-driven trip predictions for this traveler.
 
-    const feedbackSummary = feedback.length > 0
-      ? `Ratings: ${ratingCounts.loved} loved, ${ratingCounts.liked} liked, ${ratingCounts.okay} okay, ${ratingCounts.disliked} disliked. Top categories: ${topCategories}`
-      : "No activity ratings yet.";
+TRAVELER:
+- Archetype: ${archetype}
+- Key traits: ${JSON.stringify(traitScores)}
 
-    const prompt = `Analyze this traveler's mid-trip behavior and generate DNA predictions.
-
-TRAVELER CONTEXT:
-- Current archetype: ${currentArchetype}
-- Trait scores: ${JSON.stringify(traitScores)}
+TRIP:
 - Destination: ${trip.destination}
-- Trip progress: Day ${currentDay} of ${totalDays}
+- Day ${currentDay} of ${totalDays}
 - Travelers: ${trip.travelers || 1}
+- Planned activities: ${activitySummary.slice(0, 15).join(", ") || "various activities"}
 
-MID-TRIP DATA:
-- Activities planned: ${totalActivities}
-- Activities rated: ${feedback.length}
-- ${feedbackSummary}
-- Photos captured: ${memoriesCount}
-- Feedback tags: ${[...new Set(feedback.flatMap((f) => f.feedback_tags || []))].join(", ") || "none"}
-- Personalization signals: ${[...new Set(feedback.flatMap((f) => f.personalization_tags || []))].join(", ") || "none"}
+Generate spontaneous, delightful predictions about what might happen on this trip based on their personality archetype and destination. Think: "Your Culinary Cartographer DNA says you'll find a hole-in-the-wall restaurant that becomes your favorite." or "Slow Traveler alert: you'll end up staying at one café for 3 hours and love every minute."
 
-Generate mid-trip DNA insights using the tool provided.`;
+These should feel personal, fun, and specific to the destination — NOT about app engagement or metrics.`;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
@@ -163,7 +122,7 @@ Generate mid-trip DNA insights using the tool provided.`;
           messages: [
             {
               role: "system",
-              content: `You are a Travel DNA analyst. Analyze mid-trip behavior to surface personality insights, trait shifts, and predictions. Be specific, warm, and insightful. Reference actual activities and patterns. Keep insights concise and actionable.`,
+              content: `You are a playful Travel DNA oracle. You make fun, specific predictions about what will happen on someone's trip based on their personality archetype and destination. Be warm, witty, and specific to the destination. Each prediction should feel like a fortune cookie written by a best friend who knows you well.`,
             },
             { role: "user", content: prompt },
           ],
@@ -171,71 +130,46 @@ Generate mid-trip DNA insights using the tool provided.`;
             {
               type: "function",
               function: {
-                name: "generate_dna_predictions",
-                description:
-                  "Generate mid-trip DNA predictions based on traveler behavior",
+                name: "generate_trip_predictions",
+                description: "Generate fun personality-driven trip predictions",
                 parameters: {
                   type: "object",
                   properties: {
                     headline: {
                       type: "string",
-                      description:
-                        "A punchy 5-8 word headline about their travel personality this trip (e.g. 'Your inner foodie is taking over')",
+                      description: "A punchy 5-10 word headline about their archetype on this trip (e.g. 'Your inner foodie is about to feast')",
                     },
-                    travelingAs: {
+                    archetypeInsight: {
                       type: "string",
-                      description:
-                        "What archetype they're traveling as RIGHT NOW based on behavior, may differ from their profile archetype",
+                      description: "A one-liner about how their archetype plays out in this specific destination (1 sentence)",
                     },
-                    traitShifts: {
+                    predictions: {
                       type: "array",
                       items: {
                         type: "object",
                         properties: {
-                          trait: { type: "string" },
-                          direction: {
+                          emoji: {
                             type: "string",
-                            enum: ["up", "down", "stable"],
+                            description: "A single emoji that represents this prediction",
                           },
-                          insight: {
+                          text: {
                             type: "string",
-                            description: "One sentence explaining the shift",
+                            description: "A fun, specific prediction sentence (1-2 sentences max). Reference the archetype naturally.",
                           },
                         },
-                        required: ["trait", "direction", "insight"],
+                        required: ["emoji", "text"],
                       },
-                      description: "2-4 trait shifts detected from behavior",
-                    },
-                    prediction: {
-                      type: "string",
-                      description:
-                        "A fun prediction for the rest of the trip based on patterns (1-2 sentences)",
-                    },
-                    surprisingPattern: {
-                      type: "string",
-                      description:
-                        "Something unexpected about their behavior vs their DNA profile (1 sentence). Null if no surprise.",
-                    },
-                    engagementScore: {
-                      type: "number",
-                      description:
-                        "0-100 score of how engaged they are with the trip based on ratings, photos, activity completion",
+                      description: "3-4 fun personality-driven predictions about what might happen on this trip",
                     },
                   },
-                  required: [
-                    "headline",
-                    "travelingAs",
-                    "traitShifts",
-                    "prediction",
-                    "engagementScore",
-                  ],
+                  required: ["headline", "archetypeInsight", "predictions"],
                 },
               },
             },
           ],
           tool_choice: {
             type: "function",
-            function: { name: "generate_dna_predictions" },
+            function: { name: "generate_trip_predictions" },
           },
         }),
       }
@@ -273,11 +207,9 @@ Generate mid-trip DNA insights using the tool provided.`;
         success: true,
         predictions,
         meta: {
-          currentArchetype,
+          archetype,
           tripDay: currentDay,
           totalDays,
-          feedbackCount: feedback.length,
-          memoriesCount,
         },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
