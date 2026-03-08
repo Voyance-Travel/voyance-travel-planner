@@ -3685,16 +3685,26 @@ export function EditorialItinerary({
       <HelpButton />
       {/* (Sticky toolbar removed — controls moved to bottom Trip Summary section) */}
 
-      {/* Past Trip Indicator */}
+      {/* Past Trip — Create Guide CTA */}
       {isPastTrip && (
-        <div className="bg-muted/50 border border-border rounded-lg px-4 py-3 flex items-center gap-3">
-          <Clock className="h-4 w-4 text-muted-foreground" />
-          <div className="flex-1">
-            <p className="text-sm font-medium">Past Trip</p>
-            <p className="text-xs text-muted-foreground">
-              This trip has ended. The itinerary is in read-only mode.
-            </p>
+        <div className="flex items-center justify-between bg-muted/50 border border-border rounded-lg p-3">
+          <div className="flex items-center gap-3">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">Trip complete! Share it with the community.</p>
+              <p className="text-xs text-muted-foreground">
+                This trip has ended. The itinerary is in read-only mode.
+              </p>
+            </div>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={() => window.location.href = `/guide/create/${tripId}`}
+          >
+            Create Travel Guide
+          </Button>
         </div>
       )}
 

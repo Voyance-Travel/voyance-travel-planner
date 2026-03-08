@@ -157,6 +157,23 @@ export default function TripRecap() {
 
       {/* Content */}
       <div className="max-w-4xl mx-auto px-4 -mt-6 relative z-10 pb-12">
+        {/* Create Guide CTA */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="bg-primary/5 border border-primary/20 rounded-2xl p-5 mb-4 flex items-center justify-between"
+        >
+          <div>
+            <p className="font-semibold text-sm text-foreground">Share your trip</p>
+            <p className="text-xs text-muted-foreground">Turn this trip into a travel guide for the community</p>
+          </div>
+          <Button size="sm" onClick={() => navigate(`/guide/create/${tripId}`)}>
+            <BookOpen className="h-3.5 w-3.5 mr-1.5" />
+            Create Guide
+          </Button>
+        </motion.div>
+
         {/* Quick Stats Card */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
