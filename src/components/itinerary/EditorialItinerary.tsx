@@ -52,7 +52,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { format, parseISO, isToday, addDays } from 'date-fns';
+import { format, parseISO, isToday, addDays, isPast, startOfDay } from 'date-fns';
 import { safeFormatDate, parseLocalDate } from '@/utils/dateUtils';
 import type { ActivityType, ItineraryActivity, WeatherCondition, DayItinerary } from '@/types/itinerary';
 import { convertFrontendDayToBackend, convertFrontendActivityToBackend } from '@/types/itinerary';
@@ -1814,7 +1814,9 @@ export function EditorialItinerary({
   // IMPORTANT: While permission is loading, default to editable (owner assumption) to avoid blocking UI.
   const permissionResolved = !permissionLoading && !!tripPermission;
   const guestCanDirectEdit = tripPermission?.canEdit && guestEditMode === 'free_edit';
-  const effectiveIsEditable = !effectiveIsPreview && isEditable && (
+  // Past trips (endDate < today) are always read-only
+  const isPastTrip = endDate ? isPast(startOfDay(addDays(parseLocalDate(endDate), 1))) : false;
+  const effectiveIsEditable = !isPastTrip && !effectiveIsPreview && isEditable && (
     !permissionResolved || tripPermission?.isOwner || guestCanDirectEdit
   );
   const guestMustPropose = !effectiveIsPreview && isEditable && permissionResolved && !tripPermission?.isOwner && tripPermission?.canEdit && isPropose;
@@ -3606,6 +3608,19 @@ export function EditorialItinerary({
       {/* Persistent Help Button */}
       <HelpButton />
       {/* (Sticky toolbar removed — controls moved to bottom Trip Summary section) */}
+
+      {/* Past Trip Indicator */}
+      {isPastTrip && (
+        <div className="bg-muted/50 border border-border rounded-lg px-4 py-3 flex items-center gap-3">
+          <Clock className="h-4 w-4 text-muted-foreground" />
+          <div className="flex-1">
+            <p className="text-sm font-medium">Past Trip</p>
+            <p className="text-xs text-muted-foreground">
+              This trip has ended. The itinerary is in read-only mode.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* View-Only Mode Indicator */}
       {isEditable && !effectiveIsEditable && !guestMustPropose && tripPermission && !tripPermission.isOwner && (
