@@ -33,7 +33,6 @@ interface InviteInfo {
   endDate?: string;
   inviterName?: string;
   inviterAvatar?: string;
-  spotsRemaining?: number;
 }
 
 interface AcceptResult {
@@ -402,12 +401,6 @@ export default function AcceptInvite() {
                     <span>
                       {format(parseLocalDate(inviteInfo.startDate), 'MMM d')} - {format(parseLocalDate(inviteInfo.endDate), 'MMM d, yyyy')}
                     </span>
-                  </div>
-                )}
-                {inviteInfo.spotsRemaining !== undefined && (
-                  <div className="flex items-center gap-3 text-sm">
-                    <Users className="h-4 w-4 text-primary" />
-                    <span>{inviteInfo.spotsRemaining} spot{inviteInfo.spotsRemaining !== 1 ? 's' : ''} remaining</span>
                   </div>
                 )}
               </div>

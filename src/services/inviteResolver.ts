@@ -16,7 +16,6 @@ export interface InviteHealth {
   expiresAt?: string;
   usesCount?: number;
   maxUses?: number;
-  spotsRemaining?: number;
   rotated?: boolean;
 }
 

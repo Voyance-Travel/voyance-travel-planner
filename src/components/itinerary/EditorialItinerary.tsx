@@ -5887,16 +5887,14 @@ export function EditorialItinerary({
                    {inviteHealth?.success && (
                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
                        <Check className="h-3 w-3 text-green-500" />
-                       <span>Verified just now</span>
+                       <span>Link active</span>
                        <span>·</span>
-                       <span>{inviteHealth.spotsRemaining} spot{inviteHealth.spotsRemaining !== 1 ? 's' : ''} remaining</span>
-                       <span>·</span>
-                       <span>{inviteHealth.usesCount}/{inviteHealth.maxUses} used</span>
+                       <span>Expires in 30 days</span>
                      </div>
                    )}
                    {!inviteHealth && (
                      <p className="text-xs text-muted-foreground">
-                       Link expires in 7 days.{travelers > 1 ? ` Up to ${travelers - 1} ${travelers - 1 === 1 ? 'person' : 'people'} can join.` : ' Share this trip with others.'}
+                       Link expires in 30 days. Share this trip with others.
                      </p>
                    )}
                    {/* Reset link button */}
