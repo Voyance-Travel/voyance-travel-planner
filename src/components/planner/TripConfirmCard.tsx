@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar, Users, DollarSign, Hotel, Sparkles, CheckCircle2, Pencil, Route, TrainFront, Plane, Bus, Car, Ship, ChevronDown } from 'lucide-react';
+import { MapPin, Calendar, Users, DollarSign, Hotel, Sparkles, CheckCircle2, Pencil, Route, TrainFront, Plane, Bus, Car, Ship, ChevronDown, Clock, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
@@ -79,6 +79,13 @@ export function TripConfirmCard({ details, onConfirm, onEdit, isGenerating, tran
   }
   if (details.mustDoActivities) {
     rows.push({ icon: <CheckCircle2 className="h-3.5 w-3.5" />, label: 'Must-do', value: details.mustDoActivities });
+  }
+  if (details.pacing && details.pacing !== 'balanced') {
+    const pacingLabels: Record<string, string> = { relaxed: 'Relaxed pace', packed: 'Action-packed' };
+    rows.push({ icon: <Clock className="h-3.5 w-3.5" />, label: 'Pace', value: pacingLabels[details.pacing] || details.pacing });
+  }
+  if (details.interestCategories?.length) {
+    rows.push({ icon: <Star className="h-3.5 w-3.5" />, label: 'Interests', value: details.interestCategories.join(', ') });
   }
   if (details.tripType) {
     rows.push({ icon: <Sparkles className="h-3.5 w-3.5" />, label: 'Trip type', value: details.tripType });
