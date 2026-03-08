@@ -3,9 +3,9 @@
  * Features: day progress, current activity preview, quick actions, feedback prompts
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
- import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { 
   Plane, 
   Calendar, 
@@ -28,9 +28,21 @@ import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { useTripHeroImage } from '@/hooks/useTripHeroImage';
- import { openMapLocation, isIOS } from '@/utils/mapNavigation';
+import { openMapNavigation, openMapLocation, isIOS } from '@/utils/mapNavigation';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+
+interface TodayActivity {
+  name: string;
+  startTime?: string;
+  endTime?: string;
+  location?: {
+    name?: string;
+    address?: string;
+    lat?: number;
+    lng?: number;
+  };
+}
 
 interface ActiveTripCardProps {
   trip: {
@@ -65,10 +77,29 @@ function getTimeOfDayGreeting() {
 }
 
 export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
-   const navigate = useNavigate();
+  const navigate = useNavigate();
   const [userRating, setUserRating] = useState<number>(0);
   const [hoverRating, setHoverRating] = useState<number>(0);
   const [isSavingRating, setIsSavingRating] = useState(false);
+  const [todayActivities, setTodayActivities] = useState<TodayActivity[]>([]);
+
+  // Calculate current day number for fetching the right itinerary day
+  const now = new Date();
+  const startDate = trip.startDate ? parseLocalDate(trip.startDate) : null;
+  const endDate = trip.endDate ? parseLocalDate(trip.endDate) : null;
+  
+  let currentDay = 1;
+  let totalDays = 1;
+  let progressPercent = 0;
+  let daysRemaining = 0;
+  
+  if (startDate && endDate) {
+    totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    currentDay = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    currentDay = Math.max(1, Math.min(currentDay, totalDays));
+    progressPercent = (currentDay / totalDays) * 100;
+    daysRemaining = totalDays - currentDay;
+  }
 
   // Load existing rating
   useEffect(() => {
@@ -85,6 +116,44 @@ export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
     };
     loadRating();
   }, [trip.id]);
+
+  // Fetch today's activities for smart map navigation
+  useEffect(() => {
+    if (!trip.hasItineraryData) return;
+
+    const fetchTodayActivities = async () => {
+      try {
+        const { data } = await supabase
+          .from('itinerary_days')
+          .select('activities')
+          .eq('trip_id', trip.id)
+          .eq('day_number', currentDay)
+          .maybeSingle();
+
+        if (!data?.activities) return;
+
+        const activities = Array.isArray(data.activities) ? data.activities : [];
+        const mapped: TodayActivity[] = activities.map((act: any) => ({
+          name: act.title || act.name || 'Activity',
+          startTime: act.start_time || act.startTime,
+          endTime: act.end_time || act.endTime,
+          location: act.location ? {
+            name: act.location.name,
+            address: act.location.address,
+            lat: act.location.lat ?? act.location.latitude,
+            lng: act.location.lng ?? act.location.longitude,
+          } : undefined,
+        }));
+
+        setTodayActivities(mapped);
+      } catch (err) {
+        // Non-blocking — map will fall back to destination
+        console.error('[ActiveTripCard] Failed to fetch today activities:', err);
+      }
+    };
+
+    fetchTodayActivities();
+  }, [trip.id, trip.hasItineraryData, currentDay]);
 
   const handleRatingClick = async (rating: number) => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -122,35 +191,66 @@ export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
     tripId: trip.id,
   });
 
-  // Calculate trip progress
-  const now = new Date();
-  const startDate = trip.startDate ? parseLocalDate(trip.startDate) : null;
-  const endDate = trip.endDate ? parseLocalDate(trip.endDate) : null;
-  
-  let currentDay = 1;
-  let totalDays = 1;
-  let progressPercent = 0;
-  let daysRemaining = 0;
-  
-  if (startDate && endDate) {
-    totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    currentDay = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    currentDay = Math.max(1, Math.min(currentDay, totalDays));
-    progressPercent = (currentDay / totalDays) * 100;
-    daysRemaining = totalDays - currentDay;
-  }
-
   const TimeIcon = getTimeOfDayIcon();
   const greeting = getTimeOfDayGreeting();
 
-   // Generate map URL for the destination
-   const getMapUrl = () => {
-     const query = encodeURIComponent(trip.destination);
-     if (isIOS()) {
-       return `https://maps.apple.com/?q=${query}`;
-     }
-     return `https://www.google.com/maps/search/?api=1&query=${query}`;
-   };
+  // Smart map handler: current→next activity directions, single location, or destination fallback
+  const handleOpenMap = () => {
+    if (todayActivities.length > 0) {
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      const currentTotalMinutes = currentHour * 60 + currentMinute;
+
+      let currentActivity: TodayActivity | null = null;
+      let nextActivity: TodayActivity | null = null;
+
+      for (let i = 0; i < todayActivities.length; i++) {
+        const act = todayActivities[i];
+        if (!act.startTime) continue;
+
+        const [h, m] = act.startTime.split(':').map(Number);
+        const actStart = h * 60 + (m || 0);
+
+        let actEnd = actStart + 60; // default 1hr
+        if (act.endTime) {
+          const [eh, em] = act.endTime.split(':').map(Number);
+          actEnd = eh * 60 + (em || 0);
+        }
+
+        if (currentTotalMinutes >= actStart && currentTotalMinutes < actEnd) {
+          currentActivity = act;
+          nextActivity = todayActivities[i + 1] || null;
+          break;
+        } else if (actStart > currentTotalMinutes && !nextActivity) {
+          nextActivity = act;
+          currentActivity = i > 0 ? todayActivities[i - 1] : null;
+          break;
+        }
+      }
+
+      const currentLoc = currentActivity?.location;
+      const nextLoc = nextActivity?.location;
+
+      // Two-point directions
+      if (currentLoc && nextLoc && (currentLoc.lat || currentLoc.address || currentLoc.name) && (nextLoc.lat || nextLoc.address || nextLoc.name)) {
+        openMapNavigation(
+          { name: currentLoc.name, address: currentLoc.address, lat: currentLoc.lat, lng: currentLoc.lng },
+          { name: nextLoc.name, address: nextLoc.address, lat: nextLoc.lat, lng: nextLoc.lng }
+        );
+        return;
+      }
+
+      // Single location fallback
+      const singleLoc = nextLoc || currentLoc;
+      if (singleLoc && (singleLoc.lat || singleLoc.address || singleLoc.name)) {
+        openMapLocation({ name: singleLoc.name, address: singleLoc.address, lat: singleLoc.lat, lng: singleLoc.lng });
+        return;
+      }
+    }
+
+    // Final fallback — destination city
+    openMapLocation({ name: trip.destination });
+  };
 
   return (
     <motion.div
@@ -229,25 +329,23 @@ export default function ActiveTripCard({ trip }: ActiveTripCardProps) {
         {/* Quick Actions Grid */}
         <div className="grid grid-cols-2 gap-3">
           <Button 
-             asChild
+            asChild
             variant="default"
             className="h-auto py-4 flex-col gap-2"
           >
-             <Link to={`/itinerary/${trip.id}`}>
-               <Calendar className="h-5 w-5" />
-               <span className="text-sm font-medium">Today's Plan</span>
-             </Link>
+            <Link to={`/itinerary/${trip.id}`}>
+              <Calendar className="h-5 w-5" />
+              <span className="text-sm font-medium">Today's Plan</span>
+            </Link>
           </Button>
           
           <Button 
-            asChild
             variant="outline"
             className="h-auto py-4 flex-col gap-2 border-border/60"
+            onClick={handleOpenMap}
           >
-            <a href={getMapUrl()} target="_blank" rel="noopener noreferrer">
             <MapPin className="h-5 w-5" />
             <span className="text-sm font-medium">Open Map</span>
-            </a>
           </Button>
         </div>
 
