@@ -6,9 +6,8 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MapPin, Train, Car, ChevronDown, ChevronUp, Footprints, Bus, ArrowRightLeft, Loader2, Coins } from 'lucide-react';
+import { MapPin, Train, Car, ChevronDown, Footprints, Bus, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { CREDIT_COSTS } from '@/config/pricing';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 interface TransitBadgeProps {
@@ -72,7 +71,6 @@ export function TransitBadge({
   const isMobile = useIsMobile();
   // On mobile, always start collapsed regardless of showDetails prop
   const [expanded, setExpanded] = useState(isMobile ? false : showDetails);
-  const [showModePicker, setShowModePicker] = useState(false);
   
   const icon = transportIcons[transportation.method.toLowerCase()] || <MapPin className="h-2.5 w-2.5" />;
   const costDisplay = transportation.estimatedCost?.amount && transportation.estimatedCost.amount > 0
@@ -83,7 +81,6 @@ export function TransitBadge({
 
   const handleModeSelect = async (mode: string) => {
     if (mode === currentMode || !onTransportModeChange) return;
-    setShowModePicker(false);
     await onTransportModeChange(mode);
   };
 
@@ -158,67 +155,37 @@ export function TransitBadge({
                     <span>{costDisplay}</span>
                   </>
                 )}
-
-                {/* Change mode button */}
-                {onTransportModeChange && !isChangingMode && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowModePicker(!showModePicker);
-                    }}
-                    className={cn(
-                      "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] ml-auto",
-                      "border border-dashed border-border/60 text-muted-foreground",
-                      "hover:border-primary/50 hover:text-primary transition-colors",
-                      showModePicker && "border-primary/50 text-primary bg-primary/5"
-                    )}
-                    title={`Change transport mode (${CREDIT_COSTS.TRANSPORT_MODE_CHANGE} credits)`}
-                  >
-                    <ArrowRightLeft className="h-2.5 w-2.5" />
-                    <span className="hidden sm:inline">Change</span>
-                  </button>
-                )}
               </div>
 
-              {/* Mode picker */}
-              <AnimatePresence>
-                {showModePicker && onTransportModeChange && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {AVAILABLE_MODES.map(mode => {
-                        const isActive = mode.value === currentMode || 
-                          (currentMode === 'walk' && mode.value === 'walking');
-                        return (
-                          <button
-                            key={mode.value}
-                            onClick={() => handleModeSelect(mode.value)}
-                            disabled={isActive}
-                            className={cn(
-                              "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs border transition-colors",
-                              isActive
-                                ? "bg-primary/10 text-primary border-primary/30 font-medium"
-                                : "bg-background border-border hover:border-primary/50 hover:text-foreground text-muted-foreground"
-                            )}
-                          >
-                            {mode.icon}
-                            {mode.label}
-                          </button>
-                        );
-                      })}
-                      <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 ml-1">
-                        <Coins className="h-2.5 w-2.5" />
-                        {CREDIT_COSTS.TRANSPORT_MODE_CHANGE} credits
-                      </span>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {/* Mode picker — always visible when expanded and editable */}
+              {onTransportModeChange && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {AVAILABLE_MODES.map(mode => {
+                    const isActive = mode.value === currentMode || 
+                      (currentMode === 'walk' && mode.value === 'walking');
+                    return (
+                      <button
+                        key={mode.value}
+                        onClick={() => handleModeSelect(mode.value)}
+                        disabled={isActive || isChangingMode}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs border transition-colors",
+                          isActive
+                            ? "bg-primary/10 text-primary border-primary/30 font-medium"
+                            : "bg-background border-border hover:border-primary/50 hover:text-foreground text-muted-foreground"
+                        )}
+                      >
+                        {isChangingMode && mode.value === currentMode ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          mode.icon
+                        )}
+                        {mode.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Instructions */}
               {transportation.instructions && (
