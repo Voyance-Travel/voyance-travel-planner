@@ -2193,6 +2193,81 @@ export type Database = {
         }
         Relationships: []
       }
+      community_guides: {
+        Row: {
+          content: Json | null
+          cover_image_url: string | null
+          created_at: string
+          description: string | null
+          destination: string | null
+          destination_country: string | null
+          id: string
+          like_count: number | null
+          published_at: string | null
+          slug: string | null
+          status: string
+          tags: string[] | null
+          title: string
+          trip_id: string
+          updated_at: string
+          user_id: string
+          view_count: number | null
+        }
+        Insert: {
+          content?: Json | null
+          cover_image_url?: string | null
+          created_at?: string
+          description?: string | null
+          destination?: string | null
+          destination_country?: string | null
+          id?: string
+          like_count?: number | null
+          published_at?: string | null
+          slug?: string | null
+          status?: string
+          tags?: string[] | null
+          title: string
+          trip_id: string
+          updated_at?: string
+          user_id: string
+          view_count?: number | null
+        }
+        Update: {
+          content?: Json | null
+          cover_image_url?: string | null
+          created_at?: string
+          description?: string | null
+          destination?: string | null
+          destination_country?: string | null
+          id?: string
+          like_count?: number | null
+          published_at?: string | null
+          slug?: string | null
+          status?: string
+          tags?: string[] | null
+          title?: string
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+          view_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_guides_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "community_guides_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       consent_records: {
         Row: {
           consent_type: string
@@ -3780,6 +3855,58 @@ export type Database = {
           usage?: Json
         }
         Relationships: []
+      }
+      guide_favorites: {
+        Row: {
+          activity_id: string
+          created_at: string
+          id: string
+          note: string | null
+          sort_order: number | null
+          trip_id: string
+          user_id: string
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          sort_order?: number | null
+          trip_id: string
+          user_id: string
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          sort_order?: number | null
+          trip_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guide_favorites_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "trip_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guide_favorites_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "guide_favorites_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       guides: {
         Row: {
