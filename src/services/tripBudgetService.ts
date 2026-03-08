@@ -576,3 +576,55 @@ export async function getCategoryAllocations(tripId: string): Promise<CategoryAl
     },
   ];
 }
+
+// =============================================================================
+// MULTI-CITY BUDGET BREAKDOWN
+// =============================================================================
+
+export interface CityBudget {
+  cityId: string;
+  cityName: string;
+  cityOrder: number;
+  nights: number;
+  allocatedBudgetCents: number;
+  spentCents: number;
+  remainingCents: number;
+  breakdown: {
+    hotel: number;
+    activities: number;
+    dining: number;
+    transport: number;
+    misc: number;
+  };
+}
+
+/**
+ * Get budget breakdown by city for multi-city trips.
+ * Returns null for single-city trips (0 or 1 city rows).
+ */
+export async function getCityBudgetBreakdown(tripId: string): Promise<CityBudget[] | null> {
+  const { data: cities } = await supabase
+    .from('trip_cities')
+    .select('id, city_name, city_order, nights, allocated_budget_cents, activity_cost_cents, dining_cost_cents, hotel_cost_cents, transport_cost_cents, misc_cost_cents, total_cost_cents')
+    .eq('trip_id', tripId)
+    .order('city_order', { ascending: true });
+
+  if (!cities || cities.length <= 1) return null;
+
+  return (cities as any[]).map(city => ({
+    cityId: city.id,
+    cityName: city.city_name,
+    cityOrder: city.city_order,
+    nights: city.nights || 0,
+    allocatedBudgetCents: city.allocated_budget_cents || 0,
+    spentCents: city.total_cost_cents || 0,
+    remainingCents: (city.allocated_budget_cents || 0) - (city.total_cost_cents || 0),
+    breakdown: {
+      hotel: city.hotel_cost_cents || 0,
+      activities: city.activity_cost_cents || 0,
+      dining: city.dining_cost_cents || 0,
+      transport: city.transport_cost_cents || 0,
+      misc: city.misc_cost_cents || 0,
+    },
+  }));
+}

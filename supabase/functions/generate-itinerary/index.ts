@@ -4207,7 +4207,7 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     premium: 300,
     luxury: 500
   };
-  context.dailyBudget = budgetMap[context.budgetTier || 'standard'] || 150;
+   context.dailyBudget = budgetMap[context.budgetTier || 'standard'] || 150;
 
   // Override with ACTUAL user-set budget if available
   const budgetTotalCents = trip.budget_total_cents;
@@ -4226,6 +4226,9 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     context.dailyBudget = actualDailyPerPerson; // Override tier-based estimate
     console.log(`[Stage 1] User budget: $${budgetTotalCents / 100} total, $${actualDailyPerPerson}/day/person for activities (after flight=$${flightCents / 100}, hotel=$${hotelCents / 100})`);
   }
+
+  // Store tripCities ref for per-city budget override (populated later in multi-city block)
+  let resolvedTripCities: any[] | null = null;
 
   // =========================================================================
   // MULTI-CITY SUPPORT: Build day→city mapping from destinations or trip_cities

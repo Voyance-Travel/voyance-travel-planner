@@ -2519,6 +2519,30 @@ export default function Start() {
           // Non-fatal: edge function can fall back to destinations JSONB
         } else {
           console.log(`[Start] Persisted ${cityRows.length} trip_cities for trip ${trip.id}`);
+
+          // ─── SPLIT BUDGET ACROSS CITIES ───
+          if (budgetAmount) {
+            const totalNights = multiCityDestinations.reduce((sum, d) => sum + (d.nights || 1), 0);
+            const budgetCents = Math.round(budgetAmount * 100);
+            const cityBudgets = multiCityDestinations.map((d, i) => {
+              const cityNights = d.nights || 1;
+              const share = cityNights / totalNights;
+              return { cityOrder: i, allocatedBudgetCents: Math.round(budgetCents * share) };
+            });
+            // Adjust rounding so the sum matches exactly
+            const allocatedSum = cityBudgets.reduce((s, c) => s + c.allocatedBudgetCents, 0);
+            if (allocatedSum !== budgetCents) {
+              cityBudgets[0].allocatedBudgetCents += (budgetCents - allocatedSum);
+            }
+            for (const cb of cityBudgets) {
+              await supabase
+                .from('trip_cities')
+                .update({ allocated_budget_cents: cb.allocatedBudgetCents } as any)
+                .eq('trip_id', trip.id)
+                .eq('city_order', cb.cityOrder);
+            }
+            console.log('[Start] Budget split:', cityBudgets.map(c => `City ${c.cityOrder}: $${(c.allocatedBudgetCents / 100).toFixed(2)}`).join(', '));
+          }
         }
       } else {
         // Single-city trip: also insert one trip_cities row for unified schema
@@ -2539,6 +2563,13 @@ export default function Start() {
         const { error: singleCityError } = await supabase.from('trip_cities').insert(singleCityRow as any);
         if (singleCityError) {
           console.error('[Start] Failed to persist single trip_cities row:', singleCityError);
+        } else if (budgetAmount) {
+          // Single-city: allocate full budget
+          await supabase
+            .from('trip_cities')
+            .update({ allocated_budget_cents: Math.round(budgetAmount * 100) } as any)
+            .eq('trip_id', trip.id)
+            .eq('city_order', 0);
         }
       }
 
