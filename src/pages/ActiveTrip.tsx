@@ -328,7 +328,7 @@ export default function ActiveTrip() {
     // The actual pace adjustment would be handled by the itinerary system
   }, []);
 
-import { openMapLocation } from '@/utils/mapNavigation';
+
 
   const handleActivityComplete = useCallback((activityId: string) => {
     setCompletedActivities(prev => new Set([...prev, activityId]));
