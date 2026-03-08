@@ -2131,14 +2131,9 @@ export default function Start() {
   }, []);
 
   // Shorthand for the common Step 1 → Step 2 transition (skips step 2 for day trips)
-  const goToNextAfterStep1 = useCallback(() => {
-    // isDayTrip is computed from startDate/endDate so we check inline
-    if (startDate && endDate && differenceInDays(endDate, startDate) === 0) {
-      goToStep(3); // Skip flight/hotel for day trips
-    } else {
-      goToStep(2);
-    }
-  }, [goToStep, startDate, endDate]);
+  // Uses a ref-based check since startDate/endDate are declared later
+  const goToNextAfterStep1Ref = useRef<() => void>(() => goToStep(2));
+  const goToNextAfterStep1 = useCallback(() => goToNextAfterStep1Ref.current(), []);
 
   // Listen for browser back button to navigate between steps
   useEffect(() => {
