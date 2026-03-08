@@ -5703,7 +5703,18 @@ export function EditorialItinerary({
         />
       )}
 
-      {/* Activity Alternatives Drawer (AI Swap) */}
+      {/* Version History Drawer */}
+      <VersionHistoryDrawer
+        open={versionHistoryOpen}
+        onOpenChange={setVersionHistoryOpen}
+        versions={versions}
+        isLoading={isLoadingVersions}
+        isRestoring={isUndoing}
+        onLoadVersions={loadVersionHistory}
+        onRestore={handleRestoreVersion}
+        dayNumber={selectedDay?.dayNumber ?? 1}
+      />
+
       <ActivityAlternativesDrawer
         open={swapDrawerOpen}
         onClose={() => {
