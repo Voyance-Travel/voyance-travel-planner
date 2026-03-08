@@ -317,9 +317,10 @@ Return EXACTLY 3 destinations as JSON. Pick different destinations than the prev
       entity_name: `${s.city}, ${s.country}`,
       metadata: { shown_at: new Date().toISOString() },
     }));
-    await supabase.from('user_enrichment').insert(shownRecords).throwOnError().catch(err => {
-      console.warn('[suggest-mystery-trips] Failed to record shown suggestions:', err);
-    });
+    const { error: shownError } = await supabase.from('user_enrichment').insert(shownRecords);
+    if (shownError) {
+      console.warn('[suggest-mystery-trips] Failed to record shown suggestions:', shownError);
+    }
 
     return new Response(JSON.stringify({ 
       suggestions: enrichedSuggestions,
