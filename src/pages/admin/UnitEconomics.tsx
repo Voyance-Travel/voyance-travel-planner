@@ -5,7 +5,8 @@
 
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { RefreshCw, LayoutDashboard, DollarSign, TrendingDown, Users, Coins, LineChart, Settings, AlertTriangle, CheckCircle2, ArrowLeft } from "lucide-react";
+import { RefreshCw, LayoutDashboard, DollarSign, TrendingDown, Users, Coins, LineChart, Settings, AlertTriangle, CheckCircle2, ArrowLeft, TrendingUp, CircleDollarSign } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,7 +42,7 @@ const KNOWN_PACK_PRICES: Record<string, number> = {
 // Tab definitions
 // ============================================================================
 
-type TabKey = 'overview' | 'revenue' | 'costs' | 'users' | 'credits' | 'forecast';
+type TabKey = 'overview' | 'revenue' | 'costs' | 'users' | 'credits' | 'forecast' | 'projections' | 'credit-economics';
 
 const TABS: Array<{ key: TabKey; label: string; icon: React.ElementType }> = [
   { key: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -50,6 +51,52 @@ const TABS: Array<{ key: TabKey; label: string; icon: React.ElementType }> = [
   { key: 'users', label: 'Users', icon: Users },
   { key: 'credits', label: 'Credits', icon: Coins },
   { key: 'forecast', label: 'Forecast', icon: LineChart },
+  { key: 'projections', label: 'Projections', icon: TrendingUp },
+  { key: 'credit-economics', label: 'Credit Econ', icon: CircleDollarSign },
+];
+
+// ============================================================================
+// Revenue Mix Presets
+// ============================================================================
+
+const REVENUE_MIX_PRESETS = {
+  pessimistic: { label: 'Pessimistic', description: 'Most users buy cheapest pack', flex_100: 80, flex_300: 10, flex_500: 5, voyager: 3, explorer: 2, adventurer: 0 },
+  conservative: { label: 'Conservative', description: 'Skewed toward smaller packs', flex_100: 40, flex_300: 25, flex_500: 15, voyager: 10, explorer: 7, adventurer: 3 },
+  balanced: { label: 'Balanced', description: 'Even spread across tiers', flex_100: 20, flex_300: 20, flex_500: 20, voyager: 15, explorer: 15, adventurer: 10 },
+  optimistic: { label: 'Optimistic', description: 'Higher-value packs dominate', flex_100: 10, flex_300: 15, flex_500: 15, voyager: 20, explorer: 25, adventurer: 15 },
+} as const;
+
+type MixKey = keyof typeof REVENUE_MIX_PRESETS;
+
+const CREDIT_TIERS = [
+  { key: 'flex_100', label: 'Flex 100', price: 9, credits: 100, color: 'hsl(var(--primary))' },
+  { key: 'flex_300', label: 'Flex 300', price: 25, credits: 300, color: 'hsl(var(--primary))' },
+  { key: 'flex_500', label: 'Flex 500', price: 39, credits: 500, color: 'hsl(var(--primary))' },
+  { key: 'voyager', label: 'Voyager', price: 49.99, credits: 600, color: 'hsl(var(--accent))' },
+  { key: 'explorer', label: 'Explorer', price: 89.99, credits: 1600, color: 'hsl(var(--accent))' },
+  { key: 'adventurer', label: 'Adventurer', price: 149.99, credits: 3200, color: 'hsl(var(--accent))' },
+];
+
+const CREDIT_ACTIONS = [
+  { action: 'Unlock Full Day', credits: 60, cost: 0.018, freeCap: '—', category: 'core', what: 'Reveals addresses, photos, hours, tips, booking links' },
+  { action: 'Smart Finish', credits: 50, cost: 0.040, freeCap: '—', category: 'core', what: 'AI enrichment for manual/imported trips' },
+  { action: 'Hotel Search', credits: 40, cost: 0.020, freeCap: '—', category: 'core', what: 'AI hotel suggestions per city' },
+  { action: 'Route Optimization', credits: 20, cost: 0.015, freeCap: '—', category: 'core', what: 'Google Routes + AI reorder per day' },
+  { action: 'Mystery Getaway', credits: 15, cost: 0.025, freeCap: '—', category: 'discovery', what: 'AI surprise destination suggestions' },
+  { action: 'Regenerate Day', credits: 10, cost: 0.018, freeCap: '1-5/trip', category: 'editing', what: 'Full day regeneration with new venues' },
+  { action: 'Swap Activity', credits: 5, cost: 0.009, freeCap: '3-15/trip', category: 'editing', what: 'Replace one activity with alternative' },
+  { action: 'Add Activity', credits: 5, cost: 0.009, freeCap: '2-10/trip', category: 'editing', what: 'Add new activity to a day' },
+  { action: 'Restaurant Rec', credits: 5, cost: 0.015, freeCap: '1-5/trip', category: 'dining', what: 'Perplexity-powered restaurant suggestion' },
+  { action: 'AI Companion', credits: 5, cost: 0.005, freeCap: '5-25/trip', category: 'chat', what: 'Chat message with AI trip companion' },
+  { action: 'Mystery Logistics', credits: 5, cost: 0.015, freeCap: '—', category: 'discovery', what: 'Flight + hotel estimates for mystery trip' },
+  { action: 'Transport Mode', credits: 5, cost: 0.005, freeCap: '—', category: 'routing', what: 'Change transport mode for a route' },
+];
+
+const TIER_RATES = [
+  { rate: 9 / 100, label: 'Flex 100', perCr: '$0.090/cr' },
+  { rate: 39 / 500, label: 'Flex 500', perCr: '$0.078/cr' },
+  { rate: 89.99 / 1600, label: 'Explorer', perCr: '$0.056/cr' },
+  { rate: 149.99 / 3200, label: 'Adventurer', perCr: '$0.047/cr' },
 ];
 
 // ============================================================================
