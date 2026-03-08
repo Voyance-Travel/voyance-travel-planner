@@ -885,7 +885,7 @@ export default function TripDetail() {
     if (daysArray.length === 0) {
       const start = parseLocalDate(trip.start_date);
       const end = parseLocalDate(trip.end_date);
-      const dayCount = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+      const dayCount = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
       
       for (let i = 0; i < dayCount; i++) {
         daysArray.push({

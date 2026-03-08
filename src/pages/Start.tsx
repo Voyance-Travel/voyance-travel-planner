@@ -889,7 +889,7 @@ function TripDetailsStep({
 
         {/* Credit Cost Estimate */}
         {planMode !== 'chat' && planMode !== 'manual' && startDate && endDate && (
-          <TripCostEstimate tripDays={differenceInDays(endDate, startDate)} />
+          <TripCostEstimate tripDays={differenceInDays(endDate, startDate) + 1} />
         )}
       </div>
 
@@ -2437,7 +2437,7 @@ export default function Start() {
             ? multiCityTransports[i - 1].transitionDay || 'half_and_half'
             : null,
           generation_status: 'pending' as const,
-          days_total: d.nights,
+          days_total: (d.nights || 1) + 1, // Inclusive day count: nights + 1
           hotel_selection: manualHotels[d.city]?.name ? [{
             name: manualHotels[d.city].name,
             address: manualHotels[d.city].address,
@@ -2459,6 +2459,7 @@ export default function Start() {
       } else {
         // Single-city trip: also insert one trip_cities row for unified schema
         const nights = differenceInDays(endDate, startDate);
+        const days = nights + 1; // Inclusive: Apr 10–13 = 4 days
         const singleCityRow = {
           trip_id: trip.id,
           city_order: 0,
@@ -2468,7 +2469,7 @@ export default function Start() {
           departure_date: format(endDate, 'yyyy-MM-dd'),
           nights: nights > 0 ? nights : 1,
           generation_status: 'pending' as const,
-          days_total: nights > 0 ? nights : 1,
+          days_total: days > 0 ? days : 1,
         };
         const { error: singleCityError } = await supabase.from('trip_cities').insert(singleCityRow as any);
         if (singleCityError) {
