@@ -3781,7 +3781,7 @@ export function EditorialItinerary({
             </div>
 
             {/* Smart Finish Banner — DNA gap analysis for manual trips */}
-            {isManualMode && (
+            {isManualMode && !isPastTrip && (
               <SmartFinishBanner
                 tripId={tripId}
                 isManualMode={isManualMode}

@@ -1457,6 +1457,7 @@ export default function TripDetail() {
   }
 
   const isLiveTrip = trip.status === 'active';
+  // Detect past trips for read-only mode and hiding Travel Intel
   const itineraryDays = transformToItineraryDays();
 
   // Compute effective end date: if itinerary has more REAL days than the stored
@@ -1475,6 +1476,7 @@ export default function TripDetail() {
     }
     return trip.end_date;
   })();
+  const isPastTripView = isAfter(new Date(), parseLocalDate(effectiveEndDate));
 
   return (
     <MainLayout>
@@ -1961,6 +1963,7 @@ export default function TripDetail() {
                         </ErrorBoundary>
                       }
                       travelIntelCards={
+                        !isPastTripView ? (
                         <ErrorBoundary>
                           {tripCities.length > 1 ? (
                             tripCities.map((city) => (
@@ -1991,6 +1994,7 @@ export default function TripDetail() {
                             />
                           )}
                         </ErrorBoundary>
+                        ) : null
                       }
                       daysPlanned={editorDays.filter((d: any) => {
                         const acts = d.activities || [];
@@ -2041,6 +2045,7 @@ export default function TripDetail() {
                       }}
                     />
                     </ErrorBoundary>
+                    {!isPastTripView && (
                     <ErrorBoundary>
                     {tripCities.length > 1 ? (
                       tripCities.map((city) => (
@@ -2071,8 +2076,8 @@ export default function TripDetail() {
                       />
                     )}
                     </ErrorBoundary>
+                    )}
                   </div>
-
 
 
 
