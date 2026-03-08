@@ -10,7 +10,7 @@
  * Each badge is expandable to show specifics. Includes savings calculation.
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, Clock, MapPinOff, Target, TrendingUp, ChevronDown, ChevronUp,
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 export interface IntelligenceDetail {
   title: string;
