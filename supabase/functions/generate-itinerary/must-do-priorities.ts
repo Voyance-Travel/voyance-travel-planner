@@ -551,10 +551,46 @@ FAILURE TO INCLUDE ANY OF THESE IS A HARD FAILURE.
 
 `;
 
-  // Group by priority level
-  const mustLevel = scheduled.filter(s => s.priority.priority === 'must');
-  const highLevel = scheduled.filter(s => s.priority.priority === 'high');
-  const niceLevel = scheduled.filter(s => s.priority.priority === 'nice');
+  // ── ALL-DAY & HALF-DAY EVENT SECTIONS (highest priority, separate from standard must-dos) ──
+  const allDayEvents = scheduled.filter(s => s.priority.activityType === 'all_day_event');
+  const halfDayEvents = scheduled.filter(s => s.priority.activityType === 'half_day_event');
+  const quickStops = scheduled.filter(s => s.priority.activityType === 'quick_stop');
+  const standardItems = scheduled.filter(s => !s.priority.activityType || s.priority.activityType === 'standard');
+  
+  if (allDayEvents.length > 0) {
+    prompt += `### 🏟️ ALL-DAY EVENTS (Day is DEDICATED to this event)\n`;
+    for (const s of allDayEvents) {
+      const venue = s.priority.venueName ? ` at ${s.priority.venueName}` : '';
+      const dates = s.priority.eventDates ? ` (confirmed: ${s.priority.eventDates})` : '';
+      prompt += `\n**${s.priority.title}** → Day ${s.assignedDay}${venue}${dates}
+This is an ALL-DAY commitment. Plan Day ${s.assignedDay} ENTIRELY around this event:
+- Morning: Breakfast near venue, transit to event location
+- Main event fills the core of the day (${Math.round((s.priority.estimatedDuration || 480) / 60)} hours)
+- Evening: Dinner near event venue area
+- Do NOT schedule other major sightseeing on this day
+- Only include meals, transit to/from venue, and post-event wind-down
+${s.priority.requiresBooking ? '⚠️ TICKETS/BOOKING REQUIRED — mention this prominently\n' : ''}`;
+    }
+    prompt += '\n';
+  }
+  
+  if (halfDayEvents.length > 0) {
+    prompt += `### 🎭 HALF-DAY EVENTS (Block ${halfDayEvents.length > 1 ? 'respective' : 'the'} half of the day)\n`;
+    for (const s of halfDayEvents) {
+      const timeBlock = s.priority.preferredTime === 'evening' ? 'evening (leave afternoon free for sightseeing)' 
+        : s.priority.preferredTime === 'morning' ? 'morning (leave afternoon/evening free)' 
+        : `${s.priority.preferredTime || 'assigned time'} block`;
+      prompt += `- **${s.priority.title}** → Day ${s.assignedDay}, ${timeBlock} (~${Math.round((s.priority.estimatedDuration || 180) / 60)}h)`;
+      if (s.priority.requiresBooking) prompt += ` ⚠️ BOOKING REQUIRED`;
+      prompt += `\n`;
+    }
+    prompt += `→ Fill the OTHER half of these days with sightseeing/activities.\n\n`;
+  }
+
+  // Group standard items by priority level
+  const mustLevel = standardItems.filter(s => s.priority.priority === 'must');
+  const highLevel = standardItems.filter(s => s.priority.priority === 'high');
+  const niceLevel = standardItems.filter(s => s.priority.priority === 'nice');
   
   if (mustLevel.length > 0) {
     prompt += `### 🔴 MUST HAVE (Non-negotiable)\n`;
@@ -578,6 +614,14 @@ FAILURE TO INCLUDE ANY OF THESE IS A HARD FAILURE.
     prompt += `### 🟢 NICE TO HAVE\n`;
     for (const s of niceLevel) {
       prompt += `- ${s.priority.title} → Day ${s.assignedDay}\n`;
+    }
+    prompt += '\n';
+  }
+  
+  if (quickStops.length > 0) {
+    prompt += `### 📸 QUICK STOPS (Weave into nearest convenient day)\n`;
+    for (const s of quickStops) {
+      prompt += `- ${s.priority.title} → Day ${s.assignedDay} (~${s.priority.estimatedDuration || 30} min, fit between activities)\n`;
     }
     prompt += '\n';
   }
