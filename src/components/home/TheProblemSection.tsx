@@ -1,267 +1,282 @@
 import { motion } from 'framer-motion';
 import { strangerCopy } from '@/lib/strangerCopy';
-import { X, Clock, Gem, AlertTriangle, FileSpreadsheet, Globe, MessageSquare, Search, BookmarkX, MapPin, Star, Calendar, ChevronRight } from 'lucide-react';
+import { X, Clock, Compass, Heart, Zap, Shield, Check, Sparkles, Globe, Map, Calendar, CreditCard, Search, Star, Users } from 'lucide-react';
 
-// Authentic "Before" chaos - realistic research hell
-function BeforeChaos() {
+// Visual mockup of chaos (before) - Real website style (from About page)
+function ChaosMockup() {
   return (
-    <div className="relative bg-neutral-950 rounded-xl overflow-hidden shadow-2xl border border-neutral-800">
-      {/* macOS window chrome */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-neutral-900 border-b border-neutral-800">
-        <div className="flex gap-1.5">
-          <div className="w-3 h-3 rounded-full bg-red-500/90" />
-          <div className="w-3 h-3 rounded-full bg-yellow-500/90" />
-          <div className="w-3 h-3 rounded-full bg-green-500/90" />
-        </div>
-        {/* Browser tabs */}
-        <div className="flex-1 flex gap-0.5 overflow-hidden ml-2">
-          {[
-            { name: 'Reddit: Best Barcelona...', active: true },
-            { name: 'TripAdvisor', active: false },
-            { name: 'Google Flights', active: false },
-            { name: 'Blog: Hidden...', active: false },
-          ].map((tab, i) => (
-            <div 
-              key={i} 
-              className={`text-[8px] px-2 py-1 rounded-t-md truncate max-w-[70px] ${
-                tab.active 
-                  ? 'bg-neutral-800 text-white' 
-                  : 'bg-neutral-900 text-neutral-500 hover:bg-neutral-850'
-              }`}
-            >
-              {tab.name}
-            </div>
-          ))}
-          <div className="text-[8px] px-2 py-1 text-neutral-600">+14</div>
-        </div>
-      </div>
-      
-      {/* Chaotic content */}
-      <div className="p-3 space-y-2">
-        {/* Search bar */}
-        <div className="flex items-center gap-2 bg-neutral-800 rounded-lg px-2 py-1.5">
-          <Search className="w-3 h-3 text-neutral-500" />
-          <span className="text-[9px] text-neutral-400 truncate">best barcelona restaurants authentic local 2024 reddit not touristy</span>
+    <motion.div 
+      initial={{ opacity: 0, x: -30 }}
+      whileInView={{ opacity: 1, x: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.6 }}
+      className="relative"
+    >
+      {/* Browser window frame */}
+      <div className="bg-[#f8f9fa] rounded-xl border border-[#dee2e6] overflow-hidden shadow-2xl">
+        {/* Browser header - Chrome style */}
+        <div className="bg-[#e8eaed] px-3 py-2 border-b border-[#d3d3d3] flex items-center gap-2">
+          <div className="flex gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-[#ed6a5e]" />
+            <div className="w-3 h-3 rounded-full bg-[#f4bf4f]" />
+            <div className="w-3 h-3 rounded-full bg-[#61c554]" />
+          </div>
+          {/* Multiple tabs - chaos! */}
+          <div className="flex-1 flex gap-0.5 ml-3 overflow-hidden">
+            {[
+              { name: 'Flights', color: 'bg-white', active: true },
+              { name: 'Hotels', color: 'bg-blue-50' },
+              { name: 'Reviews', color: 'bg-green-50' },
+              { name: 'Maps', color: 'bg-amber-50' },
+              { name: 'Blog', color: 'bg-purple-50' },
+              { name: '+8', color: 'bg-gray-200' },
+            ].map((tab) => (
+              <div 
+                key={tab.name} 
+                className={`px-2 py-1 text-[10px] rounded-t-lg flex-shrink-0 border-t border-x border-[#d3d3d3] ${
+                  tab.active ? 'bg-white text-[#202124] font-medium' : `${tab.color} text-[#5f6368]`
+                }`}
+              >
+                {tab.name}
+              </div>
+            ))}
+          </div>
         </div>
         
-        {/* Messy grid of content */}
-        <div className="grid grid-cols-5 gap-2 text-[7px]">
-          {/* Spreadsheet chaos */}
-          <div className="col-span-3 bg-white rounded-md p-1.5 shadow-sm">
-            <div className="flex items-center gap-1 text-green-700 font-medium mb-1 text-[8px]">
-              <FileSpreadsheet className="w-2.5 h-2.5" />
-              Barcelona_Trip_v4_FINAL_REAL.xlsx
-            </div>
-            <div className="space-y-px">
-              <div className="grid grid-cols-4 gap-px text-[6px]">
-                <div className="bg-neutral-200 px-1 py-0.5 font-semibold text-neutral-700">Day</div>
-                <div className="bg-neutral-200 px-1 py-0.5 font-semibold text-neutral-700">Place</div>
-                <div className="bg-neutral-200 px-1 py-0.5 font-semibold text-neutral-700">Time</div>
-                <div className="bg-neutral-200 px-1 py-0.5 font-semibold text-neutral-700">Status</div>
+        {/* URL bar */}
+        <div className="bg-white px-4 py-2 border-b border-[#e5e5e5]">
+          <div className="flex items-center gap-3">
+            <div className="flex gap-2">
+              <div className="w-5 h-5 rounded-full bg-[#dadce0] flex items-center justify-center">
+                <span className="text-[8px] text-[#5f6368]">←</span>
               </div>
+              <div className="w-5 h-5 rounded-full bg-[#dadce0] flex items-center justify-center">
+                <span className="text-[8px] text-[#5f6368]">→</span>
+              </div>
+            </div>
+            <div className="flex-1 bg-[#f1f3f4] rounded-full px-4 py-1.5 text-[10px] text-[#5f6368]">
+              google.com/travel/flights?dest=PAR...
+            </div>
+          </div>
+        </div>
+        
+        {/* Content area - real website feel */}
+        <div className="bg-white min-h-[200px] md:min-h-[300px] relative overflow-hidden">
+          {/* Google Flights mockup */}
+          <div className="p-4">
+            {/* Search bar */}
+            <div className="flex gap-2 mb-4">
+              <div className="flex-1 border border-[#dadce0] rounded-lg p-2 text-[10px] text-[#5f6368]">
+                <span className="text-[#202124]">NYC</span> → <span className="text-[#202124]">Paris</span>
+              </div>
+              <div className="border border-[#dadce0] rounded-lg p-2 text-[10px] text-[#5f6368]">
+                May 15-20
+              </div>
+              <div className="bg-[#1a73e8] text-white rounded-lg px-4 py-2 text-[10px]">
+                Search
+              </div>
+            </div>
+            
+            {/* Flight results */}
+            <div className="space-y-2">
               {[
-                ['1', 'La Boqueria', '9am?', '❌ PACKED'],
-                ['1', 'Sagrada Familia', '??', 'sold out'],
-                ['2', 'Park Güell', 'morning', '⚠️ TICKETS'],
-                ['2', 'Casa Batlló', '???', 'need tix'],
-                ['3', '???', '', 'research'],
-              ].map((row, i) => (
-                <div key={i} className="grid grid-cols-4 gap-px text-[6px]">
-                  {row.map((cell, j) => (
-                    <div 
-                      key={j} 
-                      className={`px-1 py-0.5 ${
-                        cell.includes('❌') || cell.includes('⚠️') 
-                          ? 'bg-red-50 text-red-600' 
-                          : cell.includes('???') || cell === 'research'
-                            ? 'bg-yellow-50 text-yellow-700'
-                            : 'bg-white text-neutral-600'
-                      }`}
-                    >
-                      {cell}
+                { airline: 'Delta', time: '7:00 AM - 9:15 PM', stops: '1 stop', price: '$842' },
+                { airline: 'Air France', time: '10:30 AM - 11:45 PM', stops: 'Nonstop', price: '$1,247' },
+                { airline: 'United', time: '3:15 PM - 6:30 AM+1', stops: '1 stop', price: '$789' },
+              ].map((flight, i) => (
+                <motion.div 
+                  key={i}
+                  className="border border-[#dadce0] rounded-lg p-2 flex items-center justify-between text-[10px]"
+                  animate={{ opacity: [0.7, 1, 0.7] }}
+                  transition={{ duration: 2, delay: i * 0.3, repeat: Infinity }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 bg-[#f1f3f4] rounded-full" />
+                    <div>
+                      <div className="font-medium text-[#202124]">{flight.time}</div>
+                      <div className="text-[#5f6368]">{flight.airline} • {flight.stops}</div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold text-[#202124]">{flight.price}</div>
+                    <div className="text-[8px] text-[#5f6368]">round trip</div>
+                  </div>
+                </motion.div>
               ))}
             </div>
           </div>
           
-          {/* Reddit thread */}
-          <div className="col-span-2 bg-white rounded-md p-1.5 shadow-sm">
-            <div className="flex items-center gap-1 text-orange-600 font-medium mb-1 text-[8px]">
-              <MessageSquare className="w-2.5 h-2.5" />
-              r/Barcelona
+          {/* Overlapping browser windows - generic */}
+          <motion.div 
+            className="absolute top-4 right-2 w-24 md:w-48 bg-white rounded-lg shadow-xl border border-[#e5e5e5] overflow-hidden rotate-[3deg] opacity-95 hidden md:block"
+            animate={{ rotate: [3, 4, 3] }}
+            transition={{ duration: 3, repeat: Infinity }}
+          >
+            <div className="bg-blue-600 text-white px-2 py-1 text-[8px] font-bold">Hotels Site</div>
+            <div className="p-2 text-[8px]">
+              <div className="text-blue-600 font-bold mb-1">Paris Hotels</div>
+              <div className="text-[#5f6368]">1,247 properties</div>
+              <div className="text-green-600 font-medium mt-1">From $89/night</div>
             </div>
-            <div className="space-y-1 text-[6px]">
-              <div className="flex items-start gap-1">
-                <span className="text-orange-500 font-medium">↑47</span>
-                <span className="text-neutral-600">Skip La Rambla, tourist trap</span>
-              </div>
-              <div className="flex items-start gap-1">
-                <span className="text-orange-500 font-medium">↑89</span>
-                <span className="text-neutral-600">No! La Rambla is essential</span>
-              </div>
-              <div className="flex items-start gap-1">
-                <span className="text-neutral-400 font-medium">↑23</span>
-                <span className="text-neutral-500">Depends on your style...</span>
-              </div>
-              <div className="text-neutral-400 italic text-[5px]">
-                127 conflicting replies...
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        {/* Bottom chaos row */}
-        <div className="grid grid-cols-2 gap-2">
-          {/* Blog listicle */}
-          <div className="bg-white rounded-md p-1.5 shadow-sm">
-            <div className="flex items-center gap-1 text-blue-600 font-medium text-[8px] mb-0.5">
-              <Globe className="w-2.5 h-2.5" />
-              10 MUST-DO Things Barcelona!
-            </div>
-            <div className="text-neutral-500 text-[6px] italic">
-              "As a travel influencer..."
-            </div>
-            <div className="text-neutral-400 text-[5px] mt-0.5">
-              #Sponsored #Ad #Gifted
-            </div>
-          </div>
+          </motion.div>
           
-          {/* Bookmarks mess */}
-          <div className="bg-neutral-800 rounded-md p-1.5">
-            <div className="flex items-center gap-1 text-neutral-400 font-medium text-[8px] mb-1">
-              <BookmarkX className="w-2.5 h-2.5" />
-              Saved (47 links)
+          <motion.div 
+            className="absolute bottom-8 right-8 w-44 bg-white rounded-lg shadow-xl border border-[#e5e5e5] overflow-hidden rotate-[-2deg] opacity-95 hidden md:block"
+            animate={{ rotate: [-2, -3, -2] }}
+            transition={{ duration: 2.5, repeat: Infinity }}
+          >
+            <div className="bg-emerald-500 px-2 py-1 text-[8px] font-bold text-white">Reviews Site</div>
+            <div className="p-2 text-[8px]">
+              <div className="font-bold mb-1">Things to Do</div>
+              <div className="text-[#5f6368]">Eiffel Tower ★★★★★</div>
+              <div className="text-[#5f6368]">Louvre Museum ★★★★★</div>
             </div>
-            <div className="space-y-0.5 text-[5px] text-neutral-500">
-              <div className="truncate">• barcelona-guide.com/best-r...</div>
-              <div className="truncate">• reddit.com/r/barcelona/...</div>
-              <div className="truncate">• youtube.com/watch?...</div>
-              <div className="text-neutral-600">+ 44 more tabs</div>
-            </div>
+          </motion.div>
+          
+          {/* Sticky notes overlaid */}
+          <motion.div 
+            className="absolute bottom-16 left-4 w-24 h-20 bg-[#fff475] rounded shadow-lg p-2 text-[8px] text-[#3c4043] rotate-[-4deg] hidden md:block"
+            animate={{ rotate: [-4, -3, -4] }}
+            transition={{ duration: 2, repeat: Infinity }}
+          >
+            <div className="font-bold mb-1">Still need to:</div>
+            <div>• Compare hotel options</div>
+            <div>• Read more reviews</div>
+            <div>• Confirm dates w/ group</div>
+          </motion.div>
+          
+          {/* Stress indicator */}
+          <div className="absolute bottom-2 left-2 flex items-center gap-2 bg-[#fce8e6] text-[#c5221f] text-[10px] px-3 py-1.5 rounded-full">
+            <Clock className="w-3 h-3" />
+            <span className="font-medium">6+ hours researching...</span>
           </div>
         </div>
       </div>
       
-      {/* Stress indicator */}
-      <div className="absolute bottom-2 right-2 bg-red-500/20 backdrop-blur-sm text-red-400 text-[8px] px-2 py-1 rounded-full border border-red-500/30">
-        8+ hours researching...
+      {/* Label */}
+      <div className="mt-6 text-center">
+        <span className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-destructive/10 text-destructive text-sm font-semibold">
+          <X className="w-4 h-4" />
+          The Old Way
+        </span>
       </div>
-      
-      {/* BEFORE label */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/80 to-transparent pt-10 pb-4">
-        <p className="text-center text-white font-serif text-lg tracking-wide">BEFORE</p>
-      </div>
-    </div>
+    </motion.div>
   );
 }
 
-// Clean Voyance "After" - actual app representation
-function AfterVoyance() {
+// Visual mockup of Voyance (after) - Polished app style (from About page)
+function VoyanceMockup() {
   return (
-    <div className="relative bg-card rounded-xl overflow-hidden shadow-2xl border border-border">
-      {/* Voyance app header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-background border-b border-border">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center border border-primary/20">
-            <span className="text-primary text-xs font-serif font-bold">V</span>
+    <motion.div 
+      initial={{ opacity: 0, x: 30 }}
+      whileInView={{ opacity: 1, x: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.6, delay: 0.2 }}
+      className="relative"
+    >
+      {/* Browser window frame */}
+      <div className="rounded-xl border-2 border-primary/30 overflow-hidden shadow-2xl shadow-primary/10 bg-gradient-to-br from-background via-background to-primary/5">
+        {/* Browser header - Modern style */}
+        <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-4 py-3 border-b border-primary/20 flex items-center gap-2">
+          <div className="flex gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-primary/40" />
+            <div className="w-3 h-3 rounded-full bg-primary/30" />
+            <div className="w-3 h-3 rounded-full bg-primary/20" />
           </div>
-          <div>
-             <span className="text-sm font-medium text-foreground">Barcelona</span>
-            <span className="text-xs text-muted-foreground ml-1.5">5 Days</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-primary/10 border border-primary/20">
-          <span className="text-[10px] text-primary font-medium">The Present Traveler</span>
-        </div>
-      </div>
-      
-      {/* Intelligence metrics */}
-      <div className="px-4 py-3 bg-muted/30 border-b border-border">
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Intelligence Summary</p>
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-1.5">
-            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-              <Clock className="w-3 h-3 text-primary" />
+          {/* Single Voyance tab */}
+          <div className="flex-1 ml-4 flex items-center justify-between">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 text-xs rounded-full bg-primary/10 text-primary font-medium">
+              <Compass className="w-3 h-3" />
+              voyance.travel/trip/paris-adventure
             </div>
-            <div>
-              <span className="text-sm font-semibold text-foreground">3 hrs</span>
-              <span className="text-[10px] text-muted-foreground ml-1">saved</span>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              Synced
             </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-              <Gem className="w-3 h-3 text-primary" />
-            </div>
-            <div>
-              <span className="text-sm font-semibold text-foreground">4</span>
-              <span className="text-[10px] text-muted-foreground ml-1">hidden gems</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-6 h-6 rounded-full bg-destructive/10 flex items-center justify-center">
-              <AlertTriangle className="w-3 h-3 text-destructive" />
-            </div>
-            <div>
-              <span className="text-sm font-semibold text-foreground">3</span>
-              <span className="text-[10px] text-muted-foreground ml-1">traps avoided</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      {/* Day itinerary preview */}
-      <div className="p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-primary" />
-            <span className="text-xs font-semibold text-foreground">Day 1</span>
-            <span className="text-xs text-muted-foreground">El Born & Gothic Quarter</span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-muted-foreground" />
         </div>
         
-        <div className="space-y-2">
-          {[
-            { time: '9:00', activity: 'Santa Caterina Market, early', badge: 'Voyance Find', badgeType: 'primary' },
-            { time: '11:00', activity: 'Picasso Museum (skip the line)', badge: null, badgeType: null },
-            { time: '14:00', activity: 'El Born backstreet tapas crawl', badge: 'Local Pick', badgeType: 'secondary' },
-          ].map((item, i) => (
-            <div key={i} className="flex items-center gap-3 p-2.5 bg-background rounded-lg border border-border/60 hover:border-primary/30 transition-colors">
-              <div className="flex items-center justify-center w-8">
-                <span className="text-[11px] font-medium text-muted-foreground">{item.time}</span>
+        {/* Clean Voyance interface */}
+        <div className="p-2 md:p-6 bg-background min-h-[200px] md:min-h-[320px] relative overflow-hidden">
+          {/* Decorative gradient */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-primary/10 to-transparent rounded-bl-full" />
+          
+          {/* Trip header */}
+          <div className="flex items-start justify-between mb-5 relative z-10">
+            <div>
+              <div className="inline-flex items-center gap-2 text-xs text-primary font-medium uppercase tracking-wider mb-2 bg-primary/10 px-3 py-1 rounded-full">
+                <Sparkles className="w-3 h-3" />
+                Your Curated Itinerary
               </div>
-              <div className="w-1.5 h-1.5 rounded-full bg-primary/40" />
-              <div className="flex-1 flex items-center gap-2">
-                <MapPin className="w-3 h-3 text-muted-foreground" />
-                <span className="text-sm text-foreground">{item.activity}</span>
-              </div>
-              {item.badge && (
-                <span className={`text-[9px] px-2 py-0.5 rounded-full font-medium ${
-                  item.badgeType === 'primary' 
-                    ? 'bg-primary/15 text-primary border border-primary/20' 
-                    : 'bg-accent/15 text-accent-foreground border border-accent/20'
-                }`}>
-                  {item.badge}
-                </span>
-              )}
+              <h3 className="text-lg md:text-2xl font-serif font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">5 Days in Paris</h3>
+              <p className="text-xs text-muted-foreground mt-1">May 15-20, 2026 • 2 travelers • Premium Experience</p>
             </div>
-          ))}
-        </div>
-        
-        {/* Quick action hint */}
-        <div className="flex items-center justify-center gap-2 pt-2">
-          <Star className="w-3 h-3 text-primary/50" />
-          <span className="text-[10px] text-muted-foreground">Personalized to your travel style</span>
+          </div>
+          
+          {/* Quick summary cards - Premium style */}
+          <div className="grid grid-cols-3 gap-1.5 md:gap-3 mb-3 md:mb-5">
+            <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg md:rounded-xl p-1.5 md:p-3 text-center border border-primary/20">
+              <div className="text-xs md:text-lg font-bold text-foreground">$2,840</div>
+              <div className="text-[8px] md:text-[10px] text-muted-foreground">All-inclusive</div>
+            </div>
+            <div className="bg-gradient-to-br from-accent/50 to-accent/30 rounded-lg md:rounded-xl p-1.5 md:p-3 text-center border border-accent/30">
+              <div className="text-xs md:text-lg font-bold text-foreground">12</div>
+              <div className="text-[8px] md:text-[10px] text-muted-foreground">Activities</div>
+            </div>
+            <div className="bg-gradient-to-br from-secondary to-secondary/50 rounded-lg md:rounded-xl p-1.5 md:p-3 text-center border border-secondary/30">
+              <div className="flex items-center justify-center gap-0.5 text-xs md:text-lg font-bold text-foreground">
+                <Star className="w-2 h-2 md:w-3 md:h-3 fill-primary text-primary" />
+                4.8
+              </div>
+              <div className="text-[8px] md:text-[10px] text-muted-foreground">Hotel</div>
+            </div>
+          </div>
+          
+          {/* Day preview - Timeline style */}
+          <div className="relative pl-4 border-l-2 border-primary/30 space-y-3">
+            <div className="text-xs font-semibold text-foreground mb-3 -ml-4 pl-4">Day 1 · Arrival & Culture</div>
+            {[
+              { time: '10:00 AM', activity: 'Louvre Museum', desc: 'Skip-the-line tickets', icon: <Globe className="w-3 h-3" /> },
+              { time: '1:00 PM', activity: 'Café de Flore', desc: 'Lunch reservation', icon: <Star className="w-3 h-3" /> },
+              { time: '3:30 PM', activity: 'Seine River Walk', desc: 'Golden hour stroll', icon: <Map className="w-3 h-3" /> },
+            ].map((item, i) => (
+              <motion.div 
+                key={i} 
+                className="flex items-start gap-3 text-xs relative"
+                initial={{ opacity: 0, x: -10 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.3 + i * 0.1 }}
+              >
+                {/* Timeline dot */}
+                <div className="absolute -left-[1.15rem] top-1 w-2 h-2 rounded-full bg-primary ring-2 ring-background" />
+                <span className="text-muted-foreground w-16 flex-shrink-0">{item.time}</span>
+                <div className="flex-1 bg-muted/50 rounded-lg p-2 border border-border/50">
+                  <div className="flex items-center gap-2 text-foreground font-medium">
+                    <span className="text-primary">{item.icon}</span>
+                    {item.activity}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">{item.desc}</div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+          
+          {/* Time saved indicator */}
+          <div className="absolute bottom-4 right-4 flex items-center gap-2 text-primary text-xs bg-primary/10 px-3 py-2 rounded-full border border-primary/20">
+            <Zap className="w-3 h-3" />
+            <span className="font-medium">Built in 5 minutes</span>
+          </div>
         </div>
       </div>
       
-      {/* AFTER label */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-card via-card/90 to-transparent pt-10 pb-4">
-        <p className="text-center text-foreground font-serif text-lg tracking-wide">AFTER</p>
+      {/* Label */}
+      <div className="mt-6 text-center">
+        <span className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-primary/15 text-primary text-sm font-semibold border border-primary/20">
+          <Check className="w-4 h-4" />
+          With Voyance
+        </span>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -269,7 +284,11 @@ export default function TheProblemSection() {
   const { problem } = strangerCopy.homepage;
 
   return (
-    <section className="py-12 sm:py-16 md:py-24 lg:py-32 relative overflow-hidden bg-muted/30">
+    <section className="py-12 sm:py-16 md:py-24 lg:py-32 relative overflow-hidden bg-gradient-to-b from-muted/50 to-muted/20">
+      {/* Background decorations */}
+      <div className="absolute top-0 left-0 w-64 h-64 bg-destructive/5 rounded-full blur-3xl" />
+      <div className="absolute bottom-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl" />
+
       <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-16 relative z-10">
         {/* Header */}
         <motion.div
@@ -302,17 +321,25 @@ export default function TheProblemSection() {
           </p>
         </motion.div>
 
-        {/* Before/After Comparison - stack on mobile */}
-        <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-50px" }}
-          transition={{ duration: 0.7, delay: 0.2 }}
-          className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 md:gap-8"
-        >
-          <BeforeChaos />
-          <AfterVoyance />
-        </motion.div>
+        {/* Before/After Comparison with VS indicator */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 max-w-6xl mx-auto relative">
+          <ChaosMockup />
+          
+          {/* VS indicator between mockups */}
+          <motion.div 
+            initial={{ opacity: 0, scale: 0 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.4 }}
+            className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20"
+          >
+            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-background to-muted border-2 border-primary/50 flex items-center justify-center shadow-xl">
+              <span className="text-primary font-bold text-sm">VS</span>
+            </div>
+          </motion.div>
+          
+          <VoyanceMockup />
+        </div>
 
         {/* Closing statement - mobile-optimized */}
         <motion.p
