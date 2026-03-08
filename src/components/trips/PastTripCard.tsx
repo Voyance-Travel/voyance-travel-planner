@@ -213,6 +213,17 @@ export function PastTripCard({ trip, index = 0 }: PastTripCardProps) {
               <Edit3 className="h-3.5 w-3.5" />
               {hasReview ? 'Edit Review' : 'Add Review'}
             </Button>
+            {favCount > 0 && (
+              <Button
+                onClick={() => navigate(`/trip/${trip.id}/guide`)}
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs h-9"
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+                Build Guide
+              </Button>
+            )}
           </div>
         </div>
       </motion.div>
