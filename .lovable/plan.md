@@ -1,41 +1,63 @@
 
 
-## Fix: Mystery Trip — Safety Filtering + Better Personalization
+## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
 
-### Single file change: `supabase/functions/suggest-mystery-trips/index.ts`
+### What's Already Working (No Changes Needed)
+- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
+- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
+- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
+- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
 
-**1. Add home_airport fetch to the existing Promise.all (line 69)**
-Add a 7th parallel query for `profiles.home_airport` to infer user origin. There's no `nationality` column, but `home_airport` exists (e.g., "JFK" → US, "LHR" → UK). We'll map common airport codes to country, defaulting to `'US'`.
+### What's Broken — Two Things
 
-**2. Add hardcoded unsafe destinations blocklist (after line 155)**
-Insert `UNSAFE_DESTINATIONS` map covering ~15 conflict/sanction countries (Russia, Yemen, Syria, Afghanistan, North Korea, Iran, Somalia, South Sudan, Libya, Iraq, Myanmar, Venezuela, Haiti, Sudan, Ukraine). Filter `availableDestinations` through it before passing to AI. Log exclusions.
+**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
 
-**3. Rewrite system prompt (line 178-188)**
-- Add `TRAVELER ORIGIN: {origin}` 
-- Add CRITICAL SAFETY RULES section (never suggest conflict zones, sanctions, travel bans for origin country)
-- Add SELECTION RULES: must only pick from provided list
-- Keep existing personalization instructions
+**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
 
-**4. Enhance user prompt (line 190-206)**
-- Add origin context: "The traveler is from {origin}"
-- Add preferred_regions emphasis: "At least 1 of 3 should be in/near preferred regions"
-- Add explicit instruction: "All 3 must be safe and practical for a {origin} traveler"
-- Add "you MUST pick from this list ONLY" reinforcement
+### Changes
 
-**5. Lower temperature from 1.2 to 0.9 (line 216)**
-1.2 is too high — causes bizarre/unsafe picks. 0.9 still provides variety but stays grounded.
+#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
 
-**6. Post-AI safety validation (after line 294)**
-After parsing AI response, filter suggestions through the same `UNSAFE_DESTINATIONS` blocklist. If AI hallucinated an unsafe destination despite instructions, catch it. Log warnings for any filtered results. User gets partial results (1-2) rather than a failure.
+**Change A — Remove stall detector setup** (lines ~261-313):
+Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
 
-### Helper: Airport-to-country mapping
-Small utility mapping ~20 common airport prefixes to country codes (JFK/LAX/ORD→US, LHR/LGW→UK, CDG→FR, etc.), with fallback to 'US'.
+**Change B — Remove browser loop fallback** (lines ~455-469):
+Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
 
-### What stays the same
-- All enrichment/suppression/decline tracking
-- Credit costs (15cr suggestions, 5cr logistics)  
-- `mystery-trip-logistics` function
-- `MysteryGetawayModal.tsx` UI
-- Image enrichment from destinations table
-- Cost tracking
+```typescript
+// OLD:
+} catch (serverErr) {
+  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
+  const generatedDays = await generateItinerary({ ... });
+  // ... 40 lines of fallback logic
+}
+
+// NEW:
+} catch (serverErr) {
+  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
+  setPrePhase(null);
+  setHasStarted(false);
+  toast.error('Failed to start generation. Please try again.');
+  return;
+}
+```
+
+**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
+
+**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
+
+#### File 2: `src/hooks/useItineraryGeneration.ts`
+
+No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
+
+### Files to Modify
+
+| File | What |
+|------|------|
+| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
+
+### Risk Assessment
+- **Low risk**: The server-side self-chaining is already fully implemented and tested
+- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
+- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
 
