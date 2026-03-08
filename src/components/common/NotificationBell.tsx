@@ -167,6 +167,7 @@ function useRespondToFriendRequest() {
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -205,14 +206,16 @@ export function NotificationBell() {
     };
   }, [user?.id, queryClient]);
 
-  // Sanitize notifications
+  // Sanitize notifications and filter out dismissed ones
   const notifications = useMemo(() => {
-    return rawNotifications.map(n => ({
-      ...n,
-      title: sanitizeNotificationText(n.title, n.activityId),
-      message: sanitizeNotificationText(n.message, n.activityId)
-    }));
-  }, [rawNotifications]);
+    return rawNotifications
+      .filter(n => !dismissedIds.has(n.id))
+      .map(n => ({
+        ...n,
+        title: sanitizeNotificationText(n.title, n.activityId),
+        message: sanitizeNotificationText(n.message, n.activityId)
+      }));
+  }, [rawNotifications, dismissedIds]);
 
   const unreadCount = notifications.filter(n => !n.read && !n.sent).length + friendRequests.length;
 
@@ -240,6 +243,7 @@ export function NotificationBell() {
 
   const handleDismiss = (e: React.MouseEvent, notification: TripNotification) => {
     e.stopPropagation();
+    setDismissedIds(prev => new Set(prev).add(notification.id));
     dismissMutation.mutate({
       tripId: notification.tripId,
       notificationId: notification.id,
