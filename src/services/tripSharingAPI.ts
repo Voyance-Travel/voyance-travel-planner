@@ -116,6 +116,7 @@ export async function getTravelers(tripId: string): Promise<TravelersResponse> {
   if (error) throw new Error(error.message);
 
   // Also get trip owner
+  // @ts-ignore - deep type instantiation with joined select
   const { data: trip } = await supabase
     .from('trips')
     .select('user_id, profiles:user_id (id, display_name, avatar_url)')
