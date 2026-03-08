@@ -2238,22 +2238,24 @@ export default function TripDetail() {
             })()
           )}
 
+          {/* Journey "Up Next" portal — only for linked journey trips */}
+          {trip.journey_id && trip.journey_order && trip.journey_total_legs && (
+            <div className="mt-8">
+              <JourneyUpNext
+                journeyId={trip.journey_id}
+                journeyName={trip.journey_name}
+                journeyOrder={trip.journey_order}
+                journeyTotalLegs={trip.journey_total_legs}
+              />
+            </div>
+          )}
+
           {/* Trip Photo Gallery */}
           <div className="mt-12">
             <ErrorBoundary>
             <TripPhotoGallery tripId={trip.id} />
             </ErrorBoundary>
           </div>
-
-          {/* Journey "Up Next" portal — only for linked journey trips */}
-          {trip.journey_id && trip.journey_order && trip.journey_total_legs && (
-            <JourneyUpNext
-              journeyId={trip.journey_id}
-              journeyName={trip.journey_name}
-              journeyOrder={trip.journey_order}
-              journeyTotalLegs={trip.journey_total_legs}
-            />
-          )}
 
         </div>
       </section>
