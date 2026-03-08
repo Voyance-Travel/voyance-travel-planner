@@ -799,33 +799,6 @@ function TripDetailsStep({
           </motion.div>
         )}
 
-        {/* Pacing Section */}
-        {planMode !== 'chat' && planMode !== 'manual' && (
-        <div className="space-y-2 sm:space-y-3">
-          <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
-            Pacing
-          </label>
-          <div className="grid grid-cols-3 gap-2">
-            {pacingOptions.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => setPacing(option.id)}
-                className={cn(
-                  'p-2.5 rounded-lg border text-center transition-all',
-                  pacing === option.id
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border hover:border-primary/40'
-                )}
-              >
-                <div className="text-base mb-0.5">{option.emoji}</div>
-                <div className="text-xs font-medium text-foreground">{option.label}</div>
-                <div className="text-[10px] text-muted-foreground">{option.description}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-        )}
 
         {/* Budget Section - Collapsible */}
         {planMode !== 'chat' && planMode !== 'manual' && (
