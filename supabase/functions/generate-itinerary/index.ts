@@ -10773,6 +10773,7 @@ NEVER suggest a more expensive alternative when the user asks for cheaper. This 
 ${preferenceContext}
 ${tripIntentsContext}
 ${mustDoPrompt}
+${additionalNotesPrompt}
 ${mustHavesConstraintPrompt}
 ${preBookedCommitmentsPrompt}
 ${previousDayActivities?.length ? `\nAvoid repeating these specific venues/activities (be creative and pick DIFFERENT ones): ${previousDayActivities.join(', ')}` : ''}
