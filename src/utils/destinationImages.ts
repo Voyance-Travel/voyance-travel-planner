@@ -182,14 +182,15 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
 
   // Americas - Major US Cities
   'new york': [
-    'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=1200',
     'https://images.unsplash.com/photo-1534430480872-3498386e7856?w=1200',
-    'https://images.unsplash.com/photo-1522083165195-3424ed129620?w=1200',
+    'https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=1200',
+    'https://images.unsplash.com/photo-1518235925288-1db0fee2e487?w=1200',
   ],
   'new-york': [
-    'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=1200',
     'https://images.unsplash.com/photo-1534430480872-3498386e7856?w=1200',
-    'https://images.unsplash.com/photo-1522083165195-3424ed129620?w=1200',
+    'https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=1200',
+    'https://images.unsplash.com/photo-1518235925288-1db0fee2e487?w=1200',
+  ],
   ],
   'baltimore': [
     'https://images.unsplash.com/photo-1572120360610-d971b9d7767c?w=1200', // Inner Harbor
