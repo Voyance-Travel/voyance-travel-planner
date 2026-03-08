@@ -400,7 +400,7 @@ export default function ActiveTrip() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => navigate(`/trip/${tripId}`)}
+                onClick={() => navigate(`/trip/${tripId}?edit=true`)}
                 className="ml-auto gap-1.5 text-muted-foreground"
               >
                 <Pencil className="w-3.5 h-3.5" />
