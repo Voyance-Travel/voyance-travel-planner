@@ -317,7 +317,7 @@ function FeatureCard({ feature, index }: { feature: typeof FEATURES[0]; index: n
 
 export default function CustomizationShowcase() {
   return (
-    <section className="py-16 sm:py-24 md:py-32 bg-background relative overflow-hidden">
+    <section className="py-16 sm:py-24 md:py-32 bg-muted/30 relative overflow-hidden">
       {/* Subtle background */}
       <div className="absolute inset-0 opacity-[0.02]">
         <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)', backgroundSize: '32px 32px' }} />
