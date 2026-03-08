@@ -153,7 +153,10 @@ export function GenerationPhases({
 }: GenerationPhasesProps) {
   const visibleDays = useDripFeedDays(generatedDaysList);
   const visibleCompletedCount = visibleDays.length;
-  const displayCompletedDays = visibleCompletedCount;
+
+  // Use the poller's completedDays (high-water-marked) as the authoritative count
+  // so the UI stays consistent even before drip-feed reveals kick in.
+  const displayCompletedDays = Math.max(visibleCompletedCount, completedDays);
 
   const calculatedProgress = totalDays > 0
     ? Math.max(pollerProgress, Math.round((displayCompletedDays / totalDays) * 100))
