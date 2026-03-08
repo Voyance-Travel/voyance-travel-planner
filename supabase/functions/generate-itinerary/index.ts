@@ -2906,7 +2906,7 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
   try {
     const { data: trip, error } = await supabase
       .from('trips')
-      .select('flight_selection, hotel_selection, is_multi_city, flight_intelligence')
+      .select('flight_selection, hotel_selection, is_multi_city, flight_intelligence, journey_id')
       .eq('id', tripId)
       .maybeSingle();
 
