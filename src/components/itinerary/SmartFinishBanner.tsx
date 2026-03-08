@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useSpendCredits } from '@/hooks/useSpendCredits';
+import { getErrorMessage } from '@/utils/errorMessages';
 import { useCredits } from '@/hooks/useCredits';
 import { CREDIT_COSTS } from '@/config/pricing';
 import { useQueryClient } from '@tanstack/react-query';
@@ -281,17 +282,17 @@ export function SmartFinishBanner({
 
       if (refundError || !refundData?.success) {
         console.error(`[SmartFinish ${source}] Guaranteed refund FAILED:`, refundError ?? refundData);
-        toast.error('Enrichment failed. Credit refund also failed. Please contact support.', { duration: 8000 });
+        toast.error('Credit refund also failed. Please contact support.', { duration: 8000 });
       } else {
         console.log(`[SmartFinish ${source}] Guaranteed refund OK: +${refundData.refunded} credits`);
-        toast.error('Enrichment failed. Your credits have been refunded.', {
-          description: humanError,
+        toast(getErrorMessage('smartFinish', 'still_processing'), {
+          description: 'Your credits have been refunded. Check back in a moment.',
           duration: 6000,
         });
       }
     } catch (refundErr) {
       console.error(`[SmartFinish ${source}] Guaranteed refund exception:`, refundErr);
-      toast.error('Enrichment failed. Credit refund also failed. Please contact support.', { duration: 8000 });
+      toast.error('Credit refund also failed. Please contact support.', { duration: 8000 });
     }
 
     // Reset purchased flag so banner stays visible
@@ -341,7 +342,7 @@ export function SmartFinishBanner({
       onPurchaseComplete?.();
     } catch (err: any) {
       if (!err?.message?.startsWith('Not enough credits')) {
-        toast.error('Something went wrong. Please try again later.');
+        toast(getErrorMessage('smartFinish'));
       }
       console.error('Retry enrichment error:', err);
     } finally {
@@ -393,7 +394,7 @@ export function SmartFinishBanner({
       onPurchaseComplete?.();
     } catch (err: any) {
       if (!err?.message?.startsWith('Not enough credits')) {
-        toast.error('Failed to activate Smart Finish. Please try again.');
+        toast(getErrorMessage('smartFinish'));
       }
     } finally {
       setIsPurchasing(false);
