@@ -351,13 +351,15 @@ export function PaymentsTab({
         }
 
         if (cost > 0) {
-          const activityPayments = payments.filter(p => p.item_type === 'activity' && p.item_id === activity.id);
+          // Use composite key to avoid collisions when the same activity ID appears on multiple days
+          const compositeId = `${activity.id}_d${day.dayNumber}`;
+          const activityPayments = payments.filter(p => p.item_type === 'activity' && p.item_id === compositeId);
           const activityPayment = activityPayments[0];
           const assignedIds = activityPayments
             .map(p => (p as any)?.assigned_member_id)
             .filter(Boolean) as string[];
           items.push({
-            id: activity.id,
+            id: compositeId,
             type: 'activity',
             name: activity.title,
             amountCents: Math.round(cost * 100),
@@ -509,11 +511,32 @@ export function PaymentsTab({
 
       if (error) throw error;
 
+      // Optimistic update — immediately reflect in the UI
+      const optimisticPayment: TripPayment = {
+        id: `optimistic-${Date.now()}`,
+        trip_id: tripId,
+        user_id: user.id,
+        item_type: markPaidModal.type as TripPayment['item_type'],
+        item_id: markPaidModal.id,
+        item_name: markPaidModal.name,
+        amount_cents: markPaidModal.amountCents,
+        currency: 'USD',
+        quantity: 1,
+        status: 'paid',
+        external_provider: 'external',
+        external_booking_id: externalRef || undefined,
+        paid_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      } as TripPayment;
+      setPayments(prev => [...prev, optimisticPayment]);
+
       toast.success('Marked as paid');
       setMarkPaidModal(null);
       setExternalRef('');
       setSelectedMemberId('');
-      await fetchPayments(150);
+      // Background refetch to sync real IDs
+      fetchPayments(300);
     } catch (err) {
       console.error('Error marking paid:', err);
       toast.error('Failed to update');
