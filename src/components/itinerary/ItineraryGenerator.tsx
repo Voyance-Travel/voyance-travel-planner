@@ -264,6 +264,84 @@ export function ItineraryGenerator({
 
   // State for partial generation
   const [partialDays, setPartialDays] = useState<number | null>(null);
+  const [generationIssueSince, setGenerationIssueSince] = useState<number | null>(null);
+  const [showRetryButton, setShowRetryButton] = useState(false);
+  const recoveryInFlightRef = useRef(false);
+
+  const recoverFromDatabase = useCallback(async () => {
+    const [tripResult, dayResult] = await Promise.all([
+      supabase
+        .from('trips')
+        .select('itinerary_status, itinerary_data')
+        .eq('id', tripId)
+        .maybeSingle(),
+      supabase
+        .from('itinerary_days')
+        .select('id', { count: 'exact', head: true })
+        .eq('trip_id', tripId),
+    ]);
+
+    const itineraryData = (tripResult.data?.itinerary_data as { days?: GeneratedDay[] } | null) ?? null;
+    const existingDays = itineraryData?.days ?? [];
+
+    if (existingDays.length > 0) {
+      setGenerationIssueSince(null);
+      setShowRetryButton(false);
+      setPrePhase(null);
+      setServerGenActive(false);
+      setHasStarted(false);
+      onComplete(existingDays, undefined, gateResultRef.current?.isFirstTrip);
+      return 'ready' as const;
+    }
+
+    const dayCount = dayResult.count ?? 0;
+    const status = String(tripResult.data?.itinerary_status || '').toLowerCase();
+    if (dayCount > 0 || status === 'generating' || status === 'queued' || status === 'ready' || status === 'generated') {
+      setHasStarted(true);
+      setPrePhase('preparing');
+      setServerGenActive(true);
+      setShowRetryButton(false);
+      return 'in_progress' as const;
+    }
+
+    return 'missing' as const;
+  }, [tripId, onComplete]);
+
+  const suppressErrorAndRecover = useCallback(async (source: string, err?: unknown) => {
+    console.warn(`[ItineraryGenerator] Suppressing generation error (${source})`, err);
+    if (recoveryInFlightRef.current) return;
+    recoveryInFlightRef.current = true;
+    try {
+      const result = await recoverFromDatabase();
+      if (result !== 'ready') {
+        setHasStarted(true);
+        setPrePhase('preparing');
+        setServerGenActive(result === 'in_progress');
+        setGenerationIssueSince(prev => prev ?? Date.now());
+      }
+    } catch (recoveryErr) {
+      console.warn('[ItineraryGenerator] Recovery check failed, continuing loading state:', recoveryErr);
+      setHasStarted(true);
+      setPrePhase('preparing');
+      setServerGenActive(true);
+      setGenerationIssueSince(prev => prev ?? Date.now());
+    } finally {
+      recoveryInFlightRef.current = false;
+    }
+  }, [recoverFromDatabase]);
+
+  // Show retry CTA only if no itinerary exists for 5+ minutes after a suppressed failure
+  useEffect(() => {
+    if (!generationIssueSince) return;
+    const timer = window.setInterval(async () => {
+      const result = await recoverFromDatabase().catch(() => 'in_progress' as const);
+      if (result === 'missing' && Date.now() - generationIssueSince >= 5 * 60 * 1000) {
+        setShowRetryButton(true);
+      }
+    }, 15000);
+
+    return () => clearInterval(timer);
+  }, [generationIssueSince, recoverFromDatabase]);
 
   // Show cost confirmation before generating (for non-first-trip users)
   const handleGenerateClick = () => {
