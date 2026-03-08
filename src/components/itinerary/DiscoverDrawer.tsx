@@ -178,15 +178,18 @@ export function DiscoverDrawer({
         return;
       }
 
+      // Infer category from natural language query
+      const inferredCategory = inferCategoryFromQuery(query);
+
       const { data, error } = await supabase.functions.invoke('nearby-suggestions', {
         body: {
           lat,
           lng,
-          category: 'food', // fallback category
+          category: inferredCategory,
           archetype: archetype || 'flexible_wanderer',
           timeOfDay: getTimeOfDay(),
           radiusMeters: 1500,
-          query, // pass natural language query
+          query, // pass natural language query for additional context
         },
       });
 

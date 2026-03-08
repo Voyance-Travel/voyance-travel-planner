@@ -8,25 +8,11 @@ const corsHeaders = {
 interface NearbyRequest {
   lat: number;
   lng: number;
-  category: 'coffee' | 'food' | 'wander' | 'drinks' | 'snacks';
+  category: 'coffee' | 'food' | 'wander' | 'drinks' | 'snacks' | 'nightlife' | 'attractions' | 'events';
   archetype?: string;
   timeOfDay?: 'morning' | 'afternoon' | 'evening' | 'night';
   radiusMeters?: number;
-}
-
-interface NearbySuggestion {
-  id: string;
-  name: string;
-  category: string;
-  description: string;
-  whyForYou: string; // Archetype-specific reason
-  distance: string;
-  walkTime: string;
-  priceLevel: number;
-  rating?: number;
-  isOpen?: boolean;
-  address?: string;
-  coordinates?: { lat: number; lng: number };
+  query?: string;
 }
 
 // Archetype-specific preferences for filtering
@@ -86,8 +72,11 @@ const CATEGORY_PROMPTS: Record<string, string> = {
   coffee: 'cafes, coffee shops, tea houses, bakeries with coffee',
   food: 'restaurants, local eateries, food halls, street food spots',
   wander: 'interesting streets, parks, viewpoints, neighborhoods to explore',
-  drinks: 'bars, wine bars, cocktail lounges, beer gardens',
+  drinks: 'bars, wine bars, cocktail lounges, beer gardens, pubs',
   snacks: 'bakeries, ice cream, street food, quick bites',
+  nightlife: 'comedy clubs, live music venues, jazz clubs, dance clubs, nightclubs, karaoke bars, rooftop bars, late-night lounges, speakeasies, entertainment venues',
+  attractions: 'museums, galleries, landmarks, monuments, historic sites, architectural wonders, observation decks, theaters, cultural centers',
+  events: 'live performances, concerts, local festivals, pop-up events, theater shows, sporting events, markets, street performances happening now or soon',
 };
 
 serve(async (req: Request) => {
@@ -97,7 +86,7 @@ serve(async (req: Request) => {
 
   try {
     const body: NearbyRequest = await req.json();
-    const { lat, lng, category, archetype, timeOfDay, radiusMeters = 800 } = body;
+    const { lat, lng, category, archetype, timeOfDay, radiusMeters = 800, query } = body;
 
     if (!lat || !lng || !category) {
       return new Response(
@@ -115,12 +104,18 @@ serve(async (req: Request) => {
     const prefs = archetype ? ARCHETYPE_PREFERENCES[archetype] || ARCHETYPE_PREFERENCES.flexible_wanderer : ARCHETYPE_PREFERENCES.flexible_wanderer;
     const categoryContext = CATEGORY_PROMPTS[category] || CATEGORY_PROMPTS.food;
 
+    // Build query context if a natural language query was provided
+    const queryContext = query
+      ? `\nUSER QUERY: "${query}"\nThe user is looking for something specific. Prioritize results matching their intent over strict category filters. Interpret their request broadly — if they ask about "tonight" or "what's happening", focus on entertainment, nightlife, live events, and things to do rather than just restaurants.`
+      : '';
+
     const systemPrompt = `You are a local expert finding nearby ${category} spots for travelers.
 
 LOCATION: ${lat}, ${lng}
 RADIUS: ${radiusMeters}m walking distance
 TIME: ${timeOfDay || 'current time'}
 CATEGORY: ${categoryContext}
+${queryContext}
 
 TRAVELER STYLE (${archetype || 'flexible_wanderer'}):
 - Vibes they love: ${prefs.vibes.join(', ')}
@@ -134,6 +129,8 @@ CRITICAL:
 - Use REAL places that actually exist near these coordinates
 - Estimate realistic walking times and distances
 - Be specific about what makes each place special for this archetype
+- For nightlife/events queries: focus on ENTERTAINMENT venues (comedy, music, clubs, shows) NOT restaurants
+- For attractions: focus on cultural/sightseeing experiences NOT food
 
 OUTPUT FORMAT (JSON only, no markdown):
 {
@@ -154,6 +151,10 @@ OUTPUT FORMAT (JSON only, no markdown):
   ]
 }`;
 
+    const userMessage = query
+      ? `The user asked: "${query}". Find relevant options within ${radiusMeters}m of coordinates ${lat}, ${lng}`
+      : `Find nearby ${category} options within ${radiusMeters}m of coordinates ${lat}, ${lng}`;
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -164,7 +165,7 @@ OUTPUT FORMAT (JSON only, no markdown):
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `Find nearby ${category} options within ${radiusMeters}m of coordinates ${lat}, ${lng}` }
+          { role: "user", content: userMessage }
         ],
         temperature: 0.7,
         max_tokens: 1200,
