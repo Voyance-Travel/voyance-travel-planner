@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
 import DestinationHeroImage from '@/components/common/DestinationHeroImage';
 import SafeImage from '@/components/SafeImage';
+import DestinationCardActions from '@/components/explore/DestinationCardActions';
 import type { HybridDestination } from '@/hooks/useHybridDestinationSearch';
 
 interface ExploreDestinationCardProps {
@@ -38,6 +39,15 @@ export default function ExploreDestinationCard({ destination, index, onClick }: 
           />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+
+        <DestinationCardActions
+          itemId={destination.id}
+          city={destination.city}
+          country={destination.country}
+          region={destination.region}
+          tagline={destination.tagline}
+          imageUrl={destination.imageUrl}
+        />
 
         <div className="absolute bottom-3 left-3 right-3">
           <div className="flex items-center gap-2">

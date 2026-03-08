@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { buildRoute } from '@/config/routes';
 import { toSiteImageUrlFromPhotoId } from '@/utils/unsplash';
 import nolaHero1 from '@/assets/destinations/new-orleans-1.jpg';
+import DestinationCardActions from '@/components/explore/DestinationCardActions';
 
 // Unique images for each destination to avoid duplicates across site
 const destinations = [
@@ -104,6 +105,12 @@ export default function TrendingDestinationsEnhanced() {
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                  <DestinationCardActions
+                    itemId={destination.slug}
+                    city={destination.name}
+                    country={destination.country}
+                    imageUrl={typeof destination.image === 'string' ? destination.image : undefined}
+                  />
                   <div className="absolute bottom-3 left-3">
                     <span className="px-2 py-1 bg-white/20 backdrop-blur-sm rounded-full text-xs text-white">
                       {destination.category}
