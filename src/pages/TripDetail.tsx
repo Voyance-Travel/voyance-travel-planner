@@ -158,6 +158,12 @@ export default function TripDetail() {
   const stalledTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const [resumingGeneration, setResumingGeneration] = useState(false);
   const onReadyCalledRef = useRef(false);
+  const [generateNewDaysPrompt, setGenerateNewDaysPrompt] = useState<{
+    open: boolean;
+    daysAdded: number;
+    insertPosition: 'before' | 'after';
+    dayNumbers: number[];
+  }>({ open: false, daysAdded: 0, insertPosition: 'after', dayNumbers: [] });
 
   useEffect(() => {
     if (generationStalled) {
