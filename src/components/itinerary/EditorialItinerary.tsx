@@ -349,6 +349,7 @@ export interface HotelSelection {
   description?: string;
   website?: string;
   googleMapsUrl?: string;
+  totalPrice?: number;
 }
 
 /** Per-city hotel info for multi-city trips */
@@ -5656,6 +5657,7 @@ export function EditorialItinerary({
                 neighborhood: '',
                 checkInTime: hotelSelection.checkInTime || '15:00',
                 checkOutTime: hotelSelection.checkOutTime || '11:00',
+                totalPrice: hotelSelection.totalPrice,
               } : undefined}
             />
           </DialogContent>

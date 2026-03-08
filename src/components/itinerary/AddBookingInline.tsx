@@ -27,6 +27,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { AirportAutocomplete } from '@/components/common/AirportAutocomplete';
 import { enrichHotel } from '@/services/hotelAPI';
 import { HotelAutocomplete } from '@/components/common/HotelAutocomplete';
+import { syncHotelToLedger } from '@/services/budgetLedgerSync';
 import { cn } from '@/lib/utils';
 import { FlightImportModal } from './FlightImportModal';
 import { FindMyHotelsDrawer } from './FindMyHotelsDrawer';
@@ -72,6 +73,7 @@ export interface ManualHotelEntry {
   checkInTime?: string;
   checkOutTime?: string;
   accommodationType?: import('@/utils/hotelValidation').AccommodationType;
+  totalPrice?: number;
 }
 
 interface AddFlightInlineProps {
@@ -835,6 +837,7 @@ export function AddHotelInline({
         isManualEntry: true,
         isEnriched: !!enrichment,
         accommodationType: hotelData.accommodationType || 'hotel',
+        totalPrice: hotelData.totalPrice || undefined,
       };
       
       // Build updated hotels array
@@ -873,6 +876,16 @@ export function AddHotelInline({
         if (error) throw error;
       }
 
+
+      // Sync hotel price to budget ledger if price was entered
+      if (newHotel.totalPrice && newHotel.totalPrice > 0) {
+        syncHotelToLedger(tripId, {
+          name: newHotel.name,
+          totalPrice: newHotel.totalPrice,
+          checkIn: newHotel.checkInDate,
+          checkOut: newHotel.checkOutDate,
+        }).catch(err => console.error('Failed to sync hotel to budget:', err));
+      }
 
       toast.dismiss('hotel-enrich');
       toast.success(enrichment ? `${accomLabel} found and details updated!` : `${accomLabel} details saved!`);
@@ -1076,6 +1089,26 @@ export function AddHotelInline({
                   onChange={(e) => setHotelData(prev => ({ ...prev, checkOutTime: e.target.value }))}
                 />
               </div>
+            </div>
+
+            <div>
+              <Label className="text-xs">Total Price (USD)</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  className="pl-7"
+                  value={hotelData.totalPrice || ''}
+                  onChange={(e) => setHotelData(prev => ({ 
+                    ...prev, 
+                    totalPrice: e.target.value ? parseFloat(e.target.value) : undefined 
+                  }))}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Optional — syncs to your trip budget if enabled</p>
             </div>
           </div>
 

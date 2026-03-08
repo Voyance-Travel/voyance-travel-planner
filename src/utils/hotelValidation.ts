@@ -28,6 +28,10 @@ export interface HotelBooking {
   isEnriched?: boolean;
   /** Type of accommodation: hotel, airbnb, rental, hostel, other */
   accommodationType?: AccommodationType;
+  /** Total price for the entire stay in USD */
+  totalPrice?: number;
+  /** Price per night in USD */
+  pricePerNight?: number;
 }
 
 /**
