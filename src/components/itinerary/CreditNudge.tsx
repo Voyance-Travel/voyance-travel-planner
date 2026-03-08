@@ -10,6 +10,8 @@ import { Coins, Crown, X, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CREDIT_COSTS, FLEXIBLE_CREDITS, VOYANCE_CLUB_PACKS, BOOST_PACK, getRecommendedPack, formatCredits } from '@/config/pricing';
 import { EmbeddedCheckoutModal } from '@/components/checkout/EmbeddedCheckoutModal';
+import { isIAPAvailable, purchaseByPackId } from '@/services/iapService';
+import { useToast } from '@/hooks/use-toast';
 
 interface CreditNudgeProps {
   action: keyof typeof CREDIT_COSTS;
@@ -36,6 +38,7 @@ export function CreditNudge({ action, currentBalance, onDismiss, compact }: Cred
     productId: string;
     mode: 'payment';
   } | null>(null);
+  const { toast } = useToast();
 
   const cost = CREDIT_COSTS[action];
   const deficit = cost - currentBalance;
@@ -47,6 +50,20 @@ export function CreditNudge({ action, currentBalance, onDismiss, compact }: Cred
   const primaryPack = showQuickTopUp ? BOOST_PACK : recommended;
 
   if (!primaryPack) return null;
+
+  const handleBuyPack = async (pack: { priceId: string; name: string; credits: number; productId: string; id?: string }) => {
+    if (isIAPAvailable() && pack.id) {
+      const result = await purchaseByPackId(pack.id);
+      if (result.success) {
+        toast({ title: 'Purchase complete!', description: `${formatCredits(result.credits || pack.credits)} credits added.` });
+        onDismiss();
+      } else if (result.error !== 'cancelled') {
+        toast({ title: 'Purchase failed', description: result.error || 'Please try again.', variant: 'destructive' });
+      }
+      return;
+    }
+    setCheckoutPack({ priceId: pack.priceId, name: pack.name, credits: pack.credits, productId: pack.productId, mode: 'payment' });
+  };
 
   return (
     <>
@@ -88,13 +105,7 @@ export function CreditNudge({ action, currentBalance, onDismiss, compact }: Cred
               <Button
                 size="sm"
                 className="gap-1.5 flex-1"
-                onClick={() => setCheckoutPack({
-                  priceId: primaryPack.priceId,
-                  name: primaryPack.name,
-                  credits: primaryPack.credits,
-                  productId: primaryPack.productId,
-                  mode: 'payment',
-                })}
+                onClick={() => handleBuyPack({ ...primaryPack, id: primaryPack.id })}
               >
                 <Zap size={13} />
                 {primaryPack.name} · {formatCredits(primaryPack.credits)} credits · ${primaryPack.price}
@@ -106,13 +117,7 @@ export function CreditNudge({ action, currentBalance, onDismiss, compact }: Cred
                   size="sm"
                   variant="outline"
                   className="gap-1.5"
-                  onClick={() => setCheckoutPack({
-                    priceId: recommended.priceId,
-                    name: recommended.name,
-                    credits: recommended.credits,
-                    productId: recommended.productId,
-                    mode: 'payment',
-                  })}
+                  onClick={() => handleBuyPack({ ...recommended, id: recommended.id })}
                 >
                   <Crown size={13} />
                   {recommended.name} · {formatCredits(recommended.credits)} credits · ${recommended.price}
@@ -125,13 +130,7 @@ export function CreditNudge({ action, currentBalance, onDismiss, compact }: Cred
                   size="sm"
                   variant="outline"
                   className="gap-1.5"
-                  onClick={() => setCheckoutPack({
-                    priceId: BOOST_PACK.priceId,
-                    name: BOOST_PACK.name,
-                    credits: BOOST_PACK.credits,
-                    productId: BOOST_PACK.productId,
-                    mode: 'payment',
-                  })}
+                  onClick={() => handleBuyPack({ ...BOOST_PACK, id: BOOST_PACK.id })}
                 >
                   <Zap size={13} />
                   Quick Top-Up · {BOOST_PACK.credits} credits · ${BOOST_PACK.price}

@@ -16,6 +16,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
+import { isIAPAvailable, purchaseByPackId } from '@/services/iapService';
+import { useToast } from '@/hooks/use-toast';
 
 interface LedgerEntry {
   id: string;
@@ -121,7 +123,18 @@ export default function CreditsAndBilling() {
     setLoadingMore(false);
   }, [user?.id, ledger, loadingMore]);
 
-  const handleBuyPack = (pack: { priceId: string; productId: string; credits: number; name: string }) => {
+  const { toast } = useToast();
+
+  const handleBuyPack = async (pack: { priceId: string; productId: string; credits: number; name: string; id?: string }) => {
+    if (isIAPAvailable() && pack.id) {
+      const result = await purchaseByPackId(pack.id);
+      if (result.success) {
+        toast({ title: 'Purchase complete!', description: `${formatCredits(result.credits || pack.credits)} credits added.` });
+      } else if (result.error !== 'cancelled') {
+        toast({ title: 'Purchase failed', description: result.error || 'Please try again.', variant: 'destructive' });
+      }
+      return;
+    }
     setCheckoutConfig(pack);
   };
 
