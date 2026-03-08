@@ -1,5 +1,7 @@
 import { motion } from 'framer-motion';
 import { Quote, Sparkles, Brain, Clock, MapPin, AlertTriangle, Gem, Users, TrendingUp } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 // Real beta tester testimonials - replace with actual quotes as they accumulate
 const BETA_TESTIMONIALS = [
