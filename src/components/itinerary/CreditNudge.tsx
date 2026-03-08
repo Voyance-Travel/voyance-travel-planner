@@ -117,13 +117,7 @@ export function CreditNudge({ action, currentBalance, onDismiss, compact }: Cred
                   size="sm"
                   variant="outline"
                   className="gap-1.5"
-                  onClick={() => setCheckoutPack({
-                    priceId: recommended.priceId,
-                    name: recommended.name,
-                    credits: recommended.credits,
-                    productId: recommended.productId,
-                    mode: 'payment',
-                  })}
+                  onClick={() => handleBuyPack({ ...recommended, id: recommended.id })}
                 >
                   <Crown size={13} />
                   {recommended.name} · {formatCredits(recommended.credits)} credits · ${recommended.price}
@@ -136,13 +130,7 @@ export function CreditNudge({ action, currentBalance, onDismiss, compact }: Cred
                   size="sm"
                   variant="outline"
                   className="gap-1.5"
-                  onClick={() => setCheckoutPack({
-                    priceId: BOOST_PACK.priceId,
-                    name: BOOST_PACK.name,
-                    credits: BOOST_PACK.credits,
-                    productId: BOOST_PACK.productId,
-                    mode: 'payment',
-                  })}
+                  onClick={() => handleBuyPack({ ...BOOST_PACK, id: BOOST_PACK.id })}
                 >
                   <Zap size={13} />
                   Quick Top-Up · {BOOST_PACK.credits} credits · ${BOOST_PACK.price}
