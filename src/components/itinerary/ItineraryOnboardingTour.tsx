@@ -27,6 +27,10 @@ interface TourStep {
   icon: React.ReactNode;
   selector?: string;
   position: 'top' | 'bottom' | 'left' | 'right' | 'center';
+  /** Called before the step is shown — use to expand collapsed sections, etc. */
+  onBeforeStep?: () => void;
+  /** Called when navigating away from this step — use to clean up */
+  onLeaveStep?: () => void;
 }
 
 const TOUR_STEPS: TourStep[] = [
@@ -44,7 +48,24 @@ const TOUR_STEPS: TourStep[] = [
     description: 'Your Health Score tracks how trip-ready you are. Add flights, hotels, and resolve issues to hit 100%. Tap the score to see what needs attention.',
     icon: <HeartPulse className="h-5 w-5" />,
     selector: '[data-tour="health-score"]',
-    position: 'right',
+    position: 'bottom',
+    onBeforeStep: () => {
+      // On mobile, the health panel is inside a collapsed MobileTripOverview.
+      // Expand it so the health score is visible.
+      const isMobile = window.innerWidth < 640;
+      if (isMobile) {
+        // Dispatch event to expand the mobile overview section
+        window.dispatchEvent(new CustomEvent('tour-expand-mobile-overview'));
+      }
+      // Also expand the health panel itself if it's collapsed
+      const healthEl = document.querySelector('[data-tour="health-score"]');
+      if (healthEl) {
+        // Ensure it's scrolled into view after a brief delay for expansion animation
+        setTimeout(() => {
+          healthEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 300);
+      }
+    },
   },
   {
     id: 'trip-actions',
@@ -68,7 +89,22 @@ const TOUR_STEPS: TourStep[] = [
     description: 'Every activity can be swapped, moved, edited, or removed. Tap the ⋯ menu for options, or lock an activity to keep it safe. You get 3 free swaps per trip.',
     icon: <ArrowRightLeft className="h-5 w-5" />,
     selector: '[data-tour="activity-card"]',
-    position: 'right',
+    position: 'bottom',
+    onBeforeStep: () => {
+      // On mobile, expand the first activity card so users can see the detail view
+      const isMobile = window.innerWidth < 640;
+      if (isMobile) {
+        const activityCard = document.querySelector('[data-tour="activity-card"]');
+        if (activityCard) {
+          // Click the mobile header button to expand if not already expanded
+          const mobileButton = activityCard.querySelector('button.sm\\:hidden');
+          const expandedSection = activityCard.querySelector('.sm\\:hidden.px-3.pb-3');
+          if (mobileButton && !expandedSection) {
+            (mobileButton as HTMLElement).click();
+          }
+        }
+      }
+    },
   },
   {
     id: 'chat-bubble',
@@ -76,7 +112,7 @@ const TOUR_STEPS: TourStep[] = [
     description: "Tell the assistant what you want. 'Make Day 3 more relaxed' or 'Add more food options.' It'll suggest changes you can approve before they're applied. 5 free messages included.",
     icon: <MessageSquare className="h-5 w-5" />,
     selector: '[data-tour="chat-bubble"]',
-    position: 'left',
+    position: 'top',
   },
   {
     id: 'tab-bar',
@@ -84,7 +120,7 @@ const TOUR_STEPS: TourStep[] = [
     description: "There's more here: set a Budget and track spending, split costs in Payments, see weather and logistics in Trip Details, and check visa/safety info in Need to Know.",
     icon: <Wallet className="h-5 w-5" />,
     selector: '[data-tour="tab-bar"]',
-    position: 'bottom',
+    position: 'top',
   },
 ];
 
@@ -165,8 +201,14 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
   useEffect(() => {
     if (!isVisible) return;
 
+    const step = TOUR_STEPS[currentStep];
+
+    // Fire onBeforeStep hook for this step
+    if (step.onBeforeStep) {
+      step.onBeforeStep();
+    }
+
     const updateHighlight = () => {
-      const step = TOUR_STEPS[currentStep];
       if (step?.selector) {
         const element = document.querySelector(step.selector);
         if (element) {
@@ -177,7 +219,6 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
       setHighlightRect(null);
     };
 
-    const step = TOUR_STEPS[currentStep];
     if (step?.selector) {
       const element = document.querySelector(step.selector);
       if (element) {
@@ -215,17 +256,26 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
     return () => clearInterval(interval);
   }, [isVisible, currentStep]);
 
+  const navigateToStep = useCallback((newStep: number) => {
+    // Fire onLeaveStep for current step
+    const current = TOUR_STEPS[currentStep];
+    if (current?.onLeaveStep) {
+      current.onLeaveStep();
+    }
+    setCurrentStep(newStep);
+  }, [currentStep]);
+
   const handleNext = useCallback(() => {
     if (currentStep < TOUR_STEPS.length - 1) {
-      setCurrentStep(prev => prev + 1);
+      navigateToStep(currentStep + 1);
     } else {
       handleComplete();
     }
-  }, [currentStep]);
+  }, [currentStep, navigateToStep]);
 
   const handlePrev = useCallback(() => {
-    if (currentStep > 0) setCurrentStep(prev => prev - 1);
-  }, [currentStep]);
+    if (currentStep > 0) navigateToStep(currentStep - 1);
+  }, [currentStep, navigateToStep]);
 
   const handleComplete = useCallback(() => {
     if (user?.id) {
@@ -277,6 +327,50 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
   const isLast = currentStep === TOUR_STEPS.length - 1;
   const isCentered = step.position === 'center' || !highlightRect;
 
+  // Calculate tooltip position ensuring it stays within viewport
+  const getTooltipStyle = (): React.CSSProperties => {
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+
+    // Mobile: always position at safe bottom area above the nav bar
+    if (isMobile) {
+      return { bottom: 96 };
+    }
+
+    if (!highlightRect) {
+      return isCentered ? { top: '50%', transform: 'translateY(-50%)' } : {};
+    }
+
+    const viewportH = window.innerHeight;
+    const tooltipHeight = 220; // approximate height of tooltip card
+    const padding = 20;
+
+    if (step.position === 'bottom') {
+      const proposedTop = highlightRect.bottom + padding;
+      // If it would overflow the bottom, flip to top
+      if (proposedTop + tooltipHeight > viewportH - 20) {
+        return { bottom: viewportH - highlightRect.top + padding };
+      }
+      return { top: Math.min(proposedTop, viewportH - tooltipHeight - 20) };
+    }
+
+    if (step.position === 'top') {
+      const proposedBottom = viewportH - highlightRect.top + padding;
+      // If it would overflow the top, flip to bottom
+      if (viewportH - proposedBottom < 20) {
+        return { top: highlightRect.bottom + padding };
+      }
+      return { bottom: proposedBottom };
+    }
+
+    if (step.position === 'left' || step.position === 'right') {
+      const top = Math.max(highlightRect.top + highlightRect.height / 2 - 110, 20);
+      // Ensure it doesn't overflow the bottom
+      return { top: Math.min(top, viewportH - tooltipHeight - 20) };
+    }
+
+    return {};
+  };
+
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-[100] pointer-events-none">
@@ -305,18 +399,7 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
           className="pointer-events-auto fixed inset-x-0 flex justify-center px-3 sm:px-4"
           style={{
             zIndex: 102,
-            ...(typeof window !== 'undefined' && window.innerWidth < 640
-              ? { bottom: 96 }
-              : step.position === 'bottom' && highlightRect
-                ? { top: Math.min(highlightRect.bottom + 20, window.innerHeight - 300) }
-                : step.position === 'top' && highlightRect
-                  ? { bottom: window.innerHeight - highlightRect.top + 20 }
-                  : (step.position === 'left' || step.position === 'right') && highlightRect
-                    ? { top: Math.max(highlightRect.top + highlightRect.height / 2 - 110, 20) }
-                    : isCentered
-                      ? { top: '50%', transform: 'translateY(-50%)' }
-                      : {}
-            ),
+            ...getTooltipStyle(),
           }}
         >
           <motion.div
@@ -366,7 +449,7 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
                 {TOUR_STEPS.map((_, idx) => (
                   <button
                     key={idx}
-                    onClick={() => setCurrentStep(idx)}
+                    onClick={() => navigateToStep(idx)}
                     aria-label={`Go to step ${idx + 1}`}
                     className={cn(
                       "h-1 sm:h-1.5 rounded-full transition-all",
