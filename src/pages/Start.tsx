@@ -1717,6 +1717,10 @@ function FlightHotelStep({
                         }
                         setEditingHotelIndex(null); // null = new hotel
                         setEditingHotelCity(null);
+                        setNewHotelDraft({
+                          name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00',
+                          checkInDate: startDate, checkOutDate: endDate,
+                        });
                         setShowHotelModal(true);
                       }}
                     >
