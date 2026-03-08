@@ -99,10 +99,7 @@ export default function GuideBuilder() {
         tagInput: '',
       });
     } else if (trip && !form.title) {
-      const displayName = user?.user_metadata?.display_name || user?.user_metadata?.name || '';
-      const defaultTitle = displayName
-        ? `${trip.destination} Travel Guide by ${displayName}`
-        : `${trip.destination} Travel Guide`;
+      const defaultTitle = `${trip.destination} Travel Guide`;
       setForm(prev => ({ ...prev, title: defaultTitle.slice(0, 100) }));
     }
   }, [existingGuide, trip]);
