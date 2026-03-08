@@ -2514,8 +2514,8 @@ export default function Start() {
                 neighborhood: h.neighborhood || '',
                 checkInTime: h.checkInTime || '15:00',
                 checkOutTime: h.checkOutTime || '11:00',
-                checkInDate: h.checkInDate || (d.startDate ? format(parseLocalDate(d.startDate), 'yyyy-MM-dd') : undefined),
-                checkOutDate: h.checkOutDate || (d.endDate ? format(parseLocalDate(d.endDate), 'yyyy-MM-dd') : undefined),
+                checkInDate: h.checkInDate || d.arrivalDate || undefined,
+                checkOutDate: h.checkOutDate || d.departureDate || undefined,
                 pricePerNight: h.pricePerNight || undefined,
                 source: 'manual',
               }))
