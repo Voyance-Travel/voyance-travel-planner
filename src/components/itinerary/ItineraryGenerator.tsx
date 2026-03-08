@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Loader2, CheckCircle, MapPin, Clock, DollarSign, RefreshCw, Star, Image, Wallet, Lightbulb, AlertCircle, LogIn, Coins, Cloud, Check } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle, MapPin, Clock, DollarSign, RefreshCw, Star, Image, Wallet, Lightbulb, LogIn, Coins, Cloud, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -392,11 +392,10 @@ export function ItineraryGenerator({
           generateDays: 0,
         };
       } else {
-        // Server/network error — surface as generic error, NOT "out of credits"
+        // Server/network error — suppress hard errors and recover from DB state
         console.error('[ItineraryGenerator] Gate error (server/network):', err);
         cancel();
-        setPrePhase(null);
-        toast.error('Something went wrong while preparing your trip. Please try again in a moment.');
+        await suppressErrorAndRecover('authorize', err);
         return;
       }
     }
@@ -445,8 +444,7 @@ export function ItineraryGenerator({
       } catch (err) {
         console.error('[ItineraryGenerator] Partial spend error:', err);
         cancel();
-        setPrePhase(null);
-        toast.error('Something went wrong. Please try again.');
+        await suppressErrorAndRecover('partial_spend', err);
         return;
       }
     }
@@ -556,19 +554,16 @@ export function ItineraryGenerator({
               queryClient.invalidateQueries({ queryKey: ['entitlements', userId] });
             }
           } else {
-            toast.error('Generation failed and automatic refund could not be processed. Please contact support.', { duration: 8000 });
+            toast('Generation paused while we verify your saved itinerary.', { duration: 5000 });
           }
         } else {
           // All days generated but something else failed (e.g. final save) — no refund needed
-          toast.info('Generation completed but had a minor issue. Your itinerary has been saved.');
+          toast('Generation completed. Finalizing your itinerary view…');
         }
       } else {
-        // If useItineraryGeneration didn't already set the error, surface it
-        if (status !== 'error') {
-          toast.error('Generation failed. Please try again.');
-        }
+        // Suppress hard errors and keep loading while verifying DB state
       }
-      setHasStarted(false);
+      await suppressErrorAndRecover('handle_generate', err);
     }
   };
 
@@ -602,15 +597,8 @@ export function ItineraryGenerator({
         const st = tripRow?.itinerary_status as string;
         const itData = tripRow?.itinerary_data as { days?: unknown[] } | null;
         
-        // If itinerary data exists with days, treat as complete regardless of status
-        if (itData?.days?.length && itData.days.length > 0 && st !== 'generating' && st !== 'queued') {
-          onComplete([], undefined, false);
-        } else if (st === 'ready' || st === 'generated') {
-          onComplete([], undefined, false);
-        } else if (st === 'generating' || st === 'queued') {
-          // In progress — activate poller
-          setServerGenActive(true);
-        }
+        // Always recover from DB-first state (never call onComplete with empty days)
+        await recoverFromDatabase();
       } catch (e) {
         console.warn('[ItineraryGenerator] Mount status check failed:', e);
       }
