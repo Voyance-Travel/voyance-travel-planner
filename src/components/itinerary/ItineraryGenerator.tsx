@@ -137,6 +137,9 @@ export function ItineraryGenerator({
   const showPreferenceNudge = preferenceStatus && 
     (preferenceStatus.personalizationLevel === 'none' || preferenceStatus.personalizationLevel === 'basic');
 
+  // Fetch trip cities for multi-city progress display
+  const { data: tripCitiesData } = useTripCities(isMultiCity ? tripId : undefined);
+
   const [hasStarted, setHasStarted] = useState(false);
   const [showNudgeCard, setShowNudgeCard] = useState(true);
   const [showGenericWarning, setShowGenericWarning] = useState(false);
