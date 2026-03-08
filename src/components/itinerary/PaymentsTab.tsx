@@ -404,20 +404,24 @@ export function PaymentsTab({
   // ─── Canonical totals from activity_costs table (single source of truth) ───
   const [canonicalSummary, setCanonicalSummary] = useState<PaymentsSummary | null>(null);
   const [ledgerPlannedCents, setLedgerPlannedCents] = useState<number | null>(null);
-  useEffect(() => {
-    getPaymentsSummary(tripId).then(s => setCanonicalSummary(s));
-    // Fetch the budget ledger's planned total so Payments matches Budget tab
-    supabase
-      .from('trip_budget_summary')
-      .select('planned_total_cents')
-      .eq('trip_id', tripId)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data?.planned_total_cents) {
-          setLedgerPlannedCents(data.planned_total_cents);
-        }
-      });
+  const fetchSummary = useCallback(async () => {
+    const [summary] = await Promise.all([
+      getPaymentsSummary(tripId),
+      supabase
+        .from('trip_budget_summary')
+        .select('planned_total_cents')
+        .eq('trip_id', tripId)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data?.planned_total_cents) {
+            setLedgerPlannedCents(data.planned_total_cents);
+          }
+        }),
+    ]);
+    setCanonicalSummary(summary);
   }, [tripId]);
+
+  useEffect(() => { fetchSummary(); }, [fetchSummary]);
 
   // Calculate totals — prefer ledger planned total (same source as Budget tab),
   // then canonical view, then JS fallback
