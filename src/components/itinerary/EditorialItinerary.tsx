@@ -8281,7 +8281,7 @@ function ActivityRow({
     return (
       <div
         className={cn(
-          "flex items-center gap-2 px-4 py-2",
+          "flex items-center gap-2 px-4 py-2 group/activity",
           !isLast && "border-b border-border/30",
         )}
         data-tour="transit-row"
@@ -8318,16 +8318,46 @@ function ActivityRow({
         {isEditable && !activity.isLocked && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="ml-auto min-w-[44px] min-h-[44px] flex items-center justify-center text-foreground/60 hover:text-foreground hover:bg-muted rounded-full transition-colors opacity-0 group-hover/activity:opacity-100 shrink-0 touch-manipulation">
+              <button className="ml-auto min-w-[44px] min-h-[44px] flex items-center justify-center text-foreground/60 hover:text-foreground hover:bg-muted rounded-full transition-colors sm:opacity-0 sm:group-hover/activity:opacity-100 shrink-0 touch-manipulation">
                 <MoreHorizontal className="h-5 w-5" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-36">
-              {onRemove && (
-                <DropdownMenuItem onClick={() => onRemove(dayIndex, activity.id)} className="text-destructive text-xs">
-                  <Trash2 className="h-3 w-3 mr-1.5" />
-                  Remove
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onClick={() => onEdit(dayIndex, activityIndex, activity)} className="cursor-pointer gap-2 text-xs">
+                <Edit3 className="h-3 w-3" /> Edit Details
+              </DropdownMenuItem>
+              {activityIndex > 0 && (
+                <DropdownMenuItem onClick={() => onMove(dayIndex, activity.id, 'up')} className="cursor-pointer gap-2 text-xs">
+                  <ArrowUp className="h-3 w-3" /> Move Up
                 </DropdownMenuItem>
+              )}
+              {activityIndex < totalActivities - 1 && (
+                <DropdownMenuItem onClick={() => onMove(dayIndex, activity.id, 'down')} className="cursor-pointer gap-2 text-xs">
+                  <ArrowDown className="h-3 w-3" /> Move Down
+                </DropdownMenuItem>
+              )}
+              {onMoveToDay && totalDays > 1 && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="cursor-pointer gap-2 text-xs">
+                    <CalendarDays className="h-3 w-3" /> Move to Day
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {Array.from({ length: totalDays }, (_, d) => d).filter(d => d !== dayIndex).map(d => (
+                      <DropdownMenuItem key={d} onClick={() => onMoveToDay(dayIndex, activity.id, d)} className="text-xs">
+                        Day {d + 1}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
+              {onRemove && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => onRemove(dayIndex, activity.id)} className="text-destructive text-xs cursor-pointer gap-2">
+                    <Trash2 className="h-3 w-3" />
+                    Remove
+                  </DropdownMenuItem>
+                </>
               )}
             </DropdownMenuContent>
           </DropdownMenu>
