@@ -1,23 +1,19 @@
 /**
  * Itinerary Intelligence Summary
  * 
- * Displays quantified value at the top of each itinerary with expandable details:
- * - X Voyance Finds (hidden gems)
- * - Y Timing Hacks
- * - Z Local Picks (insider alternatives)
- * - W Insider Tips
- * 
- * Each badge is expandable to show specifics. Includes savings calculation.
+ * Collapsible on mobile (default collapsed), expanded on desktop.
+ * Shows quantified value with expandable detail badges.
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Sparkles, Clock, MapPinOff, Target, TrendingUp, ChevronDown, ChevronUp,
-  AlertTriangle, Lightbulb, MapPin, DollarSign
+  Sparkles, Clock, Target, TrendingUp, ChevronDown, ChevronUp,
+  Lightbulb, MapPin, DollarSign
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 export interface IntelligenceDetail {
   title: string;
@@ -32,10 +28,9 @@ export interface ItineraryValueStats {
   touristTrapsAvoided: number;
   insiderTips: number;
   estimatedSavings?: {
-    time: string;  // e.g., "3+ hours"
-    money?: string; // e.g., "~$150"
+    time: string;
+    money?: string;
   };
-  // Expandable details
   voyanceFindsDetails?: IntelligenceDetail[];
   timingDetails?: IntelligenceDetail[];
   trapsAvoidedDetails?: IntelligenceDetail[];
@@ -57,48 +52,24 @@ export function ItineraryValueHeader({
   className,
   tripId,
 }: ItineraryValueHeaderProps) {
+  const isMobile = useIsMobile();
   const hasValue = stats.voyanceFinds > 0 || 
                    stats.timingOptimizations > 0 || 
                    stats.touristTrapsAvoided > 0 ||
                    stats.insiderTips > 0;
 
-  // Auto-collapse on return visits (mobile only)
-  const storageKey = tripId ? `voyance_intel_seen_${tripId}` : null;
-  const [isCollapsed, setIsCollapsed] = useState(() => {
-    if (!storageKey) return false;
-    try { return !!localStorage.getItem(storageKey); } catch { return false; }
-  });
-  useEffect(() => {
-    if (storageKey) {
-      try { localStorage.setItem(storageKey, '1'); } catch { /* ignore */ }
-    }
-  }, [storageKey]);
+  // Mobile: collapsed by default. Desktop: expanded.
+  const [isExpanded, setIsExpanded] = useState(!isMobile);
 
   if (!hasValue) return null;
 
-  // Collapsed summary line on mobile for return visits
-  if (isCollapsed) {
-    const summaryParts = [];
-    if (stats.touristTrapsAvoided > 0) summaryParts.push(`${stats.touristTrapsAvoided} local picks`);
-    if (stats.insiderTips > 0) summaryParts.push(`${stats.insiderTips} insider tips`);
-    if (stats.estimatedSavings?.time) summaryParts.push(`${stats.estimatedSavings.time} saved`);
-    
-    return (
-      <button
-        onClick={() => setIsCollapsed(false)}
-        className={cn(
-          'w-full sm:hidden rounded-xl border border-border bg-card p-3 flex items-center gap-2.5 text-left hover:bg-secondary/30 transition-colors',
-          className
-        )}
-      >
-        <Sparkles className="h-4 w-4 text-primary shrink-0" />
-        <span className="text-xs text-muted-foreground flex-1 truncate">
-          ✨ {summaryParts.join(', ')}
-        </span>
-        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-      </button>
-    );
-  }
+  // Summary line for collapsed state
+  const summaryParts: string[] = [];
+  if (stats.voyanceFinds > 0) summaryParts.push(`${stats.voyanceFinds} finds`);
+  if (stats.timingOptimizations > 0) summaryParts.push(`${stats.timingOptimizations} timing hacks`);
+  if (stats.touristTrapsAvoided > 0) summaryParts.push(`${stats.touristTrapsAvoided} local picks`);
+  if (stats.insiderTips > 0) summaryParts.push(`${stats.insiderTips} insider tips`);
+  if (stats.estimatedSavings?.time) summaryParts.push(`${stats.estimatedSavings.time} saved`);
 
   return (
     <motion.div
@@ -109,86 +80,120 @@ export function ItineraryValueHeader({
         className
       )}
     >
-      {/* Header */}
-      <div className="p-3 sm:p-5 text-center border-b border-border/50">
-        <h2 className="text-sm font-semibold text-primary uppercase tracking-wider mb-1">
-          Voyance Intelligence Summary
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          Your {destination}
-          {archetype && <span> · {archetype} style</span>}
-        </p>
-      </div>
-
-      {/* Metric Badges Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-border/50">
-        {stats.voyanceFinds > 0 && (
-          <ExpandableBadge
-            icon={<Sparkles className="h-4 w-4" />}
-            value={stats.voyanceFinds}
-            label="Voyance Finds"
-            subtitle="Hidden gems you wouldn't find alone"
-            color="primary"
-            details={stats.voyanceFindsDetails}
-          />
-        )}
-        {stats.timingOptimizations > 0 && (
-          <ExpandableBadge
-            icon={<Clock className="h-4 w-4" />}
-            value={stats.timingOptimizations}
-            label="Timing Hacks"
-            subtitle="Scheduled to beat crowds"
-            color="accent"
-            details={stats.timingDetails}
-          />
-        )}
-        {stats.touristTrapsAvoided > 0 && (
-          <ExpandableBadge
-            icon={<Sparkles className="h-4 w-4" />}
-            value={stats.touristTrapsAvoided}
-            label="Local Picks"
-            subtitle="Insider alternatives included"
-            color="primary"
-            details={stats.trapsAvoidedDetails}
-          />
-        )}
-        {stats.insiderTips > 0 && (
-          <ExpandableBadge
-            icon={<Target className="h-4 w-4" />}
-            value={stats.insiderTips}
-            label="Insider Tips"
-            subtitle="Local execution advice"
-            color="gold"
-            details={stats.insiderTipsDetails}
-          />
-        )}
-      </div>
-
-      {/* Savings Result */}
-      {stats.estimatedSavings && (
-        <div className="p-4 bg-primary/5 border-t border-border/50">
-          <div className="flex items-center justify-center gap-3 flex-wrap">
-            <div className="flex items-center gap-1.5 text-primary font-medium">
-              <TrendingUp className="h-4 w-4" />
-              <span className="text-sm">Result:</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm">
-              <span className="font-semibold text-foreground">
-                {stats.estimatedSavings.time} saved
-              </span>
-              {stats.estimatedSavings.money && (
-                <>
-                  <span className="text-muted-foreground">+</span>
-                  <span className="font-semibold text-foreground">
-                    {stats.estimatedSavings.money}
-                  </span>
-                </>
-              )}
-              <span className="text-muted-foreground">vs. typical itinerary</span>
-            </div>
+      {/* Collapsible header — always visible */}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full p-3 sm:p-5 flex items-center justify-between text-left border-b border-border/50 hover:bg-secondary/30 transition-colors"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <Sparkles className="h-4 w-4 text-primary shrink-0" />
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-primary uppercase tracking-wider">
+              Voyance Intelligence
+            </h2>
+            {!isExpanded && (
+              <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                {summaryParts.join(' · ')}
+              </p>
+            )}
           </div>
         </div>
-      )}
+        <ChevronDown className={cn(
+          "h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200",
+          isExpanded && "rotate-180"
+        )} />
+      </button>
+
+      {/* Expandable content */}
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className="overflow-hidden"
+          >
+            {/* Destination subtitle */}
+            <div className="px-3 sm:px-5 pt-2 pb-1 text-center">
+              <p className="text-xs text-muted-foreground">
+                Your {destination}
+                {archetype && <span> · {archetype} style</span>}
+              </p>
+            </div>
+
+            {/* Metric Badges Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-border/50">
+              {stats.voyanceFinds > 0 && (
+                <ExpandableBadge
+                  icon={<Sparkles className="h-4 w-4" />}
+                  value={stats.voyanceFinds}
+                  label="Voyance Finds"
+                  subtitle="Hidden gems you wouldn't find alone"
+                  color="primary"
+                  details={stats.voyanceFindsDetails}
+                />
+              )}
+              {stats.timingOptimizations > 0 && (
+                <ExpandableBadge
+                  icon={<Clock className="h-4 w-4" />}
+                  value={stats.timingOptimizations}
+                  label="Timing Hacks"
+                  subtitle="Scheduled to beat crowds"
+                  color="accent"
+                  details={stats.timingDetails}
+                />
+              )}
+              {stats.touristTrapsAvoided > 0 && (
+                <ExpandableBadge
+                  icon={<Sparkles className="h-4 w-4" />}
+                  value={stats.touristTrapsAvoided}
+                  label="Local Picks"
+                  subtitle="Insider alternatives included"
+                  color="primary"
+                  details={stats.trapsAvoidedDetails}
+                />
+              )}
+              {stats.insiderTips > 0 && (
+                <ExpandableBadge
+                  icon={<Target className="h-4 w-4" />}
+                  value={stats.insiderTips}
+                  label="Insider Tips"
+                  subtitle="Local execution advice"
+                  color="gold"
+                  details={stats.insiderTipsDetails}
+                />
+              )}
+            </div>
+
+            {/* Savings Result */}
+            {stats.estimatedSavings && (
+              <div className="p-4 bg-primary/5 border-t border-border/50">
+                <div className="flex items-center justify-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-1.5 text-primary font-medium">
+                    <TrendingUp className="h-4 w-4" />
+                    <span className="text-sm">Result:</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="font-semibold text-foreground">
+                      {stats.estimatedSavings.time} saved
+                    </span>
+                    {stats.estimatedSavings.money && (
+                      <>
+                        <span className="text-muted-foreground">+</span>
+                        <span className="font-semibold text-foreground">
+                          {stats.estimatedSavings.money}
+                        </span>
+                      </>
+                    )}
+                    <span className="text-muted-foreground">vs. typical itinerary</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
