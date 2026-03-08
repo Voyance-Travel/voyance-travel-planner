@@ -4776,6 +4776,7 @@ export function EditorialItinerary({
                           onActivityRemove={handleActivityRemove}
                           onDayLock={handleDayLock}
                           onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
+                          onRemoveDay={effectiveIsEditable && !isActivelyGenerating ? () => handleRemoveDay(selectedDayIndex) : undefined}
                           onAddActivity={(afterIndex?: number) => setAddActivityModal({ dayIndex: selectedDayIndex, afterIndex })}
                           onDiscover={() => setDiscoverDrawerOpen(true)}
                           onImportActivities={() => setImportModal({ dayIndex: selectedDayIndex })}
