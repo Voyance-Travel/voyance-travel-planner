@@ -7891,6 +7891,33 @@ export type Database = {
         }
         Relationships: []
       }
+      user_social_links: {
+        Row: {
+          created_at: string
+          id: string
+          platform: string
+          updated_at: string
+          url: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          platform: string
+          updated_at?: string
+          url: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          platform?: string
+          updated_at?: string
+          url?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_tiers: {
         Row: {
           first_purchase_at: string | null
