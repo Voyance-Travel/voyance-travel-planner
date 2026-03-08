@@ -3,14 +3,14 @@
  * Public route — no auth required.
  * /community-guides/:guideId
  */
-import { lazy, Suspense, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { lazy, Suspense, useMemo, useState, useEffect } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
-import { BookOpen, MapPin, Calendar, ArrowLeft, ArrowRight, Clock, Loader2 } from 'lucide-react';
+import { BookOpen, MapPin, Calendar, ArrowLeft, ArrowRight, Clock, Loader2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
@@ -110,9 +110,19 @@ function groupByDay(activities: Activity[]): Map<number, Activity[]> {
 
 export default function CommunityGuideDetail() {
   const { guideId } = useParams<{ guideId: string }>();
+  const navigate = useNavigate();
   const { data: guide, isLoading } = useGuideById(guideId);
   const { data: tripInfo } = useTripDuration(guide?.trip_id);
   const { data: contentLinks = [] } = useContentLinks(guide?.id);
+
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setCurrentUserId(data.user?.id || null);
+    });
+  }, []);
 
   // 404 if not found or unpublished
   const is404 = !isLoading && (!guide || guide.status !== 'published');
