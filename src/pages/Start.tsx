@@ -1594,6 +1594,10 @@ function FlightHotelStep({
                     // If no hotels yet, open modal for first hotel
                     if (manualHotelList.length === 0 && !manualHotel.name) {
                       setEditingHotelIndex(null);
+                      setNewHotelDraft({
+                        name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00',
+                        checkInDate: startDate, checkOutDate: endDate,
+                      });
                       setShowHotelModal(true);
                     }
                   }}
