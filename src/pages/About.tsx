@@ -303,14 +303,8 @@ export default function About() {
             animate={{ opacity: 1, y: 0 }}
             className="max-w-4xl"
           >
-            <motion.span 
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.2 }}
-              className="inline-block text-primary text-sm md:text-base font-medium uppercase tracking-[0.2em] mb-5 md:mb-8"
-            >
-              Why We Exist
-            </motion.span>
+
+
             <h1 className="font-serif text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-bold mb-6 md:mb-10 leading-[1.08]">
               Travel{' '}
               <span className="text-primary italic">designed</span>,
