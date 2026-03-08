@@ -981,6 +981,25 @@ function FlightHotelStep({
   const [lastImportedLegs, setLastImportedLegs] = useState<ManualFlightEntry[]>([]);
   const [importNonce, setImportNonce] = useState(0);
 
+  // Memoize transport selections to avoid new object reference on every render
+  const computedTransportSelections = useMemo(() => {
+    type LT = 'flight' | 'train' | 'bus' | 'car' | 'ferry';
+    const fromSelections: Record<number, { type: LT }> = {};
+    if (transportSelections) {
+      Object.entries(transportSelections).forEach(([k, v]) => {
+        fromSelections[Number(k)] = { type: (v.option?.mode || 'flight') as LT };
+      });
+    }
+    const merged: Record<number, { type: LT }> = {};
+    (multiCityTransports || []).forEach((t, i) => {
+      merged[i] = { type: (fromSelections[i]?.type || t.type || 'flight') as LT };
+    });
+    Object.entries(fromSelections).forEach(([k, v]) => {
+      if (!(Number(k) in merged)) merged[Number(k)] = v;
+    });
+    return Object.keys(merged).length > 0 ? merged : undefined;
+  }, [transportSelections, multiCityTransports]);
+
   const normalizeLegs = (legs: ManualFlightEntry[]): ManualFlightEntry[] => {
     const hasContent = (leg: ManualFlightEntry) => Boolean(
       leg.airline ||
