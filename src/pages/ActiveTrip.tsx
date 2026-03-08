@@ -328,6 +328,7 @@ export default function ActiveTrip() {
     // The actual pace adjustment would be handled by the itinerary system
   }, []);
 
+import { openMapLocation } from '@/utils/mapNavigation';
 
   const handleActivityComplete = useCallback((activityId: string) => {
     setCompletedActivities(prev => new Set([...prev, activityId]));
@@ -1019,7 +1020,14 @@ function TodayView({
                       {!isPastDay && (
                         <div className="flex items-center gap-2 mt-3">
                           {activity.location && (
-                            <Button size="sm" variant="outline" className="h-8 gap-1.5">
+                            <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => {
+                              openMapLocation({
+                                name: activity.location?.name || activity.name,
+                                address: activity.location?.address,
+                                lat: activity.location?.lat,
+                                lng: activity.location?.lng,
+                              });
+                            }}>
                               <Navigation className="w-3.5 h-3.5" />
                               Directions
                             </Button>
