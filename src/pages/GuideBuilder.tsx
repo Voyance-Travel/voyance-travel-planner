@@ -258,7 +258,7 @@ export default function GuideBuilder() {
         const { error } = await supabase.from('community_guides').insert(payload);
         if (error) throw error;
       }
-      return publish;
+      return finalPublish;
     },
     onSuccess: (didPublish) => {
       queryClient.invalidateQueries({ queryKey: ['community-guide-trip', tripId] });
