@@ -8,6 +8,11 @@ import { consumePendingInviteToken, extractInviteTokenFromPath } from '@/utils/i
  * Handles redirect after OAuth sign-in.
  * Recovers invite tokens from URL params, return path, or persisted storage
  * and redirects to /invite/{token} to complete acceptance.
+ * 
+ * IMPORTANT: Only processes invite tokens when there's evidence of a real auth return
+ * (URL param, or saved return path). Stale durable tokens alone are NOT enough to
+ * trigger a redirect — this prevents the "haunted invite" loop where a persisted
+ * token keeps redirecting the user on every homepage visit.
  */
 export function OAuthReturnHandler() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -23,7 +28,7 @@ export function OAuthReturnHandler() {
     // Only redirect from the root path (where OAuth lands)
     if (location.pathname !== '/') return;
     
-    // Priority 1: inviteToken URL param
+    // Priority 1: inviteToken URL param (explicit — always trust)
     const urlInviteToken = searchParams.get('inviteToken');
     if (urlInviteToken) {
       hasRedirected.current = true;
@@ -31,7 +36,7 @@ export function OAuthReturnHandler() {
       return;
     }
 
-    // Priority 2: token extracted from saved return path
+    // Priority 2: token extracted from saved return path (explicit — always trust)
     const returnPath = peekReturnPath();
     const pathToken = extractInviteTokenFromPath(returnPath);
     if (pathToken) {
@@ -41,13 +46,17 @@ export function OAuthReturnHandler() {
       return;
     }
 
-    // Priority 3: persisted invite token (session + local storage)
-    const persistedToken = consumePendingInviteToken();
-    if (persistedToken) {
-      hasRedirected.current = true;
-      consumeReturnPath('/');
-      navigate(`/invite/${persistedToken}`, { replace: true });
-      return;
+    // Priority 3: persisted invite token — ONLY if there's a saved return path
+    // (indicating we're returning from an auth flow, not just visiting the homepage).
+    // Without this guard, stale durable tokens cause infinite redirect loops.
+    if (returnPath) {
+      const persistedToken = consumePendingInviteToken();
+      if (persistedToken) {
+        hasRedirected.current = true;
+        consumeReturnPath('/');
+        navigate(`/invite/${persistedToken}`, { replace: true });
+        return;
+      }
     }
 
     // No invite token — fall back to normal return path behavior
