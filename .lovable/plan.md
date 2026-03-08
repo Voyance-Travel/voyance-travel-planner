@@ -1,63 +1,78 @@
 
 
-## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
+## Problem
 
-### What's Already Working (No Changes Needed)
-- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
-- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
-- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
-- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
+The import parser has two bugs causing activities to land at absurd times (12 AM, 1:30 AM):
 
-### What's Broken — Two Things
+**Bug 1 — Numbered lists eaten as times.** `TIME_PATTERN` is `/(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/gi` — every part is optional, so it matches bare numbers like "1", "2", "12" from numbered lists ("1. Visit museum"). `normalizeTime` then converts "1" → "01:00" (1 AM), "12" → "12:00" (which could be correct or wrong depending on context). This is the primary source of the midnight/1 AM times.
 
-**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
+**Bug 2 — No smart default times.** When no time is detected, activities get `undefined` startTime → empty string on import → they sort to the bottom with no time. There's no logic to assign reasonable daytime slots (9 AM, 10:30 AM, 12 PM, etc.) based on position in the day.
 
-**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
+**UX Gap — No way to fix times before importing.** The assign step shows times read-only. Users can't adjust times before committing the import, forcing cleanup after the fact.
 
-### Changes
+## Plan
 
-#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
+### Fix 1: Tighten `TIME_PATTERN` to stop matching bare numbers
+**File:** `src/components/itinerary/ImportActivitiesModal.tsx` (line 74)
 
-**Change A — Remove stall detector setup** (lines ~261-313):
-Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
-
-**Change B — Remove browser loop fallback** (lines ~455-469):
-Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
+Change the regex to require at least one of: `:MM`, `am/pm`, or both. Bare digits alone won't match.
 
 ```typescript
-// OLD:
-} catch (serverErr) {
-  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
-  const generatedDays = await generateItinerary({ ... });
-  // ... 40 lines of fallback logic
-}
+// Requires either :MM portion, or am/pm, or both — never just a bare number
+const TIME_PATTERN = /(\d{1,2}:\d{2}\s*(?:am|pm)?|\d{1,2}\s*(?:am|pm))/gi;
+```
 
-// NEW:
-} catch (serverErr) {
-  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
-  setPrePhase(null);
-  setHasStarted(false);
-  toast.error('Failed to start generation. Please try again.');
-  return;
+This means:
+- `9:00 AM` ✅, `14:30` ✅, `9am` ✅, `9 PM` ✅
+- `1` ❌, `12` ❌, `2.` ❌ (no longer match)
+
+### Fix 2: Smart default time assignment for activities without times
+**File:** `src/components/itinerary/ImportActivitiesModal.tsx` (after parsing loop, ~line 320)
+
+After all activities in a group are parsed, run a post-processing pass that assigns sequential daytime slots to any activity with no `startTime`:
+
+- Start from `09:00` (or after the last timed activity)
+- Space activities 90 minutes apart
+- Cap at `21:00`
+- Mark these as "estimated" so the UI can show them differently
+
+```typescript
+// Post-process: assign sequential default times to untimed activities
+for (const group of groups) {
+  let nextDefault = 9 * 60; // 9:00 AM in minutes
+  for (const activity of group.activities) {
+    if (activity.startTime) {
+      // Advance the default clock past this timed activity
+      const mins = timeToMinutes(activity.startTime);
+      nextDefault = Math.max(nextDefault, mins + 90);
+    } else {
+      // Assign a reasonable daytime slot
+      activity.startTime = minutesToTime(Math.min(nextDefault, 21 * 60));
+      activity.isEstimatedTime = true;
+      nextDefault += 90;
+    }
+  }
 }
 ```
 
-**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
+Add `isEstimatedTime?: boolean` to the `ParsedActivity` interface.
 
-**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
+### Fix 3: Allow inline time editing in the assign/review step
+**File:** `src/components/itinerary/ImportActivitiesModal.tsx` (activity preview, ~line 569-590)
 
-#### File 2: `src/hooks/useItineraryGeneration.ts`
+Make the time display clickable/editable so users can adjust times before importing:
 
-No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
+- Show estimated times in a muted/italic style with a small clock icon
+- Clicking a time opens a small inline time input (or uses an `<input type="time">`)
+- Add an `updateActivityTime` callback to modify the time in state
 
-### Files to Modify
+This way users can fix any bad parses or adjust estimated times before they commit the import.
 
-| File | What |
-|------|------|
-| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
+### Files Modified
 
-### Risk Assessment
-- **Low risk**: The server-side self-chaining is already fully implemented and tested
-- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
-- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
+| File | Changes |
+|------|---------|
+| `src/components/itinerary/ImportActivitiesModal.tsx` | Tighten TIME_PATTERN regex, add post-parse default time assignment, add inline time editing in assign step |
+
+No backend changes needed. No other files affected.
 
