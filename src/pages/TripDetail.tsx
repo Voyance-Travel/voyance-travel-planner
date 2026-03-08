@@ -1476,6 +1476,7 @@ export default function TripDetail() {
     }
     return trip.end_date;
   })();
+  const isPastTripView = isAfter(new Date(), parseLocalDate(effectiveEndDate));
 
   return (
     <MainLayout>
