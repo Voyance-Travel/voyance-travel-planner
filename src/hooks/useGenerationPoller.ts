@@ -182,7 +182,7 @@ export function useGenerationPoller({
           console.log('[useGenerationPoller] Status is "failed" but itinerary_data has all days — treating as ready');
           stalledFiredRef.current = false;
           autoResumeAttemptedRef.current = false;
-          setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList });
+          setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
           if (!onReadyCalledRef.current) {
             onReadyCalledRef.current = true;
             onReadyRef.current?.();
@@ -195,7 +195,7 @@ export function useGenerationPoller({
           console.log('[useGenerationPoller] Status is "failed" but itinerary_days has all days — treating as ready');
           stalledFiredRef.current = false;
           autoResumeAttemptedRef.current = false;
-          setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList });
+          setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
           if (!onReadyCalledRef.current) {
             onReadyCalledRef.current = true;
             onReadyRef.current?.();
@@ -207,14 +207,14 @@ export function useGenerationPoller({
         const inResumeGrace = justResumedRef.current && (Date.now() - resumedAtRef.current < 15000);
         if (inResumeGrace) {
           // Don't show failed yet — stay polling, the next cycle will confirm
-          setState({ status: 'polling', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList });
+          setState({ status: 'polling', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList, currentCity });
           return;
         }
 
         stalledFiredRef.current = false;
         autoResumeAttemptedRef.current = false;
         const genError = (meta.generation_error as string) || 'Generation failed';
-        setState({ status: 'failed', completedDays, totalDays, progress, error: genError, partialDays, generatedDaysList: daysList });
+        setState({ status: 'failed', completedDays, totalDays, progress, error: genError, partialDays, generatedDaysList: daysList, currentCity });
         onFailedRef.current?.(genError);
         return;
       }
@@ -223,7 +223,7 @@ export function useGenerationPoller({
         stalledFiredRef.current = false;
         autoResumeAttemptedRef.current = false;
         const genError = (meta.generation_error as string) || 'Generation paused';
-        setState({ status: 'partial', completedDays, totalDays, progress, error: genError, partialDays, generatedDaysList: daysList });
+        setState({ status: 'partial', completedDays, totalDays, progress, error: genError, partialDays, generatedDaysList: daysList, currentCity });
         return;
       }
 
@@ -280,7 +280,7 @@ export function useGenerationPoller({
 
             console.log('[useGenerationPoller] Auto-resume triggered successfully');
             // Stay in polling state — the resumed generation will update status
-            setState({ status: 'polling', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList });
+            setState({ status: 'polling', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList, currentCity });
             return;
           } catch {
             // Auto-resume failed — fall through to stalled
@@ -289,7 +289,7 @@ export function useGenerationPoller({
         }
 
         // Auto-resume was already attempted or failed
-        setState({ status: 'stalled', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList });
+        setState({ status: 'stalled', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList, currentCity });
         if (!stalledFiredRef.current) {
           stalledFiredRef.current = true;
           onStalledRef.current?.();
@@ -300,7 +300,7 @@ export function useGenerationPoller({
       // Active generation
       stalledFiredRef.current = false;
       consecutiveErrorsRef.current = 0; // Reset on success
-      setState({ status: 'polling', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList });
+      setState({ status: 'polling', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList, currentCity });
     } catch (err) {
       consecutiveErrorsRef.current += 1;
       console.warn(`[useGenerationPoller] Poll error (${consecutiveErrorsRef.current}):`, err);
@@ -371,6 +371,19 @@ export function useGenerationPoller({
         },
         () => {
           // Trip status changed — poll immediately
+          poll();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'trip_cities',
+          filter: `trip_id=eq.${tripId}`,
+        },
+        () => {
+          // City generation status changed — poll immediately
           poll();
         }
       )
