@@ -646,7 +646,7 @@ interface TodayViewProps {
   onCopy: (id: string, text: string) => void;
   copiedId: string | null;
   archetype?: string;
-  feedbackByActivity: Map<string, string>;
+  feedbackByActivity: Map<string, { rating: string; personalization_tags?: string[] | null }>;
   onMediaPress: (activityId: string, activityName: string) => void;
   onVoicePress: (activityId: string, activityName: string) => void;
   sentiment: import('@/hooks/useTripSentiment').TripSentiment;
