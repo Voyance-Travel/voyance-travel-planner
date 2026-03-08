@@ -547,12 +547,16 @@ html.a11y-no-color-only [data-state="checked"] {
 }
 
 @keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes cardGlow {
+  0%, 100% { box-shadow: 0 1px 4px hsla(var(--primary) / 0.04); }
+  50% { box-shadow: 0 2px 16px hsla(var(--primary) / 0.12); }
 }
