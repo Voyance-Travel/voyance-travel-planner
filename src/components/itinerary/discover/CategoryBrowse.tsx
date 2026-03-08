@@ -1,17 +1,20 @@
 /**
  * CategoryBrowse — Tertiary category quick-filters for Discover
  */
-import { Coffee, UtensilsCrossed, Footprints, Wine, IceCream } from 'lucide-react';
+import { Coffee, UtensilsCrossed, Footprints, Wine, IceCream, Music, Landmark, PartyPopper } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-export type Category = 'coffee' | 'food' | 'wander' | 'drinks' | 'snacks';
+export type Category = 'coffee' | 'food' | 'wander' | 'drinks' | 'snacks' | 'nightlife' | 'attractions' | 'events';
 
 const CATEGORIES: { key: Category; label: string; icon: React.ReactNode }[] = [
   { key: 'coffee', label: 'Cafés', icon: <Coffee className="h-3.5 w-3.5" /> },
   { key: 'food', label: 'Restaurants', icon: <UtensilsCrossed className="h-3.5 w-3.5" /> },
   { key: 'wander', label: 'Explore', icon: <Footprints className="h-3.5 w-3.5" /> },
   { key: 'drinks', label: 'Drinks', icon: <Wine className="h-3.5 w-3.5" /> },
+  { key: 'nightlife', label: 'Nightlife', icon: <Music className="h-3.5 w-3.5" /> },
+  { key: 'attractions', label: 'Attractions', icon: <Landmark className="h-3.5 w-3.5" /> },
+  { key: 'events', label: 'Events', icon: <PartyPopper className="h-3.5 w-3.5" /> },
   { key: 'snacks', label: 'Snacks', icon: <IceCream className="h-3.5 w-3.5" /> },
 ];
 

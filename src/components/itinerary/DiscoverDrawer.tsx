@@ -17,6 +17,33 @@ import { CategoryBrowse, type Category } from './discover/CategoryBrowse';
 import { Badge } from '@/components/ui/badge';
 import { Star, Plus, MapPin, Clock } from 'lucide-react';
 
+/** Infer the best category from a natural language query */
+function inferCategoryFromQuery(query: string): Category {
+  const q = query.toLowerCase();
+
+  const nightlifeKw = ['tonight', 'nightlife', 'club', 'clubs', 'comedy', 'comedy club', 'live music', 'jazz', 'karaoke', 'dance', 'dancing', 'dj', 'bar crawl', 'late night', 'night out', 'going out', 'party', 'speakeasy', 'lounge'];
+  const attractionsKw = ['museum', 'gallery', 'landmark', 'monument', 'historic', 'architecture', 'theater', 'theatre', 'observation', 'sightseeing', 'see', 'visit', 'tour', 'attraction'];
+  const eventsKw = ['happening', 'event', 'concert', 'festival', 'show', 'performance', 'what\'s on', 'whats on', 'what to do', 'things to do', 'local events', 'pop-up', 'market'];
+  const drinksKw = ['bar', 'bars', 'cocktail', 'wine', 'beer', 'pub', 'drink', 'drinks', 'happy hour', 'rooftop'];
+  const coffeeKw = ['coffee', 'cafe', 'café', 'tea', 'espresso', 'latte', 'cappuccino'];
+  const wanderKw = ['walk', 'explore', 'park', 'garden', 'stroll', 'neighborhood', 'viewpoint', 'scenic'];
+  const snacksKw = ['snack', 'ice cream', 'dessert', 'pastry', 'bakery', 'sweet', 'quick bite'];
+
+  if (nightlifeKw.some(kw => q.includes(kw))) return 'nightlife';
+  if (eventsKw.some(kw => q.includes(kw))) return 'events';
+  if (attractionsKw.some(kw => q.includes(kw))) return 'attractions';
+  if (drinksKw.some(kw => q.includes(kw))) return 'drinks';
+  if (coffeeKw.some(kw => q.includes(kw))) return 'coffee';
+  if (wanderKw.some(kw => q.includes(kw))) return 'wander';
+  if (snacksKw.some(kw => q.includes(kw))) return 'snacks';
+
+  // Default: use time-of-day heuristic
+  const hour = new Date().getHours();
+  if (hour >= 21 || hour < 4) return 'nightlife';
+  if (hour >= 17) return 'drinks';
+  return 'food';
+}
+
 interface NearbySuggestion {
   id: string;
   name: string;
@@ -178,15 +205,18 @@ export function DiscoverDrawer({
         return;
       }
 
+      // Infer category from natural language query
+      const inferredCategory = inferCategoryFromQuery(query);
+
       const { data, error } = await supabase.functions.invoke('nearby-suggestions', {
         body: {
           lat,
           lng,
-          category: 'food', // fallback category
+          category: inferredCategory,
           archetype: archetype || 'flexible_wanderer',
           timeOfDay: getTimeOfDay(),
           radiusMeters: 1500,
-          query, // pass natural language query
+          query, // pass natural language query for additional context
         },
       });
 
