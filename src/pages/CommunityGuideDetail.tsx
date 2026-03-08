@@ -148,7 +148,7 @@ export default function CommunityGuideDetail() {
 
   return (
     <MainLayout>
-      <Head title={ogTitle} description={ogDesc} og={{ title: ogTitle, description: ogDesc, image: ogImage }} />
+      <Head title={ogTitle} description={ogDesc} />
 
       {/* Hero */}
       <section className="relative">
