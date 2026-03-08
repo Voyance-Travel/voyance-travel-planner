@@ -190,6 +190,31 @@ export default function GuideBuilder() {
     mutationFn: async (publish: boolean) => {
       if (!tripId || !user) throw new Error('Missing trip or user');
 
+      // Content moderation before publishing
+      let finalPublish = publish;
+      let finalStatus: string = publish ? 'published' : 'draft';
+
+      if (publish) {
+        const allText = [
+          form.title,
+          form.description,
+          ...sections.map((s: any) => `${s.title || ''} ${s.body || ''}`),
+          ...allItems.map(item => `${item.name || ''} ${item.description || ''} ${item.note || ''}`),
+        ].join(' ');
+
+        const flaggedPatterns = [
+          /\b(hate|kill|murder|terrorist|bomb)\b/i,
+          /\b(porn|xxx|nsfw|nude)\b/i,
+          /\b(scam|phishing|malware)\b/i,
+        ];
+
+        if (flaggedPatterns.some(p => p.test(allText))) {
+          toast.error('Your guide contains content that needs review. Saved as draft.');
+          finalPublish = false;
+          finalStatus = 'flagged';
+        }
+      }
+
       const slug = form.title
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
@@ -221,8 +246,8 @@ export default function GuideBuilder() {
         tags: form.tags,
         content,
         slug,
-        status: publish ? 'published' : 'draft',
-        published_at: publish ? new Date().toISOString() : (existingGuide?.published_at || null),
+        status: finalStatus,
+        published_at: finalPublish ? new Date().toISOString() : (existingGuide?.published_at || null),
         updated_at: new Date().toISOString(),
       };
 
