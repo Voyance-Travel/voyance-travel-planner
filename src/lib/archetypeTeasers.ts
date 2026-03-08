@@ -38,7 +38,7 @@ export interface ArchetypeTeaser {
 
 export const ARCHETYPE_TEASERS: Record<string, ArchetypeTeaser> = {
   slow_traveler: {
-    name: "Slow Traveler",
+    name: "Present Traveler",
     oneLiner: "You'd rather do 3 things well than 10 things rushed.",
     typicalTrip: [
       "6am alarm for sunrise spot",

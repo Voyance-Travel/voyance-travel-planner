@@ -103,7 +103,7 @@ const SAMPLE_ITINERARIES = [
     country: 'Japan',
     duration: '7 days',
     image: tokyoHero,
-    archetype: 'Slow Traveler',
+    archetype: 'Present Traveler',
     archetypeCategory: 'CURATOR',
     budgetTier: 'Stretch',
     totalCost: 2890,

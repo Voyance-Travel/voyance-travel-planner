@@ -47,7 +47,7 @@ interface ArchetypeDay {
 const ARCHETYPES: ArchetypeDay[] = [
   {
     id: 'slow_traveler',
-    name: 'The Slow Traveler',
+    name: 'The Present Traveler',
     tagline: 'Savor every moment',
     icon: Leaf,
     colorClass: 'text-emerald-600 dark:text-emerald-400',

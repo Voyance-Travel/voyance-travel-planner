@@ -173,7 +173,7 @@ function AfterVoyance() {
           </div>
         </div>
         <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-primary/10 border border-primary/20">
-          <span className="text-[10px] text-primary font-medium">The Slow Traveler</span>
+          <span className="text-[10px] text-primary font-medium">The Present Traveler</span>
         </div>
       </div>
       

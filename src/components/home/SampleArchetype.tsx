@@ -9,7 +9,7 @@ import { useRef } from 'react';
 const FEATURED_ARCHETYPES = [
   {
     id: 'slow_traveler',
-    name: 'Slow Traveler',
+    name: 'Present Traveler',
     tagline: 'Stay long enough to have a favorite café',
     icon: Leaf,
     category: 'RESTORER',
