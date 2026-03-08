@@ -1,54 +1,63 @@
 
 
-## Enhancement: Projections Tab + Credit Economics Table
+## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
 
-### Current Structure
+### What's Already Working (No Changes Needed)
+- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
+- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
+- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
+- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
 
-The Unit Economics dashboard (`src/pages/admin/UnitEconomics.tsx`) uses a 6-tab sidebar layout: Overview, Revenue, Costs, Users, Credits, Forecast. Each tab is a separate component receiving `data: UnitEconomicsData`. The existing Forecast tab has basic linear projections and scenario cards but no interactive modeling. The Credits tab shows consumption by action but not the full cost-per-tier margin analysis.
+### What's Broken — Two Things
 
-### Plan
+**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
 
-**Single file change: `src/pages/admin/UnitEconomics.tsx`**
+**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
 
-**1. Add two new tabs to `TABS` array (line 46-53):**
-- `projections` — "Projections" with a TrendingUp icon
-- `credit-economics` — "Credit Economics" with a Coins-variant icon
+### Changes
 
-Update `TabKey` type, `TABS` array, and `renderTab()` switch.
+#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
 
-**2. New `ProjectionsTab` component**
+**Change A — Remove stall detector setup** (lines ~261-313):
+Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
 
-Interactive revenue projection model with:
-- **Own conversion rate slider** (1-100%, default 5%) — independent from any global control
-- **Revenue mix selector** — 4 presets (pessimistic, conservative, balanced, optimistic) defining what % of paid users buy each tier
-- **Blended AOV display** — computed from mix × tier prices
-- **Projection table** at 100 / 500 / 1K / 5K / 10K users showing: monthly users, paid users, monthly revenue, annual revenue, total cost, monthly profit, annual profit, margin %
-- **Revenue mix breakdown cards** — for each tier: what % of users, price × credits, revenue contribution at 1K users
-- **Key milestones** — break-even users, $1K MRR threshold, revenue at 1K and 10K users
+**Change B — Remove browser loop fallback** (lines ~455-469):
+Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
 
-Revenue mix presets (defined as a constant):
+```typescript
+// OLD:
+} catch (serverErr) {
+  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
+  const generatedDays = await generateItinerary({ ... });
+  // ... 40 lines of fallback logic
+}
+
+// NEW:
+} catch (serverErr) {
+  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
+  setPrePhase(null);
+  setHasStarted(false);
+  toast.error('Failed to start generation. Please try again.');
+  return;
+}
 ```
-pessimistic:  80% flex_100, 10% flex_300, 5% flex_500, 3% voyager, 2% explorer, 0% adventurer
-conservative: 40% flex_100, 25% flex_300, 15% flex_500, 10% voyager, 7% explorer, 3% adventurer
-balanced:     20% flex_100, 20% flex_300, 20% flex_500, 15% voyager, 15% explorer, 10% adventurer
-optimistic:   10% flex_100, 15% flex_300, 15% flex_500, 20% voyager, 25% explorer, 15% adventurer
-```
 
-Cost model per row: `freeCost = freeUsers × $0.024/mo`, `paidCost = paidUsers × $0.091`, `fixedCost = $49`, margin = `(revenue - totalCost) / revenue`.
+**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
 
-**3. New `CreditEconomicsTab` component**
+**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
 
-Comprehensive credit action table with every action:
-- Columns: Action, Description, Credits, Free Cap, Our Cost, Cost/Credit, then **4 tier columns** (Flex 100 @ $0.090/cr, Flex 500 @ $0.078/cr, Explorer @ $0.056/cr, Adventurer @ $0.047/cr) each showing user-pays and margin %, plus a Best Margin column
-- 12 rows covering: Unlock Day (60cr), Smart Finish (50cr), Hotel Search (40cr), Route Optimization (20cr), Mystery Getaway (15cr), Regenerate Day (10cr), Swap Activity (5cr), Add Activity (5cr), Restaurant Rec (5cr), AI Companion (5cr), Mystery Logistics (5cr), Transport Mode (5cr)
+#### File 2: `src/hooks/useItineraryGeneration.ts`
 
-Below the table:
-- **Summary cards**: Most Expensive Action, Cheapest Action, Highest Volume, Worst Margin
-- **Credit Flow Overview**: 3-column layout showing Sources (sign-up bonus, monthly grant, referral, purchases), Sinks (unlock days, editing, smart finish, hotel search), Expiration Rules (free 2mo, purchased never, club bonus 6mo, FIFO)
+No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
 
-### What stays the same
-- All 6 existing tabs unchanged
-- `useUnitEconomicsData` hook unchanged
-- `unitEconomics.ts` config unchanged
-- No database changes needed
+### Files to Modify
+
+| File | What |
+|------|------|
+| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
+
+### Risk Assessment
+- **Low risk**: The server-side self-chaining is already fully implemented and tested
+- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
+- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
 
