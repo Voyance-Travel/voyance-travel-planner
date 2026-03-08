@@ -7398,6 +7398,7 @@ interface DayCardProps {
   onActivityReorder?: (activities: EditorialActivity[]) => void; // Drag-and-drop reorder
   onDayLock: (dayIndex: number) => void;
   onDayRegenerate: () => void;
+  onRemoveDay?: () => void;
   onAddActivity: (afterIndex?: number) => void;
   onDiscover?: () => void;
   onImportActivities?: () => void;
