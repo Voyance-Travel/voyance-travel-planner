@@ -545,7 +545,54 @@ export function useLovableItinerary(tripId: string | null) {
 
     } catch (error) {
       console.error('[useLovableItinerary] Generation failed:', error);
-      if (isMounted.current) {
+      if (isMounted.current && tripId) {
+        // CRITICAL: Before showing error, check if itinerary was actually saved to DB
+        // The edge function may have succeeded even though the connection was lost
+        try {
+          const { data: verifyTrip } = await supabase
+            .from('trips')
+            .select('itinerary_data, itinerary_status')
+            .eq('id', tripId)
+            .single();
+          
+          const verifyData = verifyTrip?.itinerary_data as { days?: unknown[] } | null;
+          const verifyStatus = verifyTrip?.itinerary_status as string;
+          
+          if (verifyData?.days?.length && verifyData.days.length > 0) {
+            // Itinerary exists in DB — this was a false error!
+            console.log('[useLovableItinerary] Error ignored — itinerary exists in DB with', verifyData.days.length, 'days');
+            const convertedDays = (verifyData.days as any[]).map(convertBackendDay);
+            setState(prev => ({
+              ...prev,
+              loading: false,
+              currentStep: 'complete',
+              progress: 100,
+              days: convertedDays,
+              hasExistingItinerary: true,
+              error: null,
+              message: 'Your itinerary is ready!',
+              generationDuration: Date.now() - (prev.generationStartTime || Date.now()),
+            }));
+            return;
+          }
+          
+          if (verifyStatus === 'generating' || verifyStatus === 'queued') {
+            // Still generating server-side — don't show error, let poller handle it
+            console.log('[useLovableItinerary] Error ignored — generation still in progress server-side');
+            setState(prev => ({
+              ...prev,
+              loading: true,
+              currentStep: 'generating',
+              error: null,
+              message: 'Generation is continuing in the background...',
+            }));
+            return;
+          }
+        } catch (verifyErr) {
+          console.warn('[useLovableItinerary] Could not verify DB state:', verifyErr);
+        }
+
+        // Itinerary truly doesn't exist — show the error
         const savedDaysCount = state.days.length;
         const resumeMsg = savedDaysCount > 0
           ? ` Days 1-${savedDaysCount} have been saved. You can resume generation to continue where you left off.`

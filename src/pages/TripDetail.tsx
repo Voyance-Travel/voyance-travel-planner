@@ -197,14 +197,38 @@ export default function TripDetail() {
         }
       }
     },
-    onFailed: (err) => {
+    onFailed: async (err) => {
       setGenerationStalled(false);
-      toast.error(`Generation failed: ${err}. Credits for ungenerated days have been refunded.`, { duration: 6000 });
+      
+      // CRITICAL: Before showing error, verify itinerary doesn't actually exist in DB
       if (tripId) {
-        supabase.from('trips').select('*').eq('id', tripId).single().then(({ data }) => {
-          if (data) setTrip(data);
-        });
+        try {
+          const { data: verifyTrip } = await supabase
+            .from('trips')
+            .select('*, itinerary_data')
+            .eq('id', tripId)
+            .single();
+          const verifyData = verifyTrip?.itinerary_data as { days?: unknown[] } | null;
+          if (verifyData?.days?.length && verifyData.days.length > 0) {
+            console.log('[TripDetail] onFailed suppressed — itinerary exists with', verifyData.days.length, 'days');
+            setTrip(verifyTrip);
+            setShowGenerator(false);
+            setCachedVersion(tripId, (verifyTrip as any).itinerary_version ?? 1);
+            toast.success('Your itinerary is ready! 🎉');
+            if (user?.id) {
+              queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
+              queryClient.invalidateQueries({ queryKey: ['entitlements', user.id] });
+            }
+            return;
+          }
+          // Trip truly failed — update local state
+          if (verifyTrip) setTrip(verifyTrip);
+        } catch (e) {
+          console.warn('[TripDetail] Could not verify DB state on failure:', e);
+        }
       }
+      
+      toast.error(`Generation failed: ${err}. Credits for ungenerated days have been refunded.`, { duration: 6000 });
       if (user?.id) {
         queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
         queryClient.invalidateQueries({ queryKey: ['entitlements', user.id] });
