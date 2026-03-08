@@ -276,10 +276,10 @@ export function TripOverview({
             >
               <Card 
                 className={cn(
-                  'cursor-pointer transition-all hover:shadow-md',
+                  'cursor-pointer transition-all hover:shadow-md overflow-hidden',
                   day.isToday && 'ring-2 ring-primary/50'
                 )}
-                onClick={() => onDaySelect?.(day.dayNumber)}
+                onClick={() => setExpandedDay(expandedDay === day.dayNumber ? null : day.dayNumber)}
               >
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
@@ -317,10 +317,46 @@ export function TripOverview({
                         </p>
                         <p className="text-xs text-muted-foreground">activities</p>
                       </div>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      <ChevronRight className={cn(
+                        'h-4 w-4 text-muted-foreground transition-transform duration-200',
+                        expandedDay === day.dayNumber && 'rotate-90'
+                      )} />
                     </div>
                   </div>
                 </CardContent>
+
+                <AnimatePresence>
+                  {expandedDay === day.dayNumber && (() => {
+                    const dayData = days.find(d => d.dayNumber === day.dayNumber);
+                    const activities = dayData?.activities || [];
+                    return (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="px-4 pb-4 pt-1 space-y-1.5 border-t border-border">
+                          {activities.length === 0 ? (
+                            <p className="text-xs text-muted-foreground py-2">No activities planned</p>
+                          ) : activities.map((activity) => (
+                            <div key={activity.id} className="flex items-center gap-3 p-2 rounded-lg bg-muted/50">
+                              <div className={cn(
+                                'w-2 h-2 rounded-full shrink-0',
+                                completedActivities.has(activity.id) ? 'bg-emerald-500' : 'bg-primary'
+                              )} />
+                              <span className="text-sm flex-1">{activity.name}</span>
+                              {completedActivities.has(activity.id) && (
+                                <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    );
+                  })()}
+                </AnimatePresence>
               </Card>
             </motion.div>
           ))}
