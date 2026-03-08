@@ -39,8 +39,6 @@ interface FindMyHotelsDrawerProps {
   cityId?: string;
 }
 
-// Module-level lock to prevent multiple component instances from firing simultaneously
-let globalSpendLock = false;
 
 export function FindMyHotelsDrawer({
   tripId,
@@ -92,10 +90,9 @@ export function FindMyHotelsDrawer({
       return;
     }
 
-    // Multi-layer idempotency: ref guard + module-level lock
-    if (spendAttemptedRef.current || globalSpendLock) return;
+    // Idempotency: ref guard prevents double-spend per component instance
+    if (spendAttemptedRef.current) return;
     spendAttemptedRef.current = true;
-    globalSpendLock = true;
 
     setIsSpending(true);
     try {
@@ -117,15 +114,13 @@ export function FindMyHotelsDrawer({
     } catch (err: any) {
       // Reset guards on error so user can retry
       spendAttemptedRef.current = false;
-      globalSpendLock = false;
       console.error('[FindMyHotels] Credit spend failed:', err);
       if (!err?.message?.startsWith('Not enough credits') && err?.message !== 'Duplicate spend request blocked') {
         toast.error(err?.message || 'Failed to start hotel search. Please try again.');
       }
     } finally {
       setIsSpending(false);
-      // Release module lock after completion (success keeps ref locked to prevent re-spend)
-      globalSpendLock = false;
+      // Success keeps ref locked to prevent re-spend; error handler resets it for retry
     }
   }, [hasPaid, spendCredits, tripId, destination, creditCost, idempotencyKey]);
 
