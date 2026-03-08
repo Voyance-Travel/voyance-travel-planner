@@ -54,6 +54,12 @@ function detectSwapReason(
 ): SwapReason | null {
   if (!nextActivity?.startTime) return null;
 
+  // Don't suggest swaps for past days
+  const dayStart = parseLocalDate(dayDate);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (dayStart < today) return null;
+
   const now = new Date();
   const [hours, minutes] = nextActivity.startTime.split(':').map(Number);
   const activityStart = new Date(parseLocalDate(dayDate));

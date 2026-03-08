@@ -155,6 +155,7 @@ export function LiveItineraryView({
 
   const currentDay = days[selectedDayIndex];
   const isTodaySelected = currentDay ? isToday(parseLocalDate(currentDay.date)) : false;
+  const isPastDay = currentDay ? isBefore(parseLocalDate(currentDay.date), new Date()) && !isTodaySelected : false;
   
   // Calculate activity statuses based on time
   const getActivityStatus = useCallback((activity: Activity, index: number) => {
