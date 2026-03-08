@@ -636,7 +636,6 @@ export function ImportActivitiesModal({
                         {activity.cost && <span className="text-muted-foreground">${activity.cost.amount}</span>}
                       </div>
                     ))}
-                    ))}
                   </div>
                 </div>
               ))}
