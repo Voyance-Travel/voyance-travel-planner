@@ -7,7 +7,7 @@ import ValueFirstHero from '@/components/home/ValueFirstHero';
 
 import TheProblemSection from '@/components/home/TheProblemSection';
 import PersonalizationProof from '@/components/home/PersonalizationProof';
-import TheInsightSection from '@/components/home/TheInsightSection';
+
 import SampleArchetype from '@/components/home/SampleArchetype';
 import CustomizationShowcase from '@/components/home/CustomizationShowcase';
 import ItineraryShowcase from '@/components/home/ItineraryShowcase';
@@ -94,14 +94,6 @@ export default function Home() {
         {/* Section 2: Same City, Different Journey — proof point */}
         <div className="py-8 md:py-0">
           <PersonalizationProof />
-        </div>
-        
-        {/* Divider */}
-        <div className="h-px bg-border/50 mx-6 md:hidden" />
-        
-        {/* Section 3: Your Travel DNA — identity (flows from personalization) */}
-        <div className="py-8 md:py-0">
-          <TheInsightSection />
         </div>
         
         {/* Divider */}
