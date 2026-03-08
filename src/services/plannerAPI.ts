@@ -193,6 +193,7 @@ export function useCreatePlannerTrip() {
   return useMutation({
     mutationFn: createPlannerTrip,
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['trips-lightweight'] });
       queryClient.invalidateQueries({ queryKey: ['trips'] });
       queryClient.invalidateQueries({ queryKey: ['plannerTrip'] });
     },
@@ -207,6 +208,7 @@ export function useUpdatePlannerTrip() {
       updatePlannerTrip(tripId, input),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['plannerTrip', data.id] });
+      queryClient.invalidateQueries({ queryKey: ['trips-lightweight'] });
       queryClient.invalidateQueries({ queryKey: ['trips'] });
     },
   });

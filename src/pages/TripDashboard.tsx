@@ -753,7 +753,13 @@ export default function TripDashboard() {
         // Fetch owned trips
         const { data: ownedData, error: fetchError } = await supabase
           .from('trips')
-          .select('*')
+          .select(`
+            id, user_id, name, origin_city, destination, destination_country,
+            start_date, end_date, travelers, trip_type, budget_tier, status,
+            itinerary_status, flight_selection, hotel_selection, price_lock_expires_at,
+            metadata, journey_id, journey_name, journey_order, journey_total_legs,
+            transition_mode, creation_source, is_multi_city, created_at, updated_at
+          `)
           .eq('user_id', user.id)
           .order('updated_at', { ascending: false })
           .limit(50);
@@ -766,7 +772,13 @@ export default function TripDashboard() {
           .select(`
             trip_id,
             permission,
-            trip:trips!trip_collaborators_trip_id_fkey(*)
+            trip:trips!trip_collaborators_trip_id_fkey(
+              id, user_id, name, origin_city, destination, destination_country,
+              start_date, end_date, travelers, trip_type, budget_tier, status,
+              itinerary_status, flight_selection, hotel_selection, price_lock_expires_at,
+              metadata, journey_id, journey_name, journey_order, journey_total_legs,
+              transition_mode, creation_source, is_multi_city, created_at, updated_at
+            )
           `)
           .eq('user_id', user.id)
           .not('accepted_at', 'is', null);
@@ -834,7 +846,7 @@ export default function TripDashboard() {
           flightSelection: row.flight_selection,
           hotelSelection: row.hotel_selection,
           metadata: row.metadata as Record<string, any> | null,
-          hasItineraryData: !!row.itinerary_data,
+          hasItineraryData: row.itinerary_status === 'ready' || row.itinerary_status === 'partial',
           itineraryStatus: row.itinerary_status as string | null,
           isPaid: (row.metadata as Record<string, any>)?.is_paid || row.status === 'booked' || false,
           isCollaborator: false,
@@ -864,7 +876,7 @@ export default function TripDashboard() {
               flightSelection: row.flight_selection,
               hotelSelection: row.hotel_selection,
               metadata: row.metadata as Record<string, any> | null,
-              hasItineraryData: !!row.itinerary_data,
+              hasItineraryData: row.itinerary_status === 'ready' || row.itinerary_status === 'partial',
               itineraryStatus: row.itinerary_status as string | null,
               isPaid: false,
               isCollaborator: true,

@@ -42,6 +42,18 @@ interface TripRow {
   updated_at: string;
 }
 
+/**
+ * Columns to select for lightweight dashboard queries.
+ * Excludes itinerary_data (50-100KB JSON blob) which is only needed on the itinerary view.
+ */
+export const LIGHTWEIGHT_TRIP_COLUMNS = `
+  id, user_id, name, origin_city, destination, destination_country,
+  start_date, end_date, travelers, trip_type, budget_tier, status,
+  itinerary_status, flight_selection, hotel_selection, price_lock_expires_at,
+  metadata, journey_id, journey_name, journey_order, journey_total_legs,
+  transition_mode, creation_source, is_multi_city, created_at, updated_at
+` as const;
+
 // Application-level Trip type
 export interface Trip {
   id: string;
@@ -258,6 +270,32 @@ export async function getTrips(): Promise<Trip[]> {
 }
 
 /**
+ * Get all trips for current user — lightweight version for dashboard/list views.
+ * Excludes itinerary_data (50-100KB JSON blob) to reduce payload by ~97%.
+ */
+export async function getTripsLightweight(): Promise<Trip[]> {
+  const userId = await getCurrentUserId();
+
+  const { data, error } = await supabase
+    .from('trips')
+    .select(LIGHTWEIGHT_TRIP_COLUMNS)
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false })
+    .limit(50);
+
+  if (error) {
+    console.error('[Trips] Error fetching lightweight trips:', error);
+    throw error;
+  }
+
+  // Return with null itinerary_data since we didn't fetch it
+  return (data || []).map(row => transformTrip({
+    ...row,
+    itinerary_data: null,
+  } as TripRow));
+}
+
+/**
  * Get a single trip by ID
  */
 export async function getTrip(tripId: string): Promise<Trip | null> {
@@ -385,7 +423,19 @@ export function useTrips() {
   return useQuery({
     queryKey: ['trips'],
     queryFn: getTrips,
-    staleTime: 30_000,
+    staleTime: 120_000, // 2 minutes — full trip data doesn't change often
+  });
+}
+
+/**
+ * Lightweight hook for dashboard — doesn't fetch itinerary_data.
+ * Uses a separate cache key so full trip fetches don't conflict.
+ */
+export function useTripsLightweight() {
+  return useQuery({
+    queryKey: ['trips-lightweight'],
+    queryFn: getTripsLightweight,
+    staleTime: 60_000, // 1 minute — dashboard doesn't need instant updates
   });
 }
 
@@ -394,7 +444,8 @@ export function useTrip(tripId: string | undefined) {
     queryKey: ['trip', tripId],
     queryFn: () => getTrip(tripId!),
     enabled: !!tripId,
-    staleTime: 30_000,
+    staleTime: 120_000, // 2 minutes — itinerary data doesn't change without user action
+    gcTime: 600_000, // Keep in cache for 10 minutes
   });
 }
 
@@ -413,6 +464,7 @@ export function useCreateTrip() {
     mutationFn: createTrip,
     onSuccess: async () => {
       toast.success('Trip created!');
+      queryClient.invalidateQueries({ queryKey: ['trips-lightweight'] });
       queryClient.invalidateQueries({ queryKey: ['trips'] });
 
       // Check if this is the user's second trip and grant bonus
@@ -463,6 +515,7 @@ export function useUpdateTrip() {
       updateTrip(tripId, updates),
     onSuccess: (_, { tripId }) => {
       queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+      queryClient.invalidateQueries({ queryKey: ['trips-lightweight'] });
       queryClient.invalidateQueries({ queryKey: ['trips'] });
     },
     onError: (error: Error) => {
@@ -478,6 +531,7 @@ export function useDeleteTrip() {
     mutationFn: deleteTrip,
     onSuccess: () => {
       toast.success('Trip deleted');
+      queryClient.invalidateQueries({ queryKey: ['trips-lightweight'] });
       queryClient.invalidateQueries({ queryKey: ['trips'] });
     },
     onError: (error: Error) => {
