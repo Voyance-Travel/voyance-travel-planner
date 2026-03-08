@@ -343,7 +343,7 @@ export default function MultiCitySelector({
                               </button>
                             </div>
 
-                            {/* City Info */}
+                             {/* City Info */}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
                                 <span className="font-semibold text-lg">{destination.city}</span>
@@ -351,6 +351,11 @@ export default function MultiCitySelector({
                                   <span className="text-sm text-muted-foreground">{destination.country}</span>
                                 )}
                               </div>
+                              {cityDates?.[index] && (
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  {cityDates[index].arrival} — {cityDates[index].departure}
+                                </p>
+                              )}
                             </div>
 
                             {/* Nights Selector - Pill Style */}
