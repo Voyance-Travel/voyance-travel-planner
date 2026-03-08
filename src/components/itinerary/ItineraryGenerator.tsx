@@ -28,6 +28,7 @@ import { useGenerationGate, type GateResult } from '@/hooks/useGenerationGate';
 import { generateFullPreview, type FullPreview, type PreviewDay } from '@/services/fullPreviewService';
 import { convertPreviewToGeneratedDays, createLockedPlaceholderDays } from '@/utils/previewConverter';
 import { calculateTripCredits } from '@/lib/tripCostCalculator';
+import { useTripCities } from '@/hooks/useTripCities';
 import { useCredits } from '@/hooks/useCredits';
 import { formatCredits } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
@@ -1142,6 +1143,9 @@ export function ItineraryGenerator({
           generatedDaysList={poller.generatedDaysList}
           isComplete={poller.isReady}
           progress={poller.progress}
+          currentCity={poller.currentCity}
+          isMultiCity={isMultiCity}
+          tripCities={tripCitiesData?.map(c => ({ city_name: c.city_name, generation_status: c.generation_status })) || []}
         />
         <div className="flex justify-center mt-6">
           <Button
