@@ -324,6 +324,27 @@ function parsePastedTextGrouped(text: string, currency: string, knownCities: str
     groups.push(currentGroup);
   }
 
+  // Post-process: assign sequential daytime defaults to untimed activities
+  for (const group of groups) {
+    let nextDefault = 9 * 60; // 9:00 AM in minutes
+    for (const activity of group.activities) {
+      if (activity.startTime) {
+        // Advance the default clock past this timed activity
+        const [h, m] = activity.startTime.split(':').map(Number);
+        const mins = h * 60 + m;
+        nextDefault = Math.max(nextDefault, mins + 90);
+      } else {
+        // Assign a reasonable daytime slot, cap at 21:00
+        const capped = Math.min(nextDefault, 21 * 60);
+        const hh = Math.floor(capped / 60).toString().padStart(2, '0');
+        const mm = (capped % 60).toString().padStart(2, '0');
+        activity.startTime = `${hh}:${mm}`;
+        activity.isEstimatedTime = true;
+        nextDefault += 90;
+      }
+    }
+  }
+
   return groups;
 }
 
