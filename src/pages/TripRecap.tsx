@@ -3,7 +3,7 @@
  * Post-trip summary with highlights, photos, stats, and sharing
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -23,8 +23,8 @@ import TripPhotoGallery from '@/components/trip/TripPhotoGallery';
 import { TripNotes } from '@/components/post-trip/TripNotes';
 import { GoBackList } from '@/components/post-trip/GoBackList';
 import { TripStats } from '@/components/post-trip/TripStats';
-import { ShareTripCard } from '@/components/post-trip/ShareTripCard';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import { format, differenceInDays, parseISO } from 'date-fns';
 
 export default function TripRecap() {
@@ -34,7 +34,6 @@ export default function TripRecap() {
   const { data: learning } = useTripLearning(tripId || '');
   
   const [showDebrief, setShowDebrief] = useState(false);
-  const [showShareCard, setShowShareCard] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
 
   // Calculate trip duration
@@ -110,7 +109,20 @@ export default function TripRecap() {
             variant="ghost" 
             size="sm" 
             className="text-white hover:bg-white/20"
-            onClick={() => setShowShareCard(true)}
+            onClick={async () => {
+              if (navigator.share) {
+                try {
+                  await navigator.share({
+                    title: `My ${trip.destination} Trip`,
+                    text: `Check out my trip to ${trip.destination}! Planned with Voyance.`,
+                    url: window.location.href,
+                  });
+                } catch (e) { /* user cancelled */ }
+              } else {
+                navigator.clipboard.writeText(window.location.href);
+                toast.success('Link copied!');
+              }
+            }}
           >
             <Share2 className="w-4 h-4 mr-2" />
             Share
@@ -358,7 +370,20 @@ export default function TripRecap() {
             )}
             <Button 
               className="flex-1"
-              onClick={() => setShowShareCard(true)}
+              onClick={async () => {
+                if (navigator.share) {
+                  try {
+                    await navigator.share({
+                      title: `My ${trip.destination} Trip`,
+                      text: `Check out my trip to ${trip.destination}! Planned with Voyance.`,
+                      url: window.location.href,
+                    });
+                  } catch (e) { /* user cancelled */ }
+                } else {
+                  navigator.clipboard.writeText(window.location.href);
+                  toast.success('Link copied!');
+                }
+              }}
             >
               <Share2 className="w-4 h-4 mr-2" />
               Share Trip
@@ -376,14 +401,6 @@ export default function TripRecap() {
         tripName={trip.name}
       />
 
-      {/* Share Card Modal */}
-      <ShareTripCard
-        isOpen={showShareCard}
-        onClose={() => setShowShareCard(false)}
-        trip={trip}
-        photos={photos}
-        highlights={highlights}
-      />
     </div>
   );
 }
