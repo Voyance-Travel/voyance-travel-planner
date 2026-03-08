@@ -349,6 +349,7 @@ export interface HotelSelection {
   description?: string;
   website?: string;
   googleMapsUrl?: string;
+  totalPrice?: number;
 }
 
 /** Per-city hotel info for multi-city trips */
