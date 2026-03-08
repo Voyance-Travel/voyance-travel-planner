@@ -1629,6 +1629,9 @@ export default function TripDetail() {
                   generatedDaysList={generationPoller.generatedDaysList}
                   isComplete={generationPoller.isReady}
                   progress={generationPoller.progress}
+                  currentCity={generationPoller.currentCity}
+                  isMultiCity={!!(trip as any).is_multi_city || tripCities.length > 1}
+                  tripCities={tripCities.map(c => ({ city_name: c.city_name, generation_status: c.generation_status }))}
                 />
               )}
 
