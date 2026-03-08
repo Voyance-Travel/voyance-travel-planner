@@ -53,7 +53,7 @@ export default function LoadingInterlude({
                     />
                   </div>
                   <p className="mt-3 text-xs text-muted-foreground">
-                    Tip: images + results are cached so the next steps should feel faster.
+                    Tip: images and results are saved, so the next steps should feel faster.
                   </p>
                 </div>
               </div>
