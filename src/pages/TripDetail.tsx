@@ -2364,6 +2364,109 @@ export default function TripDetail() {
           toast('Local changes discarded.');
         }}
       />
+
+      {/* Generate New Days Prompt — shown after extending trip dates */}
+      <AlertDialog
+        open={generateNewDaysPrompt.open}
+        onOpenChange={(open) => setGenerateNewDaysPrompt(prev => ({ ...prev, open }))}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-primary" />
+              Build your new {generateNewDaysPrompt.daysAdded === 1 ? 'day' : 'days'}?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  You added {generateNewDaysPrompt.daysAdded} new {generateNewDaysPrompt.daysAdded === 1 ? 'day' : 'days'}{' '}
+                  {generateNewDaysPrompt.insertPosition === 'before' ? 'at the start' : 'at the end'} of your trip.
+                  {generateNewDaysPrompt.daysAdded > 1
+                    ? ' These days are currently empty.'
+                    : ' This day is currently empty.'}
+                </p>
+                <p>
+                  Want us to build a full itinerary with activities, restaurants, and logistics for{' '}
+                  {generateNewDaysPrompt.daysAdded === 1 ? 'this day' : 'these days'}?
+                </p>
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-secondary/50 border border-border">
+                  <Coins className="h-4 w-4 text-primary shrink-0" />
+                  <span className="text-sm font-medium">
+                    {CREDIT_COSTS.UNLOCK_DAY * generateNewDaysPrompt.daysAdded} credits
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    ({CREDIT_COSTS.UNLOCK_DAY} per day)
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  This may also affect surrounding days (checkout logistics, flight info, hotel extensions).
+                  You can also update flight and hotel details afterward.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>I'll plan it myself</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!tripId || !trip) return;
+                setGenerateNewDaysPrompt(prev => ({ ...prev, open: false }));
+                // Trigger generation for the new days via the resume path
+                // This re-uses the same generation pipeline
+                const meta = (trip.metadata as Record<string, unknown>) || {};
+                const totalDays = trip.start_date && trip.end_date
+                  ? differenceInDays(parseLocalDate(trip.end_date), parseLocalDate(trip.start_date)) + 1
+                  : 0;
+                try {
+                  await supabase.from('trips').update({
+                    itinerary_status: 'generating',
+                    metadata: {
+                      ...meta,
+                      generation_total_days: totalDays,
+                      generation_error: null,
+                      generation_heartbeat: new Date().toISOString(),
+                      generation_started_at: new Date().toISOString(),
+                      generation_extend_days: generateNewDaysPrompt.dayNumbers,
+                    },
+                  }).eq('id', tripId);
+
+                  const { data: refreshed } = await supabase.from('trips').select('*').eq('id', tripId).single();
+                  if (refreshed) setTrip(refreshed);
+
+                  const { error } = await supabase.functions.invoke('generate-itinerary', {
+                    body: {
+                      action: 'generate-trip',
+                      tripId,
+                      destination: trip.destination,
+                      destinationCountry: (trip as any).destination_country,
+                      startDate: trip.start_date,
+                      endDate: trip.end_date,
+                      travelers: trip.travelers || 1,
+                      tripType: trip.trip_type,
+                      budgetTier: (trip as any).budget_tier,
+                      isMultiCity: !!(trip as any).is_multi_city,
+                      creditsCharged: 0, // Charged via spend-credits separately
+                      requestedDays: totalDays,
+                      resumeFromDay: generateNewDaysPrompt.dayNumbers[0], // Start from first new day
+                      extendDays: generateNewDaysPrompt.dayNumbers,
+                    },
+                  });
+
+                  if (error) throw error;
+                  toast.success(`Generating ${generateNewDaysPrompt.daysAdded} new ${generateNewDaysPrompt.daysAdded === 1 ? 'day' : 'days'}…`);
+                } catch (err) {
+                  console.error('[TripDetail] Failed to generate new days:', err);
+                  toast.error('Failed to start generation. Please try again.');
+                }
+              }}
+              className="gap-2"
+            >
+              <Sparkles className="h-4 w-4" />
+              Build {generateNewDaysPrompt.daysAdded === 1 ? 'this day' : 'these days'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </MainLayout>
   );
 }
