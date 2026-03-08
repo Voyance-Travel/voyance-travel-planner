@@ -259,6 +259,14 @@ export default function MultiLegFlightEditor({
   const onLegsChangeRef = useRef(onLegsChange);
   /** Stable signature of last emitted legs — prevents redundant parent updates */
   const lastEmittedSignature = useRef<string>('');
+  /** Track pending transport mode change for propagation outside setState */
+  const [pendingTransportChange, setPendingTransportChange] = useState<{
+    slotId: string;
+    type: LegTransportType;
+    transitionIndex: number;
+  } | null>(null);
+  /** Stable signature of last applied transportSelections — prevents re-renders from reference changes */
+  const prevTransportSelectionsRef = useRef<string>('');
 
   useEffect(() => {
     onLegsChangeRef.current = onLegsChange;
@@ -296,8 +304,18 @@ export default function MultiLegFlightEditor({
   }, [destinations, startDate, endDate, transportSelections, initialized, initialOutbound, initialReturn, initialAdditionalLegs]);
 
   // Sync transport type selections from InterCityTransportComparison into existing slots
+  // Guarded with a signature ref to prevent re-renders from reference-only changes
   useEffect(() => {
     if (!initialized || !transportSelections) return;
+
+    const sig = Object.entries(transportSelections)
+      .map(([k, v]) => `${k}:${v.type}`)
+      .sort()
+      .join(',');
+
+    if (sig === prevTransportSelectionsRef.current) return;
+    prevTransportSelectionsRef.current = sig;
+
     setSlots(prev => {
       let changed = false;
       const updated = prev.map(s => {
@@ -313,6 +331,16 @@ export default function MultiLegFlightEditor({
       return changed ? updated : prev;
     });
   }, [initialized, transportSelections]);
+
+  // Propagate pending transport mode change to parent AFTER state commit
+  useEffect(() => {
+    if (!pendingTransportChange) return;
+    const { type, transitionIndex } = pendingTransportChange;
+    setPendingTransportChange(null);
+    if (onTransportModeChange) {
+      onTransportModeChange(transitionIndex, type);
+    }
+  }, [pendingTransportChange, onTransportModeChange]);
 
   // Rehydrate slots when parent receives imported/loaded legs after initial mount
   useEffect(() => {
@@ -611,15 +639,15 @@ export default function MultiLegFlightEditor({
       const updated = prev.map(s =>
         s.id === slotId ? { ...s, transportType: type } : s
       );
-      syncToParent(updated);
-      // Propagate mode change for intercity legs to parent
+      // Schedule parent propagation outside the updater
       const slot = updated.find(s => s.id === slotId);
-      if (slot?.legType === 'intercity' && slot.transitionIndex >= 0 && onTransportModeChange) {
-        onTransportModeChange(slot.transitionIndex, type);
+      if (slot?.legType === 'intercity' && slot.transitionIndex >= 0) {
+        setPendingTransportChange({ slotId, type, transitionIndex: slot.transitionIndex });
       }
+      syncToParent(updated);
       return updated;
     });
-  }, [syncToParent, onTransportModeChange]);
+  }, [syncToParent]);
 
   // Route chain summary
   const routeChain = useMemo(() => {
