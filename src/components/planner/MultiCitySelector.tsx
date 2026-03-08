@@ -4,7 +4,7 @@
  * Polished component for adding multiple cities with nights allocation
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Plus, ChevronUp, ChevronDown, Trash2, Globe, Train, Plane as PlaneIcon, Car, Bus, Sparkles, Clock, ArrowDown, ArrowRightLeft, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
