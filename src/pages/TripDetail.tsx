@@ -7,7 +7,18 @@ import { NightsRedistributionModal } from '@/components/trip/NightsRedistributio
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { format, isAfter, isBefore, differenceInDays, addDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
-import { Loader2, MapPin, ArrowLeft, Sparkles, CheckCircle } from 'lucide-react';
+import { Loader2, MapPin, ArrowLeft, Sparkles, CheckCircle, Coins, Calendar } from 'lucide-react';
+import { CREDIT_COSTS } from '@/config/pricing';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from '@/components/ui/alert-dialog';
 import { GenerationPhases } from '@/components/planner/shared/GenerationPhases';
 import { type DateChangeResult } from '@/components/trip/TripDateEditor';
 import MainLayout from '@/components/layout/MainLayout';
