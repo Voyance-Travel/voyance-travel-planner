@@ -4601,6 +4601,7 @@ export function EditorialItinerary({
                             setOptionSelections(prev => ({ ...prev, [groupKey]: selectedId }));
                           }}
                           compactCards={isManualMode || creationSource === 'smart_finish'}
+                          isPastTrip={isPastTrip}
                           onRefreshDay={() => handleRefreshDay(selectedDayIndex)}
                           isRefreshingDay={refreshingDayNumber === selectedDay.dayNumber}
                           refreshResult={refreshResults[selectedDay.dayNumber] || null}
@@ -7223,6 +7224,8 @@ interface DayCardProps {
   onOptionSelect?: (groupKey: string, selectedId: string) => void;
   /** Compact card mode for Smart Finish / manual trips — matches regular itinerary layout */
   compactCards?: boolean;
+  /** Whether this is a past trip — shows guide bookmark button */
+  isPastTrip?: boolean;
 }
 
 function DayCard({
@@ -7278,6 +7281,7 @@ function DayCard({
   onDismissRefresh,
   onApplyRefreshChanges,
   compactCards = false,
+  isPastTrip = false,
 }: DayCardProps) {
   // Per-day preview: a day is preview only if the global flag is set AND the day itself is a preview
   // Fully generated days (e.g., first 2 free days) should NOT be gated even if other days are locked
