@@ -1017,41 +1017,43 @@ function TodayView({
 
                       {/* Action Buttons — today only */}
                       {!isPastDay && (
-                        {activity.location && (
-                          <Button size="sm" variant="outline" className="h-8 gap-1.5">
-                            <Navigation className="w-3.5 h-3.5" />
-                            Directions
-                          </Button>
-                        )}
-                        {activity.voucherUrl && (
-                          <Button size="sm" variant="outline" className="h-8 gap-1.5">
-                            <QrCode className="w-3.5 h-3.5" />
-                            Show tickets
-                          </Button>
-                        )}
-                        <MemoryUploadButton
-                          tripId={trip.id}
-                          activityId={activity.id}
-                          activityName={activity.name}
-                          locationName={activity.location?.name}
-                          dayNumber={tripContext.currentDayNumber}
-                          variant="icon"
-                        />
-                        <div className="ml-auto">
-                          <CheckInButton
+                        <div className="flex items-center gap-2 mt-3">
+                          {activity.location && (
+                            <Button size="sm" variant="outline" className="h-8 gap-1.5">
+                              <Navigation className="w-3.5 h-3.5" />
+                              Directions
+                            </Button>
+                          )}
+                          {activity.voucherUrl && (
+                            <Button size="sm" variant="outline" className="h-8 gap-1.5">
+                              <QrCode className="w-3.5 h-3.5" />
+                              Show tickets
+                            </Button>
+                          )}
+                          <MemoryUploadButton
+                            tripId={trip.id}
                             activityId={activity.id}
                             activityName={activity.name}
-                            tripId={trip.id}
-                            destination={trip.destination}
-                            activityType={activity.type}
-                            activityCategory={activity.category}
-                            isCheckedIn={isCompleted}
-                            isNearby={proximity.nearbyActivityId === activity.id}
-                            distanceMeters={proximity.nearbyActivityId === activity.id ? proximity.distanceMeters : null}
-                            onCheckIn={onActivityComplete}
+                            locationName={activity.location?.name}
+                            dayNumber={tripContext.currentDayNumber}
+                            variant="icon"
                           />
+                          <div className="ml-auto">
+                            <CheckInButton
+                              activityId={activity.id}
+                              activityName={activity.name}
+                              tripId={trip.id}
+                              destination={trip.destination}
+                              activityType={activity.type}
+                              activityCategory={activity.category}
+                              isCheckedIn={isCompleted}
+                              isNearby={proximity.nearbyActivityId === activity.id}
+                              distanceMeters={proximity.nearbyActivityId === activity.id ? proximity.distanceMeters : null}
+                              onCheckIn={onActivityComplete}
+                            />
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   </div>
                 </CardContent>
