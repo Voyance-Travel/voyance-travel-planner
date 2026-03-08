@@ -7723,7 +7723,7 @@ function DayCard({
 
                     return (
                       <div className="px-2 sm:px-0 py-2">
-                        <div className="rounded-xl border-2 border-dashed border-primary/20 bg-primary/[0.03] overflow-hidden">
+                        <div className="rounded-xl border-2 border-dashed border-primary/20 bg-primary/[0.03] overflow-hidden relative group/travel">
                           <div className="flex items-center gap-3 px-4 py-3">
                             <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10 shrink-0">
                               <TransportIcon className="w-4.5 h-4.5 text-primary" />
@@ -7749,6 +7749,22 @@ function DayCard({
                               <span className="text-xs font-medium text-muted-foreground shrink-0">
                                 {travelMeta.currency === 'USD' ? '$' : travelMeta.currency}{travelMeta.price}
                               </span>
+                            )}
+                            {/* Action menu for travel summary */}
+                            {isEditable && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button className="min-w-[36px] min-h-[36px] flex items-center justify-center text-foreground/60 hover:text-foreground hover:bg-muted rounded-full transition-colors sm:opacity-0 sm:group-hover/travel:opacity-100 shrink-0 touch-manipulation">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-36">
+                                  <DropdownMenuItem onClick={() => onActivityRemove(dayIndex, activityToRender.id)} className="text-destructive text-xs cursor-pointer gap-2">
+                                    <Trash2 className="h-3 w-3" />
+                                    Remove
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             )}
                           </div>
                           {/* Expandable details */}
