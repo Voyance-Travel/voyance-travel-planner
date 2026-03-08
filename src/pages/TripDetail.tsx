@@ -161,7 +161,7 @@ export default function TripDetail() {
   const [generateNewDaysPrompt, setGenerateNewDaysPrompt] = useState<{
     open: boolean;
     daysAdded: number;
-    insertPosition: 'before' | 'after';
+    insertPosition: string;
     dayNumbers: number[];
   }>({ open: false, daysAdded: 0, insertPosition: 'after', dayNumbers: [] });
 
