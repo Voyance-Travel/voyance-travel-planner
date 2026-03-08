@@ -2504,7 +2504,7 @@ export function EditorialItinerary({
           if (!error) {
             setHasChanges(false);
             setLastSaved(new Date());
-            toast.success('Changes saved', { duration: 2000 });
+            // Silent auto-save — no toast for background saves
           } else {
             console.error('[EditorialItinerary] Database save failed:', error);
           }
@@ -2525,7 +2525,7 @@ export function EditorialItinerary({
           localStorage.setItem(localStorageKey, JSON.stringify(demoTrips));
           setHasChanges(false);
           setLastSaved(new Date());
-          toast.success('Changes saved', { duration: 2000 });
+          // Silent auto-save — no toast for background saves
         }
       } catch (err) {
         console.error('[EditorialItinerary] Auto-save failed:', err);
