@@ -993,6 +993,7 @@ function TodayView({
                         />
                         <GuideBookmarkButton
                           activityId={activity.id}
+                          activityName={activity.name}
                           tripId={trip.id}
                           compact
                         />
