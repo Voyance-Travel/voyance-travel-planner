@@ -289,11 +289,12 @@ export default function TripDetail() {
     const totalDays = canonicalTotalDays > 0 ? canonicalTotalDays : metaTotalDays;
 
     try {
-      // Reset status to generating with fresh heartbeat
+      // Reset status to generating with fresh heartbeat + normalize total days
       await supabase.from('trips').update({
         itinerary_status: 'generating',
         metadata: {
           ...meta,
+          generation_total_days: totalDays, // Normalize to canonical count
           generation_error: null,
           generation_heartbeat: new Date().toISOString(),
           generation_started_at: new Date().toISOString(),
