@@ -946,6 +946,33 @@ export default function TripDetail() {
 
   // Handle itinerary generation complete - also force-save to backend
   const handleGenerationComplete = useCallback(async (generatedDays: GeneratedDay[], generatedOverview?: TripOverview, isFirstTrip?: boolean) => {
+    // Defensive guard: verify all expected days are present before finalizing
+    if (tripId) {
+      try {
+        const { data: currentTrip } = await supabase
+          .from('trips')
+          .select('metadata, start_date, end_date')
+          .eq('id', tripId)
+          .maybeSingle();
+        const meta = (currentTrip?.metadata as Record<string, unknown>) || {};
+        let expectedTotal = (meta.generation_total_days as number) || 0;
+        if (expectedTotal <= 0 && currentTrip?.start_date && currentTrip?.end_date) {
+          expectedTotal = differenceInDays(
+            parseLocalDate(currentTrip.end_date),
+            parseLocalDate(currentTrip.start_date)
+          ) + 1;
+        }
+        // If expected is known and days are partial, do NOT finalize — trigger stalled/resume
+        if (expectedTotal > 0 && generatedDays.length < expectedTotal) {
+          console.warn(`[TripDetail] handleGenerationComplete called with partial data: ${generatedDays.length}/${expectedTotal} days. Triggering resume instead.`);
+          setGenerationStalled(true);
+          return;
+        }
+      } catch (e) {
+        console.warn('[TripDetail] handleGenerationComplete guard check failed, proceeding:', e);
+      }
+    }
+
     // Detect if this is a preview itinerary — only check non-locked days.
     // Locked placeholder days always have isPreview:true but that doesn't mean
     // the actual generated days are previews (e.g., first-trip free 2-day generation).
