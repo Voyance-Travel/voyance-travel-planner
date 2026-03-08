@@ -763,7 +763,7 @@ export default function Settings() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <button 
-                      onClick={() => navigate('/admin/margins')}
+                      onClick={() => navigate('/admin/dashboard')}
                       className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors"
                     >
                       <div className="flex items-center gap-3">

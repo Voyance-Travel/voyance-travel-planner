@@ -261,7 +261,8 @@ function AnimatedRoutes() {
         <Route path="/admin/bulk-import" element={<ProtectedRoute><BulkImport /></ProtectedRoute>} />
         <Route path="/admin/data-cleanup" element={<ProtectedRoute><DataCleanup /></ProtectedRoute>} />
         <Route path="/admin/image-curation" element={<ProtectedRoute><ImageCuration /></ProtectedRoute>} />
-        <Route path="/admin/margins" element={<ProtectedRoute><UnitEconomics /></ProtectedRoute>} />
+        <Route path="/admin/dashboard" element={<ProtectedRoute><UnitEconomics /></ProtectedRoute>} />
+        <Route path="/admin/margins" element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="/admin/test-suites" element={<ProtectedRoute><TestSuites /></ProtectedRoute>} />
         <Route path="/admin/user-tracking" element={<ProtectedRoute><UserTracking /></ProtectedRoute>} />
         
