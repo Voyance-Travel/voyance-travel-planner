@@ -100,8 +100,10 @@ export async function submitActivityFeedback(input: CreateFeedbackInput): Promis
 
   if (error) throw error;
   
-  // Trigger preference analysis in background
-  analyzeUserPreferences().catch(console.error);
+  // Trigger preference analysis in background only if save succeeded
+  if (data) {
+    analyzeUserPreferences().catch(console.error);
+  }
   
   return data as ActivityFeedback;
 }

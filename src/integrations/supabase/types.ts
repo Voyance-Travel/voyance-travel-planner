@@ -341,13 +341,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "activity_feedback_activity_id_fkey"
-            columns: ["activity_id"]
-            isOneToOne: false
-            referencedRelation: "trip_activities"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "activity_feedback_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
