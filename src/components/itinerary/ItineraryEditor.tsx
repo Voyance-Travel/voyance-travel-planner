@@ -411,7 +411,18 @@ export function ItineraryEditor({
 
     setDays(prev => prev.map((day, idx) => {
       if (idx !== dayIndex) return day;
-      return { ...day, activities: [...day.activities, newActivity] };
+      const activities = [...day.activities];
+      const newTime = newActivity.startTime || '23:59';
+      let insertIndex = activities.length;
+      for (let i = 0; i < activities.length; i++) {
+        const existingTime = activities[i].startTime || '23:59';
+        if (newTime <= existingTime) {
+          insertIndex = i;
+          break;
+        }
+      }
+      activities.splice(insertIndex, 0, newActivity);
+      return { ...day, activities };
     }));
     setHasChanges(true);
     setAddActivityModal(null);
