@@ -1,108 +1,63 @@
 
-# Multi-City Upfront Charge + Chained Generation Implementation Plan
 
-## Overview
-I need to implement a seamless multi-city journey experience where users pay once upfront for all legs and generation auto-chains between legs. The system will build on the existing `journey_id`, `journey_order`, and `journey_total_legs` structure from `splitJourneyIfNeeded()`.
+## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
 
-## Current State Analysis
-- The `useGenerationGate.ts` doesn't have journey logic yet
-- `ItineraryGenerator.tsx` needs journey context detection and UI updates  
-- The generation engine needs auto-chaining logic
-- No journey progress UI exists yet
+### What's Already Working (No Changes Needed)
+- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
+- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
+- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
+- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
 
-## Implementation Plan
+### What's Broken — Two Things
 
-### Task 1: Implement Multi-City Upfront Journey Payment
-**Files**: `src/hooks/useGenerationGate.ts`
+**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
 
-**Changes needed**:
-1. Update `GateResult` interface to include `journeyContext` with leg information
-2. Add journey detection logic in `authorize()` to check if `journey_order === 1`
-3. Fetch all journey legs and calculate total cost for entire journey
-4. Add pre-paid check to skip credit verification for legs marked as paid
-5. After successful payment, mark all journey legs with `journey_credits_paid: true` in metadata
+**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
 
-**Key logic**:
-- When `journey_order === 1`, fetch all legs and use combined days/cities for cost calculation
-- Store journey payment metadata on all legs to prevent double-charging
-- Subsequent legs bypass credit checks if `journey_credits_paid: true`
+### Changes
 
-### Task 2: Update Generator UI for Journey Context
-**Files**: `src/components/itinerary/ItineraryGenerator.tsx`
+#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
 
-**Changes needed**:
-1. Extract journey context from gate result
-2. Update cost confirmation UI to show "Full Journey: City A → City B → City C"
-3. Display total days across all cities instead of just current leg
-4. Change button text to "Generate Full Journey (X cities)" for Leg 1
-5. Show journey breakdown in cost display
+**Change A — Remove stall detector setup** (lines ~261-313):
+Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
 
-### Task 3: Add Auto-Chain Generation Logic  
-**Files**: `supabase/functions/generate-itinerary/index.ts`
+**Change B — Remove browser loop fallback** (lines ~455-469):
+Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
 
-**Changes needed**:
-1. After completing final day of a leg, check if part of journey
-2. Find next leg in journey sequence
-3. Fire HTTP request to trigger next leg generation
-4. Mark next leg as generating and handle errors gracefully
-5. Skip credit checks for auto-chained legs (already paid)
+```typescript
+// OLD:
+} catch (serverErr) {
+  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
+  const generatedDays = await generateItinerary({ ... });
+  // ... 40 lines of fallback logic
+}
 
-**Key logic**:
-- Use fire-and-forget HTTP calls to self-invoke for next leg
-- Pass `creditsCharged: 0` for chained legs
-- Store chain metadata for debugging and recovery
+// NEW:
+} catch (serverErr) {
+  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
+  setPrePhase(null);
+  setHasStarted(false);
+  toast.error('Failed to start generation. Please try again.');
+  return;
+}
+```
 
-### Task 4: Create Journey Progress UI
-**Files**: `src/pages/TripDetail.tsx`
+**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
 
-**Changes needed**:
-1. Add journey progress monitoring hook to poll all leg statuses
-2. Create persistent bottom banner showing generation progress
-3. Display progress dots for each leg (completed/generating/pending)
-4. Add navigation between completed legs
-5. Show "Journey Complete" message when all legs ready
+**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
 
-### Task 5: Add Journey Error Recovery
-**Files**: Multiple files for error handling
+#### File 2: `src/hooks/useItineraryGeneration.ts`
 
-**Changes needed**:
-1. Handle auto-chain failures gracefully
-2. Mark failed legs with `auto_chain_failed: true`
-3. Provide manual retry without re-charging
-4. Show appropriate error messages and recovery options
+No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
 
-## Technical Considerations
+### Files to Modify
 
-### Credit Flow
-- First leg charges for entire journey upfront
-- Journey payment metadata prevents double-charging
-- Subsequent legs skip payment validation
-- Idempotency protection against duplicate charges
+| File | What |
+|------|------|
+| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
 
-### Generation Chaining
-- Self-invoking edge function architecture
-- Proper error handling and fallback mechanisms
-- Journey metadata propagation between legs
-- Real-time progress tracking via database
+### Risk Assessment
+- **Low risk**: The server-side self-chaining is already fully implemented and tested
+- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
+- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
 
-### State Management
-- Journey context passed through gate results
-- UI polls for multi-leg progress updates
-- Proper cache invalidation across legs
-- Browser refresh resilience
-
-## Implementation Order
-1. **Journey Payment Logic** - Core credit system changes
-2. **Generator UI Updates** - User-facing cost display  
-3. **Auto-Chaining Logic** - Backend generation flow
-4. **Progress UI** - Real-time journey tracking
-5. **Error Recovery** - Graceful failure handling
-
-## Testing Strategy
-- 3-city journey charges once for all legs
-- Auto-generation flows seamlessly between legs
-- Users can view completed legs while others generate
-- Failed chains allow manual retry without re-charge
-- Existing single-city flows remain unchanged
-
-This implementation will create a seamless multi-city experience while maintaining backward compatibility and providing robust error recovery.

@@ -13378,6 +13378,126 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
         console.log(`[generate-trip-day] ✅ Trip ${tripId} generation complete: ${totalDays} days`);
 
+        // ────────────────────────────────────────────────────
+        // JOURNEY AUTO-CHAINING: Check if this leg is part of a multi-city journey
+        // ────────────────────────────────────────────────────
+        try {
+          const { data: currentTrip } = await supabase
+            .from('trips')
+            .select('journey_id, journey_order, journey_total_legs, metadata')
+            .eq('id', tripId)
+            .maybeSingle();
+
+          if (currentTrip?.journey_id && currentTrip.journey_order && currentTrip.journey_total_legs) {
+            const currentOrder = currentTrip.journey_order;
+            const totalLegs = currentTrip.journey_total_legs;
+            const journeyId = currentTrip.journey_id;
+
+            console.log(`[generate-trip-day] Journey leg ${currentOrder}/${totalLegs} complete (Journey: ${journeyId})`);
+
+            // Check if there's a next leg to chain to
+            if (currentOrder < totalLegs) {
+              const nextOrder = currentOrder + 1;
+              
+              // Find the next leg in the journey
+              const { data: nextLeg } = await supabase
+                .from('trips')
+                .select('id, destination, destination_country, start_date, end_date, travelers, trip_type, budget_tier, user_id, is_multi_city, metadata')
+                .eq('journey_id', journeyId)
+                .eq('journey_order', nextOrder)
+                .maybeSingle();
+
+              if (nextLeg) {
+                console.log(`[generate-trip-day] Auto-chaining to next journey leg: ${nextLeg.id} (${nextLeg.destination})`);
+                
+                // Check if next leg is already paid (journey pre-payment)
+                const nextLegMeta = (nextLeg.metadata as Record<string, unknown>) || {};
+                const isJourneyPaid = nextLegMeta.journey_credits_paid === true;
+                
+                if (isJourneyPaid) {
+                  // Calculate total days for next leg
+                  const nextStartDate = new Date(nextLeg.start_date);
+                  const nextEndDate = new Date(nextLeg.end_date);
+                  const nextTotalDays = Math.max(1, Math.ceil((nextEndDate.getTime() - nextStartDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+
+                  // Fire HTTP request to start next leg generation
+                  const generateUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-itinerary`;
+                  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+                  
+                  const chainBody = JSON.stringify({
+                    action: 'generate-trip',
+                    tripId: nextLeg.id,
+                    destination: nextLeg.destination,
+                    destinationCountry: nextLeg.destination_country,
+                    startDate: nextLeg.start_date,
+                    endDate: nextLeg.end_date,
+                    travelers: nextLeg.travelers,
+                    tripType: nextLeg.trip_type,
+                    budgetTier: nextLeg.budget_tier,
+                    userId: nextLeg.user_id,
+                    isMultiCity: nextLeg.is_multi_city || false,
+                    creditsCharged: 0, // Pre-paid journey, no credits to charge
+                    requestedDays: nextTotalDays,
+                    journeyChain: true, // Flag to indicate this is an auto-chained journey leg
+                  });
+
+                  // Retry with exponential backoff
+                  const maxRetries = 3;
+                  let chainSuccess = false;
+                  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                    try {
+                      const response = await fetch(generateUrl, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${serviceKey}`,
+                        },
+                        body: chainBody,
+                      });
+                      if (response.ok) {
+                        chainSuccess = true;
+                        console.log(`[generate-trip-day] ✅ Successfully chained to journey leg ${nextOrder}: ${nextLeg.id}`);
+                        break;
+                      }
+                      console.error(`[generate-trip-day] Journey chain attempt ${attempt}/${maxRetries} failed: ${response.status}`);
+                    } catch (err) {
+                      console.error(`[generate-trip-day] Journey chain attempt ${attempt}/${maxRetries} error:`, err);
+                    }
+                    if (attempt < maxRetries) {
+                      await new Promise(r => setTimeout(r, 2000 * attempt));
+                    }
+                  }
+                  
+                  if (!chainSuccess) {
+                    console.error(`[generate-trip-day] ❌ Journey auto-chain failed for leg ${nextOrder}, marking as failed`);
+                    // Mark next leg as auto-chain failed so it can be manually retried
+                    await supabase
+                      .from('trips')
+                      .update({
+                        metadata: {
+                          ...nextLegMeta,
+                          auto_chain_failed: true,
+                          auto_chain_failed_at: new Date().toISOString(),
+                          auto_chain_attempted_from: tripId,
+                        },
+                      })
+                      .eq('id', nextLeg.id);
+                  }
+                } else {
+                  console.log(`[generate-trip-day] Next journey leg ${nextLeg.id} not pre-paid, skipping auto-chain`);
+                }
+              } else {
+                console.warn(`[generate-trip-day] Next journey leg ${nextOrder} not found in journey ${journeyId}`);
+              }
+            } else {
+              console.log(`[generate-trip-day] ✅ Final leg of journey ${journeyId} complete`);
+            }
+          }
+        } catch (journeyErr) {
+          console.error(`[generate-trip-day] Journey auto-chain error (non-critical):`, journeyErr);
+          // Don't fail the main response — journey chaining is best-effort
+        }
+
         return new Response(
           JSON.stringify({ status: 'complete', dayNumber, totalDays }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }

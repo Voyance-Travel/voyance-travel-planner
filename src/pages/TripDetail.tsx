@@ -67,6 +67,7 @@ import { injectHotelActivitiesIntoDays, injectMultiHotelActivities } from '@/uti
 import { cn } from '@/lib/utils';
 import { JourneyBreadcrumb } from '@/components/trips/JourneyBreadcrumb';
 import { JourneyUpNext } from '@/components/trips/JourneyUpNext';
+import { JourneyProgressBanner } from '@/components/trip/JourneyProgressBanner';
 
 type Trip = Tables<'trips'>;
 type TripActivity = Tables<'trip_activities'>;
@@ -2526,6 +2527,8 @@ export default function TripDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* Journey Progress Banner - shown during multi-city generation */}
+      <JourneyProgressBanner tripId={tripId!} />
     </MainLayout>
   );
 }
