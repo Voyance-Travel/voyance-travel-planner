@@ -66,6 +66,11 @@ function getErrorDisplay(reason?: string, fallbackError?: string) {
         title: 'Link Not Valid',
         message: 'This invite link was not found. It may have been reset by the trip owner. Ask them for a new link.',
       };
+    case 'link_replaced':
+      return {
+        title: 'Link Updated',
+        message: 'The trip owner created a new invite link. Ask them for the updated link.',
+      };
     case 'expired':
       return {
         title: 'Link Expired',
