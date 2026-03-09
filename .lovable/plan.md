@@ -1,50 +1,22 @@
-## Journey Sequential Generation — Implementation Status
 
-### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-**Implemented:**
+## Fix: Group Unlock Stripe Payment, Checkout Z-Index, and Photo Persist Bugs
 
-1. **`src/hooks/useGenerationGate.ts`**:
-   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
-   - Added journey detection: fetches all sibling legs when `journeyId` is present
-   - Sums credit costs across all journey legs for unified billing
-   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
-   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
+Four targeted fixes across 4 files. All changes are isolated and low-risk.
 
-2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
-   - Added `journeyLegs` state for cost breakdown display
-   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
-   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
-   - Updated cost confirmation dialog:
-     - Shows "Journey Cost Breakdown" header for journeys
-     - Lists each leg with city, days, and cost
-     - Shows "Journey Total" instead of "Total"
-     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
-     - Disabled partial generation for journeys (must pay full upfront)
-     - "Confirm & Generate Journey" button text for journeys
+### Bug 1: EmbeddedCheckoutModal z-index
+**File:** `src/components/checkout/EmbeddedCheckoutModal.tsx` line 94  
+Change `z-50` → `z-[60]` so Stripe checkout renders above Dialog overlays.
 
-### Part 2: Auto-Chain Generation (TODO)
+### Bug 2: Stripe group_unlock missing group_budgets row
+**File:** `supabase/functions/stripe-webhook/index.ts` lines 559-566  
+After the `group_unlocks` insert, add a `group_budgets` insert with tier-based credits (small=150, medium=300, large=500). Also add `add_activity: 0` to the usage object. This mirrors what `purchase-group-unlock` already does for credit-based purchases.
 
-When leg 1 completes generation, the backend should:
-1. Check for next queued leg in the journey
-2. Automatically trigger `generate-trip` for the next leg
-3. Continue until all legs are generated
+### Bug 3: Duplicate `await supabase` in useStalePendingChargeRefund
+**File:** `src/hooks/useStalePendingChargeRefund.ts` lines 53-54  
+Remove the orphaned `await supabase` line, keeping only the actual query `await (supabase.from(...)...`.
 
-Files to modify:
-- `supabase/functions/generate-trip/index.ts` or similar edge function
-- Add post-generation hook to detect and chain to next journey leg
+### Bug 4: Photo persist fails on non-UUID activity IDs
+**File:** `src/hooks/useActivityImage.ts` line 58  
+Add a UUID regex guard at the top of `persistPhotoToActivity`. If the activityId doesn't match UUID format, return early silently. This prevents errors for shared trip activities with slug IDs like `"sh-day1-dinner"`.
 
-### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
-
-**Implemented:**
-
-1. **`src/pages/TripDetail.tsx`**:
-   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
-   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
-   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
-   - Added distinct "queued" state UI:
-     - Clock icon with hourglass badge
-     - "{destination} is up next" heading
-     - Explanation text about waiting for previous leg
-     - "View previous city" button to navigate back to the generating leg
-   - Added `Clock` to lucide-react imports
