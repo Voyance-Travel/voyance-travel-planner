@@ -2188,6 +2188,24 @@ export default function Start() {
   const isDayTrip = startDate && endDate && differenceInDays(endDate, startDate) === 0;
   // Keep the step-skip ref in sync with current dates
   goToNextAfterStep1Ref.current = () => {
+    // Validate required fields before advancing
+    if (!isMultiCity && !destinationSelection?.cityName) {
+      toast.error('Please select a destination first');
+      return;
+    }
+    if (isMultiCity && (!multiCityDestinations || multiCityDestinations.length === 0)) {
+      toast.error('Please add at least one city');
+      return;
+    }
+    if (!startDate || !endDate) {
+      toast.error('Please select your travel dates');
+      return;
+    }
+    if (startDate > endDate) {
+      toast.error('End date must be after start date');
+      return;
+    }
+
     if (isDayTrip) {
       goToStep(3);
     } else {
