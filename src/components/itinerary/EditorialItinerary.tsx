@@ -5473,21 +5473,7 @@ export function EditorialItinerary({
           </motion.div>
         )}
 
-        {activeTab === 'needtoknow' && (
-          <motion.div
-            key="needtoknow"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="space-y-6"
-          >
-            <NeedToKnowSection 
-              destination={destination}
-              destinationCountry={destinationCountry}
-              destinationInfo={destinationInfo}
-            />
-          </motion.div>
-        )}
+        {false /* needtoknow tab removed — content moved to Trip Overview on itinerary tab */}
 
         {activeTab === 'collab' && collaborators.length > 0 && (
           <motion.div
