@@ -108,8 +108,8 @@ function ChaosMockup() {
           
           {/* Overlapping browser windows - generic */}
           <motion.div 
-            className="absolute top-4 right-2 w-24 md:w-48 bg-white rounded-lg shadow-xl border border-[#e5e5e5] overflow-hidden rotate-[3deg] opacity-95 hidden md:block"
-            animate={{ rotate: [3, 4, 3] }}
+            className="absolute top-2 right-1 w-32 md:w-40 bg-white rounded-lg shadow-xl border border-[#e5e5e5] overflow-hidden rotate-[2deg] opacity-95 hidden md:block"
+            animate={{ rotate: [2, 3, 2] }}
             transition={{ duration: 3, repeat: Infinity }}
           >
             <div className="bg-blue-600 text-white px-2 py-1 text-[8px] font-bold">Hotels Site</div>
@@ -121,7 +121,7 @@ function ChaosMockup() {
           </motion.div>
           
           <motion.div 
-            className="absolute bottom-8 right-8 w-44 bg-white rounded-lg shadow-xl border border-[#e5e5e5] overflow-hidden rotate-[-2deg] opacity-95 hidden md:block"
+            className="absolute bottom-12 right-4 w-36 md:w-40 bg-white rounded-lg shadow-xl border border-[#e5e5e5] overflow-hidden rotate-[-2deg] opacity-95 hidden md:block"
             animate={{ rotate: [-2, -3, -2] }}
             transition={{ duration: 2.5, repeat: Infinity }}
           >
@@ -135,7 +135,7 @@ function ChaosMockup() {
           
           {/* Sticky notes overlaid */}
           <motion.div 
-            className="absolute bottom-16 left-4 w-24 h-20 bg-[#fff475] rounded shadow-lg p-2 text-[8px] text-[#3c4043] rotate-[-4deg] hidden md:block"
+            className="absolute bottom-14 left-2 w-24 h-[72px] bg-[#fff475] rounded shadow-lg p-2 text-[8px] text-[#3c4043] rotate-[-4deg] hidden md:block"
             animate={{ rotate: [-4, -3, -4] }}
             transition={{ duration: 2, repeat: Infinity }}
           >
@@ -197,9 +197,7 @@ function VoyanceMockup() {
         </div>
         
         {/* Clean Voyance interface */}
-        <div className="p-2 md:p-6 bg-background min-h-[200px] md:min-h-[320px] relative overflow-hidden">
-          {/* Decorative gradient */}
-          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-primary/10 to-transparent rounded-bl-full" />
+        <div className="p-4 md:p-6 bg-background relative overflow-hidden">
           
           {/* Trip header */}
           <div className="flex items-start justify-between mb-5 relative z-10">
@@ -213,22 +211,22 @@ function VoyanceMockup() {
             </div>
           </div>
           
-          {/* Quick summary cards - Premium style */}
-          <div className="grid grid-cols-3 gap-1.5 md:gap-3 mb-3 md:mb-5">
-            <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg md:rounded-xl p-1.5 md:p-3 text-center border border-primary/20">
-              <div className="text-xs md:text-lg font-bold text-foreground">$2,840</div>
-              <div className="text-[8px] md:text-[10px] text-muted-foreground">All-inclusive</div>
+          {/* Quick summary cards */}
+          <div className="grid grid-cols-3 gap-2 md:gap-3 mb-4 md:mb-5">
+            <div className="bg-muted/60 rounded-lg md:rounded-xl p-2 md:p-3 text-center border border-border/50">
+              <div className="text-sm md:text-lg font-bold text-foreground">$2,840</div>
+              <div className="text-[9px] md:text-xs text-muted-foreground">All-inclusive</div>
             </div>
-            <div className="bg-gradient-to-br from-accent/50 to-accent/30 rounded-lg md:rounded-xl p-1.5 md:p-3 text-center border border-accent/30">
-              <div className="text-xs md:text-lg font-bold text-foreground">12</div>
-              <div className="text-[8px] md:text-[10px] text-muted-foreground">Activities</div>
+            <div className="bg-muted/60 rounded-lg md:rounded-xl p-2 md:p-3 text-center border border-border/50">
+              <div className="text-sm md:text-lg font-bold text-foreground">12</div>
+              <div className="text-[9px] md:text-xs text-muted-foreground">Activities</div>
             </div>
-            <div className="bg-gradient-to-br from-secondary to-secondary/50 rounded-lg md:rounded-xl p-1.5 md:p-3 text-center border border-secondary/30">
-              <div className="flex items-center justify-center gap-0.5 text-xs md:text-lg font-bold text-foreground">
-                <Star className="w-2 h-2 md:w-3 md:h-3 fill-primary text-primary" />
+            <div className="bg-muted/60 rounded-lg md:rounded-xl p-2 md:p-3 text-center border border-border/50">
+              <div className="flex items-center justify-center gap-0.5 text-sm md:text-lg font-bold text-foreground">
+                <Star className="w-3 h-3 fill-primary text-primary" />
                 4.8
               </div>
-              <div className="text-[8px] md:text-[10px] text-muted-foreground">Hotel</div>
+              <div className="text-[9px] md:text-xs text-muted-foreground">Hotel</div>
             </div>
           </div>
           
@@ -260,11 +258,13 @@ function VoyanceMockup() {
               </motion.div>
             ))}
           </div>
-          
-          {/* Time saved indicator */}
-          <div className="absolute bottom-4 right-4 flex items-center gap-2 text-primary text-xs bg-primary/10 px-3 py-2 rounded-full border border-primary/20">
-            <Zap className="w-3 h-3" />
-            <span className="font-medium">Built in 5 minutes</span>
+
+          {/* Time saved indicator — inline, not overlapping */}
+          <div className="flex justify-end mt-4">
+            <div className="flex items-center gap-2 text-primary text-xs bg-primary/10 px-3 py-2 rounded-full border border-primary/20">
+              <Zap className="w-3 h-3" />
+              <span className="font-medium">Built in 5 minutes</span>
+            </div>
           </div>
         </div>
       </div>
@@ -331,7 +331,7 @@ export default function TheProblemSection() {
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
             transition={{ delay: 0.4 }}
-            className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20"
+            className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20"
           >
             <div className="w-14 h-14 rounded-full bg-gradient-to-br from-background to-muted border-2 border-primary/50 flex items-center justify-center shadow-xl">
               <span className="text-primary font-bold text-sm">VS</span>
