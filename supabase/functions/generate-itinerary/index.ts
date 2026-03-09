@@ -13406,6 +13406,29 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         }
         if (!chainSuccess) {
           console.error(`[generate-trip-day] All ${maxRetries} chain attempts failed for day ${dayNumber + 1}`);
+
+          // Update trip metadata so frontend knows chain broke
+          try {
+            const { data: currentTrip } = await supabase
+              .from('trips')
+              .select('metadata')
+              .eq('id', tripId)
+              .single();
+
+            const currentMeta = (currentTrip?.metadata as Record<string, unknown>) || {};
+
+            await supabase.from('trips').update({
+              metadata: {
+                ...currentMeta,
+                chain_broken_at_day: dayNumber,
+                chain_error: `Chain to day ${dayNumber + 1} failed after ${maxRetries} attempts`,
+                generation_completed_days: dayNumber,
+                generation_heartbeat: new Date().toISOString(),
+              },
+            }).eq('id', tripId);
+          } catch (metaErr) {
+            console.error('[generate-trip-day] Failed to update chain failure metadata:', metaErr);
+          }
         }
 
         return new Response(
