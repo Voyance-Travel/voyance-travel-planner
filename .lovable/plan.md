@@ -1,19 +1,44 @@
 
 
-## Already Implemented
+## Merge Voyance Intelligence + Trip Summary Into One Card
 
-The TransitModePicker feature described in your request is **already fully implemented**:
+### Current State
+Two separate cards in `EditorialItinerary.tsx`:
+1. **Voyance Intelligence** (lines 3915-4098): Collapsible with stats badges, essentials, flights/hotel, travel intel
+2. **Trip Summary** (lines 4113-4325): Separate card with trip total, currency toggle, action buttons (Share, Export PDF, Save, Optimize, Regenerate)
 
-1. **`src/components/itinerary/TransitModePicker.tsx`** exists (444 lines) with:
-   - Tappable row that expands/collapses inline transport options
-   - Calls `airport-transfers` edge function to fetch alternatives
-   - AI recommendation display
-   - "Select" button to switch modes (updates title, duration, cost via `onEdit`)
-   - Separate three-dot context menu with `e.stopPropagation()` — Edit Details, Move, Remove
+### Plan
 
-2. **`src/components/itinerary/EditorialItinerary.tsx`** (line 8519-8562) already renders `<TransitModePicker>` for all transport activities via the `if (isTransport)` early return.
+**File: `src/components/itinerary/EditorialItinerary.tsx`**
 
-3. **The critical bug prevention** is already handled: the row `onClick` calls `handleExpand` (not `onEdit`), and the dropdown trigger uses `e.stopPropagation()`.
+**Replace lines 3915-4325** (both sections) with a single unified card containing four rows:
 
-No code changes are needed. If you're experiencing the Edit Activity dialog opening when tapping a transit row, that would be a runtime bug worth investigating — let me know and I can debug it.
+**ROW 1: Trip Total + Currency Toggle + Meta**
+- Trip Total price with currency toggle button (from Trip Summary)
+- Days/Guests/Credits info line
+
+**ROW 2: Action Buttons**  
+- Share, Export PDF, Save buttons (primary row)
+- Optimize + Regenerate (desktop inline, mobile overflow menu)
+- All logic preserved exactly from current Trip Summary
+
+**ROW 3: Voyance Intelligence (collapsible)**
+- Wrapped in `<Collapsible>` with Sparkles icon header
+- Stats badges grid (Voyance Finds, Timing Hacks, Local Picks, Insider Tips)
+- Savings summary line
+- Collapsed state shows summary text
+
+**ROW 4: Travel Intel (collapsible)**
+- Wrapped in `<Collapsible>` with Globe icon header  
+- Renders `travelIntelCards` prop content
+- Only shows when `travelIntelCards` is provided
+
+The essentials grid (timezone, currency, language, emergency) and flights/hotel info from the current Voyance Intelligence section move into Row 3's expanded content, below the stats badges.
+
+### What stays unchanged
+- SmartFinishBanner between tabs and the unified card
+- Regeneration Loading Overlay after the card
+- WhyWeSkippedSection, ParsedTripNotesSection
+- TripDetail.tsx — no changes needed (desktop TravelIntelCard already removed, `travelIntelCards` prop already passed)
+- All dialog/modal logic (regenerate confirm, share, optimize, route upgrade)
 
