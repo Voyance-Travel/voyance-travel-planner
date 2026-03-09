@@ -732,7 +732,7 @@ export default function ItineraryPreview({
               <div className="flex-1">
                 <h3 className="font-semibold text-lg">Your Itinerary is Ready!</h3>
                 <p className="text-sm text-muted-foreground">
-                  {days.length} days planned
+                  {days.length} days crafted by Voyance
                   {generationDuration && ` • Generated in ${(generationDuration / 1000).toFixed(1)}s`}
                 </p>
               </div>
