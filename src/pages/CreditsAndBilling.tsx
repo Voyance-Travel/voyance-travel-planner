@@ -34,6 +34,7 @@ const ACTION_LABELS: Record<string, string> = {
   trip_generation: 'Trip Generation',
   unlock_day: 'Day Unlock',
   group_unlock: 'Bulk Day Unlock',
+  group_unlock_purchase: 'Group Unlock',
   swap_activity: 'Activity Swap',
   regenerate_day: 'Day Regeneration',
   ai_message: 'AI Message',
@@ -46,6 +47,10 @@ const ACTION_LABELS: Record<string, string> = {
   bonus_welcome: 'Welcome Bonus',
   bonus_launch: 'Early Adopter Bonus',
   bonus_quiz_completion: 'Quiz Completion Bonus',
+  refund: 'Refund',
+  add_activity: 'Add Activity',
+  route_optimization: 'Route Optimization',
+  regenerate_trip: 'Trip Regeneration',
   admin_manual_grant: 'Credit Grant',
   monthly_free_grant: 'Monthly Free Credits',
   stripe_purchase: 'Credit Purchase',
@@ -274,7 +279,7 @@ export default function CreditsAndBilling() {
                           <span className={`text-sm font-semibold whitespace-nowrap ${
                             isCredit ? 'text-emerald-600' : isFree ? 'text-muted-foreground' : 'text-foreground'
                           }`}>
-                            {isFree ? 'Free' : `${isCredit ? '+' : ''}${formatCredits(entry.credits_delta)}`}
+                            {isFree ? 'Free' : `${isCredit ? '+' : '-'}${formatCredits(Math.abs(entry.credits_delta))}`}
                           </span>
                         </div>
                       );
