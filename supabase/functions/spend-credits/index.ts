@@ -702,6 +702,16 @@ serve(async (req) => {
 
       // ── Sync balance cache AFTER successful deduction + ledger ──
       balance = await syncBalanceCache(supabaseAdmin, user.id);
+
+      // ── Mark pending charge as completed ──
+      if (pendingChargeId) {
+        await supabaseAdmin.from('pending_credit_charges').update({
+          status: 'completed',
+          resolved_at: new Date().toISOString(),
+        }).eq('id', pendingChargeId).catch((err: unknown) => {
+          console.error('[spend-credits] Failed to mark pending charge completed:', err);
+        });
+      }
     } catch (postDeductErr) {
       // Log but never fail the response — credits were already deducted
       console.error('[spend-credits] Post-deduction error (credits already spent, returning 200):', postDeductErr);
