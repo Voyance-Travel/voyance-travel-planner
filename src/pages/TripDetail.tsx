@@ -181,7 +181,7 @@ export default function TripDetail() {
 
   useEffect(() => {
     if (generationStalled) {
-      stalledTimerRef.current = setTimeout(() => setShowStalledUI(true), 30000);
+      stalledTimerRef.current = setTimeout(() => setShowStalledUI(true), 5000);
     } else {
       setShowStalledUI(false);
       if (stalledTimerRef.current) clearTimeout(stalledTimerRef.current);
@@ -1682,19 +1682,26 @@ export default function TripDetail() {
                 </div>
               ) : (
                 /* Active generation — GenerationPhases with airplane animation */
-                <GenerationPhases
-                  currentStep="preparing"
-                  destination={trip.destination || ''}
-                  totalDays={generationPoller.totalDays || (differenceInDays(parseLocalDate(effectiveEndDate), parseLocalDate(trip.start_date)) + 1)}
-                  tripId={trip.id}
-                  completedDays={generationPoller.completedDays}
-                  generatedDaysList={generationPoller.generatedDaysList}
-                  isComplete={generationPoller.isReady}
-                  progress={generationPoller.progress}
-                  currentCity={generationPoller.currentCity}
-                  isMultiCity={!!(trip as any).is_multi_city || tripCities.length > 1}
-                  tripCities={tripCities.map(c => ({ city_name: c.city_name, generation_status: c.generation_status }))}
-                />
+                <>
+                  <GenerationPhases
+                    currentStep="preparing"
+                    destination={trip.destination || ''}
+                    totalDays={generationPoller.totalDays || (differenceInDays(parseLocalDate(effectiveEndDate), parseLocalDate(trip.start_date)) + 1)}
+                    tripId={trip.id}
+                    completedDays={generationPoller.completedDays}
+                    generatedDaysList={generationPoller.generatedDaysList}
+                    isComplete={generationPoller.isReady}
+                    progress={generationPoller.progress}
+                    currentCity={generationPoller.currentCity}
+                    isMultiCity={!!(trip as any).is_multi_city || tripCities.length > 1}
+                    tripCities={tripCities.map(c => ({ city_name: c.city_name, generation_status: c.generation_status }))}
+                  />
+                  {generationStalled && !showStalledUI && (
+                    <p className="text-sm text-muted-foreground text-center animate-pulse mt-2">
+                      Checking generation status...
+                    </p>
+                  )}
+                </>
               )}
 
               {/* Browse completed days while generating */}
