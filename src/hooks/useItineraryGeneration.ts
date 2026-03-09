@@ -461,7 +461,7 @@ export function useItineraryGeneration() {
    * then poll trip.itinerary_status until it becomes 'ready' or 'failed'.
    */
   const startServerGeneration = useCallback(async (
-    trip: TripDetails & { creditsCharged?: number; requestedDays?: number }
+    trip: TripDetails & { creditsCharged?: number; requestedDays?: number; resumeFromDay?: number }
   ): Promise<{ status: string; totalDays: number }> => {
     // totalDays is used only for local state — the server recalculates from trip_cities for multi-city
     // Use local date parsing to avoid UTC off-by-one errors
@@ -495,6 +495,7 @@ export function useItineraryGeneration() {
         isMultiCity: trip.isMultiCity || false,
         creditsCharged: trip.creditsCharged || 0,
         requestedDays: trip.requestedDays || totalDays,
+        resumeFromDay: trip.resumeFromDay || undefined,
       },
     });
 

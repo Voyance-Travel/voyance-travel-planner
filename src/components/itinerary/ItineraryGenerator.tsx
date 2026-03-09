@@ -370,8 +370,31 @@ export function ItineraryGenerator({
         return 'ready' as const;
       }
 
-      // Partial data exists — do NOT finalize. Keep polling/stalled state.
-      console.log(`[ItineraryGenerator] Partial recovery: ${actualDays}/${expectedTotalDays} days. Staying in_progress.`);
+      // Partial data exists — check if generation is actually progressing
+      const heartbeat = tripMeta.generation_heartbeat as string | undefined;
+      const heartbeatAge = heartbeat ? Date.now() - new Date(heartbeat).getTime() : Infinity;
+      const isHeartbeatStale = heartbeatAge > 90000; // 90 seconds
+
+      if (isHeartbeatStale && actualDays > 0 && actualDays < expectedTotalDays) {
+        // Generation is stalled with partial data — auto-resume from last completed day
+        console.log(`[ItineraryGenerator] Partial recovery: ${actualDays}/${expectedTotalDays} days, heartbeat stale (${Math.round(heartbeatAge / 1000)}s). Auto-resuming from day ${actualDays + 1}...`);
+        try {
+          await supabase.functions.invoke('generate-itinerary', {
+            body: {
+              action: 'generate-trip',
+              tripId,
+              resumeFromDay: actualDays + 1,
+              isResume: true,
+            },
+          });
+          console.log(`[ItineraryGenerator] Auto-resume triggered from recoverFromDatabase`);
+        } catch (err) {
+          console.warn('[ItineraryGenerator] Auto-resume from recovery failed:', err);
+        }
+      } else {
+        console.log(`[ItineraryGenerator] Partial recovery: ${actualDays}/${expectedTotalDays} days. Staying in_progress.`);
+      }
+
       setHasStarted(true);
       setPrePhase('preparing');
       setServerGenActive(true);
@@ -576,7 +599,22 @@ export function ItineraryGenerator({
         }
 
         // Use server-side generation — fire and poll
+        // Check if partial generation exists — resume instead of restarting from Day 1
         try {
+          const { data: existingTrip } = await supabase
+            .from('trips')
+            .select('itinerary_data, itinerary_status, metadata')
+            .eq('id', tripId)
+            .single();
+
+          const existingDays = (existingTrip?.itinerary_data as any)?.days || [];
+          const completedDayCount = existingDays.length;
+          const isPartial = completedDayCount > 0 && completedDayCount < totalRequestedDays;
+
+          if (isPartial) {
+            console.log(`[ItineraryGenerator] Partial data exists (${completedDayCount}/${totalRequestedDays} days). Resuming from day ${completedDayCount + 1}`);
+          }
+
           await startServerGeneration({
             tripId,
             destination,
@@ -588,8 +626,9 @@ export function ItineraryGenerator({
             budgetTier,
             userId,
             isMultiCity,
-            creditsCharged: gateResult.creditsCharged,
+            creditsCharged: isPartial ? 0 : gateResult.creditsCharged,
             requestedDays: totalRequestedDays,
+            ...(isPartial ? { resumeFromDay: completedDayCount + 1 } : {}),
           });
           // Server acknowledged — start polling for completion
           setServerGenActive(true);
