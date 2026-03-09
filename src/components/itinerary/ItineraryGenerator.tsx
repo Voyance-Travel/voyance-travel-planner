@@ -929,9 +929,9 @@ export function ItineraryGenerator({
               calculateTripCredits({
                 days: journeyContext.totalDays,
                 cities: journeyContext.cities,
-                mustIncludes: params.mustIncludes,
-                includeHotels: params.includeHotels,
-              }, params.dna).totalCredits : costEstimate.totalCredits;
+                mustIncludes: [],
+                includeHotels: false,
+              }).totalCredits : costEstimate.totalCredits;
             
             const canAffordAll = currentBalance >= actualCost;
             const costPerDay = 60; // CREDIT_COSTS standard
