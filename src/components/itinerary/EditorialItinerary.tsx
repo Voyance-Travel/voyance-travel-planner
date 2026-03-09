@@ -1266,7 +1266,8 @@ export function EditorialItinerary({
   const [optionSelections, setOptionSelections] = useState<Record<string, string>>(
     () => (initialItineraryData?.optionSelections as Record<string, string>) || {}
   );
-  const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'payments' | 'details' | 'needtoknow' | 'collab'>('itinerary');
+  const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'payments' | 'details' | 'collab'>('itinerary');
+  const [showTripOverview, setShowTripOverview] = useState(false);
 
   // Navigate to a section when parent requests it (e.g., from TripHealthPanel quick-fix buttons)
   useEffect(() => {
@@ -3850,8 +3851,7 @@ export function EditorialItinerary({
               { id: 'itinerary', label: 'Itinerary', fullLabel: 'Itinerary', icon: <Calendar className="h-4 w-4" /> },
               { id: 'budget', label: 'Budget', fullLabel: 'Budget', icon: <Wallet className="h-4 w-4" /> },
               { id: 'payments', label: 'Payments', fullLabel: 'Payments', icon: <CreditCard className="h-4 w-4" /> },
-              { id: 'details', label: 'Details', fullLabel: 'Trip Details', icon: <Plane className="h-4 w-4" />, mobileOverflow: true },
-              { id: 'needtoknow', label: 'Info', fullLabel: 'Need to Know', icon: <Info className="h-4 w-4" />, mobileOverflow: true },
+              { id: 'details', label: 'Details', fullLabel: 'Flights & Hotels', icon: <Plane className="h-4 w-4" />, mobileOverflow: true },
               ...(collaborators.length > 0 ? [{ id: 'collab', label: 'Group', fullLabel: 'Group Chat & Vote', icon: <MessageCircle className="h-4 w-4" /> }] : []),
             ].map((tab) => (
               <button
@@ -3886,9 +3886,6 @@ export function EditorialItinerary({
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => setActiveTab('payments' as typeof activeTab)}>
                   <CreditCard className="h-4 w-4 mr-2" /> Payments
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setActiveTab('needtoknow' as typeof activeTab)}>
-                  <Info className="h-4 w-4 mr-2" /> Need to Know
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
