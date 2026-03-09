@@ -1,36 +1,50 @@
+## Journey Sequential Generation — Implementation Status
 
+### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-## Bring Back "Need to Know" as Collapsible Row in Unified Card
+**Implemented:**
 
-The `NeedToKnowSection` component still exists in `EditorialItinerary.tsx` (line 6284) but was disabled at line 5638. It needs to be added as a new collapsible row (ROW 6) in the unified Trip Command Center card, after Travel Intelligence.
+1. **`src/hooks/useGenerationGate.ts`**:
+   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
+   - Added journey detection: fetches all sibling legs when `journeyId` is present
+   - Sums credit costs across all journey legs for unified billing
+   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
+   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
 
-### Changes
+2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
+   - Added `journeyLegs` state for cost breakdown display
+   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
+   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
+   - Updated cost confirmation dialog:
+     - Shows "Journey Cost Breakdown" header for journeys
+     - Lists each leg with city, days, and cost
+     - Shows "Journey Total" instead of "Total"
+     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
+     - Disabled partial generation for journeys (must pay full upfront)
+     - "Confirm & Generate Journey" button text for journeys
 
-**File: `src/components/itinerary/EditorialItinerary.tsx`**
+### Part 2: Auto-Chain Generation (TODO)
 
-1. **Add ROW 6 after Travel Intel (after line 4305)**: Insert a new collapsible section that renders `<NeedToKnowSection>` with `destination`, `destinationCountry`, and `destinationInfo` props (all already available in scope).
+When leg 1 completes generation, the backend should:
+1. Check for next queued leg in the journey
+2. Automatically trigger `generate-trip` for the next leg
+3. Continue until all legs are generated
 
-```tsx
-{/* ROW 6: Need to Know (collapsible) */}
-<Collapsible>
-  <CollapsibleTrigger className="w-full px-4 sm:px-6 py-3 flex items-center justify-between text-left hover:bg-secondary/30 transition-colors border-b border-border/50">
-    <div className="flex items-center gap-2">
-      <Shield className="h-4 w-4 text-primary shrink-0" />
-      <span className="text-xs font-semibold text-primary uppercase tracking-wider">Need to Know</span>
-    </div>
-    <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
-  </CollapsibleTrigger>
-  <CollapsibleContent>
-    <div className="p-3 sm:p-4">
-      <NeedToKnowSection
-        destination={destination}
-        destinationCountry={destinationCountry}
-        destinationInfo={destinationInfo}
-      />
-    </div>
-  </CollapsibleContent>
-</Collapsible>
-```
+Files to modify:
+- `supabase/functions/generate-trip/index.ts` or similar edge function
+- Add post-generation hook to detect and chain to next journey leg
 
-`Shield` is already imported from lucide-react. No other file changes needed — the component and its data-fetching logic are intact.
+### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
 
+**Implemented:**
+
+1. **`src/pages/TripDetail.tsx`**:
+   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
+   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
+   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
+   - Added distinct "queued" state UI:
+     - Clock icon with hourglass badge
+     - "{destination} is up next" heading
+     - Explanation text about waiting for previous leg
+     - "View previous city" button to navigate back to the generating leg
+   - Added `Clock` to lucide-react imports
