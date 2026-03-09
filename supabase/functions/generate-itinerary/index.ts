@@ -6056,9 +6056,12 @@ Generate activities for this day following ALL constraints above.`;
         }
       }
 
+      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish);
+
       // ==========================================================================
       // MINIMUM REAL ACTIVITY COUNT VALIDATION
       // Reject days with only logistics (transport/accommodation/downtime)
+      // Now pushes to validation.errors to trigger retry loop
       // ==========================================================================
       {
         const realActivities = (generatedDay.activities || []).filter((a: any) => {
@@ -6071,12 +6074,16 @@ Generate activities for this day following ALL constraints above.`;
         });
         const minimumRealActivities = isLastDay ? 1 : 2;
         if (realActivities.length < minimumRealActivities) {
-          console.warn(`[Stage 2] Day ${dayNumber} has only ${realActivities.length} real activities (minimum: ${minimumRealActivities})`);
+          console.warn(`[Stage 2] Day ${dayNumber} has only ${realActivities.length} real activities (minimum: ${minimumRealActivities}) — triggering retry`);
+          validation.errors.push(
+            `Day ${dayNumber} has only ${realActivities.length} real activities (transport/accommodation don't count). Minimum is ${minimumRealActivities}. Add more sightseeing, dining, or experience activities.`
+          );
+          validation.isValid = false;
         }
       }
 
       // ==========================================================================
-      // USER PREFERENCE VALIDATION (logging + warnings)
+      // USER PREFERENCE VALIDATION — now triggers retries
       // ==========================================================================
       {
         const userNotes = (preferenceContext || '').toLowerCase();
@@ -6098,26 +6105,49 @@ Generate activities for this day following ALL constraints above.`;
         for (const [activity, keywords] of Object.entries(ACTIVITY_KEYWORDS)) {
           if (userNotes.includes(activity)) {
             const dayHasThis = keywords.some(kw => allActivityText.includes(kw));
-            if (!dayHasThis) {
-              console.warn(`[Stage 2] WARNING: User requested "${activity}" but Day ${dayNumber} has no matching activities`);
+            if (!dayHasThis && !isLastDay) {
+              console.warn(`[Stage 2] User requested "${activity}" but Day ${dayNumber} has no matching activities — triggering retry`);
+              validation.errors.push(
+                `User explicitly requested "${activity}" but Day ${dayNumber} contains ZERO ${activity}-related activities. You MUST include at least one ${activity} activity. Check the user's preferences and honor them.`
+              );
+              validation.isValid = false;
             }
           }
         }
 
         // Check for "light dining" preference violations
-        const wantsLightDining = userNotes.includes('light dinner') || userNotes.includes('light meal') || userNotes.includes('casual dinner');
+        const wantsLightDining = userNotes.includes('light dinner') || userNotes.includes('light meal') || userNotes.includes('casual dinner') || userNotes.includes('simple dinner') || userNotes.includes('quick bite');
         if (wantsLightDining) {
           for (const act of generatedDay.activities) {
             const isDining = ((act as any).category || '').toLowerCase() === 'dining';
             const cost = (act as any).cost?.amount || 0;
             if (isDining && cost > 50) {
-              console.warn(`[Stage 2] WARNING: User requested light dinner but got "${(act as any).title}" at $${cost}`);
+              console.warn(`[Stage 2] User requested light dining but got "${(act as any).title}" at $${cost} — triggering retry`);
+              validation.errors.push(
+                `User requested a light/casual dinner but "${(act as any).title}" costs $${cost}. Replace with a casual, affordable option under $40. The user explicitly asked for light dining — respect their preference.`
+              );
+              validation.isValid = false;
             }
           }
         }
-      }
 
-      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish);
+        // Check for budget preference violations
+        const wantsBudget = userNotes.includes('budget') || userNotes.includes('cheap') || userNotes.includes('affordable') || userNotes.includes('save money') || userNotes.includes('low cost');
+        if (wantsBudget) {
+          const expensiveActivities = generatedDay.activities.filter((a: any) => {
+            const cost = (a as any).cost?.amount || 0;
+            return cost > 75;
+          });
+          if (expensiveActivities.length > 0) {
+            const names = expensiveActivities.map((a: any) => `"${a.title}" ($${(a as any).cost?.amount})`).join(', ');
+            console.warn(`[Stage 2] User wants budget trip but Day ${dayNumber} has expensive activities: ${names} — triggering retry`);
+            validation.errors.push(
+              `User requested a BUDGET trip but Day ${dayNumber} includes expensive activities: ${names}. Replace with affordable alternatives under $50 each. The user explicitly asked for budget-friendly options.`
+            );
+            validation.isValid = false;
+          }
+        }
+      }
 
       // Transition day validation: MUST contain at least one inter-city transport activity
       if (isTransitionDay && dayCity?.transitionFrom && dayCity?.transitionTo) {
