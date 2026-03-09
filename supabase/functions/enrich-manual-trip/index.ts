@@ -83,8 +83,9 @@ function buildResearchContext(itinerary: any): string {
         parts.push(`@ ${loc}`);
       }
       if (activity.notes || activity.description) {
-        const note = activity.notes || activity.description;
-        if (note.length < 200) parts.push(`— ${note}`);
+        const note = typeof activity.notes === 'string' ? activity.notes
+          : typeof activity.description === 'string' ? activity.description : null;
+        if (note && note.length < 200) parts.push(`— ${note}`);
       }
       if (activity.bookingUrl || activity.booking_url) {
         parts.push(`[link: ${activity.bookingUrl || activity.booking_url}]`);
@@ -93,13 +94,14 @@ function buildResearchContext(itinerary: any): string {
     }
   }
 
-  if (itinerary.practicalTips?.length) {
-    lines.push(`\nPRACTICAL TIPS FROM USER'S RESEARCH:\n${itinerary.practicalTips.slice(0, 5).map((t: string) => `- ${t}`).join("\n")}`);
+  if (Array.isArray(itinerary.practicalTips) && itinerary.practicalTips.length > 0) {
+    lines.push(`\nPRACTICAL TIPS FROM USER'S RESEARCH:\n${itinerary.practicalTips.slice(0, 5).map((t: any) => `- ${String(t)}`).join("\n")}`);
   }
 
-  if (itinerary.accommodationNotes?.length || itinerary.metadata?.accommodationNotes?.length) {
-    const notes = itinerary.accommodationNotes || itinerary.metadata?.accommodationNotes;
-    lines.push(`\nACCOMMODATION NOTES:\n${notes.slice(0, 5).map((n: string) => `- ${n}`).join("\n")}`);
+  const accNotes = Array.isArray(itinerary.accommodationNotes) ? itinerary.accommodationNotes
+    : Array.isArray(itinerary.metadata?.accommodationNotes) ? itinerary.metadata.accommodationNotes : null;
+  if (accNotes && accNotes.length > 0) {
+    lines.push(`\nACCOMMODATION NOTES:\n${accNotes.slice(0, 5).map((n: any) => `- ${String(n)}`).join("\n")}`);
   }
 
   return lines.join("\n");
