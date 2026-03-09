@@ -1266,7 +1266,8 @@ export function EditorialItinerary({
   const [optionSelections, setOptionSelections] = useState<Record<string, string>>(
     () => (initialItineraryData?.optionSelections as Record<string, string>) || {}
   );
-  const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'payments' | 'details' | 'needtoknow' | 'collab'>('itinerary');
+  const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'payments' | 'details' | 'collab'>('itinerary');
+  const [showTripOverview, setShowTripOverview] = useState(false);
 
   // Navigate to a section when parent requests it (e.g., from TripHealthPanel quick-fix buttons)
   useEffect(() => {
@@ -3850,8 +3851,7 @@ export function EditorialItinerary({
               { id: 'itinerary', label: 'Itinerary', fullLabel: 'Itinerary', icon: <Calendar className="h-4 w-4" /> },
               { id: 'budget', label: 'Budget', fullLabel: 'Budget', icon: <Wallet className="h-4 w-4" /> },
               { id: 'payments', label: 'Payments', fullLabel: 'Payments', icon: <CreditCard className="h-4 w-4" /> },
-              { id: 'details', label: 'Details', fullLabel: 'Trip Details', icon: <Plane className="h-4 w-4" />, mobileOverflow: true },
-              { id: 'needtoknow', label: 'Info', fullLabel: 'Need to Know', icon: <Info className="h-4 w-4" />, mobileOverflow: true },
+              { id: 'details', label: 'Details', fullLabel: 'Flights & Hotels', icon: <Plane className="h-4 w-4" />, mobileOverflow: true },
               ...(collaborators.length > 0 ? [{ id: 'collab', label: 'Group', fullLabel: 'Group Chat & Vote', icon: <MessageCircle className="h-4 w-4" /> }] : []),
             ].map((tab) => (
               <button
@@ -3887,9 +3887,6 @@ export function EditorialItinerary({
                 <DropdownMenuItem onClick={() => setActiveTab('payments' as typeof activeTab)}>
                   <CreditCard className="h-4 w-4 mr-2" /> Payments
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setActiveTab('needtoknow' as typeof activeTab)}>
-                  <Info className="h-4 w-4 mr-2" /> Need to Know
-                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -3912,6 +3909,106 @@ export function EditorialItinerary({
             exit={{ opacity: 0 }}
             className="space-y-6"
           >
+            {/* ── Trip Overview — collapsible summary at top ── */}
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowTripOverview(prev => !prev)}
+                className="flex items-center justify-between w-full text-left px-4 py-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm font-medium shrink-0">Trip Overview</span>
+                  {destination && (
+                    <span className="text-xs text-muted-foreground truncate">
+                      {destination}
+                      {startDate ? ` · ${format(parseISO(startDate), 'MMM d')}` : ''}
+                      {endDate ? ` – ${format(parseISO(endDate), 'MMM d')}` : ''}
+                      {` · ${travelers} traveler${travelers !== 1 ? 's' : ''}`}
+                    </span>
+                  )}
+                </div>
+                <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform text-muted-foreground", showTripOverview && "rotate-180")} />
+              </button>
+
+              <AnimatePresence>
+                {showTripOverview && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mt-2 space-y-3 px-4 pb-3">
+                      {/* Flights */}
+                      {hasFlightData && allFlightLegs.length > 0 && (
+                        <div className="space-y-1.5">
+                          {allFlightLegs.slice(0, 3).map((leg, i) => (
+                            <div key={i} className="flex items-center gap-3 text-sm">
+                              <Plane className={cn("h-4 w-4 text-muted-foreground shrink-0", i > 0 && "rotate-180")} />
+                              <span className="font-medium">{leg.airline || 'Flight'}</span>
+                              <span className="text-muted-foreground">
+                                {leg.departure?.airport} → {leg.arrival?.airport}
+                                {leg.departure?.time ? ` · ${leg.departure.time}` : ''}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Hotel */}
+                      {hotelSelection?.name && (
+                        <div className="flex items-center gap-3 text-sm">
+                          <Hotel className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span className="font-medium">{hotelSelection.name}</span>
+                          {hotelSelection.address && (
+                            <span className="text-muted-foreground truncate">{hotelSelection.address}</span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Quick Intel from destinationInfo */}
+                      {(destinationInfo?.timezone || destinationInfo?.currency || destinationInfo?.language || destinationInfo?.emergency) && (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-border/40">
+                          {destinationInfo?.timezone && (
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <Clock className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{destinationInfo.timezone}</span>
+                            </div>
+                          )}
+                          {destinationInfo?.currency && (
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <Wallet className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{destinationInfo.currency}</span>
+                            </div>
+                          )}
+                          {destinationInfo?.language && (
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <Languages className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{destinationInfo.language}</span>
+                            </div>
+                          )}
+                          {destinationInfo?.emergency && (
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{destinationInfo.emergency}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Fallback: no data yet */}
+                      {!hasFlightData && !hotelSelection?.name && !destinationInfo?.timezone && (
+                        <p className="text-xs text-muted-foreground italic">
+                          Add flights and hotels in the <button className="underline" onClick={() => setActiveTab('details')}>Flights &amp; Hotels</button> tab.
+                        </p>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
             {/* Itinerary Value Header - Shows the hidden value */}
             <div data-tour="value-header">
               <ItineraryValueHeader
@@ -5476,21 +5573,7 @@ export function EditorialItinerary({
           </motion.div>
         )}
 
-        {activeTab === 'needtoknow' && (
-          <motion.div
-            key="needtoknow"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="space-y-6"
-          >
-            <NeedToKnowSection 
-              destination={destination}
-              destinationCountry={destinationCountry}
-              destinationInfo={destinationInfo}
-            />
-          </motion.div>
-        )}
+        {false /* needtoknow tab removed — content moved to Trip Overview on itinerary tab */}
 
         {activeTab === 'collab' && collaborators.length > 0 && (
           <motion.div
