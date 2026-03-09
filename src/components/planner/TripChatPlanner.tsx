@@ -60,6 +60,23 @@ export interface TripDetails {
   interestCategories?: string[];
   /** Day number of a special celebration (birthday, anniversary, etc.) */
   celebrationDay?: number;
+  /** User-specified activities that MUST be included in the itinerary */
+  userActivities?: Array<{
+    name: string;
+    day?: number;
+    startTime?: string;
+    endTime?: string;
+    isAllDay?: boolean;
+    isRequired?: boolean;
+    category?: string;
+    notes?: string;
+  }>;
+  /** Flight arrival details for first-day scheduling */
+  flightArrival?: { airport?: string; time?: string; airline?: string; flightNumber?: string };
+  /** Flight departure details for last-day scheduling */
+  flightDeparture?: { airport?: string; time?: string; airline?: string; flightNumber?: string };
+  /** Hotel preference from conversation */
+  hotelPreference?: string;
 }
 
 interface ChatMessage {
