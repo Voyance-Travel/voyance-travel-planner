@@ -481,21 +481,62 @@ export function TransitModePicker({
                           className="overflow-hidden"
                         >
                           <div className="px-3 pb-3 pt-1 space-y-2 border-t border-border/30">
-                            {/* Route description */}
-                            {option.route && (
-                              <div className="text-xs text-foreground/80">
-                                <span className="font-medium text-foreground">Route: </span>
-                                {option.route}
+                            {/* Step-by-step route from Google Maps Directions */}
+                            {loadingRouteId === option.id && (
+                              <div className="flex items-center gap-2 py-2">
+                                <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                                <span className="text-[11px] text-muted-foreground">Loading route details...</span>
                               </div>
                             )}
 
-                            {/* Train line callout */}
-                            {option.trainLine && (
-                              <div className="flex items-center gap-1.5 text-xs text-foreground/80 bg-secondary/30 rounded px-2 py-1">
-                                <Train className="h-3 w-3 text-primary shrink-0" />
-                                Take the <span className="font-medium">{option.trainLine}</span>
+                            {routeDetailsCache[option.id]?.steps && routeDetailsCache[option.id]!.steps.length > 0 ? (
+                              <div className="space-y-1.5">
+                                {routeDetailsCache[option.id]!.steps.map((step, idx) => (
+                                  <div key={idx} className="flex items-start gap-2">
+                                    <div className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-[9px] font-bold shrink-0 mt-0.5">
+                                      {idx + 1}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-[11px] text-foreground/90 leading-snug">{step.instruction}</p>
+                                      {step.transitDetails && (
+                                        <div className="flex items-center gap-1 mt-0.5 text-[10px] bg-secondary/40 rounded px-1.5 py-0.5 w-fit">
+                                          <Train className="h-2.5 w-2.5 text-primary shrink-0" />
+                                          <span className="font-medium text-foreground">{step.transitDetails.lineName}</span>
+                                          <span className="text-muted-foreground">
+                                            {step.transitDetails.departureStop} → {step.transitDetails.arrivalStop}
+                                            {step.transitDetails.numStops > 0 && ` (${step.transitDetails.numStops} stop${step.transitDetails.numStops > 1 ? 's' : ''})`}
+                                          </span>
+                                        </div>
+                                      )}
+                                      {step.distance && (
+                                        <p className="text-[10px] text-muted-foreground mt-0.5">{step.distance} · {step.duration}</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                                {routeDetailsCache[option.id]!.totalDuration && (
+                                  <p className="text-[10px] text-muted-foreground font-medium pt-1 border-t border-border/20">
+                                    Total: {routeDetailsCache[option.id]!.totalDuration} · {routeDetailsCache[option.id]!.totalDistance}
+                                  </p>
+                                )}
                               </div>
-                            )}
+                            ) : loadingRouteId !== option.id ? (
+                              /* Fallback to generic route from airport-transfers */
+                              <>
+                                {option.route && (
+                                  <div className="text-xs text-foreground/80">
+                                    <span className="font-medium text-foreground">Route: </span>
+                                    {option.route}
+                                  </div>
+                                )}
+                                {option.trainLine && (
+                                  <div className="flex items-center gap-1.5 text-xs text-foreground/80 bg-secondary/30 rounded px-2 py-1">
+                                    <Train className="h-3 w-3 text-primary shrink-0" />
+                                    Take the <span className="font-medium">{option.trainLine}</span>
+                                  </div>
+                                )}
+                              </>
+                            ) : null}
 
                             {/* Pros */}
                             {option.pros && option.pros.length > 0 && (
