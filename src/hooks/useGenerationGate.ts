@@ -49,6 +49,8 @@ export interface GenerationGateParams {
   dna?: TravelDNA;
   mustIncludes?: string[];
   includeHotels?: boolean;
+  journeyId?: string;        // If present, this is a journey leg
+  journeyTotalLegs?: number; // Total legs in the journey
 }
 
 // ============================================================================
@@ -94,7 +96,7 @@ export function useGenerationGate() {
    * Returns the generation mode and cost details.
    */
   const authorize = useCallback(async (params: GenerationGateParams): Promise<GateResult> => {
-    // Calculate trip cost
+    // Calculate trip cost for this leg
     const estimate = calculateTripCredits(
       {
         days: params.days,
@@ -105,7 +107,38 @@ export function useGenerationGate() {
       params.dna
     );
 
-    const tripCost = estimate.totalCredits;
+    // ── JOURNEY MODE: Sum costs across all legs ──
+    let journeySiblings: Array<{ id: string; start_date: string; end_date: string; destination: string; journey_order: number }> = [];
+    let totalJourneyCost = 0;
+
+    if (params.journeyId) {
+      // Fetch all sibling legs
+      const { data: siblings, error: siblingError } = await supabase
+        .from('trips')
+        .select('id, start_date, end_date, destination, journey_order')
+        .eq('journey_id', params.journeyId)
+        .neq('status', 'cancelled')
+        .order('journey_order', { ascending: true });
+
+      if (!siblingError && siblings && siblings.length > 1) {
+        journeySiblings = siblings;
+        // Sum credit cost across all legs
+        for (const leg of siblings) {
+          const legDays = Math.max(1, Math.ceil(
+            (new Date(leg.end_date).getTime() - new Date(leg.start_date).getTime()) / (1000 * 60 * 60 * 24)
+          ) + 1);
+          const legEstimate = calculateTripCredits({
+            days: legDays,
+            cities: [leg.destination],
+          });
+          totalJourneyCost += legEstimate.totalCredits;
+        }
+        console.log(`[GenerationGate] Journey mode: ${siblings.length} legs, total cost: ${totalJourneyCost} credits`);
+      }
+    }
+
+    // Use journey total cost when in journey mode, otherwise single-leg cost
+    const tripCost = totalJourneyCost > 0 ? totalJourneyCost : estimate.totalCredits;
     const currentBalance = creditData?.totalCredits ?? 0;
 
     // ────────────────────────────────────────────────────
@@ -218,6 +251,18 @@ export function useGenerationGate() {
 
       // Credits deducted successfully — record how much was spent
       creditsSpent = data.spent ?? tripCost;
+
+      // ── JOURNEY: Queue remaining legs for sequential generation ──
+      if (journeySiblings.length > 1) {
+        const otherLegs = journeySiblings.filter(s => s.id !== params.tripId);
+        for (const leg of otherLegs) {
+          await supabase
+            .from('trips')
+            .update({ itinerary_status: 'queued' })
+            .eq('id', leg.id);
+        }
+        console.log(`[GenerationGate] Queued ${otherLegs.length} journey legs for sequential generation`);
+      }
 
       // Refresh credit balance in UI
       if (user?.id) {
