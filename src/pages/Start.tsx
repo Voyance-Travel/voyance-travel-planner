@@ -14,7 +14,7 @@ import { InterCityTransportComparison, type CityTransition } from '@/components/
 import type { TransportOption } from '@/components/itinerary/EditorialItinerary';
 import MultiLegFlightEditor from '@/components/planner/flight/MultiLegFlightEditor';
 import { TripDestination, InterCityTransport, calculateTotalNights, generateDestinationDates } from '@/types/multiCity';
-import { format, addDays, isBefore, startOfToday, startOfMonth, differenceInDays } from 'date-fns';
+import { format, addDays, isBefore, startOfToday, startOfMonth, differenceInDays, startOfDay, parse, isValid } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -291,6 +291,14 @@ function DateRangePicker({
 
   const handleSelect = (date: Date | undefined) => {
     if (!date) return;
+
+    // Reject past dates regardless of input method
+    const todayStart = startOfDay(new Date());
+    if (isBefore(date, todayStart)) {
+      toast.error("Trip dates can't be in the past");
+      return;
+    }
+
     if (picking === 'start') {
       setStartDate(date);
       // If new start is after current end, clear end
@@ -326,7 +334,17 @@ function DateRangePicker({
   const tripDays = nightCount !== null ? Math.max(nightCount, 1) : null;
 
   return (
-    <div className="space-y-1.5 sm:space-y-2">
+    <div className="space-y-1.5 sm:space-y-2" onBlur={(e) => {
+      // Validate any raw text inputs for dates (if supported by calendar/trigger)
+      const typed = (e.target as HTMLInputElement).value;
+      if (typed && typeof typed === 'string') {
+        const parsed = parse(typed, 'MM/dd/yyyy', new Date());
+        if (isValid(parsed) && isBefore(parsed, startOfDay(new Date()))) {
+          toast.error("Trip dates can't be in the past");
+          setStartDate(undefined);
+        }
+      }
+    }}>
       <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
         Dates
       </label>
@@ -2331,6 +2349,13 @@ export default function Start() {
       toast.error(`Please fill in: ${missing.join(', ')}`, {
         description: 'All highlighted fields are required to create a trip.',
       });
+      return;
+    }
+
+    // Before trip insert: verify dates aren't in the past
+    if (startDate && isBefore(startDate, startOfDay(new Date()))) {
+      toast.error("Your start date is in the past. Please update your dates.");
+      goToStep(1);
       return;
     }
 
