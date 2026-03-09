@@ -279,7 +279,7 @@ export default function CreditsAndBilling() {
                           <span className={`text-sm font-semibold whitespace-nowrap ${
                             isCredit ? 'text-emerald-600' : isFree ? 'text-muted-foreground' : 'text-foreground'
                           }`}>
-                            {isFree ? 'Free' : `${isCredit ? '+' : ''}${formatCredits(entry.credits_delta)}`}
+                            {isFree ? 'Free' : `${isCredit ? '+' : '-'}${formatCredits(Math.abs(entry.credits_delta))}`}
                           </span>
                         </div>
                       );
