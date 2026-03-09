@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { getTravelGuideBySlug, type TravelGuide } from '@/services/travelGuideService';
 import { supabase } from '@/integrations/supabase/client';
 import ReactMarkdown from 'react-markdown';
+import { getDestinationImage } from '@/utils/destinationImages';
 
 export default function PublicTravelGuide() {
   const { slug } = useParams<{ slug: string }>();
@@ -76,13 +77,15 @@ export default function PublicTravelGuide() {
     : {};
   const hasSocialLinks = Object.values(socialLinks).some(v => v);
 
+  const coverImage = guide.cover_image_url || getDestinationImage(guide.destination || '');
+
   return (
     <div className="min-h-screen bg-background">
       {/* Hero */}
-      {guide.cover_image_url && (
+      {coverImage && (
         <div className="relative h-64 md:h-80 overflow-hidden">
           <img
-            src={guide.cover_image_url}
+            src={coverImage}
             alt={guide.title}
             className="w-full h-full object-cover"
           />
@@ -154,9 +157,28 @@ export default function PublicTravelGuide() {
         </header>
 
         {/* Guide Content */}
-        <article className="prose prose-sm md:prose-base dark:prose-invert max-w-none mb-12">
+        <article className="prose prose-sm md:prose-base dark:prose-invert max-w-none mb-8 prose-headings:font-semibold prose-h2:mt-10 prose-h2:border-b prose-h2:border-border prose-h2:pb-2 prose-h3:mt-6 prose-h3:text-foreground prose-p:text-foreground/90 prose-strong:text-foreground prose-li:my-1 prose-blockquote:border-l-4 prose-blockquote:border-primary prose-blockquote:bg-muted/40 prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:rounded-r-md">
           <ReactMarkdown>{guide.content}</ReactMarkdown>
         </article>
+
+        {/* Photo Gallery */}
+        {guide.selected_photos && guide.selected_photos.length > 0 && (
+          <section className="mb-12">
+            <h2 className="text-xl font-semibold mb-4">Photos from this trip</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {guide.selected_photos.map((photoUrl: string, idx: number) => (
+                <div key={`${photoUrl}-${idx}`} className="overflow-hidden rounded-lg border border-border bg-muted/20">
+                  <img
+                    src={photoUrl}
+                    alt={`${guide.title} photo ${idx + 1}`}
+                    className="w-full h-56 object-cover"
+                    loading="lazy"
+                  />
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Voyance Footer CTA */}
         <div className="border-t pt-8 pb-4 text-center">

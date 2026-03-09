@@ -92,11 +92,20 @@ export async function getTravelGuideBySlug(slug: string): Promise<TravelGuide | 
 
 export async function updateTravelGuide(
   guideId: string,
-  updates: Partial<Pick<TravelGuide, 'title' | 'content' | 'social_links' | 'cover_image_url'>>
+  updates: Partial<Pick<TravelGuide, 'title' | 'content' | 'social_links' | 'cover_image_url' | 'selected_photos'>>
 ): Promise<void> {
   const { error } = await supabase
     .from('travel_guides')
     .update(updates)
+    .eq('id', guideId);
+
+  if (error) throw error;
+}
+
+export async function deleteGuide(guideId: string): Promise<void> {
+  const { error } = await supabase
+    .from('travel_guides')
+    .delete()
     .eq('id', guideId);
 
   if (error) throw error;

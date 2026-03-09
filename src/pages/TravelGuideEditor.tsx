@@ -3,20 +3,21 @@
  * Edit AI-generated guide content, add social links, publish
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Save, Globe, Eye, EyeOff, Loader2,
-  Instagram, Youtube, Link as LinkIcon, ExternalLink
+  Instagram, Youtube, Link as LinkIcon, ExternalLink, Trash2, Upload, X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { getTravelGuide, updateTravelGuide, publishTravelGuide, type TravelGuide } from '@/services/travelGuideService';
+import { getTravelGuide, updateTravelGuide, publishTravelGuide, deleteGuide, type TravelGuide } from '@/services/travelGuideService';
 import { getAppUrl } from '@/utils/getAppUrl';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function TravelGuideEditor() {
   const { tripId, guideId } = useParams<{ tripId: string; guideId: string }>();
@@ -25,6 +26,8 @@ export default function TravelGuideEditor() {
   const [guide, setGuide] = useState<TravelGuide | null>(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
+  const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
   const [socialLinks, setSocialLinks] = useState<Record<string, string>>({
     instagram: '',
     tiktok: '',
@@ -36,15 +39,20 @@ export default function TravelGuideEditor() {
   const [publishing, setPublishing] = useState(false);
   const [editorTab, setEditorTab] = useState<string>('edit');
 
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+
   useEffect(() => {
     if (!guideId) return;
     async function load() {
       try {
-        const data = await getTravelGuide(guideId!);
+        const data = await getTravelGuide(guideId);
         if (data) {
           setGuide(data);
           setTitle(data.title);
           setContent(data.content);
+          setCoverImageUrl(data.cover_image_url);
+          setSelectedPhotos(Array.isArray(data.selected_photos) ? data.selected_photos : []);
           if (data.social_links && typeof data.social_links === 'object') {
             setSocialLinks(prev => ({ ...prev, ...(data.social_links as Record<string, string>) }));
           }
@@ -59,6 +67,64 @@ export default function TravelGuideEditor() {
     load();
   }, [guideId]);
 
+  async function uploadImageToGuide(file: File, filePath: string): Promise<string | null> {
+    const { error: uploadError } = await supabase.storage
+      .from('trip-photos')
+      .upload(filePath, file, { upsert: true });
+
+    if (uploadError) {
+      console.error('Upload error:', uploadError);
+      return null;
+    }
+
+    const { data } = supabase.storage
+      .from('trip-photos')
+      .getPublicUrl(filePath);
+
+    return data.publicUrl;
+  }
+
+  async function handleCoverUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !guideId) return;
+
+    const fileExt = file.name.split('.').pop() || 'jpg';
+    const filePath = `guide-covers/${guideId}-cover.${fileExt}`;
+
+    const publicUrl = await uploadImageToGuide(file, filePath);
+    if (!publicUrl) {
+      toast.error('Failed to upload cover photo');
+      return;
+    }
+
+    setCoverImageUrl(publicUrl);
+    toast.success('Cover photo uploaded');
+    e.target.value = '';
+  }
+
+  async function handleTripPhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length || !guideId) return;
+
+    const uploadedUrls: string[] = [];
+
+    for (const file of files) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const filePath = `guide-photos/${guideId}/${Date.now()}-${safeName}`;
+      const publicUrl = await uploadImageToGuide(file, filePath);
+      if (publicUrl) uploadedUrls.push(publicUrl);
+    }
+
+    if (!uploadedUrls.length) {
+      toast.error('Failed to upload photos');
+      return;
+    }
+
+    setSelectedPhotos(prev => [...prev, ...uploadedUrls]);
+    toast.success(`${uploadedUrls.length} photo${uploadedUrls.length > 1 ? 's' : ''} uploaded`);
+    e.target.value = '';
+  }
+
   async function handleSave() {
     if (!guideId) return;
     setSaving(true);
@@ -67,6 +133,8 @@ export default function TravelGuideEditor() {
         title,
         content,
         social_links: socialLinks,
+        cover_image_url: coverImageUrl,
+        selected_photos: selectedPhotos,
       });
       toast.success('Guide saved');
     } catch (err) {
@@ -80,8 +148,13 @@ export default function TravelGuideEditor() {
     if (!guideId) return;
     setPublishing(true);
     try {
-      // Save first
-      await updateTravelGuide(guideId, { title, content, social_links: socialLinks });
+      await updateTravelGuide(guideId, {
+        title,
+        content,
+        social_links: socialLinks,
+        cover_image_url: coverImageUrl,
+        selected_photos: selectedPhotos,
+      });
       await publishTravelGuide(guideId);
       toast.success('Guide published!');
       setGuide(prev => prev ? { ...prev, status: 'published' } : prev);
@@ -89,6 +162,19 @@ export default function TravelGuideEditor() {
       toast.error('Failed to publish');
     } finally {
       setPublishing(false);
+    }
+  }
+
+  async function handleDeleteGuide() {
+    if (!guideId) return;
+    if (!confirm('Delete this guide? This cannot be undone.')) return;
+
+    try {
+      await deleteGuide(guideId);
+      toast.success('Guide deleted');
+      navigate(`/trip/${tripId}`);
+    } catch (err) {
+      toast.error('Failed to delete guide');
     }
   }
 
@@ -142,6 +228,37 @@ export default function TravelGuideEditor() {
       </div>
 
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+        {/* Cover Photo */}
+        <div>
+          <label className="text-sm font-medium text-muted-foreground">Cover Photo</label>
+          <input
+            ref={coverInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleCoverUpload}
+          />
+          {coverImageUrl ? (
+            <div className="mt-2 rounded-lg overflow-hidden border border-border bg-muted/20">
+              <img src={coverImageUrl} alt="Guide cover" className="w-full h-48 object-cover" />
+              <div className="p-3">
+                <Button variant="outline" size="sm" onClick={() => setCoverImageUrl(null)}>
+                  Remove
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => coverInputRef.current?.click()}
+              className="w-full mt-2 border-2 border-dashed border-border rounded-lg p-6 text-center hover:bg-muted/30 transition-colors"
+            >
+              <Upload className="h-6 w-6 mx-auto mb-2 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Click to upload a cover photo</p>
+            </button>
+          )}
+        </div>
+
         {/* Title */}
         <div>
           <label className="text-sm font-medium text-muted-foreground">Title</label>
@@ -183,6 +300,44 @@ export default function TravelGuideEditor() {
               </div>
             </TabsContent>
           </Tabs>
+        </div>
+
+        {/* Trip Photos */}
+        <div>
+          <div className="mb-2">
+            <h3 className="text-sm font-medium text-muted-foreground">Trip Photos</h3>
+            <p className="text-xs text-muted-foreground mt-1">Add photos from your trip. These will appear in your published guide.</p>
+          </div>
+
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={handleTripPhotoUpload}
+          />
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
+            {selectedPhotos.map((url: string, idx: number) => (
+              <div key={`${url}-${idx}`} className="relative rounded-lg overflow-hidden border border-border bg-muted/20">
+                <img src={url} alt={`Guide photo ${idx + 1}`} className="w-full h-28 object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setSelectedPhotos(prev => prev.filter((_, i) => i !== idx))}
+                  className="absolute top-2 right-2 rounded-full p-1 bg-background/80 hover:bg-background transition-colors"
+                  aria-label="Remove photo"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <Button type="button" variant="outline" onClick={() => photoInputRef.current?.click()}>
+            <Upload className="h-4 w-4 mr-2" />
+            Upload Photos
+          </Button>
         </div>
 
         {/* Social Links */}
@@ -227,23 +382,34 @@ export default function TravelGuideEditor() {
 
       {/* Bottom Actions */}
       <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur border-t p-4">
-        <div className="max-w-3xl mx-auto flex gap-3">
+        <div className="max-w-3xl mx-auto space-y-3">
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={handleSave}
+              disabled={saving}
+            >
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              Save Draft
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={handlePublish}
+              disabled={publishing}
+            >
+              {publishing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Globe className="h-4 w-4 mr-2" />}
+              {isPublished ? 'Update & Republish' : 'Publish Guide'}
+            </Button>
+          </div>
+
           <Button
             variant="outline"
-            className="flex-1"
-            onClick={handleSave}
-            disabled={saving}
+            className="w-full"
+            onClick={handleDeleteGuide}
           >
-            {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-            Save Draft
-          </Button>
-          <Button
-            className="flex-1"
-            onClick={handlePublish}
-            disabled={publishing}
-          >
-            {publishing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Globe className="h-4 w-4 mr-2" />}
-            {isPublished ? 'Update & Republish' : 'Publish Guide'}
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete Guide
           </Button>
         </div>
       </div>
