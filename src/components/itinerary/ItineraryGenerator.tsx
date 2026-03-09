@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Loader2, CheckCircle, MapPin, Clock, DollarSign, RefreshCw, Star, Image, Wallet, Lightbulb, LogIn, Coins, Cloud, Check, AlertCircle } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle, MapPin, Clock, DollarSign, RefreshCw, Star, Image, Wallet, Lightbulb, LogIn, Coins, Cloud, Check, AlertCircle, Route, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -319,6 +319,9 @@ export function ItineraryGenerator({
   const [generationIssueSince, setGenerationIssueSince] = useState<number | null>(null);
   const [showRetryButton, setShowRetryButton] = useState(false);
   const recoveryInFlightRef = useRef(false);
+  
+  // Journey context state
+  const [journeyContext, setJourneyContext] = useState<GateResult['journeyContext'] | null>(null);
 
   const recoverFromDatabase = useCallback(async () => {
     const [tripResult, dayResult] = await Promise.all([
@@ -922,7 +925,15 @@ export function ItineraryGenerator({
           
           {/* Cost Confirmation Dialog */}
           {showCostConfirm && costEstimate.totalCredits > 0 && (() => {
-            const canAffordAll = currentBalance >= costEstimate.totalCredits;
+            const actualCost = journeyContext?.isFirstLeg ? 
+              calculateTripCredits({
+                days: journeyContext.totalDays,
+                cities: journeyContext.cities,
+                mustIncludes: params.mustIncludes,
+                includeHotels: params.includeHotels,
+              }, params.dna).totalCredits : costEstimate.totalCredits;
+            
+            const canAffordAll = currentBalance >= actualCost;
             const costPerDay = 60; // CREDIT_COSTS standard
             const affordableDays = costPerDay > 0 ? Math.floor(currentBalance / costPerDay) : 0;
             const partialCost = affordableDays * costPerDay;
@@ -936,17 +947,54 @@ export function ItineraryGenerator({
               >
                 <div className="flex items-center gap-2 mb-3">
                   <Coins className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-semibold text-foreground">Cost Breakdown</span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {journeyContext?.isFirstLeg ? 'Full Journey Cost' : 'Cost Breakdown'}
+                  </span>
                 </div>
+                
+                {/* Journey Route Display */}
+                {journeyContext?.isFirstLeg && (
+                  <div className="mb-4 p-3 rounded-lg bg-background/50 border border-border/50">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Route className="h-3.5 w-3.5 text-primary" />
+                      <span className="text-xs font-medium text-muted-foreground">Full Journey</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-sm font-medium">
+                      {journeyContext.cities.map((city, idx) => (
+                        <div key={city} className="flex items-center gap-1">
+                          <span className="text-foreground">{city}</span>
+                          {idx < journeyContext.cities.length - 1 && (
+                            <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {journeyContext.totalDays} total days · {journeyContext.totalLegs} cities · Pay once, generate all
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-1.5 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">{totalDaysEstimate} days × {costPerDay} cr/day</span>
-                    <span className="text-foreground">{costEstimate.baseCredits} cr</span>
+                    <span className="text-muted-foreground">
+                      {journeyContext?.isFirstLeg ? journeyContext.totalDays : totalDaysEstimate} days × {costPerDay} cr/day
+                    </span>
+                    <span className="text-foreground">
+                      {journeyContext?.isFirstLeg ? 
+                        calculateTripCredits({
+                          days: journeyContext.totalDays,
+                          cities: journeyContext.cities,
+                        }).baseCredits : costEstimate.baseCredits} cr
+                    </span>
                   </div>
-                  {costEstimate.multiCityFee > 0 && (
+                  {(journeyContext?.isFirstLeg ? journeyContext.cities.length > 1 : costEstimate.multiCityFee > 0) && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Multi-city fee</span>
-                      <span className="text-foreground">+{costEstimate.multiCityFee} cr</span>
+                      <span className="text-foreground">
+                        +{journeyContext?.isFirstLeg ? 
+                          calculateTripCredits({ days: journeyContext.totalDays, cities: journeyContext.cities }).multiCityFee : 
+                          costEstimate.multiCityFee} cr
+                      </span>
                     </div>
                   )}
                   {costEstimate.complexity.multiplier > 1 && (
@@ -957,7 +1005,7 @@ export function ItineraryGenerator({
                   )}
                   <div className="border-t border-border pt-1.5 flex justify-between font-semibold">
                     <span className="text-foreground">Total</span>
-                    <span className="text-primary">{formatCredits(costEstimate.totalCredits)} credits</span>
+                    <span className="text-primary">{formatCredits(actualCost)} credits</span>
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground">Your balance</span>
@@ -967,7 +1015,7 @@ export function ItineraryGenerator({
                   </div>
                   {canAffordAll && (
                     <div className="text-xs text-muted-foreground">
-                      After: {formatCredits(currentBalance - costEstimate.totalCredits)} credits remaining
+                      After: {formatCredits(currentBalance - actualCost)} credits remaining
                     </div>
                   )}
                   {canAffordPartial && (
@@ -981,7 +1029,7 @@ export function ItineraryGenerator({
                   {canAffordAll ? (
                     <Button size="sm" onClick={handleConfirmGenerate} className="w-full gap-1.5">
                       <Sparkles className="h-3.5 w-3.5" />
-                      Confirm & Generate
+                      {journeyContext?.isFirstLeg ? 'Generate Full Journey' : 'Confirm & Generate'}
                     </Button>
                   ) : canAffordPartial ? (
                     <Button size="sm" onClick={() => handleConfirmPartialGenerate(affordableDays)} className="w-full gap-1.5">
@@ -992,7 +1040,7 @@ export function ItineraryGenerator({
                     <Button size="sm" onClick={() => {
                       setShowCostConfirm(false);
                       showOutOfCredits({
-                        creditsNeeded: costEstimate.totalCredits,
+                        creditsNeeded: actualCost,
                         creditsAvailable: currentBalance,
                         tripId,
                       });
@@ -1017,11 +1065,15 @@ export function ItineraryGenerator({
                 className="gap-2"
               >
                 <Sparkles className="h-5 w-5" />
-                Generate Itinerary
+                {journeyContext?.isFirstLeg ? 'Generate Full Journey' : 'Generate Itinerary'}
                 {isFirstTrip ? (
                   <span className="text-xs opacity-80">· Free</span>
                 ) : costEstimate.totalCredits > 0 ? (
-                  <span className="text-xs opacity-80">· {formatCredits(costEstimate.totalCredits)} cr</span>
+                  <span className="text-xs opacity-80">
+                    · {formatCredits(journeyContext?.isFirstLeg ? 
+                      calculateTripCredits({ days: journeyContext.totalDays, cities: journeyContext.cities }).totalCredits : 
+                      costEstimate.totalCredits)} cr
+                  </span>
                 ) : null}
               </Button>
               
