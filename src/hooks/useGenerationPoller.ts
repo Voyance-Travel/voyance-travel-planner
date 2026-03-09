@@ -109,6 +109,10 @@ export function useGenerationPoller({
       ]);
 
       if (tripResult.error || !tripResult.data) return;
+      if (daysResult.error) {
+        console.warn('[GenerationPoller] itinerary_days query failed:', daysResult.error);
+        // Continue with trip data; skip day-based stall detection this cycle
+      }
       const data = tripResult.data;
 
       const itineraryStatus = data.itinerary_status as string;

@@ -362,25 +362,40 @@ export default function TripDetail() {
       if (refreshed) setTrip(refreshed);
 
       // Call generate-trip which will resume from completedDays+1
-      const { error } = await supabase.functions.invoke('generate-itinerary', {
-        body: {
-          action: 'generate-trip',
-          tripId,
-          destination: trip.destination,
-          destinationCountry: (trip as any).destination_country,
-          startDate: trip.start_date,
-          endDate: trip.end_date,
-          travelers: trip.travelers || 1,
-          tripType: trip.trip_type,
-          budgetTier: (trip as any).budget_tier,
-          isMultiCity: !!(trip as any).is_multi_city,
-          creditsCharged: 0, // Already charged, no new charge
-          requestedDays: totalDays,
-          resumeFromDay: completedDays + 1, // Signal to backend to skip completed days
-        },
-      });
+      // Retry up to 3 attempts with exponential backoff to avoid losing credits on transient failures
+      let invokeError: Error | null = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const { error } = await supabase.functions.invoke('generate-itinerary', {
+          body: {
+            action: 'generate-trip',
+            tripId,
+            destination: trip.destination,
+            destinationCountry: (trip as any).destination_country,
+            startDate: trip.start_date,
+            endDate: trip.end_date,
+            travelers: trip.travelers || 1,
+            tripType: trip.trip_type,
+            budgetTier: (trip as any).budget_tier,
+            isMultiCity: !!(trip as any).is_multi_city,
+            creditsCharged: 0, // Already charged, no new charge
+            requestedDays: totalDays,
+            resumeFromDay: completedDays + 1, // Signal to backend to skip completed days
+          },
+        });
 
-      if (error) throw error;
+        if (!error) {
+          invokeError = null;
+          break;
+        }
+
+        invokeError = error;
+        console.warn(`[Resume] Attempt ${attempt + 1} failed:`, error);
+        if (attempt < 2) {
+          await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+        }
+      }
+
+      if (invokeError) throw invokeError;
       toast.success('Resuming generation…');
     } catch (err) {
       console.error('[Resume] Failed:', err);
