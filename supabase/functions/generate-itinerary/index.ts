@@ -804,6 +804,13 @@ function isRecurringEvent(activity: { title?: string; description?: string; dura
   const desc = (activity.description || '').toLowerCase();
   const combined = `${title} ${desc}`;
 
+  // Logistical activities are NEVER recurring events, even if they mention one
+  // "Airport Transfer to U.S. Open" is a transfer, not a recurring event
+  const logisticalPattern = /\b(transfer|transit|taxi|uber|rideshare|check.?in|check.?out|airport|depart|arrival|shuttle|car service|pick.?up|drop.?off)\b/i;
+  if (logisticalPattern.test(title)) {
+    return false;
+  }
+
   const sportingEvents = [
     'us open', 'u.s. open', 'wimbledon', 'french open', 'australian open',
     'world cup', 'olympics', 'olympic games', 'formula 1', 'f1 grand prix',
@@ -5376,7 +5383,7 @@ ${(() => {
     lines += `AVOID REPEATING THESE ACTIVITIES (already done on previous days): ${nonRecurringPrevious.join(', ')}\n`;
   }
   if (recurringPrevious.length > 0) {
-    lines += `THESE ARE MULTI-DAY EVENTS — SCHEDULE THEM AGAIN TODAY: ${recurringPrevious.join(', ')}\n`;
+    lines += `THESE ARE MULTI-DAY EVENTS the traveler is attending across multiple days. CREATE A FULL ATTENDANCE ACTIVITY for each (not just a transfer to the venue): ${recurringPrevious.join(', ')}\n`;
   }
   return lines;
 })()}
