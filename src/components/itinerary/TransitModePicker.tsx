@@ -566,9 +566,9 @@ export function TransitModePicker({
                                     {showAll ? 'Show fewer steps' : `+ ${hiddenCount} more step${hiddenCount > 1 ? 's' : ''}`}
                                   </button>
                                 )}
-                              </div>);
-                            })()
-                            ) : loadingRouteId !== option.id ? (
+                              </div>
+                              );
+                            })() : loadingRouteId !== option.id ? (
                               /* Fallback to generic route from airport-transfers */
                               <>
                                 {option.route && (
