@@ -1708,6 +1708,48 @@ export default function TripDetail() {
                 </ErrorBoundary>
               )}
             </div>
+          ) : isQueuedJourneyLeg ? (
+            /* Queued Journey Leg — waiting for previous city to finish */
+            <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+              <div className="relative mb-6">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Clock className="h-8 w-8 text-primary/60" />
+                </div>
+                <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                  <span className="text-xs">⏳</span>
+                </div>
+              </div>
+              <h2 className="text-xl font-serif font-bold mb-2">
+                {trip.destination} is up next
+              </h2>
+              <p className="text-muted-foreground max-w-md mb-6">
+                Your itinerary will start generating once the previous leg finishes. This usually takes a few minutes.
+              </p>
+              {trip.journey_id && trip.journey_order && trip.journey_order > 1 && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    // Navigate to the previous leg
+                    const prevOrder = trip.journey_order! - 1;
+                    supabase
+                      .from('trips')
+                      .select('id')
+                      .eq('journey_id', trip.journey_id!)
+                      .eq('journey_order', prevOrder)
+                      .single()
+                      .then(({ data }) => {
+                        if (data?.id) {
+                          navigate(`/trip/${data.id}`);
+                        }
+                      });
+                  }}
+                  className="gap-2"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  View previous city
+                </Button>
+              )}
+            </div>
           ) : showGenerator ? (
             /* Itinerary Generator */
             <ErrorBoundary>
