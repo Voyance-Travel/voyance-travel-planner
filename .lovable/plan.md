@@ -1,68 +1,50 @@
+## Journey Sequential Generation — Implementation Status
 
+### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-## Fix TransitModePicker: Switch from `airport-transfers` to `transfer-pricing` + Add Walking Support
+**Implemented:**
 
-### Problem
-The `TransitModePicker` component (line 126) calls the `airport-transfers` edge function, which returns hardcoded options without walking support. It should call `transfer-pricing` instead, which uses Google Maps Distance Matrix API and returns walking options when routes are ≤30 min.
+1. **`src/hooks/useGenerationGate.ts`**:
+   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
+   - Added journey detection: fetches all sibling legs when `journeyId` is present
+   - Sums credit costs across all journey legs for unified billing
+   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
+   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
 
-### Root Cause
-`src/components/itinerary/TransitModePicker.tsx` line 126:
-```ts
-const { data, error } = await supabase.functions.invoke('airport-transfers', { ... });
-```
-The `airport-transfers` function never returns a "Walk" option. The `transfer-pricing` function does (line 476-490 of that function).
+2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
+   - Added `journeyLegs` state for cost breakdown display
+   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
+   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
+   - Updated cost confirmation dialog:
+     - Shows "Journey Cost Breakdown" header for journeys
+     - Lists each leg with city, days, and cost
+     - Shows "Journey Total" instead of "Total"
+     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
+     - Disabled partial generation for journeys (must pay full upfront)
+     - "Confirm & Generate Journey" button text for journeys
 
-### Changes
+### Part 2: Auto-Chain Generation (TODO)
 
-**File: `src/components/itinerary/TransitModePicker.tsx`**
+When leg 1 completes generation, the backend should:
+1. Check for next queued leg in the journey
+2. Automatically trigger `generate-trip` for the next leg
+3. Continue until all legs are generated
 
-1. **Switch edge function call** (line 126): Change `'airport-transfers'` to `'transfer-pricing'` and update the request body to match `transfer-pricing`'s expected format:
-   ```ts
-   const { data, error } = await supabase.functions.invoke('transfer-pricing', {
-     body: {
-       origin: activity.venue || activity.address || city,
-       destination: transitDestination,
-       city,
-       travelers: 2,
-       transferType: 'point_to_point',
-     },
-   });
-   ```
+Files to modify:
+- `supabase/functions/generate-trip/index.ts` or similar edge function
+- Add post-generation hook to detect and chain to next journey leg
 
-2. **Map response shape**: The `transfer-pricing` function returns `TransferOption` objects with fields like `title`, `duration`, `durationMinutes`, `priceFormatted`, `priceTotal`, `mode`, `notes`, `trainLine`, `isBookable`, `bookingUrl`. The current `TransportOptionData` interface expects `label`, `estimatedCost`, `icon`, `route`, `pros`, `cons`, `bookingTip`. Update the interface and mapping:
+### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
 
-   - Replace `TransportOptionData` interface with the shape from `transfer-pricing`:
-     ```ts
-     interface TransportOptionData {
-       id: string;
-       mode: string;
-       title: string;          // was "label"
-       duration: string;
-       durationMinutes: number;
-       priceTotal: number;
-       priceFormatted: string;  // was "estimatedCost"
-       distance?: number;
-       notes?: string;
-       trainLine?: string;
-       isBookable: boolean;
-       bookingUrl?: string;
-       recommended?: boolean;   // keep for UI
-       source: string;
-       confidence: number;
-     }
-     ```
+**Implemented:**
 
-   - Update response parsing (line 134): Map `data.options` directly (shape already matches). Set recommended from `data.recommendedOption`. Store `data.googleMapsData` for route display. Filter out airport-specific options for non-airport routes.
-
-3. **Update rendering** (lines 316-422): Change references from `option.label` → `option.title`, `option.estimatedCost` → `option.priceFormatted`, `option.icon` → use `getModeIcon(option.mode)`. Remove `option.route`/`option.pros`/`option.cons`/`option.bookingTip` detail expansion (not in new shape) — replace with `option.notes` and `option.trainLine` display.
-
-4. **Update `handleSelectOption`** (line 155): Change `option.label` → `option.title`, parse cost from `option.priceTotal` instead of regex on `option.estimatedCost`.
-
-5. **Add Google Maps route summary**: Show origin → destination with distance when `googleMapsData` is available, above the options list.
-
-6. **Add `travelers` prop** to the interface (currently missing) and pass it in the edge function call. In `EditorialItinerary.tsx` line 8544, add `travelers={travelers}` prop.
-
-### Files to modify
-- `src/components/itinerary/TransitModePicker.tsx` — main changes
-- `src/components/itinerary/EditorialItinerary.tsx` — pass `travelers` prop (line ~8556)
-
+1. **`src/pages/TripDetail.tsx`**:
+   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
+   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
+   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
+   - Added distinct "queued" state UI:
+     - Clock icon with hourglass badge
+     - "{destination} is up next" heading
+     - Explanation text about waiting for previous leg
+     - "View previous city" button to navigate back to the generating leg
+   - Added `Clock` to lucide-react imports

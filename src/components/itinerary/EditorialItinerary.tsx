@@ -8083,6 +8083,7 @@ function DayCard({
                           onViewReviews={aiLocked ? undefined : onViewReviews}
                           onTransportModeChange={onTransportModeChange}
                           changingTransportActivityId={changingTransportActivityId}
+                          transitOrigin={prevVisibleActivity?.location?.name || prevVisibleActivity?.location?.address || prevVisibleActivity?.title}
                           collaboratorColorMap={collaboratorColorMap}
                           aiLocked={aiLocked}
                           compact={compactCards}
@@ -8126,6 +8127,7 @@ function DayCard({
                         onViewReviews={aiLocked ? undefined : onViewReviews}
                         onTransportModeChange={onTransportModeChange}
                         changingTransportActivityId={changingTransportActivityId}
+                        transitOrigin={prevVisibleActivity?.location?.name || prevVisibleActivity?.location?.address || prevVisibleActivity?.title}
                         collaboratorColorMap={collaboratorColorMap}
                         aiLocked={aiLocked}
                         compact={compactCards}
@@ -8327,6 +8329,8 @@ interface ActivityRowProps {
   /** Handler for changing transport mode on a route segment */
   onTransportModeChange?: (dayIndex: number, activityId: string, newMode: string) => Promise<void>;
   changingTransportActivityId?: string | null;
+  /** Origin location for transit routing (previous activity's location) */
+  transitOrigin?: string;
   /** Color map for collaborator attribution badges */
   collaboratorColorMap?: Map<string, CollaboratorAttribution>;
   aiLocked?: boolean;
@@ -8371,6 +8375,7 @@ function ActivityRow({
   onViewReviews,
   onTransportModeChange,
   changingTransportActivityId,
+  transitOrigin: transitOriginProp,
   collaboratorColorMap,
   aiLocked,
   guestMustPropose,
@@ -8540,6 +8545,8 @@ function ActivityRow({
     const isWalkingTransport = activityTitle.toLowerCase().includes('walk') || activityTitle.toLowerCase().includes('stroll');
     const transportCost = isWalkingTransport ? null : (cost > 0 ? cost : null);
 
+    const transitOrigin = transitOriginProp || destination;
+
     return (
       <TransitModePicker
         activity={activity}
@@ -8554,6 +8561,8 @@ function ActivityRow({
         city={destination}
         tripId={tripId}
         tripCurrency={tripCurrency}
+        travelers={travelers}
+        transitOrigin={transitOrigin}
         onEdit={onEdit}
         onMove={onMove}
         onMoveToDay={onMoveToDay}
