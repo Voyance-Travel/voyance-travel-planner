@@ -449,6 +449,8 @@ export interface EditorialItineraryProps {
   hasItinerary?: boolean;
   dateEditorFlightSelection?: Record<string, unknown> | null;
   dateEditorCities?: Array<{ id: string; city_name: string; nights?: number }>;
+  /** Travel intel cards passed from TripDetail */
+  travelIntelCards?: React.ReactNode;
 }
 
 // =============================================================================
@@ -1129,6 +1131,7 @@ export function EditorialItinerary({
   hasItinerary: hasItineraryProp,
   dateEditorFlightSelection,
   dateEditorCities,
+  travelIntelCards,
 }: EditorialItineraryProps) {
   const queryClient = useQueryClient();
   const isActivelyGenerating = itineraryStatus === 'generating' || itineraryStatus === 'queued';
@@ -3997,8 +4000,16 @@ export function EditorialItinerary({
                         </div>
                       )}
 
+                      {/* Travel Intel cards */}
+                      {travelIntelCards && (
+                        <div className="pt-2 border-t border-border/40 space-y-2">
+                          <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Travel Intelligence</h4>
+                          {travelIntelCards}
+                        </div>
+                      )}
+
                       {/* Fallback: no data yet */}
-                      {!hasFlightData && !hotelSelection?.name && !destinationInfo?.timezone && (
+                      {!hasFlightData && !hotelSelection?.name && !destinationInfo?.timezone && !travelIntelCards && (
                         <p className="text-xs text-muted-foreground italic">
                           Add flights and hotels in the <button className="underline" onClick={() => setActiveTab('details')}>Flights &amp; Hotels</button> tab.
                         </p>
