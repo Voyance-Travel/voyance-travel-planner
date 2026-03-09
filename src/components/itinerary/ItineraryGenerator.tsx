@@ -318,6 +318,7 @@ export function ItineraryGenerator({
   const [partialDays, setPartialDays] = useState<number | null>(null);
   const [generationIssueSince, setGenerationIssueSince] = useState<number | null>(null);
   const [showRetryButton, setShowRetryButton] = useState(false);
+  const [showTakingLonger, setShowTakingLonger] = useState(false);
   const recoveryInFlightRef = useRef(false);
   
   // Journey context state
@@ -427,7 +428,8 @@ export function ItineraryGenerator({
         setGenerationIssueSince(prev => prev ?? Date.now());
       }
     } catch (recoveryErr) {
-      console.warn('[ItineraryGenerator] Recovery check failed, continuing loading state:', recoveryErr);
+      console.warn('[ItineraryGenerator] Recovery check failed:', recoveryErr);
+      toast.warning('Generation hit a snag. Checking status...', { duration: 4000 });
       setHasStarted(true);
       setPrePhase('preparing');
       setServerGenActive(true);
@@ -437,12 +439,12 @@ export function ItineraryGenerator({
     }
   }, [recoverFromDatabase]);
 
-  // Show retry CTA only if no itinerary exists for 5+ minutes after a suppressed failure
+  // Show retry CTA only if no itinerary exists for 90+ seconds after a suppressed failure
   useEffect(() => {
     if (!generationIssueSince) return;
     const timer = window.setInterval(async () => {
       const result = await recoverFromDatabase().catch(() => 'in_progress' as const);
-      if (result === 'missing' && Date.now() - generationIssueSince >= 5 * 60 * 1000) {
+      if (result === 'missing' && Date.now() - generationIssueSince >= 90 * 1000) {
         setShowRetryButton(true);
       }
     }, 15000);
@@ -1208,11 +1210,27 @@ export function ItineraryGenerator({
             We’re reconnecting and verifying your generated days in the background.
           </p>
 
+          {showTakingLonger && !showRetryButton && (
+            <p className="text-sm text-muted-foreground mt-2 text-center">
+              Taking longer than expected. Hang tight...
+            </p>
+          )}
+
           {showRetryButton && (
-            <Button onClick={handleRetry} className="gap-2">
-              <RefreshCw className="h-4 w-4" />
-              Generation didn't complete. Try again?
-            </Button>
+            <div className="flex flex-col items-center gap-3 mt-4">
+              <p className="text-sm text-muted-foreground text-center">
+                Generation seems to have stalled.
+              </p>
+              <div className="flex gap-3">
+                <Button variant="outline" onClick={() => window.history.back()}>
+                  Go Back
+                </Button>
+                <Button onClick={handleRetry} className="gap-2">
+                  <RefreshCw className="h-4 w-4" />
+                  Retry Generation
+                </Button>
+              </div>
+            </div>
           )}
         </div>
       </motion.div>
