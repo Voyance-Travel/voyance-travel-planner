@@ -7,7 +7,7 @@ import { NightsRedistributionModal } from '@/components/trip/NightsRedistributio
 import { useParams, useNavigate, useSearchParams, Navigate } from 'react-router-dom';
 import { format, isAfter, isBefore, differenceInDays, addDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
-import { Loader2, MapPin, ArrowLeft, Sparkles, CheckCircle, Coins, Calendar, Clock } from 'lucide-react';
+import { Loader2, MapPin, ArrowLeft, Sparkles, CheckCircle, PenLine, Coins, Calendar, Clock } from 'lucide-react';
 import { CREDIT_COSTS } from '@/config/pricing';
 import {
   AlertDialog,
@@ -1577,20 +1577,46 @@ export default function TripDetail() {
           {(() => {
             const isPastTrip = isAfter(new Date(), parseLocalDate(effectiveEndDate));
             const statusLabel = isLiveTrip ? 'Active' : isPastTrip && trip.status === 'draft' ? 'Past' : (trip.status || 'draft');
+            const canToggleStatus = !isLiveTrip && !isPastTrip && (trip.status === 'draft' || trip.status === 'booked');
+
+            const handleStatusToggle = async () => {
+              if (!canToggleStatus || !trip.id) return;
+              const newStatus = trip.status === 'booked' ? 'draft' : 'booked';
+              const { error } = await supabase.from('trips').update({ status: newStatus }).eq('id', trip.id);
+              if (!error) {
+                setTrip(prev => prev ? { ...prev, status: newStatus } : prev);
+              }
+            };
+
             return (
               <div className="flex items-center gap-2 mb-4 sm:mb-6">
                 <h1 className="text-xl sm:text-2xl font-serif font-bold truncate">{trip.name}</h1>
-                <Badge 
-                  variant={
-                    isLiveTrip ? 'default' :
-                    trip.status === 'completed' ? 'secondary' : 
-                    trip.status === 'booked' ? 'default' : 
-                    isPastTrip ? 'secondary' : 'outline'
-                  }
-                  className="capitalize shrink-0 text-[10px] px-1.5 py-0"
-                >
-                  {statusLabel}
-                </Badge>
+                {canToggleStatus ? (
+                  <button
+                    onClick={handleStatusToggle}
+                    className="inline-flex items-center gap-1 shrink-0 text-[10px] px-2 py-0.5 rounded-full border font-semibold transition-colors cursor-pointer hover:opacity-80"
+                    style={{
+                      background: trip.status === 'booked' ? 'hsl(var(--primary))' : 'transparent',
+                      color: trip.status === 'booked' ? 'hsl(var(--primary-foreground))' : 'hsl(var(--foreground))',
+                      borderColor: trip.status === 'booked' ? 'hsl(var(--primary))' : 'hsl(var(--border))',
+                    }}
+                  >
+                    {trip.status === 'booked' ? <CheckCircle className="w-3 h-3" /> : <PenLine className="w-3 h-3" />}
+                    {trip.status === 'booked' ? 'Confirmed' : 'Draft'}
+                  </button>
+                ) : (
+                  <Badge 
+                    variant={
+                      isLiveTrip ? 'default' :
+                      trip.status === 'completed' ? 'secondary' : 
+                      trip.status === 'booked' ? 'default' : 
+                      isPastTrip ? 'secondary' : 'outline'
+                    }
+                    className="capitalize shrink-0 text-[10px] px-1.5 py-0"
+                  >
+                    {statusLabel}
+                  </Badge>
+                )}
               </div>
             );
           })()}

@@ -1,24 +1,50 @@
+## Journey Sequential Generation — Implementation Status
 
+### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-## Add Trip Status Toggle (Draft / Confirmed)
+**Implemented:**
 
-The `TripConfirmationBanner` component exists but was never wired into the UI. Rather than re-integrating that complex component (which has hotel/flight logistics dialogs, swap suggestions, etc.), a simpler approach is better: add a clickable status badge directly in the trip header that toggles between "draft" and "booked" (confirmed).
+1. **`src/hooks/useGenerationGate.ts`**:
+   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
+   - Added journey detection: fetches all sibling legs when `journeyId` is present
+   - Sums credit costs across all journey legs for unified billing
+   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
+   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
 
-### Changes
+2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
+   - Added `journeyLegs` state for cost breakdown display
+   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
+   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
+   - Updated cost confirmation dialog:
+     - Shows "Journey Cost Breakdown" header for journeys
+     - Lists each leg with city, days, and cost
+     - Shows "Journey Total" instead of "Total"
+     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
+     - Disabled partial generation for journeys (must pay full upfront)
+     - "Confirm & Generate Journey" button text for journeys
 
-**File: `src/pages/TripDetail.tsx`**
+### Part 2: Auto-Chain Generation (TODO)
 
-Replace the read-only `Badge` in the trip header (lines 1581-1596) with an interactive dropdown or toggle button:
+When leg 1 completes generation, the backend should:
+1. Check for next queued leg in the journey
+2. Automatically trigger `generate-trip` for the next leg
+3. Continue until all legs are generated
 
-- When status is `draft`: show a badge/button labeled "Draft" with a subtle prompt — clicking it sets status to `booked` (confirmed)
-- When status is `booked`: show "Confirmed" badge — clicking it sets back to `draft`
-- Past trips and active trips: keep the badge read-only (no toggle)
+Files to modify:
+- `supabase/functions/generate-trip/index.ts` or similar edge function
+- Add post-generation hook to detect and chain to next journey leg
 
-Implementation:
-1. Add a `handleStatusToggle` function that calls `supabase.from('trips').update({ status: newStatus }).eq('id', tripId)` and updates local `trip` state
-2. Replace the static Badge with a clickable button-styled badge that shows a dropdown with "Draft" and "Confirmed" options, or simply toggles on click
-3. Use existing icons: `PenLine` for draft, `CheckCircle` for confirmed
-4. Keep it minimal — just a small clickable badge, no modal or dialog
+### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
 
-The toggle will only appear for future trips that aren't currently active. Past trips and live trips keep their read-only badges.
+**Implemented:**
 
+1. **`src/pages/TripDetail.tsx`**:
+   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
+   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
+   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
+   - Added distinct "queued" state UI:
+     - Clock icon with hourglass badge
+     - "{destination} is up next" heading
+     - Explanation text about waiting for previous leg
+     - "View previous city" button to navigate back to the generating leg
+   - Added `Clock` to lucide-react imports
