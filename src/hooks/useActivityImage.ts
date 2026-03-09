@@ -59,6 +59,10 @@ function getCacheKey(title: string, destination?: string, cacheId?: string): str
 }
 
 async function persistPhotoToActivity(activityId: string, photoUrl: string): Promise<void> {
+  // Skip persist for non-UUID IDs (shared activities use slug IDs like "sh-day1-dinner")
+  if (!activityId || !UUID_REGEX.test(activityId)) {
+    return;
+  }
   if (persistedActivityIds.has(activityId)) return;
   persistedActivityIds.add(activityId);
   try {
