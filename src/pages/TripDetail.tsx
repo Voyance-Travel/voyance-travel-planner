@@ -193,6 +193,7 @@ export default function TripDetail() {
     tripId: tripId || null,
     enabled: isServerGenerating,
     interval: 3000,
+    resumeInFlight: resumeInFlightRef.current || resumingGeneration,
     onReady: async () => {
       if (onReadyCalledRef.current) return;
       onReadyCalledRef.current = true;
