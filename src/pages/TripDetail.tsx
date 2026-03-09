@@ -332,14 +332,17 @@ export default function TripDetail() {
 
     const meta = (trip.metadata as Record<string, unknown>) || {};
     const completedDays = (meta.generation_completed_days as number) || 0;
-    // Recompute expected days from canonical trip dates instead of trusting
-    // potentially stale/inflated metadata.generation_total_days
+    // For multi-city trips, the backend's generation_total_days (sum of city days)
+    // is authoritative — date arithmetic can disagree. For single-city, prefer dates.
+    const metaTotalDays = (meta.generation_total_days as number) || 0;
+    const isMultiCityTrip = !!(trip as any).is_multi_city;
     const canonicalTotalDays = trip.start_date && trip.end_date
       ? differenceInDays(parseLocalDate(trip.end_date), parseLocalDate(trip.start_date)) + 1
       : 0;
-    const metaTotalDays = (meta.generation_total_days as number) || 0;
-    // Use canonical date-derived count as source of truth; fall back to metadata only if dates are missing
-    const totalDays = canonicalTotalDays > 0 ? canonicalTotalDays : metaTotalDays;
+    // Multi-city: trust backend's sum-of-city-days; single-city: prefer date arithmetic
+    const totalDays = isMultiCityTrip && metaTotalDays > 0
+      ? metaTotalDays
+      : (canonicalTotalDays > 0 ? canonicalTotalDays : metaTotalDays);
 
     try {
       // Reset status to generating with fresh heartbeat + normalize total days
@@ -764,32 +767,38 @@ export default function TripDetail() {
 
         // Self-heal: detect corrupted ready+partial state
         // If itinerary_status is 'ready' but day count < expected, trigger stalled/resume
-        // Also correct inflated metadata.generation_total_days from canonical dates
         if (tripData.itinerary_status === 'ready' || (tripData.itinerary_status as string) === 'generated') {
           const itinData = tripData.itinerary_data as { days?: unknown[] } | null;
           const actualDays = Math.max(itinData?.days?.length ?? 0, itineraryDaysDbCount);
           const meta = (tripData.metadata as Record<string, unknown>) || {};
-          // Always recompute from canonical dates first
-          let expectedTotal = 0;
-          if (tripData.start_date && tripData.end_date) {
-            try {
-              expectedTotal = differenceInDays(
-                parseLocalDate(tripData.end_date),
-                parseLocalDate(tripData.start_date)
-              ) + 1;
-            } catch { expectedTotal = 0; }
-          }
-          // Fall back to metadata only if dates don't yield a valid count
-          if (expectedTotal <= 0) {
-            expectedTotal = (meta.generation_total_days as number) || 0;
-          }
-          // Correct inflated metadata if it disagrees with canonical dates
           const metaTotal = (meta.generation_total_days as number) || 0;
-          if (expectedTotal > 0 && metaTotal > 0 && metaTotal !== expectedTotal && tripId) {
-            console.warn(`[TripDetail] Self-heal: correcting metadata.generation_total_days from ${metaTotal} to ${expectedTotal}`);
-            supabase.from('trips').update({
-              metadata: { ...meta, generation_total_days: expectedTotal },
-            }).eq('id', tripId).then(() => {});
+          const isMultiCityTrip = !!(tripData as any).is_multi_city;
+
+          // For multi-city trips, the backend's generation_total_days (sum of city days)
+          // is the authoritative source — don't override with date arithmetic.
+          let expectedTotal = 0;
+          if (isMultiCityTrip && metaTotal > 0) {
+            expectedTotal = metaTotal;
+          } else {
+            // Single-city: recompute from canonical dates
+            if (tripData.start_date && tripData.end_date) {
+              try {
+                expectedTotal = differenceInDays(
+                  parseLocalDate(tripData.end_date),
+                  parseLocalDate(tripData.start_date)
+                ) + 1;
+              } catch { expectedTotal = 0; }
+            }
+            if (expectedTotal <= 0) {
+              expectedTotal = metaTotal;
+            }
+            // Only correct metadata for single-city trips where date arithmetic is reliable
+            if (expectedTotal > 0 && metaTotal > 0 && metaTotal !== expectedTotal && tripId) {
+              console.warn(`[TripDetail] Self-heal: correcting metadata.generation_total_days from ${metaTotal} to ${expectedTotal}`);
+              supabase.from('trips').update({
+                metadata: { ...meta, generation_total_days: expectedTotal },
+              }).eq('id', tripId).then(() => {});
+            }
           }
           if (expectedTotal > 0 && actualDays > 0 && actualDays < expectedTotal) {
             console.warn(`[TripDetail] Self-heal: trip marked ready but only ${actualDays}/${expectedTotal} days. Triggering resume.`);
@@ -2512,9 +2521,14 @@ export default function TripDetail() {
                 // Trigger generation for the new days via the resume path
                 // This re-uses the same generation pipeline
                 const meta = (trip.metadata as Record<string, unknown>) || {};
-                const totalDays = trip.start_date && trip.end_date
+                const metaTotalDays = (meta.generation_total_days as number) || 0;
+                const isMultiCityTrip = !!(trip as any).is_multi_city;
+                const canonicalDays = trip.start_date && trip.end_date
                   ? differenceInDays(parseLocalDate(trip.end_date), parseLocalDate(trip.start_date)) + 1
                   : 0;
+                const totalDays = isMultiCityTrip && metaTotalDays > 0
+                  ? metaTotalDays
+                  : (canonicalDays > 0 ? canonicalDays : metaTotalDays);
                 try {
                   await supabase.from('trips').update({
                     itinerary_status: 'generating',
