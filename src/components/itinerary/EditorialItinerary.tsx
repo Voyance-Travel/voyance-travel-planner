@@ -1135,6 +1135,7 @@ export function EditorialItinerary({
   dateEditorFlightSelection,
   dateEditorCities,
   travelIntelCards,
+  tripHealthPanel,
 }: EditorialItineraryProps) {
   const queryClient = useQueryClient();
   const isActivelyGenerating = itineraryStatus === 'generating' || itineraryStatus === 'queued';
