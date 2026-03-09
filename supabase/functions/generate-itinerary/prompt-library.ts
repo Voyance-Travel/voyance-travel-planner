@@ -2034,6 +2034,11 @@ ${'='.repeat(70)}
 - Do NOT include tourist attractions requiring extended visits. Keep evening activities casual.
 - The transportComparison array is REQUIRED. Do not omit it.
 - Activity count for transition days: exactly 6-8 activities (the 6 mandatory + 1-2 evening).
+${tooCloseForFlight ? `
+⚠️ CRITICAL: ${fromLabel} and ${toLabel} are in the SAME METROPOLITAN AREA.
+NEVER suggest flights between them — there are no commercial flights for this distance.
+Only suggest ground transport: rideshare, taxi, bus, train, or driving.
+` : ''}
 
 ${'='.repeat(70)}
 ⏰ ARRIVAL-TIME SCHEDULING CONSTRAINT
