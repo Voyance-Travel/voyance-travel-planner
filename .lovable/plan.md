@@ -1,50 +1,38 @@
-## Journey Sequential Generation — Implementation Status
 
-### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-**Implemented:**
+## Plan: Fix Route Details — Google API Returns Error
 
-1. **`src/hooks/useGenerationGate.ts`**:
-   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
-   - Added journey detection: fetches all sibling legs when `journeyId` is present
-   - Sums credit costs across all journey legs for unified billing
-   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
-   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
+### Root Cause
+I tested the `route-details` edge function directly. It's deployed and responding (200), but Google Maps Directions API is returning a non-OK status. The response is `{ steps: [], summary: "Route not available" }`. The function doesn't log or return the Google API status/error, making it impossible to debug.
 
-2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
-   - Added `journeyLegs` state for cost breakdown display
-   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
-   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
-   - Updated cost confirmation dialog:
-     - Shows "Journey Cost Breakdown" header for journeys
-     - Lists each leg with city, days, and cost
-     - Shows "Journey Total" instead of "Total"
-     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
-     - Disabled partial generation for journeys (must pay full upfront)
-     - "Confirm & Generate Journey" button text for journeys
+The frontend code is correct — it calls `fetchRouteDetails` on option expand, receives empty steps, and falls back to generic route text. **This is a backend issue, not a frontend issue.**
 
-### Part 2: Auto-Chain Generation (TODO)
+### Changes
 
-When leg 1 completes generation, the backend should:
-1. Check for next queued leg in the journey
-2. Automatically trigger `generate-trip` for the next leg
-3. Continue until all legs are generated
+#### 1. Update `supabase/functions/route-details/index.ts`
+Add logging and return the Google API status in error responses so we can debug:
 
-Files to modify:
-- `supabase/functions/generate-trip/index.ts` or similar edge function
-- Add post-generation hook to detect and chain to next journey leg
+- **Add `console.log`** for the Google API response status and error message
+- **Return `googleStatus`** in the error response so frontend can log it
+- **Handle `departure_time` correctly** — `departure_time: 'now'` is only valid for `driving` and `transit` modes, not `walking`. For walking mode, omit it.
+- **Make `mode` optional** — default to `'transit'` if not provided (the current code returns 400 if mode is missing, but the frontend may send without it)
 
-### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
+The key fix: the `departure_time=now` parameter may be causing `INVALID_REQUEST` for walking mode. The Google Directions API docs state `departure_time` is only valid for driving and transit.
 
-**Implemented:**
+#### 2. No frontend changes needed
+The `TransitModePicker` already:
+- Calls `fetchRouteDetails` on Level 2 expand (line 280)
+- Renders step-by-step directions when `routeDetailsCache` has data (lines 492-521)
+- Falls back to generic route text when no steps available (lines 523-538)
+- Shows loading spinner while fetching (lines 485-489)
 
-1. **`src/pages/TripDetail.tsx`**:
-   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
-   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
-   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
-   - Added distinct "queued" state UI:
-     - Clock icon with hourglass badge
-     - "{destination} is up next" heading
-     - Explanation text about waiting for previous leg
-     - "View previous city" button to navigate back to the generating leg
-   - Added `Clock` to lucide-react imports
+Once the edge function returns actual steps, the UI will render them automatically.
+
+### Technical Details
+
+Updated edge function will:
+1. Default `mode` to `'transit'` if omitted
+2. Only include `departure_time` for driving/transit, not walking
+3. Log Google API response status
+4. Return `googleStatus` and `error_message` in error responses for debugging
+
