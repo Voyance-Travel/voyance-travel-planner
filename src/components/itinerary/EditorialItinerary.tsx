@@ -449,6 +449,8 @@ export interface EditorialItineraryProps {
   hasItinerary?: boolean;
   dateEditorFlightSelection?: Record<string, unknown> | null;
   dateEditorCities?: Array<{ id: string; city_name: string; nights?: number }>;
+  /** Travel intel cards passed from TripDetail */
+  travelIntelCards?: React.ReactNode;
 }
 
 // =============================================================================
@@ -1129,6 +1131,7 @@ export function EditorialItinerary({
   hasItinerary: hasItineraryProp,
   dateEditorFlightSelection,
   dateEditorCities,
+  travelIntelCards,
 }: EditorialItineraryProps) {
   const queryClient = useQueryClient();
   const isActivelyGenerating = itineraryStatus === 'generating' || itineraryStatus === 'queued';
