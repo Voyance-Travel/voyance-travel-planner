@@ -22,6 +22,25 @@ import {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+interface RouteDetails {
+  steps: Array<{
+    instruction: string;
+    distance: string;
+    duration: string;
+    travelMode: string;
+    transitDetails?: {
+      lineName: string;
+      vehicleType: string;
+      departureStop: string;
+      arrivalStop: string;
+      numStops: number;
+    };
+  }>;
+  summary: string;
+  totalDuration: string;
+  totalDistance: string;
+}
+
 interface TransportOptionData {
   id: string;
   mode: string;
