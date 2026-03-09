@@ -3075,6 +3075,36 @@ export function EditorialItinerary({
   }, [tripId, days]);
 
   const handleActivityMove = useCallback((dayIndex: number, activityId: string, direction: 'up' | 'down') => {
+    // Helper: parse "HH:mm" or "H:mm AM/PM" to minutes since midnight
+    const toMins = (t?: string): number | null => {
+      if (!t) return null;
+      const m24 = t.match(/^(\d{1,2}):(\d{2})$/);
+      if (m24) return parseInt(m24[1], 10) * 60 + parseInt(m24[2], 10);
+      const m12 = t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+      if (!m12) return null;
+      let h = parseInt(m12[1], 10);
+      const mins = parseInt(m12[2], 10);
+      const pm = m12[3].toUpperCase() === 'PM';
+      if (pm && h !== 12) h += 12;
+      if (!pm && h === 12) h = 0;
+      return h * 60 + mins;
+    };
+    const fmtTime = (mins: number) => {
+      const h = Math.floor(mins / 60) % 24;
+      const m = mins % 60;
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    };
+    // Parse a transit duration string like "25 min" or "1h 30m" to minutes
+    const parseTransitDuration = (dur?: string): number | null => {
+      if (!dur) return null;
+      const hm = dur.match(/(\d+)\s*h(?:ours?|r)?/i);
+      const mm = dur.match(/(\d+)\s*m(?:in(?:ute)?s?)?/i);
+      let total = 0;
+      if (hm) total += parseInt(hm[1], 10) * 60;
+      if (mm) total += parseInt(mm[1], 10);
+      return total > 0 ? total : null;
+    };
+
     setDays(prev => prev.map((day, idx) => {
       if (idx !== dayIndex) return day;
       const activities = [...day.activities];
@@ -3084,10 +3114,33 @@ export function EditorialItinerary({
       const newIdx = direction === 'up' ? actIdx - 1 : actIdx + 1;
       if (newIdx < 0 || newIdx >= activities.length) return day;
       
+      // Swap positions
       [activities[actIdx], activities[newIdx]] = [activities[newIdx], activities[actIdx]];
-      return { ...day, activities };
+      
+      // Recalculate times for all activities after the swap
+      const withTimes = activities.map(a => {
+        const s = toMins(a.startTime || a.time);
+        const e = toMins(a.endTime);
+        const dur = (s !== null && e !== null && e > s) ? e - s : 30;
+        return { activity: a, duration: dur };
+      });
+
+      const allStarts = activities.map(a => toMins(a.startTime || a.time)).filter((v): v is number => v !== null);
+      let cursor = allStarts.length > 0 ? Math.min(...allStarts) : 9 * 60;
+
+      const updated = withTimes.map(({ activity, duration }, i) => {
+        const newStart = fmtTime(cursor);
+        const newEnd = fmtTime(cursor + duration);
+        const nextActivity = withTimes[i + 1]?.activity;
+        const transitGap = parseTransitDuration(nextActivity?.transportation?.duration) ?? 20;
+        cursor += duration + transitGap;
+        return { ...activity, startTime: newStart, endTime: newEnd, time: newStart };
+      });
+
+      return { ...day, activities: updated };
     }));
     setHasChanges(true);
+    setNeedsOptimization(true);
   }, []);
 
   // Handle drag-and-drop reorder of activities within a day — dynamically reassign times
