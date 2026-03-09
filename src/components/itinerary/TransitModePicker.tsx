@@ -514,9 +514,24 @@ export function TransitModePicker({
                               </div>
                             )}
 
-                            {routeDetailsCache[option.id]?.steps && routeDetailsCache[option.id]!.steps.length > 0 ? (
+                            {routeDetailsCache[option.id]?.steps && routeDetailsCache[option.id]!.steps.length > 0 ? (() => {
+                              const MAX_INLINE_STEPS = 5;
+                              const steps = routeDetailsCache[option.id]!.steps;
+                              const showAll = showAllStepsFor === option.id;
+                              const visibleSteps = showAll ? steps : steps.slice(0, MAX_INLINE_STEPS);
+                              const hiddenCount = steps.length - MAX_INLINE_STEPS;
+
+                              return (
                               <div className="space-y-1.5">
-                                {routeDetailsCache[option.id]!.steps.map((step, idx) => (
+                                {routeDetailsCache[option.id]!.summary && (
+                                  <p className="text-[11px] font-medium text-foreground">{routeDetailsCache[option.id]!.summary}</p>
+                                )}
+                                {routeDetailsCache[option.id]!.totalDuration && (
+                                  <p className="text-[10px] text-muted-foreground">
+                                    {routeDetailsCache[option.id]!.totalDuration} · {routeDetailsCache[option.id]!.totalDistance}
+                                  </p>
+                                )}
+                                {visibleSteps.map((step, idx) => (
                                   <div key={idx} className="flex items-start gap-2">
                                     <div className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-[9px] font-bold shrink-0 mt-0.5">
                                       {idx + 1}
@@ -539,12 +554,20 @@ export function TransitModePicker({
                                     </div>
                                   </div>
                                 ))}
-                                {routeDetailsCache[option.id]!.totalDuration && (
-                                  <p className="text-[10px] text-muted-foreground font-medium pt-1 border-t border-border/20">
-                                    Total: {routeDetailsCache[option.id]!.totalDuration} · {routeDetailsCache[option.id]!.totalDistance}
-                                  </p>
+                                {hiddenCount > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setShowAllStepsFor(showAll ? null : option.id);
+                                    }}
+                                    className="text-xs text-primary hover:text-primary/80 font-medium pt-1"
+                                  >
+                                    {showAll ? 'Show fewer steps' : `+ ${hiddenCount} more step${hiddenCount > 1 ? 's' : ''}`}
+                                  </button>
                                 )}
-                              </div>
+                              </div>);
+                            })()
                             ) : loadingRouteId !== option.id ? (
                               /* Fallback to generic route from airport-transfers */
                               <>
