@@ -2977,11 +2977,12 @@ export default function Start() {
                 )}
 
                 {currentStep === 2 && (
-                  <FlightHotelStep
-                    key="flight-hotel"
-                    destination={isMultiCity ? (multiCityDestinations[0]?.city || '') : destinationSelection.cityName}
-                    startDate={startDate ? format(startDate, 'yyyy-MM-dd') : ''}
-                    endDate={endDate ? format(endDate, 'yyyy-MM-dd') : ''}
+                  startDate && endDate ? (
+                    <FlightHotelStep
+                      key="flight-hotel"
+                      destination={isMultiCity ? (multiCityDestinations[0]?.city || '') : destinationSelection.cityName}
+                      startDate={format(startDate, 'yyyy-MM-dd')}
+                      endDate={format(endDate, 'yyyy-MM-dd')}
                     travelers={travelers}
                     outboundFlight={outboundFlight}
                     setOutboundFlight={setOutboundFlight}
@@ -3029,6 +3030,20 @@ export default function Start() {
                     onIntelligenceCapture={(intel) => setFlightIntelligence(intel)}
                     flightIntelligence={flightIntelligence}
                   />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-16 px-6 text-center space-y-4">
+                      <p className="text-neutral-600 text-sm">
+                        Something went wrong — your trip dates were lost. Let's go back and re-enter them.
+                      </p>
+                      <Button
+                        onClick={() => goToStep(1)}
+                        variant="outline"
+                        className="mt-2"
+                      >
+                        Go Back to Step 1
+                      </Button>
+                    </div>
+                  )
                 )}
 
                 {currentStep === 3 && (

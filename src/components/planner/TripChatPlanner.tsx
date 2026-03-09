@@ -91,6 +91,15 @@ interface TripChatPlannerProps {
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-trip-planner`;
 
+// Detect if destination text implies multiple cities
+const looksLikeMultiCity = (destination: string): boolean => {
+  if (!destination) return false;
+  // Check for common multi-city patterns
+  const separators = /,|\band\b|\bthen\b|\bto\b|→|->|>/i;
+  const parts = destination.split(separators).map(s => s.trim()).filter(Boolean);
+  return parts.length >= 2;
+};
+
 /**
  * Normalize multi-city details using the shared utility.
  * This ensures the same logic is used for both the confirm card display
@@ -245,6 +254,22 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
             const normalized = normalizeChatTripDates(details.startDate, details.endDate);
             details.startDate = normalized.startDate;
             details.endDate = normalized.endDate;
+          }
+
+          if ((!details.cities || details.cities.length === 0) && looksLikeMultiCity(details.destination || '')) {
+            // AI dropped the cities — ask user to confirm
+            const cityGuesses = (details.destination || '')
+              .split(/,|\band\b|\bthen\b/i)
+              .map(s => s.trim())
+              .filter(Boolean);
+
+            // Show a confirmation message in the chat
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: `It sounds like you want to visit multiple cities: ${cityGuesses.join(', ')}. Is that right? If so, how many nights in each city?`
+            }]);
+            setIsStreaming(false);
+            return; // Don't create trip yet — wait for user confirmation
           }
 
           // Safety net: if AI didn't populate cities[] but destination has multiple cities,
