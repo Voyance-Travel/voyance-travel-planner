@@ -6255,6 +6255,61 @@ Generate activities for this day following ALL constraints above.`;
 
       const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish, !!context.isDayTrip, _userActivities);
 
+      // ==========================================================================
+      // PART 5 FIX: Verify user-requested activities appear in output (safety net)
+      // ==========================================================================
+      if (context.userActivities && context.userActivities.length > 0) {
+        const dayUserActivities = context.userActivities.filter(a => a.day === dayNumber);
+        // Also include unassigned activities distributed to this day
+        const unassignedActivities = context.userActivities.filter(a => !a.day);
+        const distributedUnassigned = unassignedActivities.filter((_, i) =>
+          Math.floor(i * context.totalDays / Math.max(1, unassignedActivities.length)) === dayNumber - 1
+        );
+        const allDayUserActivities = [...dayUserActivities, ...distributedUnassigned];
+
+        for (const requested of allDayUserActivities) {
+          const reqName = (requested.name || '').toLowerCase();
+          if (!reqName) continue;
+          
+          const found = generatedDay.activities?.some(gen => {
+            const genTitle = (gen.title || '').toLowerCase();
+            // Fuzzy match: check if the generated title contains key words from the requested name
+            const keywords = reqName.split(/\s+/).filter(w => w.length > 3);
+            return keywords.length > 0 && keywords.some(kw => genTitle.includes(kw));
+          });
+
+          if (!found) {
+            console.warn(`[generate-itinerary] MISSING USER ACTIVITY: "${requested.name}" was requested for Day ${dayNumber} but not found in generated output`);
+
+            // Force-add the missing activity
+            generatedDay.activities = generatedDay.activities || [];
+            generatedDay.activities.push({
+              id: `force_${dayNumber}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+              title: requested.name,
+              startTime: requested.startTime || (requested.isAllDay ? '09:00' : '10:00'),
+              endTime: requested.endTime || (requested.isAllDay ? '18:00' : '12:00'),
+              category: requested.category || 'activity',
+              description: `${requested.name}${requested.notes ? ' — ' + requested.notes : ''} (User-requested activity)`,
+              location: { name: requested.name, address: context.destination || '' },
+              cost: { amount: 0, currency: 'USD' },
+              tags: ['user-requested', requested.category || 'activity'],
+              bookingRequired: false,
+              transportation: { method: 'varies', duration: 'varies', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
+              tips: 'This activity was specifically requested by the traveler.',
+            } as StrictActivity);
+
+            console.log(`[generate-itinerary] Force-added missing activity: "${requested.name}"`);
+          }
+        }
+
+        // Re-sort by start time after force-adding
+        generatedDay.activities?.sort((a, b) => {
+          const timeA = parseTimeToMinutes(a.startTime || '') ?? 99999;
+          const timeB = parseTimeToMinutes(b.startTime || '') ?? 99999;
+          return timeA - timeB;
+        });
+      }
+
       // Transition day validation: MUST contain at least one inter-city transport activity
       if (isTransitionDay && dayCity?.transitionFrom && dayCity?.transitionTo) {
         const hasTransport = generatedDay.activities?.some((a: any) => {
