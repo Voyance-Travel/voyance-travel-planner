@@ -452,6 +452,8 @@ export interface EditorialItineraryProps {
   dateEditorCities?: Array<{ id: string; city_name: string; nights?: number }>;
   /** Travel intel cards passed from TripDetail */
   travelIntelCards?: React.ReactNode;
+  /** Trip health/completion panel passed from TripDetail */
+  tripHealthPanel?: React.ReactNode;
 }
 
 // =============================================================================
