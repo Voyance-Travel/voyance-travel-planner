@@ -230,15 +230,24 @@ export function useGenerationPoller({
       let isStalled = false;
 
       if (!inResumeGrace) {
-        // Method 1: Heartbeat-based stall detection
-        const heartbeat = meta.generation_heartbeat as string | undefined;
-        const startedAt = meta.generation_started_at as string | undefined;
-        const referenceTime = heartbeat || startedAt;
+        // Method 0: Chain failure detection — backend explicitly marked the chain as broken
+        const chainBrokenAt = meta.chain_broken_at_day as number | undefined;
+        if (chainBrokenAt && chainBrokenAt > 0 && completedDays < totalDays) {
+          console.warn(`[useGenerationPoller] Chain broke at day ${chainBrokenAt}. Triggering stall.`);
+          isStalled = true;
+        }
 
-        if (referenceTime) {
-          const elapsed = Date.now() - new Date(referenceTime).getTime();
-          if (elapsed > STALE_THRESHOLD_MS) {
-            isStalled = true;
+        // Method 1: Heartbeat-based stall detection
+        if (!isStalled) {
+          const heartbeat = meta.generation_heartbeat as string | undefined;
+          const startedAt = meta.generation_started_at as string | undefined;
+          const referenceTime = heartbeat || startedAt;
+
+          if (referenceTime) {
+            const elapsed = Date.now() - new Date(referenceTime).getTime();
+            if (elapsed > STALE_THRESHOLD_MS) {
+              isStalled = true;
+            }
           }
         }
 

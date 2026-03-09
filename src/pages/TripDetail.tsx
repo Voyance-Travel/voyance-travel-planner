@@ -318,6 +318,8 @@ export default function TripDetail() {
           generation_error: null,
           generation_heartbeat: new Date().toISOString(),
           generation_started_at: new Date().toISOString(),
+          chain_broken_at_day: null,  // Clear chain failure
+          chain_error: null,           // Clear chain error message
         },
       }).eq('id', tripId);
 
