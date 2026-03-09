@@ -34,6 +34,7 @@ const ACTION_LABELS: Record<string, string> = {
   trip_generation: 'Trip Generation',
   unlock_day: 'Day Unlock',
   group_unlock: 'Bulk Day Unlock',
+  group_unlock_purchase: 'Group Unlock',
   swap_activity: 'Activity Swap',
   regenerate_day: 'Day Regeneration',
   ai_message: 'AI Message',
