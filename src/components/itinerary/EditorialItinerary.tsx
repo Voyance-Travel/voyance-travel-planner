@@ -23,7 +23,7 @@ import {
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
   Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2, ClipboardPaste, Compass, Bus, Ship, ArrowRight, Droplets, Wrench,
-  Footprints, Navigation2, History as HistoryIcon,
+  Footprints, Navigation2, History as HistoryIcon, Lightbulb,
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
@@ -108,7 +108,7 @@ import ShareGuideSheet from '@/components/sharing/ShareGuideSheet';
 import { preloadAirportCodes, getAirportDisplaySync } from '@/services/locationSearchAPI';
 // InlineModifier removed — redundant with TripChat
 import type { ItineraryDay } from '@/services/itineraryActionExecutor';
-import { ItineraryValueHeader } from './ItineraryValueHeader';
+// ItineraryValueHeader removed — merged into unified Voyance Intelligence section
 
 import { WhyWeSkippedSection } from './WhyWeSkippedSection';
 import { NewMemberSuggestionsCard } from './NewMemberSuggestionsCard';
@@ -3912,25 +3912,36 @@ export function EditorialItinerary({
             exit={{ opacity: 0 }}
             className="space-y-6"
           >
-            {/* ── Trip Overview — collapsible summary at top ── */}
-            <div>
+            {/* ── Voyance Intelligence — unified collapsible section ── */}
+            <div data-tour="value-header" className="rounded-xl border border-border bg-gradient-to-b from-card to-card/80 backdrop-blur-sm overflow-hidden">
               <button
                 type="button"
                 onClick={() => setShowTripOverview(prev => !prev)}
-                className="flex items-center justify-between w-full text-left px-4 py-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
+                className="w-full p-3 sm:p-4 flex items-center justify-between text-left hover:bg-secondary/30 transition-colors"
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-sm font-medium shrink-0">Trip Overview</span>
-                  {destination && (
-                    <span className="text-xs text-muted-foreground truncate">
-                      {destination}
-                      {startDate ? ` · ${format(parseISO(startDate), 'MMM d')}` : ''}
-                      {endDate ? ` – ${format(parseISO(endDate), 'MMM d')}` : ''}
-                      {` · ${travelers} traveler${travelers !== 1 ? 's' : ''}`}
-                    </span>
-                  )}
+                  <Sparkles className="h-4 w-4 text-primary shrink-0" />
+                  <div className="min-w-0">
+                    <h2 className="text-sm font-semibold text-primary uppercase tracking-wider">
+                      Voyance Intelligence
+                    </h2>
+                    {!showTripOverview && (
+                      <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                        {[
+                          valueStats.voyanceFinds > 0 && `${valueStats.voyanceFinds} finds`,
+                          valueStats.timingOptimizations > 0 && `${valueStats.timingOptimizations} timing hacks`,
+                          valueStats.touristTrapsAvoided > 0 && `${valueStats.touristTrapsAvoided} local picks`,
+                          valueStats.insiderTips > 0 && `${valueStats.insiderTips} insider tips`,
+                          valueStats.estimatedSavings?.time && `${valueStats.estimatedSavings.time} saved`,
+                        ].filter(Boolean).join(' · ') || `${destination || 'Trip'} overview`}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform text-muted-foreground", showTripOverview && "rotate-180")} />
+                <ChevronDown className={cn(
+                  "h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200",
+                  showTripOverview && "rotate-180"
+                )} />
               </button>
 
               <AnimatePresence>
@@ -3939,10 +3950,75 @@ export function EditorialItinerary({
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="overflow-hidden"
+                    transition={{ duration: 0.25 }}
+                    className="overflow-hidden border-t border-border/50"
                   >
-                    <div className="mt-2 space-y-3 px-4 pb-3">
+                    {/* ROW 1: Intelligence stats badges */}
+                    {(valueStats.voyanceFinds > 0 || valueStats.timingOptimizations > 0 || valueStats.touristTrapsAvoided > 0 || valueStats.insiderTips > 0) && (
+                      <div className="border-b border-border/50">
+                        <p className="text-xs text-muted-foreground text-center pt-3 pb-1">
+                          Your {destination} trip{style ? ` · ${style} style` : ''}
+                        </p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-border/50">
+                          {valueStats.voyanceFinds > 0 && (
+                            <div className="p-4 text-center">
+                              <div className="w-10 h-10 rounded-full flex items-center justify-center mb-2 mx-auto text-primary bg-primary/10">
+                                <Sparkles className="h-4 w-4" />
+                              </div>
+                              <span className="text-3xl font-bold text-primary">{valueStats.voyanceFinds}</span>
+                              <p className="text-xs font-medium text-foreground mt-0.5">Voyance Finds</p>
+                            </div>
+                          )}
+                          {valueStats.timingOptimizations > 0 && (
+                            <div className="p-4 text-center">
+                              <div className="w-10 h-10 rounded-full flex items-center justify-center mb-2 mx-auto text-accent bg-accent/10">
+                                <Clock className="h-4 w-4" />
+                              </div>
+                              <span className="text-3xl font-bold text-accent">{valueStats.timingOptimizations}</span>
+                              <p className="text-xs font-medium text-foreground mt-0.5">Timing Hacks</p>
+                            </div>
+                          )}
+                          {valueStats.touristTrapsAvoided > 0 && (
+                            <div className="p-4 text-center">
+                              <div className="w-10 h-10 rounded-full flex items-center justify-center mb-2 mx-auto text-primary bg-primary/10">
+                                <Sparkles className="h-4 w-4" />
+                              </div>
+                              <span className="text-3xl font-bold text-primary">{valueStats.touristTrapsAvoided}</span>
+                              <p className="text-xs font-medium text-foreground mt-0.5">Local Picks</p>
+                            </div>
+                          )}
+                          {valueStats.insiderTips > 0 && (
+                            <div className="p-4 text-center">
+                              <div className="w-10 h-10 rounded-full flex items-center justify-center mb-2 mx-auto text-gold bg-gold/10">
+                                <Lightbulb className="h-4 w-4" />
+                              </div>
+                              <span className="text-3xl font-bold text-gold">{valueStats.insiderTips}</span>
+                              <p className="text-xs font-medium text-foreground mt-0.5">Insider Tips</p>
+                            </div>
+                          )}
+                        </div>
+                        {valueStats.estimatedSavings && (
+                          <div className="p-3 bg-primary/5 border-t border-border/50">
+                            <div className="flex items-center justify-center gap-2 text-sm">
+                              <TrendingUp className="h-4 w-4 text-primary" />
+                              <span className="font-medium text-foreground">
+                                {valueStats.estimatedSavings.time} saved
+                              </span>
+                              {valueStats.estimatedSavings.money && (
+                                <>
+                                  <span className="text-muted-foreground">+</span>
+                                  <span className="font-medium text-foreground">{valueStats.estimatedSavings.money}</span>
+                                </>
+                              )}
+                              <span className="text-muted-foreground">vs. typical itinerary</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ROW 2: Trip essentials + flights/hotel */}
+                    <div className="p-3 sm:p-4 space-y-3">
                       {/* Flights */}
                       {hasFlightData && allFlightLegs.length > 0 && (
                         <div className="space-y-1.5">
@@ -3970,9 +4046,9 @@ export function EditorialItinerary({
                         </div>
                       )}
 
-                      {/* Quick Intel from destinationInfo */}
+                      {/* Essentials grid */}
                       {(destinationInfo?.timezone || destinationInfo?.currency || destinationInfo?.language || destinationInfo?.emergency) && (
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-border/40">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-border/40">
                           {destinationInfo?.timezone && (
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                               <Clock className="h-3.5 w-3.5 shrink-0" />
@@ -3982,7 +4058,7 @@ export function EditorialItinerary({
                           {destinationInfo?.currency && (
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                               <Wallet className="h-3.5 w-3.5 shrink-0" />
-                              <span className="truncate">{destinationInfo.currency}</span>
+                              <span className="truncate">{destinationInfo.currency}{destinationInfo.currencySymbol ? ` (${destinationInfo.currencySymbol})` : ''}</span>
                             </div>
                           )}
                           {destinationInfo?.language && (
@@ -4008,8 +4084,9 @@ export function EditorialItinerary({
                         </div>
                       )}
 
-                      {/* Fallback: no data yet */}
-                      {!hasFlightData && !hotelSelection?.name && !destinationInfo?.timezone && !travelIntelCards && (
+                      {/* Fallback */}
+                      {!hasFlightData && !hotelSelection?.name && !destinationInfo?.timezone && !travelIntelCards && 
+                       valueStats.voyanceFinds === 0 && valueStats.timingOptimizations === 0 && (
                         <p className="text-xs text-muted-foreground italic">
                           Add flights and hotels in the <button className="underline" onClick={() => setActiveTab('details')}>Flights &amp; Hotels</button> tab.
                         </p>
@@ -4018,16 +4095,6 @@ export function EditorialItinerary({
                   </motion.div>
                 )}
               </AnimatePresence>
-            </div>
-
-            {/* Itinerary Value Header - Shows the hidden value */}
-            <div data-tour="value-header">
-              <ItineraryValueHeader
-                stats={valueStats}
-                destination={destination}
-                archetype={style}
-                tripId={tripId}
-              />
             </div>
 
             {/* Smart Finish Banner — DNA gap analysis for manual trips */}

@@ -1,45 +1,50 @@
+## Journey Sequential Generation — Implementation Status
 
+### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-## Consolidate Trip Intelligence Into One Unified Section
+**Implemented:**
 
-### Current State
-- **Trip Overview** (lines 3915-4021 in EditorialItinerary): Collapsible section with flights, hotel, destination info, and travel intel cards — but `travelIntelCards` is never passed from TripDetail to EditorialItinerary (only to MobileTripOverview)
-- **ItineraryValueHeader** (lines 4023-4031): Separate stats badges section below Trip Overview
-- **Trip Summary** (lines 4046-4160+): Full card with pricing, actions, export, etc.
-- **Desktop Travel Intel** (TripDetail lines 2171-2202): Standalone TravelIntelCard rendered outside EditorialItinerary
+1. **`src/hooks/useGenerationGate.ts`**:
+   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
+   - Added journey detection: fetches all sibling legs when `journeyId` is present
+   - Sums credit costs across all journey legs for unified billing
+   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
+   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
 
-### Plan
+2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
+   - Added `journeyLegs` state for cost breakdown display
+   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
+   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
+   - Updated cost confirmation dialog:
+     - Shows "Journey Cost Breakdown" header for journeys
+     - Lists each leg with city, days, and cost
+     - Shows "Journey Total" instead of "Total"
+     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
+     - Disabled partial generation for journeys (must pay full upfront)
+     - "Confirm & Generate Journey" button text for journeys
 
-#### 1. TripDetail.tsx — Pass `travelIntelCards` to EditorialItinerary + remove desktop standalone
+### Part 2: Auto-Chain Generation (TODO)
 
-**Pass prop**: Add `travelIntelCards={...}` to the `<EditorialItinerary>` component (around line 2277), using the same TravelIntelCard JSX currently at lines 2171-2202.
+When leg 1 completes generation, the backend should:
+1. Check for next queued leg in the journey
+2. Automatically trigger `generate-trip` for the next leg
+3. Continue until all legs are generated
 
-**Remove standalone desktop Travel Intel**: Delete lines 2171-2202 (the `{!isPastTripView && (...)}` block with TravelIntelCard inside the `hidden sm:block` div). Keep the TripHealthPanel.
+Files to modify:
+- `supabase/functions/generate-trip/index.ts` or similar edge function
+- Add post-generation hook to detect and chain to next journey leg
 
-#### 2. EditorialItinerary.tsx — Merge Trip Overview + ItineraryValueHeader into one "Voyance Intelligence" collapsible
+### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
 
-**Replace lines 3915-4031** (Trip Overview collapsible + ItineraryValueHeader) with a single unified collapsible section:
+**Implemented:**
 
-- **Header row**: Sparkles icon + "Voyance Intelligence" title + collapsed summary (savings text) + chevron toggle
-- **Expanded content**:
-  - **Row 1**: Stats badges grid (Voyance Finds, Timing Hacks, Local Picks, Insider Tips) from `valueStats` — only if any > 0. Include savings summary line.
-  - **Row 2**: Trip essentials grid (timezone, currency, language, emergency) from `destinationInfo`
-  - **Row 3**: Travel Intel cards from `travelIntelCards` prop
-  - **Row 4**: Flight/hotel info currently in Trip Overview (preserved from existing code)
-
-**Keep Trip Summary card** (lines 4046+) — that's pricing/actions, not intelligence. It stays separate.
-
-**Remove ItineraryValueHeader import** (line 111) since it's no longer used.
-
-#### 3. No changes to
-- TravelIntelCard component
-- MobileTripOverview (keeps its own collapsed layout)
-- Trip Summary card (pricing, export, share actions)
-- Edge functions or database
-
-### Technical Notes
-- The `Collapsible` component from radix is already imported in EditorialItinerary
-- `valueStats` is already computed in the component
-- `travelIntelCards` prop already exists in interface and is destructured — just needs to be passed from TripDetail
-- Icons (Sparkles, Clock, Target, TrendingUp) need to be verified as imported
-
+1. **`src/pages/TripDetail.tsx`**:
+   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
+   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
+   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
+   - Added distinct "queued" state UI:
+     - Clock icon with hourglass badge
+     - "{destination} is up next" heading
+     - Explanation text about waiting for previous leg
+     - "View previous city" button to navigate back to the generating leg
+   - Added `Clock` to lucide-react imports
