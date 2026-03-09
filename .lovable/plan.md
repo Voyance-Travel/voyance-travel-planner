@@ -1,63 +1,66 @@
 
 
-## Plan: Remove Browser Loop Fallback + Client-Side Stall Detector
+## Broken Edge Functions and Dead-End Code Audit
 
-### What's Already Working (No Changes Needed)
-- **Backend self-chaining**: `generate-trip` → `generate-trip-day` → self-chain is fully implemented (lines 12124-12563 of edge function)
-- **`startServerGeneration`**: Already calls `generate-trip` action (fire-and-forget)
-- **`GenerationPhases.tsx`**: Already polls `itinerary_days` every 5s and shows live day-by-day progress
-- **`useGenerationPoller`**: Already detects stalls via heartbeat and auto-resumes
+### 1. Edge Functions Missing from `config.toml` (Will Fail on Deploy)
 
-### What's Broken — Two Things
+Three edge functions exist as code directories but are **not registered** in `supabase/config.toml`, meaning they won't be deployed:
 
-**1. Fallback to browser loop** (ItineraryGenerator.tsx lines 456-469): When `startServerGeneration` throws, the catch block falls back to `generateItinerary()` — the browser-side for-loop. This means any server-side error (timeout, 403, network blip) reverts to the broken browser-dependent path.
+| Function | Has Client Code? | Status |
+|---|---|---|
+| `mapkit-token` | Yes (`src/utils/mapkit.ts`) | **Broken** -- called but never deployed |
+| `validate-iap-receipt` | Yes (`src/services/iapService.ts`) | **Broken** -- called but never deployed |
+| `send-push` | No client references | Dead code -- no caller exists |
 
-**2. Client-side stall detector** (ItineraryGenerator.tsx lines 261-313): A `setInterval` every 10s checks `Date.now() - lastProgressTimeRef.current > 600_000`. During server-side generation, `lastProgressTimeRef` is never updated (it's only reset when `days.length` changes in the browser-side hook, which doesn't happen during server gen). So after 10 minutes, this fires `handleStallTimeout` → cancels generation → refunds credits → shows "Generation timed out." This is the thing that kills generation when the user walks away and comes back.
-
-### Changes
-
-#### File 1: `src/components/itinerary/ItineraryGenerator.tsx`
-
-**Change A — Remove stall detector setup** (lines ~261-313):
-Remove the `stallCheckRef` `setInterval` setup and the `handleStallTimeout` function from `handleGenerate`. The server-side heartbeat + `useGenerationPoller` auto-resume already handles stall detection properly.
-
-**Change B — Remove browser loop fallback** (lines ~455-469):
-Replace the `catch` block that falls back to `generateItinerary()` with a simple error display. If `startServerGeneration` fails, show the error to the user and let them retry — don't silently fall back to a broken browser loop.
-
-```typescript
-// OLD:
-} catch (serverErr) {
-  console.warn('Server-side generation failed, falling back to frontend loop:', serverErr);
-  const generatedDays = await generateItinerary({ ... });
-  // ... 40 lines of fallback logic
-}
-
-// NEW:
-} catch (serverErr) {
-  console.error('[ItineraryGenerator] Server-side generation failed:', serverErr);
-  setPrePhase(null);
-  setHasStarted(false);
-  toast.error('Failed to start generation. Please try again.');
-  return;
-}
+**Fix**: Add these to `config.toml`:
+```toml
+[functions.mapkit-token]
+  verify_jwt = false
+[functions.validate-iap-receipt]
+  verify_jwt = false
+[functions.send-push]
+  verify_jwt = false
 ```
+Or delete `send-push` entirely since nothing calls it.
 
-**Change C — Clean up stall detector references**: Remove all `stallCheckRef` cleanup calls scattered throughout error handlers (lines 132, 149, 265, 356, 387, 410, 476-477), since the stall detector no longer exists. Remove `stallCheckRef` and `lastProgressTimeRef` declarations and the `useEffect` that resets the stall detector on `days.length` change (lines 206-212).
+### 2. `send-push` Uses Deprecated Deno API
 
-**Change D — Remove `generationTimeoutRef` cleanup** if it's also unused (verify it's only used alongside stallCheck).
+`send-push/index.ts` line 1 uses `import { serve } from "https://deno.land/std@0.168.0/http/server.ts"` -- the old `serve()` pattern instead of the modern `Deno.serve()`. This will likely fail on current edge-runtime. Same issue exists in the function body.
 
-#### File 2: `src/hooks/useItineraryGeneration.ts`
+### 3. `src/services/liveAPI/index.ts` -- Complete Dead Code
 
-No changes needed to the hook itself — `generateItineraryProgressive` and `generateItinerary` can stay as dead code for now. They're only called from the fallback path we're removing. Removing them is optional cleanup.
+This file is never imported anywhere in the codebase. It exports mock stubs for `amadeusAPI` and `bookingAPI` with zero consumers. The `ENABLE_MOCK_APIS` flag it references is only mentioned inside this file itself.
 
-### Files to Modify
+**Fix**: Delete `src/services/liveAPI/index.ts` (and the directory).
 
-| File | What |
-|------|------|
-| `src/components/itinerary/ItineraryGenerator.tsx` | Remove stall detector, remove browser loop fallback, clean up refs |
+### 4. Admin/Maintenance Functions -- Not Broken but Worth Noting
 
-### Risk Assessment
-- **Low risk**: The server-side self-chaining is already fully implemented and tested
-- The `useGenerationPoller` already handles stall detection via heartbeat (3-min threshold) and auto-resumes
-- The only regression risk: if `startServerGeneration` fails on first call, user now sees an error instead of silently falling back. This is actually better UX — the fallback was broken anyway.
+These edge functions are only called from admin pages, which is fine:
+- `cleanup-activities`, `cleanup-attractions`, `cleanup-destinations` (admin DataCleanup page)
+- `delete-users`, `import-users` (admin BulkImport page)
+
+These edge functions exist but have **no client callers** at all (internal/cron/one-off tools):
+- `golden-persona-tests`
+- `seed-demo-user`
+- `migrate-site-images`
+- `score-image-quality`
+- `backfill-activity-costs`
+- `backfill-destination-images`
+
+These aren't broken -- they're maintenance utilities -- but they add deploy overhead.
+
+### Summary of Required Fixes
+
+| Priority | Issue | Fix |
+|---|---|---|
+| **High** | `mapkit-token` missing from config.toml | Add to config.toml |
+| **High** | `validate-iap-receipt` missing from config.toml | Add to config.toml |
+| **Medium** | `send-push` missing from config.toml + deprecated API + no callers | Delete the function |
+| **Low** | `src/services/liveAPI/` is dead code | Delete the directory |
+
+### Implementation
+
+1. Add `mapkit-token` and `validate-iap-receipt` entries to `supabase/config.toml`
+2. Delete `supabase/functions/send-push/` directory (or add to config.toml and modernize to `Deno.serve()` if push notifications are planned)
+3. Delete `src/services/liveAPI/` directory
 
