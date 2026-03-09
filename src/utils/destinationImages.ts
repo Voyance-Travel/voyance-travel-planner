@@ -120,24 +120,24 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1546874177-9e664107314e?w=1200',
   ],
   'busan': [
-    'https://images.unsplash.com/photo-1538485399081-7191377e8241?w=1200', // Haeundae Beach
+    'https://images.unsplash.com/photo-1596768651008-c3d3ef56c8cf?w=1200', // Haeundae Beach
     'https://images.unsplash.com/photo-1578037571214-25e07a2f91ef?w=1200', // Gamcheon Culture Village
     'https://images.unsplash.com/photo-1596422846543-75c6fc197f11?w=1200', // Busan coastal view
   ],
   'jeju': [
-    'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=1200', // Jeju landscape
     'https://images.unsplash.com/photo-1623083500086-8a7cd5a8f4a6?w=1200', // Jeju coast
     'https://images.unsplash.com/photo-1599707367072-cd6ada2bc375?w=1200', // Jeju nature
+    'https://images.unsplash.com/photo-1594817527365-bf75115b5a5d?w=1200', // Jeju landscape
   ],
   'osaka': [
     'https://images.unsplash.com/photo-1590559899731-a382839e5549?w=1200', // Osaka Castle
     'https://images.unsplash.com/photo-1556731740-e9f6b0b7f8f5?w=1200', // Dotonbori
-    'https://images.unsplash.com/photo-1596422846543-75c6fc197f07?w=1200', // Osaka night
+    'https://images.unsplash.com/photo-1570521462033-3015e76e7432?w=1200', // Osaka temple
   ],
   'taipei': [
-    'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=1200', // Taipei 101
-    'https://images.unsplash.com/photo-1517154421773-0529f29ea451?w=1200', // Temple
     'https://images.unsplash.com/photo-1553653924-39b70295f8da?w=1200', // Jiufen
+    'https://images.unsplash.com/photo-1470004914212-05527e49370b?w=1200', // Taipei skyline
+    'https://images.unsplash.com/photo-1598935898639-81586f7d2129?w=1200', // Taipei 101
   ],
   'hong kong': [
     'https://images.unsplash.com/photo-1506970845246-18f21d533b20?w=1200', // Victoria Harbour
@@ -151,13 +151,13 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
   ],
   'kuala lumpur': [
     'https://images.unsplash.com/photo-1596422846543-75c6fc197f07?w=1200', // Petronas Towers
-    'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=1200', // KL skyline
-    'https://images.unsplash.com/photo-1519677100203-a0e668c92439?w=1200', // Batu Caves
+    'https://images.unsplash.com/photo-1573731843786-58f2e9a5f24e?w=1200', // KL skyline night
+    'https://images.unsplash.com/photo-1583852460850-e0b68ce12ac5?w=1200', // Batu Caves area
   ],
   'kuala-lumpur': [
     'https://images.unsplash.com/photo-1596422846543-75c6fc197f07?w=1200',
-    'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=1200',
-    'https://images.unsplash.com/photo-1519677100203-a0e668c92439?w=1200',
+    'https://images.unsplash.com/photo-1573731843786-58f2e9a5f24e?w=1200',
+    'https://images.unsplash.com/photo-1583852460850-e0b68ce12ac5?w=1200',
   ],
   'hanoi': [
     'https://images.unsplash.com/photo-1557750255-c76072a7aad1?w=1200',
@@ -429,13 +429,6 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
   ],
 };
 
-// Generate Unsplash URL for unknown destinations
-const generateUnsplashUrl = (destination: string, index = 0): string => {
-  const seed = destination.toLowerCase().replace(/[^a-z]/g, '');
-  const sizes = ['1200', '800', '600'];
-  const size = sizes[index % sizes.length];
-  return `https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=${size}&q=80&sig=${seed}${index}`;
-};
 
 // Generic travel fallbacks for completely unknown destinations
 const GENERIC_TRAVEL_IMAGES = [
@@ -497,13 +490,14 @@ export function getDestinationImages(destination: string, count = 4): string[] {
     return result;
   }
   
-  // Generate dynamic Unsplash URLs for unknown destinations
-  const dynamicUrls = Array.from({ length: count }, (_, i) => generateUnsplashUrl(destination, i));
-  // Add generic fallbacks
+  // Non-curated destination — return generic travel images (deterministic order based on destination name)
+  // The API layer (useDestinationImages hook) will also try Google Places for a real image
   const hash = normalized.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
-  dynamicUrls.push(GENERIC_TRAVEL_IMAGES[hash % GENERIC_TRAVEL_IMAGES.length]);
-  dynamicUrls.push(GENERIC_TRAVEL_IMAGES[(hash + 1) % GENERIC_TRAVEL_IMAGES.length]);
-  return dynamicUrls;
+  const result: string[] = [];
+  for (let i = 0; i < Math.min(count, GENERIC_TRAVEL_IMAGES.length); i++) {
+    result.push(GENERIC_TRAVEL_IMAGES[(hash + i) % GENERIC_TRAVEL_IMAGES.length]);
+  }
+  return result;
 }
 
 /**
