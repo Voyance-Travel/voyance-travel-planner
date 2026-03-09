@@ -1053,7 +1053,7 @@ export function ItineraryGenerator({
                   {canAffordAll ? (
                     <Button size="sm" onClick={handleConfirmGenerate} className="w-full gap-1.5">
                       <Sparkles className="h-3.5 w-3.5" />
-                      Confirm & Generate
+                      {journeyLegs.length > 1 ? 'Confirm & Generate Journey' : 'Confirm & Generate'}
                     </Button>
                   ) : canAffordPartial ? (
                     <Button size="sm" onClick={() => handleConfirmPartialGenerate(affordableDays)} className="w-full gap-1.5">
@@ -1064,7 +1064,7 @@ export function ItineraryGenerator({
                     <Button size="sm" onClick={() => {
                       setShowCostConfirm(false);
                       showOutOfCredits({
-                        creditsNeeded: costEstimate.totalCredits,
+                        creditsNeeded: effectiveTotalCost,
                         creditsAvailable: currentBalance,
                         tripId,
                       });
