@@ -7,11 +7,41 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 
-// Simple in-memory cache to avoid refetching
+// ── localStorage cache with 7-day TTL ────────────────────────────────────────
+const CACHE_KEY_PREFIX = 'voyance_photo_';
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+function getFromLocalCache(key: string): { url: string; source: string } | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY_PREFIX + key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Date.now() - parsed.ts > CACHE_TTL_MS) {
+      localStorage.removeItem(CACHE_KEY_PREFIX + key);
+      return null;
+    }
+    return { url: parsed.url, source: parsed.source };
+  } catch {
+    return null;
+  }
+}
+
+function setLocalCache(key: string, url: string, source: string): void {
+  try {
+    localStorage.setItem(CACHE_KEY_PREFIX + key, JSON.stringify({ url, source, ts: Date.now() }));
+  } catch {
+    // localStorage full — ignore
+  }
+}
+
+// In-memory cache for same-session dedup
 const imageCache = new Map<string, { url: string; source: string }>();
 
 // Pending requests to dedupe concurrent fetches
 const pendingRequests = new Map<string, Promise<{ url: string; source: string } | null>>();
+
+// Track which activity IDs we've already persisted to avoid duplicate writes
+const persistedActivityIds = new Set<string>();
 
 function getCategoryFallback(category?: string, title?: string): string {
   return getActivityFallbackImage(category, title);
@@ -23,6 +53,24 @@ function getCacheKey(title: string, destination?: string, cacheId?: string): str
     .replace(/[^a-z0-9]/g, '-')
     .slice(0, 80);
   return normalized;
+}
+
+async function persistPhotoToActivity(activityId: string, photoUrl: string): Promise<void> {
+  if (persistedActivityIds.has(activityId)) return;
+  persistedActivityIds.add(activityId);
+  try {
+    const { error } = await supabase
+      .from('trip_activities')
+      .update({ photos: [photoUrl] })
+      .eq('id', activityId);
+
+    if (error) {
+      persistedActivityIds.delete(activityId);
+      console.warn('[useActivityImage] Failed to persist photo:', error.message);
+    }
+  } catch {
+    persistedActivityIds.delete(activityId);
+  }
 }
 
 async function fetchImageFromBackend(
@@ -41,7 +89,6 @@ async function fetchImageFromBackend(
     });
 
     if (error) {
-      // Backend error - fall through to fallback handling
       return null;
     }
 
@@ -52,7 +99,6 @@ async function fetchImageFromBackend(
 
     return null;
   } catch (err) {
-    // Fetch error - fall through to fallback handling
     return null;
   }
 }
@@ -62,7 +108,8 @@ export function useActivityImage(
   category?: string,
   existingPhoto?: string | null,
   destination?: string,
-  cacheId?: string
+  cacheId?: string,
+  activityId?: string
 ): { 
   imageUrl: string | null; 
   loading: boolean; 
@@ -107,6 +154,16 @@ export function useActivityImage(
       return;
     }
 
+    // Check localStorage cache (survives page reload)
+    const localCached = getFromLocalCache(cacheKey);
+    if (localCached) {
+      imageCache.set(cacheKey, localCached); // warm in-memory
+      setImageUrl(localCached.url);
+      setSource(localCached.source);
+      setLoading(false);
+      return;
+    }
+
     // Check if there's already a pending request for this image
     if (pendingRequests.has(cacheKey)) {
       pendingRequests.get(cacheKey)!.then((result) => {
@@ -125,7 +182,6 @@ export function useActivityImage(
     }
 
     // If destination is missing, don't attempt "real" venue lookup.
-    // Without destination we get wildly irrelevant results and cache collisions.
     if (!destination || destination.trim().length < 2) {
       setImageUrl(getCategoryFallback(category, title));
       setSource('fallback');
@@ -155,8 +211,14 @@ export function useActivityImage(
 
         if (result) {
           imageCache.set(cacheKey, result);
+          setLocalCache(cacheKey, result.url, result.source);
           setImageUrl(result.url);
           setSource(result.source);
+
+          // Persist photo URL to activity record so future loads skip the API
+          if (activityId && result.source !== 'fallback') {
+            persistPhotoToActivity(activityId, result.url).catch(() => {});
+          }
         } else {
           // Keep the category fallback
           setSource('fallback');
@@ -166,7 +228,7 @@ export function useActivityImage(
     }, 50 + Math.random() * 100);
 
     return () => clearTimeout(timer);
-  }, [title, category, existingPhoto, destination]);
+  }, [title, category, existingPhoto, destination, activityId]);
 
   return { imageUrl, loading, source };
 }
@@ -180,4 +242,5 @@ export function getActivityPlaceholder(category?: string): string {
 export function clearActivityImageCache(): void {
   imageCache.clear();
   pendingRequests.clear();
+  persistedActivityIds.clear();
 }

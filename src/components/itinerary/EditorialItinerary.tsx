@@ -8515,7 +8515,8 @@ function ActivityRow({
     effectiveCategory,
     existingPhoto,
     shouldFetchRealPhoto ? destination : undefined,
-    activity.id
+    activity.id,
+    activity.id  // activityId — for DB write-back of fetched photo URLs
   );
 
   const thumbnailUrl = fetchedImageUrl;
