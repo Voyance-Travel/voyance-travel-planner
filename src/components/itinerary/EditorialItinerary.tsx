@@ -108,7 +108,7 @@ import ShareGuideSheet from '@/components/sharing/ShareGuideSheet';
 import { preloadAirportCodes, getAirportDisplaySync } from '@/services/locationSearchAPI';
 // InlineModifier removed — redundant with TripChat
 import type { ItineraryDay } from '@/services/itineraryActionExecutor';
-// ItineraryValueHeader removed — merged into unified Voyance Intelligence section
+import { TransitModePicker } from './TransitModePicker';
 
 import { WhyWeSkippedSection } from './WhyWeSkippedSection';
 import { NewMemberSuggestionsCard } from './NewMemberSuggestionsCard';
