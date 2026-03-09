@@ -8373,6 +8373,7 @@ function ActivityRow({
   onViewReviews,
   onTransportModeChange,
   changingTransportActivityId,
+  transitOrigin: transitOriginProp,
   collaboratorColorMap,
   aiLocked,
   guestMustPropose,
