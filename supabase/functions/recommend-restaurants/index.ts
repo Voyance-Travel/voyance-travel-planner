@@ -422,7 +422,9 @@ async function fetchFoursquare(
         id: `foursquare_${place.fsq_id}`,
         name: (place.name as string) || 'Unknown',
         cuisine: categories.map(c => c.short_name || c.name),
-        rating: ((place.rating as number) || 0) / 2, // Foursquare uses 0-10 scale
+        // Foursquare uses 1-10 scale. Map linearly to 1-5 to match Google/TripAdvisor.
+        // e.g. FSQ 10→5.0, FSQ 8→4.1, FSQ 7→3.7, FSQ 5→2.8
+        rating: (place.rating as number) ? Math.round(((((place.rating as number) - 1) / 9) * 4 + 1) * 10) / 10 : 0,
         reviewCount: stats?.total_ratings || 0,
         priceLevel: (place.price as number) || 2,
         address: location?.formatted_address || location?.address || '',
