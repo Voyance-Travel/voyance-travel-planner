@@ -1777,15 +1777,72 @@ export function EditorialItinerary({
           };
         }));
         setHasChanges(true);
-        const modeLabels: Record<string, string> = {
-          walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus',
-          uber: 'Rideshare', taxi: 'Taxi', train: 'Train',
+      } else {
+        // Optimize call returned no data — apply mode change locally with default costs
+        const modeCosts: Record<string, number> = {
+          walk: 0, walking: 0, metro: 3, subway: 3, bus: 2,
+          uber: 15, taxi: 20, rideshare: 12, car: 5,
         };
-        toast.success(`Updated to ${modeLabels[newMode] || newMode}`);
+        setDays(prev => prev.map((d, idx) => {
+          if (idx !== dayIndex) return d;
+          return {
+            ...d,
+            activities: d.activities.map(act => {
+              if (act.id !== activityId || !act.transportation) return act;
+              return {
+                ...act,
+                transportation: {
+                  ...act.transportation,
+                  method: newMode,
+                  estimatedCost: {
+                    amount: modeCosts[newMode.toLowerCase()] ?? 0,
+                    currency: act.transportation.estimatedCost?.currency || 'USD',
+                  },
+                },
+              };
+            }),
+          };
+        }));
+        setHasChanges(true);
       }
+      const modeLabels: Record<string, string> = {
+        walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus',
+        uber: 'Rideshare', taxi: 'Taxi', train: 'Train',
+      };
+      toast.success(`Updated to ${modeLabels[newMode] || newMode}`);
     } catch (err) {
       console.error('Transport mode change error:', err);
-      toast.error('Failed to recalculate route');
+      // Optimize failed — apply mode change locally with default costs
+      const modeCosts: Record<string, number> = {
+        walk: 0, walking: 0, metro: 3, subway: 3, bus: 2,
+        uber: 15, taxi: 20, rideshare: 12, car: 5,
+      };
+      setDays(prev => prev.map((d, idx) => {
+        if (idx !== dayIndex) return d;
+        return {
+          ...d,
+          activities: d.activities.map(act => {
+            if (act.id !== activityId || !act.transportation) return act;
+            return {
+              ...act,
+              transportation: {
+                ...act.transportation,
+                method: newMode,
+                estimatedCost: {
+                  amount: modeCosts[newMode.toLowerCase()] ?? 0,
+                  currency: act.transportation.estimatedCost?.currency || 'USD',
+                },
+              },
+            };
+          }),
+        };
+      }));
+      setHasChanges(true);
+      const modeLabels: Record<string, string> = {
+        walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus',
+        uber: 'Rideshare', taxi: 'Taxi', train: 'Train',
+      };
+      toast.success(`Updated to ${modeLabels[newMode] || newMode} (estimated cost)`);
     } finally {
       setChangingTransportActivityId(null);
     }
@@ -8314,7 +8371,9 @@ function ActivityRow({
       return <Navigation2 className="h-3.5 w-3.5" />;
     })();
 
-    const transportCost = cost > 0 ? cost : null;
+    // Walking is always free — override any AI-hallucinated cost
+    const isWalkingTransport = activityTitle.toLowerCase().includes('walk') || activityTitle.toLowerCase().includes('stroll');
+    const transportCost = isWalkingTransport ? null : (cost > 0 ? cost : null);
 
     return (
       <div
