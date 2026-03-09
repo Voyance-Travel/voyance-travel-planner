@@ -7,7 +7,7 @@ import { NightsRedistributionModal } from '@/components/trip/NightsRedistributio
 import { useParams, useNavigate, useSearchParams, Navigate } from 'react-router-dom';
 import { format, isAfter, isBefore, differenceInDays, addDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
-import { Loader2, MapPin, ArrowLeft, Sparkles, CheckCircle, Coins, Calendar, Clock } from 'lucide-react';
+import { Loader2, MapPin, ArrowLeft, Sparkles, CheckCircle, PenLine, Coins, Calendar, Clock } from 'lucide-react';
 import { CREDIT_COSTS } from '@/config/pricing';
 import {
   AlertDialog,
