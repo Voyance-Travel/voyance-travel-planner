@@ -5514,6 +5514,124 @@ These help the traveler prepare for their trip.
         }
       }
 
+      // ═══════════════════════════════════════════════════════════════════════════
+      // USER ACTIVITIES INJECTION — MANDATORY FROM CHAT EXTRACTION (Part 3 Fix)
+      // ═══════════════════════════════════════════════════════════════════════════
+      let userActivitiesPrompt = '';
+      
+      if (context.userActivities && context.userActivities.length > 0) {
+        // Filter activities for this day, plus unassigned activities (no day specified)
+        const dayActivities = context.userActivities.filter(a => a.day === dayNumber);
+        const unassignedActivities = context.userActivities.filter(a => !a.day);
+        
+        // Distribute unassigned activities across days
+        const distributedUnassigned = unassignedActivities.filter((_, i) =>
+          Math.floor(i * context.totalDays / Math.max(1, unassignedActivities.length)) === dayNumber - 1
+        );
+        
+        const activitiesForThisDay = [...dayActivities, ...distributedUnassigned];
+        const hasAllDayEvent = activitiesForThisDay.some(a => a.isAllDay);
+        
+        if (hasAllDayEvent) {
+          const allDayEvent = activitiesForThisDay.find(a => a.isAllDay)!;
+          const otherActivities = activitiesForThisDay.filter(a => !a.isAllDay);
+          
+          userActivitiesPrompt = `
+${'='.repeat(70)}
+🚨 USER'S PLAN FOR THIS DAY — FOLLOW EXACTLY (ALL-DAY EVENT)
+${'='.repeat(70)}
+
+This is a DEDICATED day for: **${allDayEvent.name}**
+${allDayEvent.startTime ? `From: ${allDayEvent.startTime}` : 'From: 09:00 AM'}
+${allDayEvent.endTime ? `Until: ${allDayEvent.endTime}` : 'Until: 06:00 PM'}
+${allDayEvent.notes ? `Notes: ${allDayEvent.notes}` : ''}
+
+🚫 DO NOT add other sightseeing, museums, attractions, or activities to this day.
+The user wants to spend the FULL DAY at ${allDayEvent.name}.
+
+The ONLY things to schedule:
+1. Transit FROM hotel/airport TO ${allDayEvent.name}
+2. "${allDayEvent.name}" as a SINGLE activity block (the main event — generate this as ONE activity with the full time range)
+3. Transit FROM ${allDayEvent.name} back to hotel
+${otherActivities.length > 0 ? `4. Evening activities the user specifically requested: ${otherActivities.map(a => `"${a.name}"${a.startTime ? ` at ${a.startTime}` : ''}`).join(', ')}` : '4. A dinner near the hotel (user did not specify, so pick something good)'}
+
+⚠️ DO NOT apply normal pacing rules (5-8 activities). This day has 1 main event.
+⚠️ The main event MUST appear as an actual activity in your output — not just transfers around it.
+`;
+        } else if (activitiesForThisDay.length > 0) {
+          // User specified activities but not an all-day event
+          userActivitiesPrompt = `
+${'='.repeat(70)}
+🚨 USER'S REQUESTED ACTIVITIES FOR THIS DAY — ALL MANDATORY
+${'='.repeat(70)}
+
+${activitiesForThisDay.map((a, i) => {
+  let line = `${i + 1}. "${a.name}"`;
+  if (a.startTime) line += ` at ${a.startTime}`;
+  if (a.endTime) line += ` until ${a.endTime}`;
+  if (a.category) line += ` [${a.category}]`;
+  if (a.notes) line += ` — ${a.notes}`;
+  return line;
+}).join('\n')}
+
+RULES:
+- Include ALL activities listed above. They are NON-NEGOTIABLE.
+- Schedule them at the times specified, or at logical times if no time given
+- Add meals around them (breakfast, lunch, dinner) if not already included
+- Add transit between activities
+- You MAY add 1-2 additional activities if there are obvious gaps, but the user's picks come first
+- Do NOT replace any user activity with your own recommendation
+`;
+        }
+      }
+      
+      // ═══════════════════════════════════════════════════════════════════════════
+      // FLIGHT CONSTRAINTS INJECTION (Part 3 Fix)
+      // ═══════════════════════════════════════════════════════════════════════════
+      let flightPrompt = '';
+      
+      if (dayNumber === 1 && context.flightArrival?.airport) {
+        const arrival = context.flightArrival;
+        flightPrompt += `
+🛬 ARRIVAL FLIGHT:
+The traveler arrives at ${arrival.airport} at ${arrival.time || 'morning'}.
+${arrival.airline ? `Airline: ${arrival.airline}${arrival.flightNumber ? ` ${arrival.flightNumber}` : ''}` : ''}
+
+CONSTRAINT: Start the day's activities AFTER arrival + transit time.
+- Allow ~30-45 min from landing to ground transport
+- Add transit from ${arrival.airport} to the first destination
+- The first non-transit activity should NOT start before ${arrival.time ? `${arrival.time} + 90 minutes` : '10:00 AM'}
+`;
+      }
+      
+      if (dayNumber === context.totalDays && context.flightDeparture?.airport) {
+        const departure = context.flightDeparture;
+        flightPrompt += `
+🛫 DEPARTURE FLIGHT:
+The traveler departs from ${departure.airport}${departure.time ? ` at ${departure.time}` : ''}.
+${departure.airline ? `Airline: ${departure.airline}${departure.flightNumber ? ` ${departure.flightNumber}` : ''}` : ''}
+
+CONSTRAINT: The last activities MUST end with enough time to get to ${departure.airport}.
+- Allow 2-3 hours before departure for transit + check-in
+- Include a "Transit to ${departure.airport}" activity
+- End with a "Flight Departure from ${departure.airport}" activity
+`;
+      }
+      
+      // ═══════════════════════════════════════════════════════════════════════════
+      // HOTEL PREFERENCE INJECTION (Part 4 Fix)
+      // ═══════════════════════════════════════════════════════════════════════════
+      let hotelPrompt = '';
+      
+      if (context.hotelPreference) {
+        hotelPrompt = `
+🏨 HOTEL LOCATION: The traveler wants to stay in/near ${context.hotelPreference}.
+- All "return to hotel" activities should reference ${context.hotelPreference}
+- Morning activities should logically start near ${context.hotelPreference}
+- Evening activities should end near ${context.hotelPreference} when possible
+`;
+      }
+
       // Calculate day-of-week for operating hours awareness
       const dateObj = new Date(date);
       const DAY_NAMES_GEN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
