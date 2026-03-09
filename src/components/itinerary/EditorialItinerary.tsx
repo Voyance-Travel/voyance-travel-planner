@@ -8537,90 +8537,28 @@ function ActivityRow({
     const transportCost = isWalkingTransport ? null : (cost > 0 ? cost : null);
 
     return (
-      <div
-        className={cn(
-          "flex items-center gap-2 px-4 py-2 group/activity",
-          !isLast && "border-b border-border/30",
-        )}
-        data-tour="transit-row"
-      >
-        {/* Dotted timeline connector */}
-        <div className="flex flex-col items-center gap-0.5 shrink-0 text-border">
-          <div className="w-px h-2 border-l border-dashed" />
-          <div className="w-px h-2 border-l border-dashed" />
-        </div>
-
-        {/* Icon */}
-        <span className="text-muted-foreground shrink-0">{transportIcon}</span>
-
-        {/* Title */}
-        <span className="text-xs text-muted-foreground truncate min-w-0">
-          {activityTitle}
-        </span>
-
-        {/* Duration pill */}
-        {durationText && (
-          <span className="text-[10px] font-medium text-muted-foreground bg-secondary/50 rounded-full px-2 py-0.5 shrink-0 whitespace-nowrap">
-            {durationText}
-          </span>
-        )}
-
-        {/* Cost (only if > 0) */}
-        {transportCost != null && (
-          <span className="text-[10px] text-muted-foreground ml-auto shrink-0">
-            {formatCurrency(displayCost(transportCost), tripCurrency)}
-          </span>
-        )}
-
-        {/* Context menu (keep editable) */}
-        {isEditable && !activity.isLocked && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="ml-auto min-w-[44px] min-h-[44px] flex items-center justify-center text-foreground/60 hover:text-foreground hover:bg-muted rounded-full transition-colors sm:opacity-0 sm:group-hover/activity:opacity-100 shrink-0 touch-manipulation">
-                <MoreHorizontal className="h-5 w-5" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem onClick={() => onEdit(dayIndex, activityIndex, activity)} className="cursor-pointer gap-2 text-xs">
-                <Edit3 className="h-3 w-3" /> Edit Details
-              </DropdownMenuItem>
-              {activityIndex > 0 && (
-                <DropdownMenuItem onClick={() => onMove(dayIndex, activity.id, 'up')} className="cursor-pointer gap-2 text-xs">
-                  <MoveUp className="h-3 w-3" /> Move Up
-                </DropdownMenuItem>
-              )}
-              {activityIndex < totalActivities - 1 && (
-                <DropdownMenuItem onClick={() => onMove(dayIndex, activity.id, 'down')} className="cursor-pointer gap-2 text-xs">
-                  <MoveDown className="h-3 w-3" /> Move Down
-                </DropdownMenuItem>
-              )}
-              {onMoveToDay && totalDays > 1 && (
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="cursor-pointer gap-2 text-xs">
-                    <Calendar className="h-3 w-3" /> Move to Day
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent>
-                    {Array.from({ length: totalDays }, (_, d) => d).filter(d => d !== dayIndex).map(d => (
-                      <DropdownMenuItem key={d} onClick={() => onMoveToDay(dayIndex, activity.id, d)} className="text-xs">
-                        Day {d + 1}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-              )}
-              {onRemove && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => onRemove(dayIndex, activity.id)} className="text-destructive text-xs cursor-pointer gap-2">
-                    <Trash2 className="h-3 w-3" />
-                    Remove
-                  </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
+      <TransitModePicker
+        activity={activity}
+        activityIndex={activityIndex}
+        dayIndex={dayIndex}
+        activityTitle={activityTitle}
+        transportIcon={transportIcon}
+        durationText={durationText}
+        transportCost={transportCost}
+        isLast={isLast}
+        isEditable={isEditable}
+        city={destination}
+        tripId={tripId}
+        tripCurrency={tripCurrency}
+        onEdit={onEdit}
+        onMove={onMove}
+        onMoveToDay={onMoveToDay}
+        onRemove={onRemove}
+        totalActivities={totalActivities}
+        totalDays={totalDays}
+        formatCurrency={(c: number) => formatCurrency(displayCost(c), tripCurrency)}
+        onActivityUpdated={() => {/* parent handles via onEdit */}}
+      />
     );
   }
 
