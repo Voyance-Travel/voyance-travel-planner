@@ -24,7 +24,8 @@ import {
    Trash2,
    UserPlus,
    AlertTriangle,
-   RotateCcw
+   RotateCcw,
+   RefreshCw
 } from 'lucide-react';
 import ActiveTripCard from '@/components/trips/ActiveTripCard';
 import { PastTripCard } from '@/components/trips/PastTripCard';
