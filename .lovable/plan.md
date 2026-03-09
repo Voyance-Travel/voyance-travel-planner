@@ -51,6 +51,16 @@ Files to modify:
 
 ---
 
+## Preference Enforcement Activation ✅ COMPLETE
+
+### Fix 1: Per-day preference checks now trigger retries ✅
+Moved MINIMUM REAL ACTIVITY COUNT and USER PREFERENCE VALIDATION blocks to after `validateGeneratedDay()` so they can push errors into `validation.errors`. Upgraded all `console.warn` calls to `validation.errors.push` + `validation.isValid = false`. Added budget preference validation ($75+ threshold). Activity keyword checks skip departure days.
+
+### Fix 2: Stage 2.6 personalization rejection enabled ✅
+Uncommented and enhanced the rejection block. Critical and major dietary violations are now actively enforced — dietary violations get patched with ⚠️ warnings in activity descriptions. Low personalization scores (<40) are logged.
+
+---
+
 ## Itinerary Generation Quality Fixes ✅ COMPLETE
 
 ### Bug 1: Arrival Sequence Inverted ✅
