@@ -111,6 +111,8 @@ export function GenerationAnimation({ progress = 0, className }: GenerationAnima
             return (
               <motion.circle
                 key={i}
+                cx={cxFrames[0]}
+                cy={cyFrames[0]}
                 r={dot.size}
                 className="fill-primary/50"
                 animate={{ cx: cxFrames, cy: cyFrames }}

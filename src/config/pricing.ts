@@ -560,12 +560,13 @@ const MAX_REASONABLE_CREDITS = 10_000_000;
 let _formatCreditsWarned = false;
 
 export function formatCredits(credits: number): string {
+  if (credits < 0) return '0';
   if (credits > MAX_REASONABLE_CREDITS) {
     if (!_formatCreditsWarned) {
       _formatCreditsWarned = true;
       console.warn(`[formatCredits] Unreasonable credit value detected: ${credits}. Subsequent warnings suppressed.`);
     }
-    return '-';
+    return '—';
   }
   return credits.toLocaleString();
 }
