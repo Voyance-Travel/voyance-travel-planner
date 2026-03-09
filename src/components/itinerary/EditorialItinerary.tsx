@@ -4303,6 +4303,26 @@ export function EditorialItinerary({
                   </CollapsibleContent>
                 </Collapsible>
               )}
+
+              {/* ROW 6: Need to Know (collapsible) */}
+              <Collapsible>
+                <CollapsibleTrigger className="w-full px-4 sm:px-6 py-3 flex items-center justify-between text-left hover:bg-secondary/30 transition-colors border-b border-border/50">
+                  <div className="flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-primary shrink-0" />
+                    <span className="text-xs font-semibold text-primary uppercase tracking-wider">Need to Know</span>
+                  </div>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="p-3 sm:p-4">
+                    <NeedToKnowSection
+                      destination={destination}
+                      destinationCountry={destinationCountry}
+                      destinationInfo={destinationInfo}
+                    />
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             </div>
 
 
