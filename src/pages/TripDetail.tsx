@@ -291,7 +291,39 @@ export default function TripDetail() {
     },
   });
 
-  // Resume generation from where it left off
+  // =========================================================================
+  // FALLBACK: Force transition when generation is "ready" but UI is stuck
+  // On mobile, the onReady callback may not fire due to dropped realtime
+  // connections. This timer ensures the UI transitions within 5 seconds.
+  // =========================================================================
+  useEffect(() => {
+    if (generationPoller.isReady && (isServerGenerating || generationStalled || showGenerator)) {
+      const fallbackTimer = setTimeout(async () => {
+        console.warn('[TripDetail] Forcing transition — generation ready but UI still showing generation view');
+        if (tripId) {
+          const { data } = await supabase.from('trips').select('*').eq('id', tripId).single();
+          if (data) {
+            setTrip(data);
+            setItineraryDaysCount(0);
+            setShowGenerator(false);
+            setGenerationStalled(false);
+            setCachedVersion(tripId, (data as any).itinerary_version ?? 1);
+            if (!onReadyCalledRef.current) {
+              onReadyCalledRef.current = true;
+              toast.success('Your itinerary is ready! 🎉');
+            }
+            if (user?.id) {
+              queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
+              queryClient.invalidateQueries({ queryKey: ['entitlements', user.id] });
+            }
+          }
+        }
+      }, 5000);
+
+      return () => clearTimeout(fallbackTimer);
+    }
+  }, [generationPoller.isReady, isServerGenerating, generationStalled, showGenerator, tripId]);
+
   const handleResumeGeneration = useCallback(async () => {
     if (!tripId || !trip) return;
     setResumingGeneration(true);
