@@ -7,7 +7,7 @@ import { NightsRedistributionModal } from '@/components/trip/NightsRedistributio
 import { useParams, useNavigate, useSearchParams, Navigate } from 'react-router-dom';
 import { format, isAfter, isBefore, differenceInDays, addDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
-import { Loader2, MapPin, ArrowLeft, Sparkles, CheckCircle, Coins, Calendar } from 'lucide-react';
+import { Loader2, MapPin, ArrowLeft, Sparkles, CheckCircle, Coins, Calendar, Clock } from 'lucide-react';
 import { CREDIT_COSTS } from '@/config/pricing';
 import {
   AlertDialog,
@@ -165,7 +165,8 @@ export default function TripDetail() {
   // =========================================================================
   const [itineraryDaysCount, setItineraryDaysCount] = useState<number>(0);
   const [itineraryDaysSummaries, setItineraryDaysSummaries] = useState<Array<{ day_number: number; title: string; theme: string }>>([]);
-  const isServerGenerating = trip?.itinerary_status === 'generating' || trip?.itinerary_status === 'queued' || (itineraryDaysCount > 0 && !trip?.itinerary_data && trip?.itinerary_status !== 'ready' && (trip?.itinerary_status as string) !== 'generated');
+  const isQueuedJourneyLeg = trip?.itinerary_status === 'queued' && !!trip?.journey_id;
+  const isServerGenerating = trip?.itinerary_status === 'generating' || (!isQueuedJourneyLeg && trip?.itinerary_status === 'queued') || (itineraryDaysCount > 0 && !trip?.itinerary_data && trip?.itinerary_status !== 'ready' && (trip?.itinerary_status as string) !== 'generated');
   const [generationStalled, setGenerationStalled] = useState(false);
   const [showStalledUI, setShowStalledUI] = useState(false);
   const stalledTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -552,6 +553,32 @@ export default function TripDetail() {
   };
 
   // Auto-trigger generation when ?generate=true is in URL
+  // Poll for queued → generating transition (journey legs)
+  useEffect(() => {
+    if (!isQueuedJourneyLeg || !trip?.id) return;
+
+    const interval = setInterval(async () => {
+      const { data } = await supabase
+        .from('trips')
+        .select('itinerary_status')
+        .eq('id', trip.id)
+        .single();
+
+      if (data && data.itinerary_status !== 'queued') {
+        // Status changed — reload the trip data to trigger re-render
+        console.log(`[TripDetail] Queued leg ${trip.id} status changed to: ${data.itinerary_status}`);
+        // Force a refetch of trip data
+        queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
+        // If it's now generating, show the generator
+        if (data.itinerary_status === 'generating') {
+          handleShowGenerator(true);
+        }
+      }
+    }, 5000); // Poll every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [isQueuedJourneyLeg, trip?.id, queryClient]);
+
   useEffect(() => {
     if (
       shouldAutoGenerate && 
