@@ -429,7 +429,7 @@ serve(async (req) => {
       });
     }
 
-    const parsed = JSON.parse(toolCall.function.arguments);
+    let parsed = JSON.parse(toolCall.function.arguments);
 
     // --- CJK / schema-leak sanitization ---
     // AI models sometimes inject Chinese characters or leak schema field names
@@ -459,7 +459,7 @@ serve(async (req) => {
     }
     
     // Sanitize all string fields in the parsed output
-    sanitizeDeep(parsed);
+    parsed = sanitizeDeep(parsed) as typeof parsed;
     // Apply in-place to top-level fields
     if (parsed.destination && typeof parsed.destination === 'string') {
       parsed.destination = sanitizeStr(parsed.destination);
