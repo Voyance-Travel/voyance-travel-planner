@@ -4,7 +4,7 @@
  * Two-level expansion: Level 1 = options list, Level 2 = route details per option.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import {
