@@ -1,128 +1,108 @@
 
-# Multi-City Upfront Charge + Chained Generation Plan
+# Multi-City Upfront Charge + Chained Generation Implementation Plan
 
 ## Overview
-The user wants to implement a seamless multi-city journey experience where:
-1. Users pay once upfront for the entire journey (all legs combined)
-2. Generation auto-chains from leg to leg automatically
-3. Users can view completed legs while other legs generate in the background
+I need to implement a seamless multi-city journey experience where users pay once upfront for all legs and generation auto-chains between legs. The system will build on the existing `journey_id`, `journey_order`, and `journey_total_legs` structure from `splitJourneyIfNeeded()`.
 
 ## Current State Analysis
-- `splitJourneyIfNeeded()` already creates separate trip records for each leg with `journey_id`, `journey_order`, and `journey_total_legs`
-- Each leg is currently treated as an independent trip for payment and generation
-- Users must manually navigate to each leg and trigger generation separately
+- The `useGenerationGate.ts` doesn't have journey logic yet
+- `ItineraryGenerator.tsx` needs journey context detection and UI updates  
+- The generation engine needs auto-chaining logic
+- No journey progress UI exists yet
 
 ## Implementation Plan
 
-### Part 1: Upfront Journey Payment Logic
+### Task 1: Implement Multi-City Upfront Journey Payment
+**Files**: `src/hooks/useGenerationGate.ts`
 
-**File: `src/hooks/useGenerationGate.ts`**
-- Add journey detection logic before credit authorization
-- When `journey_order === 1`, fetch all journey legs and calculate total cost
-- Pass combined days/cities to the authorization flow
-- After successful payment, mark all legs as `journey_credits_paid: true`
-- Skip credit checks for pre-paid legs
+**Changes needed**:
+1. Update `GateResult` interface to include `journeyContext` with leg information
+2. Add journey detection logic in `authorize()` to check if `journey_order === 1`
+3. Fetch all journey legs and calculate total cost for entire journey
+4. Add pre-paid check to skip credit verification for legs marked as paid
+5. After successful payment, mark all journey legs with `journey_credits_paid: true` in metadata
 
-**File: `src/components/itinerary/ItineraryGenerator.tsx`**
-- Detect journey context before calling `authorize()`
-- Calculate total journey days and cities for cost estimation
-- Update UI to show full journey cost breakdown
+**Key logic**:
+- When `journey_order === 1`, fetch all legs and use combined days/cities for cost calculation
+- Store journey payment metadata on all legs to prevent double-charging
+- Subsequent legs bypass credit checks if `journey_credits_paid: true`
 
-### Part 2: Auto-Chained Generation
+### Task 2: Update Generator UI for Journey Context
+**Files**: `src/components/itinerary/ItineraryGenerator.tsx`
 
-**File: `supabase/functions/generate-itinerary/index.ts`**
-- After completing the final day of a leg, check for next journey leg
-- Auto-trigger generation for the next leg via self-invocation
-- Handle journey metadata propagation
-- Include proper error handling for chain failures
+**Changes needed**:
+1. Extract journey context from gate result
+2. Update cost confirmation UI to show "Full Journey: City A → City B → City C"
+3. Display total days across all cities instead of just current leg
+4. Change button text to "Generate Full Journey (X cities)" for Leg 1
+5. Show journey breakdown in cost display
 
-**Key Implementation Points:**
-- Use fire-and-forget HTTP calls to chain to next leg
-- Mark next leg as `itinerary_status: 'generating'`
-- Pass `creditsCharged: 0` for chained legs (already paid)
+### Task 3: Add Auto-Chain Generation Logic  
+**Files**: `supabase/functions/generate-itinerary/index.ts`
+
+**Changes needed**:
+1. After completing final day of a leg, check if part of journey
+2. Find next leg in journey sequence
+3. Fire HTTP request to trigger next leg generation
+4. Mark next leg as generating and handle errors gracefully
+5. Skip credit checks for auto-chained legs (already paid)
+
+**Key logic**:
+- Use fire-and-forget HTTP calls to self-invoke for next leg
+- Pass `creditsCharged: 0` for chained legs
 - Store chain metadata for debugging and recovery
 
-### Part 3: Progressive Journey UI
+### Task 4: Create Journey Progress UI
+**Files**: `src/pages/TripDetail.tsx`
 
-**File: `src/pages/TripDetail.tsx`**
-- Add journey progress monitoring hook
-- Create persistent bottom banner showing generation progress
-- Display progress dots for each leg (completed/generating/pending)
-- Add journey navigation buttons when all legs complete
-- Handle auto-navigation to next ready leg
+**Changes needed**:
+1. Add journey progress monitoring hook to poll all leg statuses
+2. Create persistent bottom banner showing generation progress
+3. Display progress dots for each leg (completed/generating/pending)
+4. Add navigation between completed legs
+5. Show "Journey Complete" message when all legs ready
 
-**File: `src/components/itinerary/ItineraryGenerator.tsx`**
-- Update cost display to show journey totals
-- Modify button text for journey context
-- Ensure completion flow stays on current leg (no navigation away)
+### Task 5: Add Journey Error Recovery
+**Files**: Multiple files for error handling
 
-### Part 4: Error Recovery & Edge Cases
-
-**Graceful Chain Failure:**
-- If auto-chain fails, mark leg with `auto_chain_failed: true`
-- Allow manual retry without re-charging
-- Show appropriate UI prompts for failed legs
-
-**Journey State Management:**
-- Prevent double-charging via journey payment flags
-- Handle concurrent generation attempts
-- Maintain journey integrity across browser refreshes
-
-### Part 5: UI Enhancements
-
-**Journey Cost Display:**
-- Show "Full Journey: City A → City B → City C"
-- Display total days and cost breakdown
-- Update button text to "Generate Full Journey (X cities)"
-
-**Progress Tracking:**
-- Real-time journey progress banner
-- Visual progress dots for each leg
-- Auto-refresh leg statuses while generating
-- Navigation between completed legs
+**Changes needed**:
+1. Handle auto-chain failures gracefully
+2. Mark failed legs with `auto_chain_failed: true`
+3. Provide manual retry without re-charging
+4. Show appropriate error messages and recovery options
 
 ## Technical Considerations
 
-### Credit Flow Changes
-- First leg charges for entire journey
-- Subsequent legs skip payment (pre-paid flag)
-- Journey payment metadata stored on all legs
+### Credit Flow
+- First leg charges for entire journey upfront
+- Journey payment metadata prevents double-charging
+- Subsequent legs skip payment validation
 - Idempotency protection against duplicate charges
 
 ### Generation Chaining
-- Self-invoking edge function calls
-- Proper error handling and fallback
-- Journey metadata propagation
-- Progress tracking via database updates
+- Self-invoking edge function architecture
+- Proper error handling and fallback mechanisms
+- Journey metadata propagation between legs
+- Real-time progress tracking via database
 
-### State Synchronization
-- Real-time polling for journey progress
-- Proper cache invalidation
-- UI state management across legs
+### State Management
+- Journey context passed through gate results
+- UI polls for multi-leg progress updates
+- Proper cache invalidation across legs
 - Browser refresh resilience
 
-## Files to Modify
-
-1. `src/hooks/useGenerationGate.ts` - Journey payment logic
-2. `src/components/itinerary/ItineraryGenerator.tsx` - UI updates and cost display
-3. `supabase/functions/generate-itinerary/index.ts` - Auto-chaining logic
-4. `src/pages/TripDetail.tsx` - Journey progress tracking and navigation
-5. Database schema - Journey metadata fields (if needed)
+## Implementation Order
+1. **Journey Payment Logic** - Core credit system changes
+2. **Generator UI Updates** - User-facing cost display  
+3. **Auto-Chaining Logic** - Backend generation flow
+4. **Progress UI** - Real-time journey tracking
+5. **Error Recovery** - Graceful failure handling
 
 ## Testing Strategy
+- 3-city journey charges once for all legs
+- Auto-generation flows seamlessly between legs
+- Users can view completed legs while others generate
+- Failed chains allow manual retry without re-charge
+- Existing single-city flows remain unchanged
 
-1. **Journey Payment**: 3-city trip charges once for all legs
-2. **Auto-Chaining**: Generation flows seamlessly between legs
-3. **Progressive UI**: Can view completed legs while others generate
-4. **Error Recovery**: Failed chains allow manual retry without re-charge
-5. **Existing Flows**: Single-city and short multi-city trips unchanged
-
-## Risk Mitigation
-
-- Extensive idempotency checks to prevent double-charging
-- Graceful fallback for chain failures
-- Preserve existing single-city generation flow
-- Comprehensive error logging for debugging
-- User-friendly error messages and retry options
-
-This implementation will create a seamless multi-city experience while maintaining backward compatibility with existing trip types.
+This implementation will create a seamless multi-city experience while maintaining backward compatibility and providing robust error recovery.
