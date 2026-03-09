@@ -1,65 +1,50 @@
+## Journey Sequential Generation — Implementation Status
 
+### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-## Plan: Add Real Google Maps Route Details to TransitModePicker
+**Implemented:**
 
-### Current State
-The `TransitModePicker` component is already fully integrated and working:
-- Calls `airport-transfers` edge function for transport options
-- Has two-level expansion (Level 1: options list, Level 2: route details)
-- Walk option added client-side, airport filtering in place
-- Three-dot menu separated from row tap
+1. **`src/hooks/useGenerationGate.ts`**:
+   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
+   - Added journey detection: fetches all sibling legs when `journeyId` is present
+   - Sums credit costs across all journey legs for unified billing
+   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
+   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
 
-**What's missing**: Level 2 shows generic route text from `airport-transfers` (e.g., "Direct door-to-door"). The user wants real step-by-step directions from Google Maps Directions API.
+2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
+   - Added `journeyLegs` state for cost breakdown display
+   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
+   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
+   - Updated cost confirmation dialog:
+     - Shows "Journey Cost Breakdown" header for journeys
+     - Lists each leg with city, days, and cost
+     - Shows "Journey Total" instead of "Total"
+     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
+     - Disabled partial generation for journeys (must pay full upfront)
+     - "Confirm & Generate Journey" button text for journeys
 
-### Changes
+### Part 2: Auto-Chain Generation (TODO)
 
-#### 1. Create `route-details` edge function
-**New file: `supabase/functions/route-details/index.ts`**
+When leg 1 completes generation, the backend should:
+1. Check for next queued leg in the journey
+2. Automatically trigger `generate-trip` for the next leg
+3. Continue until all legs are generated
 
-Calls Google Maps Directions API with origin, destination, and mode (`driving`/`transit`/`walking`). Returns formatted step-by-step directions with transit details (line name, departure/arrival stops, number of stops). Uses existing `GOOGLE_MAPS_API_KEY` secret.
+Files to modify:
+- `supabase/functions/generate-trip/index.ts` or similar edge function
+- Add post-generation hook to detect and chain to next journey leg
 
-Add to `supabase/config.toml`:
-```toml
-[functions.route-details]
-  verify_jwt = false
-```
+### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
 
-#### 2. Integrate route details into TransitModePicker Level 2
-**File: `src/components/itinerary/TransitModePicker.tsx`**
+**Implemented:**
 
-- Add state: `routeDetailsCache` (map of option ID → route data), `loadingRouteId`
-- When user expands an option (Level 2), call `route-details` edge function if not cached
-- Map mode: taxi/uber → `driving`, train/bus/transit → `transit`, walk → `walking`
-- Display step-by-step directions with numbered steps, transit details (line name, stops), and walking segments
-- Fall back to generic `option.route` text if Directions API returns no results
-- Show small loading spinner while fetching
-
-#### 3. No changes to EditorialItinerary.tsx
-The integration is already complete there.
-
-### Technical Details
-
-**Route details response shape:**
-```ts
-interface RouteDetails {
-  steps: Array<{
-    instruction: string;
-    distance: string;
-    duration: string;
-    travelMode: string;
-    transitDetails?: {
-      lineName: string;
-      vehicleType: string;
-      departureStop: string;
-      arrivalStop: string;
-      numStops: number;
-    };
-  }>;
-  summary: string;
-  totalDuration: string;
-  totalDistance: string;
-}
-```
-
-**UI rendering**: Each step gets a numbered circle + instruction text. Transit steps show line name + stops in a highlighted badge. Walking segments show distance/duration.
-
+1. **`src/pages/TripDetail.tsx`**:
+   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
+   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
+   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
+   - Added distinct "queued" state UI:
+     - Clock icon with hourglass badge
+     - "{destination} is up next" heading
+     - Explanation text about waiting for previous leg
+     - "View previous city" button to navigate back to the generating leg
+   - Added `Clock` to lucide-react imports
