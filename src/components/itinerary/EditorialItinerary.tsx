@@ -23,7 +23,7 @@ import {
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
   Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2, ClipboardPaste, Compass, Bus, Ship, ArrowRight, Droplets, Wrench,
-  Footprints, Navigation2, History as HistoryIcon,
+  Footprints, Navigation2, History as HistoryIcon, CheckCircle2,
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
@@ -4359,6 +4359,13 @@ export function EditorialItinerary({
                         return !['check-in', 'check-out', 'hotel', 'accommodation'].includes(cat);
                       });
                       const isDayEmpty = !dayHasRealActivities;
+                      const allActivitiesLocked = dayHasRealActivities && 
+                        (day.activities || [])
+                          .filter((a: any) => {
+                            const cat = (a.category || a.type || '').toLowerCase();
+                            return !['check-in', 'check-out', 'hotel', 'accommodation'].includes(cat);
+                          })
+                          .every((a: any) => a.isLocked);
                       // Compute date from startDate + dayNumber for reliable cross-month handling
                       let dayDate: Date | null = null;
                       try {
@@ -4405,15 +4412,19 @@ export function EditorialItinerary({
                               ? (day.metadata?.isLocked && !isManualMode) 
                                 ? 'bg-muted border-border shadow-sm' 
                                 : 'bg-primary text-primary-foreground border-primary shadow-md'
-                              : (day.metadata?.isLocked && !isManualMode) 
-                                ? 'bg-muted/30 border-transparent opacity-60 hover:opacity-80' 
-                                : 'bg-card border-border/50 hover:bg-muted hover:border-border',
+                              : allActivitiesLocked && !(day.metadata?.isLocked && !isManualMode)
+                                ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-950/50'
+                                : (day.metadata?.isLocked && !isManualMode) 
+                                  ? 'bg-muted/30 border-transparent opacity-60 hover:opacity-80' 
+                                  : 'bg-card border-border/50 hover:bg-muted hover:border-border',
                             isTodayDay && !isSelected && 'ring-2 ring-primary ring-offset-2 ring-offset-background'
                           )}
                         >
-                          {day.metadata?.isLocked && !isManualMode && (
+                          {day.metadata?.isLocked && !isManualMode ? (
                             <Lock className="h-3 w-3 absolute top-1 right-1 text-muted-foreground" />
-                          )}
+                          ) : allActivitiesLocked ? (
+                            <CheckCircle2 className="h-3 w-3 absolute top-1 right-1 text-emerald-500" />
+                          ) : null}
                           {/* Day number */}
                           <span className={cn(
                             'text-[10px] font-semibold uppercase tracking-wide',
@@ -4453,14 +4464,21 @@ export function EditorialItinerary({
                               Today
                             </Badge>
                           )}
-                          {isDayEmpty && !isTodayDay && !(day.metadata?.isLocked && !isManualMode) && (
+                          {allActivitiesLocked && !isTodayDay && !(day.metadata?.isLocked && !isManualMode) ? (
+                            <span className={cn(
+                              'text-[9px] mt-0.5 font-medium',
+                              isSelected ? 'text-primary-foreground/70' : 'text-emerald-500'
+                            )}>
+                              Planned
+                            </span>
+                          ) : isDayEmpty && !isTodayDay && !(day.metadata?.isLocked && !isManualMode) ? (
                             <span className={cn(
                               'text-[9px] mt-0.5 font-medium',
                               isSelected ? 'text-primary-foreground/70' : 'text-amber-500'
                             )}>
                               Unplanned
                             </span>
-                          )}
+                          ) : null}
                         </button>
                       );
                     })}
