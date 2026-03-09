@@ -4,7 +4,7 @@
  * Two-level expansion: Level 1 = options list, Level 2 = route details per option.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import {
@@ -141,6 +141,7 @@ export function TransitModePicker({
   const [expandedOptionId, setExpandedOptionId] = useState<string | null>(null);
   const [routeDetailsCache, setRouteDetailsCache] = useState<Record<string, RouteDetails | null>>({});
   const [loadingRouteId, setLoadingRouteId] = useState<string | null>(null);
+  const [showAllStepsFor, setShowAllStepsFor] = useState<string | null>(null);
 
   const transitDestination = parseTransitDestination(activityTitle);
   const isAirportRoute = activityTitle.toLowerCase().includes('airport');
@@ -149,8 +150,8 @@ export function TransitModePicker({
     if (hasFetched || isLoading) return;
     setIsLoading(true);
     try {
-      const origin = transitOrigin || activity.location?.address || city;
-      const destination = activity.location?.name || activity.location?.address || transitDestination;
+      const origin = transitOrigin || city;
+      const destination = transitDestination + ', ' + city;
 
       const { data, error } = await supabase.functions.invoke('airport-transfers', {
         body: { origin, destination, city },
@@ -190,6 +191,30 @@ export function TransitModePicker({
 
         setOptions(filtered);
         setAiRecommendation(data.aiRecommendation || '');
+
+        // Fetch real walking data for the Walk option
+        if (!isAirportRoute && filtered.some(o => o.id === 'walk')) {
+          const walkOrigin = transitOrigin || city;
+          const walkDest = transitDestination + ', ' + city;
+          supabase.functions.invoke('route-details', {
+            body: { origin: walkOrigin, destination: walkDest, mode: 'walking' },
+          }).then(({ data: walkData }) => {
+            if (walkData?.totalDuration && walkData?.totalDistance) {
+              setOptions(prev => prev.map(o => {
+                if (o.id === 'walk') {
+                  return {
+                    ...o,
+                    duration: walkData.totalDuration,
+                    estimatedCost: 'Free',
+                    route: `Walk ${walkData.totalDuration} (${walkData.totalDistance})`,
+                    notes: `${walkData.totalDistance} walk`,
+                  };
+                }
+                return o;
+              }));
+            }
+          }).catch(() => { /* keep "Varies" as fallback */ });
+        }
       }
     } catch (err) {
       console.error('Failed to fetch transit options:', err);
@@ -255,8 +280,8 @@ export function TransitModePicker({
         : option.mode === 'walk' ? 'walking'
         : 'driving';
 
-      const origin = transitOrigin || activity.location?.address || city;
-      const destination = activity.location?.name || activity.location?.address || transitDestination;
+      const origin = transitOrigin || city;
+      const destination = transitDestination + ', ' + city;
 
       const { data, error } = await supabase.functions.invoke('route-details', {
         body: { origin, destination, mode: googleMode },
@@ -489,9 +514,24 @@ export function TransitModePicker({
                               </div>
                             )}
 
-                            {routeDetailsCache[option.id]?.steps && routeDetailsCache[option.id]!.steps.length > 0 ? (
+                            {routeDetailsCache[option.id]?.steps && routeDetailsCache[option.id]!.steps.length > 0 ? (() => {
+                              const MAX_INLINE_STEPS = 5;
+                              const steps = routeDetailsCache[option.id]!.steps;
+                              const showAll = showAllStepsFor === option.id;
+                              const visibleSteps = showAll ? steps : steps.slice(0, MAX_INLINE_STEPS);
+                              const hiddenCount = steps.length - MAX_INLINE_STEPS;
+
+                              return (
                               <div className="space-y-1.5">
-                                {routeDetailsCache[option.id]!.steps.map((step, idx) => (
+                                {routeDetailsCache[option.id]!.summary && (
+                                  <p className="text-[11px] font-medium text-foreground">{routeDetailsCache[option.id]!.summary}</p>
+                                )}
+                                {routeDetailsCache[option.id]!.totalDuration && (
+                                  <p className="text-[10px] text-muted-foreground">
+                                    {routeDetailsCache[option.id]!.totalDuration} · {routeDetailsCache[option.id]!.totalDistance}
+                                  </p>
+                                )}
+                                {visibleSteps.map((step, idx) => (
                                   <div key={idx} className="flex items-start gap-2">
                                     <div className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-[9px] font-bold shrink-0 mt-0.5">
                                       {idx + 1}
@@ -514,13 +554,21 @@ export function TransitModePicker({
                                     </div>
                                   </div>
                                 ))}
-                                {routeDetailsCache[option.id]!.totalDuration && (
-                                  <p className="text-[10px] text-muted-foreground font-medium pt-1 border-t border-border/20">
-                                    Total: {routeDetailsCache[option.id]!.totalDuration} · {routeDetailsCache[option.id]!.totalDistance}
-                                  </p>
+                                {hiddenCount > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setShowAllStepsFor(showAll ? null : option.id);
+                                    }}
+                                    className="text-xs text-primary hover:text-primary/80 font-medium pt-1"
+                                  >
+                                    {showAll ? 'Show fewer steps' : `+ ${hiddenCount} more step${hiddenCount > 1 ? 's' : ''}`}
+                                  </button>
                                 )}
                               </div>
-                            ) : loadingRouteId !== option.id ? (
+                              );
+                            })() : loadingRouteId !== option.id ? (
                               /* Fallback to generic route from airport-transfers */
                               <>
                                 {option.route && (

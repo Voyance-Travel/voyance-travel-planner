@@ -1,49 +1,50 @@
+## Journey Sequential Generation — Implementation Status
 
+### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-## Fix: Route Details — Wrong Origin, Too Many Steps, Missing Walk Distance
+**Implemented:**
 
-### Bug Analysis
+1. **`src/hooks/useGenerationGate.ts`**:
+   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
+   - Added journey detection: fetches all sibling legs when `journeyId` is present
+   - Sums credit costs across all journey legs for unified billing
+   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
+   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
 
-**Bug 1 — Wrong origin**: The `transitOrigin` prop chain looks correct (`prevVisibleActivity?.location?.name`), but in `fetchRouteDetails` (line 258-259), the **destination** is wrong. It uses `activity.location?.name || activity.location?.address` — but transport activities typically don't have a `location` object with meaningful data. The destination should be `transitDestination + ', ' + city` (parsed from the title + city context). The origin looks correct via `transitOrigin`, but falls back to `city` which could be wrong if `transitOrigin` is undefined.
+2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
+   - Added `journeyLegs` state for cost breakdown display
+   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
+   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
+   - Updated cost confirmation dialog:
+     - Shows "Journey Cost Breakdown" header for journeys
+     - Lists each leg with city, days, and cost
+     - Shows "Journey Total" instead of "Total"
+     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
+     - Disabled partial generation for journeys (must pay full upfront)
+     - "Confirm & Generate Journey" button text for journeys
 
-**Bug 2 — Too many steps**: All steps render inline with no cap.
+### Part 2: Auto-Chain Generation (TODO)
 
-**Bug 3 — Walk "Varies"**: Walk option is hardcoded client-side with no real data.
+When leg 1 completes generation, the backend should:
+1. Check for next queued leg in the journey
+2. Automatically trigger `generate-trip` for the next leg
+3. Continue until all legs are generated
 
-### Changes
+Files to modify:
+- `supabase/functions/generate-trip/index.ts` or similar edge function
+- Add post-generation hook to detect and chain to next journey leg
 
-#### File: `src/components/itinerary/TransitModePicker.tsx`
+### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
 
-**1. Fix origin/destination in `fetchRouteDetails` (lines 258-259)**
+**Implemented:**
 
-Replace:
-```typescript
-const origin = transitOrigin || activity.location?.address || city;
-const destination = activity.location?.name || activity.location?.address || transitDestination;
-```
-With:
-```typescript
-const origin = transitOrigin || city;
-const destination = transitDestination + ', ' + city;
-```
-
-This ensures:
-- Origin = previous activity's venue/address (via `transitOrigin` prop), falling back to city
-- Destination = parsed destination from transport title (e.g., "Rockefeller Center Area") + city for geocoding context
-
-**2. Same fix in `fetchOptions` (lines 152-153)** — apply the same destination logic for consistency.
-
-**3. Add step cap with "Show more" toggle (around lines 492-521)**
-
-Add state: `const [showAllStepsFor, setShowAllStepsFor] = useState<string | null>(null);`
-
-Cap inline display at 5 steps. Show a "+ X more steps" button when there are more. Clicking it reveals all steps.
-
-**4. Fetch real walking data after adding Walk option (after line 191)**
-
-After `setOptions(filtered)`, fire-and-forget a call to `route-details` with `mode: 'walking'` to get real duration/distance. On success, update the Walk option in state with `totalDuration` and `totalDistance`.
-
-### No other files change
-
-The `EditorialItinerary.tsx` origin computation (`prevVisibleActivity?.location?.name || ...`) is already correct. The `route-details` edge function is working. Only `TransitModePicker.tsx` needs fixes.
-
+1. **`src/pages/TripDetail.tsx`**:
+   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
+   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
+   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
+   - Added distinct "queued" state UI:
+     - Clock icon with hourglass badge
+     - "{destination} is up next" heading
+     - Explanation text about waiting for previous leg
+     - "View previous city" button to navigate back to the generating leg
+   - Added `Clock` to lucide-react imports
