@@ -452,7 +452,17 @@ export function ItineraryGenerator({
     return () => clearInterval(timer);
   }, [generationIssueSince, recoverFromDatabase]);
 
-  // Show cost confirmation before generating (for non-first-trip users)
+  // Show "taking longer than expected" after 60 seconds of issue
+  useEffect(() => {
+    if (!generationIssueSince) {
+      setShowTakingLonger(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowTakingLonger(true), 60000);
+    return () => clearTimeout(timer);
+  }, [generationIssueSince]);
+
+
   const handleGenerateClick = () => {
     // First trip is always free — skip cost confirmation
     if (isFirstTrip) {
