@@ -4000,8 +4000,16 @@ export function EditorialItinerary({
                         </div>
                       )}
 
+                      {/* Travel Intel cards */}
+                      {travelIntelCards && (
+                        <div className="pt-2 border-t border-border/40 space-y-2">
+                          <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Travel Intelligence</h4>
+                          {travelIntelCards}
+                        </div>
+                      )}
+
                       {/* Fallback: no data yet */}
-                      {!hasFlightData && !hotelSelection?.name && !destinationInfo?.timezone && (
+                      {!hasFlightData && !hotelSelection?.name && !destinationInfo?.timezone && !travelIntelCards && (
                         <p className="text-xs text-muted-foreground italic">
                           Add flights and hotels in the <button className="underline" onClick={() => setActiveTab('details')}>Flights &amp; Hotels</button> tab.
                         </p>
