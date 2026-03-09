@@ -23,7 +23,7 @@ import {
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
   Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2, ClipboardPaste, Compass, Bus, Ship, ArrowRight, Droplets, Wrench,
-  Footprints, Navigation2, History as HistoryIcon, Lightbulb,
+  Footprints, Navigation2, History as HistoryIcon, Lightbulb, CheckCircle2,
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
@@ -452,6 +452,8 @@ export interface EditorialItineraryProps {
   dateEditorCities?: Array<{ id: string; city_name: string; nights?: number }>;
   /** Travel intel cards passed from TripDetail */
   travelIntelCards?: React.ReactNode;
+  /** Trip health/completion panel passed from TripDetail */
+  tripHealthPanel?: React.ReactNode;
 }
 
 // =============================================================================
@@ -1133,6 +1135,7 @@ export function EditorialItinerary({
   dateEditorFlightSelection,
   dateEditorCities,
   travelIntelCards,
+  tripHealthPanel,
 }: EditorialItineraryProps) {
   const queryClient = useQueryClient();
   const isActivelyGenerating = itineraryStatus === 'generating' || itineraryStatus === 'queued';
@@ -4265,7 +4268,25 @@ export function EditorialItinerary({
                 </Collapsible>
               )}
 
-              {/* ROW 4: Travel Intel (collapsible) */}
+              {/* ROW 4: Trip Completion (collapsible) */}
+              {tripHealthPanel && (
+                <Collapsible>
+                  <CollapsibleTrigger className="w-full px-4 sm:px-6 py-3 flex items-center justify-between text-left hover:bg-secondary/30 transition-colors border-b border-border/50">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Trip Completion</span>
+                    </div>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="p-3 sm:p-4">
+                      {tripHealthPanel}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+
+              {/* ROW 5: Travel Intel (collapsible) */}
               {travelIntelCards && (
                 <Collapsible>
                   <CollapsibleTrigger className="w-full px-4 sm:px-6 py-3 flex items-center justify-between text-left hover:bg-secondary/30 transition-colors border-b border-border/50">

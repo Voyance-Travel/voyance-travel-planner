@@ -2132,44 +2132,7 @@ export default function TripDetail() {
                     />
                   </div>
 
-                  {/* Desktop: Original layout — Health + Travel Intel separately */}
-                  <div className="hidden sm:block">
-                    <ErrorBoundary>
-                    <TripHealthPanel
-                      days={editorDays}
-                      totalDaysExpected={(() => { const m = (trip?.metadata as Record<string, unknown>) || {}; const gen = (m.generation_total_days as number) || 0; return gen > 0 ? Math.max(gen, editorDays.length) : editorDays.length; })()}
-                      hasFlights={!!trip.flight_selection}
-                      hasHotel={
-                        !!trip.hotel_selection || 
-                        (tripCities.length > 0 && tripCities.every(c => {
-                          const h = c.hotel_selection as any;
-                          const hotel = Array.isArray(h) && h.length > 0 ? h[0] : h;
-                          return !!hotel?.name;
-                        }))
-                      }
-                      isMultiCity={!!(trip as any).is_multi_city || tripCities.length > 1}
-                      hasInterCityTransport={editorDays.some((d: any) => d.isTransitionDay)}
-                      className="mb-4"
-                      onAction={(action, ctx) => {
-                        if (action === 'add_flights') {
-                          setNavigateToSection('flights');
-                          setTimeout(() => setNavigateToSection(null), 500);
-                        } else if (action === 'add_hotel') {
-                          setNavigateToSection('hotels');
-                          setTimeout(() => setNavigateToSection(null), 500);
-                        } else if (action === 'add_intercity') {
-                          setNavigateToSection('hotels');
-                          setTimeout(() => setNavigateToSection(null), 500);
-                        } else if (action === 'generate_day' || action === 'refresh_day') {
-                          toast.info(`Use the day toolbar to ${action === 'generate_day' ? 'generate' : 'refresh'} Day ${ctx?.dayNumber || ''}`);
-                        } else if (action === 'generate_missing_days' || action === 'generate_all') {
-                          setShowGenerator(true);
-                        }
-                      }}
-                    />
-                    </ErrorBoundary>
-                    {/* Desktop Travel Intel removed — now inside EditorialItinerary's unified Voyance Intelligence section */}
-                  </div>
+                  {/* Desktop: TripHealthPanel now rendered inside EditorialItinerary's unified card */}
 
 
 
@@ -2277,6 +2240,40 @@ export default function TripDetail() {
                         )}
                       </ErrorBoundary>
                     ) : null
+                  }
+                  tripHealthPanel={
+                    <TripHealthPanel
+                      days={editorDays}
+                      totalDaysExpected={(() => { const m = (trip?.metadata as Record<string, unknown>) || {}; const gen = (m.generation_total_days as number) || 0; return gen > 0 ? Math.max(gen, editorDays.length) : editorDays.length; })()}
+                      hasFlights={!!trip.flight_selection}
+                      hasHotel={
+                        !!trip.hotel_selection || 
+                        (tripCities.length > 0 && tripCities.every(c => {
+                          const h = c.hotel_selection as any;
+                          const hotel = Array.isArray(h) && h.length > 0 ? h[0] : h;
+                          return !!hotel?.name;
+                        }))
+                      }
+                      isMultiCity={!!(trip as any).is_multi_city || tripCities.length > 1}
+                      hasInterCityTransport={editorDays.some((d: any) => d.isTransitionDay)}
+                      className=""
+                      onAction={(action, ctx) => {
+                        if (action === 'add_flights') {
+                          setNavigateToSection('flights');
+                          setTimeout(() => setNavigateToSection(null), 500);
+                        } else if (action === 'add_hotel') {
+                          setNavigateToSection('hotels');
+                          setTimeout(() => setNavigateToSection(null), 500);
+                        } else if (action === 'add_intercity') {
+                          setNavigateToSection('hotels');
+                          setTimeout(() => setNavigateToSection(null), 500);
+                        } else if (action === 'generate_day' || action === 'refresh_day') {
+                          toast.info(`Use the day toolbar to ${action === 'generate_day' ? 'generate' : 'refresh'} Day ${ctx?.dayNumber || ''}`);
+                        } else if (action === 'generate_missing_days' || action === 'generate_all') {
+                          setShowGenerator(true);
+                        }
+                      }}
+                    />
                   }
                   onDaysChange={(updatedDays) => {
                     // Keep trip state in sync so ItineraryAssistant always sees current days
