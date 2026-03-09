@@ -392,33 +392,36 @@ export default function ActiveTrip() {
         {/* Header */}
         <header className="sticky top-0 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
           <div className="container max-w-2xl mx-auto px-4">
-            <div className="flex items-center justify-between py-3">
+            {/* Top row: navigation + actions */}
+            <div className="flex items-center justify-between pt-3 pb-1">
               <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
                 <ArrowLeft className="w-5 h-5" />
               </Button>
-              
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate(`/trip/${tripId}?edit=true`)}
-                className="ml-auto gap-1.5 text-muted-foreground"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                Edit
-              </Button>
-              
-              <div className="text-center">
-                <h1 className="font-bold text-lg">{trip.destination}</h1>
-                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                  <span>Day {tripContext.currentDayNumber} of {tripContext.totalDays}</span>
-                  <span>·</span>
-                  <span>{format(new Date(), 'EEEE, MMM d')}</span>
+
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 bg-muted/50 rounded-full px-2.5 py-1">
+                  <TimeIcon className="w-4 h-4 text-amber-500" />
+                  <span className="text-xs font-medium">{timeContext.greeting}</span>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate(`/trip/${tripId}?edit=true`)}
+                  className="gap-1.5 text-muted-foreground"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  Edit
+                </Button>
               </div>
-              
-              <div className="flex items-center gap-1.5 bg-muted/50 rounded-full px-2.5 py-1">
-                <TimeIcon className="w-4 h-4 text-amber-500" />
-                <span className="text-xs font-medium">{timeContext.greeting}</span>
+            </div>
+
+            {/* Destination + day info — centered, with breathing room */}
+            <div className="text-center pb-3">
+              <h1 className="font-serif font-bold text-xl">{trip.destination}</h1>
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground mt-0.5">
+                <span>Day {tripContext.currentDayNumber} of {tripContext.totalDays}</span>
+                <span>·</span>
+                <span>{format(new Date(), 'EEEE, MMM d')}</span>
               </div>
             </div>
 
@@ -433,9 +436,9 @@ export default function ActiveTrip() {
                     key={v}
                     onClick={() => setView(v)}
                     className={cn(
-                      'pb-2 border-b-2 text-sm font-medium transition-colors',
-                      view === v 
-                        ? 'border-primary text-primary' 
+                      'pb-2 border-b-2 text-sm font-medium transition-colors whitespace-nowrap',
+                      view === v
+                        ? 'border-primary text-primary'
                         : 'border-transparent text-muted-foreground hover:text-foreground'
                     )}
                   >
