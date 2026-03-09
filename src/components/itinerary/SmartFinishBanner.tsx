@@ -6,7 +6,7 @@
  * Shows gap analysis in a dialog when user clicks to review.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, AlertTriangle, Info, CheckCircle2, 
@@ -204,10 +204,12 @@ export function SmartFinishBanner({
    * Issues guaranteed refund if generation fails.
    */
   const callEnrichWithGuaranteedRefund = async (source: string): Promise<{ success: boolean; data?: any }> => {
-    if (isGenerating) {
+    // Synchronous lock check - prevents race condition from rapid double-clicks
+    if (enrichLockRef.current || isGenerating) {
       toast.info('Smart Finish is already running. Please wait…');
       return { success: false };
     }
+    enrichLockRef.current = true; // Immediate synchronous lock
     setIsGenerating(true);
     try {
       // Kick off — returns immediately with status: "generating"
@@ -575,7 +577,7 @@ export function SmartFinishBanner({
           <DialogFooter className="flex-col gap-2 sm:flex-col">
             <Button
               onClick={handlePurchase}
-              disabled={isPurchasing}
+              disabled={isPurchasing || isGenerating}
               className="w-full gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 shadow-md"
             >
               {isPurchasing ? (
