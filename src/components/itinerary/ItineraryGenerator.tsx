@@ -964,11 +964,16 @@ export function ItineraryGenerator({
           
           {/* Cost Confirmation Dialog */}
           {showCostConfirm && costEstimate.totalCredits > 0 && (() => {
-            const canAffordAll = currentBalance >= costEstimate.totalCredits;
+            // Use journey total if this is a journey, otherwise single-trip cost
+            const effectiveTotalCost = journeyLegs.length > 1 
+              ? journeyLegs.reduce((sum, leg) => sum + leg.cost, 0)
+              : costEstimate.totalCredits;
+            const canAffordAll = currentBalance >= effectiveTotalCost;
             const costPerDay = 60; // CREDIT_COSTS standard
             const affordableDays = costPerDay > 0 ? Math.floor(currentBalance / costPerDay) : 0;
             const partialCost = affordableDays * costPerDay;
-            const canAffordPartial = !canAffordAll && affordableDays >= 1;
+            // Disable partial generation for journeys — must pay full upfront
+            const canAffordPartial = journeyLegs.length <= 1 && !canAffordAll && affordableDays >= 1;
 
             return (
               <motion.div
@@ -1034,7 +1039,7 @@ export function ItineraryGenerator({
                   </div>
                   {canAffordAll && (
                     <div className="text-xs text-muted-foreground">
-                      After: {formatCredits(currentBalance - costEstimate.totalCredits)} credits remaining
+                      After: {formatCredits(currentBalance - effectiveTotalCost)} credits remaining
                     </div>
                   )}
                   {canAffordPartial && (
