@@ -8540,6 +8540,14 @@ function ActivityRow({
     const isWalkingTransport = activityTitle.toLowerCase().includes('walk') || activityTitle.toLowerCase().includes('stroll');
     const transportCost = isWalkingTransport ? null : (cost > 0 ? cost : null);
 
+    // Get origin from previous activity for routing
+    const prevActivity = day?.activities?.[activityIndex - 1];
+    const transitOrigin = prevActivity?.location?.name
+      || prevActivity?.location?.address
+      || prevActivity?.venue
+      || prevActivity?.title
+      || destination;
+
     return (
       <TransitModePicker
         activity={activity}
@@ -8554,6 +8562,8 @@ function ActivityRow({
         city={destination}
         tripId={tripId}
         tripCurrency={tripCurrency}
+        travelers={travelers}
+        transitOrigin={transitOrigin}
         onEdit={onEdit}
         onMove={onMove}
         onMoveToDay={onMoveToDay}
