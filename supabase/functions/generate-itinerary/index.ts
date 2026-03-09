@@ -13788,6 +13788,22 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         }
         if (!chainSuccess) {
           console.error(`[generate-trip-day] All ${maxRetries} chain attempts failed for day ${dayNumber + 1}`);
+          // Mark chain as broken so the frontend poller can auto-resume
+          try {
+            await supabase.from('trips').update({
+              metadata: {
+                ...meta,
+                generation_completed_days: dayNumber,
+                generation_heartbeat: new Date().toISOString(),
+                generation_total_days: totalDays,
+                generation_chain_broken: true,
+                generation_chain_broken_at_day: dayNumber + 1,
+              },
+            }).eq('id', tripId);
+            console.log(`[generate-trip-day] Marked chain as broken at day ${dayNumber + 1} — frontend will auto-resume`);
+          } catch (metaErr) {
+            console.error(`[generate-trip-day] Failed to mark chain broken:`, metaErr);
+          }
         }
 
         return new Response(
