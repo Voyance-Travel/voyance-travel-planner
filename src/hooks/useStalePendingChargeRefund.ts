@@ -47,6 +47,15 @@ export function useStalePendingChargeRefund(tripId: string | undefined) {
         for (const charge of staleCharges) {
           const attempts = (charge as any).refund_attempts ?? 0;
 
+          // SessionStorage guard: skip charges that already failed this session
+          const failedKey = `stale_refund_failed_${charge.id}`;
+          try {
+            if (sessionStorage.getItem(failedKey)) {
+              console.log(`[StalePendingCharge] Skipping ${charge.id} — already failed this session`);
+              continue;
+            }
+          } catch { /* sessionStorage unavailable */ }
+
           // Max attempts reached — mark as failed and stop retrying
           if (attempts >= MAX_REFUND_ATTEMPTS) {
             if (attempts === MAX_REFUND_ATTEMPTS) {
@@ -86,6 +95,7 @@ export function useStalePendingChargeRefund(tripId: string | undefined) {
 
             if (refundError || !refundData?.success) {
               console.error(`[StalePendingCharge] Refund failed for ${charge.id} (attempt ${attempts + 1}/${MAX_REFUND_ATTEMPTS}):`, refundError ?? refundData);
+              try { sessionStorage.setItem(failedKey, 'true'); } catch { /* */ }
               continue;
             }
 
@@ -103,6 +113,7 @@ export function useStalePendingChargeRefund(tripId: string | undefined) {
             anyRefunded = true;
           } catch (err) {
             console.error(`[StalePendingCharge] Error processing charge ${charge.id} (attempt ${attempts + 1}/${MAX_REFUND_ATTEMPTS}):`, err);
+            try { sessionStorage.setItem(failedKey, 'true'); } catch { /* */ }
           }
         }
 
