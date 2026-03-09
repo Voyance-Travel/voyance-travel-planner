@@ -4347,6 +4347,36 @@ export type Database = {
         }
         Relationships: []
       }
+      invite_failure_log: {
+        Row: {
+          attempted_token: string
+          created_at: string
+          id: string
+          reason: string
+          referrer: string | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          attempted_token: string
+          created_at?: string
+          id?: string
+          reason: string
+          referrer?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          attempted_token?: string
+          created_at?: string
+          id?: string
+          reason?: string
+          referrer?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       itinerary_activities: {
         Row: {
           booking_required: boolean | null
@@ -6803,6 +6833,7 @@ export type Database = {
           id: string
           invited_by: string
           max_uses: number | null
+          replaced_at: string | null
           role: string
           token: string
           trip_id: string
@@ -6817,6 +6848,7 @@ export type Database = {
           id?: string
           invited_by: string
           max_uses?: number | null
+          replaced_at?: string | null
           role?: string
           token?: string
           trip_id: string
@@ -6831,6 +6863,7 @@ export type Database = {
           id?: string
           invited_by?: string
           max_uses?: number | null
+          replaced_at?: string | null
           role?: string
           token?: string
           trip_id?: string

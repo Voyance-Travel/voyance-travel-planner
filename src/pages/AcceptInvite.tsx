@@ -48,6 +48,7 @@ interface AcceptResult {
 const TERMINAL_REASONS = new Set([
   'token_not_found',
   'invalid_token',
+  'link_replaced',
   'expired',
   'trip_full',
   'invite_limit_reached',
@@ -64,6 +65,11 @@ function getErrorDisplay(reason?: string, fallbackError?: string) {
       return {
         title: 'Link Not Valid',
         message: 'This invite link was not found. It may have been reset by the trip owner. Ask them for a new link.',
+      };
+    case 'link_replaced':
+      return {
+        title: 'Link Updated',
+        message: 'The trip owner created a new invite link. Ask them for the updated link.',
       };
     case 'expired':
       return {
@@ -166,6 +172,15 @@ export default function AcceptInvite() {
           if (!info.valid) {
             logger.warn('[invite] Invalid invite', { reason: info.reason, token: token?.slice(0, 8) });
             setError(info.error || 'Invalid invite');
+            // Log failure for debugging (fire-and-forget)
+            console.error(`[AcceptInvite] INVITE FAILED — token: "${token?.slice(0, 8)}…", reason: "${info.reason}"`);
+            supabase.from('invite_failure_log' as any).insert({
+              attempted_token: token || 'MISSING',
+              reason: info.reason || 'unknown',
+              user_agent: navigator.userAgent,
+              referrer: document.referrer || null,
+              user_id: user?.id || null,
+            } as any).then(() => {});
             // Clear persisted token on terminal outcomes
             if (info.reason && TERMINAL_REASONS.has(info.reason)) {
               clearPendingInviteToken();
