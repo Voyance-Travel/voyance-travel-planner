@@ -33,3 +33,18 @@ When leg 1 completes generation, the backend should:
 Files to modify:
 - `supabase/functions/generate-trip/index.ts` or similar edge function
 - Add post-generation hook to detect and chain to next journey leg
+
+### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
+
+**Implemented:**
+
+1. **`src/pages/TripDetail.tsx`**:
+   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
+   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
+   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
+   - Added distinct "queued" state UI:
+     - Clock icon with hourglass badge
+     - "{destination} is up next" heading
+     - Explanation text about waiting for previous leg
+     - "View previous city" button to navigate back to the generating leg
+   - Added `Clock` to lucide-react imports
