@@ -135,14 +135,14 @@ function ChaosMockup() {
           
           {/* Sticky notes overlaid */}
           <motion.div 
-            className="absolute bottom-14 left-2 w-24 h-[72px] bg-[#fff475] rounded shadow-lg p-2 text-[8px] text-[#3c4043] rotate-[-4deg] hidden md:block"
+            className="absolute bottom-14 left-2 w-28 bg-[#fff475] rounded shadow-lg p-2 text-[8px] text-[#3c4043] rotate-[-4deg] hidden md:block"
             animate={{ rotate: [-4, -3, -4] }}
             transition={{ duration: 2, repeat: Infinity }}
           >
             <div className="font-bold mb-1">Still need to:</div>
-            <div>• Compare hotel options</div>
-            <div>• Read more reviews</div>
-            <div>• Confirm dates w/ group</div>
+            <div>• Compare hotels</div>
+            <div>• Read reviews</div>
+            <div>• Confirm dates</div>
           </motion.div>
           
           {/* Stress indicator */}
