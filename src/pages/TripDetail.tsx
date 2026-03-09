@@ -2168,38 +2168,7 @@ export default function TripDetail() {
                       }}
                     />
                     </ErrorBoundary>
-                    {!isPastTripView && (
-                    <ErrorBoundary>
-                    {tripCities.length > 1 ? (
-                      tripCities.map((city) => (
-                        <TravelIntelCard
-                          key={city.id}
-                          city={city.city_name}
-                          country={city.country || trip.destination_country || ((destinationMeta as any)?.country as string | undefined)}
-                          startDate={city.arrival_date || trip.start_date}
-                          endDate={city.departure_date || effectiveEndDate}
-                          travelers={trip.travelers || 2}
-                          archetype={(trip as any).travel_style || undefined}
-                          interests={(trip as any).interests || undefined}
-                          tripId={trip.id}
-                          className="mb-4"
-                        />
-                      ))
-                    ) : (
-                      <TravelIntelCard
-                        city={trip.destination}
-                        country={trip.destination_country || ((destinationMeta as any)?.country as string | undefined)}
-                        startDate={trip.start_date}
-                        endDate={effectiveEndDate}
-                        travelers={trip.travelers || 2}
-                        archetype={(trip as any).travel_style || undefined}
-                        interests={(trip as any).interests || undefined}
-                        tripId={trip.id}
-                        className="mb-4"
-                      />
-                    )}
-                    </ErrorBoundary>
-                    )}
+                    {/* Desktop Travel Intel removed — now inside EditorialItinerary's unified Voyance Intelligence section */}
                   </div>
 
 
