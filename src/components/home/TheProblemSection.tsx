@@ -108,8 +108,8 @@ function ChaosMockup() {
           
           {/* Overlapping browser windows - generic */}
           <motion.div 
-            className="absolute top-4 right-2 w-24 md:w-48 bg-white rounded-lg shadow-xl border border-[#e5e5e5] overflow-hidden rotate-[3deg] opacity-95 hidden md:block"
-            animate={{ rotate: [3, 4, 3] }}
+            className="absolute top-2 right-1 w-32 md:w-40 bg-white rounded-lg shadow-xl border border-[#e5e5e5] overflow-hidden rotate-[2deg] opacity-95 hidden md:block"
+            animate={{ rotate: [2, 3, 2] }}
             transition={{ duration: 3, repeat: Infinity }}
           >
             <div className="bg-blue-600 text-white px-2 py-1 text-[8px] font-bold">Hotels Site</div>
@@ -121,7 +121,7 @@ function ChaosMockup() {
           </motion.div>
           
           <motion.div 
-            className="absolute bottom-8 right-8 w-44 bg-white rounded-lg shadow-xl border border-[#e5e5e5] overflow-hidden rotate-[-2deg] opacity-95 hidden md:block"
+            className="absolute bottom-12 right-4 w-36 md:w-40 bg-white rounded-lg shadow-xl border border-[#e5e5e5] overflow-hidden rotate-[-2deg] opacity-95 hidden md:block"
             animate={{ rotate: [-2, -3, -2] }}
             transition={{ duration: 2.5, repeat: Infinity }}
           >
@@ -135,7 +135,7 @@ function ChaosMockup() {
           
           {/* Sticky notes overlaid */}
           <motion.div 
-            className="absolute bottom-16 left-4 w-24 h-20 bg-[#fff475] rounded shadow-lg p-2 text-[8px] text-[#3c4043] rotate-[-4deg] hidden md:block"
+            className="absolute bottom-14 left-2 w-24 h-[72px] bg-[#fff475] rounded shadow-lg p-2 text-[8px] text-[#3c4043] rotate-[-4deg] hidden md:block"
             animate={{ rotate: [-4, -3, -4] }}
             transition={{ duration: 2, repeat: Infinity }}
           >
