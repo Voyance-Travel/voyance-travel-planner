@@ -438,7 +438,9 @@ async function getGooglePlacesPhoto(
 
       // Pick the best photo from the place (prefer 2nd or 3rd photo — first is often a logo/sign)
       const photos = best.place.photos || [];
-      const photoIndex = photos.length >= 3 ? 1 : 0; // Skip first photo if multiple available
+      // Skip first photo (often logo/sign) and second (often interior/staff).
+      // Prefer third photo which tends to be exterior/ambiance.
+      const photoIndex = photos.length >= 4 ? 2 : photos.length >= 2 ? 1 : 0;
       const photoResource = photos[photoIndex].name;
       const googlePhotoUrl = `https://places.googleapis.com/v1/${photoResource}/media?maxWidthPx=1200&key=${apiKey}`;
       
@@ -1316,7 +1318,7 @@ async function fetchImageTiered(
         lovableApiKey
       );
 
-      qualityScore = qualityResult.score;
+      qualityScore = qualityResult.pass ? qualityResult.score : Math.min(qualityResult.score, 0.5);
 
       // If image fails quality check, try next candidate or fallback
       if (!qualityResult.pass) {
