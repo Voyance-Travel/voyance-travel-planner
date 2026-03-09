@@ -660,6 +660,23 @@ interface GenerationContext {
   multiCityDayMap?: MultiCityDayInfo[];
   // Pre-fetched venue operating hours from verified_venues cache
   venueHoursCache?: Array<{ name: string; opening_hours: string[] }>;
+  // User-specified activities from chat extraction (with times, all-day flags)
+  userActivities?: Array<{
+    name: string;
+    day?: number;
+    startTime?: string;
+    endTime?: string;
+    isAllDay?: boolean;
+    isRequired?: boolean;
+    category?: string;
+    notes?: string;
+  }>;
+  // Flight arrival details for first-day scheduling
+  flightArrival?: { airport?: string; time?: string; airline?: string; flightNumber?: string };
+  // Flight departure details for last-day scheduling
+  flightDeparture?: { airport?: string; time?: string; airline?: string; flightNumber?: string };
+  // Hotel preference from chat
+  hotelPreference?: string;
 }
 
 interface StrictActivity {
@@ -4394,6 +4411,13 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     userConstraints: (trip.metadata?.userConstraints as any[]) || undefined,
     // Flight details from chat planner
     flightDetails: (trip.metadata?.flightDetails as string) || undefined,
+    // User-specified activities from chat extraction (Part 3 fix)
+    userActivities: (trip.metadata?.userActivities as any[]) || undefined,
+    // Flight arrival/departure from chat (Part 3 fix)
+    flightArrival: (trip.metadata?.flightArrival as any) || undefined,
+    flightDeparture: (trip.metadata?.flightDeparture as any) || undefined,
+    // Hotel preference from chat (Part 4 fix)
+    hotelPreference: (trip.metadata?.hotelPreference as string) || undefined,
   };
 
   // Set daily budget based on tier (fallback)
