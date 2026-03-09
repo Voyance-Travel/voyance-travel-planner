@@ -8327,6 +8327,8 @@ interface ActivityRowProps {
   /** Handler for changing transport mode on a route segment */
   onTransportModeChange?: (dayIndex: number, activityId: string, newMode: string) => Promise<void>;
   changingTransportActivityId?: string | null;
+  /** Origin location for transit routing (previous activity's location) */
+  transitOrigin?: string;
   /** Color map for collaborator attribution badges */
   collaboratorColorMap?: Map<string, CollaboratorAttribution>;
   aiLocked?: boolean;
