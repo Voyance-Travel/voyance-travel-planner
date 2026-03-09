@@ -6,7 +6,7 @@
  * Shows gap analysis in a dialog when user clicks to review.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, AlertTriangle, Info, CheckCircle2, 
@@ -98,6 +98,7 @@ export function SmartFinishBanner({
   const [enrichmentFailed, setEnrichmentFailed] = useState(false);
   const [failureReason, setFailureReason] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const enrichLockRef = useRef(false);
 
   const spendCredits = useSpendCredits();
   const { data: creditData } = useCredits();
@@ -204,10 +205,12 @@ export function SmartFinishBanner({
    * Issues guaranteed refund if generation fails.
    */
   const callEnrichWithGuaranteedRefund = async (source: string): Promise<{ success: boolean; data?: any }> => {
-    if (isGenerating) {
+    // Synchronous lock check - prevents race condition from rapid double-clicks
+    if (enrichLockRef.current || isGenerating) {
       toast.info('Smart Finish is already running. Please wait…');
       return { success: false };
     }
+    enrichLockRef.current = true; // Immediate synchronous lock
     setIsGenerating(true);
     try {
       // Kick off — returns immediately with status: "generating"
@@ -220,14 +223,16 @@ export function SmartFinishBanner({
         console.error(`[SmartFinish ${source}] Kickoff failed:`, errorMsg);
         // Still check if backend completed despite the error
         const recovered = await pollForCompletion(source, 8, 3000);
-        if (recovered.success) { setIsGenerating(false); return recovered; }
+        if (recovered.success) { enrichLockRef.current = false; setIsGenerating(false); return recovered; }
 
         await issueGuaranteedRefund(source, errorMsg);
+        enrichLockRef.current = false;
         return { success: false };
       }
 
       // If already completed (idempotent re-call)
       if (data.status === 'completed' || data.alreadyCompleted) {
+        enrichLockRef.current = false;
         setIsGenerating(false);
         return { success: true, data };
       }
@@ -238,17 +243,20 @@ export function SmartFinishBanner({
       if (!result.success) {
         const errorDetail = result.data?.error || undefined;
         await issueGuaranteedRefund(source, errorDetail);
+        enrichLockRef.current = false;
         return { success: false };
       }
 
+      enrichLockRef.current = false;
       setIsGenerating(false);
       return result;
     } catch (err: unknown) {
       console.error(`[SmartFinish ${source}] Exception:`, err);
       const recovered = await pollForCompletion(source, 8, 3000);
-      if (recovered.success) { setIsGenerating(false); return recovered; }
+      if (recovered.success) { enrichLockRef.current = false; setIsGenerating(false); return recovered; }
 
       await issueGuaranteedRefund(source, err instanceof Error ? err.message : String(err));
+      enrichLockRef.current = false;
       return { success: false };
     }
   };
@@ -575,7 +583,7 @@ export function SmartFinishBanner({
           <DialogFooter className="flex-col gap-2 sm:flex-col">
             <Button
               onClick={handlePurchase}
-              disabled={isPurchasing}
+              disabled={isPurchasing || isGenerating}
               className="w-full gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 shadow-md"
             >
               {isPurchasing ? (
