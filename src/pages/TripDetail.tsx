@@ -181,7 +181,7 @@ export default function TripDetail() {
 
   useEffect(() => {
     if (generationStalled) {
-      stalledTimerRef.current = setTimeout(() => setShowStalledUI(true), 30000);
+      stalledTimerRef.current = setTimeout(() => setShowStalledUI(true), 5000);
     } else {
       setShowStalledUI(false);
       if (stalledTimerRef.current) clearTimeout(stalledTimerRef.current);
