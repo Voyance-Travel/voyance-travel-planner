@@ -412,7 +412,7 @@ export function SmartFinishBanner({
         className={cn(
           "relative overflow-hidden rounded-xl border",
           enrichmentFailed
-            ? "border-red-200/60 dark:border-red-800/40 bg-gradient-to-br from-red-50/80 via-orange-50/50 to-red-50/80 dark:from-red-950/30 dark:via-orange-950/20 dark:to-red-950/30"
+            ? "border-border bg-muted/50"
             : "border-amber-200/60 dark:border-amber-800/40 bg-gradient-to-br from-amber-50/80 via-orange-50/50 to-amber-50/80 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-amber-950/30",
           "p-4 sm:p-5",
           className
@@ -436,7 +436,7 @@ export function SmartFinishBanner({
             <div className={cn(
               "shrink-0 p-2.5 rounded-xl shadow-md",
               enrichmentFailed
-                ? "bg-gradient-to-br from-red-400 to-orange-500 shadow-red-500/20"
+                ? "bg-muted-foreground/80 shadow-muted-foreground/20"
                 : "bg-gradient-to-br from-amber-400 to-orange-500 shadow-amber-500/20"
             )}>
               {enrichmentFailed ? <RefreshCw className="h-5 w-5 text-white" /> : <Wand2 className="h-5 w-5 text-white" />}
@@ -444,7 +444,7 @@ export function SmartFinishBanner({
             <div className="min-w-0">
               <h3 className="text-sm font-semibold text-foreground leading-tight">
                 {enrichmentFailed
-                  ? 'Enrichment failed. Retry at no extra cost'
+                  ? 'Let\'s try that again'
                   : 'This trip has great bones. Want us to finish it?'}
               </h3>
               <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
