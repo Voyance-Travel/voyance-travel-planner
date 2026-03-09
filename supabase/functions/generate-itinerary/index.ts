@@ -796,9 +796,50 @@ interface ValidationWarning {
 }
 
 /**
- * Validates the generated itinerary against user preferences
- * Returns violations that should cause rejection/regeneration
+ * Detect activities that are multi-day events and SHOULD repeat across days.
+ * These are exempt from trip-wide deduplication.
  */
+function isRecurringEvent(activity: { title?: string; description?: string; duration?: number; isAllDay?: boolean }, userActivities: string[] = []): boolean {
+  const title = (activity.title || '').toLowerCase();
+  const desc = (activity.description || '').toLowerCase();
+  const combined = `${title} ${desc}`;
+
+  const sportingEvents = [
+    'us open', 'u.s. open', 'wimbledon', 'french open', 'australian open',
+    'world cup', 'olympics', 'olympic games', 'formula 1', 'f1 grand prix',
+    'tour de france', 'masters tournament', 'super bowl week',
+    'world series', 'nba finals', 'stanley cup', 'ryder cup',
+    'cricket world cup', 'rugby world cup', 'copa america',
+  ];
+
+  const festivals = [
+    'coachella', 'glastonbury', 'burning man', 'tomorrowland', 'lollapalooza',
+    'bonnaroo', 'primavera sound', 'reading festival', 'leeds festival',
+    'mardi gras', 'carnival', 'oktoberfest', 'day of the dead', 'dia de los muertos',
+    'diwali', 'holi', 'chinese new year', 'lunar new year', 'la tomatina',
+    'rio carnival', 'venice carnival', 'edinburgh fringe', 'cannes film festival',
+    'sundance', 'sxsw', 'art basel', 'comic-con', 'comic con',
+    'fashion week', 'film festival', 'music festival', 'food festival',
+  ];
+
+  for (const event of [...sportingEvents, ...festivals]) {
+    if (combined.includes(event)) return true;
+  }
+
+  for (const userAct of userActivities) {
+    const userActLower = userAct.toLowerCase().trim();
+    if (userActLower.length > 3 && (title.includes(userActLower) || userActLower.includes(title.substring(0, 20)))) {
+      return true;
+    }
+  }
+
+  if (activity.isAllDay) return true;
+  if (activity.duration && activity.duration >= 300) return true;
+
+  return false;
+}
+
+
 function validateItineraryPersonalization(
   days: StrictDay[],
   ctx: ValidationContext
