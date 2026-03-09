@@ -2776,21 +2776,31 @@ export default function Start() {
                         }] : null;
 
                         // Build flight_selection from chat-extracted flight details
-                        const flightSelection = (details.arrivalAirport || details.arrivalTime || details.departureAirport || details.departureTime) ? {
+                        // Merge legacy fields (arrivalAirport/Time) with new flightArrival/flightDeparture
+                        const effectiveArrivalAirport = details.flightArrival?.airport || details.arrivalAirport;
+                        const effectiveArrivalTime = details.flightArrival?.time || details.arrivalTime;
+                        const effectiveDepartureAirport = details.flightDeparture?.airport || details.departureAirport;
+                        const effectiveDepartureTime = details.flightDeparture?.time || details.departureTime;
+
+                        const flightSelection = (effectiveArrivalAirport || effectiveArrivalTime || effectiveDepartureAirport || effectiveDepartureTime) ? {
                           departure: {
                             arrival: {
-                              time: details.arrivalTime || undefined,
-                              airport: details.arrivalAirport || undefined,
+                              time: effectiveArrivalTime || undefined,
+                              airport: effectiveArrivalAirport || undefined,
                             },
                           },
                           return: {
                             departure: {
-                              time: details.departureTime || undefined,
-                              airport: details.departureAirport || undefined,
+                              time: effectiveDepartureTime || undefined,
+                              airport: effectiveDepartureAirport || undefined,
                             },
                           },
-                          arrivalAirport: details.arrivalAirport || undefined,
-                          departureAirport: details.departureAirport || undefined,
+                          arrivalAirport: effectiveArrivalAirport || undefined,
+                          departureAirport: effectiveDepartureAirport || undefined,
+                          arrivalAirline: details.flightArrival?.airline || undefined,
+                          departureAirline: details.flightDeparture?.airline || undefined,
+                          arrivalFlightNumber: details.flightArrival?.flightNumber || undefined,
+                          departureFlightNumber: details.flightDeparture?.flightNumber || undefined,
                           source: 'chat',
                         } : null;
 
