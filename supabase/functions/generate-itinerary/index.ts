@@ -6103,7 +6103,12 @@ Generate activities for this day following ALL constraints above.`;
         }
       }
 
-      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish, !!context.isDayTrip);
+      // Build user activities for recurring event detection
+      const _mustDoText = (context.mustDoActivities as string) || '';
+      const _parsedMustDos = _mustDoText.split(/[,;\n]/).map(s => s.trim()).filter(Boolean).map(name => ({ name, isRecurring: true }));
+      const _userActivities = [...((context as any).userActivities || []), ..._parsedMustDos];
+
+      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish, !!context.isDayTrip, _userActivities);
 
       // Transition day validation: MUST contain at least one inter-city transport activity
       if (isTransitionDay && dayCity?.transitionFrom && dayCity?.transitionTo) {
@@ -9193,7 +9198,12 @@ If the purpose is a specific event, plan at least ONE full day around that event
         [] // Trip intents loaded separately for full generation
       );
       
-      const validationResult = validateItineraryPersonalization(aiResult.days, validationCtx);
+      // Build user activities for recurring event detection in personalization validator
+      const _pMustDoText = (context.mustDoActivities as string) || '';
+      const _pParsedMustDos = _pMustDoText.split(/[,;\n]/).map(s => s.trim()).filter(Boolean).map(name => ({ name, isRecurring: true }));
+      const _pUserActivities = [...((context as any).userActivities || []), ..._pParsedMustDos];
+
+      const validationResult = validateItineraryPersonalization(aiResult.days, validationCtx, _pUserActivities);
       
       // Log validation results
       console.log(`[Stage 2.6] Personalization score: ${validationResult.personalizationScore}/100`);
