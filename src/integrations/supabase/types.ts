@@ -4777,6 +4777,7 @@ export type Database = {
           created_at: string
           credits_amount: number
           id: string
+          idempotency_key: string | null
           refund_attempts: number
           resolution_note: string | null
           resolved_at: string | null
@@ -4789,6 +4790,7 @@ export type Database = {
           created_at?: string
           credits_amount: number
           id?: string
+          idempotency_key?: string | null
           refund_attempts?: number
           resolution_note?: string | null
           resolved_at?: string | null
@@ -4801,6 +4803,7 @@ export type Database = {
           created_at?: string
           credits_amount?: number
           id?: string
+          idempotency_key?: string | null
           refund_attempts?: number
           resolution_note?: string | null
           resolved_at?: string | null
