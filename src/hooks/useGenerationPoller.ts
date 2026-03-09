@@ -9,11 +9,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-/** Stale threshold: if no heartbeat for 5 minutes, generation is considered dead */
-const STALE_THRESHOLD_MS = 5 * 60 * 1000;
+/** Stale threshold: if no heartbeat for 90 seconds, generation is considered stalled */
+const STALE_THRESHOLD_MS = 90 * 1000;
 
-/** Stall threshold for itinerary_days: if no new day in 5 minutes */
-const DAY_STALL_THRESHOLD_MS = 5 * 60 * 1000;
+/** Stall threshold for itinerary_days: if no new day in 90 seconds */
+const DAY_STALL_THRESHOLD_MS = 90 * 1000;
 
 export interface GeneratedDaySummary {
   day_number: number;
