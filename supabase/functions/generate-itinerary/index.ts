@@ -5175,8 +5175,15 @@ DAY-SPECIFIC CONSTRAINTS (Flight/Hotel/DNA driven)
 ${'='.repeat(70)}
 ${dayConstraintsSection}` : ''}
 
-ADDITIONAL CONTEXT:
+${preferenceContext ? `${'='.repeat(70)}
+🚨 USER'S EXPLICIT REQUESTS (MUST BE HONORED — FAILURE = REJECTED ITINERARY) 🚨
+${'='.repeat(70)}
 ${preferenceContext}
+
+⚠️ If the user asked for a specific activity (e.g., "skiing", "surfing", "hiking"), you MUST include it in the itinerary.
+⚠️ If the user specified dietary preferences (e.g., "light dinner", "vegetarian"), respect them in ALL restaurant choices.
+⚠️ Ignoring explicit user requests is the #1 reason itineraries get rejected. DO NOT substitute generic activities.
+` : 'ADDITIONAL CONTEXT: (none)'}
 
 ${flightHotelContext}${retryPrompt}
 
@@ -5967,6 +5974,145 @@ Generate activities for this day following ALL constraints above.`;
               .map(a => a.title);
             console.log(`[Stage 2] Day ${dayNumber}: Removing ${toRemoveIds.size} duplicate airport activities: ${removedTitles.join(', ')}`);
             generatedDay.activities = generatedDay.activities.filter(a => !toRemoveIds.has(a.id));
+          }
+        }
+      }
+
+      // ==========================================================================
+      // ARRIVAL DAY SEQUENCE FIX: Ensure airport → transfer → hotel check-in order
+      // ==========================================================================
+      if (isFirstDay && generatedDay.activities.length > 1) {
+        const arrivalKeywords = ['arrival at airport', 'arrive at airport', 'airport arrival', 'land at', 'arrive in'];
+        const transferKeywords = ['airport transfer', 'transfer to hotel', 'rideshare to', 'taxi to hotel', 'shuttle to', 'uber to', 'lyft to'];
+        const checkinKeywords = ['check-in', 'check in', 'checkin'];
+
+        const arrivalIdx = generatedDay.activities.findIndex((a: any) => {
+          const t = (a.title || '').toLowerCase();
+          return arrivalKeywords.some(kw => t.includes(kw)) ||
+            (a.category === 'transport' && t.includes('airport') && !t.includes('transfer'));
+        });
+        const transferIdx = generatedDay.activities.findIndex((a: any) => {
+          const t = (a.title || '').toLowerCase();
+          return transferKeywords.some(kw => t.includes(kw)) ||
+            (a.category === 'transport' && t.includes('transfer') && t.includes('hotel'));
+        });
+        const checkinIdx = generatedDay.activities.findIndex((a: any) => {
+          const t = (a.title || '').toLowerCase();
+          return checkinKeywords.some(kw => t.includes(kw)) || 
+            (a.category === 'accommodation' && (t.includes('hotel') || t.includes('settle')));
+        });
+
+        // If check-in comes before arrival or transfer, reorder
+        if (checkinIdx >= 0 && arrivalIdx >= 0 && checkinIdx < arrivalIdx) {
+          console.log(`[Stage 2] FIXING: Hotel check-in (idx ${checkinIdx}) before airport arrival (idx ${arrivalIdx}) — reordering`);
+
+          // Collect the arrival-sequence activities
+          const seqItems: Array<{ act: any; type: string }> = [];
+          if (arrivalIdx >= 0) seqItems.push({ act: generatedDay.activities[arrivalIdx], type: 'arrival' });
+          if (transferIdx >= 0) seqItems.push({ act: generatedDay.activities[transferIdx], type: 'transfer' });
+          if (checkinIdx >= 0) seqItems.push({ act: generatedDay.activities[checkinIdx], type: 'checkin' });
+
+          // Remove them (reverse order to preserve indices)
+          const indicesToRemove = [arrivalIdx, transferIdx, checkinIdx].filter(i => i >= 0).sort((a, b) => b - a);
+          for (const idx of indicesToRemove) {
+            generatedDay.activities.splice(idx, 1);
+          }
+
+          // Parse flight arrival time, default 9:00 AM
+          let flightArrivalMins = 540;
+          try {
+            // Try to extract from flightHotelContext
+            const arrivalMatch = flightHotelContext.match(/(?:arrives?|arrival|landing)[^\d]*(\d{1,2}):(\d{2})/i);
+            if (arrivalMatch) {
+              flightArrivalMins = parseInt(arrivalMatch[1]) * 60 + parseInt(arrivalMatch[2]);
+            }
+          } catch { /* use default */ }
+
+          const formatTimeMins = (mins: number) => {
+            const h = Math.floor(mins / 60);
+            const m = mins % 60;
+            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+          };
+
+          // Assign sequential times
+          const orderMap: Record<string, number> = { arrival: 0, transfer: 1, checkin: 2 };
+          const timings: Record<string, { start: number; duration: number }> = {
+            arrival: { start: flightArrivalMins, duration: 30 },
+            transfer: { start: flightArrivalMins + 30, duration: 60 },
+            checkin: { start: flightArrivalMins + 90, duration: 30 },
+          };
+
+          for (const item of seqItems) {
+            const t = timings[item.type];
+            if (t) {
+              item.act.startTime = formatTimeMins(t.start);
+              item.act.endTime = formatTimeMins(t.start + t.duration);
+            }
+          }
+
+          // Sort by order and prepend
+          seqItems.sort((a, b) => (orderMap[a.type] || 0) - (orderMap[b.type] || 0));
+          generatedDay.activities = [...seqItems.map(s => s.act), ...generatedDay.activities];
+        }
+      }
+
+      // ==========================================================================
+      // MINIMUM REAL ACTIVITY COUNT VALIDATION
+      // Reject days with only logistics (transport/accommodation/downtime)
+      // ==========================================================================
+      {
+        const realActivities = (generatedDay.activities || []).filter((a: any) => {
+          const title = (a.title || '').toLowerCase();
+          const category = (a.category || '').toLowerCase();
+          const isLogistics = category === 'transport' || category === 'accommodation' || category === 'downtime' ||
+            title.includes('head to airport') || title.includes('check-in') || title.includes('check-out') ||
+            title.includes('checkout') || title.includes('transfer') || title.includes('arrival at');
+          return !isLogistics;
+        });
+        const minimumRealActivities = isLastDay ? 1 : 2;
+        if (realActivities.length < minimumRealActivities) {
+          console.warn(`[Stage 2] Day ${dayNumber} has only ${realActivities.length} real activities (minimum: ${minimumRealActivities})`);
+        }
+      }
+
+      // ==========================================================================
+      // USER PREFERENCE VALIDATION (logging + warnings)
+      // ==========================================================================
+      {
+        const userNotes = (preferenceContext || '').toLowerCase();
+        const allActivityText = generatedDay.activities.map((a: any) => 
+          `${(a.title || '')} ${(a.description || '')}`
+        ).join(' ').toLowerCase();
+
+        const ACTIVITY_KEYWORDS: Record<string, string[]> = {
+          'skiing': ['ski', 'snow', 'slopes', 'big snow', 'mountain creek', 'ski resort'],
+          'surfing': ['surf', 'beach break', 'waves', 'surf lesson'],
+          'hiking': ['hike', 'trail', 'trek', 'summit'],
+          'museum': ['museum', 'gallery', 'exhibit'],
+          'shopping': ['shop', 'mall', 'boutique', 'market'],
+          'spa': ['spa', 'massage', 'wellness', 'sauna'],
+          'snorkeling': ['snorkel', 'reef', 'underwater'],
+          'diving': ['dive', 'scuba', 'underwater'],
+        };
+
+        for (const [activity, keywords] of Object.entries(ACTIVITY_KEYWORDS)) {
+          if (userNotes.includes(activity)) {
+            const dayHasThis = keywords.some(kw => allActivityText.includes(kw));
+            if (!dayHasThis) {
+              console.warn(`[Stage 2] WARNING: User requested "${activity}" but Day ${dayNumber} has no matching activities`);
+            }
+          }
+        }
+
+        // Check for "light dining" preference violations
+        const wantsLightDining = userNotes.includes('light dinner') || userNotes.includes('light meal') || userNotes.includes('casual dinner');
+        if (wantsLightDining) {
+          for (const act of generatedDay.activities) {
+            const isDining = ((act as any).category || '').toLowerCase() === 'dining';
+            const cost = (act as any).cost?.amount || 0;
+            if (isDining && cost > 50) {
+              console.warn(`[Stage 2] WARNING: User requested light dinner but got "${(act as any).title}" at $${cost}`);
+            }
           }
         }
       }
