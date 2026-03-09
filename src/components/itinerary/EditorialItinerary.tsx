@@ -23,7 +23,7 @@ import {
   Globe, Wallet, Languages, Train, ChevronLeft, ChevronRight, Info, Images,
   CreditCard, Library, TrendingUp, Share2, Link2, Copy, Check,
   Shield, FileText, HeartPulse, MoreHorizontal, Eye, Coins, MessageCircle, MessageSquarePlus, Loader2, ClipboardPaste, Compass, Bus, Ship, ArrowRight, Droplets, Wrench,
-  Footprints, Navigation2, History as HistoryIcon, CheckCircle2,
+  Footprints, Navigation2, History as HistoryIcon,
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
@@ -2533,7 +2533,7 @@ export function EditorialItinerary({
     }, 3000); // Auto-save 3 seconds after last change
 
     return () => clearTimeout(autoSaveTimer);
-  }, [hasChanges, days, tripId, effectiveIsEditable, optionSelections]);
+  }, [hasChanges, days, tripId, effectiveIsEditable]);
 
   // ===========================================================================
   // HANDLERS
@@ -2565,24 +2565,14 @@ export function EditorialItinerary({
       let saved = false;
 
       if (existingTrip) {
-        // Compute updated end_date and nights from day count
-        const updatePayload: Record<string, unknown> = {
-          itinerary_data: itineraryData,
-          itinerary_status: 'ready',
-          updated_at: new Date().toISOString(),
-        };
-        try {
-          if (startDate && days.length > 0) {
-            const newEnd = addDays(parseLocalDate(startDate), days.length - 1);
-            updatePayload.end_date = `${newEnd.getFullYear()}-${String(newEnd.getMonth() + 1).padStart(2, '0')}-${String(newEnd.getDate()).padStart(2, '0')}`;
-            updatePayload.nights = days.length - 1;
-          }
-        } catch { /* keep existing dates */ }
-
         // Save to database
         const { error } = await supabase
           .from('trips')
-          .update(updatePayload as any)
+          .update({
+            itinerary_data: itineraryData as any,
+            itinerary_status: 'ready',
+            updated_at: new Date().toISOString()
+          })
           .eq('id', tripId);
 
         if (error) throw error;
@@ -2630,68 +2620,6 @@ export function EditorialItinerary({
       setIsSaving(false);
     }
   }, [days, tripId, onSave]);
-
-  // ── Add / Remove Days ──────────────────────────────────────────────────────
-
-  const handleAddDay = useCallback(() => {
-    const lastDay = days[days.length - 1];
-    let newDate: string | undefined;
-    try {
-      if (lastDay?.date) {
-        const d = addDays(parseLocalDate(lastDay.date), 1);
-        newDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      } else if (startDate) {
-        const d = addDays(parseLocalDate(startDate), days.length);
-        newDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      }
-    } catch { /* fallback: no date */ }
-
-    const newDay: EditorialDay = {
-      dayNumber: days.length + 1,
-      date: newDate,
-      title: `Day ${days.length + 1}`,
-      theme: lastDay?.city ? `Exploring ${lastDay.city}` : undefined,
-      activities: [],
-      city: lastDay?.city,
-      country: lastDay?.country,
-    };
-
-    setDays(prev => [...prev, newDay]);
-    setHasChanges(true);
-    // Navigate to the new day
-    setTimeout(() => setSelectedDayIndex(days.length), 50);
-    toast.success('Day added — add activities and save when ready.');
-  }, [days, startDate, setDays]);
-
-  const handleRemoveDay = useCallback((dayIndex: number) => {
-    if (days.length <= 1) {
-      toast.error("Can't remove the only day in your trip.");
-      return;
-    }
-    const dayTitle = days[dayIndex]?.title || days[dayIndex]?.theme || `Day ${dayIndex + 1}`;
-    if (!window.confirm(`Remove "${dayTitle}"? All activities for this day will be deleted.`)) return;
-
-    setDays(prev =>
-      prev
-        .filter((_, i) => i !== dayIndex)
-        .map((d, i) => {
-          // Re-number days and recalculate dates
-          let newDate = d.date;
-          try {
-            if (startDate) {
-              const dt = addDays(parseLocalDate(startDate), i);
-              newDate = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-            }
-          } catch { /* keep original */ }
-          return { ...d, dayNumber: i + 1, date: newDate };
-        })
-    );
-    setHasChanges(true);
-    if (selectedDayIndex >= days.length - 1) {
-      setSelectedDayIndex(Math.max(0, days.length - 2));
-    }
-    toast.success('Day removed — save to confirm.');
-  }, [days, startDate, setDays, selectedDayIndex]);
 
   // Full itinerary regeneration — now uses day-by-day pattern matching original generation
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -3075,36 +3003,6 @@ export function EditorialItinerary({
   }, [tripId, days]);
 
   const handleActivityMove = useCallback((dayIndex: number, activityId: string, direction: 'up' | 'down') => {
-    // Helper: parse "HH:mm" or "H:mm AM/PM" to minutes since midnight
-    const toMins = (t?: string): number | null => {
-      if (!t) return null;
-      const m24 = t.match(/^(\d{1,2}):(\d{2})$/);
-      if (m24) return parseInt(m24[1], 10) * 60 + parseInt(m24[2], 10);
-      const m12 = t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-      if (!m12) return null;
-      let h = parseInt(m12[1], 10);
-      const mins = parseInt(m12[2], 10);
-      const pm = m12[3].toUpperCase() === 'PM';
-      if (pm && h !== 12) h += 12;
-      if (!pm && h === 12) h = 0;
-      return h * 60 + mins;
-    };
-    const fmtTime = (mins: number) => {
-      const h = Math.floor(mins / 60) % 24;
-      const m = mins % 60;
-      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-    };
-    // Parse a transit duration string like "25 min" or "1h 30m" to minutes
-    const parseTransitDuration = (dur?: string): number | null => {
-      if (!dur) return null;
-      const hm = dur.match(/(\d+)\s*h(?:ours?|r)?/i);
-      const mm = dur.match(/(\d+)\s*m(?:in(?:ute)?s?)?/i);
-      let total = 0;
-      if (hm) total += parseInt(hm[1], 10) * 60;
-      if (mm) total += parseInt(mm[1], 10);
-      return total > 0 ? total : null;
-    };
-
     setDays(prev => prev.map((day, idx) => {
       if (idx !== dayIndex) return day;
       const activities = [...day.activities];
@@ -3114,33 +3012,10 @@ export function EditorialItinerary({
       const newIdx = direction === 'up' ? actIdx - 1 : actIdx + 1;
       if (newIdx < 0 || newIdx >= activities.length) return day;
       
-      // Swap positions
       [activities[actIdx], activities[newIdx]] = [activities[newIdx], activities[actIdx]];
-      
-      // Recalculate times for all activities after the swap
-      const withTimes = activities.map(a => {
-        const s = toMins(a.startTime || a.time);
-        const e = toMins(a.endTime);
-        const dur = (s !== null && e !== null && e > s) ? e - s : 30;
-        return { activity: a, duration: dur };
-      });
-
-      const allStarts = activities.map(a => toMins(a.startTime || a.time)).filter((v): v is number => v !== null);
-      let cursor = allStarts.length > 0 ? Math.min(...allStarts) : 9 * 60;
-
-      const updated = withTimes.map(({ activity, duration }, i) => {
-        const newStart = fmtTime(cursor);
-        const newEnd = fmtTime(cursor + duration);
-        const nextActivity = withTimes[i + 1]?.activity;
-        const transitGap = parseTransitDuration(nextActivity?.transportation?.duration) ?? 20;
-        cursor += duration + transitGap;
-        return { ...activity, startTime: newStart, endTime: newEnd, time: newStart };
-      });
-
-      return { ...day, activities: updated };
+      return { ...day, activities };
     }));
     setHasChanges(true);
-    setNeedsOptimization(true);
   }, []);
 
   // Handle drag-and-drop reorder of activities within a day — dynamically reassign times
@@ -4334,7 +4209,7 @@ export function EditorialItinerary({
                     <span className="hidden sm:inline">History</span>
                   </Button>
                   <span className="text-xs text-muted-foreground">
-                    {days.length === 1 ? 'Day Trip' : `Day ${selectedDayIndex + 1} of ${days.length}`}
+                    Day {selectedDayIndex + 1} of {days.length}
                   </span>
                 </div>
               </div>
@@ -4359,13 +4234,6 @@ export function EditorialItinerary({
                         return !['check-in', 'check-out', 'hotel', 'accommodation'].includes(cat);
                       });
                       const isDayEmpty = !dayHasRealActivities;
-                      const allActivitiesLocked = dayHasRealActivities && 
-                        (day.activities || [])
-                          .filter((a: any) => {
-                            const cat = (a.category || a.type || '').toLowerCase();
-                            return !['check-in', 'check-out', 'hotel', 'accommodation'].includes(cat);
-                          })
-                          .every((a: any) => a.isLocked);
                       // Compute date from startDate + dayNumber for reliable cross-month handling
                       let dayDate: Date | null = null;
                       try {
@@ -4412,19 +4280,15 @@ export function EditorialItinerary({
                               ? (day.metadata?.isLocked && !isManualMode) 
                                 ? 'bg-muted border-border shadow-sm' 
                                 : 'bg-primary text-primary-foreground border-primary shadow-md'
-                              : allActivitiesLocked && !(day.metadata?.isLocked && !isManualMode)
-                                ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-950/50'
-                                : (day.metadata?.isLocked && !isManualMode) 
-                                  ? 'bg-muted/30 border-transparent opacity-60 hover:opacity-80' 
-                                  : 'bg-card border-border/50 hover:bg-muted hover:border-border',
+                              : (day.metadata?.isLocked && !isManualMode) 
+                                ? 'bg-muted/30 border-transparent opacity-60 hover:opacity-80' 
+                                : 'bg-card border-border/50 hover:bg-muted hover:border-border',
                             isTodayDay && !isSelected && 'ring-2 ring-primary ring-offset-2 ring-offset-background'
                           )}
                         >
-                          {day.metadata?.isLocked && !isManualMode ? (
+                          {day.metadata?.isLocked && !isManualMode && (
                             <Lock className="h-3 w-3 absolute top-1 right-1 text-muted-foreground" />
-                          ) : allActivitiesLocked ? (
-                            <CheckCircle2 className="h-3 w-3 absolute top-1 right-1 text-emerald-500" />
-                          ) : null}
+                          )}
                           {/* Day number */}
                           <span className={cn(
                             'text-[10px] font-semibold uppercase tracking-wide',
@@ -4464,42 +4328,17 @@ export function EditorialItinerary({
                               Today
                             </Badge>
                           )}
-                          {allActivitiesLocked && !isTodayDay && !(day.metadata?.isLocked && !isManualMode) ? (
-                            <span className={cn(
-                              'text-[9px] mt-0.5 font-medium',
-                              isSelected ? 'text-primary-foreground/70' : 'text-emerald-500'
-                            )}>
-                              Planned
-                            </span>
-                          ) : isDayEmpty && !isTodayDay && !(day.metadata?.isLocked && !isManualMode) ? (
+                          {isDayEmpty && !isTodayDay && !(day.metadata?.isLocked && !isManualMode) && (
                             <span className={cn(
                               'text-[9px] mt-0.5 font-medium',
                               isSelected ? 'text-primary-foreground/70' : 'text-amber-500'
                             )}>
                               Unplanned
                             </span>
-                          ) : null}
+                          )}
                         </button>
                       );
                     })}
-                    {/* Add Day button in day picker */}
-                    {effectiveIsEditable && !isActivelyGenerating && (
-                      <Tooltip delayDuration={200}>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            onClick={handleAddDay}
-                            className="flex flex-col items-center justify-center px-2 py-2 rounded-xl border border-dashed border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all min-w-[52px] text-muted-foreground hover:text-primary"
-                          >
-                            <Plus className="h-4 w-4" />
-                            <span className="text-[9px] font-medium mt-0.5">Add</span>
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom">
-                          <span className="text-xs">Add another day to your trip</span>
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
                   </div>
                 </div>
 
@@ -4847,7 +4686,6 @@ export function EditorialItinerary({
                           onActivityRemove={handleActivityRemove}
                           onDayLock={handleDayLock}
                           onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
-                          onRemoveDay={effectiveIsEditable && !isActivelyGenerating ? () => handleRemoveDay(selectedDayIndex) : undefined}
                           onAddActivity={(afterIndex?: number) => setAddActivityModal({ dayIndex: selectedDayIndex, afterIndex })}
                           onDiscover={() => setDiscoverDrawerOpen(true)}
                           onImportActivities={() => setImportModal({ dayIndex: selectedDayIndex })}
@@ -4863,7 +4701,6 @@ export function EditorialItinerary({
                           optionSelections={optionSelections}
                           onOptionSelect={(groupKey, selectedId) => {
                             setOptionSelections(prev => ({ ...prev, [groupKey]: selectedId }));
-                            setHasChanges(true);
                           }}
                           compactCards={isManualMode || creationSource === 'smart_finish'}
                           isPastTrip={isPastTrip}
@@ -7471,7 +7308,6 @@ interface DayCardProps {
   onActivityReorder?: (activities: EditorialActivity[]) => void; // Drag-and-drop reorder
   onDayLock: (dayIndex: number) => void;
   onDayRegenerate: () => void;
-  onRemoveDay?: () => void;
   onAddActivity: (afterIndex?: number) => void;
   onDiscover?: () => void;
   onImportActivities?: () => void;
@@ -7533,7 +7369,6 @@ function DayCard({
   onActivityReorder,
   onDayLock,
   onDayRegenerate,
-  onRemoveDay,
   onAddActivity,
   onDiscover,
   onImportActivities,
@@ -7771,15 +7606,6 @@ function DayCard({
                             <RefreshCw className={cn("h-3.5 w-3.5 mr-2", isRegenerating && "animate-spin")} />
                             Regenerate Day
                           </DropdownMenuItem>
-                        )}
-                        {onRemoveDay && totalDays > 1 && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={onRemoveDay} className="text-destructive focus:text-destructive">
-                              <Trash2 className="h-3.5 w-3.5 mr-2" />
-                              Remove Day
-                            </DropdownMenuItem>
-                          </>
                         )}
                       </>
                     )}

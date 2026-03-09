@@ -51,6 +51,7 @@ export function useStalePendingChargeRefund(tripId: string | undefined) {
           if (attempts >= MAX_REFUND_ATTEMPTS) {
             if (attempts === MAX_REFUND_ATTEMPTS) {
               console.warn(`[StalePendingCharge] Max refund attempts (${MAX_REFUND_ATTEMPTS}) reached for ${charge.id} — marking as failed`);
+              await supabase
               await (supabase
                 .from('pending_credit_charges')
                 .update({

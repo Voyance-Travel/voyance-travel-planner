@@ -576,13 +576,13 @@ export default function ItineraryPreview({
           </h1>
         </div>
         
-        <Card className="border-border bg-muted/30">
+        <Card className="border-destructive/50 bg-destructive/5">
           <CardContent className="pt-6">
             <div className="flex flex-col items-center text-center gap-4">
-              <RefreshCw className="w-12 h-12 text-muted-foreground" />
+              <AlertCircle className="w-12 h-12 text-destructive" />
               <div>
-                <h3 className="font-semibold text-lg text-foreground">Your itinerary needs another try</h3>
-                <p className="text-muted-foreground mt-1">These things happen. Your credits are safe.</p>
+                <h3 className="font-semibold text-lg text-destructive">Generation Failed</h3>
+                <p className="text-muted-foreground mt-1">{message}</p>
               </div>
               <div className="flex gap-3">
                 <Button variant="outline" onClick={() => { clearError(); onBack(); }}>
@@ -590,7 +590,7 @@ export default function ItineraryPreview({
                 </Button>
                 <Button onClick={handleRetry}>
                   <RefreshCw className="w-4 h-4 mr-2" />
-                  Build Again
+                  Try Again
                 </Button>
               </div>
             </div>
@@ -732,7 +732,7 @@ export default function ItineraryPreview({
               <div className="flex-1">
                 <h3 className="font-semibold text-lg">Your Itinerary is Ready!</h3>
                 <p className="text-sm text-muted-foreground">
-                  {days.length} days crafted by Voyance
+                  {days.length} days planned
                   {generationDuration && ` • Generated in ${(generationDuration / 1000).toFixed(1)}s`}
                 </p>
               </div>

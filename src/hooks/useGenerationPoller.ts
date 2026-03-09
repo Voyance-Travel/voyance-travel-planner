@@ -9,11 +9,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-/** Stale threshold: if no heartbeat for 90 seconds, generation is considered stalled */
-const STALE_THRESHOLD_MS = 90 * 1000;
+/** Stale threshold: if no heartbeat for 5 minutes, generation is considered dead */
+const STALE_THRESHOLD_MS = 5 * 60 * 1000;
 
-/** Stall threshold for itinerary_days: if no new day in 90 seconds */
-const DAY_STALL_THRESHOLD_MS = 90 * 1000;
+/** Stall threshold for itinerary_days: if no new day in 5 minutes */
+const DAY_STALL_THRESHOLD_MS = 5 * 60 * 1000;
 
 export interface GeneratedDaySummary {
   day_number: number;
@@ -78,9 +78,9 @@ export function useGenerationPoller({
   onFailedRef.current = onFailed;
   onStalledRef.current = onStalled;
   
-  // Track whether we already fired onStalled / how many auto-resume attempts made this cycle
+  // Track whether we already fired onStalled / attempted auto-resume
   const stalledFiredRef = useRef(false);
-  const autoResumeCountRef = useRef(0);
+  const autoResumeAttemptedRef = useRef(false);
   // Guard: only fire onReady once per generation cycle
   const onReadyCalledRef = useRef(false);
   // High-water mark: completedDays should never decrease during a generation cycle
@@ -109,10 +109,6 @@ export function useGenerationPoller({
       ]);
 
       if (tripResult.error || !tripResult.data) return;
-      if (daysResult.error) {
-        console.warn('[GenerationPoller] itinerary_days query failed:', daysResult.error);
-        // Continue with trip data; skip day-based stall detection this cycle
-      }
       const data = tripResult.data;
 
       const itineraryStatus = data.itinerary_status as string;
@@ -154,7 +150,7 @@ export function useGenerationPoller({
       // Check for completion — backend uses 'ready', some docs say 'generated'
       if (itineraryStatus === 'ready' || itineraryStatus === 'generated') {
         stalledFiredRef.current = false;
-        autoResumeCountRef.current = 0;
+        autoResumeAttemptedRef.current = false;
         setState({ status: 'ready', completedDays: totalDays || completedDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
         if (!onReadyCalledRef.current) {
           onReadyCalledRef.current = true;
@@ -166,7 +162,7 @@ export function useGenerationPoller({
       // Also check: all days exist even if status wasn't updated
       if (totalDays > 0 && dayCount >= totalDays && data.itinerary_data) {
         stalledFiredRef.current = false;
-        autoResumeCountRef.current = 0;
+        autoResumeAttemptedRef.current = false;
         setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
         if (!onReadyCalledRef.current) {
           onReadyCalledRef.current = true;
@@ -181,7 +177,7 @@ export function useGenerationPoller({
         if (partialDays.length > 0 && totalDays > 0 && partialDays.length >= totalDays) {
           console.log('[useGenerationPoller] Status is "failed" but itinerary_data has all days — treating as ready');
           stalledFiredRef.current = false;
-          autoResumeCountRef.current = 0;
+          autoResumeAttemptedRef.current = false;
           setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
           if (!onReadyCalledRef.current) {
             onReadyCalledRef.current = true;
@@ -194,7 +190,7 @@ export function useGenerationPoller({
         if (totalDays > 0 && dayCount >= totalDays) {
           console.log('[useGenerationPoller] Status is "failed" but itinerary_days has all days — treating as ready');
           stalledFiredRef.current = false;
-          autoResumeCountRef.current = 0;
+          autoResumeAttemptedRef.current = false;
           setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
           if (!onReadyCalledRef.current) {
             onReadyCalledRef.current = true;
@@ -203,8 +199,16 @@ export function useGenerationPoller({
           return;
         }
 
+        // Suppress failed transition if we just resumed from a background tab (grace period)
+        const inResumeGrace = justResumedRef.current && (Date.now() - resumedAtRef.current < 15000);
+        if (inResumeGrace) {
+          // Don't show failed yet — stay polling, the next cycle will confirm
+          setState({ status: 'polling', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList, currentCity });
+          return;
+        }
+
         stalledFiredRef.current = false;
-        autoResumeCountRef.current = 0;
+        autoResumeAttemptedRef.current = false;
         const genError = (meta.generation_error as string) || 'Generation failed';
         setState({ status: 'failed', completedDays, totalDays, progress, error: genError, partialDays, generatedDaysList: daysList, currentCity });
         onFailedRef.current?.(genError);
@@ -213,53 +217,47 @@ export function useGenerationPoller({
 
       if (itineraryStatus === 'partial') {
         stalledFiredRef.current = false;
-        autoResumeCountRef.current = 0;
+        autoResumeAttemptedRef.current = false;
         const genError = (meta.generation_error as string) || 'Generation paused';
         setState({ status: 'partial', completedDays, totalDays, progress, error: genError, partialDays, generatedDaysList: daysList, currentCity });
         return;
       }
 
       // Still generating — check for stall using BOTH heartbeat and itinerary_days timestamps
-      // On first poll after returning from background, reset auto-resume counter immediately
-      const justResumed = justResumedRef.current && (Date.now() - resumedAtRef.current < 5000);
-      if (justResumed) {
-        justResumedRef.current = false;
-        autoResumeCountRef.current = 0;
-        console.log('[useGenerationPoller] Returned from background — reset auto-resume, checking status...');
-      }
-
+      // BUT skip stall detection during resume grace period (just came back from background tab)
+      const inResumeGrace = justResumedRef.current && (Date.now() - resumedAtRef.current < 15000);
       let isStalled = false;
 
-      // Method 1: Heartbeat-based stall detection
-      const heartbeat = meta.generation_heartbeat as string | undefined;
-      const startedAt = meta.generation_started_at as string | undefined;
-      const referenceTime = heartbeat || startedAt;
+      if (!inResumeGrace) {
+        // Method 1: Heartbeat-based stall detection
+        const heartbeat = meta.generation_heartbeat as string | undefined;
+        const startedAt = meta.generation_started_at as string | undefined;
+        const referenceTime = heartbeat || startedAt;
 
-      if (referenceTime) {
-        const elapsed = Date.now() - new Date(referenceTime).getTime();
-        if (elapsed > STALE_THRESHOLD_MS) {
-          isStalled = true;
-        }
-      }
-
-      // Method 2: itinerary_days-based stall detection (if days exist but no new one in 5min)
-      if (!isStalled && dayCount > 0 && dayCount < (totalDays || Infinity)) {
-        const lastDay = daysList[daysList.length - 1];
-        if (lastDay?.created_at) {
-          const lastCreated = new Date(lastDay.created_at).getTime();
-          if (Date.now() - lastCreated > DAY_STALL_THRESHOLD_MS) {
+        if (referenceTime) {
+          const elapsed = Date.now() - new Date(referenceTime).getTime();
+          if (elapsed > STALE_THRESHOLD_MS) {
             isStalled = true;
+          }
+        }
+
+        // Method 2: itinerary_days-based stall detection (if days exist but no new one in 5min)
+        if (!isStalled && dayCount > 0 && dayCount < (totalDays || Infinity)) {
+          const lastDay = daysList[daysList.length - 1];
+          if (lastDay?.created_at) {
+            const lastCreated = new Date(lastDay.created_at).getTime();
+            if (Date.now() - lastCreated > DAY_STALL_THRESHOLD_MS) {
+              isStalled = true;
+            }
           }
         }
       }
 
       if (isStalled) {
-        // Allow up to 3 auto-resume attempts per background cycle
-        const maxAutoResumes = 3;
-        if (autoResumeCountRef.current < maxAutoResumes) {
-          autoResumeCountRef.current += 1;
-          const attempt = autoResumeCountRef.current;
-          console.log(`[useGenerationPoller] Stall detected (attempt ${attempt}/${maxAutoResumes}). Auto-resuming from day ${completedDays + 1}...`);
+        // Auto-resume: try once before showing stalled UI
+        if (!autoResumeAttemptedRef.current) {
+          autoResumeAttemptedRef.current = true;
+          console.log(`[useGenerationPoller] Stall detected. Auto-resuming from day ${completedDays + 1}...`);
 
           try {
             const { error: resumeError } = await supabase.functions.invoke('generate-itinerary', {
@@ -272,25 +270,21 @@ export function useGenerationPoller({
             });
 
             if (resumeError) {
-              console.error(`[useGenerationPoller] Auto-resume attempt ${attempt} failed:`, resumeError);
-              // Exponential backoff before next attempt
-              await new Promise(r => setTimeout(r, 2000 * attempt));
-              setState({ status: 'polling', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList, currentCity });
-              return;
+              console.error('[useGenerationPoller] Auto-resume failed:', resumeError);
+              throw resumeError;
             }
 
-            console.log(`[useGenerationPoller] Auto-resume attempt ${attempt} triggered successfully`);
+            console.log('[useGenerationPoller] Auto-resume triggered successfully');
+            // Stay in polling state — the resumed generation will update status
             setState({ status: 'polling', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList, currentCity });
             return;
           } catch {
-            console.warn(`[useGenerationPoller] Auto-resume attempt ${attempt} error, will retry on next cycle`);
-            setState({ status: 'polling', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList, currentCity });
-            return;
+            // Auto-resume failed — fall through to stalled
+            console.warn('[useGenerationPoller] Auto-resume failed, showing stalled state');
           }
         }
 
-        // All auto-resume attempts exhausted — show manual retry UI
-        console.warn(`[useGenerationPoller] All ${maxAutoResumes} auto-resume attempts failed`);
+        // Auto-resume was already attempted or failed
         setState({ status: 'stalled', completedDays, totalDays, progress, partialDays, generatedDaysList: daysList, currentCity });
         if (!stalledFiredRef.current) {
           stalledFiredRef.current = true;
@@ -314,7 +308,7 @@ export function useGenerationPoller({
     if (!enabled || !tripId) {
       setState(prev => prev.status === 'idle' ? prev : { ...prev, status: 'idle' });
       stalledFiredRef.current = false;
-      autoResumeCountRef.current = 0;
+      autoResumeAttemptedRef.current = false;
       onReadyCalledRef.current = false;
       completedDaysHWM.current = 0;
       return;
@@ -332,15 +326,18 @@ export function useGenerationPoller({
     }, fallbackInterval);
 
     // Tab visibility handler: when user returns from background, immediately poll
-    // No grace period — if heartbeat is fresh the stall check won't fire anyway
+    // and suppress stalled/failed transitions for a grace period
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         justResumedRef.current = true;
         resumedAtRef.current = Date.now();
-        // Reset auto-resume counter so we can try again after returning from background
-        autoResumeCountRef.current = 0;
-        // Immediate poll — no grace period, no suppression
-        poll();
+        // Immediate fresh poll before any error state can flash
+        poll().finally(() => {
+          // Clear the resume flag after grace period
+          setTimeout(() => {
+            justResumedRef.current = false;
+          }, 15000);
+        });
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
@@ -408,7 +405,7 @@ export function useGenerationPoller({
 
   const startPolling = useCallback(() => {
     stalledFiredRef.current = false;
-    autoResumeCountRef.current = 0;
+    autoResumeAttemptedRef.current = false;
     onReadyCalledRef.current = false;
     completedDaysHWM.current = 0;
     setState(prev => ({ ...prev, status: 'polling' }));

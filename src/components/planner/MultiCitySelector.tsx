@@ -4,7 +4,7 @@
  * Polished component for adding multiple cities with nights allocation
  */
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Plus, ChevronUp, ChevronDown, Trash2, Globe, Train, Plane as PlaneIcon, Car, Bus, Sparkles, Clock, ArrowDown, ArrowRightLeft, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -15,36 +15,6 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TripDestination, InterCityTransport, TransitionDayMode, POPULAR_ROUTES, PopularRoute, calculateTotalNights } from '@/types/multiCity';
 import { searchDestinations, Destination } from '@/services/locationSearchAPI';
-import { toast } from 'sonner';
-import { parseLocalDate } from '@/utils/dateUtils';
-import { format as dateFnsFormat } from 'date-fns';
-
-const TRAIN_DEFAULT_COUNTRIES = new Set([
-  'France', 'Germany', 'Italy', 'Spain', 'Netherlands', 'Belgium',
-  'Switzerland', 'Austria', 'Portugal', 'Czech Republic', 'Czechia',
-  'Poland', 'Greece', 'Croatia', 'Hungary', 'Denmark', 'Sweden',
-  'Norway', 'Finland', 'Ireland', 'United Kingdom', 'UK', 'England',
-  'Scotland', 'Romania', 'Bulgaria', 'Slovenia', 'Slovakia',
-  // Asia rail-friendly
-  'Japan', 'South Korea', 'Taiwan', 'China',
-  // Other
-  'Morocco',
-]);
-
-/** Pick smart transport default based on country metadata */
-function smartTransportDefault(
-  fromCountry?: string,
-  toCountry?: string,
-): InterCityTransport['type'] {
-  if (
-    fromCountry && toCountry &&
-    TRAIN_DEFAULT_COUNTRIES.has(fromCountry) &&
-    TRAIN_DEFAULT_COUNTRIES.has(toCountry)
-  ) {
-    return 'train';
-  }
-  return 'flight';
-}
 
 // Local debounce hook
 function useDebounce<T>(value: T, delay: number): T {
@@ -80,24 +50,6 @@ export default function MultiCitySelector({
   const [showAllTemplates, setShowAllTemplates] = useState(false);
 
   const totalNights = calculateTotalNights(destinations);
-  // Calculate arrival/departure dates for each city based on startDate + accumulated nights
-  const cityDates = useMemo(() => {
-    if (!startDate) return null;
-    const tripStart = parseLocalDate(startDate);
-    if (isNaN(tripStart.getTime())) return null;
-    let current = new Date(tripStart);
-    return destinations.map((city) => {
-      const arrival = new Date(current);
-      current = new Date(current);
-      current.setDate(current.getDate() + city.nights);
-      const departure = new Date(current);
-      return {
-        arrival: dateFnsFormat(arrival, 'MMM d'),
-        departure: dateFnsFormat(departure, 'MMM d'),
-      };
-    });
-  }, [startDate, destinations]);
-
   const displayedRoutes = showAllTemplates ? POPULAR_ROUTES : POPULAR_ROUTES.slice(0, 3);
   
   const debouncedQuery = useDebounce(newCity, 300);
@@ -117,16 +69,6 @@ export default function MultiCitySelector({
   const addDestination = useCallback((city: string, country?: string) => {
     if (!city.trim()) return;
 
-    // Duplicate check — use city+country for disambiguation (e.g. London UK vs London Ontario)
-    const key = `${city.trim().toLowerCase()}|${(country || '').trim().toLowerCase()}`;
-    const alreadyExists = destinations.some(
-      d => `${d.city.trim().toLowerCase()}|${(d.country || '').trim().toLowerCase()}` === key
-    );
-    if (alreadyExists) {
-      toast.info(`${city} is already in your trip. Want to extend your stay? Increase the nights instead.`);
-      return;
-    }
-
     const newDestination: TripDestination = {
       id: crypto.randomUUID(),
       city: city.trim(),
@@ -143,12 +85,11 @@ export default function MultiCitySelector({
     // Add transport between previous city and new city
     if (destinations.length > 0) {
       const prevCity = destinations[destinations.length - 1];
-      const defaultType = smartTransportDefault(prevCity.country, country);
       const newTransport: InterCityTransport = {
         id: crypto.randomUUID(),
         fromCity: prevCity.city,
         toCity: city.trim(),
-        type: defaultType,
+        type: 'train',
         departureDate: '',
         transitionDay: 'half_and_half',
       };
@@ -194,7 +135,7 @@ export default function MultiCitySelector({
         id: crypto.randomUUID(),
         fromCity: withOrder[i].city,
         toCity: withOrder[i + 1].city,
-        type: smartTransportDefault(withOrder[i].country, withOrder[i + 1].country),
+        type: 'train',
         departureDate: '',
         transitionDay: 'half_and_half',
       });
@@ -234,13 +175,11 @@ export default function MultiCitySelector({
 
     const newTransports: InterCityTransport[] = [];
     for (let i = 0; i < newDestinations.length - 1; i++) {
-      const fromCountry = route.destinations[i]?.country;
-      const toCountry = route.destinations[i + 1]?.country;
       newTransports.push({
         id: crypto.randomUUID(),
         fromCity: newDestinations[i].city,
         toCity: newDestinations[i + 1].city,
-        type: smartTransportDefault(fromCountry, toCountry),
+        type: route.region === 'Europe' ? 'train' : 'flight',
         departureDate: '',
         transitionDay: 'half_and_half',
       });
@@ -384,7 +323,7 @@ export default function MultiCitySelector({
                               </button>
                             </div>
 
-                             {/* City Info */}
+                            {/* City Info */}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
                                 <span className="font-semibold text-lg">{destination.city}</span>
@@ -392,11 +331,6 @@ export default function MultiCitySelector({
                                   <span className="text-sm text-muted-foreground">{destination.country}</span>
                                 )}
                               </div>
-                              {cityDates?.[index] && (
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                  {cityDates[index].arrival} — {cityDates[index].departure}
-                                </p>
-                              )}
                             </div>
 
                             {/* Nights Selector - Pill Style */}

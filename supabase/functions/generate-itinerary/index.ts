@@ -250,185 +250,6 @@ function sanitizeDateString(raw: unknown, fallback?: string): string {
 }
 
 /**
- * Detect whether an activity is a recurring/multi-day event that should
- * be ALLOWED to repeat across trip days. These are NOT duplicates — they're
- * the reason for the trip.
- *
- * Categories:
- * - Sporting events (US Open, Wimbledon, World Cup, Olympics, Formula 1, etc.)
- * - Music festivals (Coachella, Glastonbury, Tomorrowland, etc.)
- * - Conferences & conventions (CES, SXSW, Comic-Con, etc.)
- * - Multi-day cultural events (Carnival, Oktoberfest, etc.)
- * - Any activity the user explicitly marked as recurring or all-day
- */
-function isRecurringEvent(activity: any, userActivities?: any[]): boolean {
-  const title = (activity.title || '').toLowerCase();
-  const category = (activity.category || '').toLowerCase();
-  const tags = (activity.tags || []).map((t: string) => t.toLowerCase());
-  const description = (activity.description || '').toLowerCase();
-
-  // ─── 1. Explicit flags from user input ───
-  // If the user marked this as all-day or recurring, always allow
-  if (activity.isAllDay === true || activity.isRecurring === true) {
-    return true;
-  }
-
-  // If this activity matches a user-requested activity that spans multiple days
-  if (userActivities && userActivities.length > 0) {
-    const titleNorm = title.replace(/[^a-z0-9\s]/g, '').trim();
-    for (const ua of userActivities) {
-      const uaName = (ua.name || ua.title || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-      if (uaName && (titleNorm.includes(uaName) || uaName.includes(titleNorm))) {
-        // User explicitly requested this — check if multi-day
-        if (ua.isAllDay || ua.isRecurring || !ua.day) {
-          return true; // No specific day = should appear on multiple days
-        }
-      }
-    }
-  }
-
-  // ─── 2. Sporting event patterns ───
-  const sportingPatterns = [
-    /\b(us|u\.s\.) open\b/,
-    /\b(french|australian) open\b/,
-    /\bwimbledon\b/,
-    /\bworld cup\b/,
-    /\bolympic/,
-    /\bsuper bowl\b/,
-    /\bgrand prix\b/,
-    /\bformula (1|one)\b/,
-    /\bf1\b/,
-    /\bnascar\b/,
-    /\btour de france\b/,
-    /\bworld series\b/,
-    /\bmarch madness\b/,
-    /\bnba (finals|playoffs|game)/,
-    /\bnfl (game|playoff|sunday)/,
-    /\bryder cup\b/,
-    /\bmasters (tournament|golf)/,
-    /\bfifa\b/,
-    /\buefa\b/,
-    /\bchampions league\b/,
-    /\bipl\b/,
-    /\bcricket (world|test|match)/,
-    /\brugby (world|six nations)/,
-    /\btennis (tournament|open|championship)/,
-    /\bgolf (tournament|open|championship)/,
-    /\brace (day|week)/,
-    /\bderby\b/,
-    /\bstadium\b.*\b(game|match|event)\b/,
-  ];
-
-  // ─── 3. Festival & music event patterns ───
-  const festivalPatterns = [
-    /\bcoachella\b/,
-    /\bglastonbury\b/,
-    /\btomorrowland\b/,
-    /\blollapalooza\b/,
-    /\bbonnaroo\b/,
-    /\bburning man\b/,
-    /\bsxsw\b/,
-    /\bprimavera\b/,
-    /\bsonar\b/,
-    /\bultra (music|miami)\b/,
-    /\belectric (daisy|forest|zoo)\b/,
-    /\bfestival\b/,
-    /\bmusic (festival|fest)\b/,
-    /\bcarnival\b/,
-    /\bmardi gras\b/,
-    /\boktoberfest\b/,
-    /\bdiwali\b/,
-    /\bholi\b/,
-    /\brain\b/,
-    /\bferia\b/,
-    /\bfiesta\b/,
-  ];
-
-  // ─── 4. Conference & convention patterns ───
-  const conferencePatterns = [
-    /\bconference\b/,
-    /\bconvention\b/,
-    /\bexpo\b/,
-    /\bsummit\b/,
-    /\bsymposium\b/,
-    /\btrade show\b/,
-    /\bcomic[- ]?con\b/,
-    /\bces\b/,
-    /\bre:invent\b/,
-    /\bgoogle i\/o\b/,
-    /\bwwdc\b/,
-    /\bi\/o\b.*\bconference\b/,
-    /\baws\b.*\b(summit|conference)\b/,
-  ];
-
-  // ─── 5. Category-based detection ───
-  const recurringCategories = [
-    'sporting_event', 'sports_event', 'festival', 'conference',
-    'convention', 'tournament', 'championship', 'multi_day_event',
-    'recurring_event',
-  ];
-
-  // Check all patterns
-  const allText = `${title} ${description} ${tags.join(' ')}`;
-  const allPatterns = [...sportingPatterns, ...festivalPatterns, ...conferencePatterns];
-
-  for (const pattern of allPatterns) {
-    if (pattern.test(allText)) return true;
-  }
-
-  // Check categories
-  if (recurringCategories.includes(category)) return true;
-  for (const tag of tags) {
-    if (recurringCategories.includes(tag)) return true;
-  }
-
-  // ─── 6. Duration-based heuristic ───
-  // If an activity is 5+ hours, it's likely an all-day event worth repeating
-  if (activity.startTime && activity.endTime) {
-    const start = parseTimeToMinutes(activity.startTime);
-    const end = parseTimeToMinutes(activity.endTime);
-    if (start !== null && end !== null && (end - start) >= 300) {
-      // 5+ hours AND has a proper name (not "Free Time")
-      const genericNames = ['free time', 'relax', 'rest', 'downtime', 'leisure'];
-      if (!genericNames.some(g => title.includes(g))) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-/**
- * Parse "HH:MM" or "H:MM AM/PM" to minutes since midnight.
- * Returns null if unparseable.
- */
-function parseTimeToMinutes(timeStr: string): number | null {
-  if (!timeStr) return null;
-  
-  // Handle "9:00 AM", "2:30 PM" format
-  const ampmMatch = timeStr.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i);
-  if (ampmMatch) {
-    let hours = parseInt(ampmMatch[1]);
-    const mins = parseInt(ampmMatch[2]);
-    const period = ampmMatch[3].toLowerCase();
-    
-    if (period === 'pm' && hours < 12) hours += 12;
-    if (period === 'am' && hours === 12) hours = 0;
-    
-    return hours * 60 + mins;
-  }
-
-  // Handle "09:00", "14:30" format  
-  const milMatch = timeStr.match(/(\d{1,2}):(\d{2})/);
-  if (milMatch) {
-    return parseInt(milMatch[1]) * 60 + parseInt(milMatch[2]);
-  }
-
-  return null;
-}
-
-/**
  * Recursively walk a parsed AI response object and sanitize any field whose
  * key contains "date" (case-insensitive) so it strictly matches YYYY-MM-DD.
  */
@@ -653,30 +474,11 @@ interface GenerationContext {
   blendedDnaSnapshot?: Record<string, unknown> | null;
   // Celebration day: User-specified day for birthday/anniversary celebration (1-indexed)
   celebrationDay?: number;
-  // Day trip flag (single day, no overnight)
-  isDayTrip?: boolean;
   // Multi-city support
   isMultiCity?: boolean;
   multiCityDayMap?: MultiCityDayInfo[];
   // Pre-fetched venue operating hours from verified_venues cache
   venueHoursCache?: Array<{ name: string; opening_hours: string[] }>;
-  // User-specified activities from chat extraction (with times, all-day flags)
-  userActivities?: Array<{
-    name: string;
-    day?: number;
-    startTime?: string;
-    endTime?: string;
-    isAllDay?: boolean;
-    isRequired?: boolean;
-    category?: string;
-    notes?: string;
-  }>;
-  // Flight arrival details for first-day scheduling
-  flightArrival?: { airport?: string; time?: string; airline?: string; flightNumber?: string };
-  // Flight departure details for last-day scheduling
-  flightDeparture?: { airport?: string; time?: string; airline?: string; flightNumber?: string };
-  // Hotel preference from chat
-  hotelPreference?: string;
 }
 
 interface StrictActivity {
@@ -998,8 +800,7 @@ interface ValidationWarning {
  */
 function validateItineraryPersonalization(
   days: StrictDay[],
-  ctx: ValidationContext,
-  userActivities: any[] = []
+  ctx: ValidationContext
 ): ValidationResult {
   console.log('[Validator] Starting personalization validation...');
   
@@ -1049,20 +850,14 @@ function validateItineraryPersonalization(
       // Check for duplicates (same title in same trip)
       const activityKey = `${titleLower}::${locationLower}`;
       if (seenActivities.has(activityKey)) {
-        // Check if this is a recurring event (sporting event, festival, conference)
-        // that SHOULD repeat across days
-        if (!isRecurringEvent(activity, userActivities)) {
-          violations.push({
-            type: 'duplicate',
-            activityId: activity.id,
-            activityTitle: activity.title,
-            dayNumber: day.dayNumber,
-            details: `Duplicate activity found: "${activity.title}"`,
-            severity: 'major'
-          });
-        } else {
-          console.log(`[validateItinerary] Allowing recurring event "${activity.title}" on day ${day.dayNumber} (multi-day event)`);
-        }
+        violations.push({
+          type: 'duplicate',
+          activityId: activity.id,
+          activityTitle: activity.title,
+          dayNumber: day.dayNumber,
+          details: `Duplicate activity found: "${activity.title}"`,
+          severity: 'major'
+        });
       }
       seenActivities.add(activityKey);
       
@@ -3111,7 +2906,7 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
   try {
     const { data: trip, error } = await supabase
       .from('trips')
-      .select('flight_selection, hotel_selection, is_multi_city, flight_intelligence, journey_id')
+      .select('flight_selection, hotel_selection, is_multi_city, flight_intelligence')
       .eq('id', tripId)
       .maybeSingle();
 
@@ -3330,8 +3125,7 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
     }
     
     // Multi-city fallback: read from trip_cities if trips.hotel_selection is empty
-    // Also check journey legs — they have is_multi_city=false but may still have trip_cities hotel data
-    if (!hotel && (trip.is_multi_city || trip.journey_id)) {
+    if (!hotel && trip.is_multi_city) {
       try {
         const { data: tripCities } = await supabase
           .from('trip_cities')
@@ -4359,7 +4153,6 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
   }
 
   const totalDays = calculateDays(trip.start_date, trip.end_date);
-  const isDayTrip = totalDays === 1 && trip.start_date === trip.end_date;
 
   const context: GenerationContext = {
     tripId: trip.id,
@@ -4368,8 +4161,7 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     destinationCountry: trip.destination_country,
     startDate: trip.start_date,
     endDate: trip.end_date,
-    totalDays: Math.max(totalDays, 1),
-    isDayTrip,
+    totalDays,
     travelers: trip.travelers || 1,
     childrenCount: trip.metadata?.childrenCount || 0,
     childrenAges: trip.metadata?.childrenAges || [],
@@ -4411,13 +4203,6 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     userConstraints: (trip.metadata?.userConstraints as any[]) || undefined,
     // Flight details from chat planner
     flightDetails: (trip.metadata?.flightDetails as string) || undefined,
-    // User-specified activities from chat extraction (Part 3 fix)
-    userActivities: (trip.metadata?.userActivities as any[]) || undefined,
-    // Flight arrival/departure from chat (Part 3 fix)
-    flightArrival: (trip.metadata?.flightArrival as any) || undefined,
-    flightDeparture: (trip.metadata?.flightDeparture as any) || undefined,
-    // Hotel preference from chat (Part 4 fix)
-    hotelPreference: (trip.metadata?.hotelPreference as string) || undefined,
   };
 
   // Set daily budget based on tier (fallback)
@@ -4482,7 +4267,7 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
           const hotelNeighborhood = (cityHotel?.neighborhood as string) || hotelAddress;
           
           for (let n = 0; n < nights; n++) {
-            const isTransition = n === 0 && i > 0 && (city as any).transition_day_mode !== 'skip';
+            const isTransition = n === 0 && i > 0;
             const isSameCountry = isTransition && tripCities[i - 1].country === city.country;
             const defaultTransport = isSameCountry ? 'train' : 'flight';
             // transport_type may be stored on this city (correct) OR the previous city (legacy bug)
@@ -4595,7 +4380,7 @@ interface DayValidationResult {
 }
 
 // Validate a single generated day for quality and correctness
-function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boolean, isLastDay: boolean, totalDays: number, previousDays: StrictDay[] = [], isSmartFinish: boolean = false, isDayTrip: boolean = false, userActivities: any[] = []): DayValidationResult {
+function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boolean, isLastDay: boolean, totalDays: number, previousDays: StrictDay[] = [], isSmartFinish: boolean = false): DayValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -4769,10 +4554,7 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
       
       // Transport/logistics adjacency is expected in real itineraries (e.g. rideshare -> venue)
       if (!currIsTransportLike && !prevIsTransportLike && conceptSimilarity(currConcept, prevConcept)) {
-        // Allow recurring events back-to-back (e.g., "Morning at US Open" + "Afternoon at US Open")
-        if (isRecurringEvent(act, userActivities) || isRecurringEvent(prevAct, userActivities)) {
-          // This is fine — same event, different time blocks
-        } else if (isSmartFinish) {
+        if (isSmartFinish) {
           // In Smart Finish, user anchors may cluster around neighborhoods — downgrade to warning
           warnings.push(`Activities ${i} and ${i + 1} are similar: "${prevAct.title}" followed by "${act.title}" - consider adding variety`);
         } else {
@@ -4863,12 +4645,6 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
       // In normal mode, culinary_class and wine_tasting are hard errors; everything else is a warning
       for (const prevConcept of previousConcepts) {
         if (conceptSimilarity(actConcept, prevConcept)) {
-          // Skip dedup for recurring/multi-day events — they SHOULD repeat
-          if (isRecurringEvent(act, userActivities)) {
-            console.log(`[validateDay] Allowing recurring event "${act.title}" (multi-day event, concept match with previous day)`);
-            break;
-          }
-          
           if (!isSmartFinish && (actType === 'culinary_class' || actType === 'wine_tasting')) {
             errors.push(`TRIP-WIDE DUPLICATE: "${act.title}" is too similar to an activity from a previous day.`);
           } else {
@@ -4908,7 +4684,7 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
     }
   }
 
-  if (isFirstDay && !isDayTrip) {
+  if (isFirstDay) {
     const hasArrival = day.activities?.some(a => 
       (a.title || '').toLowerCase().includes('arrival') || 
       ((a.category === 'transport') && (a.title || '').toLowerCase().includes('airport'))
@@ -5126,9 +4902,8 @@ async function generateSingleDayWithRetry(
     '9. VARIETY PER DAY: Mix sightseeing, cultural sites, museums, outdoor activities, dining',
     '10. **ACTIVITY TITLE NAMING — CRITICAL**: The "title" field MUST be the venue or experience name ONLY. NEVER append the category, type, or a repeated word. Examples of WRONG titles: "Barton Springs Pool Pool", "Zilker Botanical Garden Garden", "Franklin Barbecue Barbecue", "Cosmic Coffee Coffee & Beer", "Record shopping shopping". CORRECT titles: "Barton Springs Pool", "Zilker Botanical Garden", "Franklin Barbecue", "Cosmic Coffee + Beer Garden". If the place name already contains the activity type (e.g., "Pool", "Garden", "Barbecue", "Coffee"), do NOT add it again.',
     '11. **DINING TITLE — CRITICAL**: For ALL dining/restaurant activities (category: "dining"), the "title" MUST be the restaurant or cafe name. NEVER use the neighborhood, district, or area as the title. Put the neighborhood in the "neighborhood" field instead. WRONG: { title: "Gaslamp Quarter", description: "Juniper & Ivy" }. WRONG: { title: "La Jolla", description: "The Taco Stand fish tacos" }. WRONG: { title: "Balboa Park", description: "The Prado restaurant" }. RIGHT: { title: "Juniper & Ivy", neighborhood: "Gaslamp Quarter" }. RIGHT: { title: "The Taco Stand", description: "fish tacos", neighborhood: "La Jolla" }. RIGHT: { title: "The Prado", neighborhood: "Balboa Park" }.',
-    !context.isDayTrip && isFirstDay ? '12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with THREE SEPARATE activity blocks (NEVER combine them into one): (a) "Arrival at Airport" (category: transport), (b) "Airport Transfer to Hotel" (category: transport), (c) "Hotel Check-in" (category: accommodation). Each MUST be its own entry with its own startTime/endTime. NEVER create a single "Arrive and check in" block.' : '',
-    !context.isDayTrip && isLastDay && context.totalDays > 1 ? '12. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
-    context.isDayTrip ? `12. **DAY TRIP — CRITICAL**: This is a DAY TRIP (single day, no overnight stay). Plan activities from morning to evening only (roughly 09:00 to 21:00). Do NOT include hotel check-in, hotel check-out, airport arrival, or airport departure blocks. Do NOT include overnight activities. Focus on making the most of one full day. Include breakfast, lunch, and dinner recommendations. Keep travel times between activities short.` : '',
+    isFirstDay ? '12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with THREE SEPARATE activity blocks (NEVER combine them into one): (a) "Arrival at Airport" (category: transport), (b) "Airport Transfer to Hotel" (category: transport), (c) "Hotel Check-in" (category: accommodation). Each MUST be its own entry with its own startTime/endTime. NEVER create a single "Arrive and check in" block.' : '',
+    isLastDay && context.totalDays > 1 ? '12. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
   ].filter(Boolean).join('\n');
 
   // Build list of previous experience types for stricter rejection
@@ -5514,124 +5289,6 @@ These help the traveler prepare for their trip.
         }
       }
 
-      // ═══════════════════════════════════════════════════════════════════════════
-      // USER ACTIVITIES INJECTION — MANDATORY FROM CHAT EXTRACTION (Part 3 Fix)
-      // ═══════════════════════════════════════════════════════════════════════════
-      let userActivitiesPrompt = '';
-      
-      if (context.userActivities && context.userActivities.length > 0) {
-        // Filter activities for this day, plus unassigned activities (no day specified)
-        const dayActivities = context.userActivities.filter(a => a.day === dayNumber);
-        const unassignedActivities = context.userActivities.filter(a => !a.day);
-        
-        // Distribute unassigned activities across days
-        const distributedUnassigned = unassignedActivities.filter((_, i) =>
-          Math.floor(i * context.totalDays / Math.max(1, unassignedActivities.length)) === dayNumber - 1
-        );
-        
-        const activitiesForThisDay = [...dayActivities, ...distributedUnassigned];
-        const hasAllDayEvent = activitiesForThisDay.some(a => a.isAllDay);
-        
-        if (hasAllDayEvent) {
-          const allDayEvent = activitiesForThisDay.find(a => a.isAllDay)!;
-          const otherActivities = activitiesForThisDay.filter(a => !a.isAllDay);
-          
-          userActivitiesPrompt = `
-${'='.repeat(70)}
-🚨 USER'S PLAN FOR THIS DAY — FOLLOW EXACTLY (ALL-DAY EVENT)
-${'='.repeat(70)}
-
-This is a DEDICATED day for: **${allDayEvent.name}**
-${allDayEvent.startTime ? `From: ${allDayEvent.startTime}` : 'From: 09:00 AM'}
-${allDayEvent.endTime ? `Until: ${allDayEvent.endTime}` : 'Until: 06:00 PM'}
-${allDayEvent.notes ? `Notes: ${allDayEvent.notes}` : ''}
-
-🚫 DO NOT add other sightseeing, museums, attractions, or activities to this day.
-The user wants to spend the FULL DAY at ${allDayEvent.name}.
-
-The ONLY things to schedule:
-1. Transit FROM hotel/airport TO ${allDayEvent.name}
-2. "${allDayEvent.name}" as a SINGLE activity block (the main event — generate this as ONE activity with the full time range)
-3. Transit FROM ${allDayEvent.name} back to hotel
-${otherActivities.length > 0 ? `4. Evening activities the user specifically requested: ${otherActivities.map(a => `"${a.name}"${a.startTime ? ` at ${a.startTime}` : ''}`).join(', ')}` : '4. A dinner near the hotel (user did not specify, so pick something good)'}
-
-⚠️ DO NOT apply normal pacing rules (5-8 activities). This day has 1 main event.
-⚠️ The main event MUST appear as an actual activity in your output — not just transfers around it.
-`;
-        } else if (activitiesForThisDay.length > 0) {
-          // User specified activities but not an all-day event
-          userActivitiesPrompt = `
-${'='.repeat(70)}
-🚨 USER'S REQUESTED ACTIVITIES FOR THIS DAY — ALL MANDATORY
-${'='.repeat(70)}
-
-${activitiesForThisDay.map((a, i) => {
-  let line = `${i + 1}. "${a.name}"`;
-  if (a.startTime) line += ` at ${a.startTime}`;
-  if (a.endTime) line += ` until ${a.endTime}`;
-  if (a.category) line += ` [${a.category}]`;
-  if (a.notes) line += ` — ${a.notes}`;
-  return line;
-}).join('\n')}
-
-RULES:
-- Include ALL activities listed above. They are NON-NEGOTIABLE.
-- Schedule them at the times specified, or at logical times if no time given
-- Add meals around them (breakfast, lunch, dinner) if not already included
-- Add transit between activities
-- You MAY add 1-2 additional activities if there are obvious gaps, but the user's picks come first
-- Do NOT replace any user activity with your own recommendation
-`;
-        }
-      }
-      
-      // ═══════════════════════════════════════════════════════════════════════════
-      // FLIGHT CONSTRAINTS INJECTION (Part 3 Fix)
-      // ═══════════════════════════════════════════════════════════════════════════
-      let flightPrompt = '';
-      
-      if (dayNumber === 1 && context.flightArrival?.airport) {
-        const arrival = context.flightArrival;
-        flightPrompt += `
-🛬 ARRIVAL FLIGHT:
-The traveler arrives at ${arrival.airport} at ${arrival.time || 'morning'}.
-${arrival.airline ? `Airline: ${arrival.airline}${arrival.flightNumber ? ` ${arrival.flightNumber}` : ''}` : ''}
-
-CONSTRAINT: Start the day's activities AFTER arrival + transit time.
-- Allow ~30-45 min from landing to ground transport
-- Add transit from ${arrival.airport} to the first destination
-- The first non-transit activity should NOT start before ${arrival.time ? `${arrival.time} + 90 minutes` : '10:00 AM'}
-`;
-      }
-      
-      if (dayNumber === context.totalDays && context.flightDeparture?.airport) {
-        const departure = context.flightDeparture;
-        flightPrompt += `
-🛫 DEPARTURE FLIGHT:
-The traveler departs from ${departure.airport}${departure.time ? ` at ${departure.time}` : ''}.
-${departure.airline ? `Airline: ${departure.airline}${departure.flightNumber ? ` ${departure.flightNumber}` : ''}` : ''}
-
-CONSTRAINT: The last activities MUST end with enough time to get to ${departure.airport}.
-- Allow 2-3 hours before departure for transit + check-in
-- Include a "Transit to ${departure.airport}" activity
-- End with a "Flight Departure from ${departure.airport}" activity
-`;
-      }
-      
-      // ═══════════════════════════════════════════════════════════════════════════
-      // HOTEL PREFERENCE INJECTION (Part 4 Fix)
-      // ═══════════════════════════════════════════════════════════════════════════
-      let hotelPrompt = '';
-      
-      if (context.hotelPreference) {
-        hotelPrompt = `
-🏨 HOTEL LOCATION: The traveler wants to stay in/near ${context.hotelPreference}.
-- All "return to hotel" activities should reference ${context.hotelPreference}
-- Morning activities should logically start near ${context.hotelPreference}
-- Evening activities should end near ${context.hotelPreference} when possible
-`;
-      }
-
       // Calculate day-of-week for operating hours awareness
       const dateObj = new Date(date);
       const DAY_NAMES_GEN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -5655,18 +5312,10 @@ ACTIVITY COUNT: ${effectiveMinActivities}-${effectiveMaxActivities} per day${isS
 Include a mix of: 3 dining slots (breakfast/lunch/dinner), transit between major moves, core exploration/activity slots, and an evening activity where appropriate.
 ${isSmartFinishGeneration ? 'SMART FINISH HARD RULE: Keep ALL user-provided anchor activities by exact name and build additional activities around them — never replace or drop anchors.' : ''}
 ${multiCityPrompt}
-${userActivitiesPrompt}
-${flightPrompt}
-${hotelPrompt}
 
-${previousActivities.length > 0 ? `AVOID REPEATING THESE SPECIFIC ACTIVITIES (DO NOT repeat these): ${previousActivities.join(', ')}\n` : ''}${recurringEventNames.length > 0 ? `\nRECURRING/MULTI-DAY EVENTS (these SHOULD be scheduled again today — they are the reason for the trip): ${[...new Set(recurringEventNames)].join(', ')}\n` : ''}
+${previousActivities.length > 0 ? `AVOID REPEATING THESE SPECIFIC ACTIVITIES: ${previousActivities.join(', ')}\n` : ''}
 NOTE: The previous-activities list is ONLY for de-duplication. Do NOT treat it as a signal for spending style.
 ${bannedTypes.length > 0 ? `\n🚫 BANNED EXPERIENCE TYPES (already done on previous days - DO NOT INCLUDE): ${bannedTypes.join(', ')}\n` : ''}
-
-IMPORTANT: Some activities are multi-day events that the traveler attends repeatedly (sporting events, festivals, conferences).
-These are NOT duplicates — schedule them every day they apply.
-Examples: "US Open" over 5 days, "Coachella" over 3 days, "CES" over 4 days.
-If the traveler requested a multi-day event, include it as the PRIMARY activity on each relevant day.
 
 CRITICAL REMINDERS:
 1. ${effectiveMinActivities}-${effectiveMaxActivities} scheduled activities required. Going under ${effectiveMinActivities} OR over ${effectiveMaxActivities} = FAILURE.
@@ -6248,67 +5897,7 @@ Generate activities for this day following ALL constraints above.`;
         }
       }
 
-      // Build user activities for recurring event detection
-      const _mustDoText = (context.mustDoActivities as string) || '';
-      const _parsedMustDos = _mustDoText.split(/[,;\n]/).map(s => s.trim()).filter(Boolean).map(name => ({ name, isRecurring: true }));
-      const _userActivities = [...((context as any).userActivities || []), ..._parsedMustDos];
-
-      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish, !!context.isDayTrip, _userActivities);
-
-      // ==========================================================================
-      // PART 5 FIX: Verify user-requested activities appear in output (safety net)
-      // ==========================================================================
-      if (context.userActivities && context.userActivities.length > 0) {
-        const dayUserActivities = context.userActivities.filter(a => a.day === dayNumber);
-        // Also include unassigned activities distributed to this day
-        const unassignedActivities = context.userActivities.filter(a => !a.day);
-        const distributedUnassigned = unassignedActivities.filter((_, i) =>
-          Math.floor(i * context.totalDays / Math.max(1, unassignedActivities.length)) === dayNumber - 1
-        );
-        const allDayUserActivities = [...dayUserActivities, ...distributedUnassigned];
-
-        for (const requested of allDayUserActivities) {
-          const reqName = (requested.name || '').toLowerCase();
-          if (!reqName) continue;
-          
-          const found = generatedDay.activities?.some(gen => {
-            const genTitle = (gen.title || '').toLowerCase();
-            // Fuzzy match: check if the generated title contains key words from the requested name
-            const keywords = reqName.split(/\s+/).filter(w => w.length > 3);
-            return keywords.length > 0 && keywords.some(kw => genTitle.includes(kw));
-          });
-
-          if (!found) {
-            console.warn(`[generate-itinerary] MISSING USER ACTIVITY: "${requested.name}" was requested for Day ${dayNumber} but not found in generated output`);
-
-            // Force-add the missing activity
-            generatedDay.activities = generatedDay.activities || [];
-            generatedDay.activities.push({
-              id: `force_${dayNumber}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-              title: requested.name,
-              startTime: requested.startTime || (requested.isAllDay ? '09:00' : '10:00'),
-              endTime: requested.endTime || (requested.isAllDay ? '18:00' : '12:00'),
-              category: requested.category || 'activity',
-              description: `${requested.name}${requested.notes ? ' — ' + requested.notes : ''} (User-requested activity)`,
-              location: { name: requested.name, address: context.destination || '' },
-              cost: { amount: 0, currency: 'USD' },
-              tags: ['user-requested', requested.category || 'activity'],
-              bookingRequired: false,
-              transportation: { method: 'varies', duration: 'varies', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
-              tips: 'This activity was specifically requested by the traveler.',
-            } as StrictActivity);
-
-            console.log(`[generate-itinerary] Force-added missing activity: "${requested.name}"`);
-          }
-        }
-
-        // Re-sort by start time after force-adding
-        generatedDay.activities?.sort((a, b) => {
-          const timeA = parseTimeToMinutes(a.startTime || '') ?? 99999;
-          const timeB = parseTimeToMinutes(b.startTime || '') ?? 99999;
-          return timeA - timeB;
-        });
-      }
+      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish);
 
       // Transition day validation: MUST contain at least one inter-city transport activity
       if (isTransitionDay && dayCity?.transitionFrom && dayCity?.transitionTo) {
@@ -9398,12 +8987,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
         [] // Trip intents loaded separately for full generation
       );
       
-      // Build user activities for recurring event detection in personalization validator
-      const _pMustDoText = (context.mustDoActivities as string) || '';
-      const _pParsedMustDos = _pMustDoText.split(/[,;\n]/).map(s => s.trim()).filter(Boolean).map(name => ({ name, isRecurring: true }));
-      const _pUserActivities = [...((context as any).userActivities || []), ..._pParsedMustDos];
-
-      const validationResult = validateItineraryPersonalization(aiResult.days, validationCtx, _pUserActivities);
+      const validationResult = validateItineraryPersonalization(aiResult.days, validationCtx);
       
       // Log validation results
       console.log(`[Stage 2.6] Personalization score: ${validationResult.personalizationScore}/100`);
@@ -13448,73 +13032,16 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         }
       }
 
-      // ─── JOURNEY LEG TRANSITION DETECTION ───
-      // Journey-split legs have is_multi_city=false but may need transition day
-      // context for day 1 (arriving from previous leg's city).
-      let journeyTransitionInfo: { isTransitionDay: boolean; transitionFrom?: string; transitionTo?: string; transportType?: string } | null = null;
-      if (!isMultiCity && dayNumber === 1) {
-        try {
-          const { data: tripRow } = await supabase
-            .from('trips')
-            .select('journey_id, journey_order, transition_mode, transition_departure_time, transition_arrival_time, destination')
-            .eq('id', tripId)
-            .single();
-
-          if (tripRow?.journey_id && tripRow.journey_order && tripRow.journey_order > 1) {
-            // Find the previous leg to get the origin city
-            const { data: prevLeg } = await supabase
-              .from('trips')
-              .select('destination')
-              .eq('journey_id', tripRow.journey_id)
-              .eq('journey_order', tripRow.journey_order - 1)
-              .single();
-
-            if (prevLeg?.destination) {
-              journeyTransitionInfo = {
-                isTransitionDay: true,
-                transitionFrom: prevLeg.destination,
-                transitionTo: tripRow.destination || destination,
-                transportType: tripRow.transition_mode || undefined,
-              };
-              console.log(`[generate-trip-day] Journey leg ${tripRow.journey_order}: transition from ${prevLeg.destination} via ${tripRow.transition_mode || 'unknown'}`);
-            }
-          }
-        } catch (e) {
-          console.warn('[generate-trip-day] Could not resolve journey transition context:', e);
-        }
-      }
-
       const cityInfo = dayCityMap?.[dayNumber - 1];
 
       // Load existing days from itinerary_data (for context)
       const existingData = (tripCheck.itinerary_data as any) || {};
       const existingDays: any[] = Array.isArray(existingData.days) ? existingData.days : [];
-      
-      // Extract user activities from metadata for recurring event detection
-      const tripMetadata = (tripCheck.metadata as Record<string, unknown>) || {};
-      const userActivities = (tripMetadata.userActivities as any[]) || [];
-      const mustDoText = (tripMetadata.mustDoActivities as string) || '';
-      
-      // Parse mustDoActivities text into a simple array for recurring detection
-      const parsedMustDos = mustDoText
-        .split(/[,;\n]/)
-        .map(s => s.trim())
-        .filter(Boolean)
-        .map(name => ({ name, isRecurring: true })); // Treat all must-dos as potentially recurring
-      
-      const allUserActivities = [...userActivities, ...parsedMustDos];
-      
       const previousActivities: string[] = [];
-      const recurringEventNames: string[] = [];
-      
       for (const day of existingDays) {
         if (day?.activities) {
           day.activities.forEach((act: any) => {
-            if (isRecurringEvent(act, allUserActivities)) {
-              recurringEventNames.push(act.title || act.name || '');
-            } else {
-              previousActivities.push(act.title || act.name || '');
-            }
+            previousActivities.push(act.title || act.name || '');
           });
         }
       }
@@ -13579,11 +13106,11 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
               budgetTier: budgetTier || 'moderate',
               userId,
               previousDayActivities: previousActivities,
-              isMultiCity: isMultiCity || !!journeyTransitionInfo,
-              isTransitionDay: cityInfo?.isTransitionDay || journeyTransitionInfo?.isTransitionDay || false,
-              transitionFrom: cityInfo?.transitionFrom || journeyTransitionInfo?.transitionFrom,
-              transitionTo: cityInfo?.transitionTo || journeyTransitionInfo?.transitionTo,
-              transitionMode: cityInfo?.transportType || journeyTransitionInfo?.transportType,
+              isMultiCity: isMultiCity || false,
+              isTransitionDay: cityInfo?.isTransitionDay || false,
+              transitionFrom: cityInfo?.transitionFrom,
+              transitionTo: cityInfo?.transitionTo,
+              transitionMode: cityInfo?.transportType,
             }),
           });
 
@@ -13809,126 +13336,6 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
         console.log(`[generate-trip-day] ✅ Trip ${tripId} generation complete: ${totalDays} days`);
 
-        // ────────────────────────────────────────────────────
-        // JOURNEY AUTO-CHAINING: Check if this leg is part of a multi-city journey
-        // ────────────────────────────────────────────────────
-        try {
-          const { data: currentTrip } = await supabase
-            .from('trips')
-            .select('journey_id, journey_order, journey_total_legs, metadata')
-            .eq('id', tripId)
-            .maybeSingle();
-
-          if (currentTrip?.journey_id && currentTrip.journey_order && currentTrip.journey_total_legs) {
-            const currentOrder = currentTrip.journey_order;
-            const totalLegs = currentTrip.journey_total_legs;
-            const journeyId = currentTrip.journey_id;
-
-            console.log(`[generate-trip-day] Journey leg ${currentOrder}/${totalLegs} complete (Journey: ${journeyId})`);
-
-            // Check if there's a next leg to chain to
-            if (currentOrder < totalLegs) {
-              const nextOrder = currentOrder + 1;
-              
-              // Find the next leg in the journey
-              const { data: nextLeg } = await supabase
-                .from('trips')
-                .select('id, destination, destination_country, start_date, end_date, travelers, trip_type, budget_tier, user_id, is_multi_city, metadata')
-                .eq('journey_id', journeyId)
-                .eq('journey_order', nextOrder)
-                .maybeSingle();
-
-              if (nextLeg) {
-                console.log(`[generate-trip-day] Auto-chaining to next journey leg: ${nextLeg.id} (${nextLeg.destination})`);
-                
-                // Check if next leg is already paid (journey pre-payment)
-                const nextLegMeta = (nextLeg.metadata as Record<string, unknown>) || {};
-                const isJourneyPaid = nextLegMeta.journey_credits_paid === true;
-                
-                if (isJourneyPaid) {
-                  // Calculate total days for next leg
-                  const nextStartDate = new Date(nextLeg.start_date);
-                  const nextEndDate = new Date(nextLeg.end_date);
-                  const nextTotalDays = Math.max(1, Math.ceil((nextEndDate.getTime() - nextStartDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-
-                  // Fire HTTP request to start next leg generation
-                  const generateUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-itinerary`;
-                  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-                  
-                  const chainBody = JSON.stringify({
-                    action: 'generate-trip',
-                    tripId: nextLeg.id,
-                    destination: nextLeg.destination,
-                    destinationCountry: nextLeg.destination_country,
-                    startDate: nextLeg.start_date,
-                    endDate: nextLeg.end_date,
-                    travelers: nextLeg.travelers,
-                    tripType: nextLeg.trip_type,
-                    budgetTier: nextLeg.budget_tier,
-                    userId: nextLeg.user_id,
-                    isMultiCity: nextLeg.is_multi_city || false,
-                    creditsCharged: 0, // Pre-paid journey, no credits to charge
-                    requestedDays: nextTotalDays,
-                    journeyChain: true, // Flag to indicate this is an auto-chained journey leg
-                  });
-
-                  // Retry with exponential backoff
-                  const maxRetries = 3;
-                  let chainSuccess = false;
-                  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-                    try {
-                      const response = await fetch(generateUrl, {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'Authorization': `Bearer ${serviceKey}`,
-                        },
-                        body: chainBody,
-                      });
-                      if (response.ok) {
-                        chainSuccess = true;
-                        console.log(`[generate-trip-day] ✅ Successfully chained to journey leg ${nextOrder}: ${nextLeg.id}`);
-                        break;
-                      }
-                      console.error(`[generate-trip-day] Journey chain attempt ${attempt}/${maxRetries} failed: ${response.status}`);
-                    } catch (err) {
-                      console.error(`[generate-trip-day] Journey chain attempt ${attempt}/${maxRetries} error:`, err);
-                    }
-                    if (attempt < maxRetries) {
-                      await new Promise(r => setTimeout(r, 2000 * attempt));
-                    }
-                  }
-                  
-                  if (!chainSuccess) {
-                    console.error(`[generate-trip-day] ❌ Journey auto-chain failed for leg ${nextOrder}, marking as failed`);
-                    // Mark next leg as auto-chain failed so it can be manually retried
-                    await supabase
-                      .from('trips')
-                      .update({
-                        metadata: {
-                          ...nextLegMeta,
-                          auto_chain_failed: true,
-                          auto_chain_failed_at: new Date().toISOString(),
-                          auto_chain_attempted_from: tripId,
-                        },
-                      })
-                      .eq('id', nextLeg.id);
-                  }
-                } else {
-                  console.log(`[generate-trip-day] Next journey leg ${nextLeg.id} not pre-paid, skipping auto-chain`);
-                }
-              } else {
-                console.warn(`[generate-trip-day] Next journey leg ${nextOrder} not found in journey ${journeyId}`);
-              }
-            } else {
-              console.log(`[generate-trip-day] ✅ Final leg of journey ${journeyId} complete`);
-            }
-          }
-        } catch (journeyErr) {
-          console.error(`[generate-trip-day] Journey auto-chain error (non-critical):`, journeyErr);
-          // Don't fail the main response — journey chaining is best-effort
-        }
-
         return new Response(
           JSON.stringify({ status: 'complete', dayNumber, totalDays }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -13999,22 +13406,6 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         }
         if (!chainSuccess) {
           console.error(`[generate-trip-day] All ${maxRetries} chain attempts failed for day ${dayNumber + 1}`);
-          // Mark chain as broken so the frontend poller can auto-resume
-          try {
-            await supabase.from('trips').update({
-              metadata: {
-                ...meta,
-                generation_completed_days: dayNumber,
-                generation_heartbeat: new Date().toISOString(),
-                generation_total_days: totalDays,
-                generation_chain_broken: true,
-                generation_chain_broken_at_day: dayNumber + 1,
-              },
-            }).eq('id', tripId);
-            console.log(`[generate-trip-day] Marked chain as broken at day ${dayNumber + 1} — frontend will auto-resume`);
-          } catch (metaErr) {
-            console.error(`[generate-trip-day] Failed to mark chain broken:`, metaErr);
-          }
         }
 
         return new Response(

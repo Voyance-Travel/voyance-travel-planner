@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Loader2, CheckCircle, MapPin, Clock, DollarSign, RefreshCw, Star, Image, Wallet, Lightbulb, LogIn, Coins, Cloud, Check, AlertCircle, Route, ChevronRight } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle, MapPin, Clock, DollarSign, RefreshCw, Star, Image, Wallet, Lightbulb, LogIn, Coins, Cloud, Check, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -318,11 +318,7 @@ export function ItineraryGenerator({
   const [partialDays, setPartialDays] = useState<number | null>(null);
   const [generationIssueSince, setGenerationIssueSince] = useState<number | null>(null);
   const [showRetryButton, setShowRetryButton] = useState(false);
-  const [showTakingLonger, setShowTakingLonger] = useState(false);
   const recoveryInFlightRef = useRef(false);
-  
-  // Journey context state
-  const [journeyContext, setJourneyContext] = useState<GateResult['journeyContext'] | null>(null);
 
   const recoverFromDatabase = useCallback(async () => {
     const [tripResult, dayResult] = await Promise.all([
@@ -371,31 +367,8 @@ export function ItineraryGenerator({
         return 'ready' as const;
       }
 
-      // Partial data exists — check if generation is actually progressing
-      const heartbeat = tripMeta.generation_heartbeat as string | undefined;
-      const heartbeatAge = heartbeat ? Date.now() - new Date(heartbeat).getTime() : Infinity;
-      const isHeartbeatStale = heartbeatAge > 90000; // 90 seconds
-
-      if (isHeartbeatStale && actualDays > 0 && actualDays < expectedTotalDays) {
-        // Generation is stalled with partial data — auto-resume from last completed day
-        console.log(`[ItineraryGenerator] Partial recovery: ${actualDays}/${expectedTotalDays} days, heartbeat stale (${Math.round(heartbeatAge / 1000)}s). Auto-resuming from day ${actualDays + 1}...`);
-        try {
-          await supabase.functions.invoke('generate-itinerary', {
-            body: {
-              action: 'generate-trip',
-              tripId,
-              resumeFromDay: actualDays + 1,
-              isResume: true,
-            },
-          });
-          console.log(`[ItineraryGenerator] Auto-resume triggered from recoverFromDatabase`);
-        } catch (err) {
-          console.warn('[ItineraryGenerator] Auto-resume from recovery failed:', err);
-        }
-      } else {
-        console.log(`[ItineraryGenerator] Partial recovery: ${actualDays}/${expectedTotalDays} days. Staying in_progress.`);
-      }
-
+      // Partial data exists — do NOT finalize. Keep polling/stalled state.
+      console.log(`[ItineraryGenerator] Partial recovery: ${actualDays}/${expectedTotalDays} days. Staying in_progress.`);
       setHasStarted(true);
       setPrePhase('preparing');
       setServerGenActive(true);
@@ -428,8 +401,7 @@ export function ItineraryGenerator({
         setGenerationIssueSince(prev => prev ?? Date.now());
       }
     } catch (recoveryErr) {
-      console.warn('[ItineraryGenerator] Recovery check failed:', recoveryErr);
-      toast.warning('Generation hit a snag. Checking status...', { duration: 4000 });
+      console.warn('[ItineraryGenerator] Recovery check failed, continuing loading state:', recoveryErr);
       setHasStarted(true);
       setPrePhase('preparing');
       setServerGenActive(true);
@@ -439,12 +411,12 @@ export function ItineraryGenerator({
     }
   }, [recoverFromDatabase]);
 
-  // Show retry CTA only if no itinerary exists for 90+ seconds after a suppressed failure
+  // Show retry CTA only if no itinerary exists for 5+ minutes after a suppressed failure
   useEffect(() => {
     if (!generationIssueSince) return;
     const timer = window.setInterval(async () => {
       const result = await recoverFromDatabase().catch(() => 'in_progress' as const);
-      if (result === 'missing' && Date.now() - generationIssueSince >= 90 * 1000) {
+      if (result === 'missing' && Date.now() - generationIssueSince >= 5 * 60 * 1000) {
         setShowRetryButton(true);
       }
     }, 15000);
@@ -452,17 +424,7 @@ export function ItineraryGenerator({
     return () => clearInterval(timer);
   }, [generationIssueSince, recoverFromDatabase]);
 
-  // Show "taking longer than expected" after 60 seconds of issue
-  useEffect(() => {
-    if (!generationIssueSince) {
-      setShowTakingLonger(false);
-      return;
-    }
-    const timer = setTimeout(() => setShowTakingLonger(true), 60000);
-    return () => clearTimeout(timer);
-  }, [generationIssueSince]);
-
-
+  // Show cost confirmation before generating (for non-first-trip users)
   const handleGenerateClick = () => {
     // First trip is always free — skip cost confirmation
     if (isFirstTrip) {
@@ -611,22 +573,7 @@ export function ItineraryGenerator({
         }
 
         // Use server-side generation — fire and poll
-        // Check if partial generation exists — resume instead of restarting from Day 1
         try {
-          const { data: existingTrip } = await supabase
-            .from('trips')
-            .select('itinerary_data, itinerary_status, metadata')
-            .eq('id', tripId)
-            .single();
-
-          const existingDays = (existingTrip?.itinerary_data as any)?.days || [];
-          const completedDayCount = existingDays.length;
-          const isPartial = completedDayCount > 0 && completedDayCount < totalRequestedDays;
-
-          if (isPartial) {
-            console.log(`[ItineraryGenerator] Partial data exists (${completedDayCount}/${totalRequestedDays} days). Resuming from day ${completedDayCount + 1}`);
-          }
-
           await startServerGeneration({
             tripId,
             destination,
@@ -638,9 +585,8 @@ export function ItineraryGenerator({
             budgetTier,
             userId,
             isMultiCity,
-            creditsCharged: isPartial ? 0 : gateResult.creditsCharged,
+            creditsCharged: gateResult.creditsCharged,
             requestedDays: totalRequestedDays,
-            ...(isPartial ? { resumeFromDay: completedDayCount + 1 } : {}),
           });
           // Server acknowledged — start polling for completion
           setServerGenActive(true);
@@ -976,15 +922,7 @@ export function ItineraryGenerator({
           
           {/* Cost Confirmation Dialog */}
           {showCostConfirm && costEstimate.totalCredits > 0 && (() => {
-            const actualCost = journeyContext?.isFirstLeg ? 
-              calculateTripCredits({
-                days: journeyContext.totalDays,
-                cities: journeyContext.cities,
-                mustIncludes: [],
-                includeHotels: false,
-              }).totalCredits : costEstimate.totalCredits;
-            
-            const canAffordAll = currentBalance >= actualCost;
+            const canAffordAll = currentBalance >= costEstimate.totalCredits;
             const costPerDay = 60; // CREDIT_COSTS standard
             const affordableDays = costPerDay > 0 ? Math.floor(currentBalance / costPerDay) : 0;
             const partialCost = affordableDays * costPerDay;
@@ -998,54 +936,17 @@ export function ItineraryGenerator({
               >
                 <div className="flex items-center gap-2 mb-3">
                   <Coins className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-semibold text-foreground">
-                    {journeyContext?.isFirstLeg ? 'Full Journey Cost' : 'Cost Breakdown'}
-                  </span>
+                  <span className="text-sm font-semibold text-foreground">Cost Breakdown</span>
                 </div>
-                
-                {/* Journey Route Display */}
-                {journeyContext?.isFirstLeg && (
-                  <div className="mb-4 p-3 rounded-lg bg-background/50 border border-border/50">
-                    <div className="flex items-center gap-1.5 mb-2">
-                      <Route className="h-3.5 w-3.5 text-primary" />
-                      <span className="text-xs font-medium text-muted-foreground">Full Journey</span>
-                    </div>
-                    <div className="flex items-center gap-1 text-sm font-medium">
-                      {journeyContext.cities.map((city, idx) => (
-                        <div key={city} className="flex items-center gap-1">
-                          <span className="text-foreground">{city}</span>
-                          {idx < journeyContext.cities.length - 1 && (
-                            <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {journeyContext.totalDays} total days · {journeyContext.totalLegs} cities · Pay once, generate all
-                    </p>
-                  </div>
-                )}
                 <div className="space-y-1.5 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      {journeyContext?.isFirstLeg ? journeyContext.totalDays : totalDaysEstimate} days × {costPerDay} cr/day
-                    </span>
-                    <span className="text-foreground">
-                      {journeyContext?.isFirstLeg ? 
-                        calculateTripCredits({
-                          days: journeyContext.totalDays,
-                          cities: journeyContext.cities,
-                        }).baseCredits : costEstimate.baseCredits} cr
-                    </span>
+                    <span className="text-muted-foreground">{totalDaysEstimate} days × {costPerDay} cr/day</span>
+                    <span className="text-foreground">{costEstimate.baseCredits} cr</span>
                   </div>
-                  {(journeyContext?.isFirstLeg ? journeyContext.cities.length > 1 : costEstimate.multiCityFee > 0) && (
+                  {costEstimate.multiCityFee > 0 && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Multi-city fee</span>
-                      <span className="text-foreground">
-                        +{journeyContext?.isFirstLeg ? 
-                          calculateTripCredits({ days: journeyContext.totalDays, cities: journeyContext.cities }).multiCityFee : 
-                          costEstimate.multiCityFee} cr
-                      </span>
+                      <span className="text-foreground">+{costEstimate.multiCityFee} cr</span>
                     </div>
                   )}
                   {costEstimate.complexity.multiplier > 1 && (
@@ -1056,7 +957,7 @@ export function ItineraryGenerator({
                   )}
                   <div className="border-t border-border pt-1.5 flex justify-between font-semibold">
                     <span className="text-foreground">Total</span>
-                    <span className="text-primary">{formatCredits(actualCost)} credits</span>
+                    <span className="text-primary">{formatCredits(costEstimate.totalCredits)} credits</span>
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground">Your balance</span>
@@ -1066,7 +967,7 @@ export function ItineraryGenerator({
                   </div>
                   {canAffordAll && (
                     <div className="text-xs text-muted-foreground">
-                      After: {formatCredits(currentBalance - actualCost)} credits remaining
+                      After: {formatCredits(currentBalance - costEstimate.totalCredits)} credits remaining
                     </div>
                   )}
                   {canAffordPartial && (
@@ -1080,7 +981,7 @@ export function ItineraryGenerator({
                   {canAffordAll ? (
                     <Button size="sm" onClick={handleConfirmGenerate} className="w-full gap-1.5">
                       <Sparkles className="h-3.5 w-3.5" />
-                      {journeyContext?.isFirstLeg ? 'Generate Full Journey' : 'Confirm & Generate'}
+                      Confirm & Generate
                     </Button>
                   ) : canAffordPartial ? (
                     <Button size="sm" onClick={() => handleConfirmPartialGenerate(affordableDays)} className="w-full gap-1.5">
@@ -1091,7 +992,7 @@ export function ItineraryGenerator({
                     <Button size="sm" onClick={() => {
                       setShowCostConfirm(false);
                       showOutOfCredits({
-                        creditsNeeded: actualCost,
+                        creditsNeeded: costEstimate.totalCredits,
                         creditsAvailable: currentBalance,
                         tripId,
                       });
@@ -1116,15 +1017,11 @@ export function ItineraryGenerator({
                 className="gap-2"
               >
                 <Sparkles className="h-5 w-5" />
-                {journeyContext?.isFirstLeg ? 'Generate Full Journey' : 'Generate Itinerary'}
+                Generate Itinerary
                 {isFirstTrip ? (
                   <span className="text-xs opacity-80">· Free</span>
                 ) : costEstimate.totalCredits > 0 ? (
-                  <span className="text-xs opacity-80">
-                    · {formatCredits(journeyContext?.isFirstLeg ? 
-                      calculateTripCredits({ days: journeyContext.totalDays, cities: journeyContext.cities }).totalCredits : 
-                      costEstimate.totalCredits)} cr
-                  </span>
+                  <span className="text-xs opacity-80">· {formatCredits(costEstimate.totalCredits)} cr</span>
                 ) : null}
               </Button>
               
@@ -1220,27 +1117,11 @@ export function ItineraryGenerator({
             We’re reconnecting and verifying your generated days in the background.
           </p>
 
-          {showTakingLonger && !showRetryButton && (
-            <p className="text-sm text-muted-foreground mt-2 text-center">
-              Taking longer than expected. Hang tight...
-            </p>
-          )}
-
           {showRetryButton && (
-            <div className="flex flex-col items-center gap-3 mt-4">
-              <p className="text-sm text-muted-foreground text-center">
-                Generation seems to have stalled.
-              </p>
-              <div className="flex gap-3">
-                <Button variant="outline" onClick={() => window.history.back()}>
-                  Go Back
-                </Button>
-                <Button onClick={handleRetry} className="gap-2">
-                  <RefreshCw className="h-4 w-4" />
-                  Retry Generation
-                </Button>
-              </div>
-            </div>
+            <Button onClick={handleRetry} className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Generation didn't complete. Try again?
+            </Button>
           )}
         </div>
       </motion.div>

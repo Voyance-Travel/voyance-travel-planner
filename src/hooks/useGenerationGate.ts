@@ -4,15 +4,11 @@
  * Pre-authorizes credits before itinerary generation.
  * Routes to full generation or preview based on balance + first-trip status.
  * 
- * Multi-City Journey Flow:
- * - Leg 1: Calculate cost for ALL legs combined, charge upfront
- * - Legs 2+: Detect pre-paid journey, bypass credit check
- * 
- * Single-Trip Flow:
+ * Flow:
  * 1. Check if this is user's FIRST trip → mode 'full', 0 credits charged
  * 2. If not first trip: calculate cost, attempt deduction
  * 3. If success → mode 'full'
- * 4. If insufficient → mode 'locked'
+ * 4. If insufficient → mode 'preview' (2-day cap, no credits)
  */
 
 import { useCallback } from 'react';
@@ -32,29 +28,6 @@ import { useCredits } from './useCredits';
 
 export type GenerationMode = 'full' | 'partial' | 'preview' | 'locked';
 
-/** Represents a single leg in a multi-city journey */
-export interface JourneyLeg {
-  tripId: string;
-  city: string;
-  country?: string;
-  days: number;
-  order: number;
-  status: string;
-}
-
-/** Journey context for multi-city trips */
-export interface JourneyContext {
-  journeyId: string;
-  journeyName: string;
-  totalLegs: number;
-  currentLegOrder: number;
-  legs: JourneyLeg[];
-  totalDays: number;
-  cities: string[];
-  isFirstLeg: boolean;
-  isPrePaid: boolean;
-}
-
 export interface GateResult {
   mode: GenerationMode;
   tripCost: number;
@@ -65,10 +38,8 @@ export interface GateResult {
   isFirstTrip?: boolean;
   /** Total days the user requested */
   requestedDays: number;
-  /** How many days to actually generate */
+  /** How many days to actually generate (2 for first trip / preview, all for credited) */
   generateDays: number;
-  /** Journey context for multi-city trips */
-  journeyContext?: JourneyContext;
 }
 
 export interface GenerationGateParams {
@@ -86,6 +57,9 @@ export interface GenerationGateParams {
 
 /**
  * Check if the user has used their first-trip free benefit.
+ * Uses the `first_trip_used` flag on profiles — only set to true
+ * after a generation completes successfully, so crashed trips don't
+ * consume the benefit.
  */
 async function checkIsFirstTrip(userId: string): Promise<boolean> {
   try {
@@ -97,142 +71,12 @@ async function checkIsFirstTrip(userId: string): Promise<boolean> {
 
     if (error) {
       console.error('[GenerationGate] First-trip check error:', error);
-      return false;
+      return false; // Default to not-first on error (safe fallback)
     }
 
     return data?.first_trip_used === false;
   } catch {
     return false;
-  }
-}
-
-/**
- * Detect if this trip is part of a multi-city journey and fetch all legs.
- */
-async function detectJourneyContext(tripId: string): Promise<JourneyContext | null> {
-  try {
-    // First, get this trip's journey info
-    const { data: trip, error } = await supabase
-      .from('trips')
-      .select('id, journey_id, journey_name, journey_order, journey_total_legs, destination, destination_country, start_date, end_date, metadata')
-      .eq('id', tripId)
-      .maybeSingle();
-
-    if (error || !trip?.journey_id) {
-      return null; // Not part of a journey
-    }
-
-    // Fetch all legs in this journey
-    const { data: allLegs, error: legsError } = await supabase
-      .from('trips')
-      .select('id, destination, destination_country, start_date, end_date, journey_order, itinerary_status')
-      .eq('journey_id', trip.journey_id)
-      .order('journey_order', { ascending: true });
-
-    if (legsError || !allLegs?.length) {
-      console.error('[GenerationGate] Failed to fetch journey legs:', legsError);
-      return null;
-    }
-
-    // Calculate days for each leg
-    const legs: JourneyLeg[] = allLegs.map((leg) => {
-      const startDate = new Date(leg.start_date);
-      const endDate = new Date(leg.end_date);
-      const days = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-      
-      return {
-        tripId: leg.id,
-        city: leg.destination,
-        country: leg.destination_country || undefined,
-        days,
-        order: leg.journey_order,
-        status: leg.itinerary_status || 'not_started',
-      };
-    });
-
-    const totalDays = legs.reduce((sum, leg) => sum + leg.days, 0);
-    const cities = legs.map((leg) => leg.city);
-    const currentLegOrder = trip.journey_order || 1;
-    const isFirstLeg = currentLegOrder === 1;
-
-    // Check if journey is already paid
-    const metadata = (trip.metadata as Record<string, unknown>) || {};
-    const isPrePaid = metadata.journey_credits_paid === true;
-
-    return {
-      journeyId: trip.journey_id,
-      journeyName: trip.journey_name || cities.join(' → '),
-      totalLegs: trip.journey_total_legs || legs.length,
-      currentLegOrder,
-      legs,
-      totalDays,
-      cities,
-      isFirstLeg,
-      isPrePaid,
-    };
-  } catch (err) {
-    console.error('[GenerationGate] Journey detection error:', err);
-    return null;
-  }
-}
-
-/**
- * Check if a journey has already been paid for (prevents double-charging).
- */
-async function checkJourneyAlreadyPaid(journeyId: string): Promise<boolean> {
-  try {
-    const { data, error } = await supabase
-      .from('trips')
-      .select('metadata')
-      .eq('journey_id', journeyId)
-      .eq('journey_order', 1)
-      .maybeSingle();
-
-    if (error || !data) return false;
-
-    const metadata = (data.metadata as Record<string, unknown>) || {};
-    return metadata.journey_credits_paid === true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Mark all legs of a journey as paid (called after successful upfront charge).
- */
-async function markJourneyAsPaid(journeyId: string, creditsCharged: number): Promise<void> {
-  try {
-    // Get all legs in the journey
-    const { data: legs, error } = await supabase
-      .from('trips')
-      .select('id, metadata')
-      .eq('journey_id', journeyId);
-
-    if (error || !legs?.length) {
-      console.error('[GenerationGate] Failed to fetch journey legs for marking:', error);
-      return;
-    }
-
-    // Update each leg with payment metadata
-    const updates = legs.map((leg) => {
-      const existingMetadata = (leg.metadata as Record<string, unknown>) || {};
-      return supabase
-        .from('trips')
-        .update({
-          metadata: {
-            ...existingMetadata,
-            journey_credits_paid: true,
-            journey_credits_amount: creditsCharged,
-            journey_payment_at: new Date().toISOString(),
-          },
-        })
-        .eq('id', leg.id);
-    });
-
-    await Promise.all(updates);
-    console.log(`[GenerationGate] Marked ${legs.length} legs as paid for journey ${journeyId}`);
-  } catch (err) {
-    console.error('[GenerationGate] Failed to mark journey as paid:', err);
   }
 }
 
@@ -250,49 +94,19 @@ export function useGenerationGate() {
    * Returns the generation mode and cost details.
    */
   const authorize = useCallback(async (params: GenerationGateParams): Promise<GateResult> => {
-    const currentBalance = creditData?.totalCredits ?? 0;
+    // Calculate trip cost
+    const estimate = calculateTripCredits(
+      {
+        days: params.days,
+        cities: params.cities,
+        mustIncludes: params.mustIncludes,
+        includeHotels: params.includeHotels,
+      },
+      params.dna
+    );
 
-    // ────────────────────────────────────────────────────
-    // JOURNEY DETECTION: Check if part of multi-city journey
-    // ────────────────────────────────────────────────────
-    const journeyContext = await detectJourneyContext(params.tripId);
-
-    // If this is a subsequent leg of an already-paid journey, skip credit check
-    if (journeyContext && !journeyContext.isFirstLeg) {
-      const isPaid = await checkJourneyAlreadyPaid(journeyContext.journeyId);
-      if (isPaid) {
-        console.log(`[GenerationGate] Journey ${journeyContext.journeyId} already paid — leg ${journeyContext.currentLegOrder} bypassing credits`);
-        return {
-          mode: 'full',
-          tripCost: 0,
-          creditsCharged: 0,
-          currentBalance,
-          shortfall: 0,
-          recommendedPack: null,
-          requestedDays: params.days,
-          generateDays: params.days,
-          journeyContext: { ...journeyContext, isPrePaid: true },
-        };
-      }
-    }
-
-    // Calculate cost — use journey total if first leg, otherwise single trip
-    const costParams = journeyContext?.isFirstLeg
-      ? {
-          days: journeyContext.totalDays,
-          cities: journeyContext.cities,
-          mustIncludes: params.mustIncludes,
-          includeHotels: params.includeHotels,
-        }
-      : {
-          days: params.days,
-          cities: params.cities,
-          mustIncludes: params.mustIncludes,
-          includeHotels: params.includeHotels,
-        };
-
-    const estimate = calculateTripCredits(costParams, params.dna);
     const tripCost = estimate.totalCredits;
+    const currentBalance = creditData?.totalCredits ?? 0;
 
     // ────────────────────────────────────────────────────
     // FIRST TRIP: Free full generation, no credits charged
@@ -310,34 +124,35 @@ export function useGenerationGate() {
           recommendedPack: null,
           isFirstTrip: true,
           requestedDays: params.days,
-          generateDays: params.days,
-          journeyContext: journeyContext || undefined,
+          generateDays: params.days, // Generate ALL days — content gated via LockedDayCard after day 2
         };
       }
     }
 
     // ────────────────────────────────────────────────────
     // SUBSEQUENT TRIPS: Check credits
+    // Full if can afford all, Partial if can afford ≥1 day, Locked if 0
     // ────────────────────────────────────────────────────
     if (!user || currentBalance < tripCost) {
-      const costPerDay = Math.ceil(tripCost / (journeyContext?.totalDays || params.days));
+      const costPerDay = Math.ceil(tripCost / params.days);
       const affordableDays = costPerDay > 0 ? Math.floor(currentBalance / costPerDay) : 0;
       const shortfall = Math.max(0, tripCost - currentBalance);
 
       if (affordableDays >= 1 && user) {
+        // PARTIAL: User can afford some days but not all
         const partialCost = affordableDays * costPerDay;
         console.log(`[GenerationGate] Partial generation: can afford ${affordableDays}/${params.days} days (${partialCost} credits)`);
         
+        // Don't deduct yet — deduction happens after user confirms in the UI
         return {
           mode: 'partial',
           tripCost,
-          creditsCharged: 0,
+          creditsCharged: 0, // Not charged yet — charged after confirmation
           currentBalance,
           shortfall,
           recommendedPack: getRecommendedPackForEstimate(tripCost, currentBalance),
           requestedDays: params.days,
           generateDays: affordableDays,
-          journeyContext: journeyContext || undefined,
         };
       }
 
@@ -350,37 +165,36 @@ export function useGenerationGate() {
         shortfall,
         recommendedPack: getRecommendedPackForEstimate(tripCost, currentBalance),
         requestedDays: params.days,
-        generateDays: 0,
-        journeyContext: journeyContext || undefined,
+        generateDays: 0, // No AI generation at all
       };
     }
 
-    // ────────────────────────────────────────────────────
-    // ATTEMPT CREDIT DEDUCTION
-    // ────────────────────────────────────────────────────
+    // Attempt to deduct credits server-side
+    // Track whether credits were actually spent so we can refund on unexpected errors
     let creditsSpent = 0;
     try {
       const { data, error } = await supabase.functions.invoke('spend-credits', {
         body: {
-          action: journeyContext?.isFirstLeg ? 'journey_generation' : 'trip_generation',
+          action: 'trip_generation',
           tripId: params.tripId,
           creditsAmount: tripCost,
           metadata: {
-            days: journeyContext?.totalDays || params.days,
-            cities: journeyContext?.cities.length || params.cities.length,
+            days: params.days,
+            cities: params.cities.length,
             complexity: estimate.complexity.tier,
             multiplier: estimate.complexity.multiplier,
-            journeyId: journeyContext?.journeyId,
-            journeyTotalLegs: journeyContext?.totalLegs,
           },
         },
       });
 
       if (error) {
+        // Network error — if user can afford it, this is a transient failure, not "insufficient"
         console.error('[GenerationGate] Spend error:', error);
+        // Throw so ItineraryGenerator shows a generic error, NOT the "out of credits" modal
         throw new Error(`Credit spend failed: ${error.message || 'network error'}`);
       }
 
+      // Handle insufficient credits (from edge function)
       if (data?.code === 'INSUFFICIENT_CREDITS' || data?.error === 'Insufficient credits') {
         const available = data.available ?? currentBalance;
         const shortfall = Math.max(0, tripCost - available);
@@ -393,21 +207,17 @@ export function useGenerationGate() {
           recommendedPack: getRecommendedPackForEstimate(tripCost, available),
           requestedDays: params.days,
           generateDays: 0,
-          journeyContext: journeyContext || undefined,
         };
       }
 
       if (data?.error) {
         console.error('[GenerationGate] Spend error:', data.error);
+        // Throw so the UI shows a generic retry error, not "out of credits"
         throw new Error(`Credit spend failed: ${data.error}`);
       }
 
+      // Credits deducted successfully — record how much was spent
       creditsSpent = data.spent ?? tripCost;
-
-      // Mark journey as paid if this is the first leg
-      if (journeyContext?.isFirstLeg && creditsSpent > 0) {
-        await markJourneyAsPaid(journeyContext.journeyId, creditsSpent);
-      }
 
       // Refresh credit balance in UI
       if (user?.id) {
@@ -422,13 +232,13 @@ export function useGenerationGate() {
         shortfall: 0,
         recommendedPack: null,
         requestedDays: params.days,
-        generateDays: params.days,
-        journeyContext: journeyContext || undefined,
+        generateDays: params.days, // Paid: generate ALL days
       };
     } catch (err) {
       console.error('[GenerationGate] Unexpected error:', err);
 
-      // DEFENSIVE REFUND
+      // DEFENSIVE REFUND: If credits were deducted but the gate is throwing,
+      // issue a fire-and-forget refund so the user doesn't lose credits.
       if (creditsSpent > 0) {
         console.warn(`[GenerationGate] Credits (${creditsSpent}) were spent but gate is failing — issuing defensive refund`);
         supabase.functions.invoke('spend-credits', {
@@ -441,10 +251,13 @@ export function useGenerationGate() {
         }).then(({ error: refundErr }) => {
           if (refundErr) console.error('[GenerationGate] Defensive refund failed:', refundErr);
           else console.log(`[GenerationGate] Defensive refund succeeded: +${creditsSpent} credits`);
+          // Refresh balance after refund
           if (user?.id) queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
         }).catch(e => console.error('[GenerationGate] Defensive refund error:', e));
       }
 
+      // Re-throw non-credit errors so the caller shows a generic retry UI,
+      // NOT the "out of credits" modal (which 'locked' mode triggers).
       throw err;
     }
   }, [user, creditData, queryClient]);

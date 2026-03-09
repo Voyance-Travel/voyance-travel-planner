@@ -6,7 +6,7 @@
  * Shows gap analysis in a dialog when user clicks to review.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, AlertTriangle, Info, CheckCircle2, 
@@ -22,7 +22,6 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useSpendCredits } from '@/hooks/useSpendCredits';
-import { getErrorMessage } from '@/utils/errorMessages';
 import { useCredits } from '@/hooks/useCredits';
 import { CREDIT_COSTS } from '@/config/pricing';
 import { useQueryClient } from '@tanstack/react-query';
@@ -98,7 +97,6 @@ export function SmartFinishBanner({
   const [enrichmentFailed, setEnrichmentFailed] = useState(false);
   const [failureReason, setFailureReason] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const enrichLockRef = useRef(false);
 
   const spendCredits = useSpendCredits();
   const { data: creditData } = useCredits();
@@ -205,12 +203,10 @@ export function SmartFinishBanner({
    * Issues guaranteed refund if generation fails.
    */
   const callEnrichWithGuaranteedRefund = async (source: string): Promise<{ success: boolean; data?: any }> => {
-    // Synchronous lock check - prevents race condition from rapid double-clicks
-    if (enrichLockRef.current || isGenerating) {
+    if (isGenerating) {
       toast.info('Smart Finish is already running. Please wait…');
       return { success: false };
     }
-    enrichLockRef.current = true; // Immediate synchronous lock
     setIsGenerating(true);
     try {
       // Kick off — returns immediately with status: "generating"
@@ -223,16 +219,14 @@ export function SmartFinishBanner({
         console.error(`[SmartFinish ${source}] Kickoff failed:`, errorMsg);
         // Still check if backend completed despite the error
         const recovered = await pollForCompletion(source, 8, 3000);
-        if (recovered.success) { enrichLockRef.current = false; setIsGenerating(false); return recovered; }
+        if (recovered.success) { setIsGenerating(false); return recovered; }
 
         await issueGuaranteedRefund(source, errorMsg);
-        enrichLockRef.current = false;
         return { success: false };
       }
 
       // If already completed (idempotent re-call)
       if (data.status === 'completed' || data.alreadyCompleted) {
-        enrichLockRef.current = false;
         setIsGenerating(false);
         return { success: true, data };
       }
@@ -243,20 +237,17 @@ export function SmartFinishBanner({
       if (!result.success) {
         const errorDetail = result.data?.error || undefined;
         await issueGuaranteedRefund(source, errorDetail);
-        enrichLockRef.current = false;
         return { success: false };
       }
 
-      enrichLockRef.current = false;
       setIsGenerating(false);
       return result;
     } catch (err: unknown) {
       console.error(`[SmartFinish ${source}] Exception:`, err);
       const recovered = await pollForCompletion(source, 8, 3000);
-      if (recovered.success) { enrichLockRef.current = false; setIsGenerating(false); return recovered; }
+      if (recovered.success) { setIsGenerating(false); return recovered; }
 
       await issueGuaranteedRefund(source, err instanceof Error ? err.message : String(err));
-      enrichLockRef.current = false;
       return { success: false };
     }
   };
@@ -290,17 +281,17 @@ export function SmartFinishBanner({
 
       if (refundError || !refundData?.success) {
         console.error(`[SmartFinish ${source}] Guaranteed refund FAILED:`, refundError ?? refundData);
-        toast.error('Credit refund also failed. Please contact support.', { duration: 8000 });
+        toast.error('Enrichment failed. Credit refund also failed. Please contact support.', { duration: 8000 });
       } else {
         console.log(`[SmartFinish ${source}] Guaranteed refund OK: +${refundData.refunded} credits`);
-        toast(getErrorMessage('smartFinish', 'still_processing'), {
-          description: 'Your credits have been refunded. Check back in a moment.',
+        toast.error('Enrichment failed. Your credits have been refunded.', {
+          description: humanError,
           duration: 6000,
         });
       }
     } catch (refundErr) {
       console.error(`[SmartFinish ${source}] Guaranteed refund exception:`, refundErr);
-      toast.error('Credit refund also failed. Please contact support.', { duration: 8000 });
+      toast.error('Enrichment failed. Credit refund also failed. Please contact support.', { duration: 8000 });
     }
 
     // Reset purchased flag so banner stays visible
@@ -350,7 +341,7 @@ export function SmartFinishBanner({
       onPurchaseComplete?.();
     } catch (err: any) {
       if (!err?.message?.startsWith('Not enough credits')) {
-        toast(getErrorMessage('smartFinish'));
+        toast.error('Something went wrong. Please try again later.');
       }
       console.error('Retry enrichment error:', err);
     } finally {
@@ -402,7 +393,7 @@ export function SmartFinishBanner({
       onPurchaseComplete?.();
     } catch (err: any) {
       if (!err?.message?.startsWith('Not enough credits')) {
-        toast(getErrorMessage('smartFinish'));
+        toast.error('Failed to activate Smart Finish. Please try again.');
       }
     } finally {
       setIsPurchasing(false);
@@ -420,7 +411,7 @@ export function SmartFinishBanner({
         className={cn(
           "relative overflow-hidden rounded-xl border",
           enrichmentFailed
-            ? "border-border bg-muted/50"
+            ? "border-red-200/60 dark:border-red-800/40 bg-gradient-to-br from-red-50/80 via-orange-50/50 to-red-50/80 dark:from-red-950/30 dark:via-orange-950/20 dark:to-red-950/30"
             : "border-amber-200/60 dark:border-amber-800/40 bg-gradient-to-br from-amber-50/80 via-orange-50/50 to-amber-50/80 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-amber-950/30",
           "p-4 sm:p-5",
           className
@@ -444,7 +435,7 @@ export function SmartFinishBanner({
             <div className={cn(
               "shrink-0 p-2.5 rounded-xl shadow-md",
               enrichmentFailed
-                ? "bg-muted-foreground/80 shadow-muted-foreground/20"
+                ? "bg-gradient-to-br from-red-400 to-orange-500 shadow-red-500/20"
                 : "bg-gradient-to-br from-amber-400 to-orange-500 shadow-amber-500/20"
             )}>
               {enrichmentFailed ? <RefreshCw className="h-5 w-5 text-white" /> : <Wand2 className="h-5 w-5 text-white" />}
@@ -452,7 +443,7 @@ export function SmartFinishBanner({
             <div className="min-w-0">
               <h3 className="text-sm font-semibold text-foreground leading-tight">
                 {enrichmentFailed
-                  ? 'Let\'s try that again'
+                  ? 'Enrichment failed. Retry at no extra cost'
                   : 'This trip has great bones. Want us to finish it?'}
               </h3>
               <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
@@ -583,7 +574,7 @@ export function SmartFinishBanner({
           <DialogFooter className="flex-col gap-2 sm:flex-col">
             <Button
               onClick={handlePurchase}
-              disabled={isPurchasing || isGenerating}
+              disabled={isPurchasing}
               className="w-full gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 shadow-md"
             >
               {isPurchasing ? (

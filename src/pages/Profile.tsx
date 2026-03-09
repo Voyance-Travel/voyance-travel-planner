@@ -90,9 +90,9 @@ function computeTripProgress(trip: any): { progress?: number; label?: string; co
   const startDate = trip.start_date ? parseLocalDate(trip.start_date) : null;
   const now = new Date();
 
-  // Needs another try
+  // Failed generation
   if (itineraryStatus === 'failed') {
-    return { progress: 0, label: 'Needs another try', color: 'bg-muted-foreground' };
+    return { progress: 0, label: 'Generation failed. Try again', color: 'bg-destructive' };
   }
 
   // Currently generating
@@ -123,15 +123,15 @@ function computeTripProgress(trip: any): { progress?: number; label?: string; co
     if (pct >= 100) {
       return { progress: 100, label: `Ready! ${daysUntil}d until departure`, color: 'bg-primary' };
     }
-    return { progress: pct, label: `${daysWithActivities}/${totalDays} days crafted`, color: 'bg-primary' };
+    return { progress: pct, label: `${daysWithActivities}/${totalDays} days planned`, color: 'bg-primary' };
   }
 
   // Completed or past trips
   const pct = Math.round((daysWithActivities / totalDays) * 100);
   if (pct >= 100) {
-    return { progress: 100, label: 'Fully crafted', color: 'bg-primary' };
+    return { progress: 100, label: 'Fully planned', color: 'bg-primary' };
   }
-  return { progress: pct, label: `${daysWithActivities}/${totalDays} days crafted`, color: 'bg-primary' };
+  return { progress: pct, label: `${daysWithActivities}/${totalDays} days planned`, color: 'bg-primary' };
 }
 
 // Transform API trip to display format

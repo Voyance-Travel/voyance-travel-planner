@@ -141,7 +141,7 @@ export default function TripCockpit({
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <p className="text-muted-foreground">Days Crafted</p>
+                <p className="text-muted-foreground">Days Planned</p>
                 <p className="text-2xl font-bold">{itineraryDaysCount}</p>
               </div>
               <div>

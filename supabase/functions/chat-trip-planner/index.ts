@@ -64,27 +64,6 @@ When the user describes their trip, your #1 job is to faithfully capture EVERYTH
 The mustDoActivities field should contain a RICH, DETAILED summary of everything the user wants, not just venue names. Include their reasoning, timing preferences, and constraints. Example:
   "Whole day at the U.S. Open (do NOT plan other activities this day). Dinner at Nobu at 7:30 PM (reservation confirmed). Want authentic sushi spots — no tourist restaurants. Flying Delta from JFK, arriving 3 PM on Day 1."
 
-EXTRACTION RULES — READ CAREFULLY:
-
-You are extracting trip details from a conversation. Your MOST IMPORTANT job is capturing the user's specific activities. The generation engine will use these to build the itinerary. If you miss an activity, it will NOT appear in their trip.
-
-For the userActivities array:
-- Extract EVERY activity, event, venue, restaurant, show, and experience mentioned
-- If the user says "US Open from 9 AM to 6 PM" → { name: "US Open", startTime: "09:00", endTime: "18:00", isAllDay: true, category: "event", isRequired: true }
-- If the user says "comedy show Friday night" → { name: "Comedy show", day: 2, category: "nightlife", isRequired: true, notes: "Friday night" }
-- If the user says "dinner then maybe a comedy show" → extract BOTH: a dinner entry AND a comedy show entry
-- If the user says "all day at the US Open" on multiple days → create separate entries for EACH day
-- "Drop bags in the locker" → { name: "US Open bag storage/lockers", category: "transport", isRequired: true }
-
-For flights:
-- "My flight lands at LaGuardia at 8:15" → flightArrival: { airport: "LGA", time: "8:15 AM" }
-- "Flying out of JFK" → flightDeparture: { airport: "JFK" }
-
-For hotel:
-- "Stay in Midtown Manhattan" → hotelPreference: "Midtown Manhattan"
-
-DO NOT skip any detail. DO NOT summarize. DO NOT combine activities. Each distinct thing the user wants to do is its own entry.
-
 LANGUAGE & OUTPUT QUALITY — MANDATORY:
 - ALL output MUST be in clean, fluent, correctly spelled English. Double-check spelling of common words.
 - For non-Latin-script destinations (China, Japan, Korea, Thailand, Arabic countries, Russia), ALWAYS use standard English transliterations or well-known English names. Examples: "Beijing" not "北京", "Chongqing" not "重庆", "Shinjuku" not "新宿".
@@ -330,73 +309,6 @@ serve(async (req) => {
                     departureTime: {
                       type: "string",
                       description: "Return flight departure time if mentioned (e.g., '6:00 PM', '18:00')",
-                    },
-                    userActivities: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          name: {
-                            type: "string",
-                            description: "Name of the activity/venue/event exactly as the user described it"
-                          },
-                          day: {
-                            type: "number",
-                            description: "Which trip day (1-indexed). If user says 'Thursday' and trip starts Thursday, this is 1."
-                          },
-                          startTime: {
-                            type: "string",
-                            description: "Start time if mentioned (e.g., '9:00 AM', '09:00')"
-                          },
-                          endTime: {
-                            type: "string",
-                            description: "End time if mentioned (e.g., '6:00 PM', '18:00')"
-                          },
-                          isAllDay: {
-                            type: "boolean",
-                            description: "True if the user wants this to fill the ENTIRE day. E.g., 'all day at the US Open', 'spend the whole day at Disney'"
-                          },
-                          isRequired: {
-                            type: "boolean",
-                            description: "Always true. Every activity the user mentions is required."
-                          },
-                          category: {
-                            type: "string",
-                            enum: ["event", "dining", "nightlife", "sightseeing", "transport", "accommodation"],
-                            description: "Category of the activity"
-                          },
-                          notes: {
-                            type: "string",
-                            description: "Any additional context the user gave about this activity"
-                          }
-                        },
-                        required: ["name", "isRequired"]
-                      },
-                      description: "CRITICAL: Extract EVERY specific activity, event, venue, show, restaurant, and experience the user mentioned. If they said 'US Open from 9 to 6', that's one entry with startTime='09:00' and endTime='18:00' and isAllDay=true. If they said 'comedy show Friday night', that's another entry with day and category='nightlife'. Miss NOTHING."
-                    },
-                    flightArrival: {
-                      type: "object",
-                      properties: {
-                        airport: { type: "string", description: "Arrival airport code (e.g., 'LGA', 'JFK')" },
-                        time: { type: "string", description: "Arrival time (e.g., '8:15 AM')" },
-                        airline: { type: "string" },
-                        flightNumber: { type: "string" }
-                      },
-                      description: "Inbound flight details if mentioned"
-                    },
-                    flightDeparture: {
-                      type: "object",
-                      properties: {
-                        airport: { type: "string", description: "Departure airport code (e.g., 'JFK', 'LAX')" },
-                        time: { type: "string", description: "Departure time if mentioned" },
-                        airline: { type: "string" },
-                        flightNumber: { type: "string" }
-                      },
-                      description: "Return flight details if mentioned"
-                    },
-                    hotelPreference: {
-                      type: "string",
-                      description: "Hotel location or name preference if mentioned (e.g., 'Midtown Manhattan', 'near the US Open')"
                     },
                     mustDoActivities: {
                       type: "string",

@@ -207,9 +207,9 @@ export function TripHealthPanel({
 
     // Days checklist entries
     if (planned === totalDaysExpected) {
-      items.push({ id: 'days-all', label: `All ${totalDaysExpected} days crafted`, done: true, icon: CalendarDays });
+      items.push({ id: 'days-all', label: `All ${totalDaysExpected} days planned`, done: true, icon: CalendarDays });
     } else if (planned > 0) {
-      items.push({ id: 'days-partial', label: `Days 1-${planned} crafted`, done: true, icon: CalendarDays });
+      items.push({ id: 'days-partial', label: `Days 1-${planned} planned`, done: true, icon: CalendarDays });
       const missingStart = planned + 1;
       const missingEnd = totalDaysExpected;
       items.push({
@@ -314,7 +314,7 @@ export function TripHealthPanel({
 
             <div className="text-left min-w-0">
               <p className="text-sm font-medium text-foreground">
-                {daysPlanned} of {totalDaysExpected} days crafted by Voyance
+                {daysPlanned} of {totalDaysExpected} days planned
               </p>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[11px] text-muted-foreground">

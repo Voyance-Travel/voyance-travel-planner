@@ -67,7 +67,6 @@ import { injectHotelActivitiesIntoDays, injectMultiHotelActivities } from '@/uti
 import { cn } from '@/lib/utils';
 import { JourneyBreadcrumb } from '@/components/trips/JourneyBreadcrumb';
 import { JourneyUpNext } from '@/components/trips/JourneyUpNext';
-import { JourneyProgressBanner } from '@/components/trip/JourneyProgressBanner';
 
 type Trip = Tables<'trips'>;
 type TripActivity = Tables<'trip_activities'>;
@@ -181,7 +180,7 @@ export default function TripDetail() {
 
   useEffect(() => {
     if (generationStalled) {
-      stalledTimerRef.current = setTimeout(() => setShowStalledUI(true), 5000);
+      stalledTimerRef.current = setTimeout(() => setShowStalledUI(true), 30000);
     } else {
       setShowStalledUI(false);
       if (stalledTimerRef.current) clearTimeout(stalledTimerRef.current);
@@ -291,39 +290,7 @@ export default function TripDetail() {
     },
   });
 
-  // =========================================================================
-  // FALLBACK: Force transition when generation is "ready" but UI is stuck
-  // On mobile, the onReady callback may not fire due to dropped realtime
-  // connections. This timer ensures the UI transitions within 5 seconds.
-  // =========================================================================
-  useEffect(() => {
-    if (generationPoller.isReady && (isServerGenerating || generationStalled || showGenerator)) {
-      const fallbackTimer = setTimeout(async () => {
-        console.warn('[TripDetail] Forcing transition — generation ready but UI still showing generation view');
-        if (tripId) {
-          const { data } = await supabase.from('trips').select('*').eq('id', tripId).single();
-          if (data) {
-            setTrip(data);
-            setItineraryDaysCount(0);
-            setShowGenerator(false);
-            setGenerationStalled(false);
-            setCachedVersion(tripId, (data as any).itinerary_version ?? 1);
-            if (!onReadyCalledRef.current) {
-              onReadyCalledRef.current = true;
-              toast.success('Your itinerary is ready! 🎉');
-            }
-            if (user?.id) {
-              queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
-              queryClient.invalidateQueries({ queryKey: ['entitlements', user.id] });
-            }
-          }
-        }
-      }, 5000);
-
-      return () => clearTimeout(fallbackTimer);
-    }
-  }, [generationPoller.isReady, isServerGenerating, generationStalled, showGenerator, tripId]);
-
+  // Resume generation from where it left off
   const handleResumeGeneration = useCallback(async () => {
     if (!tripId || !trip) return;
     setResumingGeneration(true);
@@ -332,17 +299,14 @@ export default function TripDetail() {
 
     const meta = (trip.metadata as Record<string, unknown>) || {};
     const completedDays = (meta.generation_completed_days as number) || 0;
-    // For multi-city trips, the backend's generation_total_days (sum of city days)
-    // is authoritative — date arithmetic can disagree. For single-city, prefer dates.
-    const metaTotalDays = (meta.generation_total_days as number) || 0;
-    const isMultiCityTrip = !!(trip as any).is_multi_city;
+    // Recompute expected days from canonical trip dates instead of trusting
+    // potentially stale/inflated metadata.generation_total_days
     const canonicalTotalDays = trip.start_date && trip.end_date
       ? differenceInDays(parseLocalDate(trip.end_date), parseLocalDate(trip.start_date)) + 1
       : 0;
-    // Multi-city: trust backend's sum-of-city-days; single-city: prefer date arithmetic
-    const totalDays = isMultiCityTrip && metaTotalDays > 0
-      ? metaTotalDays
-      : (canonicalTotalDays > 0 ? canonicalTotalDays : metaTotalDays);
+    const metaTotalDays = (meta.generation_total_days as number) || 0;
+    // Use canonical date-derived count as source of truth; fall back to metadata only if dates are missing
+    const totalDays = canonicalTotalDays > 0 ? canonicalTotalDays : metaTotalDays;
 
     try {
       // Reset status to generating with fresh heartbeat + normalize total days
@@ -362,50 +326,29 @@ export default function TripDetail() {
       if (refreshed) setTrip(refreshed);
 
       // Call generate-trip which will resume from completedDays+1
-      // Retry up to 3 attempts with exponential backoff to avoid losing credits on transient failures
-      let invokeError: Error | null = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const { error } = await supabase.functions.invoke('generate-itinerary', {
-          body: {
-            action: 'generate-trip',
-            tripId,
-            destination: trip.destination,
-            destinationCountry: (trip as any).destination_country,
-            startDate: trip.start_date,
-            endDate: trip.end_date,
-            travelers: trip.travelers || 1,
-            tripType: trip.trip_type,
-            budgetTier: (trip as any).budget_tier,
-            isMultiCity: !!(trip as any).is_multi_city,
-            creditsCharged: 0, // Already charged, no new charge
-            requestedDays: totalDays,
-            resumeFromDay: completedDays + 1, // Signal to backend to skip completed days
-          },
-        });
+      const { error } = await supabase.functions.invoke('generate-itinerary', {
+        body: {
+          action: 'generate-trip',
+          tripId,
+          destination: trip.destination,
+          destinationCountry: (trip as any).destination_country,
+          startDate: trip.start_date,
+          endDate: trip.end_date,
+          travelers: trip.travelers || 1,
+          tripType: trip.trip_type,
+          budgetTier: (trip as any).budget_tier,
+          isMultiCity: !!(trip as any).is_multi_city,
+          creditsCharged: 0, // Already charged, no new charge
+          requestedDays: totalDays,
+          resumeFromDay: completedDays + 1, // Signal to backend to skip completed days
+        },
+      });
 
-        if (!error) {
-          invokeError = null;
-          break;
-        }
-
-        invokeError = error;
-        console.warn(`[Resume] Attempt ${attempt + 1} failed:`, error);
-        if (attempt < 2) {
-          await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
-        }
-      }
-
-      if (invokeError) throw invokeError;
+      if (error) throw error;
       toast.success('Resuming generation…');
     } catch (err) {
       console.error('[Resume] Failed:', err);
-      toast('Couldn\'t pick up where we left off. Let\'s try again.', {
-        action: {
-          label: 'Retry',
-          onClick: () => handleResumeGeneration(),
-        },
-        duration: 5000,
-      });
+      toast.error('Failed to resume generation. Please try again.');
       setGenerationStalled(true);
     } finally {
       setResumingGeneration(false);
@@ -782,38 +725,32 @@ export default function TripDetail() {
 
         // Self-heal: detect corrupted ready+partial state
         // If itinerary_status is 'ready' but day count < expected, trigger stalled/resume
+        // Also correct inflated metadata.generation_total_days from canonical dates
         if (tripData.itinerary_status === 'ready' || (tripData.itinerary_status as string) === 'generated') {
           const itinData = tripData.itinerary_data as { days?: unknown[] } | null;
           const actualDays = Math.max(itinData?.days?.length ?? 0, itineraryDaysDbCount);
           const meta = (tripData.metadata as Record<string, unknown>) || {};
-          const metaTotal = (meta.generation_total_days as number) || 0;
-          const isMultiCityTrip = !!(tripData as any).is_multi_city;
-
-          // For multi-city trips, the backend's generation_total_days (sum of city days)
-          // is the authoritative source — don't override with date arithmetic.
+          // Always recompute from canonical dates first
           let expectedTotal = 0;
-          if (isMultiCityTrip && metaTotal > 0) {
-            expectedTotal = metaTotal;
-          } else {
-            // Single-city: recompute from canonical dates
-            if (tripData.start_date && tripData.end_date) {
-              try {
-                expectedTotal = differenceInDays(
-                  parseLocalDate(tripData.end_date),
-                  parseLocalDate(tripData.start_date)
-                ) + 1;
-              } catch { expectedTotal = 0; }
-            }
-            if (expectedTotal <= 0) {
-              expectedTotal = metaTotal;
-            }
-            // Only correct metadata for single-city trips where date arithmetic is reliable
-            if (expectedTotal > 0 && metaTotal > 0 && metaTotal !== expectedTotal && tripId) {
-              console.warn(`[TripDetail] Self-heal: correcting metadata.generation_total_days from ${metaTotal} to ${expectedTotal}`);
-              supabase.from('trips').update({
-                metadata: { ...meta, generation_total_days: expectedTotal },
-              }).eq('id', tripId).then(() => {});
-            }
+          if (tripData.start_date && tripData.end_date) {
+            try {
+              expectedTotal = differenceInDays(
+                parseLocalDate(tripData.end_date),
+                parseLocalDate(tripData.start_date)
+              ) + 1;
+            } catch { expectedTotal = 0; }
+          }
+          // Fall back to metadata only if dates don't yield a valid count
+          if (expectedTotal <= 0) {
+            expectedTotal = (meta.generation_total_days as number) || 0;
+          }
+          // Correct inflated metadata if it disagrees with canonical dates
+          const metaTotal = (meta.generation_total_days as number) || 0;
+          if (expectedTotal > 0 && metaTotal > 0 && metaTotal !== expectedTotal && tripId) {
+            console.warn(`[TripDetail] Self-heal: correcting metadata.generation_total_days from ${metaTotal} to ${expectedTotal}`);
+            supabase.from('trips').update({
+              metadata: { ...meta, generation_total_days: expectedTotal },
+            }).eq('id', tripId).then(() => {});
           }
           if (expectedTotal > 0 && actualDays > 0 && actualDays < expectedTotal) {
             console.warn(`[TripDetail] Self-heal: trip marked ready but only ${actualDays}/${expectedTotal} days. Triggering resume.`);
@@ -1697,26 +1634,19 @@ export default function TripDetail() {
                 </div>
               ) : (
                 /* Active generation — GenerationPhases with airplane animation */
-                <>
-                  <GenerationPhases
-                    currentStep="preparing"
-                    destination={trip.destination || ''}
-                    totalDays={generationPoller.totalDays || (differenceInDays(parseLocalDate(effectiveEndDate), parseLocalDate(trip.start_date)) + 1)}
-                    tripId={trip.id}
-                    completedDays={generationPoller.completedDays}
-                    generatedDaysList={generationPoller.generatedDaysList}
-                    isComplete={generationPoller.isReady}
-                    progress={generationPoller.progress}
-                    currentCity={generationPoller.currentCity}
-                    isMultiCity={!!(trip as any).is_multi_city || tripCities.length > 1}
-                    tripCities={tripCities.map(c => ({ city_name: c.city_name, generation_status: c.generation_status }))}
-                  />
-                  {generationStalled && !showStalledUI && (
-                    <p className="text-sm text-muted-foreground text-center animate-pulse mt-2">
-                      Checking generation status...
-                    </p>
-                  )}
-                </>
+                <GenerationPhases
+                  currentStep="preparing"
+                  destination={trip.destination || ''}
+                  totalDays={generationPoller.totalDays || (differenceInDays(parseLocalDate(effectiveEndDate), parseLocalDate(trip.start_date)) + 1)}
+                  tripId={trip.id}
+                  completedDays={generationPoller.completedDays}
+                  generatedDaysList={generationPoller.generatedDaysList}
+                  isComplete={generationPoller.isReady}
+                  progress={generationPoller.progress}
+                  currentCity={generationPoller.currentCity}
+                  isMultiCity={!!(trip as any).is_multi_city || tripCities.length > 1}
+                  tripCities={tripCities.map(c => ({ city_name: c.city_name, generation_status: c.generation_status }))}
+                />
               )}
 
               {/* Browse completed days while generating */}
@@ -2543,14 +2473,9 @@ export default function TripDetail() {
                 // Trigger generation for the new days via the resume path
                 // This re-uses the same generation pipeline
                 const meta = (trip.metadata as Record<string, unknown>) || {};
-                const metaTotalDays = (meta.generation_total_days as number) || 0;
-                const isMultiCityTrip = !!(trip as any).is_multi_city;
-                const canonicalDays = trip.start_date && trip.end_date
+                const totalDays = trip.start_date && trip.end_date
                   ? differenceInDays(parseLocalDate(trip.end_date), parseLocalDate(trip.start_date)) + 1
                   : 0;
-                const totalDays = isMultiCityTrip && metaTotalDays > 0
-                  ? metaTotalDays
-                  : (canonicalDays > 0 ? canonicalDays : metaTotalDays);
                 try {
                   await supabase.from('trips').update({
                     itinerary_status: 'generating',
@@ -2601,8 +2526,6 @@ export default function TripDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      {/* Journey Progress Banner - shown during multi-city generation */}
-      <JourneyProgressBanner tripId={tripId!} />
     </MainLayout>
   );
 }

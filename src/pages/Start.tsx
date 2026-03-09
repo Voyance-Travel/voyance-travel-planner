@@ -14,7 +14,7 @@ import { InterCityTransportComparison, type CityTransition } from '@/components/
 import type { TransportOption } from '@/components/itinerary/EditorialItinerary';
 import MultiLegFlightEditor from '@/components/planner/flight/MultiLegFlightEditor';
 import { TripDestination, InterCityTransport, calculateTotalNights, generateDestinationDates } from '@/types/multiCity';
-import { format, addDays, isBefore, startOfToday, startOfMonth, differenceInDays, startOfDay, parse, isValid } from 'date-fns';
+import { format, addDays, isBefore, startOfToday, startOfMonth, differenceInDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -145,14 +145,12 @@ const sampleItineraries = [
 ];
 
 // Progress Step Indicator
-function StepIndicator({ currentStep, isMultiCity, isDayTrip }: { currentStep: number; isMultiCity?: boolean; isDayTrip?: boolean }) {
-  const allSteps = [
+function StepIndicator({ currentStep, isMultiCity }: { currentStep: number; isMultiCity?: boolean }) {
+  const steps = [
     { label: 'Trip Details', shortLabel: 'Details', step: 1 },
     { label: isMultiCity ? 'Transport & Hotel' : 'Flight & Hotel', shortLabel: isMultiCity ? 'Transport' : 'Flight', step: 2 },
     { label: 'Fine-Tune', shortLabel: 'Tune', step: 3 },
   ];
-  // Day trips skip step 2 entirely
-  const steps = isDayTrip ? allSteps.filter(s => s.step !== 2) : allSteps;
 
   return (
     <div className="flex items-center justify-center gap-2 mb-6 sm:mb-8">
@@ -291,14 +289,6 @@ function DateRangePicker({
 
   const handleSelect = (date: Date | undefined) => {
     if (!date) return;
-
-    // Reject past dates regardless of input method
-    const todayStart = startOfDay(new Date());
-    if (isBefore(date, todayStart)) {
-      toast.error("Trip dates can't be in the past");
-      return;
-    }
-
     if (picking === 'start') {
       setStartDate(date);
       // If new start is after current end, clear end
@@ -330,21 +320,9 @@ function DateRangePicker({
   };
 
   const nightCount = startDate && endDate ? differenceInDays(endDate, startDate) : null;
-  const isDayTrip = nightCount === 0;
-  const tripDays = nightCount !== null ? Math.max(nightCount, 1) : null;
 
   return (
-    <div className="space-y-1.5 sm:space-y-2" onBlur={(e) => {
-      // Validate any raw text inputs for dates (if supported by calendar/trigger)
-      const typed = (e.target as HTMLInputElement).value;
-      if (typed && typeof typed === 'string') {
-        const parsed = parse(typed, 'MM/dd/yyyy', new Date());
-        if (isValid(parsed) && isBefore(parsed, startOfDay(new Date()))) {
-          toast.error("Trip dates can't be in the past");
-          setStartDate(undefined);
-        }
-      }
-    }}>
+    <div className="space-y-1.5 sm:space-y-2">
       <label className="text-[10px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase font-medium text-muted-foreground">
         Dates
       </label>
@@ -360,12 +338,7 @@ function DateRangePicker({
             <span className="flex items-center gap-1.5">
               <CalendarIcon className="h-4 w-4 opacity-50" />
               {startDate && endDate
-                ? <>
-                    {`${format(startDate, 'MMM d')} → ${format(endDate, 'MMM d')}`}
-                    {isDayTrip
-                      ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-800 ml-1.5">Day Trip</span>
-                      : nightCount ? ` (${nightCount} night${nightCount === 1 ? '' : 's'})` : ''}
-                  </>
+                ? `${format(startDate, 'MMM d')} → ${format(endDate, 'MMM d')}${nightCount ? ` (${nightCount} nights)` : ''}`
                 : startDate
                   ? `${format(startDate, 'MMM d')} → select end`
                   : 'Select dates'}
@@ -2148,10 +2121,8 @@ export default function Start() {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
   }, []);
 
-  // Shorthand for the common Step 1 → Step 2 transition (skips step 2 for day trips)
-  // Uses a ref-based check since startDate/endDate are declared later
-  const goToNextAfterStep1Ref = useRef<() => void>(() => goToStep(2));
-  const goToNextAfterStep1 = useCallback(() => goToNextAfterStep1Ref.current(), []);
+  // Shorthand for the common Step 1 → Step 2 transition
+  const goToStep2 = useCallback(() => goToStep(2), [goToStep]);
 
   // Listen for browser back button to navigate between steps
   useEffect(() => {
@@ -2185,33 +2156,6 @@ export default function Start() {
   const [celebrationDay, setCelebrationDay] = useState<number | undefined>();
   const [budgetAmount, setBudgetAmount] = useState<number | undefined>(plannerState.basics.budgetAmount);
   const [pacing, setPacing] = useState<'relaxed' | 'balanced' | 'packed'>('balanced');
-  const isDayTrip = startDate && endDate && differenceInDays(endDate, startDate) === 0;
-  // Keep the step-skip ref in sync with current dates
-  goToNextAfterStep1Ref.current = () => {
-    // Validate required fields before advancing
-    if (!isMultiCity && !destinationSelection?.cityName) {
-      toast.error('Please select a destination first');
-      return;
-    }
-    if (isMultiCity && (!multiCityDestinations || multiCityDestinations.length === 0)) {
-      toast.error('Please add at least one city');
-      return;
-    }
-    if (!startDate || !endDate) {
-      toast.error('Please select your travel dates');
-      return;
-    }
-    if (startDate > endDate) {
-      toast.error('End date must be after start date');
-      return;
-    }
-
-    if (isDayTrip) {
-      goToStep(3);
-    } else {
-      goToStep(2);
-    }
-  };
   const [linkedGuests, setLinkedGuests] = useState<LinkedGuest[]>([]);
   const [showGuestModal, setShowGuestModal] = useState(false);
 
@@ -2370,13 +2314,6 @@ export default function Start() {
       return;
     }
 
-    // Before trip insert: verify dates aren't in the past
-    if (startDate && isBefore(startDate, startOfDay(new Date()))) {
-      toast.error("Your start date is in the past. Please update your dates.");
-      goToStep(1);
-      return;
-    }
-
     if (startDate && endDate && isBefore(endDate, startDate)) {
       toast.error('End date must be after start date');
       return;
@@ -2436,32 +2373,26 @@ export default function Start() {
       if (hotelChoice === 'own') {
         if (manualHotelList.length > 0) {
           // Multi-hotel (split stay)
-          const tripStartStr = startDate ? format(startDate, 'yyyy-MM-dd') : undefined;
-          const tripEndStr = endDate ? format(endDate, 'yyyy-MM-dd') : undefined;
           hotelSelection = manualHotelList.map(h => ({
             name: h.name,
-            address: h.address || '',
-            neighborhood: h.neighborhood || '',
-            checkInTime: h.checkInTime || '15:00',
-            checkOutTime: h.checkOutTime || '11:00',
-            checkInDate: h.checkInDate || tripStartStr,
-            checkOutDate: h.checkOutDate || tripEndStr,
+            address: h.address,
+            neighborhood: h.neighborhood,
+            checkInTime: h.checkInTime,
+            checkOutTime: h.checkOutTime,
+            checkInDate: h.checkInDate,
+            checkOutDate: h.checkOutDate,
             pricePerNight: h.pricePerNight || undefined,
             source: 'manual',
           }));
           includeHotelInBudget = manualHotelList.some(h => h.includeInBudget && h.pricePerNight && h.pricePerNight > 0);
         } else if (manualHotel.name) {
           // Single hotel (legacy)
-          const singleTripStart = startDate ? format(startDate, 'yyyy-MM-dd') : undefined;
-          const singleTripEnd = endDate ? format(endDate, 'yyyy-MM-dd') : undefined;
           hotelSelection = [{
             name: manualHotel.name,
-            address: manualHotel.address || '',
-            neighborhood: manualHotel.neighborhood || '',
-            checkInTime: manualHotel.checkInTime || '15:00',
-            checkOutTime: manualHotel.checkOutTime || '11:00',
-            checkInDate: manualHotel.checkInDate || singleTripStart,
-            checkOutDate: manualHotel.checkOutDate || singleTripEnd,
+            address: manualHotel.address,
+            neighborhood: manualHotel.neighborhood,
+            checkInTime: manualHotel.checkInTime,
+            checkOutTime: manualHotel.checkOutTime,
             pricePerNight: manualHotel.pricePerNight || undefined,
             source: 'manual',
           }];
@@ -2510,7 +2441,6 @@ export default function Start() {
             generationRules: generationRules.length > 0 ? generationRules : null,
             celebrationDay: celebrationDay || null,
             pacing: pacing || 'balanced',
-            is_day_trip: !!isDayTrip,
             lastUpdated: new Date().toISOString(),
           }) as any,
         })
@@ -2574,12 +2504,12 @@ export default function Start() {
           hotel_selection: (manualHotels[d.city] && manualHotels[d.city].length > 0)
             ? manualHotels[d.city].filter(h => h.name).map(h => ({
                 name: h.name,
-                address: h.address || '',
-                neighborhood: h.neighborhood || '',
-                checkInTime: h.checkInTime || '15:00',
-                checkOutTime: h.checkOutTime || '11:00',
-                checkInDate: h.checkInDate || d.arrivalDate || undefined,
-                checkOutDate: h.checkOutDate || d.departureDate || undefined,
+                address: h.address,
+                neighborhood: h.neighborhood,
+                checkInTime: h.checkInTime,
+                checkOutTime: h.checkOutTime,
+                checkInDate: h.checkInDate || undefined,
+                checkOutDate: h.checkOutDate || undefined,
                 pricePerNight: h.pricePerNight || undefined,
                 source: 'manual',
               }))
@@ -2628,9 +2558,9 @@ export default function Start() {
           country: null,
           arrival_date: format(startDate, 'yyyy-MM-dd'),
           departure_date: format(endDate, 'yyyy-MM-dd'),
-          nights: nights,
+          nights: nights > 0 ? nights : 1,
           generation_status: 'pending' as const,
-          days_total: Math.max(days, 1),
+          days_total: days > 0 ? days : 1,
           hotel_selection: hotelSelection && hotelSelection.length > 0 ? hotelSelection : null,
         };
         const { error: singleCityError } = await supabase.from('trip_cities').insert(singleCityRow as any);
@@ -2727,7 +2657,7 @@ export default function Start() {
       <section className="min-h-screen py-8 px-4">
         <div className="max-w-5xl mx-auto">
           {/* Progress Indicator */}
-          <StepIndicator currentStep={currentStep} isMultiCity={isMultiCity} isDayTrip={!!isDayTrip} />
+          <StepIndicator currentStep={currentStep} isMultiCity={isMultiCity} />
 
           {/* Main content with sidebar */}
           <div className="flex gap-12">
@@ -2819,31 +2749,21 @@ export default function Start() {
                         }] : null;
 
                         // Build flight_selection from chat-extracted flight details
-                        // Merge legacy fields (arrivalAirport/Time) with new flightArrival/flightDeparture
-                        const effectiveArrivalAirport = details.flightArrival?.airport || details.arrivalAirport;
-                        const effectiveArrivalTime = details.flightArrival?.time || details.arrivalTime;
-                        const effectiveDepartureAirport = details.flightDeparture?.airport || details.departureAirport;
-                        const effectiveDepartureTime = details.flightDeparture?.time || details.departureTime;
-
-                        const flightSelection = (effectiveArrivalAirport || effectiveArrivalTime || effectiveDepartureAirport || effectiveDepartureTime) ? {
+                        const flightSelection = (details.arrivalAirport || details.arrivalTime || details.departureAirport || details.departureTime) ? {
                           departure: {
                             arrival: {
-                              time: effectiveArrivalTime || undefined,
-                              airport: effectiveArrivalAirport || undefined,
+                              time: details.arrivalTime || undefined,
+                              airport: details.arrivalAirport || undefined,
                             },
                           },
                           return: {
                             departure: {
-                              time: effectiveDepartureTime || undefined,
-                              airport: effectiveDepartureAirport || undefined,
+                              time: details.departureTime || undefined,
+                              airport: details.departureAirport || undefined,
                             },
                           },
-                          arrivalAirport: effectiveArrivalAirport || undefined,
-                          departureAirport: effectiveDepartureAirport || undefined,
-                          arrivalAirline: details.flightArrival?.airline || undefined,
-                          departureAirline: details.flightDeparture?.airline || undefined,
-                          arrivalFlightNumber: details.flightArrival?.flightNumber || undefined,
-                          departureFlightNumber: details.flightDeparture?.flightNumber || undefined,
+                          arrivalAirport: details.arrivalAirport || undefined,
+                          departureAirport: details.departureAirport || undefined,
                           source: 'chat',
                         } : null;
 
@@ -2907,16 +2827,11 @@ export default function Start() {
                                 additionalNotes: details.additionalNotes || null,
                                 flightDetails: details.flightDetails || null,
                                 userConstraints: details.userConstraints || null,
-                                userActivities: details.userActivities || null,
-                                flightArrival: details.flightArrival || null,
-                                flightDeparture: details.flightDeparture || null,
-                                hotelPreference: details.hotelPreference || null,
                                 pacing: details.pacing || 'balanced',
                                 isFirstTimeVisitor: details.isFirstTimeVisitor ?? true,
                                 interestCategories: details.interestCategories?.length ? details.interestCategories : null,
                                 celebrationDay: details.celebrationDay || null,
                                 generationRules,
-                                is_day_trip: chatStartDate && chatEndDate && differenceInDays(chatEndDate, chatStartDate) === 0,
                                 source: 'chat_planner',
                                 lastUpdated: new Date().toISOString(),
                               };
@@ -3010,7 +2925,7 @@ export default function Start() {
                       if (!user.quizCompleted) {
                         setShowDNAPrompt(true);
                       } else {
-                        goToNextAfterStep1();
+                        goToStep2();
                       }
                     }}
                     onManualAuthRequired={() => {
@@ -3019,13 +2934,12 @@ export default function Start() {
                   />
                 )}
 
-                {currentStep === 2 && (
-                  startDate && endDate ? (
-                    <FlightHotelStep
-                      key="flight-hotel"
-                      destination={isMultiCity ? (multiCityDestinations[0]?.city || '') : destinationSelection.cityName}
-                      startDate={format(startDate, 'yyyy-MM-dd')}
-                      endDate={format(endDate, 'yyyy-MM-dd')}
+                {currentStep === 2 && startDate && endDate && (
+                  <FlightHotelStep
+                    key="flight-hotel"
+                    destination={isMultiCity ? (multiCityDestinations[0]?.city || '') : destinationSelection.cityName}
+                    startDate={format(startDate, 'yyyy-MM-dd')}
+                    endDate={format(endDate, 'yyyy-MM-dd')}
                     travelers={travelers}
                     outboundFlight={outboundFlight}
                     setOutboundFlight={setOutboundFlight}
@@ -3047,21 +2961,7 @@ export default function Start() {
                     setManualHotelList={setManualHotelList}
                     manualHotels={manualHotels}
                     setManualHotels={setManualHotels}
-                    onSubmit={() => {
-                      const legsToCheck = [outboundFlight, ...(showReturnFlight ? [returnFlight] : []), ...additionalLegs];
-                      for (const leg of legsToCheck) {
-                        const hasAnyData = !!(
-                          leg.departureAirport || leg.arrivalAirport ||
-                          leg.departureTime || leg.arrivalTime ||
-                          leg.airline || leg.flightNumber
-                        );
-                        if (hasAnyData && (!leg.departureAirport || !leg.arrivalAirport)) {
-                          toast.error('Please add both departure and arrival airports for your flight, or clear the flight fields to skip.');
-                          return;
-                        }
-                      }
-                      goToStep(3);
-                    }}
+                    onSubmit={() => goToStep(3)}
                     onBack={() => window.history.back()}
                     isSubmitting={false}
                     isMultiCity={isMultiCity}
@@ -3073,20 +2973,6 @@ export default function Start() {
                     onIntelligenceCapture={(intel) => setFlightIntelligence(intel)}
                     flightIntelligence={flightIntelligence}
                   />
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-16 px-6 text-center space-y-4">
-                      <p className="text-neutral-600 text-sm">
-                        Something went wrong — your trip dates were lost. Let's go back and re-enter them.
-                      </p>
-                      <Button
-                        onClick={() => goToStep(1)}
-                        variant="outline"
-                        className="mt-2"
-                      >
-                        Go Back to Step 1
-                      </Button>
-                    </div>
-                  )
                 )}
 
                 {currentStep === 3 && (
@@ -3304,7 +3190,7 @@ export default function Start() {
               className="w-full text-muted-foreground"
               onClick={() => {
                 setShowDNAPrompt(false);
-                goToNextAfterStep1();
+                goToStep2();
               }}
             >
               Skip for now
