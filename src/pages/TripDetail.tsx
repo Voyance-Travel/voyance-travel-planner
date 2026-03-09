@@ -1695,6 +1695,11 @@ export default function TripDetail() {
                   isMultiCity={!!(trip as any).is_multi_city || tripCities.length > 1}
                   tripCities={tripCities.map(c => ({ city_name: c.city_name, generation_status: c.generation_status }))}
                 />
+                {generationStalled && !showStalledUI && (
+                  <p className="text-sm text-muted-foreground text-center animate-pulse mt-2">
+                    Checking generation status...
+                  </p>
+                )}
               )}
 
               {/* Browse completed days while generating */}
