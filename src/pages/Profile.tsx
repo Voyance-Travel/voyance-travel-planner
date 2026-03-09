@@ -90,9 +90,9 @@ function computeTripProgress(trip: any): { progress?: number; label?: string; co
   const startDate = trip.start_date ? parseLocalDate(trip.start_date) : null;
   const now = new Date();
 
-  // Failed generation
+  // Needs another try
   if (itineraryStatus === 'failed') {
-    return { progress: 0, label: 'Generation failed. Try again', color: 'bg-destructive' };
+    return { progress: 0, label: 'Needs another try', color: 'bg-muted-foreground' };
   }
 
   // Currently generating

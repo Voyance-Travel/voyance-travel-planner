@@ -88,9 +88,17 @@ serve(async (req) => {
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[purchase-smart-finish] Error:", msg);
-    return new Response(JSON.stringify({ error: msg }), {
+    
+    // Map internal errors to user-safe error codes
+    let errorCode = 'internal_error';
+    if (msg.includes('Not authenticated') || msg.includes('authenticated')) errorCode = 'unauthorized';
+    else if (msg.includes('not found') || msg.includes('Not found')) errorCode = 'not_found';
+    else if (msg.includes('Not your trip')) errorCode = 'unauthorized';
+    else if (msg.includes('already_purchased')) errorCode = 'already_purchased';
+    
+    return new Response(JSON.stringify({ success: false, error_code: errorCode }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 400,
+      status: errorCode === 'unauthorized' ? 401 : errorCode === 'not_found' ? 404 : 400,
     });
   }
 });
