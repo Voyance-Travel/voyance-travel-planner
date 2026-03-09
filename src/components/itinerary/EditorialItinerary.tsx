@@ -3718,8 +3718,9 @@ export function EditorialItinerary({
          .maybeSingle();
        
        if (!existingBudget) {
-        // Delay slightly so the copy toast doesn't overlap
-        setTimeout(() => setShowGroupUnlockModal(true), 600);
+        // Close the share modal first so the group unlock modal isn't hidden behind it
+        setShowShareModal(false);
+        setTimeout(() => setShowGroupUnlockModal(true), 400);
       }
 
       // Grant first_share bonus (fire-and-forget)
