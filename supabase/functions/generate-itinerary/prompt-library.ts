@@ -1875,7 +1875,36 @@ export function buildTransitionDayPrompt(params: TransitionDayParams): string {
   const fromLabel = transitionFromCountry ? `${transitionFrom}, ${transitionFromCountry}` : transitionFrom;
   const toLabel = transitionToCountry ? `${transitionTo}, ${transitionToCountry}` : transitionTo;
   const isSameCountry = transitionFromCountry && transitionToCountry && transitionFromCountry === transitionToCountry;
-  const defaultMode = transportType || (isSameCountry ? 'train' : 'flight');
+
+  // Check if cities are in the same metro area (flights would be absurd)
+  const SAME_METRO_PAIRS: Record<string, string[]> = {
+    'new york': ['east rutherford', 'newark', 'jersey city', 'hoboken', 'brooklyn', 'queens', 'bronx', 'staten island', 'long island city', 'white plains', 'yonkers', 'fort lee', 'weehawken', 'secaucus', 'new york city', 'manhattan'],
+    'san francisco': ['oakland', 'berkeley', 'san jose', 'palo alto', 'daly city', 'fremont', 'redwood city', 'mountain view', 'sunnyvale'],
+    'los angeles': ['santa monica', 'pasadena', 'long beach', 'burbank', 'anaheim', 'hollywood', 'glendale', 'beverly hills', 'west hollywood'],
+    'london': ['windsor', 'croydon', 'greenwich', 'richmond', 'watford', 'kingston'],
+    'paris': ['versailles', 'saint-denis', 'la defense', 'boulogne'],
+    'tokyo': ['yokohama', 'kawasaki', 'chiba', 'saitama'],
+    'chicago': ['evanston', 'oak park', 'naperville', 'aurora'],
+    'washington': ['arlington', 'alexandria', 'bethesda', 'silver spring', 'georgetown'],
+    'boston': ['cambridge', 'somerville', 'brookline', 'quincy'],
+    'dallas': ['fort worth', 'arlington', 'plano', 'irving'],
+  };
+
+  const originLower = (transitionFrom || '').toLowerCase().trim();
+  const destLower = (transitionTo || '').toLowerCase().trim();
+  let tooCloseForFlight = false;
+
+  for (const [metro, suburbs] of Object.entries(SAME_METRO_PAIRS)) {
+    const allInMetro = [metro, ...suburbs];
+    const originInMetro = allInMetro.some(place => originLower.includes(place) || place.includes(originLower));
+    const destInMetro = allInMetro.some(place => destLower.includes(place) || place.includes(destLower));
+    if (originInMetro && destInMetro) {
+      tooCloseForFlight = true;
+      break;
+    }
+  }
+
+  const defaultMode = tooCloseForFlight ? 'rideshare' : (transportType || (isSameCountry ? 'train' : 'flight'));
 
   // Build confirmed booking schedule block if we have real times
   let confirmedScheduleBlock = '';
