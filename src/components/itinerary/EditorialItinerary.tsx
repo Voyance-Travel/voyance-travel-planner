@@ -8083,6 +8083,7 @@ function DayCard({
                           onViewReviews={aiLocked ? undefined : onViewReviews}
                           onTransportModeChange={onTransportModeChange}
                           changingTransportActivityId={changingTransportActivityId}
+                          transitOrigin={prevVisibleActivity?.location?.name || prevVisibleActivity?.location?.address || prevVisibleActivity?.title}
                           collaboratorColorMap={collaboratorColorMap}
                           aiLocked={aiLocked}
                           compact={compactCards}
