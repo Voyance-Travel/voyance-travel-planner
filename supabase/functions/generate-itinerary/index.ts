@@ -981,7 +981,8 @@ interface ValidationWarning {
  */
 function validateItineraryPersonalization(
   days: StrictDay[],
-  ctx: ValidationContext
+  ctx: ValidationContext,
+  userActivities: any[] = []
 ): ValidationResult {
   console.log('[Validator] Starting personalization validation...');
   
@@ -1033,7 +1034,7 @@ function validateItineraryPersonalization(
       if (seenActivities.has(activityKey)) {
         // Check if this is a recurring event (sporting event, festival, conference)
         // that SHOULD repeat across days
-        if (!isRecurringEvent(activity, [])) { // Empty user activities array for now
+        if (!isRecurringEvent(activity, userActivities)) {
           violations.push({
             type: 'duplicate',
             activityId: activity.id,
@@ -4570,7 +4571,7 @@ interface DayValidationResult {
 }
 
 // Validate a single generated day for quality and correctness
-function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boolean, isLastDay: boolean, totalDays: number, previousDays: StrictDay[] = [], isSmartFinish: boolean = false, isDayTrip: boolean = false): DayValidationResult {
+function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boolean, isLastDay: boolean, totalDays: number, previousDays: StrictDay[] = [], isSmartFinish: boolean = false, isDayTrip: boolean = false, userActivities: any[] = []): DayValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -4745,7 +4746,7 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
       // Transport/logistics adjacency is expected in real itineraries (e.g. rideshare -> venue)
       if (!currIsTransportLike && !prevIsTransportLike && conceptSimilarity(currConcept, prevConcept)) {
         // Allow recurring events back-to-back (e.g., "Morning at US Open" + "Afternoon at US Open")
-        if (isRecurringEvent(act, []) || isRecurringEvent(prevAct, [])) { // Empty user activities array for now
+        if (isRecurringEvent(act, userActivities) || isRecurringEvent(prevAct, userActivities)) {
           // This is fine — same event, different time blocks
         } else if (isSmartFinish) {
           // In Smart Finish, user anchors may cluster around neighborhoods — downgrade to warning
@@ -4839,7 +4840,7 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
       for (const prevConcept of previousConcepts) {
         if (conceptSimilarity(actConcept, prevConcept)) {
           // Skip dedup for recurring/multi-day events — they SHOULD repeat
-          if (isRecurringEvent(act, [])) { // Empty user activities array for now
+          if (isRecurringEvent(act, userActivities)) {
             console.log(`[validateDay] Allowing recurring event "${act.title}" (multi-day event, concept match with previous day)`);
             break;
           }
@@ -6102,7 +6103,12 @@ Generate activities for this day following ALL constraints above.`;
         }
       }
 
-      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish, !!context.isDayTrip);
+      // Build user activities for recurring event detection
+      const _mustDoText = (context.mustDoActivities as string) || '';
+      const _parsedMustDos = _mustDoText.split(/[,;\n]/).map(s => s.trim()).filter(Boolean).map(name => ({ name, isRecurring: true }));
+      const _userActivities = [...((context as any).userActivities || []), ..._parsedMustDos];
+
+      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish, !!context.isDayTrip, _userActivities);
 
       // Transition day validation: MUST contain at least one inter-city transport activity
       if (isTransitionDay && dayCity?.transitionFrom && dayCity?.transitionTo) {
@@ -9192,7 +9198,12 @@ If the purpose is a specific event, plan at least ONE full day around that event
         [] // Trip intents loaded separately for full generation
       );
       
-      const validationResult = validateItineraryPersonalization(aiResult.days, validationCtx);
+      // Build user activities for recurring event detection in personalization validator
+      const _pMustDoText = (context.mustDoActivities as string) || '';
+      const _pParsedMustDos = _pMustDoText.split(/[,;\n]/).map(s => s.trim()).filter(Boolean).map(name => ({ name, isRecurring: true }));
+      const _pUserActivities = [...((context as any).userActivities || []), ..._pParsedMustDos];
+
+      const validationResult = validateItineraryPersonalization(aiResult.days, validationCtx, _pUserActivities);
       
       // Log validation results
       console.log(`[Stage 2.6] Personalization score: ${validationResult.personalizationScore}/100`);
