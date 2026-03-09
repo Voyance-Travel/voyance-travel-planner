@@ -547,19 +547,25 @@ serve(async (req) => {
       return errorResponse('Invalid action', 'INVALID_ACTION', 400, { validActions: [...Object.keys(FIXED_COSTS), ...VARIABLE_COST_ACTIONS] });
     }
 
-    // ── Idempotency check: skip duplicate charges ──
-    const idempotencyKey = metadata?.idempotencyKey as string | undefined;
-    if (idempotencyKey && tripId) {
+    // ── Race-safe idempotency: use pending_credit_charges insert as a lock ──
+    // The idempotency key (or a generated UUID) is inserted into pending_credit_charges
+    // with a unique constraint. If two concurrent requests race, only one insert succeeds;
+    // the loser gets a duplicate-key error and returns early without double-charging.
+    const idempotencyKey = (metadata?.idempotencyKey as string) || crypto.randomUUID();
+    let pendingChargeId: string | null = null;
+
+    // First, check if this idempotency key was already fully processed in the ledger
+    if (metadata?.idempotencyKey && tripId) {
       const { data: existing } = await supabaseAdmin
         .from('credit_ledger')
         .select('id, credits_delta')
         .eq('user_id', user.id)
         .eq('action_type', action)
         .eq('trip_id', tripId)
-        .contains('metadata', { idempotencyKey })
+        .contains('metadata', { idempotencyKey: metadata.idempotencyKey })
         .limit(1);
       if (existing && existing.length > 0) {
-        console.log('[spend-credits] Idempotent hit — returning cached result for key:', idempotencyKey);
+        console.log('[spend-credits] Idempotent hit — returning cached result for key:', metadata.idempotencyKey);
         const balance = await syncBalanceCache(supabaseAdmin, user.id);
         return new Response(
           JSON.stringify({
@@ -574,31 +580,41 @@ serve(async (req) => {
       }
     }
 
-    // ── Create pending charge record for high-value actions (safety net) ──
-    // If the downstream operation fails, this pending charge enables auto-refund.
-    let pendingChargeId: string | null = null;
-    const HIGH_VALUE_ACTIONS = ['trip_generation', 'smart_finish', 'hotel_optimization', 'regenerate_trip'];
-    if (HIGH_VALUE_ACTIONS.includes(action) && tripId) {
-      try {
-        const { data: pcRow, error: pcErr } = await supabaseAdmin
-          .from('pending_credit_charges')
-          .insert({
-            user_id: user.id,
-            trip_id: tripId,
-            action: action,
-            credits_amount: cost,
-            status: 'pending',
-          })
-          .select('id')
-          .single();
-        if (pcErr) {
-          console.error('[spend-credits] Failed to create pending charge (non-fatal):', pcErr);
-        } else {
-          pendingChargeId = pcRow.id;
+    // Insert pending charge as a lock — unique index on idempotency_key prevents duplicates
+    try {
+      const { data: pcRow, error: pcErr } = await supabaseAdmin
+        .from('pending_credit_charges')
+        .insert({
+          user_id: user.id,
+          trip_id: tripId || '00000000-0000-0000-0000-000000000000',
+          action: action,
+          credits_amount: cost,
+          status: 'pending',
+          idempotency_key: idempotencyKey,
+        })
+        .select('id')
+        .single();
+
+      if (pcErr) {
+        // Duplicate key = another request already claimed this charge
+        if (pcErr.code === '23505' || pcErr.message?.includes('duplicate') || pcErr.message?.includes('unique')) {
+          console.log(`[spend-credits] Duplicate charge prevented for idempotency_key: ${idempotencyKey}`);
+          return new Response(
+            JSON.stringify({
+              success: true,
+              alreadyProcessed: true,
+              message: 'Charge already being processed',
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
         }
-      } catch (pcCreateErr) {
-        console.error('[spend-credits] Pending charge creation error (non-fatal):', pcCreateErr);
+        // Non-duplicate error: log but don't block (fallback to no-lock behavior)
+        console.error('[spend-credits] Failed to create pending charge lock (non-fatal):', pcErr);
+      } else {
+        pendingChargeId = pcRow.id;
       }
+    } catch (pcCreateErr) {
+      console.error('[spend-credits] Pending charge lock creation error (non-fatal):', pcCreateErr);
     }
 
     // ── FIFO deduction with write-ahead ledger ──
