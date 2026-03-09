@@ -250,6 +250,185 @@ function sanitizeDateString(raw: unknown, fallback?: string): string {
 }
 
 /**
+ * Detect whether an activity is a recurring/multi-day event that should
+ * be ALLOWED to repeat across trip days. These are NOT duplicates — they're
+ * the reason for the trip.
+ *
+ * Categories:
+ * - Sporting events (US Open, Wimbledon, World Cup, Olympics, Formula 1, etc.)
+ * - Music festivals (Coachella, Glastonbury, Tomorrowland, etc.)
+ * - Conferences & conventions (CES, SXSW, Comic-Con, etc.)
+ * - Multi-day cultural events (Carnival, Oktoberfest, etc.)
+ * - Any activity the user explicitly marked as recurring or all-day
+ */
+function isRecurringEvent(activity: any, userActivities?: any[]): boolean {
+  const title = (activity.title || '').toLowerCase();
+  const category = (activity.category || '').toLowerCase();
+  const tags = (activity.tags || []).map((t: string) => t.toLowerCase());
+  const description = (activity.description || '').toLowerCase();
+
+  // ─── 1. Explicit flags from user input ───
+  // If the user marked this as all-day or recurring, always allow
+  if (activity.isAllDay === true || activity.isRecurring === true) {
+    return true;
+  }
+
+  // If this activity matches a user-requested activity that spans multiple days
+  if (userActivities && userActivities.length > 0) {
+    const titleNorm = title.replace(/[^a-z0-9\s]/g, '').trim();
+    for (const ua of userActivities) {
+      const uaName = (ua.name || ua.title || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+      if (uaName && (titleNorm.includes(uaName) || uaName.includes(titleNorm))) {
+        // User explicitly requested this — check if multi-day
+        if (ua.isAllDay || ua.isRecurring || !ua.day) {
+          return true; // No specific day = should appear on multiple days
+        }
+      }
+    }
+  }
+
+  // ─── 2. Sporting event patterns ───
+  const sportingPatterns = [
+    /\b(us|u\.s\.) open\b/,
+    /\b(french|australian) open\b/,
+    /\bwimbledon\b/,
+    /\bworld cup\b/,
+    /\bolympic/,
+    /\bsuper bowl\b/,
+    /\bgrand prix\b/,
+    /\bformula (1|one)\b/,
+    /\bf1\b/,
+    /\bnascar\b/,
+    /\btour de france\b/,
+    /\bworld series\b/,
+    /\bmarch madness\b/,
+    /\bnba (finals|playoffs|game)/,
+    /\bnfl (game|playoff|sunday)/,
+    /\bryder cup\b/,
+    /\bmasters (tournament|golf)/,
+    /\bfifa\b/,
+    /\buefa\b/,
+    /\bchampions league\b/,
+    /\bipl\b/,
+    /\bcricket (world|test|match)/,
+    /\brugby (world|six nations)/,
+    /\btennis (tournament|open|championship)/,
+    /\bgolf (tournament|open|championship)/,
+    /\brace (day|week)/,
+    /\bderby\b/,
+    /\bstadium\b.*\b(game|match|event)\b/,
+  ];
+
+  // ─── 3. Festival & music event patterns ───
+  const festivalPatterns = [
+    /\bcoachella\b/,
+    /\bglastonbury\b/,
+    /\btomorrowland\b/,
+    /\blollapalooza\b/,
+    /\bbonnaroo\b/,
+    /\bburning man\b/,
+    /\bsxsw\b/,
+    /\bprimavera\b/,
+    /\bsonar\b/,
+    /\bultra (music|miami)\b/,
+    /\belectric (daisy|forest|zoo)\b/,
+    /\bfestival\b/,
+    /\bmusic (festival|fest)\b/,
+    /\bcarnival\b/,
+    /\bmardi gras\b/,
+    /\boktoberfest\b/,
+    /\bdiwali\b/,
+    /\bholi\b/,
+    /\brain\b/,
+    /\bferia\b/,
+    /\bfiesta\b/,
+  ];
+
+  // ─── 4. Conference & convention patterns ───
+  const conferencePatterns = [
+    /\bconference\b/,
+    /\bconvention\b/,
+    /\bexpo\b/,
+    /\bsummit\b/,
+    /\bsymposium\b/,
+    /\btrade show\b/,
+    /\bcomic[- ]?con\b/,
+    /\bces\b/,
+    /\bre:invent\b/,
+    /\bgoogle i\/o\b/,
+    /\bwwdc\b/,
+    /\bi\/o\b.*\bconference\b/,
+    /\baws\b.*\b(summit|conference)\b/,
+  ];
+
+  // ─── 5. Category-based detection ───
+  const recurringCategories = [
+    'sporting_event', 'sports_event', 'festival', 'conference',
+    'convention', 'tournament', 'championship', 'multi_day_event',
+    'recurring_event',
+  ];
+
+  // Check all patterns
+  const allText = `${title} ${description} ${tags.join(' ')}`;
+  const allPatterns = [...sportingPatterns, ...festivalPatterns, ...conferencePatterns];
+
+  for (const pattern of allPatterns) {
+    if (pattern.test(allText)) return true;
+  }
+
+  // Check categories
+  if (recurringCategories.includes(category)) return true;
+  for (const tag of tags) {
+    if (recurringCategories.includes(tag)) return true;
+  }
+
+  // ─── 6. Duration-based heuristic ───
+  // If an activity is 5+ hours, it's likely an all-day event worth repeating
+  if (activity.startTime && activity.endTime) {
+    const start = parseTimeToMinutes(activity.startTime);
+    const end = parseTimeToMinutes(activity.endTime);
+    if (start !== null && end !== null && (end - start) >= 300) {
+      // 5+ hours AND has a proper name (not "Free Time")
+      const genericNames = ['free time', 'relax', 'rest', 'downtime', 'leisure'];
+      if (!genericNames.some(g => title.includes(g))) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Parse "HH:MM" or "H:MM AM/PM" to minutes since midnight.
+ * Returns null if unparseable.
+ */
+function parseTimeToMinutes(timeStr: string): number | null {
+  if (!timeStr) return null;
+  
+  // Handle "9:00 AM", "2:30 PM" format
+  const ampmMatch = timeStr.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i);
+  if (ampmMatch) {
+    let hours = parseInt(ampmMatch[1]);
+    const mins = parseInt(ampmMatch[2]);
+    const period = ampmMatch[3].toLowerCase();
+    
+    if (period === 'pm' && hours < 12) hours += 12;
+    if (period === 'am' && hours === 12) hours = 0;
+    
+    return hours * 60 + mins;
+  }
+
+  // Handle "09:00", "14:30" format  
+  const milMatch = timeStr.match(/(\d{1,2}):(\d{2})/);
+  if (milMatch) {
+    return parseInt(milMatch[1]) * 60 + parseInt(milMatch[2]);
+  }
+
+  return null;
+}
+
+/**
  * Recursively walk a parsed AI response object and sanitize any field whose
  * key contains "date" (case-insensitive) so it strictly matches YYYY-MM-DD.
  */
@@ -852,14 +1031,20 @@ function validateItineraryPersonalization(
       // Check for duplicates (same title in same trip)
       const activityKey = `${titleLower}::${locationLower}`;
       if (seenActivities.has(activityKey)) {
-        violations.push({
-          type: 'duplicate',
-          activityId: activity.id,
-          activityTitle: activity.title,
-          dayNumber: day.dayNumber,
-          details: `Duplicate activity found: "${activity.title}"`,
-          severity: 'major'
-        });
+        // Check if this is a recurring event (sporting event, festival, conference)
+        // that SHOULD repeat across days
+        if (!isRecurringEvent(activity)) {
+          violations.push({
+            type: 'duplicate',
+            activityId: activity.id,
+            activityTitle: activity.title,
+            dayNumber: day.dayNumber,
+            details: `Duplicate activity found: "${activity.title}"`,
+            severity: 'major'
+          });
+        } else {
+          console.log(`[validateItinerary] Allowing recurring event "${activity.title}" on day ${day.dayNumber} (multi-day event)`);
+        }
       }
       seenActivities.add(activityKey);
       
@@ -4559,7 +4744,10 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
       
       // Transport/logistics adjacency is expected in real itineraries (e.g. rideshare -> venue)
       if (!currIsTransportLike && !prevIsTransportLike && conceptSimilarity(currConcept, prevConcept)) {
-        if (isSmartFinish) {
+        // Allow recurring events back-to-back (e.g., "Morning at US Open" + "Afternoon at US Open")
+        if (isRecurringEvent(act) || isRecurringEvent(prevAct)) {
+          // This is fine — same event, different time blocks
+        } else if (isSmartFinish) {
           // In Smart Finish, user anchors may cluster around neighborhoods — downgrade to warning
           warnings.push(`Activities ${i} and ${i + 1} are similar: "${prevAct.title}" followed by "${act.title}" - consider adding variety`);
         } else {
@@ -4650,6 +4838,12 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
       // In normal mode, culinary_class and wine_tasting are hard errors; everything else is a warning
       for (const prevConcept of previousConcepts) {
         if (conceptSimilarity(actConcept, prevConcept)) {
+          // Skip dedup for recurring/multi-day events — they SHOULD repeat
+          if (isRecurringEvent(act)) {
+            console.log(`[validateDay] Allowing recurring event "${act.title}" (multi-day event, concept match with previous day)`);
+            break;
+          }
+          
           if (!isSmartFinish && (actType === 'culinary_class' || actType === 'wine_tasting')) {
             errors.push(`TRIP-WIDE DUPLICATE: "${act.title}" is too similar to an activity from a previous day.`);
           } else {
@@ -13080,10 +13274,16 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       const existingData = (tripCheck.itinerary_data as any) || {};
       const existingDays: any[] = Array.isArray(existingData.days) ? existingData.days : [];
       const previousActivities: string[] = [];
+      const recurringEventNames: string[] = [];
+      
       for (const day of existingDays) {
         if (day?.activities) {
           day.activities.forEach((act: any) => {
-            previousActivities.push(act.title || act.name || '');
+            if (isRecurringEvent(act)) {
+              recurringEventNames.push(act.title || act.name || '');
+            } else {
+              previousActivities.push(act.title || act.name || '');
+            }
           });
         }
       }
