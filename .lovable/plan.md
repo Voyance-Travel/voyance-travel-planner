@@ -1,50 +1,19 @@
-## Journey Sequential Generation — Implementation Status
 
-### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-**Implemented:**
+## Already Implemented
 
-1. **`src/hooks/useGenerationGate.ts`**:
-   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
-   - Added journey detection: fetches all sibling legs when `journeyId` is present
-   - Sums credit costs across all journey legs for unified billing
-   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
-   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
+The TransitModePicker feature described in your request is **already fully implemented**:
 
-2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
-   - Added `journeyLegs` state for cost breakdown display
-   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
-   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
-   - Updated cost confirmation dialog:
-     - Shows "Journey Cost Breakdown" header for journeys
-     - Lists each leg with city, days, and cost
-     - Shows "Journey Total" instead of "Total"
-     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
-     - Disabled partial generation for journeys (must pay full upfront)
-     - "Confirm & Generate Journey" button text for journeys
+1. **`src/components/itinerary/TransitModePicker.tsx`** exists (444 lines) with:
+   - Tappable row that expands/collapses inline transport options
+   - Calls `airport-transfers` edge function to fetch alternatives
+   - AI recommendation display
+   - "Select" button to switch modes (updates title, duration, cost via `onEdit`)
+   - Separate three-dot context menu with `e.stopPropagation()` — Edit Details, Move, Remove
 
-### Part 2: Auto-Chain Generation (TODO)
+2. **`src/components/itinerary/EditorialItinerary.tsx`** (line 8519-8562) already renders `<TransitModePicker>` for all transport activities via the `if (isTransport)` early return.
 
-When leg 1 completes generation, the backend should:
-1. Check for next queued leg in the journey
-2. Automatically trigger `generate-trip` for the next leg
-3. Continue until all legs are generated
+3. **The critical bug prevention** is already handled: the row `onClick` calls `handleExpand` (not `onEdit`), and the dropdown trigger uses `e.stopPropagation()`.
 
-Files to modify:
-- `supabase/functions/generate-trip/index.ts` or similar edge function
-- Add post-generation hook to detect and chain to next journey leg
+No code changes are needed. If you're experiencing the Edit Activity dialog opening when tapping a transit row, that would be a runtime bug worth investigating — let me know and I can debug it.
 
-### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
-
-**Implemented:**
-
-1. **`src/pages/TripDetail.tsx`**:
-   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
-   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
-   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
-   - Added distinct "queued" state UI:
-     - Clock icon with hourglass badge
-     - "{destination} is up next" heading
-     - Explanation text about waiting for previous leg
-     - "View previous city" button to navigate back to the generating leg
-   - Added `Clock` to lucide-react imports
