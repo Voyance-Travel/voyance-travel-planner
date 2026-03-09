@@ -145,6 +145,7 @@ export function ItineraryGenerator({
   const [showGenericWarning, setShowGenericWarning] = useState(false);
   const [showCostConfirm, setShowCostConfirm] = useState(false);
   const [prePhase, setPrePhase] = useState<Extract<GenerationStep, 'gathering-dna' | 'personalizing' | 'preparing'> | null>(null);
+  const [journeyLegs, setJourneyLegs] = useState<Array<{ city: string; days: number; cost: number }>>([]);
 
   const fetchCompletedDaysFromBackend = useCallback(async (): Promise<GeneratedDay[]> => {
     if (!tripId) return [];
@@ -468,6 +469,45 @@ export function ItineraryGenerator({
     const totalDays = differenceInCalendarDays(parseLocalDate(endDate), parseLocalDate(startDate)) + 1;
     const cities = isMultiCity ? [] : [destination]; // Multi-city cities resolved inside gate if needed
 
+    // ── Fetch journey info if this is a journey leg ──
+    let journeyId: string | undefined;
+    let journeyTotalLegs: number | undefined;
+
+    const { data: tripRow } = await supabase
+      .from('trips')
+      .select('journey_id, journey_order, journey_total_legs')
+      .eq('id', tripId)
+      .single();
+
+    if (tripRow?.journey_id && tripRow.journey_order === 1) {
+      // Only do journey costing on the FIRST leg
+      journeyId = tripRow.journey_id;
+      journeyTotalLegs = tripRow.journey_total_legs ?? undefined;
+
+      // Fetch all legs for cost breakdown display
+      const { data: allLegs } = await supabase
+        .from('trips')
+        .select('destination, start_date, end_date')
+        .eq('journey_id', journeyId)
+        .neq('status', 'cancelled')
+        .order('journey_order', { ascending: true });
+
+      if (allLegs && allLegs.length > 1) {
+        const breakdown = allLegs.map(leg => {
+          const legDays = Math.max(1, Math.ceil(
+            (new Date(leg.end_date).getTime() - new Date(leg.start_date).getTime()) / (1000 * 60 * 60 * 24)
+          ) + 1);
+          const legEst = calculateTripCredits({ days: legDays, cities: [leg.destination] });
+          return { city: leg.destination, days: legDays, cost: legEst.totalCredits };
+        });
+        setJourneyLegs(breakdown);
+      } else {
+        setJourneyLegs([]);
+      }
+    } else {
+      setJourneyLegs([]);
+    }
+
     // PRE-AUTHORIZE: Check credits and deduct if affordable
     setPrePhase('preparing');
     let gateResult: GateResult;
@@ -476,6 +516,8 @@ export function ItineraryGenerator({
         tripId,
         days: totalDays,
         cities,
+        journeyId,
+        journeyTotalLegs,
       });
     } catch (err: any) {
       // Distinguish credit errors from server/network errors
@@ -922,11 +964,16 @@ export function ItineraryGenerator({
           
           {/* Cost Confirmation Dialog */}
           {showCostConfirm && costEstimate.totalCredits > 0 && (() => {
-            const canAffordAll = currentBalance >= costEstimate.totalCredits;
+            // Use journey total if this is a journey, otherwise single-trip cost
+            const effectiveTotalCost = journeyLegs.length > 1 
+              ? journeyLegs.reduce((sum, leg) => sum + leg.cost, 0)
+              : costEstimate.totalCredits;
+            const canAffordAll = currentBalance >= effectiveTotalCost;
             const costPerDay = 60; // CREDIT_COSTS standard
             const affordableDays = costPerDay > 0 ? Math.floor(currentBalance / costPerDay) : 0;
             const partialCost = affordableDays * costPerDay;
-            const canAffordPartial = !canAffordAll && affordableDays >= 1;
+            // Disable partial generation for journeys — must pay full upfront
+            const canAffordPartial = journeyLegs.length <= 1 && !canAffordAll && affordableDays >= 1;
 
             return (
               <motion.div
@@ -936,28 +983,53 @@ export function ItineraryGenerator({
               >
                 <div className="flex items-center gap-2 mb-3">
                   <Coins className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-semibold text-foreground">Cost Breakdown</span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {journeyLegs.length > 1 ? 'Journey Cost Breakdown' : 'Cost Breakdown'}
+                  </span>
                 </div>
                 <div className="space-y-1.5 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">{totalDaysEstimate} days × {costPerDay} cr/day</span>
-                    <span className="text-foreground">{costEstimate.baseCredits} cr</span>
-                  </div>
-                  {costEstimate.multiCityFee > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Multi-city fee</span>
-                      <span className="text-foreground">+{costEstimate.multiCityFee} cr</span>
+                  {/* Journey breakdown - show each leg */}
+                  {journeyLegs.length > 1 && (
+                    <div className="space-y-1 mb-3">
+                      {journeyLegs.map((leg, i) => (
+                        <div key={i} className="flex justify-between text-muted-foreground">
+                          <span>{leg.city} ({leg.days} days)</span>
+                          <span>{formatCredits(leg.cost)} credits</span>
+                        </div>
+                      ))}
+                      <div className="border-t border-border/50 pt-1" />
                     </div>
                   )}
-                  {costEstimate.complexity.multiplier > 1 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">{costEstimate.complexity.tierLabel} complexity</span>
-                      <span className="text-foreground">×{costEstimate.complexity.multiplier}</span>
-                    </div>
+                  {/* Single trip breakdown - only show if not a journey */}
+                  {journeyLegs.length <= 1 && (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">{totalDaysEstimate} days × {costPerDay} cr/day</span>
+                        <span className="text-foreground">{costEstimate.baseCredits} cr</span>
+                      </div>
+                      {costEstimate.multiCityFee > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Multi-city fee</span>
+                          <span className="text-foreground">+{costEstimate.multiCityFee} cr</span>
+                        </div>
+                      )}
+                      {costEstimate.complexity.multiplier > 1 && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">{costEstimate.complexity.tierLabel} complexity</span>
+                          <span className="text-foreground">×{costEstimate.complexity.multiplier}</span>
+                        </div>
+                      )}
+                    </>
                   )}
+                  {/* Total and balance */}
                   <div className="border-t border-border pt-1.5 flex justify-between font-semibold">
-                    <span className="text-foreground">Total</span>
-                    <span className="text-primary">{formatCredits(costEstimate.totalCredits)} credits</span>
+                    <span className="text-foreground">{journeyLegs.length > 1 ? 'Journey Total' : 'Total'}</span>
+                    <span className="text-primary">
+                      {formatCredits(journeyLegs.length > 1 
+                        ? journeyLegs.reduce((sum, leg) => sum + leg.cost, 0) 
+                        : costEstimate.totalCredits
+                      )} credits
+                    </span>
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground">Your balance</span>
@@ -967,7 +1039,7 @@ export function ItineraryGenerator({
                   </div>
                   {canAffordAll && (
                     <div className="text-xs text-muted-foreground">
-                      After: {formatCredits(currentBalance - costEstimate.totalCredits)} credits remaining
+                      After: {formatCredits(currentBalance - effectiveTotalCost)} credits remaining
                     </div>
                   )}
                   {canAffordPartial && (
@@ -981,7 +1053,7 @@ export function ItineraryGenerator({
                   {canAffordAll ? (
                     <Button size="sm" onClick={handleConfirmGenerate} className="w-full gap-1.5">
                       <Sparkles className="h-3.5 w-3.5" />
-                      Confirm & Generate
+                      {journeyLegs.length > 1 ? 'Confirm & Generate Journey' : 'Confirm & Generate'}
                     </Button>
                   ) : canAffordPartial ? (
                     <Button size="sm" onClick={() => handleConfirmPartialGenerate(affordableDays)} className="w-full gap-1.5">
@@ -992,7 +1064,7 @@ export function ItineraryGenerator({
                     <Button size="sm" onClick={() => {
                       setShowCostConfirm(false);
                       showOutOfCredits({
-                        creditsNeeded: costEstimate.totalCredits,
+                        creditsNeeded: effectiveTotalCost,
                         creditsAvailable: currentBalance,
                         tripId,
                       });
