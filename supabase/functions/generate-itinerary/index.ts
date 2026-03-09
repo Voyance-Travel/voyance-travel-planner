@@ -5517,6 +5517,11 @@ ${previousActivities.length > 0 ? `AVOID REPEATING THESE SPECIFIC ACTIVITIES (DO
 NOTE: The previous-activities list is ONLY for de-duplication. Do NOT treat it as a signal for spending style.
 ${bannedTypes.length > 0 ? `\n🚫 BANNED EXPERIENCE TYPES (already done on previous days - DO NOT INCLUDE): ${bannedTypes.join(', ')}\n` : ''}
 
+IMPORTANT: Some activities are multi-day events that the traveler attends repeatedly (sporting events, festivals, conferences).
+These are NOT duplicates — schedule them every day they apply.
+Examples: "US Open" over 5 days, "Coachella" over 3 days, "CES" over 4 days.
+If the traveler requested a multi-day event, include it as the PRIMARY activity on each relevant day.
+
 CRITICAL REMINDERS:
 1. ${effectiveMinActivities}-${effectiveMaxActivities} scheduled activities required. Going under ${effectiveMinActivities} OR over ${effectiveMaxActivities} = FAILURE.
 2. Check the archetype's avoid list. If it says "no spa", there are ZERO spa activities.
