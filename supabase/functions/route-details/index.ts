@@ -11,34 +11,54 @@ serve(async (req) => {
   }
 
   try {
-    const { origin, destination, mode } = await req.json();
+    const { origin, destination, mode: requestedMode } = await req.json();
+    const mode = requestedMode || 'transit';
 
-    if (!origin || !destination || !mode) {
-      return new Response(JSON.stringify({ error: 'Missing origin, destination, or mode' }), {
+    if (!origin || !destination) {
+      return new Response(JSON.stringify({ error: 'origin and destination are required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const GOOGLE_MAPS_API_KEY = Deno.env.get('GOOGLE_MAPS_API_KEY');
     if (!GOOGLE_MAPS_API_KEY) {
-      return new Response(JSON.stringify({ steps: [], summary: 'Route details unavailable' }), {
+      console.error('[route-details] GOOGLE_MAPS_API_KEY not set');
+      return new Response(JSON.stringify({ steps: [], summary: 'Route details unavailable (no API key)' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const params = new URLSearchParams({
+    console.log(`[route-details] ${mode}: "${origin}" → "${destination}"`);
+
+    const params: Record<string, string> = {
       origin,
       destination,
-      mode, // 'driving', 'transit', 'walking'
-      departure_time: 'now',
+      mode,
       key: GOOGLE_MAPS_API_KEY,
-    });
+    };
 
-    const resp = await fetch(`https://maps.googleapis.com/maps/api/directions/json?${params}`);
+    // departure_time is only valid for driving and transit, NOT walking
+    if (mode === 'driving' || mode === 'transit') {
+      params.departure_time = 'now';
+    }
+
+    const url = `https://maps.googleapis.com/maps/api/directions/json?${new URLSearchParams(params)}`;
+    const resp = await fetch(url);
     const data = await resp.json();
 
+    console.log(`[route-details] Google status: ${data.status}, error_message: ${data.error_message || 'none'}`);
+
     if (data.status !== 'OK' || !data.routes?.[0]?.legs?.[0]) {
-      return new Response(JSON.stringify({ steps: [], summary: 'Route not available' }), {
+      return new Response(JSON.stringify({
+        steps: [],
+        summary: data.status === 'ZERO_RESULTS'
+          ? 'No route found for this mode of transport'
+          : 'Route not available',
+        totalDuration: '',
+        totalDistance: '',
+        googleStatus: data.status,
+        errorMessage: data.error_message || null,
+      }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -108,6 +128,8 @@ serve(async (req) => {
       }
     }
 
+    console.log(`[route-details] Returning ${formattedSteps.length} steps, ${leg.duration?.text}`);
+
     return new Response(JSON.stringify({
       steps: formattedSteps,
       summary: summaryParts.join(' → '),
@@ -117,8 +139,8 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
-    console.error('Route details error:', error);
-    return new Response(JSON.stringify({ error: 'Route lookup failed' }), {
+    console.error('[route-details] Error:', error);
+    return new Response(JSON.stringify({ error: 'Route lookup failed', details: String(error) }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
