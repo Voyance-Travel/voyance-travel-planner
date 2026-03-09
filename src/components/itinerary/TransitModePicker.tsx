@@ -190,6 +190,30 @@ export function TransitModePicker({
 
         setOptions(filtered);
         setAiRecommendation(data.aiRecommendation || '');
+
+        // Fetch real walking data for the Walk option
+        if (!isAirportRoute && filtered.some(o => o.id === 'walk')) {
+          const walkOrigin = transitOrigin || city;
+          const walkDest = transitDestination + ', ' + city;
+          supabase.functions.invoke('route-details', {
+            body: { origin: walkOrigin, destination: walkDest, mode: 'walking' },
+          }).then(({ data: walkData }) => {
+            if (walkData?.totalDuration && walkData?.totalDistance) {
+              setOptions(prev => prev.map(o => {
+                if (o.id === 'walk') {
+                  return {
+                    ...o,
+                    duration: walkData.totalDuration,
+                    estimatedCost: 'Free',
+                    route: `Walk ${walkData.totalDuration} (${walkData.totalDistance})`,
+                    notes: `${walkData.totalDistance} walk`,
+                  };
+                }
+                return o;
+              }));
+            }
+          }).catch(() => { /* keep "Varies" as fallback */ });
+        }
       }
     } catch (err) {
       console.error('Failed to fetch transit options:', err);
