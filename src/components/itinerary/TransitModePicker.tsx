@@ -246,8 +246,40 @@ export function TransitModePicker({
     }
   }, [activity, activityIndex, dayIndex, onEdit, onActivityUpdated, transitDestination]);
 
-  const toggleOptionDetail = (optionId: string) => {
-    setExpandedOptionId(prev => prev === optionId ? null : optionId);
+  const fetchRouteDetails = useCallback(async (option: TransportOptionData) => {
+    if (routeDetailsCache[option.id] !== undefined || loadingRouteId === option.id) return;
+    setLoadingRouteId(option.id);
+    try {
+      const googleMode = option.mode === 'taxi' || option.mode === 'uber' || option.mode === 'rideshare' ? 'driving'
+        : option.mode === 'train' || option.mode === 'metro' || option.mode === 'bus' || option.mode === 'transit' ? 'transit'
+        : option.mode === 'walk' ? 'walking'
+        : 'driving';
+
+      const origin = transitOrigin || activity.location?.address || city;
+      const destination = activity.location?.name || activity.location?.address || transitDestination;
+
+      const { data, error } = await supabase.functions.invoke('route-details', {
+        body: { origin, destination, mode: googleMode },
+      });
+
+      if (!error && data?.steps?.length > 0) {
+        setRouteDetailsCache(prev => ({ ...prev, [option.id]: data as RouteDetails }));
+      } else {
+        setRouteDetailsCache(prev => ({ ...prev, [option.id]: null }));
+      }
+    } catch {
+      setRouteDetailsCache(prev => ({ ...prev, [option.id]: null }));
+    } finally {
+      setLoadingRouteId(null);
+    }
+  }, [routeDetailsCache, loadingRouteId, transitOrigin, activity, city, transitDestination]);
+
+  const toggleOptionDetail = (optionId: string, option?: TransportOptionData) => {
+    const next = expandedOptionId === optionId ? null : optionId;
+    setExpandedOptionId(next);
+    if (next && option && routeDetailsCache[optionId] === undefined) {
+      fetchRouteDetails(option);
+    }
   };
 
   return (
