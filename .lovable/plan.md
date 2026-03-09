@@ -1,78 +1,28 @@
-## Journey Sequential Generation — Implementation Status
 
-### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-**Implemented:**
+## Fix: Share Link "Not Valid" + StalePendingCharge Infinite Loop + Invite Telemetry
 
-1. **`src/hooks/useGenerationGate.ts`**:
-   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
-   - Added journey detection: fetches all sibling legs when `journeyId` is present
-   - Sums credit costs across all journey legs for unified billing
-   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
-   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
+### Changes
 
-2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
-   - Added `journeyLegs` state for cost breakdown display
-   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
-   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
-   - Updated cost confirmation dialog:
-     - Shows "Journey Cost Breakdown" header for journeys
-     - Lists each leg with city, days, and cost
-     - Shows "Journey Total" instead of "Total"
-     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
-     - Disabled partial generation for journeys (must pay full upfront)
-     - "Confirm & Generate Journey" button text for journeys
+#### 1. Database Migration (single migration)
+- Add `replaced_at TIMESTAMPTZ` column to `trip_invites` (soft-delete marker)
+- Create `invite_failure_log` table with RLS (service-role only)
+- Replace `resolve_or_rotate_invite` function: change DELETEs to `UPDATE SET replaced_at = now()`, filter active invites with `AND replaced_at IS NULL`
+- Replace `get_trip_invite_info` function: add `link_replaced` reason for tokens where `replaced_at IS NOT NULL`, insert into `invite_failure_log` on every failure path (token_not_found, link_replaced, expired, invite_limit_reached)
 
-### Part 2: Auto-Chain Generation (TODO)
+#### 2. `src/pages/AcceptInvite.tsx`
+- Add `'link_replaced'` to `TERMINAL_REASONS` set (line 48-57)
+- Add `case 'link_replaced'` to `getErrorDisplay` (after line 67): title "Link Updated", message "The trip owner created a new invite link. Ask them for the updated link."
+- Add client-side failure logging after invite info returns invalid: fire-and-forget insert to `invite_failure_log` with token, reason, user_agent, referrer, user_id
 
-When leg 1 completes generation, the backend should:
-1. Check for next queued leg in the journey
-2. Automatically trigger `generate-trip` for the next leg
-3. Continue until all legs are generated
+#### 3. `src/hooks/useStalePendingChargeRefund.ts`
+- Add `sessionStorage` guard per charge ID: before attempting refund, check `stale_refund_failed_{chargeId}`; on failure, set it. This prevents infinite retry loops across re-renders/navigations within the same session.
+- The orphaned `await supabase` was already fixed in a previous deployment — current code (line 54) is clean.
 
-Files to modify:
-- `supabase/functions/generate-trip/index.ts` or similar edge function
-- Add post-generation hook to detect and chain to next journey leg
+### Files Changed
+| File | Change |
+|------|--------|
+| Migration (SQL) | `replaced_at` column, `invite_failure_log` table, updated `resolve_or_rotate_invite` + `get_trip_invite_info` |
+| `src/pages/AcceptInvite.tsx` | `link_replaced` in TERMINAL_REASONS + getErrorDisplay + failure logging |
+| `src/hooks/useStalePendingChargeRefund.ts` | sessionStorage guard to stop infinite retry |
 
-### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
-
-**Implemented:**
-
-1. **`src/pages/TripDetail.tsx`**:
-   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
-   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
-   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
-   - Added distinct "queued" state UI:
-     - Clock icon with hourglass badge
-     - "{destination} is up next" heading
-     - Explanation text about waiting for previous leg
-     - "View previous city" button to navigate back to the generating leg
-   - Added `Clock` to lucide-react imports
-
----
-
-## Preference Enforcement Activation ✅ COMPLETE
-
-### Fix 1: Per-day preference checks now trigger retries ✅
-Moved MINIMUM REAL ACTIVITY COUNT and USER PREFERENCE VALIDATION blocks to after `validateGeneratedDay()` so they can push errors into `validation.errors`. Upgraded all `console.warn` calls to `validation.errors.push` + `validation.isValid = false`. Added budget preference validation ($75+ threshold). Activity keyword checks skip departure days.
-
-### Fix 2: Stage 2.6 personalization rejection enabled ✅
-Uncommented and enhanced the rejection block. Critical and major dietary violations are now actively enforced — dietary violations get patched with ⚠️ warnings in activity descriptions. Low personalization scores (<40) are logged.
-
----
-
-## Itinerary Generation Quality Fixes ✅ COMPLETE
-
-### Bug 1: Arrival Sequence Inverted ✅
-Post-generation validator in `index.ts` detects when hotel check-in is ordered before airport arrival on Day 1. Extracts arrival/transfer/checkin activities, recalculates times based on flight arrival, and re-inserts in correct order.
-
-### Bug 2: User Preferences Ignored ✅
-- Strengthened preference injection in system prompt with explicit enforcement language (🚨 MUST BE HONORED)
-- Added post-generation validation logging that checks activities against keyword map for requested activities (skiing, surfing, etc.)
-- Warns when "light dinner" preference is violated by expensive dining ($50+)
-
-### Bug 3: Empty Days ✅
-Added minimum real activity count validation after generation. Filters out logistics (transport, accommodation, downtime) and warns when a day has fewer than 2 real activities (1 for departure day).
-
-### Bug 4: Nonsensical Inter-City Flights ✅
-Added `SAME_METRO_PAIRS` lookup in `buildTransitionDayPrompt` (prompt-library.ts). When origin and destination are in the same metro area (e.g., East Rutherford ↔ NYC), flights are suppressed from transport options and the prompt explicitly forbids them. Default mode switches to `rideshare`.
