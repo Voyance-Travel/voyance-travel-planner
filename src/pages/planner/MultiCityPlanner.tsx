@@ -168,7 +168,7 @@ export default function MultiCityPlanner() {
     if (tripId) {
       toast.success('Multi-city trip created!');
       // Navigate to planner with multi-city context
-      navigate(`/planner?tripId=${tripId}&multiCity=true`);
+      navigate(`/trip/${tripId}`);
     }
   };
 
