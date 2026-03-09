@@ -1,68 +1,40 @@
-## Journey Sequential Generation — Implementation Status
 
-### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-**Implemented:**
+## Fix: Enable Preference Enforcement — Stop Ignoring User Requests
 
-1. **`src/hooks/useGenerationGate.ts`**:
-   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
-   - Added journey detection: fetches all sibling legs when `journeyId` is present
-   - Sums credit costs across all journey legs for unified billing
-   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
-   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
+### Problem
+The system detects preference violations (dietary, activity requests, budget) but never triggers retries — all checks use `console.warn()` instead of pushing to `validation.errors`. Stage 2.6 rejection is commented out.
 
-2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
-   - Added `journeyLegs` state for cost breakdown display
-   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
-   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
-   - Updated cost confirmation dialog:
-     - Shows "Journey Cost Breakdown" header for journeys
-     - Lists each leg with city, days, and cost
-     - Shows "Journey Total" instead of "Total"
-     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
-     - Disabled partial generation for journeys (must pay full upfront)
-     - "Confirm & Generate Journey" button text for journeys
+### Changes (1 file: `supabase/functions/generate-itinerary/index.ts`)
 
-### Part 2: Auto-Chain Generation (TODO)
+#### Fix 1: Move validation blocks & upgrade to retry triggers (lines 6059-6120)
 
-When leg 1 completes generation, the backend should:
-1. Check for next queued leg in the journey
-2. Automatically trigger `generate-trip` for the next leg
-3. Continue until all legs are generated
+Move the MINIMUM REAL ACTIVITY COUNT block (lines 6059-6076) and USER PREFERENCE VALIDATION block (lines 6078-6118) to **after** `const validation = validateGeneratedDay(...)` on line 6120. This lets them push errors into `validation.errors` to trigger the existing retry loop.
 
-Files to modify:
-- `supabase/functions/generate-trip/index.ts` or similar edge function
-- Add post-generation hook to detect and chain to next journey leg
+Upgrade each check:
+- **Minimum activities**: `console.warn` → `validation.errors.push(...)` + `validation.isValid = false`
+- **Activity keywords** (skiing, surfing, etc.): Same upgrade, skip departure day (`!isLastDay`)
+- **Light dining** ($50+ check): Same upgrade, expand keywords to include `'simple dinner'`, `'quick bite'`
+- **New: Budget check**: If user notes contain `'budget'`/`'cheap'`/`'affordable'`, flag activities over $75
 
-### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
+#### Fix 2: Enable Stage 2.6 personalization rejection (lines 9222-9227)
 
-**Implemented:**
+Replace the commented-out TODO block with active enforcement:
+- Filter for `critical` severity violations and `major` dietary violations
+- Log each violation with details
+- For dietary violations: patch the offending activity's description with a `⚠️` dietary warning note rather than full regeneration
+- Log warning when `personalizationScore < 40`
 
-1. **`src/pages/TripDetail.tsx`**:
-   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
-   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
-   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
-   - Added distinct "queued" state UI:
-     - Clock icon with hourglass badge
-     - "{destination} is up next" heading
-     - Explanation text about waiting for previous leg
-     - "View previous city" button to navigate back to the generating leg
-   - Added `Clock` to lucide-react imports
+#### Fix 3: Update plan.md
 
----
+Document the preference enforcement activation.
 
-## Itinerary Generation Quality Fixes ✅ COMPLETE
+### How the retry works (existing infrastructure)
+The retry loop (lines ~4980-4999) already sends `validation.errors` back to the AI with a "fix this" prompt. These changes simply feed it the preference violations it was previously missing.
 
-### Bug 1: Arrival Sequence Inverted ✅
-Post-generation validator in `index.ts` detects when hotel check-in is ordered before airport arrival on Day 1. Extracts arrival/transfer/checkin activities, recalculates times based on flight arrival, and re-inserts in correct order.
+### Risk Mitigation
+- Activity keyword checks skip departure days to avoid false positives
+- Budget threshold is $75+ (generous) to avoid over-triggering
+- Stage 2.6 patches activities with warnings instead of rejecting entire itineraries
+- Max 3 retry attempts already enforced by existing loop
 
-### Bug 2: User Preferences Ignored ✅
-- Strengthened preference injection in system prompt with explicit enforcement language (🚨 MUST BE HONORED)
-- Added post-generation validation logging that checks activities against keyword map for requested activities (skiing, surfing, etc.)
-- Warns when "light dinner" preference is violated by expensive dining ($50+)
-
-### Bug 3: Empty Days ✅
-Added minimum real activity count validation after generation. Filters out logistics (transport, accommodation, downtime) and warns when a day has fewer than 2 real activities (1 for departure day).
-
-### Bug 4: Nonsensical Inter-City Flights ✅
-Added `SAME_METRO_PAIRS` lookup in `buildTransitionDayPrompt` (prompt-library.ts). When origin and destination are in the same metro area (e.g., East Rutherford ↔ NYC), flights are suppressed from transport options and the prompt explicitly forbids them. Default mode switches to `rideshare`.
