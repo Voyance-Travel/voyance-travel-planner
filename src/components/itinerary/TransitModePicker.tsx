@@ -149,8 +149,8 @@ export function TransitModePicker({
     if (hasFetched || isLoading) return;
     setIsLoading(true);
     try {
-      const origin = transitOrigin || activity.location?.address || city;
-      const destination = activity.location?.name || activity.location?.address || transitDestination;
+      const origin = transitOrigin || city;
+      const destination = transitDestination + ', ' + city;
 
       const { data, error } = await supabase.functions.invoke('airport-transfers', {
         body: { origin, destination, city },
