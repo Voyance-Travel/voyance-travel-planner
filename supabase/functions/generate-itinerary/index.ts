@@ -1033,7 +1033,7 @@ function validateItineraryPersonalization(
       if (seenActivities.has(activityKey)) {
         // Check if this is a recurring event (sporting event, festival, conference)
         // that SHOULD repeat across days
-        if (!isRecurringEvent(activity)) {
+        if (!isRecurringEvent(activity, [])) { // Empty user activities array for now
           violations.push({
             type: 'duplicate',
             activityId: activity.id,
@@ -4745,7 +4745,7 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
       // Transport/logistics adjacency is expected in real itineraries (e.g. rideshare -> venue)
       if (!currIsTransportLike && !prevIsTransportLike && conceptSimilarity(currConcept, prevConcept)) {
         // Allow recurring events back-to-back (e.g., "Morning at US Open" + "Afternoon at US Open")
-        if (isRecurringEvent(act) || isRecurringEvent(prevAct)) {
+        if (isRecurringEvent(act, []) || isRecurringEvent(prevAct, [])) { // Empty user activities array for now
           // This is fine — same event, different time blocks
         } else if (isSmartFinish) {
           // In Smart Finish, user anchors may cluster around neighborhoods — downgrade to warning
@@ -4839,7 +4839,7 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
       for (const prevConcept of previousConcepts) {
         if (conceptSimilarity(actConcept, prevConcept)) {
           // Skip dedup for recurring/multi-day events — they SHOULD repeat
-          if (isRecurringEvent(act)) {
+          if (isRecurringEvent(act, [])) { // Empty user activities array for now
             console.log(`[validateDay] Allowing recurring event "${act.title}" (multi-day event, concept match with previous day)`);
             break;
           }
@@ -13273,13 +13273,28 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       // Load existing days from itinerary_data (for context)
       const existingData = (tripCheck.itinerary_data as any) || {};
       const existingDays: any[] = Array.isArray(existingData.days) ? existingData.days : [];
+      
+      // Extract user activities from metadata for recurring event detection
+      const tripMetadata = (tripCheck.metadata as Record<string, unknown>) || {};
+      const userActivities = (tripMetadata.userActivities as any[]) || [];
+      const mustDoText = (tripMetadata.mustDoActivities as string) || '';
+      
+      // Parse mustDoActivities text into a simple array for recurring detection
+      const parsedMustDos = mustDoText
+        .split(/[,;\n]/)
+        .map(s => s.trim())
+        .filter(Boolean)
+        .map(name => ({ name, isRecurring: true })); // Treat all must-dos as potentially recurring
+      
+      const allUserActivities = [...userActivities, ...parsedMustDos];
+      
       const previousActivities: string[] = [];
       const recurringEventNames: string[] = [];
       
       for (const day of existingDays) {
         if (day?.activities) {
           day.activities.forEach((act: any) => {
-            if (isRecurringEvent(act)) {
+            if (isRecurringEvent(act, allUserActivities)) {
               recurringEventNames.push(act.title || act.name || '');
             } else {
               previousActivities.push(act.title || act.name || '');
