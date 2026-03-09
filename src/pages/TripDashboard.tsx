@@ -449,11 +449,11 @@ function TripCard({ trip, index = 0, onDelete }: { trip: Trip; index?: number; o
           )}
         </div>
 
-        {/* Failed generation banner */}
+        {/* Generation needs retry banner */}
         {trip.itineraryStatus === 'failed' && (
-          <div className="flex items-center gap-2 p-2.5 rounded-lg bg-destructive/10 border border-destructive/20">
-            <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
-            <span className="text-xs sm:text-sm font-medium text-destructive">Generation failed</span>
+          <div className="flex items-center gap-2 p-2.5 rounded-lg bg-muted border border-border">
+            <RefreshCw className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="text-xs sm:text-sm font-medium text-muted-foreground">Needs another try</span>
           </div>
         )}
 

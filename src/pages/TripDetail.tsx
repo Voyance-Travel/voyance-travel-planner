@@ -381,7 +381,13 @@ export default function TripDetail() {
       toast.success('Resuming generation…');
     } catch (err) {
       console.error('[Resume] Failed:', err);
-      toast.error('Failed to resume generation. Please try again.');
+      toast('Couldn\'t pick up where we left off. Let\'s try again.', {
+        action: {
+          label: 'Retry',
+          onClick: () => handleResumeGeneration(),
+        },
+        duration: 5000,
+      });
       setGenerationStalled(true);
     } finally {
       setResumingGeneration(false);

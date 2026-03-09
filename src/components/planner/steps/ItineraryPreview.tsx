@@ -576,13 +576,13 @@ export default function ItineraryPreview({
           </h1>
         </div>
         
-        <Card className="border-destructive/50 bg-destructive/5">
+        <Card className="border-border bg-muted/30">
           <CardContent className="pt-6">
             <div className="flex flex-col items-center text-center gap-4">
-              <AlertCircle className="w-12 h-12 text-destructive" />
+              <RefreshCw className="w-12 h-12 text-muted-foreground" />
               <div>
-                <h3 className="font-semibold text-lg text-destructive">Generation Failed</h3>
-                <p className="text-muted-foreground mt-1">{message}</p>
+                <h3 className="font-semibold text-lg text-foreground">Your itinerary needs another try</h3>
+                <p className="text-muted-foreground mt-1">These things happen. Your credits are safe.</p>
               </div>
               <div className="flex gap-3">
                 <Button variant="outline" onClick={() => { clearError(); onBack(); }}>
@@ -590,7 +590,7 @@ export default function ItineraryPreview({
                 </Button>
                 <Button onClick={handleRetry}>
                   <RefreshCw className="w-4 h-4 mr-2" />
-                  Try Again
+                  Build Again
                 </Button>
               </div>
             </div>
