@@ -219,3 +219,7 @@ project_id = "jsxplunjjvxuejeouwob"
     verify_jwt = false
   [functions.weather]
     verify_jwt = false
+  [functions.mapkit-token]
+    verify_jwt = false
+  [functions.validate-iap-receipt]
+    verify_jwt = false
