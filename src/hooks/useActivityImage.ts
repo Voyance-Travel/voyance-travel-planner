@@ -43,6 +43,9 @@ const pendingRequests = new Map<string, Promise<{ url: string; source: string } 
 // Track which activity IDs we've already persisted to avoid duplicate writes
 const persistedActivityIds = new Set<string>();
 
+// UUID v4 pattern check
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function getCategoryFallback(category?: string, title?: string): string {
   return getActivityFallbackImage(category, title);
 }

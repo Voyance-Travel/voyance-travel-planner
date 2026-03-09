@@ -562,8 +562,28 @@ serve(async (req) => {
               tier: groupInfo.tier,
               stripe_session_id: session.id,
               caps: groupInfo.caps,
-              usage: { swap_activity: 0, regenerate_day: 0, ai_message: 0, restaurant_rec: 0 },
+              usage: { swap_activity: 0, regenerate_day: 0, ai_message: 0, restaurant_rec: 0, add_activity: 0 },
             });
+
+            // Create group budget (mirrors purchase-group-unlock behavior)
+            const TIER_CREDITS: Record<string, number> = {
+              small: 150,
+              medium: 300,
+              large: 500,
+            };
+            const budgetCredits = TIER_CREDITS[groupInfo.tier] || 150;
+
+            const { error: budgetError } = await supabaseAdmin.from('group_budgets').insert({
+              trip_id: tripId,
+              owner_id: userId,
+              tier: groupInfo.tier,
+              initial_credits: budgetCredits,
+              remaining_credits: budgetCredits,
+            });
+
+            if (budgetError) {
+              logError("Failed to create group_budgets row", { tripId, tier: groupInfo.tier, error: budgetError.message });
+            }
 
             log("Group unlock fulfilled", { tripId, tier: groupInfo.tier });
           }

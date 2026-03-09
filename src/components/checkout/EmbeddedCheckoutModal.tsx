@@ -91,7 +91,7 @@ export function EmbeddedCheckoutModal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 bg-background overflow-y-auto"
+          className="fixed inset-0 z-[60] bg-background overflow-y-auto"
         >
           <div className="min-h-screen flex flex-col">
             {/* Header with close button */}
