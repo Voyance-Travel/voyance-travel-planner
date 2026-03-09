@@ -1805,12 +1805,11 @@ export function EditorialItinerary({
         }));
         setHasChanges(true);
       }
-        const modeLabels: Record<string, string> = {
-          walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus',
-          uber: 'Rideshare', taxi: 'Taxi', train: 'Train',
-        };
-        toast.success(`Updated to ${modeLabels[newMode] || newMode}`);
-      }
+      const modeLabels: Record<string, string> = {
+        walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus',
+        uber: 'Rideshare', taxi: 'Taxi', train: 'Train',
+      };
+      toast.success(`Updated to ${modeLabels[newMode] || newMode}`);
     } catch (err) {
       console.error('Transport mode change error:', err);
       // Optimize failed — apply mode change locally with default costs
