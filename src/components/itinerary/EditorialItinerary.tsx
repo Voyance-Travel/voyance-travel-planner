@@ -2533,7 +2533,7 @@ export function EditorialItinerary({
     }, 3000); // Auto-save 3 seconds after last change
 
     return () => clearTimeout(autoSaveTimer);
-  }, [hasChanges, days, tripId, effectiveIsEditable]);
+  }, [hasChanges, days, tripId, effectiveIsEditable, optionSelections]);
 
   // ===========================================================================
   // HANDLERS
@@ -4863,6 +4863,7 @@ export function EditorialItinerary({
                           optionSelections={optionSelections}
                           onOptionSelect={(groupKey, selectedId) => {
                             setOptionSelections(prev => ({ ...prev, [groupKey]: selectedId }));
+                            setHasChanges(true);
                           }}
                           compactCards={isManualMode || creationSource === 'smart_finish'}
                           isPastTrip={isPastTrip}
