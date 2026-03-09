@@ -660,6 +660,23 @@ interface GenerationContext {
   multiCityDayMap?: MultiCityDayInfo[];
   // Pre-fetched venue operating hours from verified_venues cache
   venueHoursCache?: Array<{ name: string; opening_hours: string[] }>;
+  // User-specified activities from chat extraction (with times, all-day flags)
+  userActivities?: Array<{
+    name: string;
+    day?: number;
+    startTime?: string;
+    endTime?: string;
+    isAllDay?: boolean;
+    isRequired?: boolean;
+    category?: string;
+    notes?: string;
+  }>;
+  // Flight arrival details for first-day scheduling
+  flightArrival?: { airport?: string; time?: string; airline?: string; flightNumber?: string };
+  // Flight departure details for last-day scheduling
+  flightDeparture?: { airport?: string; time?: string; airline?: string; flightNumber?: string };
+  // Hotel preference from chat
+  hotelPreference?: string;
 }
 
 interface StrictActivity {
@@ -4394,6 +4411,13 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
     userConstraints: (trip.metadata?.userConstraints as any[]) || undefined,
     // Flight details from chat planner
     flightDetails: (trip.metadata?.flightDetails as string) || undefined,
+    // User-specified activities from chat extraction (Part 3 fix)
+    userActivities: (trip.metadata?.userActivities as any[]) || undefined,
+    // Flight arrival/departure from chat (Part 3 fix)
+    flightArrival: (trip.metadata?.flightArrival as any) || undefined,
+    flightDeparture: (trip.metadata?.flightDeparture as any) || undefined,
+    // Hotel preference from chat (Part 4 fix)
+    hotelPreference: (trip.metadata?.hotelPreference as string) || undefined,
   };
 
   // Set daily budget based on tier (fallback)
@@ -5490,6 +5514,124 @@ These help the traveler prepare for their trip.
         }
       }
 
+      // ═══════════════════════════════════════════════════════════════════════════
+      // USER ACTIVITIES INJECTION — MANDATORY FROM CHAT EXTRACTION (Part 3 Fix)
+      // ═══════════════════════════════════════════════════════════════════════════
+      let userActivitiesPrompt = '';
+      
+      if (context.userActivities && context.userActivities.length > 0) {
+        // Filter activities for this day, plus unassigned activities (no day specified)
+        const dayActivities = context.userActivities.filter(a => a.day === dayNumber);
+        const unassignedActivities = context.userActivities.filter(a => !a.day);
+        
+        // Distribute unassigned activities across days
+        const distributedUnassigned = unassignedActivities.filter((_, i) =>
+          Math.floor(i * context.totalDays / Math.max(1, unassignedActivities.length)) === dayNumber - 1
+        );
+        
+        const activitiesForThisDay = [...dayActivities, ...distributedUnassigned];
+        const hasAllDayEvent = activitiesForThisDay.some(a => a.isAllDay);
+        
+        if (hasAllDayEvent) {
+          const allDayEvent = activitiesForThisDay.find(a => a.isAllDay)!;
+          const otherActivities = activitiesForThisDay.filter(a => !a.isAllDay);
+          
+          userActivitiesPrompt = `
+${'='.repeat(70)}
+🚨 USER'S PLAN FOR THIS DAY — FOLLOW EXACTLY (ALL-DAY EVENT)
+${'='.repeat(70)}
+
+This is a DEDICATED day for: **${allDayEvent.name}**
+${allDayEvent.startTime ? `From: ${allDayEvent.startTime}` : 'From: 09:00 AM'}
+${allDayEvent.endTime ? `Until: ${allDayEvent.endTime}` : 'Until: 06:00 PM'}
+${allDayEvent.notes ? `Notes: ${allDayEvent.notes}` : ''}
+
+🚫 DO NOT add other sightseeing, museums, attractions, or activities to this day.
+The user wants to spend the FULL DAY at ${allDayEvent.name}.
+
+The ONLY things to schedule:
+1. Transit FROM hotel/airport TO ${allDayEvent.name}
+2. "${allDayEvent.name}" as a SINGLE activity block (the main event — generate this as ONE activity with the full time range)
+3. Transit FROM ${allDayEvent.name} back to hotel
+${otherActivities.length > 0 ? `4. Evening activities the user specifically requested: ${otherActivities.map(a => `"${a.name}"${a.startTime ? ` at ${a.startTime}` : ''}`).join(', ')}` : '4. A dinner near the hotel (user did not specify, so pick something good)'}
+
+⚠️ DO NOT apply normal pacing rules (5-8 activities). This day has 1 main event.
+⚠️ The main event MUST appear as an actual activity in your output — not just transfers around it.
+`;
+        } else if (activitiesForThisDay.length > 0) {
+          // User specified activities but not an all-day event
+          userActivitiesPrompt = `
+${'='.repeat(70)}
+🚨 USER'S REQUESTED ACTIVITIES FOR THIS DAY — ALL MANDATORY
+${'='.repeat(70)}
+
+${activitiesForThisDay.map((a, i) => {
+  let line = `${i + 1}. "${a.name}"`;
+  if (a.startTime) line += ` at ${a.startTime}`;
+  if (a.endTime) line += ` until ${a.endTime}`;
+  if (a.category) line += ` [${a.category}]`;
+  if (a.notes) line += ` — ${a.notes}`;
+  return line;
+}).join('\n')}
+
+RULES:
+- Include ALL activities listed above. They are NON-NEGOTIABLE.
+- Schedule them at the times specified, or at logical times if no time given
+- Add meals around them (breakfast, lunch, dinner) if not already included
+- Add transit between activities
+- You MAY add 1-2 additional activities if there are obvious gaps, but the user's picks come first
+- Do NOT replace any user activity with your own recommendation
+`;
+        }
+      }
+      
+      // ═══════════════════════════════════════════════════════════════════════════
+      // FLIGHT CONSTRAINTS INJECTION (Part 3 Fix)
+      // ═══════════════════════════════════════════════════════════════════════════
+      let flightPrompt = '';
+      
+      if (dayNumber === 1 && context.flightArrival?.airport) {
+        const arrival = context.flightArrival;
+        flightPrompt += `
+🛬 ARRIVAL FLIGHT:
+The traveler arrives at ${arrival.airport} at ${arrival.time || 'morning'}.
+${arrival.airline ? `Airline: ${arrival.airline}${arrival.flightNumber ? ` ${arrival.flightNumber}` : ''}` : ''}
+
+CONSTRAINT: Start the day's activities AFTER arrival + transit time.
+- Allow ~30-45 min from landing to ground transport
+- Add transit from ${arrival.airport} to the first destination
+- The first non-transit activity should NOT start before ${arrival.time ? `${arrival.time} + 90 minutes` : '10:00 AM'}
+`;
+      }
+      
+      if (dayNumber === context.totalDays && context.flightDeparture?.airport) {
+        const departure = context.flightDeparture;
+        flightPrompt += `
+🛫 DEPARTURE FLIGHT:
+The traveler departs from ${departure.airport}${departure.time ? ` at ${departure.time}` : ''}.
+${departure.airline ? `Airline: ${departure.airline}${departure.flightNumber ? ` ${departure.flightNumber}` : ''}` : ''}
+
+CONSTRAINT: The last activities MUST end with enough time to get to ${departure.airport}.
+- Allow 2-3 hours before departure for transit + check-in
+- Include a "Transit to ${departure.airport}" activity
+- End with a "Flight Departure from ${departure.airport}" activity
+`;
+      }
+      
+      // ═══════════════════════════════════════════════════════════════════════════
+      // HOTEL PREFERENCE INJECTION (Part 4 Fix)
+      // ═══════════════════════════════════════════════════════════════════════════
+      let hotelPrompt = '';
+      
+      if (context.hotelPreference) {
+        hotelPrompt = `
+🏨 HOTEL LOCATION: The traveler wants to stay in/near ${context.hotelPreference}.
+- All "return to hotel" activities should reference ${context.hotelPreference}
+- Morning activities should logically start near ${context.hotelPreference}
+- Evening activities should end near ${context.hotelPreference} when possible
+`;
+      }
+
       // Calculate day-of-week for operating hours awareness
       const dateObj = new Date(date);
       const DAY_NAMES_GEN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -5513,6 +5655,9 @@ ACTIVITY COUNT: ${effectiveMinActivities}-${effectiveMaxActivities} per day${isS
 Include a mix of: 3 dining slots (breakfast/lunch/dinner), transit between major moves, core exploration/activity slots, and an evening activity where appropriate.
 ${isSmartFinishGeneration ? 'SMART FINISH HARD RULE: Keep ALL user-provided anchor activities by exact name and build additional activities around them — never replace or drop anchors.' : ''}
 ${multiCityPrompt}
+${userActivitiesPrompt}
+${flightPrompt}
+${hotelPrompt}
 
 ${previousActivities.length > 0 ? `AVOID REPEATING THESE SPECIFIC ACTIVITIES (DO NOT repeat these): ${previousActivities.join(', ')}\n` : ''}${recurringEventNames.length > 0 ? `\nRECURRING/MULTI-DAY EVENTS (these SHOULD be scheduled again today — they are the reason for the trip): ${[...new Set(recurringEventNames)].join(', ')}\n` : ''}
 NOTE: The previous-activities list is ONLY for de-duplication. Do NOT treat it as a signal for spending style.
@@ -6109,6 +6254,61 @@ Generate activities for this day following ALL constraints above.`;
       const _userActivities = [...((context as any).userActivities || []), ..._parsedMustDos];
 
       const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish, !!context.isDayTrip, _userActivities);
+
+      // ==========================================================================
+      // PART 5 FIX: Verify user-requested activities appear in output (safety net)
+      // ==========================================================================
+      if (context.userActivities && context.userActivities.length > 0) {
+        const dayUserActivities = context.userActivities.filter(a => a.day === dayNumber);
+        // Also include unassigned activities distributed to this day
+        const unassignedActivities = context.userActivities.filter(a => !a.day);
+        const distributedUnassigned = unassignedActivities.filter((_, i) =>
+          Math.floor(i * context.totalDays / Math.max(1, unassignedActivities.length)) === dayNumber - 1
+        );
+        const allDayUserActivities = [...dayUserActivities, ...distributedUnassigned];
+
+        for (const requested of allDayUserActivities) {
+          const reqName = (requested.name || '').toLowerCase();
+          if (!reqName) continue;
+          
+          const found = generatedDay.activities?.some(gen => {
+            const genTitle = (gen.title || '').toLowerCase();
+            // Fuzzy match: check if the generated title contains key words from the requested name
+            const keywords = reqName.split(/\s+/).filter(w => w.length > 3);
+            return keywords.length > 0 && keywords.some(kw => genTitle.includes(kw));
+          });
+
+          if (!found) {
+            console.warn(`[generate-itinerary] MISSING USER ACTIVITY: "${requested.name}" was requested for Day ${dayNumber} but not found in generated output`);
+
+            // Force-add the missing activity
+            generatedDay.activities = generatedDay.activities || [];
+            generatedDay.activities.push({
+              id: `force_${dayNumber}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+              title: requested.name,
+              startTime: requested.startTime || (requested.isAllDay ? '09:00' : '10:00'),
+              endTime: requested.endTime || (requested.isAllDay ? '18:00' : '12:00'),
+              category: requested.category || 'activity',
+              description: `${requested.name}${requested.notes ? ' — ' + requested.notes : ''} (User-requested activity)`,
+              location: { name: requested.name, address: context.destination || '' },
+              cost: { amount: 0, currency: 'USD' },
+              tags: ['user-requested', requested.category || 'activity'],
+              bookingRequired: false,
+              transportation: { method: 'varies', duration: 'varies', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
+              tips: 'This activity was specifically requested by the traveler.',
+            } as StrictActivity);
+
+            console.log(`[generate-itinerary] Force-added missing activity: "${requested.name}"`);
+          }
+        }
+
+        // Re-sort by start time after force-adding
+        generatedDay.activities?.sort((a, b) => {
+          const timeA = parseTimeToMinutes(a.startTime || '') ?? 99999;
+          const timeB = parseTimeToMinutes(b.startTime || '') ?? 99999;
+          return timeA - timeB;
+        });
+      }
 
       // Transition day validation: MUST contain at least one inter-city transport activity
       if (isTransitionDay && dayCity?.transitionFrom && dayCity?.transitionTo) {
