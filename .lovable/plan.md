@@ -1,44 +1,50 @@
+## Journey Sequential Generation — Implementation Status
 
+### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-## Merge Voyance Intelligence + Trip Summary Into One Card
+**Implemented:**
 
-### Current State
-Two separate cards in `EditorialItinerary.tsx`:
-1. **Voyance Intelligence** (lines 3915-4098): Collapsible with stats badges, essentials, flights/hotel, travel intel
-2. **Trip Summary** (lines 4113-4325): Separate card with trip total, currency toggle, action buttons (Share, Export PDF, Save, Optimize, Regenerate)
+1. **`src/hooks/useGenerationGate.ts`**:
+   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
+   - Added journey detection: fetches all sibling legs when `journeyId` is present
+   - Sums credit costs across all journey legs for unified billing
+   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
+   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
 
-### Plan
+2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
+   - Added `journeyLegs` state for cost breakdown display
+   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
+   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
+   - Updated cost confirmation dialog:
+     - Shows "Journey Cost Breakdown" header for journeys
+     - Lists each leg with city, days, and cost
+     - Shows "Journey Total" instead of "Total"
+     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
+     - Disabled partial generation for journeys (must pay full upfront)
+     - "Confirm & Generate Journey" button text for journeys
 
-**File: `src/components/itinerary/EditorialItinerary.tsx`**
+### Part 2: Auto-Chain Generation (TODO)
 
-**Replace lines 3915-4325** (both sections) with a single unified card containing four rows:
+When leg 1 completes generation, the backend should:
+1. Check for next queued leg in the journey
+2. Automatically trigger `generate-trip` for the next leg
+3. Continue until all legs are generated
 
-**ROW 1: Trip Total + Currency Toggle + Meta**
-- Trip Total price with currency toggle button (from Trip Summary)
-- Days/Guests/Credits info line
+Files to modify:
+- `supabase/functions/generate-trip/index.ts` or similar edge function
+- Add post-generation hook to detect and chain to next journey leg
 
-**ROW 2: Action Buttons**  
-- Share, Export PDF, Save buttons (primary row)
-- Optimize + Regenerate (desktop inline, mobile overflow menu)
-- All logic preserved exactly from current Trip Summary
+### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
 
-**ROW 3: Voyance Intelligence (collapsible)**
-- Wrapped in `<Collapsible>` with Sparkles icon header
-- Stats badges grid (Voyance Finds, Timing Hacks, Local Picks, Insider Tips)
-- Savings summary line
-- Collapsed state shows summary text
+**Implemented:**
 
-**ROW 4: Travel Intel (collapsible)**
-- Wrapped in `<Collapsible>` with Globe icon header  
-- Renders `travelIntelCards` prop content
-- Only shows when `travelIntelCards` is provided
-
-The essentials grid (timezone, currency, language, emergency) and flights/hotel info from the current Voyance Intelligence section move into Row 3's expanded content, below the stats badges.
-
-### What stays unchanged
-- SmartFinishBanner between tabs and the unified card
-- Regeneration Loading Overlay after the card
-- WhyWeSkippedSection, ParsedTripNotesSection
-- TripDetail.tsx — no changes needed (desktop TravelIntelCard already removed, `travelIntelCards` prop already passed)
-- All dialog/modal logic (regenerate confirm, share, optimize, route upgrade)
-
+1. **`src/pages/TripDetail.tsx`**:
+   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
+   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
+   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
+   - Added distinct "queued" state UI:
+     - Clock icon with hourglass badge
+     - "{destination} is up next" heading
+     - Explanation text about waiting for previous leg
+     - "View previous city" button to navigate back to the generating leg
+   - Added `Clock` to lucide-react imports

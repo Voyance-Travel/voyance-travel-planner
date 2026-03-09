@@ -49,6 +49,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -3912,191 +3913,6 @@ export function EditorialItinerary({
             exit={{ opacity: 0 }}
             className="space-y-6"
           >
-            {/* ── Voyance Intelligence — unified collapsible section ── */}
-            <div data-tour="value-header" className="rounded-xl border border-border bg-gradient-to-b from-card to-card/80 backdrop-blur-sm overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setShowTripOverview(prev => !prev)}
-                className="w-full p-3 sm:p-4 flex items-center justify-between text-left hover:bg-secondary/30 transition-colors"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <Sparkles className="h-4 w-4 text-primary shrink-0" />
-                  <div className="min-w-0">
-                    <h2 className="text-sm font-semibold text-primary uppercase tracking-wider">
-                      Voyance Intelligence
-                    </h2>
-                    {!showTripOverview && (
-                      <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-                        {[
-                          valueStats.voyanceFinds > 0 && `${valueStats.voyanceFinds} finds`,
-                          valueStats.timingOptimizations > 0 && `${valueStats.timingOptimizations} timing hacks`,
-                          valueStats.touristTrapsAvoided > 0 && `${valueStats.touristTrapsAvoided} local picks`,
-                          valueStats.insiderTips > 0 && `${valueStats.insiderTips} insider tips`,
-                          valueStats.estimatedSavings?.time && `${valueStats.estimatedSavings.time} saved`,
-                        ].filter(Boolean).join(' · ') || `${destination || 'Trip'} overview`}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <ChevronDown className={cn(
-                  "h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200",
-                  showTripOverview && "rotate-180"
-                )} />
-              </button>
-
-              <AnimatePresence>
-                {showTripOverview && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.25 }}
-                    className="overflow-hidden border-t border-border/50"
-                  >
-                    {/* ROW 1: Intelligence stats badges */}
-                    {(valueStats.voyanceFinds > 0 || valueStats.timingOptimizations > 0 || valueStats.touristTrapsAvoided > 0 || valueStats.insiderTips > 0) && (
-                      <div className="border-b border-border/50">
-                        <p className="text-xs text-muted-foreground text-center pt-3 pb-1">
-                          Your {destination} trip{style ? ` · ${style} style` : ''}
-                        </p>
-                        <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-border/50">
-                          {valueStats.voyanceFinds > 0 && (
-                            <div className="p-4 text-center">
-                              <div className="w-10 h-10 rounded-full flex items-center justify-center mb-2 mx-auto text-primary bg-primary/10">
-                                <Sparkles className="h-4 w-4" />
-                              </div>
-                              <span className="text-3xl font-bold text-primary">{valueStats.voyanceFinds}</span>
-                              <p className="text-xs font-medium text-foreground mt-0.5">Voyance Finds</p>
-                            </div>
-                          )}
-                          {valueStats.timingOptimizations > 0 && (
-                            <div className="p-4 text-center">
-                              <div className="w-10 h-10 rounded-full flex items-center justify-center mb-2 mx-auto text-accent bg-accent/10">
-                                <Clock className="h-4 w-4" />
-                              </div>
-                              <span className="text-3xl font-bold text-accent">{valueStats.timingOptimizations}</span>
-                              <p className="text-xs font-medium text-foreground mt-0.5">Timing Hacks</p>
-                            </div>
-                          )}
-                          {valueStats.touristTrapsAvoided > 0 && (
-                            <div className="p-4 text-center">
-                              <div className="w-10 h-10 rounded-full flex items-center justify-center mb-2 mx-auto text-primary bg-primary/10">
-                                <Sparkles className="h-4 w-4" />
-                              </div>
-                              <span className="text-3xl font-bold text-primary">{valueStats.touristTrapsAvoided}</span>
-                              <p className="text-xs font-medium text-foreground mt-0.5">Local Picks</p>
-                            </div>
-                          )}
-                          {valueStats.insiderTips > 0 && (
-                            <div className="p-4 text-center">
-                              <div className="w-10 h-10 rounded-full flex items-center justify-center mb-2 mx-auto text-gold bg-gold/10">
-                                <Lightbulb className="h-4 w-4" />
-                              </div>
-                              <span className="text-3xl font-bold text-gold">{valueStats.insiderTips}</span>
-                              <p className="text-xs font-medium text-foreground mt-0.5">Insider Tips</p>
-                            </div>
-                          )}
-                        </div>
-                        {valueStats.estimatedSavings && (
-                          <div className="p-3 bg-primary/5 border-t border-border/50">
-                            <div className="flex items-center justify-center gap-2 text-sm">
-                              <TrendingUp className="h-4 w-4 text-primary" />
-                              <span className="font-medium text-foreground">
-                                {valueStats.estimatedSavings.time} saved
-                              </span>
-                              {valueStats.estimatedSavings.money && (
-                                <>
-                                  <span className="text-muted-foreground">+</span>
-                                  <span className="font-medium text-foreground">{valueStats.estimatedSavings.money}</span>
-                                </>
-                              )}
-                              <span className="text-muted-foreground">vs. typical itinerary</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* ROW 2: Trip essentials + flights/hotel */}
-                    <div className="p-3 sm:p-4 space-y-3">
-                      {/* Flights */}
-                      {hasFlightData && allFlightLegs.length > 0 && (
-                        <div className="space-y-1.5">
-                          {allFlightLegs.slice(0, 3).map((leg, i) => (
-                            <div key={i} className="flex items-center gap-3 text-sm">
-                              <Plane className={cn("h-4 w-4 text-muted-foreground shrink-0", i > 0 && "rotate-180")} />
-                              <span className="font-medium">{leg.airline || 'Flight'}</span>
-                              <span className="text-muted-foreground">
-                                {leg.departure?.airport} → {leg.arrival?.airport}
-                                {leg.departure?.time ? ` · ${leg.departure.time}` : ''}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Hotel */}
-                      {hotelSelection?.name && (
-                        <div className="flex items-center gap-3 text-sm">
-                          <Hotel className="h-4 w-4 text-muted-foreground shrink-0" />
-                          <span className="font-medium">{hotelSelection.name}</span>
-                          {hotelSelection.address && (
-                            <span className="text-muted-foreground truncate">{hotelSelection.address}</span>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Essentials grid */}
-                      {(destinationInfo?.timezone || destinationInfo?.currency || destinationInfo?.language || destinationInfo?.emergency) && (
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-border/40">
-                          {destinationInfo?.timezone && (
-                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                              <Clock className="h-3.5 w-3.5 shrink-0" />
-                              <span className="truncate">{destinationInfo.timezone}</span>
-                            </div>
-                          )}
-                          {destinationInfo?.currency && (
-                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                              <Wallet className="h-3.5 w-3.5 shrink-0" />
-                              <span className="truncate">{destinationInfo.currency}{destinationInfo.currencySymbol ? ` (${destinationInfo.currencySymbol})` : ''}</span>
-                            </div>
-                          )}
-                          {destinationInfo?.language && (
-                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                              <Languages className="h-3.5 w-3.5 shrink-0" />
-                              <span className="truncate">{destinationInfo.language}</span>
-                            </div>
-                          )}
-                          {destinationInfo?.emergency && (
-                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                              <span className="truncate">{destinationInfo.emergency}</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Travel Intel cards */}
-                      {travelIntelCards && (
-                        <div className="pt-2 border-t border-border/40 space-y-2">
-                          <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Travel Intelligence</h4>
-                          {travelIntelCards}
-                        </div>
-                      )}
-
-                      {/* Fallback */}
-                      {!hasFlightData && !hotelSelection?.name && !destinationInfo?.timezone && !travelIntelCards && 
-                       valueStats.voyanceFinds === 0 && valueStats.timingOptimizations === 0 && (
-                        <p className="text-xs text-muted-foreground italic">
-                          Add flights and hotels in the <button className="underline" onClick={() => setActiveTab('details')}>Flights &amp; Hotels</button> tab.
-                        </p>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
             {/* Smart Finish Banner — DNA gap analysis for manual trips */}
             {isManualMode && !isPastTrip && (
               <SmartFinishBanner
@@ -4110,59 +3926,55 @@ export function EditorialItinerary({
               />
             )}
 
-            {/* ── Trip Summary (static, non-sticky) ── */}
-            <div className="rounded-xl border border-border bg-card overflow-hidden">
-              {/* Header */}
-              <div className="px-6 py-4 bg-gradient-to-r from-primary/5 via-background to-accent/5 border-b border-border/50">
-                <h3 className="font-serif text-lg font-semibold text-foreground">Trip Summary</h3>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  {days.length} Days · {travelers} {travelers === 1 ? 'Guest' : 'Guests'}
-                  {creditData && <> · <span className="text-primary font-medium">{formatCredits(totalCredits)}</span> credits remaining</>}
-                </p>
-              </div>
+            {/* ── Unified Trip Command Center ── */}
+            <div data-tour="value-header" className="rounded-xl border border-border bg-card overflow-hidden">
 
-              {/* Price Row */}
-              <div className="px-6 py-4 flex items-center justify-between border-b border-border/50">
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-muted-foreground">Trip Total</span>
-                  <span className="text-2xl font-bold text-foreground">{formatCurrency(displayCost(totalCost), tripCurrency)}</span>
+              {/* ROW 1: Trip Total + Currency Toggle + Meta */}
+              <div className="px-4 sm:px-6 py-4 border-b border-border/50">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-muted-foreground">Trip Total</span>
+                    <span className="text-2xl font-bold text-foreground">{formatCurrency(displayCost(totalCost), tripCurrency)}</span>
+                  </div>
+                  {localCurrency !== 'USD' && (
+                    <Tooltip delayDuration={200}>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => setShowLocalCurrency((v) => !v)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-secondary/50 border border-border text-xs font-medium hover:bg-secondary transition-colors"
+                          aria-label="Switch Currency"
+                          data-tour="currency-toggle"
+                        >
+                          <span className={showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>{localCurrency}</span>
+                          <span className="text-muted-foreground/50">↔</span>
+                          <span className={!showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>USD</span>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        <span className="text-xs font-medium">Switch Currency</span>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                 </div>
-                {localCurrency !== 'USD' && (
-                  <Tooltip delayDuration={200}>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={() => setShowLocalCurrency((v) => !v)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-secondary/50 border border-border text-xs font-medium hover:bg-secondary transition-colors"
-                        aria-label="Switch Currency"
-                        data-tour="currency-toggle"
-                      >
-                        <span className={showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>{localCurrency}</span>
-                        <span className="text-muted-foreground/50">↔</span>
-                        <span className={!showLocalCurrency ? 'text-primary' : 'text-muted-foreground'}>USD</span>
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">
-                      <span className="text-xs font-medium">Switch Currency</span>
-                    </TooltipContent>
-                  </Tooltip>
-                )}
+                <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground flex-wrap">
+                  <span>{days.length} Days · {travelers} {travelers === 1 ? 'Guest' : 'Guests'}</span>
+                  {creditData && (
+                    <span className="flex items-center gap-1 text-primary font-medium">
+                      <Coins className="h-3 w-3" />
+                      {formatCredits(totalCredits)} credits
+                    </span>
+                  )}
+                </div>
               </div>
 
-              {/* Action Buttons — Primary + Secondary pattern */}
-              <div className="px-6 py-4 space-y-3" data-tour="trip-actions">
-                {/* Primary actions */}
+              {/* ROW 2: Action Buttons */}
+              <div className="px-4 sm:px-6 py-3 border-b border-border/50" data-tour="trip-actions">
                 <div className="flex items-center justify-center gap-3 flex-wrap">
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => setShowShareModal(true)}
-                    className="gap-2"
-                  >
+                  <Button variant="outline" size="sm" onClick={() => setShowShareModal(true)} className="gap-2">
                     <Share2 className="h-4 w-4" />
                     Share
                   </Button>
 
-                  {/* PDF Export */}
                   {effectiveIsEditable && (entitlements?.can_export_pdf || smartFinishPurchased || isPaid || isManualMode) && (
                     <Button
                       variant="outline"
@@ -4203,19 +4015,13 @@ export function EditorialItinerary({
                     </Button>
                   )}
 
-                  {/* Saved indicator (not a button) */}
                   {effectiveIsEditable && (
                     <span className={cn(
                       "text-xs flex items-center gap-1",
                       hasChanges ? "text-muted-foreground" : "text-primary"
                     )}>
                       {hasChanges ? (
-                        <Button 
-                          size="sm"
-                          onClick={handleSave} 
-                          disabled={isSaving}
-                          className="gap-2"
-                        >
+                        <Button size="sm" onClick={handleSave} disabled={isSaving} className="gap-2">
                           {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                           Save
                         </Button>
@@ -4224,72 +4030,69 @@ export function EditorialItinerary({
                       )}
                     </span>
                   )}
-                </div>
 
-                {/* Secondary actions — desktop inline, mobile overflow */}
-                {effectiveIsEditable && (
-                  <>
-                    {/* Desktop: inline buttons */}
-                    <div className="hidden sm:flex items-center justify-center gap-2 flex-wrap">
-                      {needsOptimization && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => {
-                                if (entitlements?.can_optimize_routes) {
-                                  openOptimizeDialog();
-                                } else {
-                                  setShowRouteUpgrade(true);
-                                }
-                              }} 
-                              disabled={isOptimizing || days.length === 0}
-                              className="gap-1.5 text-xs text-muted-foreground"
-                            >
-                              {isOptimizing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Route className="h-3.5 w-3.5" />}
-                              <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-                              </span>
-                              {isOptimizing ? 'Optimizing...' : 'Optimize'}
-                              {!entitlements?.can_optimize_routes && <Lock className="h-3 w-3 ml-0.5 opacity-60" />}
-                              {entitlements?.can_optimize_routes && !routeOptCost.isFirstTrip && routeOptCost.cost > 0 && (
-                                <span className="inline-flex items-center gap-0.5 text-[10px] opacity-60 ml-0.5">
-                                  <Coins className="h-2.5 w-2.5" />{routeOptCost.cost}
-                                </span>
-                              )}
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>
-                              Reorders activities to minimize transit time
-                              {!routeOptCost.isFirstTrip && routeOptCost.cost > 0 && ` · ${routeOptCost.cost} credits`}
-                              {routeOptCost.isFirstTrip && ' · Free on first trip'}
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
+                  {/* Desktop: Optimize + Regenerate inline */}
+                  {effectiveIsEditable && needsOptimization && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1.5 text-xs text-muted-foreground hidden sm:inline-flex"
+                          onClick={() => {
+                            if (entitlements?.can_optimize_routes) {
+                              openOptimizeDialog();
+                            } else {
+                              setShowRouteUpgrade(true);
+                            }
+                          }}
+                          disabled={isOptimizing || days.length === 0}
+                        >
+                          {isOptimizing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Route className="h-3.5 w-3.5" />}
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                          </span>
+                          {isOptimizing ? 'Optimizing...' : 'Optimize'}
+                          {!entitlements?.can_optimize_routes && <Lock className="h-3 w-3 ml-0.5 opacity-60" />}
+                          {entitlements?.can_optimize_routes && !routeOptCost.isFirstTrip && routeOptCost.cost > 0 && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] opacity-60 ml-0.5">
+                              <Coins className="h-2.5 w-2.5" />{routeOptCost.cost}
+                            </span>
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>
+                          Reorders activities to minimize transit time
+                          {!routeOptCost.isFirstTrip && routeOptCost.cost > 0 && ` · ${routeOptCost.cost} credits`}
+                          {routeOptCost.isFirstTrip && ' · Free on first trip'}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
 
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="gap-1.5 text-xs text-muted-foreground"
-                        onClick={() => setShowRegenerateConfirm(true)}
-                        disabled={isRegenerating}
-                      >
-                        {isRegenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                        {isRegenerating ? 'Regenerating…' : 'Regenerate'}
-                      </Button>
-                    </div>
+                  {effectiveIsEditable && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1.5 text-xs text-muted-foreground hidden sm:inline-flex"
+                      onClick={() => setShowRegenerateConfirm(true)}
+                      disabled={isRegenerating}
+                    >
+                      {isRegenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                      {isRegenerating ? 'Regenerating…' : 'Regenerate'}
+                    </Button>
+                  )}
 
-                    {/* Mobile: overflow menu */}
-                    <div className="sm:hidden flex items-center justify-center">
+                  {/* Mobile: overflow menu for Optimize + Regenerate */}
+                  {effectiveIsEditable && (
+                    <div className="sm:hidden">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground">
                             <MoreHorizontal className="h-3.5 w-3.5" />
-                            More actions
+                            More
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="center" className="w-48">
@@ -4319,10 +4122,170 @@ export function EditorialItinerary({
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
-                  </>
-                )}
+                  )}
+                </div>
               </div>
+
+              {/* ROW 3: Voyance Intelligence (collapsible) */}
+              {(valueStats.voyanceFinds > 0 || valueStats.timingOptimizations > 0 || valueStats.touristTrapsAvoided > 0 || valueStats.insiderTips > 0) && (
+                <Collapsible open={showTripOverview} onOpenChange={setShowTripOverview}>
+                  <CollapsibleTrigger className="w-full px-4 sm:px-6 py-3 flex items-center justify-between text-left hover:bg-secondary/30 transition-colors border-b border-border/50">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Sparkles className="h-4 w-4 text-primary shrink-0" />
+                      <span className="text-xs font-semibold text-primary uppercase tracking-wider">Voyance Intelligence</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {!showTripOverview && valueStats.estimatedSavings && (
+                        <span className="text-[11px] text-muted-foreground">{valueStats.estimatedSavings.time} saved</span>
+                      )}
+                      <ChevronDown className={cn("h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200", showTripOverview && "rotate-180")} />
+                    </div>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="border-b border-border/50">
+                      <p className="text-xs text-muted-foreground text-center pt-3 pb-1">
+                        Your {destination} trip{style ? ` · ${style} style` : ''}
+                      </p>
+                      <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-border/50">
+                        {valueStats.voyanceFinds > 0 && (
+                          <div className="p-4 text-center">
+                            <div className="w-10 h-10 rounded-full flex items-center justify-center mb-2 mx-auto text-primary bg-primary/10">
+                              <Sparkles className="h-4 w-4" />
+                            </div>
+                            <span className="text-3xl font-bold text-primary">{valueStats.voyanceFinds}</span>
+                            <p className="text-xs font-medium text-foreground mt-0.5">Voyance Finds</p>
+                          </div>
+                        )}
+                        {valueStats.timingOptimizations > 0 && (
+                          <div className="p-4 text-center">
+                            <div className="w-10 h-10 rounded-full flex items-center justify-center mb-2 mx-auto text-accent bg-accent/10">
+                              <Clock className="h-4 w-4" />
+                            </div>
+                            <span className="text-3xl font-bold text-accent">{valueStats.timingOptimizations}</span>
+                            <p className="text-xs font-medium text-foreground mt-0.5">Timing Hacks</p>
+                          </div>
+                        )}
+                        {valueStats.touristTrapsAvoided > 0 && (
+                          <div className="p-4 text-center">
+                            <div className="w-10 h-10 rounded-full flex items-center justify-center mb-2 mx-auto text-primary bg-primary/10">
+                              <Sparkles className="h-4 w-4" />
+                            </div>
+                            <span className="text-3xl font-bold text-primary">{valueStats.touristTrapsAvoided}</span>
+                            <p className="text-xs font-medium text-foreground mt-0.5">Local Picks</p>
+                          </div>
+                        )}
+                        {valueStats.insiderTips > 0 && (
+                          <div className="p-4 text-center">
+                            <div className="w-10 h-10 rounded-full flex items-center justify-center mb-2 mx-auto text-gold bg-gold/10">
+                              <Lightbulb className="h-4 w-4" />
+                            </div>
+                            <span className="text-3xl font-bold text-gold">{valueStats.insiderTips}</span>
+                            <p className="text-xs font-medium text-foreground mt-0.5">Insider Tips</p>
+                          </div>
+                        )}
+                      </div>
+                      {valueStats.estimatedSavings && (
+                        <div className="p-3 bg-primary/5 border-t border-border/50">
+                          <div className="flex items-center justify-center gap-2 text-sm">
+                            <TrendingUp className="h-4 w-4 text-primary" />
+                            <span className="font-medium text-foreground">{valueStats.estimatedSavings.time} saved</span>
+                            {valueStats.estimatedSavings.money && (
+                              <>
+                                <span className="text-muted-foreground">+</span>
+                                <span className="font-medium text-foreground">{valueStats.estimatedSavings.money}</span>
+                              </>
+                            )}
+                            <span className="text-muted-foreground">vs. typical itinerary</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Essentials, flights, hotel */}
+                    <div className="p-3 sm:p-4 space-y-3">
+                      {hasFlightData && allFlightLegs.length > 0 && (
+                        <div className="space-y-1.5">
+                          {allFlightLegs.slice(0, 3).map((leg, i) => (
+                            <div key={i} className="flex items-center gap-3 text-sm">
+                              <Plane className={cn("h-4 w-4 text-muted-foreground shrink-0", i > 0 && "rotate-180")} />
+                              <span className="font-medium">{leg.airline || 'Flight'}</span>
+                              <span className="text-muted-foreground">
+                                {leg.departure?.airport} → {leg.arrival?.airport}
+                                {leg.departure?.time ? ` · ${leg.departure.time}` : ''}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {hotelSelection?.name && (
+                        <div className="flex items-center gap-3 text-sm">
+                          <Hotel className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span className="font-medium">{hotelSelection.name}</span>
+                          {hotelSelection.address && (
+                            <span className="text-muted-foreground truncate">{hotelSelection.address}</span>
+                          )}
+                        </div>
+                      )}
+                      {(destinationInfo?.timezone || destinationInfo?.currency || destinationInfo?.language || destinationInfo?.emergency) && (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-border/40">
+                          {destinationInfo?.timezone && (
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <Clock className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{destinationInfo.timezone}</span>
+                            </div>
+                          )}
+                          {destinationInfo?.currency && (
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <Wallet className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{destinationInfo.currency}{destinationInfo.currencySymbol ? ` (${destinationInfo.currencySymbol})` : ''}</span>
+                            </div>
+                          )}
+                          {destinationInfo?.language && (
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <Languages className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{destinationInfo.language}</span>
+                            </div>
+                          )}
+                          {destinationInfo?.emergency && (
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{destinationInfo.emergency}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {!hasFlightData && !hotelSelection?.name && !destinationInfo?.timezone &&
+                       valueStats.voyanceFinds === 0 && valueStats.timingOptimizations === 0 && (
+                        <p className="text-xs text-muted-foreground italic">
+                          Add flights and hotels in the <button className="underline" onClick={() => setActiveTab('details')}>Flights &amp; Hotels</button> tab.
+                        </p>
+                      )}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+
+              {/* ROW 4: Travel Intel (collapsible) */}
+              {travelIntelCards && (
+                <Collapsible>
+                  <CollapsibleTrigger className="w-full px-4 sm:px-6 py-3 flex items-center justify-between text-left hover:bg-secondary/30 transition-colors border-b border-border/50">
+                    <div className="flex items-center gap-2">
+                      <Globe className="h-4 w-4 text-accent shrink-0" />
+                      <span className="text-xs font-semibold text-accent uppercase tracking-wider">Travel Intelligence</span>
+                    </div>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="p-3 sm:p-4 space-y-2">
+                      {travelIntelCards}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
             </div>
+
+
+
 
             {/* Regeneration Loading Overlay */}
             <AnimatePresence>
