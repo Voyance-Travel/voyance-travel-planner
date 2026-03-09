@@ -9250,11 +9250,37 @@ If the purpose is a specific event, plan at least ONE full day around that event
         );
       }
       
-      // For now, log warnings but don't reject - we're gathering data on AI compliance
-      // TODO: Enable rejection after baseline is established
-      // if (!validationResult.isValid) {
-      //   console.error("[Stage 2.6] VALIDATION FAILED - would trigger regeneration");
-      // }
+      // Enforce critical violations — dietary restrictions and severe personalization failures
+      if (!validationResult.isValid) {
+        const criticalViolations = validationResult.violations.filter((v: any) => v.severity === 'critical');
+        const majorDietaryViolations = validationResult.violations.filter((v: any) => v.type === 'dietary' && v.severity === 'major');
+
+        if (criticalViolations.length > 0 || majorDietaryViolations.length > 0) {
+          console.error(`[Stage 2.6] CRITICAL VIOLATIONS DETECTED — ${criticalViolations.length} critical, ${majorDietaryViolations.length} dietary`);
+
+          for (const v of [...criticalViolations, ...majorDietaryViolations]) {
+            console.error(`  → [${v.severity}] ${v.type}: "${v.activityTitle}" on Day ${v.dayNumber} — ${v.details}`);
+          }
+
+          // For dietary violations, patch offending activities with warnings
+          for (const v of majorDietaryViolations) {
+            const day = aiResult.days.find((d: any) => d.dayNumber === v.dayNumber);
+            if (day) {
+              const actIdx = day.activities.findIndex((a: any) => a.title === v.activityTitle);
+              if (actIdx >= 0) {
+                const original = day.activities[actIdx];
+                console.warn(`[Stage 2.6] Patching dietary violation: "${original.title}" → marking for user warning`);
+                original.dietaryWarning = v.details;
+                original.description = (original.description || '') + `\n⚠️ Note: This venue may not fully accommodate your dietary preferences. Consider asking about ${v.details.split('restriction')[0].trim()} options when booking.`;
+              }
+            }
+          }
+        }
+
+        if (validationResult.personalizationScore < 40) {
+          console.warn(`[Stage 2.6] LOW PERSONALIZATION SCORE: ${validationResult.personalizationScore}/100 — itinerary may feel generic`);
+        }
+      }
 
       // =======================================================================
       // STAGE 2.7: Transit Gap Enforcement
