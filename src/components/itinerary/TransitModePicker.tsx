@@ -279,8 +279,8 @@ export function TransitModePicker({
         : option.mode === 'walk' ? 'walking'
         : 'driving';
 
-      const origin = transitOrigin || activity.location?.address || city;
-      const destination = activity.location?.name || activity.location?.address || transitDestination;
+      const origin = transitOrigin || city;
+      const destination = transitDestination + ', ' + city;
 
       const { data, error } = await supabase.functions.invoke('route-details', {
         body: { origin, destination, mode: googleMode },
