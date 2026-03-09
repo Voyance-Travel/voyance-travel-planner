@@ -5489,6 +5489,7 @@ Generate activities for this day following ALL constraints above.`;
                           bookingRequired: { type: "boolean" },
                           transportation: {
                             type: "object",
+                            description: "COST RULES: walk/walking → estimatedCost.amount MUST be 0 (walking is free). metro/subway → 1-5. bus → 1-4. taxi/uber/rideshare → use realistic local rates.",
                             properties: {
                               method: { type: "string" },
                               duration: { type: "string" },
