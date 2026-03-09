@@ -1,50 +1,77 @@
-## Journey Sequential Generation — Implementation Status
 
-### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-**Implemented:**
+## Fix: Itinerary Generation Quality — Arrival Sequence, User Preferences, Empty Days, Fake Flights
 
-1. **`src/hooks/useGenerationGate.ts`**:
-   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
-   - Added journey detection: fetches all sibling legs when `journeyId` is present
-   - Sums credit costs across all journey legs for unified billing
-   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
-   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
+### Summary
+Four post-generation validators and one prompt enhancement in 2 edge function files to fix critical quality bugs.
 
-2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
-   - Added `journeyLegs` state for cost breakdown display
-   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
-   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
-   - Updated cost confirmation dialog:
-     - Shows "Journey Cost Breakdown" header for journeys
-     - Lists each leg with city, days, and cost
-     - Shows "Journey Total" instead of "Total"
-     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
-     - Disabled partial generation for journeys (must pay full upfront)
-     - "Confirm & Generate Journey" button text for journeys
+---
 
-### Part 2: Auto-Chain Generation (TODO)
+### Bug 1: Arrival Sequence Inverted (Hotel Check-in Before Airport)
 
-When leg 1 completes generation, the backend should:
-1. Check for next queued leg in the journey
-2. Automatically trigger `generate-trip` for the next leg
-3. Continue until all legs are generated
+**File:** `supabase/functions/generate-itinerary/index.ts`  
+**Location:** After the departure day sequence fix block (after line ~5941), add an **arrival day sequence fix** block.
 
-Files to modify:
-- `supabase/functions/generate-trip/index.ts` or similar edge function
-- Add post-generation hook to detect and chain to next journey leg
+- On Day 1 when `context.flightData?.hasOutboundFlight`, find arrival/transfer/checkin activities by keyword matching
+- If checkin index < arrival index, extract all three, remove from array, recalculate times based on flight arrival time, re-insert in correct order (arrival → transfer → checkin) at the beginning
+- Use `context.flightData.arrivalTimeMins` or parse from `flightHotelContext` for time anchoring, default to 540 (9:00 AM)
+- This mirrors the existing departure day fix pattern (lines 5871-5941) but for Day 1
 
-### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
+### Bug 2: User Preferences Ignored (Skiing, Light Dinner)
 
-**Implemented:**
+**File:** `supabase/functions/generate-itinerary/index.ts`
 
-1. **`src/pages/TripDetail.tsx`**:
-   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
-   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
-   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
-   - Added distinct "queued" state UI:
-     - Clock icon with hourglass badge
-     - "{destination} is up next" heading
-     - Explanation text about waiting for previous leg
-     - "View previous city" button to navigate back to the generating leg
-   - Added `Clock` to lucide-react imports
+Two changes:
+
+**A. Strengthen preference injection in system prompt (line 5178-5179)**  
+Wrap `preferenceContext` with explicit enforcement language:
+```
+🚨 USER'S EXPLICIT REQUESTS (MUST BE HONORED) 🚨
+${preferenceContext}
+⚠️ If the user asked for a specific activity, you MUST include it.
+⚠️ If the user specified dietary preferences, respect them.
+```
+
+**B. Post-generation validation logging (after line ~5941, alongside Bug 1 fix)**  
+- Extract user notes from `context.tripMetadata` or `preferenceContext`
+- Check generated activities against a keyword map (skiing→ski/slopes, etc.)
+- Log warnings for missing requested activities — these feed into the existing retry system via `validation.errors` or `validation.warnings`
+- For dining preferences like "light dinner", warn when expensive dining ($50+) is generated
+
+This is logging/warning only for now (not auto-retry) to avoid generation cost increases. The stronger prompt language is the primary fix.
+
+### Bug 3: Empty Days (Only Logistics, No Real Activities)
+
+**File:** `supabase/functions/generate-itinerary/index.ts`  
+**Location:** In the validation block (around line 5974, where `validateGeneratedDay` is called)
+
+After `validateGeneratedDay`, add a minimum **real activity** count check:
+- Filter out transport, accommodation, downtime, "head to airport", transfers
+- Require ≥2 real activities for non-departure days, ≥1 for departure day
+- If below minimum, push an error to `validation.errors` — this triggers the existing retry loop (line 6044) which already rebuilds the prompt with error feedback
+
+This leverages the existing retry infrastructure rather than adding a new retry mechanism.
+
+### Bug 4: Nonsensical Inter-City Flights
+
+**File:** `supabase/functions/generate-itinerary/prompt-library.ts`  
+**Location:** In `buildTransitionDayPrompt` (line 1866), after extracting `transitionFrom`/`transitionTo`
+
+- Add a `SAME_METRO_PAIRS` lookup (NYC↔East Rutherford/Newark/Jersey City, SF↔Oakland, LA↔Santa Monica, etc.)
+- Check if origin and destination are in the same metro area
+- If `tooCloseForFlight`, append to prompt: `⚠️ NEVER suggest flights between ${fromLabel} and ${toLabel} — they are in the same metro area. Only suggest ground transport.`
+- Also set `defaultMode` to `'rideshare'` instead of `'flight'` when `tooCloseForFlight` is true
+
+---
+
+### Files Changed
+| File | Changes |
+|------|---------|
+| `supabase/functions/generate-itinerary/index.ts` | Arrival sequence fix, preference prompt strengthening, preference validation logging, empty day validation |
+| `supabase/functions/generate-itinerary/prompt-library.ts` | Same-metro flight suppression in `buildTransitionDayPrompt` |
+
+### No Changes To
+- Frontend code
+- Other edge functions
+- Database schema
+
