@@ -1,50 +1,39 @@
-## Journey Sequential Generation — Implementation Status
 
-### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-**Implemented:**
+## Fix: Photo Caching — Save Fetched Photos to Activity Records
 
-1. **`src/hooks/useGenerationGate.ts`**:
-   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
-   - Added journey detection: fetches all sibling legs when `journeyId` is present
-   - Sums credit costs across all journey legs for unified billing
-   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
-   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
+### Problem
+Every page reload re-fetches ALL activity photos from the `destination-images` edge function because photo URLs are only cached in an in-memory `Map`. This accounts for 74.8% of API costs.
 
-2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
-   - Added `journeyLegs` state for cost breakdown display
-   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
-   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
-   - Updated cost confirmation dialog:
-     - Shows "Journey Cost Breakdown" header for journeys
-     - Lists each leg with city, days, and cost
-     - Shows "Journey Total" instead of "Total"
-     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
-     - Disabled partial generation for journeys (must pay full upfront)
-     - "Confirm & Generate Journey" button text for journeys
+### Solution: 3 Layers in 2 Files
 
-### Part 2: Auto-Chain Generation (TODO)
+#### File 1: `src/hooks/useActivityImage.ts`
 
-When leg 1 completes generation, the backend should:
-1. Check for next queued leg in the journey
-2. Automatically trigger `generate-trip` for the next leg
-3. Continue until all legs are generated
+**Layer 1 — Write photo URL back to DB**
+- Add `activityId?: string` as 6th parameter to `useActivityImage`
+- Add `persistPhotoToActivity(activityId, url)` helper that does a fire-and-forget `supabase.from('trip_activities').update({ photos: [photoUrl] })` — using a plain string array since `getActivityPhoto` handles that format (line 1080: `if (typeof photo === 'string') return photo`)
+- Call it after a successful fetch (line 156-159), only when `activityId` is provided and `source !== 'fallback'`
 
-Files to modify:
-- `supabase/functions/generate-trip/index.ts` or similar edge function
-- Add post-generation hook to detect and chain to next journey leg
+**Layer 2 — localStorage cache with 7-day TTL**
+- Replace the bare `Map` with a dual-layer cache: in-memory `Map` (same-session) + `localStorage` (survives reload)
+- Add `getFromLocalCache(key)` and `setLocalCache(key, url, source)` helpers with JSON serialization and 7-day TTL
+- Cache check order: in-memory → localStorage → fetch
+- On fetch success: write to both caches
 
-### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
+#### File 2: `src/components/itinerary/EditorialItinerary.tsx`
 
-**Implemented:**
+**Layer 3 — Pass activity ID to hook**
+- Line 8513-8519: add `activity.id` as 6th argument to `useActivityImage` (it's already passed as 5th arg `cacheId`, just add it again as `activityId`)
 
-1. **`src/pages/TripDetail.tsx`**:
-   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
-   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
-   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
-   - Added distinct "queued" state UI:
-     - Clock icon with hourglass badge
-     - "{destination} is up next" heading
-     - Explanation text about waiting for previous leg
-     - "View previous city" button to navigate back to the generating leg
-   - Added `Clock` to lucide-react imports
+### Cache Priority (after fix)
+1. `existingPhoto` from DB (already populated from previous write-back) → instant, no API call
+2. In-memory `Map` → instant, same session
+3. `localStorage` → instant, survives reload
+4. Edge function fetch → API call, then writes back to all 3 layers
+
+### Expected Result
+- First visit: fetches photos, saves URLs to `trip_activities.photos` + localStorage
+- Page reload: photos load from localStorage (no API calls)
+- Different browser/device: photos load from DB via `existingPhoto` (no API calls)
+- Cost reduction: ~98% fewer photo API calls
+
