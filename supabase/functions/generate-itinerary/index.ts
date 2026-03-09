@@ -5655,6 +5655,9 @@ ACTIVITY COUNT: ${effectiveMinActivities}-${effectiveMaxActivities} per day${isS
 Include a mix of: 3 dining slots (breakfast/lunch/dinner), transit between major moves, core exploration/activity slots, and an evening activity where appropriate.
 ${isSmartFinishGeneration ? 'SMART FINISH HARD RULE: Keep ALL user-provided anchor activities by exact name and build additional activities around them — never replace or drop anchors.' : ''}
 ${multiCityPrompt}
+${userActivitiesPrompt}
+${flightPrompt}
+${hotelPrompt}
 
 ${previousActivities.length > 0 ? `AVOID REPEATING THESE SPECIFIC ACTIVITIES (DO NOT repeat these): ${previousActivities.join(', ')}\n` : ''}${recurringEventNames.length > 0 ? `\nRECURRING/MULTI-DAY EVENTS (these SHOULD be scheduled again today — they are the reason for the trip): ${[...new Set(recurringEventNames)].join(', ')}\n` : ''}
 NOTE: The previous-activities list is ONLY for de-duplication. Do NOT treat it as a signal for spending style.
