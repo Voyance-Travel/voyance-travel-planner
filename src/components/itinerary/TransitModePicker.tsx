@@ -1,7 +1,7 @@
 /**
  * TransitModePicker — Tappable transport row that expands to show
- * alternative transport modes with AI recommendation.
- * Reuses the airport-transfers edge function for option fetching.
+ * alternative transport modes with real Google Maps routing data.
+ * Uses the transfer-pricing edge function for option fetching.
  */
 
 import React, { useState, useCallback } from 'react';
@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import {
   Car, Train, Bus, Footprints, Navigation2, Clock, ChevronDown, ChevronUp,
   Sparkles, Check, Loader2, Edit3, MoveUp, MoveDown, Trash2, Calendar,
-  MoreHorizontal, MapPin, ThumbsUp, Ship,
+  MoreHorizontal, MapPin, ThumbsUp, Ship, Route,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
@@ -26,18 +26,26 @@ import {
 interface TransportOptionData {
   id: string;
   mode: string;
-  label: string;
-  icon: string;
+  title: string;
   duration: string;
   durationMinutes: number;
-  estimatedCost: string;
-  costPerPerson?: string;
-  route?: string;
+  priceTotal: number;
+  priceFormatted: string;
+  distance?: number;
   notes?: string;
-  pros?: string[];
-  cons?: string[];
+  trainLine?: string;
+  isBookable: boolean;
+  bookingUrl?: string;
   recommended?: boolean;
-  bookingTip?: string;
+  source: string;
+  confidence: number;
+}
+
+interface GoogleMapsData {
+  drivingDuration: string;
+  drivingDistance: string;
+  transitDuration?: string;
+  walkingDuration?: string;
 }
 
 interface TransitModePickerProps {
@@ -53,6 +61,8 @@ interface TransitModePickerProps {
   city: string;
   tripId: string;
   tripCurrency: string;
+  travelers: number;
+  transitOrigin: string;
   onEdit: (dayIndex: number, activityIndex: number, activity: any) => void;
   onMove: (dayIndex: number, activityId: string, direction: 'up' | 'down') => void;
   onMoveToDay?: (fromDay: number, activityId: string, toDay: number) => void;
@@ -100,6 +110,8 @@ export function TransitModePicker({
   city,
   tripId,
   tripCurrency,
+  travelers,
+  transitOrigin,
   onEdit,
   onMove,
   onMoveToDay,
@@ -111,10 +123,9 @@ export function TransitModePicker({
 }: TransitModePickerProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [options, setOptions] = useState<TransportOptionData[]>([]);
-  const [aiRecommendation, setAiRecommendation] = useState('');
+  const [googleMapsData, setGoogleMapsData] = useState<GoogleMapsData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [hasFetched, setHasFetched] = useState(false);
-  const [expandedOption, setExpandedOption] = useState<string | null>(null);
   const [selectedMode, setSelectedMode] = useState<string | null>(null);
 
   const transitDestination = parseTransitDestination(activityTitle);
@@ -123,17 +134,34 @@ export function TransitModePicker({
     if (hasFetched || isLoading) return;
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('airport-transfers', {
+      const { data, error } = await supabase.functions.invoke('transfer-pricing', {
         body: {
-          origin: activity.venue || activity.address || city,
-          destination: transitDestination,
+          origin: transitOrigin,
+          destination: activity.location?.name || activity.location?.address || activity.venue || transitDestination,
           city,
+          travelers: travelers || 2,
+          transferType: 'point_to_point',
         },
       });
 
       if (!error && data?.options) {
-        setOptions(data.options);
-        setAiRecommendation(data.aiRecommendation || '');
+        // Filter out airport-specific options for non-airport in-city routes
+        const filtered = (data.options as TransportOptionData[]).filter(opt => {
+          const t = opt.title.toLowerCase();
+          if (t.includes('airport bus') || t.includes('airport shuttle')) return false;
+          if (t.includes('hotel car')) return false;
+          return true;
+        });
+
+        // Mark recommended
+        const recommendedId = data.recommendedOption?.id;
+        const mapped = filtered.map(opt => ({
+          ...opt,
+          recommended: opt.id === recommendedId || opt.recommended,
+        }));
+
+        setOptions(mapped);
+        setGoogleMapsData(data.googleMapsData || null);
       }
     } catch (err) {
       console.error('Failed to fetch transit options:', err);
@@ -141,7 +169,7 @@ export function TransitModePicker({
       setIsLoading(false);
       setHasFetched(true);
     }
-  }, [city, transitDestination, activity.venue, activity.address, hasFetched, isLoading]);
+  }, [city, transitDestination, transitOrigin, activity, travelers, hasFetched, isLoading]);
 
   const handleExpand = () => {
     if (!isEditable) return;
@@ -153,13 +181,22 @@ export function TransitModePicker({
   };
 
   const handleSelectOption = useCallback(async (option: TransportOptionData) => {
-    const newTitle = `Travel to ${transitDestination} via ${option.label}`;
+    const shortMode = option.mode === 'walk' ? 'Walk'
+      : option.mode === 'taxi' ? 'Taxi'
+      : option.mode === 'uber' ? 'Rideshare'
+      : option.mode === 'train' || option.mode === 'metro' ? 'Train'
+      : option.mode === 'transit' ? 'Transit'
+      : option.mode === 'bus' ? 'Bus'
+      : option.mode === 'ferry' ? 'Ferry'
+      : option.title;
+
+    const newTitle = option.mode === 'walk'
+      ? `Walk to ${transitDestination}`
+      : `Travel to ${transitDestination} via ${shortMode}`;
+
     setSelectedMode(option.id);
 
     try {
-      // Update the activity in the itinerary_data JSON on the trips table
-      // We need to update via the parent's refetch mechanism
-      // For now, use the edit callback to update in-memory + persist
       const updatedActivity = {
         ...activity,
         title: newTitle,
@@ -167,11 +204,10 @@ export function TransitModePicker({
         durationMinutes: option.durationMinutes,
         cost: {
           ...(activity.cost || {}),
-          amount: parseFloat(option.estimatedCost.replace(/[^0-9.]/g, '')) || 0,
+          amount: option.priceTotal || 0,
         },
       };
 
-      // Call edit handler which persists the change
       onEdit(dayIndex, activityIndex, updatedActivity);
       setIsExpanded(false);
       onActivityUpdated?.();
@@ -293,13 +329,17 @@ export function TransitModePicker({
             className={cn("overflow-hidden", !isLast && "border-b border-border/30")}
           >
             <div className="px-4 pb-3 space-y-2">
-              {/* AI Recommendation */}
-              {aiRecommendation && !isLoading && (
-                <div className="flex items-start gap-2 p-2.5 rounded-lg bg-primary/5 border border-primary/10">
-                  <Sparkles className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-[11px] font-medium text-primary">AI Recommendation</p>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed">{aiRecommendation}</p>
+              {/* Google Maps route summary */}
+              {googleMapsData && !isLoading && (
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-secondary/30 border border-border/50">
+                  <Route className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <div className="text-[11px] text-muted-foreground flex items-center gap-1 flex-wrap">
+                    <span className="font-medium text-foreground">{transitOrigin}</span>
+                    <span>→</span>
+                    <span className="font-medium text-foreground">{transitDestination}</span>
+                    {googleMapsData.drivingDistance && googleMapsData.drivingDistance !== 'N/A' && (
+                      <span className="text-muted-foreground">· {googleMapsData.drivingDistance}</span>
+                    )}
                   </div>
                 </div>
               )}
@@ -308,15 +348,15 @@ export function TransitModePicker({
               {isLoading && (
                 <div className="flex items-center justify-center py-6 gap-2">
                   <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                  <span className="text-xs text-muted-foreground">Finding transport options...</span>
+                  <span className="text-xs text-muted-foreground">Finding real routes...</span>
                 </div>
               )}
 
               {/* Options list */}
               {!isLoading && options.map((option) => {
                 const isCurrentMode = activityTitle.toLowerCase().includes(option.mode.toLowerCase()) ||
-                  activityTitle.toLowerCase().includes(option.label.toLowerCase());
-                const isDetailExpanded = expandedOption === option.id;
+                  activityTitle.toLowerCase().includes(option.title.toLowerCase().split(' ')[0]);
+                const isWalking = option.mode === 'walk' || option.mode === 'walking';
 
                 return (
                   <div
@@ -330,10 +370,10 @@ export function TransitModePicker({
                     )}
                   >
                     <div className="flex items-center gap-2.5 p-2.5">
-                      <span className="text-lg shrink-0">{option.icon}</span>
+                      <span className="text-muted-foreground shrink-0">{getModeIcon(option.mode)}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-medium text-foreground">{option.label}</span>
+                          <span className="text-xs font-medium text-foreground">{option.title}</span>
                           {option.recommended && (
                             <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-primary/10 text-primary border-primary/20">
                               <ThumbsUp className="h-2 w-2 mr-0.5" />
@@ -351,21 +391,20 @@ export function TransitModePicker({
                           <span className="flex items-center gap-0.5">
                             <Clock className="h-2.5 w-2.5" /> {option.duration}
                           </span>
-                          <span className="font-medium text-foreground">{option.estimatedCost}</span>
-                          {option.costPerPerson && (
-                            <span>({option.costPerPerson})</span>
+                          <span className="font-medium text-foreground">{option.priceFormatted}</span>
+                          {option.distance && (
+                            <span>{option.distance} km</span>
                           )}
                         </div>
+                        {/* Notes / train line */}
+                        {option.trainLine && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">Line: {option.trainLine}</p>
+                        )}
+                        {option.notes && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{option.notes}</p>
+                        )}
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
-                        {(option.route || option.pros?.length || option.cons?.length || option.bookingTip) && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setExpandedOption(isDetailExpanded ? null : option.id); }}
-                            className="p-1 rounded hover:bg-secondary transition-colors"
-                          >
-                            {isDetailExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                          </button>
-                        )}
                         {!isCurrentMode && isEditable && (
                           <Button
                             size="sm"
@@ -376,47 +415,19 @@ export function TransitModePicker({
                             Select
                           </Button>
                         )}
+                        {option.isBookable && option.bookingUrl && (
+                          <a
+                            href={option.bookingUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-[11px] text-primary hover:underline px-1"
+                          >
+                            Book
+                          </a>
+                        )}
                       </div>
                     </div>
-
-                    {/* Expanded details */}
-                    <AnimatePresence>
-                      {isDetailExpanded && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.15 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="px-2.5 pb-2.5 pt-1 border-t border-border/50 space-y-1.5">
-                            {option.route && (
-                              <div className="flex items-start gap-1.5">
-                                <MapPin className="h-2.5 w-2.5 text-muted-foreground shrink-0 mt-0.5" />
-                                <p className="text-[10px] text-muted-foreground">{option.route}</p>
-                              </div>
-                            )}
-                            {(option.pros?.length || option.cons?.length) ? (
-                              <div className="grid grid-cols-2 gap-1.5">
-                                {option.pros?.map((pro, i) => (
-                                  <p key={`p${i}`} className="text-[10px] text-green-600 flex items-start gap-0.5">
-                                    <span className="shrink-0">✓</span><span>{pro}</span>
-                                  </p>
-                                ))}
-                                {option.cons?.map((con, i) => (
-                                  <p key={`c${i}`} className="text-[10px] text-orange-500 flex items-start gap-0.5">
-                                    <span className="shrink-0">△</span><span>{con}</span>
-                                  </p>
-                                ))}
-                              </div>
-                            ) : null}
-                            {option.bookingTip && (
-                              <p className="text-[10px] text-primary/80 italic">💡 {option.bookingTip}</p>
-                            )}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
                   </div>
                 );
               })}
