@@ -1,31 +1,92 @@
+## Journey Sequential Generation — Implementation Status
 
+### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-## Fix: Case-Sensitive Token Lookup + accept_trip_invite Case-Insensitive Update
+**Implemented:**
 
-### What's already done (from previous implementations)
-- `AcceptInvite.tsx`: `link_replaced` in `TERMINAL_REASONS` and `getErrorDisplay` ✓
-- `useStalePendingChargeRefund.ts`: sessionStorage guard ✓
-- `resolve_or_rotate_invite`: soft-delete with `replaced_at` ✓
-- `get_trip_invite_info`: `link_replaced` reason + `replaced_at` check ✓
+1. **`src/hooks/useGenerationGate.ts`**:
+   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
+   - Added journey detection: fetches all sibling legs when `journeyId` is present
+   - Sums credit costs across all journey legs for unified billing
+   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
+   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
 
-### What's needed: Single database migration
+2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
+   - Added `journeyLegs` state for cost breakdown display
+   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
+   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
+   - Updated cost confirmation dialog:
+     - Shows "Journey Cost Breakdown" header for journeys
+     - Lists each leg with city, days, and cost
+     - Shows "Journey Total" instead of "Total"
+     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
+     - Disabled partial generation for journeys (must pay full upfront)
+     - "Confirm & Generate Journey" button text for journeys
 
-**1. Replace `generate_share_token()`** — switch from base64 (mixed-case) to hex encoding (lowercase-only: a-f, 0-9). Default size 16 bytes → 16 hex chars.
+### Part 2: Auto-Chain Generation (TODO)
 
-**2. Case-insensitive index** — `CREATE INDEX idx_trip_invites_token_lower ON trip_invites(LOWER(token))` for performance.
+When leg 1 completes generation, the backend should:
+1. Check for next queued leg in the journey
+2. Automatically trigger `generate-trip` for the next leg
+3. Continue until all legs are generated
 
-**3. Backfill existing tokens** — `UPDATE trip_invites SET token = LOWER(token) WHERE token <> LOWER(token)`.
+Files to modify:
+- `supabase/functions/generate-trip/index.ts` or similar edge function
+- Add post-generation hook to detect and chain to next journey leg
 
-**4. Update `get_trip_invite_info()`** — change `WHERE token = p_token` to `WHERE LOWER(token) = LOWER(p_token)`. Keep all existing logic (replaced_at check, failure logging, etc.).
+### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
 
-**5. Update `accept_trip_invite()`** — change line 21 from `WHERE token = p_token FOR UPDATE` to `WHERE LOWER(token) = LOWER(p_token) FOR UPDATE`. Rest of function unchanged.
+**Implemented:**
 
-**6. Add `replaced_at` column** — `ALTER TABLE trip_invites ADD COLUMN IF NOT EXISTS replaced_at TIMESTAMPTZ DEFAULT NULL` (may already exist from previous migration; `IF NOT EXISTS` makes it safe).
+1. **`src/pages/TripDetail.tsx`**:
+   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
+   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
+   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
+   - Added distinct "queued" state UI:
+     - Clock icon with hourglass badge
+     - "{destination} is up next" heading
+     - Explanation text about waiting for previous leg
+     - "View previous city" button to navigate back to the generating leg
+   - Added `Clock` to lucide-react imports
 
-### Files changed
-| File | Change |
-|------|--------|
-| New migration (SQL) | All 6 items above in a single migration |
+---
 
-No frontend changes needed — everything is already in place.
+## Preference Enforcement Activation ✅ COMPLETE
 
+### Fix 1: Per-day preference checks now trigger retries ✅
+Moved MINIMUM REAL ACTIVITY COUNT and USER PREFERENCE VALIDATION blocks to after `validateGeneratedDay()` so they can push errors into `validation.errors`. Upgraded all `console.warn` calls to `validation.errors.push` + `validation.isValid = false`. Added budget preference validation ($75+ threshold). Activity keyword checks skip departure days.
+
+### Fix 2: Stage 2.6 personalization rejection enabled ✅
+Uncommented and enhanced the rejection block. Critical and major dietary violations are now actively enforced — dietary violations get patched with ⚠️ warnings in activity descriptions. Low personalization scores (<40) are logged.
+
+---
+
+## Itinerary Generation Quality Fixes ✅ COMPLETE
+
+### Bug 1: Arrival Sequence Inverted ✅
+Post-generation validator in `index.ts` detects when hotel check-in is ordered before airport arrival on Day 1. Extracts arrival/transfer/checkin activities, recalculates times based on flight arrival, and re-inserts in correct order.
+
+### Bug 2: User Preferences Ignored ✅
+- Strengthened preference injection in system prompt with explicit enforcement language (🚨 MUST BE HONORED)
+- Added post-generation validation logging that checks activities against keyword map for requested activities (skiing, surfing, etc.)
+- Warns when "light dinner" preference is violated by expensive dining ($50+)
+
+### Bug 3: Empty Days ✅
+Added minimum real activity count validation after generation. Filters out logistics (transport, accommodation, downtime) and warns when a day has fewer than 2 real activities (1 for departure day).
+
+### Bug 4: Nonsensical Inter-City Flights ✅
+Added `SAME_METRO_PAIRS` lookup in `buildTransitionDayPrompt` (prompt-library.ts). When origin and destination are in the same metro area (e.g., East Rutherford ↔ NYC), flights are suppressed from transport options and the prompt explicitly forbids them. Default mode switches to `rideshare`.
+
+---
+
+## Fix: Case-Sensitive Token Lookup ✅ COMPLETE
+
+**Root cause:** `generate_share_token()` used base64 encoding producing mixed-case tokens. Mobile apps (iMessage, WhatsApp) can lowercase URLs, breaking the case-sensitive PostgreSQL lookup.
+
+### Changes (single migration):
+1. **`generate_share_token(integer)`** — switched from base64 to hex encoding (lowercase-only: a-f, 0-9)
+2. **Case-insensitive index** — `idx_trip_invites_token_lower` on `LOWER(token)`
+3. **Backfill** — all existing tokens lowercased
+4. **`get_trip_invite_info()`** — `WHERE LOWER(token) = LOWER(p_token)` + failure logging + `replaced_at` check
+5. **`accept_trip_invite()`** — `WHERE LOWER(token) = LOWER(p_token) FOR UPDATE`
+6. **`replaced_at` column** — added to `trip_invites` for soft-delete support
