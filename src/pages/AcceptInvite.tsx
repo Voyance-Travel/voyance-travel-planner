@@ -48,6 +48,7 @@ interface AcceptResult {
 const TERMINAL_REASONS = new Set([
   'token_not_found',
   'invalid_token',
+  'link_replaced',
   'expired',
   'trip_full',
   'invite_limit_reached',
