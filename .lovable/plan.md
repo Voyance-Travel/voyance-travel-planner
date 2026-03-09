@@ -76,3 +76,17 @@ Added minimum real activity count validation after generation. Filters out logis
 
 ### Bug 4: Nonsensical Inter-City Flights ✅
 Added `SAME_METRO_PAIRS` lookup in `buildTransitionDayPrompt` (prompt-library.ts). When origin and destination are in the same metro area (e.g., East Rutherford ↔ NYC), flights are suppressed from transport options and the prompt explicitly forbids them. Default mode switches to `rideshare`.
+
+---
+
+## Fix: Case-Sensitive Token Lookup ✅ COMPLETE
+
+**Root cause:** `generate_share_token()` used base64 encoding producing mixed-case tokens. Mobile apps (iMessage, WhatsApp) can lowercase URLs, breaking the case-sensitive PostgreSQL lookup.
+
+### Changes (single migration):
+1. **`generate_share_token(integer)`** — switched from base64 to hex encoding (lowercase-only: a-f, 0-9)
+2. **Case-insensitive index** — `idx_trip_invites_token_lower` on `LOWER(token)`
+3. **Backfill** — all existing tokens lowercased
+4. **`get_trip_invite_info()`** — `WHERE LOWER(token) = LOWER(p_token)` + failure logging + `replaced_at` check
+5. **`accept_trip_invite()`** — `WHERE LOWER(token) = LOWER(p_token) FOR UPDATE`
+6. **`replaced_at` column** — added to `trip_invites` for soft-delete support
