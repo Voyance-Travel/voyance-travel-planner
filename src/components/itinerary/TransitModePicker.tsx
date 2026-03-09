@@ -1,7 +1,7 @@
 /**
  * TransitModePicker — Tappable transport row that expands to show
- * alternative transport modes with real Google Maps routing data.
- * Uses the transfer-pricing edge function for option fetching.
+ * alternative transport modes with route details from airport-transfers.
+ * Two-level expansion: Level 1 = options list, Level 2 = route details per option.
  */
 
 import React, { useState, useCallback } from 'react';
@@ -10,11 +10,10 @@ import { cn } from '@/lib/utils';
 import {
   Car, Train, Bus, Footprints, Navigation2, Clock, ChevronDown, ChevronUp,
   Sparkles, Check, Loader2, Edit3, MoveUp, MoveDown, Trash2, Calendar,
-  MoreHorizontal, MapPin, ThumbsUp, Ship, Route,
+  MoreHorizontal, ThumbsUp, ThumbsDown, Ship, Info,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger, DropdownMenuSeparator,
@@ -26,26 +25,19 @@ import {
 interface TransportOptionData {
   id: string;
   mode: string;
-  title: string;
+  label: string;
+  icon: string;
   duration: string;
   durationMinutes: number;
-  priceTotal: number;
-  priceFormatted: string;
-  distance?: number;
+  estimatedCost: string;
+  costPerPerson?: string;
+  route?: string;
   notes?: string;
+  pros?: string[];
+  cons?: string[];
   trainLine?: string;
-  isBookable: boolean;
-  bookingUrl?: string;
+  bookingTip?: string;
   recommended?: boolean;
-  source: string;
-  confidence: number;
-}
-
-interface GoogleMapsData {
-  drivingDuration: string;
-  drivingDistance: string;
-  transitDuration?: string;
-  walkingDuration?: string;
 }
 
 interface TransitModePickerProps {
@@ -61,8 +53,8 @@ interface TransitModePickerProps {
   city: string;
   tripId: string;
   tripCurrency: string;
-  travelers: number;
-  transitOrigin: string;
+  travelers?: number;
+  transitOrigin?: string;
   onEdit: (dayIndex: number, activityIndex: number, activity: any) => void;
   onMove: (dayIndex: number, activityId: string, direction: 'up' | 'down') => void;
   onMoveToDay?: (fromDay: number, activityId: string, toDay: number) => void;
@@ -123,45 +115,60 @@ export function TransitModePicker({
 }: TransitModePickerProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [options, setOptions] = useState<TransportOptionData[]>([]);
-  const [googleMapsData, setGoogleMapsData] = useState<GoogleMapsData | null>(null);
+  const [aiRecommendation, setAiRecommendation] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [hasFetched, setHasFetched] = useState(false);
   const [selectedMode, setSelectedMode] = useState<string | null>(null);
+  const [expandedOptionId, setExpandedOptionId] = useState<string | null>(null);
 
   const transitDestination = parseTransitDestination(activityTitle);
+  const isAirportRoute = activityTitle.toLowerCase().includes('airport');
 
   const fetchOptions = useCallback(async () => {
     if (hasFetched || isLoading) return;
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('transfer-pricing', {
-        body: {
-          origin: transitOrigin,
-          destination: activity.location?.name || activity.location?.address || activity.venue || transitDestination,
-          city,
-          travelers: travelers || 2,
-          transferType: 'point_to_point',
-        },
+      const origin = transitOrigin || activity.location?.address || city;
+      const destination = activity.location?.name || activity.location?.address || transitDestination;
+
+      const { data, error } = await supabase.functions.invoke('airport-transfers', {
+        body: { origin, destination, city },
       });
 
       if (!error && data?.options) {
-        // Filter out airport-specific options for non-airport in-city routes
-        const filtered = (data.options as TransportOptionData[]).filter(opt => {
-          const t = opt.title.toLowerCase();
-          if (t.includes('airport bus') || t.includes('airport shuttle')) return false;
-          if (t.includes('hotel car')) return false;
-          return true;
-        });
+        let filtered = (data.options as TransportOptionData[]);
 
-        // Mark recommended
-        const recommendedId = data.recommendedOption?.id;
-        const mapped = filtered.map(opt => ({
-          ...opt,
-          recommended: opt.id === recommendedId || opt.recommended,
-        }));
+        // Filter airport-specific options for non-airport routes
+        if (!isAirportRoute) {
+          filtered = filtered
+            .filter(opt => opt.id !== 'hotel_car')
+            .map(opt => {
+              if (opt.label === 'Airport Bus / Shuttle') {
+                return { ...opt, label: 'Bus / Shuttle' };
+              }
+              return opt;
+            });
+        }
 
-        setOptions(mapped);
-        setGoogleMapsData(data.googleMapsData || null);
+        // Add Walk option for non-airport routes
+        if (!isAirportRoute) {
+          filtered.push({
+            id: 'walk',
+            mode: 'walk',
+            label: 'Walk',
+            icon: '🚶',
+            duration: 'Varies',
+            durationMinutes: 0,
+            estimatedCost: 'Free',
+            route: `Walk to ${transitDestination}`,
+            pros: ['Free', 'See the neighborhood up close', 'Good for short distances'],
+            cons: ['Weather dependent', 'Not practical for long distances or with luggage'],
+            notes: 'Best for distances under 20 minutes',
+          });
+        }
+
+        setOptions(filtered);
+        setAiRecommendation(data.aiRecommendation || '');
       }
     } catch (err) {
       console.error('Failed to fetch transit options:', err);
@@ -169,30 +176,31 @@ export function TransitModePicker({
       setIsLoading(false);
       setHasFetched(true);
     }
-  }, [city, transitDestination, transitOrigin, activity, travelers, hasFetched, isLoading]);
+  }, [city, transitDestination, transitOrigin, activity, hasFetched, isLoading, isAirportRoute]);
 
   const handleExpand = () => {
     if (!isEditable) return;
     const next = !isExpanded;
     setIsExpanded(next);
-    if (next && !hasFetched) {
-      fetchOptions();
-    }
+    if (next) setExpandedOptionId(null);
+    if (next && !hasFetched) fetchOptions();
   };
 
   const handleSelectOption = useCallback(async (option: TransportOptionData) => {
     const shortMode = option.mode === 'walk' ? 'Walk'
       : option.mode === 'taxi' ? 'Taxi'
       : option.mode === 'uber' ? 'Rideshare'
-      : option.mode === 'train' || option.mode === 'metro' ? 'Train'
+      : option.mode === 'train' || option.mode === 'metro' ? (option.trainLine || 'Train')
       : option.mode === 'transit' ? 'Transit'
       : option.mode === 'bus' ? 'Bus'
       : option.mode === 'ferry' ? 'Ferry'
-      : option.title;
+      : option.label;
 
     const newTitle = option.mode === 'walk'
       ? `Walk to ${transitDestination}`
       : `Travel to ${transitDestination} via ${shortMode}`;
+
+    const parsedCost = parseFloat(option.estimatedCost.replace(/[^0-9.]/g, '')) || 0;
 
     setSelectedMode(option.id);
 
@@ -204,7 +212,7 @@ export function TransitModePicker({
         durationMinutes: option.durationMinutes,
         cost: {
           ...(activity.cost || {}),
-          amount: option.priceTotal || 0,
+          amount: parsedCost,
         },
       };
 
@@ -216,6 +224,10 @@ export function TransitModePicker({
       setSelectedMode(null);
     }
   }, [activity, activityIndex, dayIndex, onEdit, onActivityUpdated, transitDestination]);
+
+  const toggleOptionDetail = (optionId: string) => {
+    setExpandedOptionId(prev => prev === optionId ? null : optionId);
+  };
 
   return (
     <div>
@@ -329,17 +341,13 @@ export function TransitModePicker({
             className={cn("overflow-hidden", !isLast && "border-b border-border/30")}
           >
             <div className="px-4 pb-3 space-y-2">
-              {/* Google Maps route summary */}
-              {googleMapsData && !isLoading && (
-                <div className="flex items-center gap-2 p-2 rounded-lg bg-secondary/30 border border-border/50">
-                  <Route className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <div className="text-[11px] text-muted-foreground flex items-center gap-1 flex-wrap">
-                    <span className="font-medium text-foreground">{transitOrigin}</span>
-                    <span>→</span>
-                    <span className="font-medium text-foreground">{transitDestination}</span>
-                    {googleMapsData.drivingDistance && googleMapsData.drivingDistance !== 'N/A' && (
-                      <span className="text-muted-foreground">· {googleMapsData.drivingDistance}</span>
-                    )}
+              {/* AI Recommendation */}
+              {aiRecommendation && !isLoading && (
+                <div className="flex items-start gap-2 p-2.5 rounded-lg bg-primary/5 border border-primary/15">
+                  <Sparkles className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-[10px] font-semibold text-primary uppercase tracking-wide">AI Recommendation</p>
+                    <p className="text-xs text-foreground/80 mt-0.5">{aiRecommendation}</p>
                   </div>
                 </div>
               )}
@@ -348,32 +356,39 @@ export function TransitModePicker({
               {isLoading && (
                 <div className="flex items-center justify-center py-6 gap-2">
                   <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                  <span className="text-xs text-muted-foreground">Finding real routes...</span>
+                  <span className="text-xs text-muted-foreground">Finding transport options...</span>
                 </div>
               )}
 
-              {/* Options list */}
+              {/* Options list — Level 1 */}
               {!isLoading && options.map((option) => {
                 const isCurrentMode = activityTitle.toLowerCase().includes(option.mode.toLowerCase()) ||
-                  activityTitle.toLowerCase().includes(option.title.toLowerCase().split(' ')[0]);
-                const isWalking = option.mode === 'walk' || option.mode === 'walking';
+                  activityTitle.toLowerCase().includes(option.label.toLowerCase().split(' ')[0]);
+                const isDetailExpanded = expandedOptionId === option.id;
 
                 return (
                   <div
                     key={option.id}
                     className={cn(
-                      "rounded-lg border transition-all",
+                      "rounded-lg border transition-all overflow-hidden",
                       isCurrentMode
                         ? "border-primary bg-primary/5 ring-1 ring-primary/20"
                         : "border-border bg-card hover:border-primary/30",
                       option.recommended && !isCurrentMode && "border-primary/20 bg-primary/[0.02]"
                     )}
                   >
-                    <div className="flex items-center gap-2.5 p-2.5">
+                    {/* Level 1: Option summary row — tap to expand details */}
+                    <button
+                      onClick={() => toggleOptionDetail(option.id)}
+                      className={cn(
+                        "flex items-center gap-2.5 p-2.5 w-full text-left transition-colors",
+                        !isCurrentMode && "hover:bg-secondary/10"
+                      )}
+                    >
                       <span className="text-muted-foreground shrink-0">{getModeIcon(option.mode)}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-medium text-foreground">{option.title}</span>
+                          <span className="text-xs font-medium text-foreground">{option.label}</span>
                           {option.recommended && (
                             <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-primary/10 text-primary border-primary/20">
                               <ThumbsUp className="h-2 w-2 mr-0.5" />
@@ -391,43 +406,97 @@ export function TransitModePicker({
                           <span className="flex items-center gap-0.5">
                             <Clock className="h-2.5 w-2.5" /> {option.duration}
                           </span>
-                          <span className="font-medium text-foreground">{option.priceFormatted}</span>
-                          {option.distance && (
-                            <span>{option.distance} km</span>
+                          <span className="font-medium text-foreground">{option.estimatedCost}</span>
+                          {option.costPerPerson && (
+                            <span className="text-muted-foreground">({option.costPerPerson})</span>
                           )}
                         </div>
-                        {/* Notes / train line */}
-                        {option.trainLine && (
-                          <p className="text-[10px] text-muted-foreground mt-0.5">Line: {option.trainLine}</p>
-                        )}
-                        {option.notes && (
-                          <p className="text-[10px] text-muted-foreground mt-0.5">{option.notes}</p>
-                        )}
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        {!isCurrentMode && isEditable && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={(e) => { e.stopPropagation(); handleSelectOption(option); }}
-                            className="text-[11px] h-6 px-2"
-                          >
-                            Select
-                          </Button>
-                        )}
-                        {option.isBookable && option.bookingUrl && (
-                          <a
-                            href={option.bookingUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-[11px] text-primary hover:underline px-1"
-                          >
-                            Book
-                          </a>
-                        )}
-                      </div>
-                    </div>
+                      <span className="text-muted-foreground/40 shrink-0">
+                        {isDetailExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      </span>
+                    </button>
+
+                    {/* Level 2: Route details — expanded on tap */}
+                    <AnimatePresence>
+                      {isDetailExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.15 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="px-3 pb-3 pt-1 space-y-2 border-t border-border/30">
+                            {/* Route description */}
+                            {option.route && (
+                              <div className="text-xs text-foreground/80">
+                                <span className="font-medium text-foreground">Route: </span>
+                                {option.route}
+                              </div>
+                            )}
+
+                            {/* Train line callout */}
+                            {option.trainLine && (
+                              <div className="flex items-center gap-1.5 text-xs text-foreground/80 bg-secondary/30 rounded px-2 py-1">
+                                <Train className="h-3 w-3 text-primary shrink-0" />
+                                Take the <span className="font-medium">{option.trainLine}</span>
+                              </div>
+                            )}
+
+                            {/* Pros */}
+                            {option.pros && option.pros.length > 0 && (
+                              <div className="space-y-1">
+                                {option.pros.map((pro, i) => (
+                                  <div key={i} className="flex items-start gap-1.5 text-[11px] text-green-700 dark:text-green-400">
+                                    <ThumbsUp className="h-2.5 w-2.5 mt-0.5 shrink-0" />
+                                    <span>{pro}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Cons */}
+                            {option.cons && option.cons.length > 0 && (
+                              <div className="space-y-1">
+                                {option.cons.map((con, i) => (
+                                  <div key={i} className="flex items-start gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
+                                    <ThumbsDown className="h-2.5 w-2.5 mt-0.5 shrink-0" />
+                                    <span>{con}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Notes */}
+                            {option.notes && (
+                              <p className="text-[10px] text-muted-foreground italic">{option.notes}</p>
+                            )}
+
+                            {/* Booking tip */}
+                            {option.bookingTip && (
+                              <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground bg-secondary/20 rounded px-2 py-1.5">
+                                <Info className="h-3 w-3 shrink-0 mt-0.5" />
+                                <span><span className="font-medium">Tip:</span> {option.bookingTip}</span>
+                              </div>
+                            )}
+
+                            {/* Select button */}
+                            {!isCurrentMode && isEditable && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSelectOption(option);
+                                }}
+                                className="w-full text-xs font-medium text-primary hover:text-primary/80 py-2 rounded-lg border border-primary/20 hover:bg-primary/5 transition-colors mt-1"
+                              >
+                                Switch to {option.label}
+                              </button>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 );
               })}
