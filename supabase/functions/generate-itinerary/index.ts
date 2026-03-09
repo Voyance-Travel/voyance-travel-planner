@@ -5175,8 +5175,15 @@ DAY-SPECIFIC CONSTRAINTS (Flight/Hotel/DNA driven)
 ${'='.repeat(70)}
 ${dayConstraintsSection}` : ''}
 
-ADDITIONAL CONTEXT:
+${preferenceContext ? `${'='.repeat(70)}
+🚨 USER'S EXPLICIT REQUESTS (MUST BE HONORED — FAILURE = REJECTED ITINERARY) 🚨
+${'='.repeat(70)}
 ${preferenceContext}
+
+⚠️ If the user asked for a specific activity (e.g., "skiing", "surfing", "hiking"), you MUST include it in the itinerary.
+⚠️ If the user specified dietary preferences (e.g., "light dinner", "vegetarian"), respect them in ALL restaurant choices.
+⚠️ Ignoring explicit user requests is the #1 reason itineraries get rejected. DO NOT substitute generic activities.
+` : 'ADDITIONAL CONTEXT: (none)'}
 
 ${flightHotelContext}${retryPrompt}
 
