@@ -170,6 +170,7 @@ export default function TripDetail() {
   const [showStalledUI, setShowStalledUI] = useState(false);
   const stalledTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const [resumingGeneration, setResumingGeneration] = useState(false);
+  const resumeInFlightRef = useRef(false);
   const onReadyCalledRef = useRef(false);
   const [generateNewDaysPrompt, setGenerateNewDaysPrompt] = useState<{
     open: boolean;
@@ -293,6 +294,11 @@ export default function TripDetail() {
   // Resume generation from where it left off
   const handleResumeGeneration = useCallback(async () => {
     if (!tripId || !trip) return;
+    if (resumeInFlightRef.current) {
+      console.log('[Resume] Already resuming, skipping duplicate');
+      return;
+    }
+    resumeInFlightRef.current = true;
     setResumingGeneration(true);
     setGenerationStalled(false);
     onReadyCalledRef.current = false; // Reset so onReady can fire again for this new attempt
@@ -353,6 +359,7 @@ export default function TripDetail() {
       toast.error('Failed to resume generation. Please try again.');
       setGenerationStalled(true);
     } finally {
+      resumeInFlightRef.current = false;
       setResumingGeneration(false);
     }
   }, [tripId, trip, supabase]);

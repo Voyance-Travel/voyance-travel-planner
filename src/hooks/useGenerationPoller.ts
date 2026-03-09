@@ -50,6 +50,8 @@ interface UseGenerationPollerOptions {
   onFailed?: (error: string) => void;
   /** Called when generation is detected as stalled (zombie process) — only after auto-resume fails */
   onStalled?: () => void;
+  /** Whether a manual resume is already in flight — suppresses auto-resume to prevent race */
+  resumeInFlight?: boolean;
 }
 
 const INITIAL_STATE: GenerationPollState = {
@@ -68,6 +70,7 @@ export function useGenerationPoller({
   onReady,
   onFailed,
   onStalled,
+  resumeInFlight = false,
 }: UseGenerationPollerOptions) {
   const [state, setState] = useState<GenerationPollState>(INITIAL_STATE);
 
@@ -265,7 +268,7 @@ export function useGenerationPoller({
 
       if (isStalled) {
         // Auto-resume: try up to MAX_AUTO_RESUME_ATTEMPTS before showing stalled UI
-        if (autoResumeCountRef.current < MAX_AUTO_RESUME_ATTEMPTS) {
+        if (autoResumeCountRef.current < MAX_AUTO_RESUME_ATTEMPTS && !resumeInFlight) {
           autoResumeCountRef.current += 1;
           console.log(`[useGenerationPoller] Stall detected. Auto-resume attempt ${autoResumeCountRef.current}/${MAX_AUTO_RESUME_ATTEMPTS} from day ${completedDays + 1}...`);
 
