@@ -432,7 +432,7 @@ export function TransitModePicker({
                   >
                     {/* Level 1: Option summary row — tap to expand details */}
                     <button
-                      onClick={() => toggleOptionDetail(option.id)}
+                      onClick={() => toggleOptionDetail(option.id, option)}
                       className={cn(
                         "flex items-center gap-2.5 p-2.5 w-full text-left transition-colors",
                         !isCurrentMode && "hover:bg-secondary/10"
