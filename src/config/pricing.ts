@@ -555,7 +555,7 @@ export const TRIP_COST_EXAMPLES = {
 // HELPER FUNCTIONS
 // ============================================================
 
-const MAX_REASONABLE_CREDITS = 100_000;
+const MAX_REASONABLE_CREDITS = 10_000_000;
 
 let _formatCreditsWarned = false;
 

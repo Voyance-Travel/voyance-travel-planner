@@ -764,6 +764,7 @@ interface ValidationContext {
   budgetTier: string;
   traitScores: Record<string, number>;
   tripIntents: string[];
+  mustDoActivities?: string[];
 }
 
 interface ValidationResult {
@@ -795,9 +796,50 @@ interface ValidationWarning {
 }
 
 /**
- * Validates the generated itinerary against user preferences
- * Returns violations that should cause rejection/regeneration
+ * Detect activities that are multi-day events and SHOULD repeat across days.
+ * These are exempt from trip-wide deduplication.
  */
+function isRecurringEvent(activity: { title?: string; description?: string; duration?: number; isAllDay?: boolean }, userActivities: string[] = []): boolean {
+  const title = (activity.title || '').toLowerCase();
+  const desc = (activity.description || '').toLowerCase();
+  const combined = `${title} ${desc}`;
+
+  const sportingEvents = [
+    'us open', 'u.s. open', 'wimbledon', 'french open', 'australian open',
+    'world cup', 'olympics', 'olympic games', 'formula 1', 'f1 grand prix',
+    'tour de france', 'masters tournament', 'super bowl week',
+    'world series', 'nba finals', 'stanley cup', 'ryder cup',
+    'cricket world cup', 'rugby world cup', 'copa america',
+  ];
+
+  const festivals = [
+    'coachella', 'glastonbury', 'burning man', 'tomorrowland', 'lollapalooza',
+    'bonnaroo', 'primavera sound', 'reading festival', 'leeds festival',
+    'mardi gras', 'carnival', 'oktoberfest', 'day of the dead', 'dia de los muertos',
+    'diwali', 'holi', 'chinese new year', 'lunar new year', 'la tomatina',
+    'rio carnival', 'venice carnival', 'edinburgh fringe', 'cannes film festival',
+    'sundance', 'sxsw', 'art basel', 'comic-con', 'comic con',
+    'fashion week', 'film festival', 'music festival', 'food festival',
+  ];
+
+  for (const event of [...sportingEvents, ...festivals]) {
+    if (combined.includes(event)) return true;
+  }
+
+  for (const userAct of userActivities) {
+    const userActLower = userAct.toLowerCase().trim();
+    if (userActLower.length > 3 && (title.includes(userActLower) || userActLower.includes(title.substring(0, 20)))) {
+      return true;
+    }
+  }
+
+  if (activity.isAllDay) return true;
+  if (activity.duration && activity.duration >= 300) return true;
+
+  return false;
+}
+
+
 function validateItineraryPersonalization(
   days: StrictDay[],
   ctx: ValidationContext
@@ -849,7 +891,7 @@ function validateItineraryPersonalization(
       
       // Check for duplicates (same title in same trip)
       const activityKey = `${titleLower}::${locationLower}`;
-      if (seenActivities.has(activityKey)) {
+      if (seenActivities.has(activityKey) && !isRecurringEvent(activity, ctx.mustDoActivities || [])) {
         violations.push({
           type: 'duplicate',
           activityId: activity.id,
@@ -4645,6 +4687,10 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
       // In normal mode, culinary_class and wine_tasting are hard errors; everything else is a warning
       for (const prevConcept of previousConcepts) {
         if (conceptSimilarity(actConcept, prevConcept)) {
+          // Skip dedup for recurring events (US Open, festivals, etc.)
+          if (isRecurringEvent(act, [])) {
+            continue;
+          }
           if (!isSmartFinish && (actType === 'culinary_class' || actType === 'wine_tasting')) {
             errors.push(`TRIP-WIDE DUPLICATE: "${act.title}" is too similar to an activity from a previous day.`);
           } else {
@@ -5313,7 +5359,27 @@ Include a mix of: 3 dining slots (breakfast/lunch/dinner), transit between major
 ${isSmartFinishGeneration ? 'SMART FINISH HARD RULE: Keep ALL user-provided anchor activities by exact name and build additional activities around them — never replace or drop anchors.' : ''}
 ${multiCityPrompt}
 
-${previousActivities.length > 0 ? `AVOID REPEATING THESE SPECIFIC ACTIVITIES: ${previousActivities.join(', ')}\n` : ''}
+${(() => {
+  // Separate recurring events from regular activities for dedup prompt
+  const mustDoList = (context.mustDoActivities || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+  const recurringPrevious: string[] = [];
+  const nonRecurringPrevious: string[] = [];
+  for (const prevAct of previousActivities) {
+    if (isRecurringEvent({ title: prevAct }, mustDoList)) {
+      recurringPrevious.push(prevAct);
+    } else {
+      nonRecurringPrevious.push(prevAct);
+    }
+  }
+  let lines = '';
+  if (nonRecurringPrevious.length > 0) {
+    lines += `AVOID REPEATING THESE ACTIVITIES (already done on previous days): ${nonRecurringPrevious.join(', ')}\n`;
+  }
+  if (recurringPrevious.length > 0) {
+    lines += `THESE ARE MULTI-DAY EVENTS — SCHEDULE THEM AGAIN TODAY: ${recurringPrevious.join(', ')}\n`;
+  }
+  return lines;
+})()}
 NOTE: The previous-activities list is ONLY for de-duplication. Do NOT treat it as a signal for spending style.
 ${bannedTypes.length > 0 ? `\n🚫 BANNED EXPERIENCE TYPES (already done on previous days - DO NOT INCLUDE): ${bannedTypes.join(', ')}\n` : ''}
 
