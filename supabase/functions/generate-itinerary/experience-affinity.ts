@@ -445,6 +445,7 @@ export const ENVIRONMENT_PREFERENCES: Record<string, EnvironmentPreferences> = {
   culinary_cartographer: { indoorOutdoor: 'balanced', urbanNature: 'urban_preferred', crowdTolerance: 'avoid_crowds', structureLevel: 'moderate' },
   collection_curator: { indoorOutdoor: 'balanced', urbanNature: 'balanced', crowdTolerance: 'avoid_crowds', structureLevel: 'moderate' },
   community_builder: { indoorOutdoor: 'balanced', urbanNature: 'balanced', crowdTolerance: 'crowds_ok', structureLevel: 'moderate' },
+  story_seeker: { indoorOutdoor: 'balanced', urbanNature: 'urban_preferred', crowdTolerance: 'crowds_ok', structureLevel: 'low_structure' },
   midlife_explorer: { indoorOutdoor: 'balanced', urbanNature: 'balanced', crowdTolerance: 'avoid_crowds', structureLevel: 'moderate' },
   retirement_ranger: { indoorOutdoor: 'balanced', urbanNature: 'balanced', crowdTolerance: 'avoid_crowds', structureLevel: 'moderate' },
   balanced_story_collector: { indoorOutdoor: 'balanced', urbanNature: 'balanced', crowdTolerance: 'crowds_ok', structureLevel: 'moderate' }
