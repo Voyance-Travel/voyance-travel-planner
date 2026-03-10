@@ -325,7 +325,8 @@ The traveler has already booked the following. These are IMMOVABLE:
 }
 
 function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
   return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 

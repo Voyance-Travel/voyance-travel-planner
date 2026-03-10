@@ -226,6 +226,12 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
           // Hard date guard: force dates to 2026+ and never in the past
           if (details.startDate && details.endDate) {
             const normalized = normalizeChatTripDates(details.startDate, details.endDate);
+            if (normalized.startDate !== details.startDate || normalized.endDate !== details.endDate) {
+              console.warn('[TripChatPlanner] Date guard shifted AI dates:', {
+                original: { start: details.startDate, end: details.endDate },
+                guarded: normalized,
+              });
+            }
             details.startDate = normalized.startDate;
             details.endDate = normalized.endDate;
           }
