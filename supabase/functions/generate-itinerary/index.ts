@@ -6061,7 +6061,8 @@ Generate activities for this day following ALL constraints above.`;
         }
       }
 
-      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish);
+      const mustDoList = (context.mustDoActivities || '').split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
+      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish, mustDoList);
 
       // ==========================================================================
       // MINIMUM REAL ACTIVITY COUNT VALIDATION
