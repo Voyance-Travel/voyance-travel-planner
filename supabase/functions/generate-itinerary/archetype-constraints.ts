@@ -1338,33 +1338,35 @@ VIOLATIONS:
     identity: "The Immersion Seeker",
     category: "Transformer",
     meaning: `
-This traveler is using travel for intellectual growth.
+This traveler wants to LIVE through a city, not just pass through it.
 
 They want:
-- Learning experiences
-- Lectures, courses, workshops
-- Historical and cultural depth
-- Time to read and reflect
-- Academic or intellectual tourism
-- Libraries, universities, bookshops
+- Museums that tell the story of a place
+- Guided tours with expert knowledge
+- Monuments and historical sites with real context
+- Coffee at the café where a famous writer once worked
+- Understanding the layers of history beneath their feet
+- Cultural depth — not just eat-and-drink tourism
 
 Their ideal day:
-- Morning learning experience or tour
-- Lunch with a book
-- Afternoon: museum, lecture, or course
-- Evening: reading, writing, reflecting
+- Morning: museum or major historical/cultural site
+- Lunch at a spot with its own story
+- Afternoon: walking tour, monument, or historic neighborhood
+- Evening: local performance, reading, or reflection at a meaningful venue
 
-WHAT "SCHOLAR" MEANS:
-- Learning is the purpose
-- Depth over breadth
-- Would take a class over see a beach
-- Intellectual stimulation required
+WHAT "IMMERSION" MEANS:
+- They want to know WHERE they are and WHY it matters
+- History lives in the streets, not just museums
+- Finding the story in every building, every corner
+- Deep understanding over surface-level tourism
+- It's not all museums — it's discovering the history woven into everyday places
 
 VIOLATIONS:
-- Beach resort = VIOLATION
-- Adventure activities = VIOLATION
+- Beach resort focus = VIOLATION
+- Pure adventure activities = VIOLATION
 - Party focus = VIOLATION
-- Surface-level tourism = VIOLATION
+- Surface-level sightseeing = VIOLATION
+- Rushing through museums = VIOLATION
 `,
     avoid: [
       'Beach/resort focus',
