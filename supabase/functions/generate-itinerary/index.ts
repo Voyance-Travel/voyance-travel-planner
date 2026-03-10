@@ -4700,7 +4700,7 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
       for (const prevConcept of previousConcepts) {
         if (conceptSimilarity(actConcept, prevConcept)) {
           // Skip dedup for recurring events (US Open, festivals, etc.)
-          if (isRecurringEvent(act, [])) {
+          if (isRecurringEvent(act, mustDoActivities)) {
             continue;
           }
           if (!isSmartFinish && (actType === 'culinary_class' || actType === 'wine_tasting')) {
