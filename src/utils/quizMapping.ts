@@ -721,7 +721,7 @@ function getArchetypeTagline(id: string): string {
     culinary_cartographer: 'Your passport is basically a menu.',
     art_aficionado: 'Every gallery is a pilgrimage.',
     luxury_luminary: 'Champagne wishes, caviar dreams, economy never.',
-    eco_ethicist: 'Leave nothing but footprints.',
+    eco_ethicist: 'Travel gently, experience deeply.',
     // TRANSFORMER
     gap_year_graduate: 'The world is the ultimate classroom.',
     midlife_explorer: "It's never too late to become who you were meant to be.",
