@@ -9179,7 +9179,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
             
             const hotelN = flightHotelResult?.hotelName || 'Hotel';
             const hotelA = flightHotelResult?.hotelAddress || '';
-            const airportN = 'Airport';
+            const airportN = flightHotelResult?.arrivalAirport || 'Airport';
             
             console.log(`[Stage 2.55] Splitting combined arrival block: "${combined.title}" into 2 activities (arrival + check-in)`);
             
