@@ -440,7 +440,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   community_builder: {
     id: 'community_builder',
-    name: 'The Community Builder',
+    name: 'The Purpose Voyager',
     category: 'CONNECTOR',
     hookLine: "Travel should enrich the places you visit, not just your photo album.",
     coreDescription: "You travel with a conscience. You seek out local businesses, guides from the community, and experiences that create connection rather than consumption. Your presence should matter in a good way.",

@@ -270,7 +270,7 @@ Your trips will be designed for two. Romance isn't just about luxury (though we'
 
   community_builder: {
     id: 'community_builder',
-    name: 'The Community Builder',
+    name: 'The Purpose Voyager',
     category: 'CONNECTOR',
     revealParagraph: `You travel with a conscience.
 
