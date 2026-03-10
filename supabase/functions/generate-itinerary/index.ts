@@ -7966,7 +7966,28 @@ ${mustDoPrompt}
 ${additionalNotesPrompt}
 ${mustHavesConstraintPrompt}
 ${preBookedCommitmentsPrompt}
-${previousDayActivities?.length ? `\nAvoid repeating these specific venues/activities (be creative and pick DIFFERENT ones): ${previousDayActivities.join(', ')}` : ''}
+${(() => {
+  if (!previousDayActivities?.length) return '';
+  // Separate recurring/must-do events from regular activities
+  const mustDoList = (paramMustDoActivities || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+  const recurring: string[] = [];
+  const nonRecurring: string[] = [];
+  for (const prev of previousDayActivities) {
+    if (isRecurringEvent({ title: prev }, mustDoList)) {
+      recurring.push(prev);
+    } else {
+      nonRecurring.push(prev);
+    }
+  }
+  let result = '';
+  if (nonRecurring.length > 0) {
+    result += `\nAvoid repeating these specific venues/activities (be creative and pick DIFFERENT ones): ${nonRecurring.join(', ')}`;
+  }
+  if (recurring.length > 0) {
+    result += `\nTHESE ARE MULTI-DAY EVENTS the traveler is attending across multiple days — YOU MUST CREATE A FULL ATTENDANCE ACTIVITY CARD for each (not just transit): ${recurring.join(', ')}`;
+  }
+  return result;
+})()}
 
 CRITICAL REMINDERS:
 1. ${isFullDay ? 'This is a FULL DAY: breakfast + 3 paid activities + 2 free activities + lunch + dinner + transit between all stops + evening activity + next morning preview. Fill EVERY hour.' : `${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} scheduled sightseeing activities for this ${isFirstDay ? 'arrival' : 'departure'} day.`}
