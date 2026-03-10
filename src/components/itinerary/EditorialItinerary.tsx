@@ -26,6 +26,7 @@ import {
   Footprints, Navigation2, History as HistoryIcon, Lightbulb, CheckCircle2,
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
+import { toFriendlyError } from '@/utils/friendlyErrors';
 import { useCredits } from '@/hooks/useCredits';
 import { CREDIT_COSTS, formatCredits } from '@/config/pricing';
 import { CreditNudge } from './CreditNudge';
@@ -2879,7 +2880,7 @@ export function EditorialItinerary({
     } catch (err: any) {
       console.error('[EditorialItinerary] Regeneration failed:', err);
       if (!err?.message?.startsWith('Not enough credits')) {
-        toast.error(err?.message || 'Failed to regenerate itinerary. Please try again.');
+        toast.error(toFriendlyError(err?.message));
       }
     } finally {
       setIsRegenerating(false);
@@ -2896,10 +2897,10 @@ export function EditorialItinerary({
         toast.success(`Pricing repaired: ${result.repaired} activities updated${result.corrected > 0 ? `, ${result.corrected} outliers corrected` : ''}`);
         await refetchItineraryFromDb();
       } else {
-        toast.error(result.error || 'Failed to repair pricing');
+        toast.error(toFriendlyError(result.error));
       }
     } catch {
-      toast.error('Failed to repair pricing');
+      toast.error(toFriendlyError(null));
     } finally {
       setIsRepairingPricing(false);
     }
@@ -3759,7 +3760,7 @@ export function EditorialItinerary({
       }
     } catch (err: any) {
       console.error('Failed to create share link:', err?.message || err);
-      toast.error(err?.message || 'Failed to create invite link');
+      toast.error(toFriendlyError(err?.message));
     } finally {
       setIsCreatingInvite(false);
     }

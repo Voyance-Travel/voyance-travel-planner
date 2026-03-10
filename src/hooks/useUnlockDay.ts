@@ -15,6 +15,7 @@ import { useCredits } from './useCredits';
 import { CREDIT_COSTS } from '@/config/pricing';
 import { useOutOfCredits } from '@/contexts/OutOfCreditsContext';
 import { toast } from 'sonner';
+import { toFriendlyError } from '@/utils/friendlyErrors';
 
 export type UnlockDayStep = 'idle' | 'spending' | 'enriching' | 'saving' | 'complete' | 'error';
 
@@ -98,7 +99,7 @@ export function useUnlockDay() {
         },
       });
 
-      if (spendError) throw new Error(spendError.message || 'Failed to spend credits');
+      if (spendError) throw new Error(toFriendlyError(spendError.message));
       if (spendData?.error === 'Insufficient credits') {
         showOutOfCredits({
           action: 'UNLOCK_DAY',
@@ -192,7 +193,7 @@ export function useUnlockDay() {
     } catch (err: any) {
       console.error(`[UnlockDay] Day ${params.dayNumber} enrichment failed:`, err);
       setState({ step: 'error', dayNumber: params.dayNumber, message: '', error: err.message });
-      toast.error(`Failed to enrich Day ${params.dayNumber}. Credits were charged - please retry.`);
+      toast.error(toFriendlyError(err?.message) || `Failed to enrich Day ${params.dayNumber}. Credits were charged - please retry.`);
       return false;
     }
   }, [user, canAfford, totalCredits, queryClient, showOutOfCredits]);

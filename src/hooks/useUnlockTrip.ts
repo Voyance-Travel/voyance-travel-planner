@@ -15,6 +15,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCredits } from './useCredits';
 import { CREDIT_COSTS } from '@/config/pricing';
 import { toast } from 'sonner';
+import { toFriendlyError } from '@/utils/friendlyErrors';
 
 export type UnlockStep = 'idle' | 'spending' | 'enriching' | 'saving' | 'complete' | 'error';
 
@@ -109,7 +110,7 @@ export function useUnlockTrip() {
         },
       });
 
-      if (spendError) throw new Error(spendError.message || 'Failed to spend credits');
+      if (spendError) throw new Error(toFriendlyError(spendError.message));
       if (spendData?.error === 'Insufficient credits') {
         setState(prev => ({ ...prev, step: 'error', error: 'insufficient_credits' }));
         return false;
@@ -205,7 +206,7 @@ export function useUnlockTrip() {
 
         if (error) throw error;
         if (!data?.success && !data?.day) {
-          throw new Error(data?.error || `Failed to enrich day ${dayNum}`);
+          throw new Error(toFriendlyError(data?.error));
         }
 
         const dayData = data.day || data;

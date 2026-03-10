@@ -6,6 +6,7 @@
 import { useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
+import { toFriendlyError } from '@/utils/friendlyErrors';
 import { verifyPayment } from '@/services/tripPaymentsAPI';
 
 interface UsePaymentVerificationOptions {
@@ -37,7 +38,7 @@ export function usePaymentVerification(options: UsePaymentVerificationOptions = 
           } else if (result.success && result.status === 'pending') {
             toast.info('Payment is being processed. Please wait...');
           } else {
-            toast.error(result.error || 'Payment verification failed');
+            toast.error(toFriendlyError(result.error));
             options.onError?.(result.error || 'Verification failed');
           }
         } catch (err) {

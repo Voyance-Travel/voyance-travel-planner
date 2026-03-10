@@ -8,6 +8,7 @@ import { sendChatMessage, getActionDisplayInfo, type ItineraryContext } from '@/
 import { executeAction, type ItineraryDay, type ActionExecutionResult } from '@/services/itineraryActionExecutor';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { toFriendlyError } from '@/utils/friendlyErrors';
 import { useSpendCredits } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
 import { useEntitlements } from '@/hooks/useEntitlements';
@@ -208,7 +209,7 @@ export function InlineModifier({
         setInput('');
         setIsExpanded(false);
       } else {
-        toast.error(result.error || 'Failed to apply changes');
+        toast.error(toFriendlyError(result.error));
       }
     } catch (error) {
       console.error('[InlineModifier] Apply error:', error);

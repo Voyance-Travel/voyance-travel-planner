@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { CreditCard, Loader2, Check, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { toFriendlyError } from '@/utils/friendlyErrors';
 import { 
   initiateBooking, 
   TripPayment,
@@ -78,7 +79,7 @@ export function BookingButton({
         toast.success('Payment page opened in new tab');
         onSuccess?.();
       } else {
-        toast.error(result.error || 'Failed to start payment');
+        toast.error(toFriendlyError(result.error));
       }
     } catch (err) {
       console.error('Booking error:', err);
