@@ -2725,6 +2725,29 @@ export function EditorialItinerary({
         let lastError: Error | null = null;
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
           try {
+            // Extract locked activities from the CURRENT day before regenerating
+            const currentDay = days.find(d => d.dayNumber === dayNum);
+            const keepActivities = (currentDay?.activities || [])
+              .filter(a => a.isLocked)
+              .map(a => a.id)
+              .filter(Boolean);
+
+            const backendActivities = (currentDay?.activities || []).map(a => ({
+              id: a.id,
+              name: a.title,
+              title: a.title,
+              description: a.description,
+              category: a.category,
+              startTime: a.startTime || a.time,
+              endTime: a.endTime,
+              location: a.location,
+              cost: a.cost,
+              estimatedCost: a.cost,
+              isLocked: a.isLocked,
+              durationMinutes: a.durationMinutes,
+              tags: a.tags,
+            }));
+
             const invokePromise = supabase.functions.invoke('generate-itinerary', {
               body: {
                 action: 'generate-day',
@@ -2739,6 +2762,9 @@ export function EditorialItinerary({
                 budgetTier,
                 userId: user?.id,
                 previousDayActivities: previousActivities,
+                keepActivities,
+                currentActivities: backendActivities,
+                variationNonce: Date.now(),
               },
             });
 
