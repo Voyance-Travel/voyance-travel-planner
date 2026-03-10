@@ -18,8 +18,6 @@ class ErrorHandler {
     // Log error for debugging
     console.error('Unhandled Promise Rejection:', event.reason);
 
-    // Extract error message
-    let message = 'An unexpected error occurred. Please try again.';
     if (event.reason instanceof Error) {
       console.error('Error details:', event.reason.message, event.reason.stack);
     } else if (typeof event.reason === 'string') {
