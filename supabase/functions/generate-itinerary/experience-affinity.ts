@@ -362,6 +362,7 @@ export const TIME_PREFERENCES: Record<string, TimePreferences> = {
   family_architect: { startTime: '08:30', endTime: '19:00', peakEnergy: 'morning', notes: 'After kids wake. Early dinner. Home by bedtime.' },
   eco_ethicist: { startTime: '08:00', endTime: '21:00', peakEnergy: 'morning', notes: 'Early for nature, sustainable pacing.' },
   community_builder: { startTime: '08:30', endTime: '21:00', peakEnergy: 'morning', notes: 'Aligned with local community schedules.' },
+  story_seeker: { startTime: '09:30', endTime: '23:00', peakEnergy: 'evening', notes: 'Neighborhoods wake up late. Nightlife is where the stories are.' },
   retirement_ranger: { startTime: '09:00', endTime: '20:00', peakEnergy: 'morning', notes: 'Comfortable morning start. Early dinner preferred.' },
   retreat_regular: { startTime: '07:30', endTime: '21:00', peakEnergy: 'morning', notes: 'Morning wellness routine. Early, healthy dinner.' },
 
