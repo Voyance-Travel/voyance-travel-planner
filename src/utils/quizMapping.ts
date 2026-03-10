@@ -611,7 +611,7 @@ function getArchetypeDisplayName(id: string): string {
     cultural_anthropologist: 'The Cultural Anthropologist',
     urban_nomad: 'The Urban Nomad',
     wilderness_pioneer: 'The Wilderness Pioneer',
-    digital_explorer: 'The Digital Explorer',
+    digital_explorer: 'The Untethered Traveler',
     explorer: 'The Explorer',
     // CONNECTOR category
     social_butterfly: 'The Social Butterfly',

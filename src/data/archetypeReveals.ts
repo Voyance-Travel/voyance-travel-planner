@@ -116,7 +116,7 @@ Your trips will take you off the beaten path, literally. Trails over tourist sit
 
   digital_explorer: {
     id: 'digital_explorer',
-    name: 'The Digital Explorer',
+    name: 'The Untethered Traveler',
     category: 'EXPLORER',
     revealParagraph: `You see the world through a frame - and that's not a bad thing.
 

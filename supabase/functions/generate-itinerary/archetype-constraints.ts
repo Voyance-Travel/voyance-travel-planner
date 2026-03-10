@@ -186,7 +186,7 @@ VIOLATIONS:
   },
 
   digital_explorer: {
-    identity: "The Digital Explorer",
+    identity: "The Untethered Traveler",
     category: "Explorer",
     meaning: `
 This traveler blends technology, gaming culture, and modern experiences.

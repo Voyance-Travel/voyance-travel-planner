@@ -540,7 +540,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   digital_explorer: {
     id: 'digital_explorer',
-    name: 'The Digital Explorer',
+    name: 'The Untethered Traveler',
     category: 'EXPLORER',
     hookLine: "Your laptop is your passport extension.",
     coreDescription: "You've cracked the code of working from anywhere. Coffee shops in Lisbon, co-working spaces in Bali, beach cafés in Thailand. Your office has the best views in the world.",
