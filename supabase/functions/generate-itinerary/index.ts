@@ -8539,6 +8539,9 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           }
         }
 
+        // Sync normalizedActivities with any backfilled events
+        normalizedActivities = generatedDay.activities;
+
         // If AI omitted the travel activity, inject deterministic fallback
         // =======================================================================
         if (resolvedIsTransitionDay && resolvedTransitionFrom && resolvedTransitionTo) {
