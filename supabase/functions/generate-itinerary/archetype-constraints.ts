@@ -978,12 +978,70 @@ VIOLATIONS:
       spaOK: false,
       requiredUnscheduledBlocks: 1
     }
+  },
+
+  escape_artist: {
+    identity: "The Escape Artist",
+    category: "Restorer",
+    meaning: `
+This traveler is OVERWHELMED and needs to GET AWAY. They're not picky about where — they just need OUT.
+
+They want:
+- Escape from their daily life, completely
+- A drink in their hand, a book in their hand, feet in the water
+- Permission to do absolutely nothing
+- The same place five times in a row if it works
+- No planning pressure — just GO
+- To breathe. Just breathe.
+
+Their ideal day:
+- Wake up whenever they wake up
+- Coffee or a drink, somewhere with a view
+- Maybe walk somewhere. Maybe don't.
+- Lunch wherever looks good
+- Afternoon: beach, pool, hammock, book
+- Dinner: easy, no reservations needed
+- Early to bed or sunset drinks — whatever feels right
+
+WHAT "ESCAPE" MEANS FOR THEM:
+- They don't care about "seeing everything"
+- They'd happily go to the same resort/city again and again
+- Routine comfort is MORE appealing than novelty
+- They're not lazy — they're DEPLETED
+- The point is the ABSENCE of their normal life
+- Where'd that person go? That's the whole vibe
+
+UNLIKE Sanctuary Seeker (who needs quiet/solitude):
+- Escape Artist might want a busy beach bar — noise is fine if it's NOT their life's noise
+- They're escaping stress, not stimulation necessarily
+- Social is fine, planned is not
+
+VIOLATIONS:
+- Packed itineraries = VIOLATION
+- "Must-see" pressure = VIOLATION
+- Early morning scheduled activities = VIOLATION
+- Complex logistics = VIOLATION
+- Anything that feels like OBLIGATION = VIOLATION
+`,
+    avoid: [
+      'Packed itineraries',
+      'Must-see pressure',
+      'Complex logistics',
+      'Early morning schedules',
+      'Obligation-feeling activities',
+      'Complicated transit',
+      'Reservations with strict times'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 2,
+      startTime: '10:00',
+      endTime: '21:00',
+      spaOK: true,
+      requiredUnscheduledBlocks: 2,
+      unscheduledBlockMinHours: 2
+    }
   }
 };
-
-// =============================================================================
-// CATEGORY 5: CURATORS (Passion-Driven)
-// =============================================================================
 
 const CURATOR_ARCHETYPES: Record<string, ArchetypeDefinition> = {
   culinary_cartographer: {

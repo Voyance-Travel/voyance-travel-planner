@@ -250,6 +250,13 @@ export const EXPERIENCE_AFFINITY: Record<string, ExperienceAffinity> = {
     never: ['crowds', 'group_tours', 'nightlife', 'social_activities', 'hostels', 'parties']
   },
 
+  escape_artist: {
+    high: ['beach', 'pool', 'resort_amenity', 'cafe', 'casual_dining', 'cocktail_bar', 'local_bar', 'viewpoint'],
+    medium: ['park', 'garden', 'water_activity', 'local_restaurant', 'street_food', 'neighborhood', 'spa'],
+    low: ['museum', 'landmark', 'walking_tour', 'cultural_performance', 'food_tour'],
+    never: ['adventure_activity', 'outdoor_sport', 'hiking']
+  },
+
   // =========================================================================
   // CURATORS
   // =========================================================================
@@ -373,6 +380,7 @@ export const TIME_PREFERENCES: Record<string, TimePreferences> = {
   healing_journeyer: { startTime: '10:00', endTime: '20:00', peakEnergy: 'afternoon', notes: 'Gentle start. No pressure. Early, quiet evenings.' },
   romantic_curator: { startTime: '10:00', endTime: '23:00', peakEnergy: 'evening', notes: 'Lazy mornings. Sunset and dinner focus.' },
   sanctuary_seeker: { startTime: '10:00', endTime: '20:00', peakEnergy: 'afternoon', notes: 'Quiet mornings. Peaceful evenings.' },
+  escape_artist: { startTime: '10:00', endTime: '21:00', peakEnergy: 'afternoon', notes: 'No alarm. No schedule. Whatever feels right.' },
 
   // Night owls (11am+ starts, late nights)
   digital_explorer: { startTime: '11:00', endTime: '02:00', peakEnergy: 'night', notes: 'Late riser. Gaming/nightlife late.' },
@@ -418,6 +426,7 @@ export const ENVIRONMENT_PREFERENCES: Record<string, EnvironmentPreferences> = {
   flexible_wanderer: { indoorOutdoor: 'balanced', urbanNature: 'balanced', crowdTolerance: 'avoid_crowds', structureLevel: 'none' },
   romantic_curator: { indoorOutdoor: 'balanced', urbanNature: 'balanced', crowdTolerance: 'avoid_crowds', structureLevel: 'moderate' },
   sanctuary_seeker: { indoorOutdoor: 'balanced', urbanNature: 'balanced', crowdTolerance: 'avoid_crowds', structureLevel: 'none' },
+  escape_artist: { indoorOutdoor: 'outdoor', urbanNature: 'balanced', crowdTolerance: 'crowds_ok', structureLevel: 'none' },
 
   // VIP to beat crowds
   luxury_luminary: { indoorOutdoor: 'balanced', urbanNature: 'urban_preferred', crowdTolerance: 'vip_to_beat_crowds', structureLevel: 'moderate' },
@@ -480,6 +489,7 @@ export const PHYSICAL_INTENSITY: Record<string, PhysicalIntensity> = {
   healing_journeyer: { level: 'low', dailySteps: '5,000-8,000', walkingHours: '1-2', notes: 'Gentle only. No exertion. Rest is important.' },
   retirement_ranger: { level: 'low', dailySteps: '5,000-10,000', walkingHours: '1-2', notes: 'Accessible routes. Rest breaks. Seated options.' },
   sanctuary_seeker: { level: 'low', dailySteps: '5,000-8,000', walkingHours: '1-2', notes: 'Quiet, private. Not rushing anywhere.' },
+  escape_artist: { level: 'low', dailySteps: '4,000-8,000', walkingHours: '1-2', notes: 'Lounging is the activity. Walking only if it feels right.' },
   retreat_regular: { level: 'low', dailySteps: '5,000-10,000', walkingHours: '1-2', notes: 'Spa and wellness focus. Gentle movement only.' },
   flexible_wanderer: { level: 'low', dailySteps: '6,000-12,000', walkingHours: '2-3', notes: 'Wandering at their own pace. Can stop anytime.' }
 };
