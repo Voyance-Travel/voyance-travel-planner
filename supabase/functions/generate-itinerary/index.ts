@@ -3247,6 +3247,7 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
       latestLastActivityTime: latestLastActivity,
       hotelName,
       hotelAddress,
+      arrivalAirport: arrivalAirport as string | undefined,
       // Phase 9: Pass raw data for prompt library extractors
       rawFlightSelection: trip.flight_selection,
       rawHotelSelection: trip.hotel_selection,
