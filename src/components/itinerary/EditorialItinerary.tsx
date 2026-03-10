@@ -2897,10 +2897,10 @@ export function EditorialItinerary({
         toast.success(`Pricing repaired: ${result.repaired} activities updated${result.corrected > 0 ? `, ${result.corrected} outliers corrected` : ''}`);
         await refetchItineraryFromDb();
       } else {
-        toast.error(result.error || 'Failed to repair pricing');
+        toast.error(toFriendlyError(result.error));
       }
     } catch {
-      toast.error('Failed to repair pricing');
+      toast.error(toFriendlyError(null));
     } finally {
       setIsRepairingPricing(false);
     }
