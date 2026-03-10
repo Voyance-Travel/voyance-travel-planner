@@ -393,7 +393,7 @@ Respect their travel identity. These are not suggestions — they are requiremen
 // GENERATION RULES FORMATTING
 // =============================================================================
 
-export function formatGenerationRules(rules: Array<{type: string; days?: string[]; from?: string; to?: string; reason?: string; date?: string; description?: string; hotelName?: string; additionalGuests?: number; note?: string; text?: string}>): string {
+export function formatGenerationRules(rules: Array<{type: string; days?: string[]; from?: string; to?: string; reason?: string; date?: string; description?: string; hotelName?: string; additionalGuests?: number; note?: string; text?: string; time?: string; duration?: number; day?: number | string}>): string {
   if (!rules || rules.length === 0) return '';
   const dayMap: Record<string, string> = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
   const lines: string[] = ['\n## 🚨 RULES THE ITINERARY MUST FOLLOW\n', 'The traveler has set the following constraints. These are NON-NEGOTIABLE.\n'];
@@ -420,6 +420,24 @@ export function formatGenerationRules(rules: Array<{type: string; days?: string[
       case 'free_text':
         lines.push(`${num}. USER CONSTRAINT: ${rule.text}`);
         break;
+      case 'avoid':
+        lines.push(`${num}. 🚫 AVOID: "${rule.reason || rule.description || rule.text}". Do NOT include anything matching this in any day.`);
+        break;
+      case 'preference':
+        lines.push(`${num}. ✨ PREFERENCE: "${rule.reason || rule.description || rule.text}". Incorporate this into venue/activity selection across ALL days.`);
+        break;
+      case 'time_preference':
+        lines.push(`${num}. 🕐 TIME PREFERENCE: "${rule.reason || rule.description || rule.text}" → preferred time: ${rule.time || 'flexible'} (duration: ${rule.duration || 120} min). Schedule at this time on the best available day.`);
+        break;
+      case 'full_day_event':
+        lines.push(`${num}. 📅 FULL-DAY EVENT${rule.day ? ` (Day ${rule.day})` : ''}: "${rule.reason || rule.description || rule.text}". This event consumes the ENTIRE day — do NOT add other activities.`);
+        break;
+      case 'flight_constraint': {
+        const dayStr = rule.day ? ` (Day ${rule.day})` : '';
+        const timeStr = rule.time ? ` at ${rule.time}` : '';
+        lines.push(`${num}. ✈️ FLIGHT${dayStr}${timeStr}: "${rule.reason || rule.description || rule.text}". Account for airport transit time.`);
+        break;
+      }
     }
   });
   lines.push('\nIMPORTANT: If ANY activity conflicts with the above rules, remove or reschedule it.\n');
