@@ -790,7 +790,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   gap_year_graduate: {
     id: 'gap_year_graduate',
-    name: 'The Gap Year Graduate',
+    name: 'The Horizon Chaser',
     category: 'TRANSFORMER',
     hookLine: "The world is the ultimate classroom.",
     coreDescription: "Travel shaped who you are. Those months of backpacking, teaching, or volunteering taught you more than any degree. You carry that transformative spirit into every journey.",
