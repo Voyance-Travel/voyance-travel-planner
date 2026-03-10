@@ -759,7 +759,7 @@ VIOLATIONS:
   },
 
   retreat_regular: {
-    identity: "The Retreat Regular",
+    identity: "The Wellness Devotee",
     category: "Restorer",
     meaning: `
 This traveler wants structured wellness programs.

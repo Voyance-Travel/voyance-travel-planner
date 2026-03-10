@@ -27,7 +27,7 @@ const ARCHETYPES = [
   { id: 'status_seeker', name: 'The VIP Voyager', category: 'ACHIEVER', traits: ['exclusive-access', 'vip-experiences', 'instagram-worthy', 'prestigious'] },
   // RESTORER
   { id: 'zen_seeker', name: 'The Zen Seeker', category: 'RESTORER', traits: ['wellness', 'meditation', 'yoga', 'spiritual'] },
-  { id: 'retreat_regular', name: 'The Retreat Regular', category: 'RESTORER', traits: ['spa-resorts', 'all-inclusive', 'pampering', 'relaxation'] },
+  { id: 'retreat_regular', name: 'The Wellness Devotee', category: 'RESTORER', traits: ['spa-resorts', 'all-inclusive', 'pampering', 'relaxation'] },
   { id: 'beach_therapist', name: 'The Beach Therapist', category: 'RESTORER', traits: ['beach', 'ocean', 'sun', 'water-activities'] },
   { id: 'slow_traveler', name: 'The Slow Traveler', category: 'RESTORER', traits: ['unhurried', 'long-stays', 'local-rhythm', 'anti-tourist'] },
   // CURATOR
