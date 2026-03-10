@@ -37,7 +37,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { splitJourneyIfNeeded } from '@/utils/splitJourneyIfNeeded';
-import { normalizeChatTripDates } from '@/utils/justTellUsDateGuard';
 
 // Import destination autocomplete and airport autocomplete
 import { DestinationAutocomplete } from '@/components/planner/shared/DestinationAutocomplete';
