@@ -633,7 +633,7 @@ function getArchetypeDisplayName(id: string): string {
     culinary_cartographer: 'The Culinary Cartographer',
     art_aficionado: 'The Art Aficionado',
     luxury_luminary: 'The Luxury Luminary',
-    eco_ethicist: 'The Eco Ethicist',
+    eco_ethicist: 'The Mindful Voyager',
     curated_luxe: 'Curated Luxe',
     // TRANSFORMER category
     gap_year_graduate: 'The Gap Year Graduate',
