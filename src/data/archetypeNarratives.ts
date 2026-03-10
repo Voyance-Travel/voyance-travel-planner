@@ -767,8 +767,8 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     id: 'history_hunter',
     name: 'The History Hunter',
     category: 'CURATOR',
-    hookLine: "Every stone has a story — you just have to look.",
-    coreDescription: "You don't just visit historical sites — you walk through time. Every ruin, monument, and ancient street has layers of meaning that others walk right past. You see the centuries stacked beneath your feet.",
+    hookLine: "Every stone has a story. You just have to look.",
+    coreDescription: "You don't just visit historical sites, you walk through time. Every ruin, monument, and ancient street has layers of meaning that others walk right past. You see the centuries stacked beneath your feet.",
     whatThisMeans: [
       "You read the plaques other tourists skip",
       "You've gotten emotional at ruins",
