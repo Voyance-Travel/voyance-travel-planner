@@ -4367,7 +4367,7 @@ export function EditorialItinerary({
                   <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
                   <div>
                     <p className="text-lg font-semibold text-foreground">Rebuilding your itinerary…</p>
-                    <p className="text-sm text-muted-foreground">This may take up to a minute. Flights, hotels, and trip settings are preserved.</p>
+                    <p className="text-sm text-muted-foreground">This may take up to a minute. Flights, hotels, trip settings, and locked activities are preserved.</p>
                   </div>
                 </motion.div>
               )}
