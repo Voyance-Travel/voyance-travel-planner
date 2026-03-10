@@ -787,7 +787,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     ],
     perfectTripPreview: "You walk through centuries, not just streets.",
     emoji: "🏛️",
-    revealParagraph: `You've stood in a place that's a thousand years old and felt something shift. Not just "that's old" — something deeper. You could feel the people who walked there before you. The guide says "built in the 12th century" and everyone nods, but you're already imagining what it looked like new. You read the footnotes. You notice the renovation layers. You ask the questions the guide wasn't expecting. History isn't dead to you — it's the most alive thing in the room.`,
+    revealParagraph: `You've stood in a place that's a thousand years old and felt something shift. Not just "that's old," something deeper. You could feel the people who walked there before you. The guide says "built in the 12th century" and everyone nods, but you're already imagining what it looked like new. You read the footnotes. You notice the renovation layers. You ask the questions the guide wasn't expecting. History isn't dead to you. It's the most alive thing in the room.`,
     youProbably: [
       "Have a favorite historical period and defend it passionately",
       "Own more history books than novels",

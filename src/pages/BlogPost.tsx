@@ -99,7 +99,7 @@ function BlockRenderer({ block }: { block: BlogBlock }) {
           <Quote className="h-5 w-5 text-primary/40 mb-2" />
           <p className="text-lg text-foreground/80">{block.text}</p>
           {block.attribution && (
-            <cite className="text-sm text-muted-foreground mt-1 block not-italic">— {block.attribution}</cite>
+            <cite className="text-sm text-muted-foreground mt-1 block not-italic">- {block.attribution}</cite>
           )}
         </blockquote>
       );

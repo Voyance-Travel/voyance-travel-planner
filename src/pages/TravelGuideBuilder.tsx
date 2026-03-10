@@ -240,7 +240,7 @@ export default function TravelGuideBuilder() {
                 <div className="flex items-center gap-2">
                   {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                   <span className="font-medium">📅 Day {day.day_number}</span>
-                  {day.date && <span className="text-sm text-muted-foreground">— {day.date}</span>}
+                  {day.date && <span className="text-sm text-muted-foreground">· {day.date}</span>}
                   {day.title && <span className="text-sm text-muted-foreground">· {day.title}</span>}
                 </div>
                 <span className="text-xs text-muted-foreground">

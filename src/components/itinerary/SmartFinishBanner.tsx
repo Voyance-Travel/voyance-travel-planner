@@ -476,7 +476,7 @@ export function SmartFinishBanner({
                   className="inline-flex items-center gap-1.5 mt-2 text-xs text-amber-600 dark:text-amber-400 hover:underline"
                 >
                   <AlertTriangle className="h-3 w-3" />
-                  {analysis.gapCount} insider tip{analysis.gapCount !== 1 ? 's' : ''} found — see what you're missing
+                  {analysis.gapCount} insider tip{analysis.gapCount !== 1 ? 's' : ''} found: see what you're missing
                   <ChevronRight className="h-3 w-3" />
                 </button>
               )}

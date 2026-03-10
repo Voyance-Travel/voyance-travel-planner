@@ -652,7 +652,7 @@ export default function GuideBuilder() {
                         <p className="text-sm font-medium truncate">Day {day.dayNumber}: {day.title}</p>
                         <p className="text-xs text-muted-foreground">
                           {day.activities.length} activit{day.activities.length !== 1 ? 'ies' : 'y'}
-                          {day.theme ? ` — ${day.theme}` : ''}
+                          {day.theme ? ` · ${day.theme}` : ''}
                         </p>
                       </div>
                     </label>

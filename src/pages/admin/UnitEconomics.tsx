@@ -964,7 +964,7 @@ function CreditEconomicsTab({ data }: { data: UnitEconomicsData }) {
                         {row.freeCap !== '—' ? (
                           <Badge variant="secondary" className="text-[10px] px-1.5">{row.freeCap}</Badge>
                         ) : (
-                          <span className="text-muted-foreground">—</span>
+                          <span className="text-muted-foreground">-</span>
                         )}
                       </TableCell>
                       <TableCell className="text-right font-mono text-xs text-destructive">{fmt$(row.cost, 3)}</TableCell>
