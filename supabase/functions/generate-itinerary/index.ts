@@ -4911,7 +4911,7 @@ async function generateSingleDayWithRetry(
   let dnaPromptSection = '';
   let dayConstraintsSection = '';
   
-  if (context.travelerDNA && (context.flightData || context.hotelData)) {
+  if (context.travelerDNA) {
     const tripCtx: PromptTripContext = {
       destination: context.destination,
       destinationCountry: context.destinationCountry,
