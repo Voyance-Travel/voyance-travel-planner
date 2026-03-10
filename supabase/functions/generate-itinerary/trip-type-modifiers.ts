@@ -4101,6 +4101,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Birthday at THE restaurant they've wanted, food-focused celebration.",
       art_aficionado: "Birthday at special gallery, private museum experience, art-related celebration.",
+      history_hunter: "Birthday at a meaningful historical site, private guided tour, celebration with depth.",
       luxury_luminary: "Full luxury birthday - champagne, VIP everything, the works, make them feel royal.",
       // TRANSFORMERS
       eco_ethicist: "Sustainable celebration, nature birthday experience, eco-conscious and meaningful.",
