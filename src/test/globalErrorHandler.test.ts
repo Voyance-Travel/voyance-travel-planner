@@ -117,7 +117,7 @@ describe('GlobalErrorHandler', () => {
       handler.handleError(mockEvent);
 
       expect(mockToast).toHaveBeenCalledWith(
-        'Something went wrong. Please refresh the page.'
+        'Something hiccupped. A quick refresh should fix it.'
       );
     });
 
