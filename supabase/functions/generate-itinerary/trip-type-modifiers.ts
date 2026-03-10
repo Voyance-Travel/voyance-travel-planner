@@ -3576,7 +3576,7 @@ Include:
 - Age-appropriate nightlife if relevant
 
 Adjust to archetype:
-- Gap Year Graduate + graduation = backpacker adventure, social scenes
+- Horizon Chaser + graduation = backpacker adventure, social scenes
 - Adrenaline Architect + graduation = adventure activity they've earned
 - Social Butterfly + graduation = group celebration, nightlife
 `,
