@@ -1002,7 +1002,38 @@ const STRICT_ITINERARY_TOOL = {
 // GROUP PREFERENCE BLENDING - For multi-traveler trips with linked friends
 // =============================================================================
 
-interface TravelDNAV2 {
+// =============================================================================
+// EXTRACTED MODULES — Preference context, flight/hotel, group blending
+// =============================================================================
+import {
+  getFlightHotelContext,
+  getDynamicTransferPricing,
+  getAirportTransferTime,
+  parseTimeToMinutes,
+  minutesToHHMM,
+  addMinutesToHHMM,
+  normalizeTo24h,
+  type FlightHotelContextResult,
+  type AirportTransferFare,
+  type DynamicTransferResult,
+} from './flight-hotel-context.ts';
+
+import {
+  getTravelDNAV2,
+  getTraitOverrides,
+  getUserPreferences,
+  getLearnedPreferences,
+  getBehavioralEnrichment,
+  getCollaboratorPreferences,
+  blendGroupPreferences,
+  buildTravelDNAContext,
+  buildPreferenceContext,
+  enrichPreferencesWithAI,
+  type TravelDNAProfile,
+  type PreferenceProfile,
+} from './preference-context.ts';
+
+interface TravelDNAV2_UNUSED_MARKER {
   user_id?: string;
   dna_version?: number;
   trait_scores?: Record<string, number>;
