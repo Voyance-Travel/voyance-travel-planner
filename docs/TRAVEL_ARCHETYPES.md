@@ -109,7 +109,7 @@ Based on extreme trait scores (values >7 or <-7):
 
 ### ACHIEVERS
 
-#### 9. The Bucket List Conqueror
+#### 9. The Milestone Voyager
 - **ID**: `bucket_list_conqueror`
 - **Rarity**: common
 - **Primary Motivation**: Checking off iconic experiences
