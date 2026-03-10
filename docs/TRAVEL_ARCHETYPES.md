@@ -235,7 +235,7 @@ Based on extreme trait scores (values >7 or <-7):
 - **Backend Scoring**: High learning + cultural + low time constraints
 - **Emotional Hook**: "Every destination is a classroom"
 
-#### 24. The Healing Journeyer
+#### 24. The Restoration Seeker
 - **ID**: `healing_journeyer`
 - **Rarity**: uncommon
 - **Primary Motivation**: Travel as emotional healing
