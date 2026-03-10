@@ -261,7 +261,8 @@ export function injectMultiHotelActivities(
     const checkInDayIdx = findDayIndex(updated, hotel.checkInDate, true);
     const dayHasLateCheckin = updated[checkInDayIdx]?.activities.some(a => isLateCheckin(a));
     if (!dayHasLateCheckin) {
-      const checkInActivity = buildCheckInActivity(hotel);
+      const dayActivities = updated[checkInDayIdx]?.activities || [];
+      const checkInActivity = buildCheckInActivity(hotel, dayActivities);
       updated = updated.map((day, idx) => {
         if (idx !== checkInDayIdx) return day;
         return { ...day, activities: insertChronologically(day.activities, checkInActivity) };
