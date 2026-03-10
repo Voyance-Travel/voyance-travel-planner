@@ -683,6 +683,29 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     signatureAnswers: ['ad4', 'cd4', 'rm5', 'ld3', 'tt6'],
   },
   
+  // CURATOR - History Hunter
+  {
+    id: 'history_hunter',
+    name: 'The History Hunter',
+    category: 'CURATOR',
+    tagline: 'Every stone has a story — you just have to look.',
+    primaryTraits: [
+      { trait: 'authenticity', weight: 3, sweetSpot: 8, range: [5, 10] },
+      { trait: 'planning', weight: 2, sweetSpot: 6, range: [3, 10] },
+      { trait: 'pace', weight: 1, sweetSpot: 3, range: [-2, 6] },
+      { trait: 'adventure', weight: 1, sweetSpot: 3, range: [-2, 7] },
+    ],
+    hardNo: [
+      { trait: 'authenticity', range: [-10, 2], penalty: -20 },
+    ],
+    fineGrained: {
+      cultural_depth: { min: 0.7, weight: 20 },
+      learning_focus: { min: 0.5, weight: 15 },
+      novelty_seeking: { min: 0.3, weight: 5 },
+    },
+    signatureAnswers: ['b1', 'f2'],
+  },
+
   // Default fallback
   {
     id: 'explorer',

@@ -285,6 +285,13 @@ export const EXPERIENCE_AFFINITY: Record<string, ExperienceAffinity> = {
     never: ['budget_options', 'street_food', 'hostels', 'public_transit', 'crowds', 'queues']
   },
 
+  history_hunter: {
+    high: ['historical_site', 'museum', 'religious_site', 'architecture', 'landmark', 'walking_tour'],
+    medium: ['cultural_performance', 'neighborhood', 'local_restaurant', 'viewpoint', 'garden'],
+    low: ['cafe', 'food_market', 'park', 'street_life'],
+    never: ['adventure_activity', 'nightclub', 'shopping', 'spa', 'beach', 'outdoor_sport']
+  },
+
   // =========================================================================
   // TRANSFORMERS
   // =========================================================================

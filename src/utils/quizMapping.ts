@@ -770,6 +770,7 @@ function extractEmotionalDrivers(answers: Record<string, string | string[]>): st
     art_aficionado: ['beauty', 'inspiration', 'culture'],
     luxury_luminary: ['comfort', 'excellence', 'indulgence'],
     eco_ethicist: ['responsibility', 'authenticity', 'purpose'],
+    history_hunter: ['discovery', 'depth', 'heritage'],
     gap_year_graduate: ['growth', 'discovery', 'transformation'],
     midlife_explorer: ['renewal', 'discovery', 'meaning'],
     sabbatical_scholar: ['learning', 'renewal', 'perspective'],

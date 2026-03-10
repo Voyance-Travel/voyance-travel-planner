@@ -35,6 +35,7 @@ const ARCHETYPES = [
   { id: 'culinary_cartographer', name: 'The Culinary Cartographer', category: 'CURATOR', traits: ['food-focused', 'local-cuisine', 'cooking-classes', 'restaurants'] },
   { id: 'art_aficionado', name: 'The Art Aficionado', category: 'CURATOR', traits: ['museums', 'galleries', 'architecture', 'design'] },
   { id: 'luxury_luminary', name: 'The Luxury Luminary', category: 'CURATOR', traits: ['five-star', 'michelin', 'private-tours', 'premium'] },
+  { id: 'history_hunter', name: 'The History Hunter', category: 'CURATOR', traits: ['historical-sites', 'ruins', 'ancient', 'heritage', 'museums', 'archaeology'] },
   // TRANSFORMER
   { id: 'eco_ethicist', name: 'The Mindful Voyager', category: 'TRANSFORMER', traits: ['sustainable', 'eco-lodges', 'conservation', 'low-impact'] },
   { id: 'gap_year_graduate', name: 'The Horizon Chaser', category: 'TRANSFORMER', traits: ['backpacking', 'hostels', 'budget', 'youth'] },
