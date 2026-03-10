@@ -27,6 +27,10 @@ export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps)
   const persistAuthReturnPath = () => {
     if (redirectPath && redirectPath.startsWith('/')) {
       saveReturnPath(redirectPath);
+    } else {
+      // No explicit redirect param — save the current path so the user returns here
+      // after OAuth (saveReturnPath already filters out /signin, /signup, etc.)
+      saveReturnPath(window.location.pathname);
     }
     if (inviteToken) {
       savePendingInviteToken(inviteToken);

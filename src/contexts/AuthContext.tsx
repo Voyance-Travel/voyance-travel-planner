@@ -348,11 +348,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!isMounted) return;
         
         if (!initialSession?.user) {
-          // No session found
-          currentUserIdRef.current = null;
-          setSession(null);
-          setUser(null);
-          return;
+          // No session from getSession() — check if an OAuth SIGNED_IN event was queued
+          if (pendingOAuthSessionRef.current) {
+            console.debug('[Auth] No session from getSession, but OAuth SIGNED_IN was queued — using queued session');
+            initialSession = pendingOAuthSessionRef.current;
+            pendingOAuthSessionRef.current = null;
+          } else {
+            // Truly no session — wait briefly for OAuth hash processing, then check once more
+            await new Promise(resolve => setTimeout(resolve, 500));
+            const retryResult = await supabase.auth.getSession();
+            if (retryResult.data?.session?.user) {
+              console.debug('[Auth] OAuth session found on retry after 500ms');
+              initialSession = retryResult.data.session;
+            } else if (pendingOAuthSessionRef.current) {
+              console.debug('[Auth] OAuth SIGNED_IN queued during retry wait — using queued session');
+              initialSession = pendingOAuthSessionRef.current;
+              pendingOAuthSessionRef.current = null;
+            } else {
+              // No session found
+              currentUserIdRef.current = null;
+              setSession(null);
+              setUser(null);
+              return;
+            }
+          }
         }
         
         // Session found, validating user
