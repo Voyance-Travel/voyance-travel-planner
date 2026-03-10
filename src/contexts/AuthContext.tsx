@@ -262,8 +262,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } = supabase.auth.onAuthStateChange((event, newSession) => {
       // Auth state change event
       
-      // During initial load, let initializeAuth handle everything — don't touch state
+      // During initial load, queue SIGNED_IN events from OAuth returns instead of dropping them.
+      // Race condition: getSession() may return null before Supabase processes the OAuth hash,
+      // then SIGNED_IN fires but gets dropped because initialLoadCompleteRef is still false.
       if (!initialLoadCompleteRef.current) {
+        if (event === 'SIGNED_IN' && newSession?.user) {
+          pendingOAuthSessionRef.current = newSession;
+        }
         return;
       }
 
