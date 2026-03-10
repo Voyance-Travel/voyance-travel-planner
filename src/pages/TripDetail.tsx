@@ -907,7 +907,6 @@ export default function TripDetail() {
           const result = await repairTripCosts(tripId);
           if (result.success) {
             console.log(`[TripDetail] Auto-repair complete: ${result.repaired} rows`);
-            toast.success(`Trip pricing synced: ${result.repaired} activities updated`);
           }
         }
       } catch (err) {

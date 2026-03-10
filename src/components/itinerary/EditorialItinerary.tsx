@@ -3490,9 +3490,7 @@ export function EditorialItinerary({
         if (change?.removedActivities.length) parts.push(`${change.removedActivities.length} removed`);
         if (change?.addedBlocks.length) parts.push(`${change.addedBlocks.length} added`);
 
-        toast.success('Schedule synced to flight times', {
-          description: parts.length ? parts.join(', ') : 'Activities adjusted',
-        });
+        toast.success('Schedule updated!', { id: 'flight-sync', duration: 2000 });
       } else {
         toast.info('Schedule already matches flight times');
       }

@@ -107,11 +107,7 @@ export function FindMyHotelsDrawer({
       setHasPaid(true);
       setIsOpen(true);
       
-      if (result.freeCapUsed) {
-        toast.success(`Finding your perfect hotels (free - ${result.usageCount}/${result.freeCap} used)`);
-      } else {
-        toast.success(`Finding your perfect hotels (${result.spent ?? creditCost} credits used)`);
-      }
+      // Credits charged silently — no toast needed
     } catch (err: any) {
       // Reset guards on error so user can retry
       spendAttemptedRef.current = false;

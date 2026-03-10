@@ -529,7 +529,6 @@ export function useItineraryGeneration() {
 
       if (error) throw error;
 
-      toast.success('Itinerary saved successfully!');
       return true;
     } catch (err) {
       console.error('[useItineraryGeneration] Save error:', err);
