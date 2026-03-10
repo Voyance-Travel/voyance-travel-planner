@@ -6617,6 +6617,11 @@ The user has locked the following activities. These are FIXED and CANNOT be chan
 You must NOT generate any activities that overlap with these time slots.
 Plan activities ONLY for the available gaps between these locked blocks.
 
+Do NOT generate any activity that is similar in type or theme to a locked activity.
+For example, if "Comedy Show" is locked, do NOT suggest "Stand-Up Night" or any other comedy activity.
+If "US Open" is locked, do NOT suggest "Tennis Match" or any other tennis event.
+Each locked activity is unique — do not create alternatives, variations, or substitutes.
+
 ${lockedSlotsList}
 
 Generate activities ONLY for the remaining unlocked time periods. 
@@ -8323,6 +8328,33 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
               });
             }
           }
+
+          // Semantic dedup: remove generated activities whose titles are similar to locked ones
+          const beforeSemanticDedup = normalizedActivities.length;
+          normalizedActivities = normalizedActivities.filter((genAct: any) => {
+            const genTitle = (genAct.title || '').toLowerCase();
+            for (const locked of lockedActivities) {
+              const lockedTitle = (locked.title || '').toLowerCase();
+              // Substring match
+              if (genTitle.includes(lockedTitle) || lockedTitle.includes(genTitle)) {
+                console.log(`[generate-day] Removing "${genAct.title}" — duplicate of locked "${locked.title}"`);
+                return false;
+              }
+              // Keyword match (50% threshold)
+              const keywords = lockedTitle.replace(/\b(the|a|an|at|in|on|for|and|or|to|of)\b/g, '').split(/\s+/).filter((w: string) => w.length > 2);
+              if (keywords.length > 0) {
+                const matchCount = keywords.filter((kw: string) => genTitle.includes(kw)).length;
+                if (matchCount >= Math.ceil(keywords.length * 0.5) && matchCount >= 1) {
+                  console.log(`[generate-day] Removing "${genAct.title}" — semantic duplicate of locked "${locked.title}"`);
+                  return false;
+                }
+              }
+            }
+            return true;
+          });
+          if (normalizedActivities.length < beforeSemanticDedup) {
+            console.log(`[generate-day] Semantic dedup removed ${beforeSemanticDedup - normalizedActivities.length} activities that duplicated locked ones`);
+          }
           
           // Insert locked activities back and sort by time
           normalizedActivities = [...normalizedActivities, ...lockedActivities];
@@ -8545,6 +8577,21 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
               return false;
             });
+
+            // Also check if this must-do is already locked on the day — no need to backfill
+            const eventIsLocked = lockedActivities.some((locked: any) => {
+              const lockedTitle = (locked.title || '').toLowerCase();
+              if (lockedTitle.includes(eventTitleLower) || eventTitleLower.includes(lockedTitle)) return true;
+              if (coreKeywords.length > 0) {
+                const matchCount = coreKeywords.filter((kw: string) => lockedTitle.includes(kw)).length;
+                if (matchCount >= Math.ceil(coreKeywords.length * 0.5) && matchCount >= 1) return true;
+              }
+              return false;
+            });
+            if (eventIsLocked) {
+              console.log(`[generate-day] Skipping must-do backfill "${eventItem.priority.title}" — already locked on this day`);
+              continue;
+            }
 
             if (!eventExists) {
               console.log(`[generate-day] ⚠️ BACKFILL: Must-do event "${eventItem.priority.title}" missing from Day ${dayNumber} — injecting deterministic activity card`);
