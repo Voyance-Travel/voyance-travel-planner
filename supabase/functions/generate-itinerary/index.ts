@@ -12851,6 +12851,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             rating: a.rating || null,
             website: a.website || null,
             viator_product_code: a.viatorProductCode || null,
+            suggested_for: a.suggestedFor || null,
           };
         });
         
