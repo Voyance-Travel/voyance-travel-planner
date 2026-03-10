@@ -1680,7 +1680,7 @@
       }
     },
     "gap_year_graduate": {
-      "name": "Gap Year Graduate",
+      "name": "The Horizon Chaser",
       "category": "TRANSFORMER",
       "required": {
         "budget_tier": { "max": 0.35 },
