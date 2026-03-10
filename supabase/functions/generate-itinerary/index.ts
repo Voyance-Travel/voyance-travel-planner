@@ -10301,9 +10301,10 @@ If the purpose is a specific event, plan at least ONE full day around that event
           const settleInEnd = addMinutesToHHMM(hotelCheckIn, 30);     // 30 min to settle
           const earliestSightseeing = addMinutesToHHMM(settleInEnd, 30); // 30 min buffer
           
-          // Hotel context for prompts
+          // Hotel and airport context for prompts
           const hotelNameDisplay = flightContext.hotelName || 'Selected Hotel';
           const hotelAddressDisplay = flightContext.hotelAddress || 'Hotel Address';
+          const arrivalAirportDisplay = flightContext.arrivalAirport || 'Airport';
           
           console.log(`[Day1-Decision] Arrival at ${arrival24}: morning=${isMorningArrival}, afternoon=${isAfternoonArrival}, evening=${isEveningArrival}`);
           console.log(`[Day1-Decision] Timeline: customs=${customsClearance}, transfer=${transferStart}-${transferEnd}, checkin=${hotelCheckIn}, earliest activity=${earliestSightseeing}`);
