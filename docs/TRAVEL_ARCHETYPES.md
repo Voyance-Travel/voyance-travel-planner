@@ -125,7 +125,7 @@ Based on extreme trait scores (values >7 or <-7):
 - **Backend Scoring**: Very high adventure + achievement scores
 - **Emotional Hook**: "Normal is just a setting on the washing machine"
 
-#### 11. The Collection Curator
+#### 11. The Passport Collector
 - **ID**: `collection_curator`
 - **Rarity**: rare
 - **Primary Motivation**: Systematically experiencing specific themes
