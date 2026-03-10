@@ -1274,7 +1274,7 @@ export function EditorialItinerary({
   const [optionSelections, setOptionSelections] = useState<Record<string, string>>(
     () => (initialItineraryData?.optionSelections as Record<string, string>) || {}
   );
-  const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'payments' | 'details' | 'collab'>('itinerary');
+  const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'payments' | 'details' | 'needtoknow' | 'collab'>('itinerary');
   const [showTripOverview, setShowTripOverview] = useState(false);
 
   // Navigate to a section when parent requests it (e.g., from TripHealthPanel quick-fix buttons)
@@ -3873,10 +3873,10 @@ export function EditorialItinerary({
         >
           <div className="flex gap-1 min-w-max" data-tour="tab-bar">
             {[
-              { id: 'itinerary', label: 'Itinerary', fullLabel: 'Itinerary', icon: <Calendar className="h-4 w-4" /> },
+              { id: 'itinerary', label: 'Day-to-Day', fullLabel: 'Day-to-Day', icon: <Calendar className="h-4 w-4" /> },
               { id: 'budget', label: 'Budget', fullLabel: 'Budget', icon: <Wallet className="h-4 w-4" /> },
-              { id: 'payments', label: 'Payments', fullLabel: 'Payments', icon: <CreditCard className="h-4 w-4" /> },
-              { id: 'details', label: 'Details', fullLabel: 'Flights & Hotels', icon: <Plane className="h-4 w-4" />, mobileOverflow: true },
+              { id: 'details', label: 'Details', fullLabel: 'Travel Details', icon: <Plane className="h-4 w-4" /> },
+              { id: 'needtoknow', label: 'Info', fullLabel: 'Need to Know', icon: <Shield className="h-4 w-4" />, mobileOverflow: true },
               ...(collaborators.length > 0 ? [{ id: 'collab', label: 'Group', fullLabel: 'Group Chat & Vote', icon: <MessageCircle className="h-4 w-4" /> }] : []),
             ].map((tab) => (
               <button
@@ -3911,6 +3911,9 @@ export function EditorialItinerary({
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => setActiveTab('payments' as typeof activeTab)}>
                   <CreditCard className="h-4 w-4 mr-2" /> Payments
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setActiveTab('needtoknow' as typeof activeTab)}>
+                  <Shield className="h-4 w-4 mr-2" /> Need to Know
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -4322,25 +4325,6 @@ export function EditorialItinerary({
                 </Collapsible>
               )}
 
-              {/* ROW 6: Need to Know (collapsible) */}
-              <Collapsible>
-                <CollapsibleTrigger className="w-full px-4 sm:px-6 py-3 flex items-center justify-between text-left hover:bg-secondary/30 transition-colors border-b border-border/50">
-                  <div className="flex items-center gap-2">
-                    <Shield className="h-4 w-4 text-primary shrink-0" />
-                    <span className="text-xs font-semibold text-primary uppercase tracking-wider">Need to Know</span>
-                  </div>
-                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <div className="p-3 sm:p-4">
-                    <NeedToKnowSection
-                      destination={destination}
-                      destinationCountry={destinationCountry}
-                      destinationInfo={destinationInfo}
-                    />
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
             </div>
 
 
@@ -5673,7 +5657,21 @@ export function EditorialItinerary({
           </motion.div>
         )}
 
-        {false /* needtoknow tab removed — content moved to Trip Overview on itinerary tab */}
+        {activeTab === 'needtoknow' && (
+          <motion.div
+            key="needtoknow"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="space-y-6"
+          >
+            <NeedToKnowSection
+              destination={destination}
+              destinationCountry={destinationCountry}
+              destinationInfo={destinationInfo}
+            />
+          </motion.div>
+        )}
 
         {activeTab === 'collab' && collaborators.length > 0 && (
           <motion.div
