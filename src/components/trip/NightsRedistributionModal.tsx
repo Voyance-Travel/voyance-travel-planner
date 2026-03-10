@@ -37,9 +37,9 @@ export function NightsRedistributionModal({
   const [isSaving, setIsSaving] = useState(false);
 
   // Reset state when modal opens with new data
-  useState(() => {
+  useEffect(() => {
     setRedistribution(initialRedistribution);
-  });
+  }, [initialRedistribution]);
 
   const currentTotal = useMemo(
     () => redistribution.reduce((s, r) => s + r.newNights, 0),
