@@ -27,7 +27,7 @@ class ErrorHandler {
     }
 
     // Show user-friendly toast
-    this.toastError(message);
+    this.toastError('Something hiccupped. Try that again.');
 
     // Prevent default browser error handling
     event.preventDefault();
