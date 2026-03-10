@@ -11,7 +11,7 @@ export default function ValueFirstHero({ onScrollToDemo }: ValueFirstHeroProps) 
   return (
     <section className="relative min-h-[85vh] md:min-h-screen flex flex-col items-center justify-center overflow-hidden">
       {/* Full-screen Background Image - LCP optimized */}
-      <div className="absolute inset-0 bg-[#2c3e50]">
+      <div className="absolute inset-0 bg-[#d4a574]">
         <img
           src={toSiteImageUrlFromPhotoId('photo-1469854523086-cc02fe5d8800')}
           alt="Scenic mountain road at sunset"
@@ -21,7 +21,7 @@ export default function ValueFirstHero({ onScrollToDemo }: ValueFirstHeroProps) 
           decoding="async"
         />
         {/* Gradient overlay - stronger at bottom for mobile text readability */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-black/10" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/15 to-transparent" />
       </div>
 
       {/* Editorial Grid Lines - Desktop only */}
