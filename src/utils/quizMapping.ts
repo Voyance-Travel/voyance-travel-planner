@@ -699,7 +699,7 @@ function getArchetypeTagline(id: string): string {
     cultural_anthropologist: "You don't just visit places, you become them.",
     urban_nomad: 'Cities speak to you in neon and noise.',
     wilderness_pioneer: 'WiFi is optional, wilderness is essential.',
-    digital_explorer: 'Your laptop is your passport extension.',
+    digital_explorer: 'WiFi, passport, laptop — anywhere is home.',
     explorer: 'The world is your playground.',
     // CONNECTOR
     social_butterfly: "Every stranger is a friend you haven't met.",
@@ -709,11 +709,11 @@ function getArchetypeTagline(id: string): string {
     // ACHIEVER
     bucket_list_conqueror: 'Life is a checklist of wonders.',
     adrenaline_architect: 'Normal is just a setting on the washing machine.',
-    collection_curator: 'Countries collected, stamps earned.',
+    collection_curator: 'Every passport stamp tells a story.',
     status_seeker: "First class isn't a seat, it's a lifestyle.",
     // RESTORER
     zen_seeker: 'Breathe in experience, exhale expectation.',
-    retreat_regular: "Wellness isn't a trend, it's a lifestyle.",
+    retreat_regular: "Wellness isn't a trend — it's a travel style.",
     beach_therapist: 'Salt water heals everything.',
     slow_traveler: 'Stay long enough to have a favorite café.',
     escape_artist: 'Sometimes you need to leave to find yourself.',
@@ -721,17 +721,18 @@ function getArchetypeTagline(id: string): string {
     culinary_cartographer: 'Your passport is basically a menu.',
     art_aficionado: 'Every gallery is a pilgrimage.',
     luxury_luminary: 'Champagne wishes, caviar dreams, economy never.',
-    eco_ethicist: 'Leave nothing but footprints.',
+    eco_ethicist: 'Travel gently, experience deeply.',
     // TRANSFORMER
-    gap_year_graduate: 'The world is the ultimate classroom.',
-    midlife_explorer: "It's never too late to become who you were meant to be.",
-    sabbatical_scholar: 'Taking time off to find time on.',
+    gap_year_graduate: 'The next horizon is always calling.',
+    midlife_explorer: "The best chapter hasn't been written yet.",
+    sabbatical_scholar: "Every city has a story — I'm here to find it.",
     healing_journeyer: 'Travel is the medicine for the soul.',
     retirement_ranger: 'Your next chapter deserves the whole world as its backdrop.',
     // CONNECTOR (additional)
-    community_builder: 'You travel to connect, contribute, and belong.',
+    community_builder: 'Travel with purpose, connect with meaning.',
     // RESTORER (additional)
     sanctuary_seeker: 'You seek places that feel like a sacred refuge.',
+    flexible_wanderer: "Plans? Where we're going, we don't need plans.",
   };
   return taglines[id] || 'The world awaits your discovery.';
 }
