@@ -45,6 +45,10 @@ export interface MustDoPriority {
   maxDay?: number;
   /** Minimum day (e.g., "after we're settled") */
   minDay?: number;
+  /** Explicit start time parsed from user text (e.g., "9am-5pm" → "09:00") */
+  explicitStartTime?: string;
+  /** Explicit end time parsed from user text (e.g., "9am-5pm" → "17:00") */
+  explicitEndTime?: string;
 }
 
 export interface ScheduledMustDo {
@@ -187,6 +191,39 @@ const KNOWN_LANDMARKS: Record<string, {
   'met': { city: 'new york', duration: 240, bestTime: 'any', bookingRequired: false },
   'metropolitan museum': { city: 'new york', duration: 240, bestTime: 'any', bookingRequired: false },
 };
+
+// =============================================================================
+// EXPLICIT TIME EXTRACTION
+// =============================================================================
+
+/**
+ * Extract explicit time range from user text like "9am-5pm", "9:00 AM to 5:00 PM", "12pm–4pm"
+ * Returns null if no explicit time range found.
+ */
+function extractExplicitTimeRange(text: string): { startTime: string; endTime: string } | null {
+  const lower = text.toLowerCase();
+
+  // Match patterns: "9am-5pm", "9:00am-5:00pm", "9 am - 5 pm", "9:00 AM to 5:00 PM", "12pm–4pm"
+  const timeRangePattern = /(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*(?:[-–—]|to)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i;
+  const match = lower.match(timeRangePattern);
+
+  if (!match) return null;
+
+  const [, startH, startM, startPeriod, endH, endM, endPeriod] = match;
+
+  const to24 = (h: string, m: string | undefined, period: string): string => {
+    let hour = parseInt(h, 10);
+    const min = parseInt(m || '0', 10);
+    if (period === 'pm' && hour !== 12) hour += 12;
+    if (period === 'am' && hour === 12) hour = 0;
+    return `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+  };
+
+  return {
+    startTime: to24(startH, startM, startPeriod),
+    endTime: to24(endH, endM, endPeriod),
+  };
+}
 
 // =============================================================================
 // PARSING USER INPUT
@@ -390,6 +427,18 @@ function parseItem(item: string, destination: string): MustDoPriority | null {
     bestTime = matchedLandmark.bestTime;
   }
   
+  // Extract explicit time range from user text (e.g., "US Open 9am-5pm")
+  const explicitTimes = extractExplicitTimeRange(item);
+  if (explicitTimes) {
+    const [sh, sm] = explicitTimes.startTime.split(':').map(Number);
+    const [eh, em] = explicitTimes.endTime.split(':').map(Number);
+    const explicitDurationMins = (eh * 60 + em) - (sh * 60 + sm);
+    if (explicitDurationMins > 0) {
+      estimatedDuration = explicitDurationMins;
+    }
+    console.log(`[MustDo] Explicit time range: "${item}" → ${explicitTimes.startTime}–${explicitTimes.endTime} (${explicitDurationMins}min)`);
+  }
+
   return {
     id: `mustdo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     title: activityName,
@@ -400,6 +449,8 @@ function parseItem(item: string, destination: string): MustDoPriority | null {
     preferredTime: bestTime,
     estimatedDuration,
     requiresBooking,
+    explicitStartTime: explicitTimes?.startTime,
+    explicitEndTime: explicitTimes?.endTime,
     location: matchedLandmark?.neighborhood,
   };
 }
@@ -600,6 +651,10 @@ function getTimeForPreference(pref?: 'morning' | 'afternoon' | 'evening' | 'any'
 
 /** Compute the blocked start/end times for an all-day or half-day event */
 export function getBlockedTimeRange(s: ScheduledMustDo): { blockedStart: string; blockedEnd: string } {
+  // Prefer explicit user-specified times (e.g., "9am-5pm") over inferred defaults
+  if (s.priority.explicitStartTime && s.priority.explicitEndTime) {
+    return { blockedStart: s.priority.explicitStartTime, blockedEnd: s.priority.explicitEndTime };
+  }
   const startTime = s.assignedTime || getTimeForPreference(s.priority.preferredTime);
   const durationMins = s.priority.estimatedDuration || (s.priority.activityType === 'all_day_event' ? 480 : 180);
   const startMins = parseHHMM(startTime);

@@ -6713,11 +6713,14 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
           );
           if (dayItems.length > 0) {
             // Build blocked time info for events
+            // Build blocked time info for events — explicitly instruct AI to CREATE the event card
             const blockedTimeLines = mustDoEventItems.map(ev => {
               const { blockedStart, blockedEnd } = getBlockedTimeRange(ev);
-              return `⏰ BLOCKED TIME for "${ev.priority.title}": ${blockedStart}–${blockedEnd}. Do NOT schedule ANY activities in this window.`;
+              return `⏰ "${ev.priority.title}" — BLOCKED TIME: ${blockedStart}–${blockedEnd}
+  YOU MUST CREATE AN ACTIVITY ENTRY for "${ev.priority.title}" with startTime: "${blockedStart}", endTime: "${blockedEnd}".
+  This MUST appear as a real activity card in the JSON output. Do NOT schedule any OTHER activities in this window.`;
             }).join('\n');
-            mustDoPrompt = `\n## 🚨 USER'S MUST-DO VENUES FOR DAY ${dayNumber} (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED these venues. You MUST include them:\n${dayItems.map(item => `- ${item.priority.title} (${item.priority.priority})${item.priority.activityType === 'all_day_event' ? ' [ALL-DAY EVENT — plan the ENTIRE day around this]' : item.priority.activityType === 'half_day_event' ? ' [HALF-DAY EVENT — dedicate morning or afternoon to this]' : ''}`).join('\n')}\n${blockedTimeLines ? '\n' + blockedTimeLines + '\n' : ''}\nRULES:\n- Include ALL listed venues by name in this day's itinerary\n- For ALL-DAY events, the entire day should revolve around this event\n- Any activity overlapping a BLOCKED TIME window is a HARD FAILURE\n- Only add AI recommendations to fill remaining slots OUTSIDE blocked windows\n`;
+            mustDoPrompt = `\n## 🚨 USER'S MUST-DO VENUES FOR DAY ${dayNumber} (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED these venues. You MUST include them:\n${dayItems.map(item => `- ${item.priority.title} (${item.priority.priority})${item.priority.activityType === 'all_day_event' ? ' [ALL-DAY EVENT — YOU MUST generate an activity card for this event]' : item.priority.activityType === 'half_day_event' ? ' [HALF-DAY EVENT — YOU MUST generate an activity card for this event]' : ''}`).join('\n')}\n${blockedTimeLines ? '\n' + blockedTimeLines + '\n' : ''}\nRULES:\n- EVERY must-do venue listed above MUST appear as its own activity entry in the JSON output\n- For ALL-DAY events: CREATE the event as an activity card, then do NOT schedule OTHER activities during its time window\n- For HALF-DAY events: CREATE the event as an activity card, then fill the OTHER half of the day\n- Any OTHER activity overlapping a BLOCKED TIME window is a HARD FAILURE\n- Only add AI recommendations to fill remaining slots OUTSIDE blocked windows\n`;
           } else {
             // No items specifically for this day, but include unschedulable ones as suggestions
             const unscheduledItems = scheduled.unschedulable || [];
@@ -7966,7 +7969,28 @@ ${mustDoPrompt}
 ${additionalNotesPrompt}
 ${mustHavesConstraintPrompt}
 ${preBookedCommitmentsPrompt}
-${previousDayActivities?.length ? `\nAvoid repeating these specific venues/activities (be creative and pick DIFFERENT ones): ${previousDayActivities.join(', ')}` : ''}
+${(() => {
+  if (!previousDayActivities?.length) return '';
+  // Separate recurring/must-do events from regular activities
+  const mustDoList = (paramMustDoActivities || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+  const recurring: string[] = [];
+  const nonRecurring: string[] = [];
+  for (const prev of previousDayActivities) {
+    if (isRecurringEvent({ title: prev }, mustDoList)) {
+      recurring.push(prev);
+    } else {
+      nonRecurring.push(prev);
+    }
+  }
+  let result = '';
+  if (nonRecurring.length > 0) {
+    result += `\nAvoid repeating these specific venues/activities (be creative and pick DIFFERENT ones): ${nonRecurring.join(', ')}`;
+  }
+  if (recurring.length > 0) {
+    result += `\nTHESE ARE MULTI-DAY EVENTS the traveler is attending across multiple days — YOU MUST CREATE A FULL ATTENDANCE ACTIVITY CARD for each (not just transit): ${recurring.join(', ')}`;
+  }
+  return result;
+})()}
 
 CRITICAL REMINDERS:
 1. ${isFullDay ? 'This is a FULL DAY: breakfast + 3 paid activities + 2 free activities + lunch + dinner + transit between all stops + evening activity + next morning preview. Fill EVERY hour.' : `${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} scheduled sightseeing activities for this ${isFirstDay ? 'arrival' : 'departure'} day.`}
@@ -8442,6 +8466,65 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           if (removed > 0) {
             console.log(`[generate-day] ✓ Stripped ${removed} activities overlapping must-do event time blocks`);
             generatedDay.activities = normalizedActivities;
+          }
+        }
+
+        // =======================================================================
+        // DETERMINISTIC EVENT BACKFILL
+        // If any must-do event is STILL missing from the day (model skipped it),
+        // inject a synthetic activity entry so the card always appears.
+        // =======================================================================
+        if (mustDoEventItems.length > 0) {
+          for (const eventItem of mustDoEventItems) {
+            const { blockedStart, blockedEnd } = getBlockedTimeRange(eventItem);
+            const eventTitleLower = eventItem.priority.title.toLowerCase();
+
+            // Check if an activity matching this event already exists
+            const eventExists = generatedDay.activities.some((act: any) => {
+              const actTitle = (act.title || '').toLowerCase();
+              return actTitle.includes(eventTitleLower) || eventTitleLower.includes(actTitle);
+            });
+
+            if (!eventExists) {
+              console.log(`[generate-day] ⚠️ BACKFILL: Must-do event "${eventItem.priority.title}" missing from Day ${dayNumber} — injecting deterministic activity card`);
+
+              // Find the right insertion point (chronological order)
+              let insertIndex = generatedDay.activities.length;
+              const blockedStartMins = parseTimeToMinutes(blockedStart);
+              for (let i = 0; i < generatedDay.activities.length; i++) {
+                const act = generatedDay.activities[i];
+                const actStart = parseTimeToMinutes(act.startTime);
+                if (actStart !== null && blockedStartMins !== null && actStart >= blockedStartMins) {
+                  insertIndex = i;
+                  break;
+                }
+              }
+
+              const syntheticEvent = {
+                id: crypto.randomUUID(),
+                title: eventItem.priority.title,
+                startTime: blockedStart,
+                endTime: blockedEnd,
+                category: 'activity',
+                description: `${eventItem.priority.title} — user's scheduled event for this day.${eventItem.priority.requiresBooking ? ' Tickets/advance booking required.' : ''}`,
+                location: eventItem.priority.venueName
+                  ? { name: eventItem.priority.venueName }
+                  : { name: eventItem.priority.title },
+                estimatedCost: { amount: 0, currency: 'USD' },
+                tips: `This is your dedicated ${eventItem.priority.title} day. Arrive early to get settled and enjoy the full experience.`,
+                crowdLevel: 'high',
+                isHiddenGem: false,
+                hasTimingHack: false,
+                voyanceInsight: `Multi-day event attendance — enjoy today's experience!`,
+                personalization: {
+                  whyThisFits: `You specifically requested ${eventItem.priority.title} for this day.`,
+                },
+                bookingRequired: eventItem.priority.requiresBooking || false,
+              };
+
+              generatedDay.activities.splice(insertIndex, 0, syntheticEvent);
+              console.log(`[generate-day] ✅ BACKFILL: Injected "${eventItem.priority.title}" at position ${insertIndex} (${blockedStart}–${blockedEnd})`);
+            }
           }
         }
 
