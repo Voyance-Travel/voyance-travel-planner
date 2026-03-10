@@ -193,7 +193,7 @@ export function useUnlockDay() {
     } catch (err: any) {
       console.error(`[UnlockDay] Day ${params.dayNumber} enrichment failed:`, err);
       setState({ step: 'error', dayNumber: params.dayNumber, message: '', error: err.message });
-      toast.error(`Failed to enrich Day ${params.dayNumber}. Credits were charged - please retry.`);
+      toast.error(toFriendlyError(err?.message) || `Failed to enrich Day ${params.dayNumber}. Credits were charged - please retry.`);
       return false;
     }
   }, [user, canAfford, totalCredits, queryClient, showOutOfCredits]);

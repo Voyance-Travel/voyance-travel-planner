@@ -79,7 +79,7 @@ export function BookingButton({
         toast.success('Payment page opened in new tab');
         onSuccess?.();
       } else {
-        toast.error(result.error || 'Failed to start payment');
+        toast.error(toFriendlyError(result.error));
       }
     } catch (err) {
       console.error('Booking error:', err);

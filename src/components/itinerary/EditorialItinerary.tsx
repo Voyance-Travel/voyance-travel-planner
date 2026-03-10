@@ -3760,7 +3760,7 @@ export function EditorialItinerary({
       }
     } catch (err: any) {
       console.error('Failed to create share link:', err?.message || err);
-      toast.error(err?.message || 'Failed to create invite link');
+      toast.error(toFriendlyError(err?.message));
     } finally {
       setIsCreatingInvite(false);
     }

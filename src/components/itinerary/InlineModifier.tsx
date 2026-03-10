@@ -209,7 +209,7 @@ export function InlineModifier({
         setInput('');
         setIsExpanded(false);
       } else {
-        toast.error(result.error || 'Failed to apply changes');
+        toast.error(toFriendlyError(result.error));
       }
     } catch (error) {
       console.error('[InlineModifier] Apply error:', error);

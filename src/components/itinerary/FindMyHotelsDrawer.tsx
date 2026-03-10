@@ -117,7 +117,7 @@ export function FindMyHotelsDrawer({
       spendAttemptedRef.current = false;
       console.error('[FindMyHotels] Credit spend failed:', err);
       if (!err?.message?.startsWith('Not enough credits') && err?.message !== 'Duplicate spend request blocked') {
-        toast.error(err?.message || 'Failed to start hotel search. Please try again.');
+        toast.error(toFriendlyError(err?.message));
       }
     } finally {
       setIsSpending(false);

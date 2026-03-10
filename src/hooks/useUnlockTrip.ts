@@ -206,7 +206,7 @@ export function useUnlockTrip() {
 
         if (error) throw error;
         if (!data?.success && !data?.day) {
-          throw new Error(data?.error || `Failed to enrich day ${dayNum}`);
+          throw new Error(toFriendlyError(data?.error));
         }
 
         const dayData = data.day || data;
