@@ -941,7 +941,7 @@ export function buildArrivalDayPrompt(
   const requiredSequence: string[] = [];
   
   if (flight.hasOutboundFlight) {
-    requiredSequence.push('airport_arrival', 'airport_transfer');
+    requiredSequence.push('airport_arrival');
   }
   
   if (hotel.hasHotel) {
