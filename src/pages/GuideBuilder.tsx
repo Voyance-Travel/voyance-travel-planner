@@ -411,7 +411,7 @@ export default function GuideBuilder() {
   if (justPublished || isPublished) {
     return (
       <MainLayout>
-        <Head title={`Guide — ${trip.destination} | Voyance`} />
+        <Head title={`Guide: ${trip.destination} | Voyance`} />
         <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => navigate(`/trip/${tripId}`)}>
