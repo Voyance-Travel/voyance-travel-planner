@@ -2761,6 +2761,7 @@ interface FlightHotelContextResult {
   latestLastActivityTime?: string;
   hotelName?: string;
   hotelAddress?: string;
+  arrivalAirport?: string;
   // Phase 9: Raw data for prompt library extractors
   rawFlightSelection?: unknown;
   rawHotelSelection?: unknown;
