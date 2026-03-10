@@ -1964,50 +1964,7 @@ async function getTraitOverrides(supabase: any, userId: string): Promise<Record<
     return null;
   }
 }
-
-/**
- * Infer archetypes from trait scores for v1 users who don't have archetype_matches
- * Uses a simple weighted mapping of traits to archetype affinities
- */
-function inferArchetypesFromTraits(traitScores: Record<string, number>): Array<{ name: string; pct: number }> {
-  // Archetype definitions with trait weights
-  const archetypeTraitWeights: Record<string, Record<string, number>> = {
-    'Cultural Curator': { authenticity: 2, transformation: 1.5, planning: 1, adventure: 0.5 },
-    'Wellness Wanderer': { comfort: 1.5, pace: -2, transformation: 1.5, social: -1 },
-    'Wilderness Pioneer': { adventure: 2, authenticity: 1.5, comfort: -1, pace: 0.5 },
-    'Urban Explorer': { social: 1.5, adventure: 1, pace: 1, authenticity: 0.5 },
-    'Culinary Voyager': { authenticity: 1.5, comfort: 1, social: 0.5, adventure: 0.5 },
-    'Luxury Seeker': { comfort: 2, budget: -2, planning: 1 },
-    'Budget Adventurer': { budget: 2, adventure: 1.5, comfort: -1.5 },
-    'Social Butterfly': { social: 2, adventure: 0.5, authenticity: 0.5 },
-    'Slow Traveler': { pace: -2, comfort: 1, authenticity: 1, planning: -0.5 },
-    'Thrill Seeker': { adventure: 2, pace: 1.5, comfort: -1, transformation: 1 },
-  };
-
-  // Calculate score for each archetype
-  const archetypeScores: Array<{ name: string; score: number }> = [];
-  
-  for (const [archetype, weights] of Object.entries(archetypeTraitWeights)) {
-    let score = 50; // Base score
-    for (const [trait, weight] of Object.entries(weights)) {
-      const traitValue = traitScores[trait] || 0;
-      score += traitValue * weight;
-    }
-    archetypeScores.push({ name: archetype, score: Math.max(0, Math.min(100, score)) });
-  }
-
-  // Sort by score descending
-  archetypeScores.sort((a, b) => b.score - a.score);
-
-  // Convert to percentages (softmax-like normalization)
-  const totalScore = archetypeScores.reduce((sum, a) => sum + a.score, 0) || 1;
-  const topArchetypes = archetypeScores.slice(0, 5).map(a => ({
-    name: a.name,
-    pct: (a.score / totalScore) * 100,
-  }));
-
-  return topArchetypes;
-}
+// inferArchetypesFromTraits moved to ./user-context-normalization.ts
 
 /**
  * Build Travel DNA persona context for AI prompt
