@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { CreditCard, Loader2, Check, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { toFriendlyError } from '@/utils/friendlyErrors';
 import { 
   initiateBooking, 
   TripPayment,
