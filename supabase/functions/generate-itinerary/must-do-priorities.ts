@@ -405,6 +405,10 @@ function parseItem(item: string, destination: string): MustDoPriority | null {
     .replace(/\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*(?:[-–—]|to)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)/gi, '')  // Strip "9am-5pm" time ranges
     .replace(/\bfrom\s+(?:noon|morning|afternoon|evening)\b/gi, '')  // Strip "from noon" etc.
     .replace(/\ball\s+day\b/gi, '')  // Strip "all day"
+    // Strip day-of-week names (scheduling metadata, not the activity name)
+    .replace(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
+    // Strip time-of-day words when used as scheduling context
+    .replace(/\b(morning|afternoon|evening|night|tonight|late\s*night)\b/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -416,6 +420,16 @@ function parseItem(item: string, destination: string): MustDoPriority | null {
       activityName = key.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
       break;
     }
+  }
+
+  // Title-case the activity name if it wasn't matched to a known landmark
+  // This ensures user input like "comedy show" becomes "Comedy Show"
+  if (!matchedLandmark && activityName) {
+    activityName = activityName.split(' ').map(w => {
+      if (w.length <= 1) return w.toUpperCase();
+      if (w === w.toUpperCase() && w.length <= 5) return w; // Preserve acronyms
+      return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+    }).join(' ');
   }
 
   // Determine activity type & duration: event pattern > landmark > default
