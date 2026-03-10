@@ -65,7 +65,7 @@ Based on extreme trait scores (values >7 or <-7):
 - **Backend Scoring**: High nature + adventure, low luxury scores
 - **Emotional Hook**: "WiFi is optional, wilderness is essential"
 
-#### 4. The Digital Explorer
+#### 4. The Untethered Traveler
 - **ID**: `digital_explorer`
 - **Rarity**: common
 - **Primary Motivation**: Blending remote work with global exploration
