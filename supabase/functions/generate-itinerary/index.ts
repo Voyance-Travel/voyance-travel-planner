@@ -4431,7 +4431,7 @@ interface DayValidationResult {
 }
 
 // Validate a single generated day for quality and correctness
-function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boolean, isLastDay: boolean, totalDays: number, previousDays: StrictDay[] = [], isSmartFinish: boolean = false): DayValidationResult {
+function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boolean, isLastDay: boolean, totalDays: number, previousDays: StrictDay[] = [], isSmartFinish: boolean = false, mustDoActivities: string[] = []): DayValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -4605,7 +4605,10 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
       
       // Transport/logistics adjacency is expected in real itineraries (e.g. rideshare -> venue)
       if (!currIsTransportLike && !prevIsTransportLike && conceptSimilarity(currConcept, prevConcept)) {
-        if (isSmartFinish) {
+        // Skip dedup for recurring events the user explicitly requested (e.g., "US Open both days")
+        if (isRecurringEvent(act, mustDoActivities)) {
+          // Allow — user wants this activity repeated
+        } else if (isSmartFinish) {
           // In Smart Finish, user anchors may cluster around neighborhoods — downgrade to warning
           warnings.push(`Activities ${i} and ${i + 1} are similar: "${prevAct.title}" followed by "${act.title}" - consider adding variety`);
         } else {
@@ -4697,7 +4700,7 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
       for (const prevConcept of previousConcepts) {
         if (conceptSimilarity(actConcept, prevConcept)) {
           // Skip dedup for recurring events (US Open, festivals, etc.)
-          if (isRecurringEvent(act, [])) {
+          if (isRecurringEvent(act, mustDoActivities)) {
             continue;
           }
           if (!isSmartFinish && (actType === 'culinary_class' || actType === 'wine_tasting')) {
@@ -6058,7 +6061,8 @@ Generate activities for this day following ALL constraints above.`;
         }
       }
 
-      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish);
+      const mustDoList = (context.mustDoActivities || '').split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
+      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish, mustDoList);
 
       // ==========================================================================
       // MINIMUM REAL ACTIVITY COUNT VALIDATION
