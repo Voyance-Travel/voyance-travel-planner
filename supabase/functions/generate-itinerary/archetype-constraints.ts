@@ -455,7 +455,7 @@ VIOLATIONS:
   },
 
   community_builder: {
-    identity: "The Community Builder",
+    identity: "The Purpose Voyager",
     category: "Connector",
     meaning: `
 This traveler wants to give back and connect meaningfully.

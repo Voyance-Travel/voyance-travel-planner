@@ -18,7 +18,7 @@ const ARCHETYPES = [
   { id: 'social_butterfly', name: 'The Connection Curator', category: 'CONNECTOR', traits: ['group-travel', 'meeting-people', 'social-activities', 'extroverted'] },
   { id: 'family_architect', name: 'The Family Architect', category: 'CONNECTOR', traits: ['kid-friendly', 'multi-generational', 'educational', 'safe'] },
   { id: 'romantic_curator', name: 'The Romantic Curator', category: 'CONNECTOR', traits: ['couples', 'romantic-dinners', 'intimate', 'special-occasions'] },
-  { id: 'community_builder', name: 'The Community Builder', category: 'CONNECTOR', traits: ['voluntourism', 'local-connections', 'meaningful', 'giving-back'] },
+  { id: 'community_builder', name: 'The Purpose Voyager', category: 'CONNECTOR', traits: ['voluntourism', 'local-connections', 'meaningful', 'giving-back'] },
   { id: 'story_seeker', name: 'The Story Seeker', category: 'CONNECTOR', traits: ['conversations', 'local-stories', 'people-watching', 'authentic-encounters'] },
   // ACHIEVER
   { id: 'bucket_list_conqueror', name: 'The Milestone Voyager', category: 'ACHIEVER', traits: ['must-see-attractions', 'iconic-experiences', 'checking-off', 'ambitious'] },

@@ -305,7 +305,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
   },
   {
     id: 'community_builder',
-    name: 'The Community Builder',
+    name: 'The Purpose Voyager',
     category: 'CONNECTOR',
     tagline: 'Travel with purpose, leave a legacy.',
     primaryTraits: [

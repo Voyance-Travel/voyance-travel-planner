@@ -642,7 +642,7 @@ function getArchetypeDisplayName(id: string): string {
     healing_journeyer: 'The Healing Journeyer',
     retirement_ranger: 'The Boundless Explorer',
     // CONNECTOR (additional)
-    community_builder: 'The Community Builder',
+    community_builder: 'The Purpose Voyager',
     // RESTORER (additional)
     sanctuary_seeker: 'The Sanctuary Seeker',
     // BALANCED / FLEXIBLE archetypes
