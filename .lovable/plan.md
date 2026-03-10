@@ -1,14 +1,18 @@
 
 
-## No Code Change Needed — Republish Required
+## Branded Error Experience
 
-The fix is **already in the codebase** and working correctly:
+Three files, all cosmetic/copy changes:
 
-- **Line 7034**: `timesAreAligned = Math.abs(activityMins - flightMins) <= 5` → returns null (no warning) when times match
-- **Line 7065**: Both times displayed using `formatTime()` so they show in the same "9:30 AM" format
+### 1. `src/components/common/ErrorBoundary.tsx`
+Replace the red destructive fallback UI (lines 39-65) with the branded Voyance version: teal accent circle, Playfair "Small detour." headline, friendly subtext, Refresh/Go Home buttons. Remove the `<details>` stack trace block entirely.
 
-Your screenshot is from `travelwithvoyance.com` (the **published production site**), which hasn't been republished since these changes were made. The preview should already show the correct behavior — no false warning.
+### 2. `src/pages/NotFound.tsx` (line 14)
+Change `console.error` to `console.warn` since 404s are normal navigation events, not crashes.
 
-### Action needed
-**Republish the site** so the production URL picks up the fix. No code changes are required.
+### 3. `src/components/common/GlobalErrorHandler.tsx`
+- Line 32: `'Something hiccupped. Try that again.'`
+- Line 45: `'Something hiccupped. A quick refresh should fix it.'`
+
+No backend or structural changes needed.
 
