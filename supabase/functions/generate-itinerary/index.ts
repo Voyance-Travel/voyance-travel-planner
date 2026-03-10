@@ -10383,7 +10383,7 @@ THE FLIGHT LANDS AT ${arrival24} (${flightContext.arrivalTime || arrival24}).
 This is an EVENING ARRIVAL - limited time for activities today.
 
 REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity entry, NEVER combine into one):
-1. "Arrival at Airport"
+1. "Arrival at ${arrivalAirportDisplay}"
    - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
    - category: "transport"
    - ⚠️ This MUST be its own activity block — do NOT merge with check-in
