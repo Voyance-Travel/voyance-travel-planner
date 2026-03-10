@@ -12121,7 +12121,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         if (mustDoActivities && mustDoActivities.trim()) {
           try {
             const forceAllMust = !!isSmartFinish || !!smartFinishRequested;
-            const dayMustDos = parseMustDoInput(mustDoActivities, destination, forceAllMust)
+            const dayMustDos = parseMustDoInput(mustDoActivities, destination, forceAllMust, preferences?.startDate || date?.split('T')[0], totalDays)
               .filter(m => m.priority === 'must');
 
             if (dayMustDos.length > 0) {
