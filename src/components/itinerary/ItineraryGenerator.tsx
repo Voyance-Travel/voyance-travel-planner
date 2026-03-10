@@ -253,9 +253,7 @@ export function ItineraryGenerator({
       try {
         const completedDays = await fetchCompletedDaysFromBackend();
         const gr = gateResultRef.current;
-        if (gr && gr.creditsCharged > 0) {
-          toast.success(`Trip generated! ${gr.creditsCharged} credits used`, { duration: 5000 });
-        }
+        toast.success('Your itinerary is ready!', { duration: 4000 });
         // Let the celebration screen show for 3 seconds before transitioning
         console.log('[ItineraryGenerator] Showing celebration for 3s before onComplete');
         await new Promise(r => setTimeout(r, 3000));
