@@ -1664,7 +1664,7 @@
       }
     },
     "eco_ethicist": {
-      "name": "Eco-Ethicist",
+      "name": "The Mindful Voyager",
       "category": "TRANSFORMER",
       "required": {
         "ethics_focus": { "min": 0.75 }
