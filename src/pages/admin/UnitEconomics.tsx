@@ -152,7 +152,7 @@ function OverviewTab({ data }: { data: UnitEconomicsData }) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <MetricCard
           label="Money In"
-          value={data.revenue.totalRevenue > 0 ? fmt$(data.revenue.totalRevenue) : '—'}
+          value={data.revenue.totalRevenue > 0 ? fmt$(data.revenue.totalRevenue) : '-'}
           sub={data.revenue.purchaseCount > 0
             ? `${data.revenue.purchaseCount} purchases from ${data.users.paidUsers} customers`
             : 'No purchases recorded yet'}
