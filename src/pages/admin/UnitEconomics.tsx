@@ -644,7 +644,7 @@ function ForecastTab({ data }: { data: UnitEconomicsData }) {
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted-foreground">
-        Projections based on current {daysOfData}-day data window. Clearly labeled as <strong>estimates</strong> — linear extrapolation from current trends.
+        Projections based on current {daysOfData}-day data window. Clearly labeled as <strong>estimates</strong>, linear extrapolation from current trends.
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
