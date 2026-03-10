@@ -426,6 +426,7 @@ export const ENVIRONMENT_PREFERENCES: Record<string, EnvironmentPreferences> = {
   flexible_wanderer: { indoorOutdoor: 'balanced', urbanNature: 'balanced', crowdTolerance: 'avoid_crowds', structureLevel: 'none' },
   romantic_curator: { indoorOutdoor: 'balanced', urbanNature: 'balanced', crowdTolerance: 'avoid_crowds', structureLevel: 'moderate' },
   sanctuary_seeker: { indoorOutdoor: 'balanced', urbanNature: 'balanced', crowdTolerance: 'avoid_crowds', structureLevel: 'none' },
+  escape_artist: { indoorOutdoor: 'outdoor', urbanNature: 'balanced', crowdTolerance: 'crowds_ok', structureLevel: 'none' },
 
   // VIP to beat crowds
   luxury_luminary: { indoorOutdoor: 'balanced', urbanNature: 'urban_preferred', crowdTolerance: 'vip_to_beat_crowds', structureLevel: 'moderate' },
