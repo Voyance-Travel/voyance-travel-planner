@@ -201,7 +201,7 @@ Based on extreme trait scores (values >7 or <-7):
 - **Backend Scoring**: Maximum luxury + comfort scores
 - **Emotional Hook**: "Champagne wishes, caviar dreams, economy never"
 
-#### 20. The Eco Ethicist
+#### 20. The Mindful Voyager
 - **ID**: `eco_ethicist`
 - **Rarity**: uncommon
 - **Primary Motivation**: Sustainable and responsible travel
