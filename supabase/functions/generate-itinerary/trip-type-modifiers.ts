@@ -4368,6 +4368,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Foodie retirement - food tours, cooking classes, culinary bucket list.",
       art_aficionado: "Art retirement - museums without rushing, cultural immersion, lifelong learning.",
+      history_hunter: "History retirement - finally time for the deep dives, archaeological sites, expert tours, no rushing.",
       luxury_luminary: "Luxury retirement - five-star everything, you worked for this, premium treatment.",
       // TRANSFORMERS
       eco_ethicist: "Eco retirement - sustainable travel, nature, leaving good footprint.",
