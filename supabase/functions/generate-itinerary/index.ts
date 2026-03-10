@@ -4924,8 +4924,8 @@ async function generateSingleDayWithRetry(
       currency: context.currency,
     };
     
-    const flightData = context.flightData || { hasOutboundFlight: false, hasReturnFlight: false };
-    const hotelData = context.hotelData || { hasHotel: false };
+    const flightData = context.flightData || { hasOutboundFlight: false, hasReturnFlight: false } as any;
+    const hotelData = context.hotelData || { hasHotel: false } as any;
     
     const { personaPrompt, dayConstraints } = buildDayPrompt(
       flightData,

@@ -7062,7 +7062,7 @@ function FlightSyncWarning({ flightArrivalTime, day1FirstActivity, onSyncDay1, i
             Flight times don't match your itinerary
           </h4>
           <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-            Your flight arrives at <span className="font-semibold">{flightArrivalTime}</span>, 
+            Your flight arrives at <span className="font-semibold">{formatTime(flightMins)}</span>, 
             but Day 1 shows arrival at <span className="font-semibold">{formatTime(activityMins)}</span>.
           </p>
           <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
