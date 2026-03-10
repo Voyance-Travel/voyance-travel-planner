@@ -8763,6 +8763,16 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
             }
           }
           console.log(`[generate-day] Must-do activities parsed: ${mustDoAnalysis.length} items, ${dayItems.length} for day ${dayNumber}, ${mustDoEventItems.length} events`);
+          
+          // Add global must-do context so this day knows about other days' committed activities
+          const otherDayItems = scheduled.scheduled.filter(s => s.assignedDay !== dayNumber);
+          if (otherDayItems.length > 0) {
+            mustDoPrompt += '\n\n📋 OTHER DAYS HAVE THESE COMMITTED ACTIVITIES (for your awareness — do NOT schedule these today):\n';
+            for (const other of otherDayItems) {
+              mustDoPrompt += `- Day ${other.assignedDay}: ${other.priority.title} (${other.priority.activityType})\n`;
+            }
+            mustDoPrompt += 'Keep today\'s schedule compatible with the overall trip plan.\n';
+          }
         } else {
           // Raw text fallback
           mustDoPrompt = `\n## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)\n\nThe traveler has researched these specific venues. Include as many as possible in the itinerary:\n"${mustDoActivities.trim()}"\n`;
