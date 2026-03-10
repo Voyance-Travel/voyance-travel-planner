@@ -189,42 +189,43 @@ VIOLATIONS:
     identity: "The Untethered Traveler",
     category: "Explorer",
     meaning: `
-This traveler blends technology, gaming culture, and modern experiences.
+This traveler lives the location-free lifestyle. They work remotely, travel constantly, and blend productivity with exploration.
 
 They want:
-- Tech districts and innovation hubs
-- Gaming cafés and arcades
-- Digital art experiences (teamLab, etc.)
-- Unique photo opportunities for social media
-- Modern architecture
-- Connectivity (reliable WiFi matters)
+- Neighborhoods with great WiFi and coworking-friendly cafés
+- Experiences they can fit around a flexible work schedule
+- Digital nomad hotspots and creative districts
+- Modern, design-forward spaces
+- Unique photo opportunities worth sharing
+- Late starts (night owl tendencies)
 
 Their ideal day:
-- Sleep in (night owl tendencies)
-- Afternoon at a tech/gaming experience
-- Instagram-worthy stops
-- Evening: gaming café, VR experience, or tech event
+- Late morning start, coffee at a café with WiFi
+- A few hours of work or creative time
+- Afternoon exploration — neighborhood walks, street art, modern architecture
+- Evening: rooftop bar, night market, or local scene
 - Late night exploration
 
-WHAT "DIGITAL" MEANS FOR THEM:
-- Modern over historical
+WHAT "UNTETHERED" MEANS FOR THEM:
+- Freedom from a fixed location
+- Work and travel are not separate
+- Modern over historical (unless it's cool)
+- Connected but independent
 - Experiences that photograph well
-- Tech-forward venues
-- Gaming culture is legitimate culture
 
 VIOLATIONS:
-- Ancient ruins focus = VIOLATION (unless unique angle)
-- Traditional museums = VIOLATION
+- Early morning group tours = VIOLATION
 - Areas with poor connectivity = VIOLATION
-- "Unplugged" experiences = VIOLATION
+- Rigid schedules = VIOLATION
+- "Unplugged" or digital detox experiences = VIOLATION
 `,
     avoid: [
-      'Traditional museums',
-      'History-focused tours',
+      'Early morning group tours',
       'Remote areas without WiFi',
-      'Early morning activities',
+      'Rigid time schedules',
       'Unplugged/digital detox experiences',
-      'Traditional fine dining'
+      'Traditional fine dining (too long)',
+      'Conventional tourist itineraries'
     ],
     dayStructure: {
       maxScheduledActivities: 4,
