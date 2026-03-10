@@ -1515,7 +1515,7 @@
       }
     },
     "status_seeker": {
-      "name": "Status Seeker",
+      "name": "The VIP Voyager",
       "category": "ACHIEVER",
       "required": {
         "status_seeking": { "min": 0.7 },
