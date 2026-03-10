@@ -195,7 +195,9 @@ const KNOWN_LANDMARKS: Record<string, {
 export function parseMustDoInput(
   userInput: string,
   destination: string,
-  forceAllMust: boolean = false
+  forceAllMust: boolean = false,
+  tripStartDate?: string,
+  totalDays?: number
 ): MustDoPriority[] {
   const priorities: MustDoPriority[] = [];
 
@@ -249,7 +251,56 @@ export function parseMustDoInput(
     }
   }
 
+  // ── Day-of-week resolution: map "Friday", "Saturday" etc. to trip day numbers ──
+  if (tripStartDate) {
+    try {
+      const startDate = new Date(tripStartDate + 'T00:00:00');
+      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+      for (const item of items) {
+        if (item.preferredDay) continue; // already has a day assignment
+        const lower = item.text.toLowerCase();
+
+        for (let dow = 0; dow < 7; dow++) {
+          if (lower.includes(dayNames[dow])) {
+            const startDow = startDate.getDay();
+            let dayOffset = dow - startDow;
+            if (dayOffset < 0) dayOffset += 7;
+            const tripDay = dayOffset + 1; // 1-indexed
+            if (!totalDays || tripDay <= totalDays) {
+              item.preferredDay = tripDay;
+              console.log(`[MustDo] Day-of-week resolution: "${item.text}" → Day ${tripDay} (${dayNames[dow]})`);
+            }
+            break;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`[MustDo] Failed to parse tripStartDate "${tripStartDate}":`, e);
+    }
+  }
+
+  // ── Multi-day expansion: "both days" / "every day" / "all N days" ──
+  const effectiveTotalDays = totalDays || 7; // fallback
+  const expandedItems: typeof items = [];
   for (const item of items) {
+    const lower = item.text.toLowerCase();
+    const isMultiDay = /both days|every day|all \d+ days|each day|all days/i.test(lower);
+
+    if (isMultiDay && effectiveTotalDays > 1) {
+      const dayCountMatch = lower.match(/all (\d+) days/);
+      const numDays = dayCountMatch ? parseInt(dayCountMatch[1]) : Math.max(1, effectiveTotalDays - 1);
+
+      for (let d = 1; d <= Math.min(numDays, effectiveTotalDays); d++) {
+        expandedItems.push({ text: item.text, preferredDay: d });
+      }
+      console.log(`[MustDo] Multi-day expansion: "${item.text}" → ${Math.min(numDays, effectiveTotalDays)} entries`);
+    } else {
+      expandedItems.push(item);
+    }
+  }
+
+  for (const item of expandedItems) {
     const priority = parseItem(item.text, destination);
     if (!priority) continue;
 
