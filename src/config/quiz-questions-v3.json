@@ -1556,7 +1556,7 @@
       }
     },
     "retreat_regular": {
-      "name": "Retreat Regular",
+      "name": "The Wellness Devotee",
       "category": "RESTORER",
       "required": {
         "restoration_need": { "min": 0.7 },
