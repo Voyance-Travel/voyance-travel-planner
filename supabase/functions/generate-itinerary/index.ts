@@ -3476,8 +3476,13 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
 // STAGE 2: AI GENERATION WITH BATCH PROCESSING, VALIDATION & RETRY
 // =============================================================================
 
-// Day validation result
-interface DayValidationResult {
+// Day validation + deduplication extracted to ./day-validation.ts
+import {
+  validateGeneratedDay,
+  deduplicateActivities,
+  type DayValidationResult,
+} from './day-validation.ts';
+
   isValid: boolean;
   errors: string[];
   warnings: string[];
