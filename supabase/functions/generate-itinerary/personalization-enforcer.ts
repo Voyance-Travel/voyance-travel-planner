@@ -59,9 +59,9 @@ export type ForcedSlotType =
   | 'authentic_encounter'      // Authenticity trait
   | 'social_experience'        // Social trait (positive)
   | 'solo_retreat'             // Social trait (negative/introvert)
-  | 'vip_experience'           // Status Seeker: high comfort + budget
+  | 'vip_experience'           // VIP Voyager: high comfort + budget
   | 'couples_moment'           // Romantic Curator: romantic trip or archetype
-  | 'connectivity_spot'        // Digital Explorer: wifi-guaranteed venue
+  | 'connectivity_spot'        // Untethered Traveler: wifi-guaranteed venue
   | 'family_activity'          // Family Architect: kid-friendly activity
   | 'celebration_dinner'       // Birthday/Anniversary: special celebration dinner
   | 'celebration_experience'   // Birthday/Anniversary: memorable milestone experience
