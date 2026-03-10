@@ -219,6 +219,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Prevent onAuthStateChange from triggering redundant loads while initializeAuth runs
   const isProcessingAuthRef = useRef(false);
+  // Queue for OAuth SIGNED_IN events that fire before initial load completes
+  const pendingOAuthSessionRef = useRef<any>(null);
   // Track current user ID to skip redundant SIGNED_IN events for the same user
   const currentUserIdRef = useRef<string | null>(null);
 
@@ -260,8 +262,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } = supabase.auth.onAuthStateChange((event, newSession) => {
       // Auth state change event
       
-      // During initial load, let initializeAuth handle everything — don't touch state
+      // During initial load, queue SIGNED_IN events from OAuth returns instead of dropping them.
+      // Race condition: getSession() may return null before Supabase processes the OAuth hash,
+      // then SIGNED_IN fires but gets dropped because initialLoadCompleteRef is still false.
       if (!initialLoadCompleteRef.current) {
+        if (event === 'SIGNED_IN' && newSession?.user) {
+          pendingOAuthSessionRef.current = newSession;
+        }
         return;
       }
 
@@ -341,11 +348,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!isMounted) return;
         
         if (!initialSession?.user) {
-          // No session found
-          currentUserIdRef.current = null;
-          setSession(null);
-          setUser(null);
-          return;
+          // No session from getSession() — check if an OAuth SIGNED_IN event was queued
+          if (pendingOAuthSessionRef.current) {
+            console.debug('[Auth] No session from getSession, but OAuth SIGNED_IN was queued — using queued session');
+            initialSession = pendingOAuthSessionRef.current;
+            pendingOAuthSessionRef.current = null;
+          } else {
+            // Truly no session — wait briefly for OAuth hash processing, then check once more
+            await new Promise(resolve => setTimeout(resolve, 500));
+            const retryResult = await supabase.auth.getSession();
+            if (retryResult.data?.session?.user) {
+              console.debug('[Auth] OAuth session found on retry after 500ms');
+              initialSession = retryResult.data.session;
+            } else if (pendingOAuthSessionRef.current) {
+              console.debug('[Auth] OAuth SIGNED_IN queued during retry wait — using queued session');
+              initialSession = pendingOAuthSessionRef.current;
+              pendingOAuthSessionRef.current = null;
+            } else {
+              // No session found
+              currentUserIdRef.current = null;
+              setSession(null);
+              setUser(null);
+              return;
+            }
+          }
         }
         
         // Session found, validating user

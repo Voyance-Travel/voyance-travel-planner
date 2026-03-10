@@ -63,7 +63,14 @@ export function OAuthReturnHandler() {
     if (returnPath) {
       hasRedirected.current = true;
       navigate(consumeReturnPath('/'), { replace: true });
+      return;
     }
+
+    // FALLBACK: Authenticated on root `/` with no return path (typical after OAuth sign-in
+    // from /signin without ?redirect= param). Navigate to profile instead of leaving user
+    // on the marketing homepage or a blank page.
+    hasRedirected.current = true;
+    navigate('/profile', { replace: true });
   }, [isAuthenticated, isLoading, location.pathname, navigate, searchParams]);
 
   return null;
