@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { MapPin, Calendar, Users, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
-import { prefetchDestinationImages } from '@/utils/imagePrefetch';
+import { prefetchDestinationImages, getCachedImages } from '@/utils/imagePrefetch';
 import { normalizeUnsplashUrl } from '@/utils/unsplash';
 
 interface DynamicDestinationPhotosProps {
@@ -64,25 +64,36 @@ export default function DynamicDestinationPhotos({
       setError(false);
 
       try {
-        // Fetching landmark-driven image
+        // 1. Check prefetch cache first (localStorage + in-memory)
+        const cached = getCachedImages(cleanDestination);
+        if (cached.length > 0) {
+          setHeroImage({
+            id: 'cached-hero-0',
+            url: cached[0],
+            alt: `${cleanDestination} photo`,
+            type: 'hero',
+            source: 'database',
+          });
+          fetchedRef.current = cleanDestination;
+          setIsLoading(false);
+          return;
+        }
 
-        // Trigger prefetch for future use
+        // 2. Trigger prefetch for future use
         prefetchDestinationImages(cleanDestination);
 
-        // Fetch only 1 image - backend uses POI-based query for relevance
+        // 3. Fetch from API (curated images are returned instantly, no API call)
         const { getDestinationImages: fetchDestinationImages } = await import('@/services/destinationImagesAPI');
         const fetchedImages = await fetchDestinationImages({
           destination: cleanDestination,
           imageType: 'hero',
-          limit: 1, // Only 1 image - no carousel
+          limit: 1,
         });
 
         if (fetchedImages.length > 0) {
-          // Got landmark image
           setHeroImage(fetchedImages[0]);
           fetchedRef.current = cleanDestination;
         } else {
-          // No images returned
           setError(true);
         }
       } catch (err) {
