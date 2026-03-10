@@ -291,7 +291,6 @@ export function ItineraryEditor({
       if (onSave) await onSave(days);
       
       setHasChanges(false);
-      toast.success('Itinerary saved successfully!');
     } catch (err) {
       console.error('Save error:', err);
       toast.error('Failed to save itinerary');

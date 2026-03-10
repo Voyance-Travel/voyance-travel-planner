@@ -2253,11 +2253,8 @@ export function EditorialItinerary({
         }
       }
 
-      if (cascadeChanged) {
-        toast.success('Day 1 and final day synced to your marked flight legs');
-      } else {
-        toast.info('Flight tags saved. No itinerary time shift was needed.');
-      }
+      toast.info('Flight tags saved.');
+
     } catch (cascadeErr) {
       console.warn('Cascade after leg marking failed:', cascadeErr);
     } finally {
@@ -2521,12 +2518,7 @@ export function EditorialItinerary({
     setSwapDrawerOpen(false);
     setSwapTarget(null);
     setSwapDrawerActivity(null);
-    // QA-015: Show accurate free/paid toast based on server response
-    if (swapCreditResult?.freeCapUsed) {
-      toast.success(`Swapped activity (free, ${swapCreditResult.usageCount}/${swapCreditResult.freeCap} used)`);
-    } else {
-      toast.success(`Swapped activity (${swapCreditResult?.spent ?? CREDIT_COSTS.SWAP_ACTIVITY} credits used)`);
-    }
+    toast.success('Activity swapped!');
   }, [swapTarget, tripCurrency, isPaid, spendCredits, tripId, days, syncBudgetFromDays]);
 
   // Supports both database trips and localStorage demo trips
@@ -2996,7 +2988,7 @@ export function EditorialItinerary({
             });
             // Invalidate credit caches
             setNeedsOptimization(false);
-            toast.info('Your routes are already optimized! Credits refunded.', { duration: 4000 });
+            toast.info('Routes are already optimized!', { duration: 3000 });
           } catch (refundErr) {
             console.error('Failed to refund optimization credits:', refundErr);
           }
@@ -3498,9 +3490,7 @@ export function EditorialItinerary({
         if (change?.removedActivities.length) parts.push(`${change.removedActivities.length} removed`);
         if (change?.addedBlocks.length) parts.push(`${change.addedBlocks.length} added`);
 
-        toast.success('Schedule synced to flight times', {
-          description: parts.length ? parts.join(', ') : 'Activities adjusted',
-        });
+        toast.success('Schedule updated!', { id: 'flight-sync', duration: 2000 });
       } else {
         toast.info('Schedule already matches flight times');
       }

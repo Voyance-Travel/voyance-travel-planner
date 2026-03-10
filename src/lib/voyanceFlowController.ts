@@ -208,7 +208,7 @@ export function formatActionToast(
     const remaining = result.freeRemaining - 1; // after this use
     return `${actionLabel} (free, ${remaining} remaining)`;
   }
-  return `${actionLabel} (${result.cost} credits used)`;
+  return actionLabel;
 }
 
 // ── Section: Smart Finish Comparison ────────────────────────────────────────

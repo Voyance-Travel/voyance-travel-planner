@@ -253,9 +253,7 @@ export function ItineraryGenerator({
       try {
         const completedDays = await fetchCompletedDaysFromBackend();
         const gr = gateResultRef.current;
-        if (gr && gr.creditsCharged > 0) {
-          toast.success(`Trip generated! ${gr.creditsCharged} credits used`, { duration: 5000 });
-        }
+        toast.success('Your itinerary is ready!', { duration: 4000 });
         // Let the celebration screen show for 3 seconds before transitioning
         console.log('[ItineraryGenerator] Showing celebration for 3s before onComplete');
         await new Promise(r => setTimeout(r, 3000));
@@ -639,7 +637,6 @@ export function ItineraryGenerator({
           // The Edge Function may have already received the request and is generating.
           // Start polling to check if generation is actually in progress.
           setServerGenActive(true);
-          toast('Checking generation status...', { duration: 3000 });
           return;
         }
       } else if (gateResult.mode === 'partial') {
@@ -691,20 +688,15 @@ export function ItineraryGenerator({
           if (ok) {
             toast.info(
               daysCompleted > 0
-                ? `Generation stopped after ${daysCompleted}/${totalTrip} days. ${refundAmount} credits refunded for remaining days. Your progress has been saved.`
-                : `Generation failed. ${refundAmount} credits have been refunded.`,
+                ? 'Generation paused. Your progress has been saved.'
+                : 'Generation failed. Your credits have been refunded.',
               { duration: 6000 }
             );
             if (userId) {
               queryClient.invalidateQueries({ queryKey: ['credits', userId] });
               queryClient.invalidateQueries({ queryKey: ['entitlements', userId] });
             }
-          } else {
-            toast('Generation paused while we verify your saved itinerary.', { duration: 5000 });
           }
-        } else {
-          // All days generated but something else failed (e.g. final save) — no refund needed
-          toast('Generation completed. Finalizing your itinerary view…');
         }
       } else {
         // Suppress hard errors and keep loading while verifying DB state
