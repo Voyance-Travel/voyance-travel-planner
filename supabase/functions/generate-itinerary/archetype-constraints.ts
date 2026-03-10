@@ -235,7 +235,7 @@ VIOLATIONS:
   },
 
   flexible_wanderer: {
-    identity: "The Flexible Wanderer",
+    identity: "The Wildcard",
     category: "Explorer",
     meaning: `
 This traveler HATES rigid schedules. They want freedom.

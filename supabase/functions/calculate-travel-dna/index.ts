@@ -682,7 +682,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
   },
   {
     id: 'flexible_wanderer',
-    name: 'The Flexible Wanderer',
+    name: 'The Wildcard',
     category: 'FALLBACK',
     tagline: "Plans are just suggestions—the road decides.",
     primaryTraits: [

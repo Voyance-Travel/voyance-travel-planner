@@ -940,7 +940,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   flexible_wanderer: {
     id: 'flexible_wanderer',
-    name: 'The Flexible Wanderer',
+    name: 'The Wildcard',
     category: 'EXPLORER',
     hookLine: "Plans are just suggestions. The road decides.",
     coreDescription: "You book one-way tickets and figure out the rest later. Itineraries feel like prisons, and the best experiences come from happy accidents. You trust the journey to unfold.",

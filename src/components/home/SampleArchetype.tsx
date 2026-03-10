@@ -69,7 +69,7 @@ const FEATURED_ARCHETYPES = [
   },
   {
     id: 'flexible_wanderer',
-    name: 'Flexible Wanderer',
+    name: 'Wildcard',
     tagline: 'Plans are just suggestions',
     icon: Compass,
     category: 'EXPLORER',
