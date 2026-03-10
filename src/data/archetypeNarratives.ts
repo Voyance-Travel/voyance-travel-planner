@@ -615,7 +615,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   bucket_list_conqueror: {
     id: 'bucket_list_conqueror',
-    name: 'The Bucket List Conqueror',
+    name: 'The Milestone Voyager',
     category: 'ACHIEVER',
     hookLine: "Life is a checklist of wonders.",
     coreDescription: "You have a list, and you're checking it twice. From the Northern Lights to Machu Picchu, you approach travel with purpose. Every trip brings you closer to seeing it all.",
