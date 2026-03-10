@@ -3912,9 +3912,6 @@ export function EditorialItinerary({
                 <DropdownMenuItem onClick={() => setActiveTab('payments' as typeof activeTab)}>
                   <CreditCard className="h-4 w-4 mr-2" /> Payments
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setActiveTab('needtoknow' as typeof activeTab)}>
-                  <Shield className="h-4 w-4 mr-2" /> Need to Know
-                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
