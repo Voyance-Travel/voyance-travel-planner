@@ -197,7 +197,7 @@ describe('Error Handler Integration', () => {
     });
 
     // Should still show generic message
-    expect(mockToast).toHaveBeenCalledWith('An unexpected error occurred. Please try again.');
+    expect(mockToast).toHaveBeenCalledWith('Something hiccupped. Try that again.');
   });
 
   it('should handle network errors', () => {
