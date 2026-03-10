@@ -6617,6 +6617,11 @@ The user has locked the following activities. These are FIXED and CANNOT be chan
 You must NOT generate any activities that overlap with these time slots.
 Plan activities ONLY for the available gaps between these locked blocks.
 
+Do NOT generate any activity that is similar in type or theme to a locked activity.
+For example, if "Comedy Show" is locked, do NOT suggest "Stand-Up Night" or any other comedy activity.
+If "US Open" is locked, do NOT suggest "Tennis Match" or any other tennis event.
+Each locked activity is unique — do not create alternatives, variations, or substitutes.
+
 ${lockedSlotsList}
 
 Generate activities ONLY for the remaining unlocked time periods. 
