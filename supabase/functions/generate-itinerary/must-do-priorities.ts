@@ -45,6 +45,10 @@ export interface MustDoPriority {
   maxDay?: number;
   /** Minimum day (e.g., "after we're settled") */
   minDay?: number;
+  /** Explicit start time parsed from user text (e.g., "9am-5pm" → "09:00") */
+  explicitStartTime?: string;
+  /** Explicit end time parsed from user text (e.g., "9am-5pm" → "17:00") */
+  explicitEndTime?: string;
 }
 
 export interface ScheduledMustDo {
