@@ -4021,6 +4021,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Food and beer tour, BBQ pilgrimage, local specialty hunt, brewery crawl, hearty meals.",
       art_aficionado: "Architecture walk then drinks, design district then rooftop bar, culture by day, bars by night.",
+      history_hunter: "Historical pub crawl, old-town walking tour, legendary sports venue visit, heritage district drinks.",
       luxury_luminary: "Premium everything - VIP sports box, high-end steakhouse, exclusive lounge, top-shelf whiskey.",
       // TRANSFORMERS
       eco_ethicist: "Sustainable brewery, farm-to-table group dinner, eco-adventure activity, local craft producers.",
