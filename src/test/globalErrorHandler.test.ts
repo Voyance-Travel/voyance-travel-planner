@@ -79,7 +79,7 @@ describe('GlobalErrorHandler', () => {
       handler.handleUnhandledRejection(mockEvent);
 
       expect(mockToast).toHaveBeenCalledWith(
-        'An unexpected error occurred. Please try again.'
+        'Something hiccupped. Try that again.'
       );
     });
 
