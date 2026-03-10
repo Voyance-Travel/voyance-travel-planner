@@ -203,7 +203,7 @@ export default function TravelGuideBuilder() {
           </Button>
           <div className="flex-1">
             <h1 className="text-lg font-semibold">Build Your {trip.destination || ''} Travel Guide</h1>
-            <p className="text-sm text-muted-foreground">Everything's selected — uncheck what you don't want</p>
+            <p className="text-sm text-muted-foreground">Everything's selected. Uncheck what you don't want.</p>
           </div>
         </div>
       </div>
