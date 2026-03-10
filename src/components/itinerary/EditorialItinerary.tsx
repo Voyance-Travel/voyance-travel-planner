@@ -2880,7 +2880,7 @@ export function EditorialItinerary({
     } catch (err: any) {
       console.error('[EditorialItinerary] Regeneration failed:', err);
       if (!err?.message?.startsWith('Not enough credits')) {
-        toast.error(err?.message || 'Failed to regenerate itinerary. Please try again.');
+        toast.error(toFriendlyError(err?.message));
       }
     } finally {
       setIsRegenerating(false);
