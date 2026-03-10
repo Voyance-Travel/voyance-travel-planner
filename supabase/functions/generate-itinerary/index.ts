@@ -4431,7 +4431,7 @@ interface DayValidationResult {
 }
 
 // Validate a single generated day for quality and correctness
-function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boolean, isLastDay: boolean, totalDays: number, previousDays: StrictDay[] = [], isSmartFinish: boolean = false): DayValidationResult {
+function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boolean, isLastDay: boolean, totalDays: number, previousDays: StrictDay[] = [], isSmartFinish: boolean = false, mustDoActivities: string[] = []): DayValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
