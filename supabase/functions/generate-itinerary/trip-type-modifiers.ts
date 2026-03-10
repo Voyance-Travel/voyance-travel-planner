@@ -2605,7 +2605,7 @@ Examples:
 - Slow Traveler birthday: Long leisurely special lunch, no rush
 - Adrenaline Architect birthday: That adventure activity they've always wanted
 - Culinary Cartographer birthday: THE restaurant they've been dying to try
-- Flexible Wanderer birthday: Discovery of something unexpected
+- Wildcard birthday: Discovery of something unexpected
 - Social Butterfly birthday: Celebration with people, energy
 - Zen Seeker birthday: Meaningful, peaceful, possibly solo moment
 - Budget Backpacker birthday: Fun experience, not expensive dinner
