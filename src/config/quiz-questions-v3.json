@@ -1721,7 +1721,7 @@
       }
     },
     "sabbatical_scholar": {
-      "name": "Sabbatical Scholar",
+      "name": "The Immersion Seeker",
       "category": "TRANSFORMER",
       "required": {
         "learning_focus": { "min": 0.7 },
