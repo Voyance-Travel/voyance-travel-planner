@@ -650,7 +650,7 @@ function ForecastTab({ data }: { data: UnitEconomicsData }) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <MetricCard
           label="Projected Monthly Revenue"
-          value={monthlyRevenue > 0 ? fmt$(monthlyRevenue) : '—'}
+          value={monthlyRevenue > 0 ? fmt$(monthlyRevenue) : '-'}
           sub={`At current rate of ${fmt$(dailyRevenue)}/day`}
           accent="green"
         />
