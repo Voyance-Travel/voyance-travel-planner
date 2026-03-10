@@ -865,7 +865,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   healing_journeyer: {
     id: 'healing_journeyer',
-    name: 'The Healing Journeyer',
+    name: 'The Restoration Seeker',
     category: 'TRANSFORMER',
     hookLine: "Travel is the medicine for the soul.",
     coreDescription: "You travel to heal. Whether grief, burnout, or life transition, the road has been your path to recovery. You understand that sometimes the best way through is away.",

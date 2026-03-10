@@ -1376,7 +1376,7 @@ VIOLATIONS:
   },
 
   healing_journeyer: {
-    identity: "The Healing Journeyer",
+    identity: "The Restoration Seeker",
     category: "Transformer",
     meaning: `
 This traveler is processing something — grief, change, recovery.

@@ -639,7 +639,7 @@ function getArchetypeDisplayName(id: string): string {
     gap_year_graduate: 'The Horizon Chaser',
     midlife_explorer: 'The Unscripted Explorer',
     sabbatical_scholar: 'The Immersion Seeker',
-    healing_journeyer: 'The Healing Journeyer',
+    healing_journeyer: 'The Restoration Seeker',
     retirement_ranger: 'The Boundless Explorer',
     // CONNECTOR (additional)
     community_builder: 'The Purpose Voyager',

@@ -766,7 +766,7 @@ Your trips will feed your curiosity. Historical context, local expertise, the st
 
   healing_journeyer: {
     id: 'healing_journeyer',
-    name: 'The Healing Journeyer',
+    name: 'The Restoration Seeker',
     category: 'TRANSFORMER',
     revealParagraph: `Travel has been medicine for you.
 
