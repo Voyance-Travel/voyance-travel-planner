@@ -227,7 +227,7 @@ Based on extreme trait scores (values >7 or <-7):
 - **Backend Scoring**: Mixed scores with transformation indicators
 - **Emotional Hook**: "Chapter two starts at departure gate"
 
-#### 23. The Sabbatical Scholar
+#### 23. The Immersion Seeker
 - **ID**: `sabbatical_scholar`
 - **Rarity**: rare
 - **Primary Motivation**: Deep learning and skill development
