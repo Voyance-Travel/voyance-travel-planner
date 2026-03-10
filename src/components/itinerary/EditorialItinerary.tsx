@@ -2988,7 +2988,7 @@ export function EditorialItinerary({
             });
             // Invalidate credit caches
             setNeedsOptimization(false);
-            toast.info('Your routes are already optimized! Credits refunded.', { duration: 4000 });
+            toast.info('Routes are already optimized!', { duration: 3000 });
           } catch (refundErr) {
             console.error('Failed to refund optimization credits:', refundErr);
           }
