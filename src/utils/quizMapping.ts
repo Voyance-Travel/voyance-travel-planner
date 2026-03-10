@@ -174,7 +174,6 @@ const STYLE_TO_ARCHETYPE: Record<string, string> = {
   // Primary quiz values (from Quiz.tsx traveler_type question)
   'explorer': 'cultural_anthropologist',
   'escape_artist': 'zen_seeker',
-  'curated_luxe': 'luxury_luminary',
   'story_seeker': 'story_seeker',
   // Legacy/alternate values
   'luxury': 'luxury_luminary',
