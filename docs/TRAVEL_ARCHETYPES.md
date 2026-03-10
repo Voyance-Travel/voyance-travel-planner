@@ -243,7 +243,7 @@ Based on extreme trait scores (values >7 or <-7):
 - **Backend Scoring**: High restoration + escape + wellness scores
 - **Emotional Hook**: "Miles traveled, healing multiplied"
 
-#### 25. The Retirement Ranger
+#### 25. The Boundless Explorer
 - **ID**: `retirement_ranger`
 - **Rarity**: common
 - **Primary Motivation**: Fulfilling lifetime dreams

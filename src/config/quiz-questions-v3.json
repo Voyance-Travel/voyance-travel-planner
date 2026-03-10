@@ -1757,7 +1757,7 @@
       }
     },
     "retirement_ranger": {
-      "name": "Retirement Ranger",
+      "name": "The Boundless Explorer",
       "category": "TRANSFORMER",
       "required": {
         "bucket_list": { "min": 0.4 },
