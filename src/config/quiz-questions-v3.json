@@ -1740,7 +1740,7 @@
       }
     },
     "healing_journeyer": {
-      "name": "Healing Journeyer",
+      "name": "The Restoration Seeker",
       "category": "TRANSFORMER",
       "required": {
         "healing_focus": { "min": 0.7 }
