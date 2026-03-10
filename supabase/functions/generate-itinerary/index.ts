@@ -8813,7 +8813,7 @@ ${'='.repeat(60)}
       if (context.mustDoActivities && context.mustDoActivities.trim()) {
         // Keep all user itinerary anchors as must-have when Smart Finish was requested.
         const forceAllMust = !!context.isSmartFinish || !!context.smartFinishRequested;
-        const mustDoAnalysis = parseMustDoInput(context.mustDoActivities, context.destination, forceAllMust);
+        const mustDoAnalysis = parseMustDoInput(context.mustDoActivities, context.destination, forceAllMust, context.startDate, context.totalDays);
         
         // ═══════════════════════════════════════════════════════════════════════
         // CROSS-REFERENCE: Match must-do items against discovered local events
