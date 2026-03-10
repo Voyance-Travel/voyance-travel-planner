@@ -4328,6 +4328,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Foodie graduation - eating your way through celebration, food adventures, no meal plan budget.",
       art_aficionado: "Art graduation - museums without rush, cultural immersion, feeding creativity.",
+      history_hunter: "History graduation - celebrating at meaningful historical sites, intellectual depth.",
       luxury_luminary: "Luxury graduation - treating yourself after sacrifice, premium everything, you earned it.",
       // TRANSFORMERS
       eco_ethicist: "Sustainable graduation - eco-conscious celebration, nature, starting career with values.",
