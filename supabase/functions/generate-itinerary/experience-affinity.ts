@@ -179,9 +179,12 @@ export const EXPERIENCE_AFFINITY: Record<string, ExperienceAffinity> = {
     never: ['luxury', 'tourist_bubbles', 'chains', 'passive_sightseeing', 'exploitative_tourism']
   },
 
-  // =========================================================================
-  // ACHIEVERS
-  // =========================================================================
+  story_seeker: {
+    high: ['neighborhood', 'street_life', 'local_bar', 'local_restaurant', 'street_food', 'food_market', 'cafe'],
+    medium: ['walking_tour', 'cultural_performance', 'historical_site', 'cooking_class', 'cocktail_bar'],
+    low: ['museum', 'landmark', 'wine_tasting', 'garden', 'park'],
+    never: ['shopping', 'resort_amenity', 'spa', 'luxury_dining', 'vip_experience']
+  },
 
   bucket_list_conqueror: {
     high: ['major_landmarks', 'iconic_sites', 'famous_viewpoints', 'must_see_attractions', 'photo_ops', 'world_wonders'],
