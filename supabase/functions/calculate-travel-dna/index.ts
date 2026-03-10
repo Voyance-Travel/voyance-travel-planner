@@ -385,7 +385,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
   },
   {
     id: 'status_seeker',
-    name: 'The Prestige Traveler',
+    name: 'The VIP Voyager',
     category: 'ACHIEVER',
     tagline: "First class isn't a seat, it's a lifestyle.",
     primaryTraits: [

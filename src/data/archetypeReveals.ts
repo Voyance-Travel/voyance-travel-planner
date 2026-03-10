@@ -394,7 +394,7 @@ Your trips will feed your focus. We'll build around your interest, not despite i
 
   status_seeker: {
     id: 'status_seeker',
-    name: 'The Luxe Achiever',
+    name: 'The VIP Voyager',
     category: 'ACHIEVER',
     revealParagraph: `You want the experiences that aren't available to everyone.
 
