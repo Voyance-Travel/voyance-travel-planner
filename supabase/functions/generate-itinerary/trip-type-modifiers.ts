@@ -4408,6 +4408,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Nutrition wellness - healthy cooking, detox cuisine, food as medicine, clean eating.",
       art_aficionado: "Creative wellness - art therapy, creative expression, healing through art.",
+      history_hunter: "Reflective wellness - historical meditation sites, ancient healing traditions, contemplative walks.",
       luxury_luminary: "Luxury wellness - six-star spa resort, premium treatments, world-class facilities.",
       // TRANSFORMERS
       eco_ethicist: "Eco wellness - sustainable retreat, organic everything, nature connection, earth healing.",
