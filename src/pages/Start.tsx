@@ -2796,14 +2796,40 @@ export default function Start() {
                                 ? details.mustDoActivities.split(',').map((s: string) => s.trim()).filter(Boolean)
                                 : null;
 
-                               // Convert userConstraints → generationRules format the engine reads
-                               const addMinsToTime = (time: string, minutes: number): string => {
-                                 const [h, m] = time.split(':').map(Number);
-                                 const totalMins = h * 60 + m + minutes;
-                                 const newH = Math.floor(totalMins / 60) % 24;
-                                 const newM = totalMins % 60;
-                                 return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
-                               };
+                                // Convert userConstraints → generationRules format the engine reads
+                                // Normalize "8:15 AM", "9:00 PM", etc. to "HH:MM" 24-hour format
+                                const normalizeTimeTo24h = (timeStr: string): string => {
+                                  const cleaned = timeStr.trim();
+                                  // Already HH:MM 24h format?
+                                  const match24 = cleaned.match(/^(\d{1,2}):(\d{2})$/);
+                                  if (match24) return `${String(parseInt(match24[1])).padStart(2, '0')}:${match24[2]}`;
+                                  // 12-hour format: "9:00 AM", "8:15 PM", "9 AM", etc.
+                                  const match12 = cleaned.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/i);
+                                  if (match12) {
+                                    let hour = parseInt(match12[1], 10);
+                                    const min = parseInt(match12[2] || '0', 10);
+                                    const period = match12[3].toLowerCase();
+                                    if (period === 'pm' && hour !== 12) hour += 12;
+                                    if (period === 'am' && hour === 12) hour = 0;
+                                    return `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+                                  }
+                                  // Fallback: return as-is
+                                  return cleaned;
+                                };
+
+                                const addMinsToTime = (time: string, minutes: number): string => {
+                                  const normalized = normalizeTimeTo24h(time);
+                                  const [h, m] = normalized.split(':').map(Number);
+                                  if (isNaN(h) || isNaN(m)) {
+                                    console.warn(`[Start] addMinsToTime: could not parse "${time}" (normalized: "${normalized}") — defaulting to +${minutes}min from 09:00`);
+                                    const fallbackTotal = 9 * 60 + minutes;
+                                    return `${String(Math.floor(fallbackTotal / 60) % 24).padStart(2, '0')}:${String(fallbackTotal % 60).padStart(2, '0')}`;
+                                  }
+                                  const totalMins = h * 60 + m + minutes;
+                                  const newH = Math.floor(totalMins / 60) % 24;
+                                  const newM = totalMins % 60;
+                                  return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
+                                };
 
                                let generationRules: Array<Record<string, unknown>> | null = null;
                                if (details.userConstraints?.length) {
