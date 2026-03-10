@@ -3180,7 +3180,7 @@ export function buildWellnessPrompt(): string {
 Wellness is the PURPOSE of this trip.
 This is not "vacation with spa added." Wellness IS the agenda.
 
-This effectively makes them a Retreat Regular or Zen Seeker for this trip.
+This effectively makes them a Wellness Devotee or Zen Seeker for this trip.
 
 ═══════════════════════════════════════════════════════════════════════
 WELLNESS RETREAT STRUCTURE
