@@ -479,6 +479,7 @@ export const PHYSICAL_INTENSITY: Record<string, PhysicalIntensity> = {
   social_butterfly: { level: 'moderate', dailySteps: '10,000-15,000', walkingHours: '3-4', notes: 'Group activities, walking tours, bar hopping.' },
   eco_ethicist: { level: 'moderate', dailySteps: '12,000-16,000', walkingHours: '3-5', notes: 'Walking and biking preferred over transport.' },
   community_builder: { level: 'moderate', dailySteps: '10,000-14,000', walkingHours: '3-4', notes: 'Community visits, neighborhood walking.' },
+  story_seeker: { level: 'moderate', dailySteps: '10,000-16,000', walkingHours: '3-5', notes: 'Neighborhood wandering, bar hopping, following leads on foot.' },
   sabbatical_scholar: { level: 'moderate', dailySteps: '8,000-12,000', walkingHours: '2-3', notes: 'Library time, lectures, some walking.' },
   balanced_story_collector: { level: 'moderate', dailySteps: '10,000-14,000', walkingHours: '3-4', notes: 'Balanced mix of activity types.' },
   digital_explorer: { level: 'moderate', dailySteps: '8,000-12,000', walkingHours: '2-3', notes: 'Some walking for photo spots, but lots of sitting.' },
