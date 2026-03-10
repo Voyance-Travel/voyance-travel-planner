@@ -322,7 +322,7 @@ serve(async (req) => {
                     mustDoActivities: {
                       type: "string",
                       description:
-                        "Comma-separated list of SPECIFIC activities, events, venues, and experiences the user wants to do. Include time constraints when mentioned. Examples: 'US Open tennis 9am-6pm both days, comedy show Friday night, dinner at Carbone, visit Central Park morning'. Be exhaustive — capture EVERY specific activity, event, restaurant, show, or experience the user mentions. This is the MOST IMPORTANT field for itinerary quality.",
+                        "Comma-separated list of SPECIFIC activities, events, venues, and experiences the user wants to do. Include time constraints when mentioned. IMPORTANT: Expand multi-day references into per-day entries with explicit day numbers. Instead of 'US Open tennis both days', write 'US Open tennis 9am-6pm Day 1, US Open tennis 9am-6pm Day 2, US Open tennis 9am-6pm Day 3'. Instead of 'comedy show Friday night', write 'comedy show Day 3 evening' (calculating the day number from the start date). Be exhaustive — capture EVERY specific activity, event, restaurant, show, or experience the user mentions. This is the MOST IMPORTANT field for itinerary quality.",
                     },
                     additionalNotes: {
                       type: "string",
