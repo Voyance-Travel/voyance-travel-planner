@@ -1,92 +1,38 @@
-## Journey Sequential Generation — Implementation Status
 
-### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-**Implemented:**
+## Plan: Remove Noisy Toasts — 16 Exact Changes
 
-1. **`src/hooks/useGenerationGate.ts`**:
-   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
-   - Added journey detection: fetches all sibling legs when `journeyId` is present
-   - Sums credit costs across all journey legs for unified billing
-   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
-   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
+All changes are simple line deletions or string replacements across 7 files. No structural or logic changes.
 
-2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
-   - Added `journeyLegs` state for cost breakdown display
-   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
-   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
-   - Updated cost confirmation dialog:
-     - Shows "Journey Cost Breakdown" header for journeys
-     - Lists each leg with city, days, and cost
-     - Shows "Journey Total" instead of "Total"
-     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
-     - Disabled partial generation for journeys (must pay full upfront)
-     - "Confirm & Generate Journey" button text for journeys
+### Deletions (remove toast line entirely)
 
-### Part 2: Auto-Chain Generation (TODO)
+| # | File | Line | Toast to delete |
+|---|------|------|----------------|
+| 1 | `TripDetail.tsx` | 910 | `toast.success('Trip pricing synced...')` |
+| 2 | `EditorialItinerary.tsx` | 2257 | `toast.success('Day 1 and final day synced...')` — also remove the else block (lines 2256-2260) replacing with just the else body |
+| 3 | `EditorialItinerary.tsx` | 2870 | The pricing repair success toast was already removed in a prior pass — the current code at ~2870 has no toast. Confirmed no action needed. |
+| 5 | `FindMyHotelsDrawer.tsx` | 113 | `toast.success('Finding your perfect hotels (X credits used)')` |
+| 7 | `ItineraryGenerator.tsx` | 642 | `toast('Checking generation status...')` |
+| 8 | `ItineraryGenerator.tsx` | 703 | `toast('Generation paused while we verify...')` |
+| 9 | `ItineraryGenerator.tsx` | 707 | `toast('Generation completed. Finalizing...')` |
+| 11 | `useItineraryGeneration.ts` | 532 | `toast.success('Itinerary saved successfully!')` |
+| 12 | `ItineraryEditor.tsx` | 294 | `toast.success('Itinerary saved successfully!')` |
+| 13 | `useStalePendingChargeRefund.ts` | 122-124 | `toast.info('A previous Smart Finish attempt failed...')` |
 
-When leg 1 completes generation, the backend should:
-1. Check for next queued leg in the journey
-2. Automatically trigger `generate-trip` for the next leg
-3. Continue until all legs are generated
+### Replacements
 
-Files to modify:
-- `supabase/functions/generate-trip/index.ts` or similar edge function
-- Add post-generation hook to detect and chain to next journey leg
+| # | File | Line | Before → After |
+|---|------|------|----------------|
+| 4 | `EditorialItinerary.tsx` | 2525-2529 | Both swap toast branches → single `toast.success('Activity swapped!')` |
+| 6 | `ItineraryGenerator.tsx` | 257 | `toast.success('Trip generated! X credits used')` → `toast.success('Your itinerary is ready!', { duration: 4000 })` |
+| 10 | `ItineraryGenerator.tsx` | 694 | Long generation-stopped message → `'Generation paused. Your progress has been saved.'` (keep the full-refund else branch as `'Generation failed. Your credits have been refunded.'`) |
+| 14 | `EditorialItinerary.tsx` | 2999 | `'Your routes are already optimized! Credits refunded.'` → `'Routes are already optimized!'` with `duration: 3000` |
+| 15 | `EditorialItinerary.tsx` | 3501-3503 | `'Schedule synced to flight times'` → `toast.success('Schedule updated!', { id: 'flight-sync', duration: 2000 })` (drop the description) |
+| 16 | `voyanceFlowController.ts` | 211 | `return \`\${actionLabel} (\${result.cost} credits used)\`` → `return actionLabel` |
 
-### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
+### Notes on item 2 (line 2256-2260)
+The if/else block is: if cascadeChanged → toast, else → toast. Delete the `toast.success` on line 2257 but keep the else branch toast. The if block becomes empty so collapse it: just keep the else branch's `toast.info` unconditionally, or remove the entire if/else and keep only the else toast. Actually per the request, only line 2257 is deleted — so the if block body becomes empty. I'll remove the entire if/else and keep only the else toast.
 
-**Implemented:**
+### Notes on item 5 (FindMyHotelsDrawer)
+Delete line 113 (`toast.success` for credits used). Keep the free-cap toast on line 111 as well? The request says delete line 112 which maps to the credits-used toast. I'll delete only the paid toast (line 113) and keep the free one (line 111). Actually re-reading: the request says delete the line `toast.success('Finding your perfect hotels (${result.spent ?? creditCost} credits used)')` — that's only the paid branch. I'll also clean up the if/else to just keep the free branch toast or remove both. The request specifically targets one line — I'll delete just that line and adjust the if/else.
 
-1. **`src/pages/TripDetail.tsx`**:
-   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
-   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
-   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
-   - Added distinct "queued" state UI:
-     - Clock icon with hourglass badge
-     - "{destination} is up next" heading
-     - Explanation text about waiting for previous leg
-     - "View previous city" button to navigate back to the generating leg
-   - Added `Clock` to lucide-react imports
-
----
-
-## Preference Enforcement Activation ✅ COMPLETE
-
-### Fix 1: Per-day preference checks now trigger retries ✅
-Moved MINIMUM REAL ACTIVITY COUNT and USER PREFERENCE VALIDATION blocks to after `validateGeneratedDay()` so they can push errors into `validation.errors`. Upgraded all `console.warn` calls to `validation.errors.push` + `validation.isValid = false`. Added budget preference validation ($75+ threshold). Activity keyword checks skip departure days.
-
-### Fix 2: Stage 2.6 personalization rejection enabled ✅
-Uncommented and enhanced the rejection block. Critical and major dietary violations are now actively enforced — dietary violations get patched with ⚠️ warnings in activity descriptions. Low personalization scores (<40) are logged.
-
----
-
-## Itinerary Generation Quality Fixes ✅ COMPLETE
-
-### Bug 1: Arrival Sequence Inverted ✅
-Post-generation validator in `index.ts` detects when hotel check-in is ordered before airport arrival on Day 1. Extracts arrival/transfer/checkin activities, recalculates times based on flight arrival, and re-inserts in correct order.
-
-### Bug 2: User Preferences Ignored ✅
-- Strengthened preference injection in system prompt with explicit enforcement language (🚨 MUST BE HONORED)
-- Added post-generation validation logging that checks activities against keyword map for requested activities (skiing, surfing, etc.)
-- Warns when "light dinner" preference is violated by expensive dining ($50+)
-
-### Bug 3: Empty Days ✅
-Added minimum real activity count validation after generation. Filters out logistics (transport, accommodation, downtime) and warns when a day has fewer than 2 real activities (1 for departure day).
-
-### Bug 4: Nonsensical Inter-City Flights ✅
-Added `SAME_METRO_PAIRS` lookup in `buildTransitionDayPrompt` (prompt-library.ts). When origin and destination are in the same metro area (e.g., East Rutherford ↔ NYC), flights are suppressed from transport options and the prompt explicitly forbids them. Default mode switches to `rideshare`.
-
----
-
-## Fix: Case-Sensitive Token Lookup ✅ COMPLETE
-
-**Root cause:** `generate_share_token()` used base64 encoding producing mixed-case tokens. Mobile apps (iMessage, WhatsApp) can lowercase URLs, breaking the case-sensitive PostgreSQL lookup.
-
-### Changes (single migration):
-1. **`generate_share_token(integer)`** — switched from base64 to hex encoding (lowercase-only: a-f, 0-9)
-2. **Case-insensitive index** — `idx_trip_invites_token_lower` on `LOWER(token)`
-3. **Backfill** — all existing tokens lowercased
-4. **`get_trip_invite_info()`** — `WHERE LOWER(token) = LOWER(p_token)` + failure logging + `replaced_at` check
-5. **`accept_trip_invite()`** — `WHERE LOWER(token) = LOWER(p_token) FOR UPDATE`
-6. **`replaced_at` column** — added to `trip_invites` for soft-delete support
