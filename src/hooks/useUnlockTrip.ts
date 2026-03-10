@@ -110,7 +110,7 @@ export function useUnlockTrip() {
         },
       });
 
-      if (spendError) throw new Error(spendError.message || 'Failed to spend credits');
+      if (spendError) throw new Error(toFriendlyError(spendError.message));
       if (spendData?.error === 'Insufficient credits') {
         setState(prev => ({ ...prev, step: 'error', error: 'insufficient_credits' }));
         return false;
