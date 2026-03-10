@@ -2786,8 +2786,8 @@ OPTIONS:
 NOTE: Not all guys trips are party trips.
 Calibrate to archetype:
 - Zen Seeker guys = might skip nightlife
-- Retirement Ranger guys = early dinner, one nice bar
-- Gap Year Graduate guys = maximum nightlife
+- Boundless Explorer guys = early dinner, one nice bar
+- Horizon Chaser guys = maximum nightlife
 
 But generally, at least ONE evening option should be there.
 
