@@ -1834,26 +1834,6 @@
         "status_seeking": { "above": 0.6, "weight": -0.5 }
       }
     },
-    "curated_luxe": {
-      "name": "Curated Luxe",
-      "category": "CURATOR",
-      "required": {
-        "quality_intrinsic": { "min": 0.6 },
-        "planning": { "min": 0.5 },
-        "budget_tier": { "min": 0.5 }
-      },
-      "boosters": {
-        "quality_intrinsic": 1.5,
-        "planning": 1.0,
-        "food_focus": 0.6,
-        "cultural_depth": 0.5
-      },
-      "penalties": {
-        "flexibility": { "above": 0.8, "weight": -0.8 },
-        "adventure": { "above": 0.7, "weight": -0.5 },
-        "status_seeking": { "above": 0.7, "weight": -0.5 }
-      }
-    },
     "balanced_story_collector": {
       "name": "Balanced Story Collector",
       "category": "EXPLORER",

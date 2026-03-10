@@ -570,17 +570,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
     ],
     signatureAnswers: ['sm4', 'g1', 'h5', 'rm3'],
   },
-  {
-    id: 'curated_luxe',
-    name: 'Curated Luxe',
-    category: 'CURATOR',
-    tagline: "You don't travel—you orchestrate experiences.",
-    primaryTraits: [
-      { trait: 'comfort', weight: 2, sweetSpot: 7, range: [5, 10] },
-      { trait: 'planning', weight: 2, sweetSpot: 7, range: [5, 10] },
-    ],
-    signatureAnswers: ['e1', 'h1', 'ld2'],  // detailed + boutique + craft
-  },
+  // curated_luxe was merged into status_seeker — removed from scoring
   
   // ═══════════════════════════════════════
   // TRANSFORMER category
@@ -1843,7 +1833,7 @@ function calculateRarity(primary: string, secondary: string | null): string {
   const commonCombos = [
     ['zen_seeker', 'slow_traveler'],
     ['cultural_anthropologist', 'culinary_cartographer'],
-    ['luxury_luminary', 'curated_luxe'],
+    ['luxury_luminary', 'status_seeker'],
     ['adrenaline_architect', 'wilderness_pioneer'],
   ];
   

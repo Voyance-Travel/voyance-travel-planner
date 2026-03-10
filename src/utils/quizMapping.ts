@@ -174,7 +174,6 @@ const STYLE_TO_ARCHETYPE: Record<string, string> = {
   // Primary quiz values (from Quiz.tsx traveler_type question)
   'explorer': 'cultural_anthropologist',
   'escape_artist': 'zen_seeker',
-  'curated_luxe': 'luxury_luminary',
   'story_seeker': 'story_seeker',
   // Legacy/alternate values
   'luxury': 'luxury_luminary',
@@ -634,7 +633,6 @@ function getArchetypeDisplayName(id: string): string {
     art_aficionado: 'The Art Aficionado',
     luxury_luminary: 'The Luxury Luminary',
     eco_ethicist: 'The Mindful Voyager',
-    curated_luxe: 'Curated Luxe',
     // TRANSFORMER category
     gap_year_graduate: 'The Horizon Chaser',
     midlife_explorer: 'The Rediscovery Traveler',
@@ -681,7 +679,6 @@ function getArchetypeCategory(id: string): string {
     art_aficionado: 'CURATOR',
     luxury_luminary: 'CURATOR',
     eco_ethicist: 'CURATOR',
-    curated_luxe: 'CURATOR',
     // TRANSFORMER
     gap_year_graduate: 'TRANSFORMER',
     midlife_explorer: 'TRANSFORMER',
@@ -725,7 +722,6 @@ function getArchetypeTagline(id: string): string {
     art_aficionado: 'Every gallery is a pilgrimage.',
     luxury_luminary: 'Champagne wishes, caviar dreams, economy never.',
     eco_ethicist: 'Leave nothing but footprints.',
-    curated_luxe: "You don't travel, you orchestrate experiences.",
     // TRANSFORMER
     gap_year_graduate: 'The world is the ultimate classroom.',
     midlife_explorer: "It's never too late to become who you were meant to be.",
@@ -749,7 +745,6 @@ function extractEmotionalDrivers(answers: Record<string, string | string[]>): st
     // Primary quiz values
     explorer: ['discovery', 'curiosity', 'growth'],
     escape_artist: ['freedom', 'peace', 'renewal'],
-    curated_luxe: ['comfort', 'excellence', 'indulgence'],
     story_seeker: ['connection', 'meaning', 'understanding'],
     // Extended archetypes
     cultural_anthropologist: ['discovery', 'authenticity', 'connection'],

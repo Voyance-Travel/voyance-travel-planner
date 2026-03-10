@@ -1555,7 +1555,11 @@ const DEFAULT_DEFINITION: ArchetypeDefinition = {
 export function getArchetypeDefinition(archetype: string | undefined): ArchetypeDefinition {
   if (!archetype) return DEFAULT_DEFINITION;
   
-  const normalized = archetype.toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_');
+  let normalized = archetype.toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_');
+
+  // Legacy archetype merges
+  if (normalized === 'curated_luxe') normalized = 'status_seeker';
+
   return ARCHETYPE_DEFINITIONS[normalized] || DEFAULT_DEFINITION;
 }
 
