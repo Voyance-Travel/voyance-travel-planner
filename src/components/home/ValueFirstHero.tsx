@@ -21,7 +21,7 @@ export default function ValueFirstHero({ onScrollToDemo }: ValueFirstHeroProps) 
           decoding="async"
         />
         {/* Gradient overlay - stronger at bottom for mobile text readability */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-black/10" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/15 to-transparent" />
       </div>
 
       {/* Editorial Grid Lines - Desktop only */}
