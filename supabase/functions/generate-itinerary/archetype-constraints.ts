@@ -509,7 +509,7 @@ VIOLATIONS:
 
 const ACHIEVER_ARCHETYPES: Record<string, ArchetypeDefinition> = {
   bucket_list_conqueror: {
-    identity: "The Bucket List Conqueror",
+    identity: "The Milestone Voyager",
     category: "Achiever",
     meaning: `
 This traveler wants to CHECK THINGS OFF. The iconic experiences.

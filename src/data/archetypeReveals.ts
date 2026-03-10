@@ -304,7 +304,7 @@ Your trips will reflect your values. We'll prioritize locally-owned, community-p
 
   bucket_list_conqueror: {
     id: 'bucket_list_conqueror',
-    name: 'The Bucket List Conqueror',
+    name: 'The Milestone Voyager',
     category: 'ACHIEVER',
     revealParagraph: `You have a list. And you're working through it.
 

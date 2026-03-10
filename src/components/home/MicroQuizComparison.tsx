@@ -33,8 +33,8 @@ const DAY_OPTIONS = {
   relaxed: {
     title: "The Slow Morning",
     subtitle: "Quality over quantity",
-    archetype: "Bucket List Conqueror",
-    tendencyLabel: "You might be a Bucket List Conqueror",
+    archetype: "Milestone Voyager",
+    tendencyLabel: "You might be a Milestone Voyager",
     activities: [
       { time: "10:00 AM", name: "Wake up, no alarm", icon: Coffee, badge: null },
       { time: "11:30 AM", name: "Kissaten coffee in Yanaka", icon: Coffee, badge: "Voyance Find" },
