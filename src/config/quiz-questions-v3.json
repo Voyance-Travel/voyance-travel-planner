@@ -1443,7 +1443,7 @@
       }
     },
     "community_builder": {
-      "name": "Community Builder",
+      "name": "The Purpose Voyager",
       "category": "CONNECTOR",
       "required": {
         "ethics_focus": { "min": 0.6 },
