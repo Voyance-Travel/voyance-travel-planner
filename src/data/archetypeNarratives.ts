@@ -763,6 +763,43 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     perfectTripPreview: "You leave places better than you found them.",
     emoji: "🌱"
   },
+  history_hunter: {
+    id: 'history_hunter',
+    name: 'The History Hunter',
+    category: 'CURATOR',
+    hookLine: "Every stone has a story — you just have to look.",
+    coreDescription: "You don't just visit historical sites — you walk through time. Every ruin, monument, and ancient street has layers of meaning that others walk right past. You see the centuries stacked beneath your feet.",
+    whatThisMeans: [
+      "You read the plaques other tourists skip",
+      "You've gotten emotional at ruins",
+      "You plan trips around archaeological discoveries",
+      "You can place a building's era by its architecture"
+    ],
+    superpowers: [
+      "Deep appreciation for historical context and significance",
+      "Patience to truly understand a place through its past",
+      "Ability to find meaning in sites others find ordinary"
+    ],
+    growthEdges: [
+      "May overlook modern culture in favor of the ancient",
+      "Can spend so long at one site that the day slips away",
+      "Might dismiss destinations without obvious historical significance"
+    ],
+    perfectTripPreview: "You walk through centuries, not just streets.",
+    emoji: "🏛️",
+    revealParagraph: `You've stood in a place that's a thousand years old and felt something shift. Not just "that's old" — something deeper. You could feel the people who walked there before you. The guide says "built in the 12th century" and everyone nods, but you're already imagining what it looked like new. You read the footnotes. You notice the renovation layers. You ask the questions the guide wasn't expecting. History isn't dead to you — it's the most alive thing in the room.`,
+    youProbably: [
+      "Have a favorite historical period and defend it passionately",
+      "Own more history books than novels",
+      "Have visited the same ancient site more than once and found something new each time"
+    ],
+    itineraryPreview: [
+      "Expert-guided historical walks",
+      "Time at sites without rushing",
+      "Museums with real depth",
+      "Ancient quarters and layers of history"
+    ]
+  },
   gap_year_graduate: {
     id: 'gap_year_graduate',
     name: 'The Horizon Chaser',

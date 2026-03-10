@@ -53,7 +53,7 @@ const ALL_ARCHETYPE_IDS = [
   'social_butterfly', 'family_architect', 'romantic_curator', 'story_seeker', 'community_builder',
   'bucket_list_conqueror', 'adrenaline_architect', 'collection_curator', 'status_seeker',
   'zen_seeker', 'slow_traveler', 'beach_therapist', 'sanctuary_seeker', 'escape_artist', 'retreat_regular',
-  'culinary_cartographer', 'luxury_luminary', 'art_aficionado', 'eco_ethicist',
+  'culinary_cartographer', 'luxury_luminary', 'art_aficionado', 'eco_ethicist', 'history_hunter',
   'gap_year_graduate', 'midlife_explorer', 'healing_journeyer', 'sabbatical_scholar', 'retirement_ranger',
 ];
 

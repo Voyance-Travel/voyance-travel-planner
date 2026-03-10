@@ -633,6 +633,7 @@ function getArchetypeDisplayName(id: string): string {
     art_aficionado: 'The Art Aficionado',
     luxury_luminary: 'The Luxury Luminary',
     eco_ethicist: 'The Mindful Voyager',
+    history_hunter: 'The History Hunter',
     // TRANSFORMER category
     gap_year_graduate: 'The Horizon Chaser',
     midlife_explorer: 'The Rediscovery Traveler',
@@ -679,6 +680,7 @@ function getArchetypeCategory(id: string): string {
     art_aficionado: 'CURATOR',
     luxury_luminary: 'CURATOR',
     eco_ethicist: 'CURATOR',
+    history_hunter: 'CURATOR',
     // TRANSFORMER
     gap_year_graduate: 'TRANSFORMER',
     midlife_explorer: 'TRANSFORMER',
@@ -722,6 +724,7 @@ function getArchetypeTagline(id: string): string {
     art_aficionado: 'Every gallery is a pilgrimage.',
     luxury_luminary: 'Champagne wishes, caviar dreams, economy never.',
     eco_ethicist: 'Travel gently, experience deeply.',
+    history_hunter: 'Every stone has a story — you just have to look.',
     // TRANSFORMER
     gap_year_graduate: 'The next horizon is always calling.',
     midlife_explorer: "The best chapter hasn't been written yet.",
@@ -767,6 +770,7 @@ function extractEmotionalDrivers(answers: Record<string, string | string[]>): st
     art_aficionado: ['beauty', 'inspiration', 'culture'],
     luxury_luminary: ['comfort', 'excellence', 'indulgence'],
     eco_ethicist: ['responsibility', 'authenticity', 'purpose'],
+    history_hunter: ['discovery', 'depth', 'heritage'],
     gap_year_graduate: ['growth', 'discovery', 'transformation'],
     midlife_explorer: ['renewal', 'discovery', 'meaning'],
     sabbatical_scholar: ['learning', 'renewal', 'perspective'],

@@ -165,6 +165,11 @@ export const TYPE_RARITY: Record<string, TypeRarity> = {
     tier: 'rare',
     description: 'Just 2% of travelers prioritize eco-ethics like you',
   },
+  history_hunter: {
+    percentage: 6.0,
+    tier: 'uncommon',
+    description: '6% of travelers dig into history the way you do',
+  },
 
   // ═══════════════════════════════════════════════════════════════
   // TRANSFORMER CATEGORY

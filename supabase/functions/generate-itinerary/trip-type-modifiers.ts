@@ -1051,6 +1051,22 @@ export const soloSocialCalibration: Record<string, SoloSocialCalibration> = {
     ]
   },
 
+  history_hunter: {
+    socialLevel: 'low',
+    description: 'Solo history immersion - own pace, deep dives',
+    include: [
+      'Archaeological sites (hours alone)',
+      'Museums (no one rushing you)',
+      'Historical walks (self-guided)',
+      'Ancient quarters',
+      'Bookshops'
+    ],
+    avoid: [
+      'Group tours with surface-level content',
+      'Party scenes'
+    ]
+  },
+
   sabbatical_scholar: {
     socialLevel: 'low',
     description: 'Solo learning - libraries, courses, thinking',
@@ -4021,6 +4037,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Food and beer tour, BBQ pilgrimage, local specialty hunt, brewery crawl, hearty meals.",
       art_aficionado: "Architecture walk then drinks, design district then rooftop bar, culture by day, bars by night.",
+      history_hunter: "Historical pub crawl, old-town walking tour, legendary sports venue visit, heritage district drinks.",
       luxury_luminary: "Premium everything - VIP sports box, high-end steakhouse, exclusive lounge, top-shelf whiskey.",
       // TRANSFORMERS
       eco_ethicist: "Sustainable brewery, farm-to-table group dinner, eco-adventure activity, local craft producers.",
@@ -4060,6 +4077,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Food tour, cooking class together, wine tasting, restaurant hopping, market visit.",
       art_aficionado: "Gallery hopping, design districts, art-focused experiences, creative workshops.",
+      history_hunter: "Historical walking tour, heritage museum, ancient quarter exploration, meaningful sites.",
       luxury_luminary: "Spa day, fine dining, luxury shopping, champagne everything, five-star treatment.",
       // TRANSFORMERS
       eco_ethicist: "Sustainable fashion shopping, eco-spa, farm-to-table experiences, ethical brands.",
@@ -4099,6 +4117,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Birthday at THE restaurant they've wanted, food-focused celebration.",
       art_aficionado: "Birthday at special gallery, private museum experience, art-related celebration.",
+      history_hunter: "Birthday at a meaningful historical site, private guided tour, celebration with depth.",
       luxury_luminary: "Full luxury birthday - champagne, VIP everything, the works, make them feel royal.",
       // TRANSFORMERS
       eco_ethicist: "Sustainable celebration, nature birthday experience, eco-conscious and meaningful.",
@@ -4138,6 +4157,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Food anniversary - cooking class together, restaurant tour, wine tasting.",
       art_aficionado: "Art anniversary - museums together, design experiences, cultural romance.",
+      history_hunter: "History anniversary - ancient sites together, guided heritage walk, romantic old-town dinner.",
       luxury_luminary: "Luxury anniversary - five-star everything, private experiences, premium romance.",
       // TRANSFORMERS
       eco_ethicist: "Eco anniversary - sustainable resort, nature, responsible romance.",
@@ -4172,6 +4192,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       slow_traveler: "Slow honeymoon - long meals, no rushing, savoring every newlywed moment.",
       culinary_cartographer: "Food honeymoon - cooking classes together, restaurant exploration.",
       art_aficionado: "Art honeymoon - museums together, design hotels, cultural romance.",
+      history_hunter: "History honeymoon - ancient cities, heritage hotels, walking through centuries together.",
       luxury_luminary: "Luxury honeymoon - five-star everything, private experiences, premium.",
       eco_ethicist: "Eco honeymoon - sustainable resorts, nature, responsible romance.",
       gap_year_graduate: "Budget honeymoon - backpacker romance, meaningful over expensive.",
@@ -4214,6 +4235,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Solo food journey - counter seating heaven (sushi bars, tapas counters), food tours, markets. Food people understand solo diners. Chef's table for one.",
       art_aficionado: "Solo art immersion - hours in front of one painting if you want. No one saying 'ready to go?' Museum heaven, gallery wandering, bookshops.",
+      history_hunter: "Solo history deep-dive - hours at one ruin if you want. No one rushing you past the plaque. Archaeological sites, old quarters, expert-led walks.",
       luxury_luminary: "Solo luxury indulgence - treat yourself to the best. Chef's counter, spa day, premium everything for one. Solo doesn't mean lesser experience.",
 
       // TRANSFORMERS
@@ -4249,6 +4271,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       slow_traveler: "Slow family trip - no rushing, long beach days, relaxed kid pace.",
       culinary_cartographer: "Foodie family - cooking classes, food tours, teaching kids about food.",
       art_aficionado: "Art family - kid-friendly museums, hands-on art activities, creative fun.",
+      history_hunter: "History family - interactive historical sites, kid-friendly heritage tours, ancient stories come alive.",
       luxury_luminary: "Luxury family - five-star family resorts, kids clubs, family suites.",
       eco_ethicist: "Eco family - teaching sustainability, nature, conservation experiences.",
       gap_year_graduate: "Budget family - camping, picnics, free activities, creative fun.",
@@ -4282,6 +4305,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       slow_traveler: "Ultimate slow babymoon - no rushing ever, complete rest.",
       culinary_cartographer: "Food babymoon - pregnancy-safe dining focus, gentle food tours.",
       art_aficionado: "Art babymoon - museums at easy pace, seated viewing options.",
+      history_hunter: "History babymoon - gentle heritage walks, seated museum visits, easy-paced old town.",
       luxury_luminary: "Luxury babymoon - five-star pampering, every comfort anticipated.",
       eco_ethicist: "Eco babymoon - sustainable resort, gentle nature, peaceful.",
       gap_year_graduate: "Budget babymoon - comfortable basics, rest focus over activities.",
@@ -4320,6 +4344,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Foodie graduation - eating your way through celebration, food adventures, no meal plan budget.",
       art_aficionado: "Art graduation - museums without rush, cultural immersion, feeding creativity.",
+      history_hunter: "History graduation - celebrating at meaningful historical sites, intellectual depth.",
       luxury_luminary: "Luxury graduation - treating yourself after sacrifice, premium everything, you earned it.",
       // TRANSFORMERS
       eco_ethicist: "Sustainable graduation - eco-conscious celebration, nature, starting career with values.",
@@ -4359,6 +4384,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Foodie retirement - food tours, cooking classes, culinary bucket list.",
       art_aficionado: "Art retirement - museums without rushing, cultural immersion, lifelong learning.",
+      history_hunter: "History retirement - finally time for the deep dives, archaeological sites, expert tours, no rushing.",
       luxury_luminary: "Luxury retirement - five-star everything, you worked for this, premium treatment.",
       // TRANSFORMERS
       eco_ethicist: "Eco retirement - sustainable travel, nature, leaving good footprint.",
@@ -4398,6 +4424,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Nutrition wellness - healthy cooking, detox cuisine, food as medicine, clean eating.",
       art_aficionado: "Creative wellness - art therapy, creative expression, healing through art.",
+      history_hunter: "Reflective wellness - historical meditation sites, ancient healing traditions, contemplative walks.",
       luxury_luminary: "Luxury wellness - six-star spa resort, premium treatments, world-class facilities.",
       // TRANSFORMERS
       eco_ethicist: "Eco wellness - sustainable retreat, organic everything, nature connection, earth healing.",
@@ -4437,6 +4464,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Food adventure - extreme food experiences, foraging, survival cooking.",
       art_aficionado: "Creative adventure - adventure photography, capturing the extreme, artistic thrills.",
+      history_hunter: "Historical adventure - archaeological expeditions, ancient trail treks, heritage exploration.",
       luxury_luminary: "Luxury adventure - heli-skiing, private guides, premium adventure experiences.",
       // TRANSFORMERS
       eco_ethicist: "Eco adventure - sustainable expeditions, conservation adventures, leave no trace.",
@@ -4476,6 +4504,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Ultimate food obsession - every meal researched, maximum food experiences, total immersion.",
       art_aficionado: "Artistic dining - beautiful presentation, design-forward restaurants, food as art.",
+      history_hunter: "Historical dining - ancient recipes, heritage restaurants, traditional taverns, eating history.",
       luxury_luminary: "Luxury gastronomy - tasting menus, rare ingredients, premium wine pairings, five-star dining.",
       // TRANSFORMERS
       eco_ethicist: "Sustainable foodie - farm-to-table, organic, zero-waste restaurants, ethical eating.",
@@ -4515,6 +4544,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Food bleisure - research best restaurants, local specialties, food-focused free time.",
       art_aficionado: "Art bleisure - galleries during lunch, museum after conference, cultural evenings.",
+      history_hunter: "History bleisure - squeeze in a historical site during lunch, old quarter evening walk.",
       luxury_luminary: "Premium bleisure - upgrade hotel, expense account dinners, luxury free time.",
       // TRANSFORMERS
       eco_ethicist: "Sustainable bleisure - eco-conscious choices, sustainable restaurants, green options.",
