@@ -211,7 +211,7 @@ Based on extreme trait scores (values >7 or <-7):
 
 ### TRANSFORMERS
 
-#### 21. The Gap Year Graduate
+#### 21. The Horizon Chaser
 - **ID**: `gap_year_graduate`
 - **Rarity**: common
 - **Primary Motivation**: Self-discovery through extended travel
