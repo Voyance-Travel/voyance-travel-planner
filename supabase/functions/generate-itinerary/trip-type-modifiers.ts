@@ -4061,6 +4061,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Food tour, cooking class together, wine tasting, restaurant hopping, market visit.",
       art_aficionado: "Gallery hopping, design districts, art-focused experiences, creative workshops.",
+      history_hunter: "Historical walking tour, heritage museum, ancient quarter exploration, meaningful sites.",
       luxury_luminary: "Spa day, fine dining, luxury shopping, champagne everything, five-star treatment.",
       // TRANSFORMERS
       eco_ethicist: "Sustainable fashion shopping, eco-spa, farm-to-table experiences, ethical brands.",
