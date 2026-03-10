@@ -4289,6 +4289,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       slow_traveler: "Ultimate slow babymoon - no rushing ever, complete rest.",
       culinary_cartographer: "Food babymoon - pregnancy-safe dining focus, gentle food tours.",
       art_aficionado: "Art babymoon - museums at easy pace, seated viewing options.",
+      history_hunter: "History babymoon - gentle heritage walks, seated museum visits, easy-paced old town.",
       luxury_luminary: "Luxury babymoon - five-star pampering, every comfort anticipated.",
       eco_ethicist: "Eco babymoon - sustainable resort, gentle nature, peaceful.",
       gap_year_graduate: "Budget babymoon - comfortable basics, rest focus over activities.",
