@@ -15,6 +15,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCredits } from './useCredits';
 import { CREDIT_COSTS } from '@/config/pricing';
 import { toast } from 'sonner';
+import { toFriendlyError } from '@/utils/friendlyErrors';
 
 export type UnlockStep = 'idle' | 'spending' | 'enriching' | 'saving' | 'complete' | 'error';
 
