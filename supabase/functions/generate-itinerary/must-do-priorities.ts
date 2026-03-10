@@ -284,7 +284,14 @@ export function parseMustDoInput(
     for (const sub of subItems) {
       const cleaned = sub.replace(/^\s*-\s*/, '').trim();
       if (!cleaned || cleaned.length < 2) continue;
-      items.push({ text: cleaned, preferredDay: currentDay });
+      // Extract inline "Day N" pattern from anywhere in the text
+      let inlineDay = currentDay;
+      const inlineDayMatch = cleaned.match(/\bday\s+(\d+)\b/i);
+      if (inlineDayMatch) {
+        inlineDay = Number(inlineDayMatch[1]);
+        console.log(`[MustDo] Inline day extraction: "${cleaned}" → Day ${inlineDay}`);
+      }
+      items.push({ text: cleaned, preferredDay: inlineDay });
     }
   }
 
@@ -394,6 +401,10 @@ function parseItem(item: string, destination: string): MustDoPriority | null {
     .replace(/\s+@\s+.*$/, '')
     .replace(/\s+at\s+\d{1,2}:\d{2}(\s*[AP]M)?/i, '')
     .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .replace(/\bday\s+\d+\b/gi, '')  // Strip "Day 1", "Day 2", etc.
+    .replace(/\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*(?:[-–—]|to)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)/gi, '')  // Strip "9am-5pm" time ranges
+    .replace(/\bfrom\s+(?:noon|morning|afternoon|evening)\b/gi, '')  // Strip "from noon" etc.
+    .replace(/\ball\s+day\b/gi, '')  // Strip "all day"
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -539,29 +550,39 @@ function findBestDay(
   const maxDay = priority.maxDay ?? totalDays;
   const isAllDay = priority.activityType === 'all_day_event';
   
-  // If user specified a day, try that first
+  // If user specified a day, HARD ASSIGN it (user explicitly tagged "Day N")
   if (priority.preferredDay && priority.preferredDay >= minDay && priority.preferredDay <= maxDay) {
     const dayLoad = dayAssignments.get(priority.preferredDay) || [];
-    
-    // All-day events need an EMPTY day (no other must-dos assigned)
+
     if (isAllDay) {
+      // For all-day events with explicit day, only fail if another ALL-DAY event is already there
       const hasOtherAllDay = dayLoad.some(p => p.activityType === 'all_day_event');
       if (!hasOtherAllDay) {
         return {
           success: true,
           day: priority.preferredDay,
-          rationale: `User preferred Day ${priority.preferredDay} (all-day event, day dedicated)`,
+          rationale: `User specified Day ${priority.preferredDay} — hard assigned (all-day event)`,
         };
       }
-    } else {
-      const totalDuration = dayLoad.reduce((sum, p) => sum + (p.estimatedDuration || 120), 0);
-      if (totalDuration + (priority.estimatedDuration || 120) <= 480) {
+      // Even if another all-day event exists, still assign if it's the SAME event (multi-day)
+      const sameEventExists = dayLoad.some(p =>
+        p.title.toLowerCase().includes(priority.title.toLowerCase()) ||
+        priority.title.toLowerCase().includes(p.title.toLowerCase())
+      );
+      if (sameEventExists) {
         return {
           success: true,
           day: priority.preferredDay,
-          rationale: `User preferred Day ${priority.preferredDay}`,
+          rationale: `User specified Day ${priority.preferredDay} — hard assigned (same multi-day event)`,
         };
       }
+    } else {
+      // Non-all-day with explicit day: always assign (user said it, respect it)
+      return {
+        success: true,
+        day: priority.preferredDay,
+        rationale: `User specified Day ${priority.preferredDay} — hard assigned`,
+      };
     }
   }
   

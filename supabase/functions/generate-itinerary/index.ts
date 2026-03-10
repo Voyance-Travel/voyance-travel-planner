@@ -6728,7 +6728,18 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
               mustDoPrompt = `\n## User's Researched Venues (try to include if appropriate)\n${unscheduledItems.map(u => `- ${u.priority.title} (${u.priority.priority})`).join('\n')}\n`;
             }
           }
-          console.log(`[generate-day] Must-do activities parsed: ${mustDoAnalysis.length} items, ${dayItems.length} for day ${dayNumber}, ${mustDoEventItems.length} events`);
+          console.log(`[generate-day] Must-do activities parsed: ${mustDoAnalysis.length} items total`);
+          console.log(`[generate-day] Day ${dayNumber}: ${dayItems.length} assigned items, ${mustDoEventItems.length} event(s)`);
+          for (const di of dayItems) {
+            console.log(`[generate-day]   → "${di.priority.title}" (${di.priority.activityType}, preferredDay=${di.priority.preferredDay}, assigned=${di.assignedDay})`);
+          }
+          if (mustDoEventItems.length === 0 && dayItems.length === 0) {
+            const allScheduled = scheduled.scheduled;
+            console.log(`[generate-day] ⚠️ No items for Day ${dayNumber}. Full schedule:`);
+            for (const s of allScheduled) {
+              console.log(`[generate-day]   → "${s.priority.title}" assigned to Day ${s.assignedDay} (preferred=${s.priority.preferredDay})`);
+            }
+          }
           
           // Add global must-do context so this day knows about other days' committed activities
           const otherDayItems = scheduled.scheduled.filter(s => s.assignedDay !== dayNumber);
@@ -8479,10 +8490,21 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             const { blockedStart, blockedEnd } = getBlockedTimeRange(eventItem);
             const eventTitleLower = eventItem.priority.title.toLowerCase();
 
-            // Check if an activity matching this event already exists
+            // Check if a NON-TRANSPORT activity matching this event already exists
+            // Transit activities like "Subway to US Open" contain the event name but are NOT the event
+            const transportCategories = ['transport', 'transportation', 'transit', 'transfer'];
+            const transportTitlePatterns = /\b(transfer|transit|taxi|uber|subway|metro|bus|drive|ride|lyft|car service|shuttle|walk(?:ing)?)\s+(to|from|back)\b/i;
             const eventExists = generatedDay.activities.some((act: any) => {
               const actTitle = (act.title || '').toLowerCase();
-              return actTitle.includes(eventTitleLower) || eventTitleLower.includes(actTitle);
+              const actCategory = (act.category || '').toLowerCase();
+              const titleMatchesEvent = actTitle.includes(eventTitleLower) || eventTitleLower.includes(actTitle);
+              if (!titleMatchesEvent) return false;
+              // Transport/transit activities do NOT count as the event itself
+              if (transportCategories.includes(actCategory)) return false;
+              if (transportTitlePatterns.test(act.title || '')) return false;
+              // Empty or very short titles are false positives
+              if (actTitle.length < 3) return false;
+              return true;
             });
 
             if (!eventExists) {
@@ -8527,6 +8549,9 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             }
           }
         }
+
+        // Sync normalizedActivities with any backfilled events
+        normalizedActivities = generatedDay.activities;
 
         // If AI omitted the travel activity, inject deterministic fallback
         // =======================================================================

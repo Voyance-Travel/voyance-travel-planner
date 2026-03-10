@@ -402,7 +402,14 @@ export function formatGenerationRules(rules: Array<{type: string; days?: string[
     switch (rule.type) {
       case 'blocked_time': {
         const dayNames = (rule.days || []).map(d => dayMap[d] || d).join(', ');
-        lines.push(`${num}. BLOCKED TIME: On ${dayNames}, do NOT schedule any activities between ${rule.from} and ${rule.to}.${rule.reason ? ` Reason: ${rule.reason}.` : ''} Leave these hours completely free.`);
+        // Sanitize NaN times — skip malformed rules entirely
+        const fromTime = String(rule.from || '');
+        const toTime = String(rule.to || '');
+        if (fromTime.includes('NaN') || toTime.includes('NaN') || !fromTime || !toTime) {
+          console.warn(`[formatGenerationRules] Skipping malformed blocked_time rule: from="${fromTime}", to="${toTime}", reason="${rule.reason}"`);
+          break;
+        }
+        lines.push(`${num}. BLOCKED TIME: On ${dayNames}, do NOT schedule any activities between ${fromTime} and ${toTime}.${rule.reason ? ` Reason: ${rule.reason}.` : ''} Leave these hours completely free.`);
         break;
       }
       case 'special_event':
