@@ -112,3 +112,24 @@ Added `SAME_METRO_PAIRS` lookup in `buildTransitionDayPrompt` (prompt-library.ts
 - Added `arrivalAirport` to `FlightHotelContextResult` interface and return value
 - Stage 2.55 split block uses `flightHotelResult.arrivalAirport` instead of hardcoded `'Airport'`
 - All 3 Day 1 constraint templates (morning/afternoon/evening) use `arrivalAirportDisplay`
+
+---
+
+## Fix 12: Blocked Time Window Truncation ✅ COMPLETE
+
+**Root cause:** Chat planner outputs `time_block` constraints with start time but no `endTime`. `Start.tsx` defaults missing durations to 120 minutes, producing `09:00→11:00` instead of `09:00→17:00` for "US Open 9am to 5pm". The generator sees the short window and skips the event card.
+
+### Layer 1: Self-correction in generation engine ✅
+- `budget-constraints.ts` `formatGenerationRules`: parses `reason` text for explicit time ranges (e.g. "9am to 5pm") using regex
+- If parsed end time is later than stored `to` value, overrides it
+- Fixes ALL existing trips with truncated blocked windows
+
+### Layer 2: Chat planner schema extended ✅
+- Added `endTime` and `duration` fields to `userConstraints` schema in `chat-trip-planner/index.ts`
+- AI can now output structured time ranges (time="9:00 AM", endTime="5:00 PM")
+
+### Layer 3: Start.tsx time_block handler fixed ✅
+- Priority 1: Use explicit `endTime` from chat planner
+- Priority 2: Parse time range from constraint `description` text via regex
+- Priority 3: Fall back to duration math (existing behavior)
+- Eliminates the 120-minute default for events with known end times
