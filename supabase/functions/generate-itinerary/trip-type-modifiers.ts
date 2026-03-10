@@ -4528,6 +4528,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Food bleisure - research best restaurants, local specialties, food-focused free time.",
       art_aficionado: "Art bleisure - galleries during lunch, museum after conference, cultural evenings.",
+      history_hunter: "History bleisure - squeeze in a historical site during lunch, old quarter evening walk.",
       luxury_luminary: "Premium bleisure - upgrade hotel, expense account dinners, luxury free time.",
       // TRANSFORMERS
       eco_ethicist: "Sustainable bleisure - eco-conscious choices, sustainable restaurants, green options.",
