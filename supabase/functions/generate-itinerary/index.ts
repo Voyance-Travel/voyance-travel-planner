@@ -261,11 +261,7 @@ const corsHeaders = {
   'Access-Control-Max-Age': '86400',
 };
 
-// =============================================================================
-// DATE SANITIZATION — Strip non-ASCII chars that leak from CJK locale prompts
-// =============================================================================
-const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
-
+// sanitization functions moved to ./sanitization.ts
 /**
  * Sanitize a single date string: extract the YYYY-MM-DD portion and discard
  * any trailing garbage (e.g. Chinese characters like "控制").
