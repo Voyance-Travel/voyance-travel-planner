@@ -9354,7 +9354,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
       if (context.mustDoActivities && context.mustDoActivities.trim()) {
         try {
           const forceAllMust = !!context.isSmartFinish || !!context.smartFinishRequested;
-          const mustDoCheck = parseMustDoInput(context.mustDoActivities, context.destination, forceAllMust);
+          const mustDoCheck = parseMustDoInput(context.mustDoActivities, context.destination, forceAllMust, context.startDate, context.totalDays);
           if (mustDoCheck.length > 0) {
             const itineraryForValidation = aiResult.days.map((d: any) => ({
               dayNumber: d.dayNumber,
