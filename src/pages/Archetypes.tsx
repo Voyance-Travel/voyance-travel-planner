@@ -46,6 +46,7 @@ const NARRATIVE_TO_DETAIL: Record<string, string> = {
   sabbatical_scholar: 'voyager',
   retirement_ranger: 'bucket_lister',
   community_builder: 'connector',
+  flexible_wanderer: 'wanderer',
 };
 
 const CATEGORY_ORDER = ['EXPLORER', 'CONNECTOR', 'ACHIEVER', 'RESTORER', 'CURATOR', 'TRANSFORMER'] as const;
