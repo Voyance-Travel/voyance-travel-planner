@@ -162,7 +162,7 @@ describe('Error Message Security', () => {
 
     // Should show generic message, not the actual error
     expect(mockToast).not.toHaveBeenCalledWith(expect.stringContaining('password'));
-    expect(mockToast).toHaveBeenCalledWith('An unexpected error occurred. Please try again.');
+    expect(mockToast).toHaveBeenCalledWith('Something hiccupped. Try that again.');
   });
 
   it('should not expose stack traces to users', () => {
