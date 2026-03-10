@@ -683,7 +683,7 @@ ${s.priority.requiresBooking ? '⚠️ TICKETS/BOOKING REQUIRED — mention this
         : s.priority.preferredTime === 'morning' ? 'morning (leave afternoon/evening free)' 
         : `${s.priority.preferredTime || 'assigned time'} block`;
       prompt += `- **${s.priority.title}** → Day ${s.assignedDay}, ${timeBlock} (~${durationHours}h)\n`;
-      prompt += `  ⏰ BLOCKED TIME: ${blockedStart}–${blockedEnd}. Do NOT schedule ANY other activities in this window.\n`;
+      prompt += `  ⏰ BLOCKED TIME: ${blockedStart}–${blockedEnd}. YOU MUST create an activity entry for "${s.priority.title}" in this window. Do NOT schedule any OTHER activities here.\n`;
       if (s.priority.requiresBooking) prompt += `  ⚠️ BOOKING REQUIRED\n`;
     }
     prompt += `→ Fill the OTHER half of these days with sightseeing/activities.\n\n`;
