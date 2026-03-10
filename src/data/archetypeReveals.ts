@@ -676,7 +676,7 @@ Your trips will align with your values. Locally-owned, environmentally-conscious
 
   gap_year_graduate: {
     id: 'gap_year_graduate',
-    name: 'The Gap Year Graduate',
+    name: 'The Horizon Chaser',
     category: 'TRANSFORMER',
     revealParagraph: `You'll sleep on a bad mattress if it means another week on the road.
 

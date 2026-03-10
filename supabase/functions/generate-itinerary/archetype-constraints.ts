@@ -1232,7 +1232,7 @@ VIOLATIONS:
   },
 
   gap_year_graduate: {
-    identity: "The Gap Year Graduate",
+    identity: "The Horizon Chaser",
     category: "Transformer",
     meaning: `
 This traveler is young, budget-conscious, and experience-hungry.
