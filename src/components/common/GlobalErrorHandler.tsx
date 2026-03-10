@@ -42,7 +42,7 @@ export function GlobalErrorHandler() {
         return;
       }
 
-      toast.error('Something went wrong. Please refresh the page.');
+      toast.error('Something hiccupped. A quick refresh should fix it.');
       event.preventDefault();
     };
 
