@@ -647,7 +647,7 @@ function getArchetypeDisplayName(id: string): string {
     sanctuary_seeker: 'The Sanctuary Seeker',
     // BALANCED / FLEXIBLE archetypes
     balanced_story_collector: 'The Balanced Story Collector',
-    flexible_wanderer: 'The Flexible Wanderer',
+    flexible_wanderer: 'The Wildcard',
   };
   return names[id] || 'The Explorer';
 }

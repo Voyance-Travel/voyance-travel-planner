@@ -146,7 +146,7 @@ Your trips will include the iconic spots (you want the shot), but also the hidde
 
   flexible_wanderer: {
     id: 'flexible_wanderer',
-    name: 'The Flexible Wanderer',
+    name: 'The Wildcard',
     category: 'EXPLORER',
     revealParagraph: `Your best travel moments weren't planned. They happened.
 
