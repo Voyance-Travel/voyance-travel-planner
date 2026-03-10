@@ -2851,21 +2851,49 @@ export default function Start() {
                                          note: 'User requested this as a full-day event but did not specify which day. The must-do scheduler should assign it.',
                                        });
                                      }
-                                   } else if (c.type === 'time_block') {
-                                      const rawDuration = (c as any).duration;
-                                     const duration = (typeof rawDuration === 'number' && !isNaN(rawDuration) && rawDuration > 0)
-                                       ? rawDuration
-                                       : (typeof rawDuration === 'string' ? parseInt(rawDuration, 10) || 120 : 120);
-                                      const normalizedTime = c.time ? normalizeTimeTo24h(c.time) : c.time;
-                                      const endTime = normalizedTime ? addMinsToTime(normalizedTime, duration) : normalizedTime;
-                                      if (c.day && c.time) {
-                                        rules.push({
-                                          type: 'blocked_time',
-                                          days: [`day_${c.day}`],
-                                          from: normalizedTime || c.time,
-                                          to: endTime || normalizedTime || c.time,
-                                         reason: c.description,
-                                       });
+                                    } else if (c.type === 'time_block') {
+                                       const normalizedTime = c.time ? normalizeTimeTo24h(c.time) : c.time;
+                                       
+                                       // Priority 1: explicit endTime from chat planner
+                                       let computedEndTime: string | undefined;
+                                       const rawEndTime = (c as any).endTime;
+                                       if (rawEndTime && typeof rawEndTime === 'string') {
+                                         computedEndTime = normalizeTimeTo24h(rawEndTime);
+                                       }
+                                       
+                                       // Priority 2: parse time range from description (e.g. "9am to 5pm")
+                                       if (!computedEndTime && c.description) {
+                                         const rangeMatch = c.description.match(
+                                           /(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*(?:to|[-–—])\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i
+                                         );
+                                         if (rangeMatch) {
+                                           let endH = parseInt(rangeMatch[4], 10);
+                                           const endM = rangeMatch[5] ? parseInt(rangeMatch[5], 10) : 0;
+                                           const endMeridiem = rangeMatch[6].toLowerCase();
+                                           if (endMeridiem === 'pm' && endH < 12) endH += 12;
+                                           if (endMeridiem === 'am' && endH === 12) endH = 0;
+                                           computedEndTime = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+                                         }
+                                       }
+                                       
+                                       // Priority 3: fall back to duration math
+                                       if (!computedEndTime && normalizedTime) {
+                                         const rawDuration = (c as any).duration;
+                                         const duration = (typeof rawDuration === 'number' && !isNaN(rawDuration) && rawDuration > 0)
+                                           ? rawDuration
+                                           : (typeof rawDuration === 'string' ? parseInt(rawDuration, 10) || 120 : 120);
+                                         computedEndTime = addMinsToTime(normalizedTime, duration);
+                                       }
+                                       
+                                       const endTime = computedEndTime || normalizedTime;
+                                       if (c.day && c.time) {
+                                         rules.push({
+                                           type: 'blocked_time',
+                                           days: [`day_${c.day}`],
+                                           from: normalizedTime || c.time,
+                                           to: endTime || normalizedTime || c.time,
+                                          reason: c.description,
+                                        });
                                      } else if (c.time) {
                                        rules.push({
                                          type: 'time_preference',
