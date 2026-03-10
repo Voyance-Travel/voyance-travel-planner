@@ -2220,7 +2220,7 @@ MUST INCLUDE:
 ✓ At least one "do nothing" day
 
 PACING: Subtract 2 from normal pace score.
-Even a Bucket List Conqueror honeymooner needs rest.
+Even a Milestone Voyager honeymooner needs rest.
 
 NEVER:
 ✗ 7am departures
