@@ -713,7 +713,7 @@ function getArchetypeTagline(id: string): string {
     status_seeker: "First class isn't a seat, it's a lifestyle.",
     // RESTORER
     zen_seeker: 'Breathe in experience, exhale expectation.',
-    retreat_regular: "Wellness isn't a trend, it's a lifestyle.",
+    retreat_regular: "Wellness isn't a trend — it's a travel style.",
     beach_therapist: 'Salt water heals everything.',
     slow_traveler: 'Stay long enough to have a favorite café.',
     escape_artist: 'Sometimes you need to leave to find yourself.',
