@@ -193,6 +193,39 @@ const KNOWN_LANDMARKS: Record<string, {
 };
 
 // =============================================================================
+// EXPLICIT TIME EXTRACTION
+// =============================================================================
+
+/**
+ * Extract explicit time range from user text like "9am-5pm", "9:00 AM to 5:00 PM", "12pm–4pm"
+ * Returns null if no explicit time range found.
+ */
+function extractExplicitTimeRange(text: string): { startTime: string; endTime: string } | null {
+  const lower = text.toLowerCase();
+
+  // Match patterns: "9am-5pm", "9:00am-5:00pm", "9 am - 5 pm", "9:00 AM to 5:00 PM", "12pm–4pm"
+  const timeRangePattern = /(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*(?:[-–—]|to)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i;
+  const match = lower.match(timeRangePattern);
+
+  if (!match) return null;
+
+  const [, startH, startM, startPeriod, endH, endM, endPeriod] = match;
+
+  const to24 = (h: string, m: string | undefined, period: string): string => {
+    let hour = parseInt(h, 10);
+    const min = parseInt(m || '0', 10);
+    if (period === 'pm' && hour !== 12) hour += 12;
+    if (period === 'am' && hour === 12) hour = 0;
+    return `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+  };
+
+  return {
+    startTime: to24(startH, startM, startPeriod),
+    endTime: to24(endH, endM, endPeriod),
+  };
+}
+
+// =============================================================================
 // PARSING USER INPUT
 // =============================================================================
 
