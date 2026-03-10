@@ -8944,12 +8944,77 @@ If the purpose is a specific event, plan at least ONE full day around that event
           // Hotel and airport context for prompts
           const hotelNameDisplay = flightContext.hotelName || 'Selected Hotel';
           const hotelAddressDisplay = flightContext.hotelAddress || 'Hotel Address';
-          const arrivalAirportDisplay = flightContext.arrivalAirport || 'Airport';
+          // Enhanced airport name extraction with metadata fallback
+          let arrivalAirportDisplay = flightContext.arrivalAirport || '';
+          if (!arrivalAirportDisplay && metadata?.flightDetails) {
+            const flightStr = typeof metadata.flightDetails === 'string' ? metadata.flightDetails : '';
+            const airportMatch = flightStr.match(/\b(JFK|LaGuardia|LGA|EWR|Newark|LAX|SFO|ORD|ATL|DFW|MIA|BOS|SEA|DEN|PHX)\b/i);
+            if (airportMatch) {
+              const airportNames: Record<string, string> = {
+                'JFK': 'JFK Airport', 'LAGUARDIA': 'LaGuardia Airport (LGA)', 'LGA': 'LaGuardia Airport (LGA)',
+                'EWR': 'Newark Liberty Airport (EWR)', 'NEWARK': 'Newark Liberty Airport (EWR)',
+                'LAX': 'Los Angeles Airport (LAX)', 'SFO': 'San Francisco Airport (SFO)',
+                'ORD': "O'Hare Airport (ORD)", 'ATL': 'Hartsfield-Jackson Airport (ATL)',
+                'DFW': 'Dallas/Fort Worth Airport (DFW)', 'MIA': 'Miami Airport (MIA)',
+                'BOS': 'Boston Logan Airport (BOS)', 'SEA': 'Seattle-Tacoma Airport (SEA)',
+                'DEN': 'Denver Airport (DEN)', 'PHX': 'Phoenix Sky Harbor Airport (PHX)',
+              };
+              arrivalAirportDisplay = airportNames[airportMatch[1].toUpperCase()] || `${airportMatch[1]} Airport`;
+            }
+          }
+          arrivalAirportDisplay = arrivalAirportDisplay || 'Airport';
           
           console.log(`[Day1-Decision] Arrival at ${arrival24}: morning=${isMorningArrival}, afternoon=${isAfternoonArrival}, evening=${isEveningArrival}`);
           console.log(`[Day1-Decision] Timeline: customs=${customsClearance}, transfer=${transferStart}-${transferEnd}, checkin=${hotelCheckIn}, earliest activity=${earliestSightseeing}`);
           
-          if (isMorningArrival) {
+          // Check if Day 1 has a user-requested all-day event
+          const day1HasAllDayEvent = mustDoEventItems?.some(
+            (item: any) => item.priority?.activityType === 'all_day_event'
+          );
+          
+          if (day1HasAllDayEvent) {
+            // ===== MODIFIED DAY 1: User has an all-day event — skip hotel-first flow =====
+            const allDayEvent = mustDoEventItems.find(
+              (item: any) => item.priority?.activityType === 'all_day_event'
+            );
+            const eventName = allDayEvent?.priority?.title || 'Event';
+            
+            console.log(`[Day1-Decision] ALL-DAY EVENT detected: "${eventName}" — using direct-to-event template`);
+            
+            dayConstraints = `
+THE FLIGHT LANDS AT ${arrival24} (${flightContext.arrivalTime || arrival24}).
+The traveler has an ALL-DAY EVENT today: "${eventName}".
+
+⚠️ MODIFIED DAY 1 — USER HAS AN ALL-DAY EVENT:
+The traveler has explicitly requested "${eventName}" as an all-day event on Day 1.
+Do NOT follow the standard arrival-transfer-checkin sequence. Instead:
+
+REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity entry):
+1. "Arrival at ${arrivalAirportDisplay}"
+   - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
+   - category: "transport"
+   - description: "Clear customs and collect luggage"
+
+2. "Transfer to ${eventName}"
+   - startTime: "${addMinutesToHHMM(arrival24, 30)}", endTime: "${addMinutesToHHMM(arrival24, 90)}"
+   - category: "transit"
+   - description: "Head directly to the event from the airport. Luggage can be stored at the venue or a nearby locker."
+
+3. "${eventName}" (ALL-DAY EVENT)
+   - This is the main activity. Schedule it for the appropriate duration after transfer.
+   - category: appropriate category for the event
+
+4. After the event ends, add:
+   - Transfer to hotel
+   - Hotel check-in (late check-in)
+   - Dinner (if time permits)
+
+IMPORTANT: The traveler CHOSE to go directly to the event. Respect this choice.
+Do NOT add a hotel check-in before the event.
+Do NOT generate a separate "Airport Transfer to Hotel" activity before the event.
+
+DO NOT plan activities before ${arrival24}. The day starts when the plane lands.`;
+          } else if (isMorningArrival) {
             // ===== MORNING ARRIVAL (before noon) =====
             // Consider: customs, jet lag, traveler profile (breakfast preference, rest needs)
             dayConstraints = `
