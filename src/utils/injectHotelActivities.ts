@@ -230,11 +230,14 @@ export function injectMultiHotelActivities(
     if (!hotel) continue;
 
     const checkInDayIdx = findDayIndex(updated, hotel.checkInDate, true);
-    const checkInActivity = buildCheckInActivity(hotel);
-    updated = updated.map((day, idx) => {
-      if (idx !== checkInDayIdx) return day;
-      return { ...day, activities: insertChronologically(day.activities, checkInActivity) };
-    });
+    const dayHasLateCheckin = updated[checkInDayIdx]?.activities.some(a => isLateCheckin(a));
+    if (!dayHasLateCheckin) {
+      const checkInActivity = buildCheckInActivity(hotel);
+      updated = updated.map((day, idx) => {
+        if (idx !== checkInDayIdx) return day;
+        return { ...day, activities: insertChronologically(day.activities, checkInActivity) };
+      });
+    }
 
     const checkOutDayIdx = findDayIndex(updated, hotel.checkOutDate, false);
     if (checkOutDayIdx !== checkInDayIdx) {
