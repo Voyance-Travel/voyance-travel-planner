@@ -1695,7 +1695,7 @@ Still ensure variety in experiences (not just spa + dinner repeat).
 === TRIP-WIDE VARIETY RULES (ENFORCED) ===
 
 NO REPETITION:
-- Maximum 1 spa/wellness experience PER TRIP (unless Luxury Luminary/Retreat Regular/Zen Seeker)
+- Maximum 1 spa/wellness experience PER TRIP (unless Luxury Luminary/Wellness Devotee/Zen Seeker)
 - Maximum 1 Michelin restaurant PER TRIP (unless Luxury Luminary/Culinary Cartographer)
 - Maximum 1 cooking class PER TRIP
 - Maximum 1 wine/cocktail "experience" PER TRIP (casual drinks don't count)
