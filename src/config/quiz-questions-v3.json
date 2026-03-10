@@ -1499,7 +1499,7 @@
       }
     },
     "collection_curator": {
-      "name": "Collection Curator",
+      "name": "The Passport Collector",
       "category": "ACHIEVER",
       "required": {
         "niche_interest": { "min": 0.7 }
