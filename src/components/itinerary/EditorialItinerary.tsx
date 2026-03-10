@@ -2725,6 +2725,29 @@ export function EditorialItinerary({
         let lastError: Error | null = null;
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
           try {
+            // Extract locked activities from the CURRENT day before regenerating
+            const currentDay = days.find(d => d.dayNumber === dayNum);
+            const keepActivities = (currentDay?.activities || [])
+              .filter(a => a.isLocked)
+              .map(a => a.id)
+              .filter(Boolean);
+
+            const backendActivities = (currentDay?.activities || []).map(a => ({
+              id: a.id,
+              name: a.title,
+              title: a.title,
+              description: a.description,
+              category: a.category,
+              startTime: a.startTime || a.time,
+              endTime: a.endTime,
+              location: a.location,
+              cost: a.cost,
+              estimatedCost: a.cost,
+              isLocked: a.isLocked,
+              durationMinutes: a.durationMinutes,
+              tags: a.tags,
+            }));
+
             const invokePromise = supabase.functions.invoke('generate-itinerary', {
               body: {
                 action: 'generate-day',
@@ -2739,6 +2762,9 @@ export function EditorialItinerary({
                 budgetTier,
                 userId: user?.id,
                 previousDayActivities: previousActivities,
+                keepActivities,
+                currentActivities: backendActivities,
+                variationNonce: Date.now(),
               },
             });
 
@@ -4341,7 +4367,7 @@ export function EditorialItinerary({
                   <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
                   <div>
                     <p className="text-lg font-semibold text-foreground">Rebuilding your itinerary…</p>
-                    <p className="text-sm text-muted-foreground">This may take up to a minute. Flights, hotels, and trip settings are preserved.</p>
+                    <p className="text-sm text-muted-foreground">This may take up to a minute. Flights, hotels, trip settings, and locked activities are preserved.</p>
                   </div>
                 </motion.div>
               )}
@@ -7004,6 +7030,10 @@ function FlightSyncWarning({ flightArrivalTime, day1FirstActivity, onSyncDay1, i
   const FLIGHT_BUFFER_MINS = 105; // 1h customs + 45m transit — same as cascadeTransportToItinerary
   const expectedEarliest = flightMins + FLIGHT_BUFFER_MINS;
 
+  // If the arrival activity starts within 5 minutes of flight arrival, times are aligned — no warning
+  const timesAreAligned = Math.abs(activityMins - flightMins) <= 5;
+  if (timesAreAligned) return null;
+
   // The warning should only fire if:
   // 1. First activity starts BEFORE the expected earliest (schedule is too early), OR
   // 2. First activity starts more than 3 hours AFTER the expected earliest (unreasonable gap)
@@ -7032,7 +7062,7 @@ function FlightSyncWarning({ flightArrivalTime, day1FirstActivity, onSyncDay1, i
             Flight times don't match your itinerary
           </h4>
           <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-            Your flight arrives at <span className="font-semibold">{flightArrivalTime}</span>, 
+            Your flight arrives at <span className="font-semibold">{formatTime(flightMins)}</span>, 
             but Day 1 shows arrival at <span className="font-semibold">{formatTime(activityMins)}</span>.
           </p>
           <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">

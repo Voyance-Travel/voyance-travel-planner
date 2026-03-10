@@ -4911,7 +4911,7 @@ async function generateSingleDayWithRetry(
   let dnaPromptSection = '';
   let dayConstraintsSection = '';
   
-  if (context.travelerDNA && (context.flightData || context.hotelData)) {
+  if (context.travelerDNA) {
     const tripCtx: PromptTripContext = {
       destination: context.destination,
       destinationCountry: context.destinationCountry,
@@ -4924,8 +4924,8 @@ async function generateSingleDayWithRetry(
       currency: context.currency,
     };
     
-    const flightData = context.flightData || { hasOutboundFlight: false, hasReturnFlight: false };
-    const hotelData = context.hotelData || { hasHotel: false };
+    const flightData = context.flightData || { hasOutboundFlight: false, hasReturnFlight: false } as any;
+    const hotelData = context.hotelData || { hasHotel: false } as any;
     
     const { personaPrompt, dayConstraints } = buildDayPrompt(
       flightData,
@@ -4955,7 +4955,7 @@ async function generateSingleDayWithRetry(
     '9. VARIETY PER DAY: Mix sightseeing, cultural sites, museums, outdoor activities, dining',
     '10. **ACTIVITY TITLE NAMING — CRITICAL**: The "title" field MUST be the venue or experience name ONLY. NEVER append the category, type, or a repeated word. Examples of WRONG titles: "Barton Springs Pool Pool", "Zilker Botanical Garden Garden", "Franklin Barbecue Barbecue", "Cosmic Coffee Coffee & Beer", "Record shopping shopping". CORRECT titles: "Barton Springs Pool", "Zilker Botanical Garden", "Franklin Barbecue", "Cosmic Coffee + Beer Garden". If the place name already contains the activity type (e.g., "Pool", "Garden", "Barbecue", "Coffee"), do NOT add it again.',
     '11. **DINING TITLE — CRITICAL**: For ALL dining/restaurant activities (category: "dining"), the "title" MUST be the restaurant or cafe name. NEVER use the neighborhood, district, or area as the title. Put the neighborhood in the "neighborhood" field instead. WRONG: { title: "Gaslamp Quarter", description: "Juniper & Ivy" }. WRONG: { title: "La Jolla", description: "The Taco Stand fish tacos" }. WRONG: { title: "Balboa Park", description: "The Prado restaurant" }. RIGHT: { title: "Juniper & Ivy", neighborhood: "Gaslamp Quarter" }. RIGHT: { title: "The Taco Stand", description: "fish tacos", neighborhood: "La Jolla" }. RIGHT: { title: "The Prado", neighborhood: "Balboa Park" }.',
-    isFirstDay ? '12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with THREE SEPARATE activity blocks (NEVER combine them into one): (a) "Arrival at Airport" (category: transport), (b) "Airport Transfer to Hotel" (category: transport), (c) "Hotel Check-in" (category: accommodation). Each MUST be its own entry with its own startTime/endTime. NEVER create a single "Arrive and check in" block.' : '',
+    isFirstDay ? '12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with TWO SEPARATE activity blocks (NEVER combine them into one): (a) "Arrival at Airport" (category: transport), (b) "Hotel Check-in & Refresh" (category: accommodation). Each MUST be its own entry with its own startTime/endTime. Do NOT include an "Airport Transfer to Hotel" activity — the transfer is already handled by a separate UI component. Allow sufficient time between airport arrival and hotel check-in for customs, baggage, and transit.' : '',
     isLastDay && context.totalDays > 1 ? '12. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
   ].filter(Boolean).join('\n');
 
@@ -9179,7 +9179,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
             const hotelA = flightHotelResult?.hotelAddress || '';
             const airportN = 'Airport';
             
-            console.log(`[Stage 2.55] Splitting combined arrival block: "${combined.title}" into 3 activities`);
+            console.log(`[Stage 2.55] Splitting combined arrival block: "${combined.title}" into 2 activities (arrival + check-in)`);
             
             const splitActivities = [
               {
@@ -9194,19 +9194,8 @@ If the purpose is a specific event, plan at least ONE full day around that event
               },
               {
                 ...combined,
-                id: `${combined.id}-transfer`,
-                title: `Airport Transfer to ${hotelN}`,
-                description: `Take a taxi or private transfer from ${airportN} to ${hotelN}`,
-                startTime: transferStart,
-                endTime: transferEnd,
-                category: 'transport',
-                type: 'transport',
-                location: { name: hotelN, address: hotelA },
-              },
-              {
-                ...combined,
                 id: `${combined.id}-checkin`,
-                title: 'Hotel Check-in',
+                title: 'Hotel Check-in & Refresh',
                 description: 'Check in, freshen up, and get oriented to the area',
                 startTime: checkInStart,
                 endTime: checkInEnd,
@@ -9218,7 +9207,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
             
             day1.activities.splice(combinedIdx, 1, ...splitActivities);
             aiResult.days[0] = day1;
-            console.log(`[Stage 2.55] ✓ Split into: Arrival (${combined.startTime}-${arrivalEnd}), Transfer (${transferStart}-${transferEnd}), Check-in (${checkInStart}-${checkInEnd})`);
+            console.log(`[Stage 2.55] ✓ Split into: Arrival (${combined.startTime}-${arrivalEnd}), Check-in (${checkInStart}-${checkInEnd})`);
           }
         }
       }
@@ -12834,6 +12823,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             rating?: unknown;
             website?: string;
             viatorProductCode?: string;
+            suggestedFor?: string;
           };
           
           return {
@@ -12861,6 +12851,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             rating: a.rating || null,
             website: a.website || null,
             viator_product_code: a.viatorProductCode || null,
+            suggested_for: a.suggestedFor || null,
           };
         });
         
