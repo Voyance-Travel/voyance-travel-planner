@@ -2853,13 +2853,14 @@ export default function Start() {
                                      }
                                    } else if (c.type === 'time_block') {
                                      const duration = (c as any).duration || 120;
-                                     const endTime = c.time ? addMinsToTime(c.time, duration) : c.time;
-                                     if (c.day && c.time) {
-                                       rules.push({
-                                         type: 'blocked_time',
-                                         days: [`day_${c.day}`],
-                                         from: c.time,
-                                         to: endTime || c.time,
+                                      const normalizedTime = c.time ? normalizeTimeTo24h(c.time) : c.time;
+                                      const endTime = normalizedTime ? addMinsToTime(normalizedTime, duration) : normalizedTime;
+                                      if (c.day && c.time) {
+                                        rules.push({
+                                          type: 'blocked_time',
+                                          days: [`day_${c.day}`],
+                                          from: normalizedTime || c.time,
+                                          to: endTime || normalizedTime || c.time,
                                          reason: c.description,
                                        });
                                      } else if (c.time) {

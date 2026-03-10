@@ -651,6 +651,10 @@ function getTimeForPreference(pref?: 'morning' | 'afternoon' | 'evening' | 'any'
 
 /** Compute the blocked start/end times for an all-day or half-day event */
 export function getBlockedTimeRange(s: ScheduledMustDo): { blockedStart: string; blockedEnd: string } {
+  // Prefer explicit user-specified times (e.g., "9am-5pm") over inferred defaults
+  if (s.priority.explicitStartTime && s.priority.explicitEndTime) {
+    return { blockedStart: s.priority.explicitStartTime, blockedEnd: s.priority.explicitEndTime };
+  }
   const startTime = s.assignedTime || getTimeForPreference(s.priority.preferredTime);
   const durationMins = s.priority.estimatedDuration || (s.priority.activityType === 'all_day_event' ? 480 : 180);
   const startMins = parseHHMM(startTime);

@@ -8469,6 +8469,65 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           }
         }
 
+        // =======================================================================
+        // DETERMINISTIC EVENT BACKFILL
+        // If any must-do event is STILL missing from the day (model skipped it),
+        // inject a synthetic activity entry so the card always appears.
+        // =======================================================================
+        if (mustDoEventItems.length > 0) {
+          for (const eventItem of mustDoEventItems) {
+            const { blockedStart, blockedEnd } = getBlockedTimeRange(eventItem);
+            const eventTitleLower = eventItem.priority.title.toLowerCase();
+
+            // Check if an activity matching this event already exists
+            const eventExists = generatedDay.activities.some((act: any) => {
+              const actTitle = (act.title || '').toLowerCase();
+              return actTitle.includes(eventTitleLower) || eventTitleLower.includes(actTitle);
+            });
+
+            if (!eventExists) {
+              console.log(`[generate-day] ⚠️ BACKFILL: Must-do event "${eventItem.priority.title}" missing from Day ${dayNumber} — injecting deterministic activity card`);
+
+              // Find the right insertion point (chronological order)
+              let insertIndex = generatedDay.activities.length;
+              const blockedStartMins = parseTimeToMinutes(blockedStart);
+              for (let i = 0; i < generatedDay.activities.length; i++) {
+                const act = generatedDay.activities[i];
+                const actStart = parseTimeToMinutes(act.startTime);
+                if (actStart !== null && blockedStartMins !== null && actStart >= blockedStartMins) {
+                  insertIndex = i;
+                  break;
+                }
+              }
+
+              const syntheticEvent = {
+                id: crypto.randomUUID(),
+                title: eventItem.priority.title,
+                startTime: blockedStart,
+                endTime: blockedEnd,
+                category: 'activity',
+                description: `${eventItem.priority.title} — user's scheduled event for this day.${eventItem.priority.requiresBooking ? ' Tickets/advance booking required.' : ''}`,
+                location: eventItem.priority.venueName
+                  ? { name: eventItem.priority.venueName }
+                  : { name: eventItem.priority.title },
+                estimatedCost: { amount: 0, currency: 'USD' },
+                tips: `This is your dedicated ${eventItem.priority.title} day. Arrive early to get settled and enjoy the full experience.`,
+                crowdLevel: 'high',
+                isHiddenGem: false,
+                hasTimingHack: false,
+                voyanceInsight: `Multi-day event attendance — enjoy today's experience!`,
+                personalization: {
+                  whyThisFits: `You specifically requested ${eventItem.priority.title} for this day.`,
+                },
+                bookingRequired: eventItem.priority.requiresBooking || false,
+              };
+
+              generatedDay.activities.splice(insertIndex, 0, syntheticEvent);
+              console.log(`[generate-day] ✅ BACKFILL: Injected "${eventItem.priority.title}" at position ${insertIndex} (${blockedStart}–${blockedEnd})`);
+            }
+          }
+        }
+
         // If AI omitted the travel activity, inject deterministic fallback
         // =======================================================================
         if (resolvedIsTransitionDay && resolvedTransitionFrom && resolvedTransitionTo) {
