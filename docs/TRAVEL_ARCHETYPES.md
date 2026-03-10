@@ -219,7 +219,7 @@ Based on extreme trait scores (values >7 or <-7):
 - **Backend Scoring**: High flexibility + discovery + low structure
 - **Emotional Hook**: "Finding yourself requires getting lost first"
 
-#### 22. The Midlife Explorer
+#### 22. The Rediscovery Traveler
 - **ID**: `midlife_explorer`
 - **Rarity**: uncommon
 - **Primary Motivation**: Rediscovering self through new horizons
