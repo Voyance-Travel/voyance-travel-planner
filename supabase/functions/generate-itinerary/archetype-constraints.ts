@@ -1437,37 +1437,37 @@ VIOLATIONS:
     identity: "The Boundless Explorer",
     category: "Transformer",
     meaning: `
-This traveler has time and is enjoying it.
+This traveler has the gift of TIME and they're using every bit of it.
 
 They want:
-- Comfortable pacing
-- Accessible activities
-- Quality experiences
-- Good food
-- Interesting but not exhausting
-- Time to enjoy
+- Comfortable pacing — no rushing, ever
+- Accessible activities that don't require extreme physical effort
+- Quality experiences — they've earned them
+- Good food, well-chosen restaurants
+- Interesting and enriching, but not exhausting
+- Time to actually enjoy every moment
 
 Their ideal day:
-- Leisurely breakfast
+- Leisurely breakfast — no alarm clock
 - One morning activity (not too much walking)
-- Nice lunch
+- Nice lunch with no rush
 - Afternoon rest or light activity
-- Early dinner
-- Early evening (not late nights)
+- Early dinner at a well-chosen spot
+- Early evening — comfortable wind-down
 
-WHAT "RETIREMENT" MEANS:
-- Comfort matters
-- Accessibility matters
-- No rushing ever
+WHAT "BOUNDLESS" MEANS:
+- Comfort matters — they've earned it
+- Accessibility matters — not every experience requires stairs
+- No rushing, ever
 - Quality over quantity
-- Early dinners are fine
+- They have the freedom to linger
 
 VIOLATIONS:
-- Extreme walking = VIOLATION
+- Extreme walking distances = VIOLATION
 - Late-night activities = VIOLATION
-- Budget/hostel focus = VIOLATION
-- Physically demanding activities = VIOLATION
-- Youth-focused venues = VIOLATION
+- Budget accommodations = VIOLATION
+- Physically demanding experiences = VIOLATION
+- Rushed itineraries = VIOLATION
 `,
     avoid: [
       'Extreme walking distances',
