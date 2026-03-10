@@ -4255,6 +4255,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       slow_traveler: "Slow family trip - no rushing, long beach days, relaxed kid pace.",
       culinary_cartographer: "Foodie family - cooking classes, food tours, teaching kids about food.",
       art_aficionado: "Art family - kid-friendly museums, hands-on art activities, creative fun.",
+      history_hunter: "History family - interactive historical sites, kid-friendly heritage tours, ancient stories come alive.",
       luxury_luminary: "Luxury family - five-star family resorts, kids clubs, family suites.",
       eco_ethicist: "Eco family - teaching sustainability, nature, conservation experiences.",
       gap_year_graduate: "Budget family - camping, picnics, free activities, creative fun.",
