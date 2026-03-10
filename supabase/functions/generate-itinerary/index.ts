@@ -2761,6 +2761,7 @@ interface FlightHotelContextResult {
   latestLastActivityTime?: string;
   hotelName?: string;
   hotelAddress?: string;
+  arrivalAirport?: string;
   // Phase 9: Raw data for prompt library extractors
   rawFlightSelection?: unknown;
   rawHotelSelection?: unknown;
@@ -3246,6 +3247,7 @@ async function getFlightHotelContext(supabase: any, tripId: string): Promise<Fli
       latestLastActivityTime: latestLastActivity,
       hotelName,
       hotelAddress,
+      arrivalAirport: arrivalAirport as string | undefined,
       // Phase 9: Pass raw data for prompt library extractors
       rawFlightSelection: trip.flight_selection,
       rawHotelSelection: trip.hotel_selection,
@@ -8813,7 +8815,7 @@ ${'='.repeat(60)}
       if (context.mustDoActivities && context.mustDoActivities.trim()) {
         // Keep all user itinerary anchors as must-have when Smart Finish was requested.
         const forceAllMust = !!context.isSmartFinish || !!context.smartFinishRequested;
-        const mustDoAnalysis = parseMustDoInput(context.mustDoActivities, context.destination, forceAllMust);
+        const mustDoAnalysis = parseMustDoInput(context.mustDoActivities, context.destination, forceAllMust, context.startDate, context.totalDays);
         
         // ═══════════════════════════════════════════════════════════════════════
         // CROSS-REFERENCE: Match must-do items against discovered local events
@@ -9177,7 +9179,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
             
             const hotelN = flightHotelResult?.hotelName || 'Hotel';
             const hotelA = flightHotelResult?.hotelAddress || '';
-            const airportN = 'Airport';
+            const airportN = flightHotelResult?.arrivalAirport || 'Airport';
             
             console.log(`[Stage 2.55] Splitting combined arrival block: "${combined.title}" into 2 activities (arrival + check-in)`);
             
@@ -9354,7 +9356,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
       if (context.mustDoActivities && context.mustDoActivities.trim()) {
         try {
           const forceAllMust = !!context.isSmartFinish || !!context.smartFinishRequested;
-          const mustDoCheck = parseMustDoInput(context.mustDoActivities, context.destination, forceAllMust);
+          const mustDoCheck = parseMustDoInput(context.mustDoActivities, context.destination, forceAllMust, context.startDate, context.totalDays);
           if (mustDoCheck.length > 0) {
             const itineraryForValidation = aiResult.days.map((d: any) => ({
               dayNumber: d.dayNumber,
@@ -10097,7 +10099,7 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
 
       if (mustDoActivities.trim()) {
         const forceAllMust = !!isSmartFinish || !!smartFinishRequested;
-        const mustDoAnalysis = parseMustDoInput(mustDoActivities, destination, forceAllMust);
+        const mustDoAnalysis = parseMustDoInput(mustDoActivities, destination, forceAllMust, preferences?.startDate || date?.split('T')[0], totalDays);
         if (mustDoAnalysis.length > 0) {
           const scheduled = scheduleMustDos(mustDoAnalysis, totalDays);
           // Only include items relevant to this day
@@ -10209,7 +10211,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
 
         // Defense-in-depth: parse additionalNotes for events that should be in the must-do pipeline
         if (!mustDoPrompt.trim()) {
-          const detectedFromNotes = parseMustDoInput(additionalNotes, destination, false);
+          const detectedFromNotes = parseMustDoInput(additionalNotes, destination, false, preferences?.startDate || date?.split('T')[0], totalDays);
           const eventItems = detectedFromNotes.filter(p => p.activityType === 'all_day_event' || p.activityType === 'half_day_event');
           if (eventItems.length > 0) {
             const scheduled = scheduleMustDos(eventItems, totalDays);
@@ -10299,9 +10301,10 @@ If the purpose is a specific event, plan at least ONE full day around that event
           const settleInEnd = addMinutesToHHMM(hotelCheckIn, 30);     // 30 min to settle
           const earliestSightseeing = addMinutesToHHMM(settleInEnd, 30); // 30 min buffer
           
-          // Hotel context for prompts
+          // Hotel and airport context for prompts
           const hotelNameDisplay = flightContext.hotelName || 'Selected Hotel';
           const hotelAddressDisplay = flightContext.hotelAddress || 'Hotel Address';
+          const arrivalAirportDisplay = flightContext.arrivalAirport || 'Airport';
           
           console.log(`[Day1-Decision] Arrival at ${arrival24}: morning=${isMorningArrival}, afternoon=${isAfternoonArrival}, evening=${isEveningArrival}`);
           console.log(`[Day1-Decision] Timeline: customs=${customsClearance}, transfer=${transferStart}-${transferEnd}, checkin=${hotelCheckIn}, earliest activity=${earliestSightseeing}`);
@@ -10319,7 +10322,7 @@ TRAVELER CONTEXT:
 - Consider their energy level when planning activities
 
 REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity entry, NEVER combine into one):
-1. "Arrival at Airport" 
+1. "Arrival at ${arrivalAirportDisplay}" 
    - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
    - category: "transport"
    - description: "Clear customs and collect luggage"
@@ -10350,7 +10353,7 @@ THE FLIGHT LANDS AT ${arrival24} (${flightContext.arrivalTime || arrival24}).
 This is an AFTERNOON ARRIVAL.
 
 REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity entry, NEVER combine into one):
-1. "Arrival at Airport"
+1. "Arrival at ${arrivalAirportDisplay}"
    - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
    - category: "transport"
    - description: "Clear customs and collect luggage"
@@ -10380,7 +10383,7 @@ THE FLIGHT LANDS AT ${arrival24} (${flightContext.arrivalTime || arrival24}).
 This is an EVENING ARRIVAL - limited time for activities today.
 
 REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity entry, NEVER combine into one):
-1. "Arrival at Airport"
+1. "Arrival at ${arrivalAirportDisplay}"
    - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
    - category: "transport"
    - ⚠️ This MUST be its own activity block — do NOT merge with check-in
@@ -12121,7 +12124,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         if (mustDoActivities && mustDoActivities.trim()) {
           try {
             const forceAllMust = !!isSmartFinish || !!smartFinishRequested;
-            const dayMustDos = parseMustDoInput(mustDoActivities, destination, forceAllMust)
+            const dayMustDos = parseMustDoInput(mustDoActivities, destination, forceAllMust, preferences?.startDate || date?.split('T')[0], totalDays)
               .filter(m => m.priority === 'must');
 
             if (dayMustDos.length > 0) {
