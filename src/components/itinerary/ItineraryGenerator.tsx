@@ -637,7 +637,6 @@ export function ItineraryGenerator({
           // The Edge Function may have already received the request and is generating.
           // Start polling to check if generation is actually in progress.
           setServerGenActive(true);
-          toast('Checking generation status...', { duration: 3000 });
           return;
         }
       } else if (gateResult.mode === 'partial') {
