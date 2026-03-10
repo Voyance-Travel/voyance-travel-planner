@@ -2518,12 +2518,7 @@ export function EditorialItinerary({
     setSwapDrawerOpen(false);
     setSwapTarget(null);
     setSwapDrawerActivity(null);
-    // QA-015: Show accurate free/paid toast based on server response
-    if (swapCreditResult?.freeCapUsed) {
-      toast.success(`Swapped activity (free, ${swapCreditResult.usageCount}/${swapCreditResult.freeCap} used)`);
-    } else {
-      toast.success(`Swapped activity (${swapCreditResult?.spent ?? CREDIT_COSTS.SWAP_ACTIVITY} credits used)`);
-    }
+    toast.success('Activity swapped!');
   }, [swapTarget, tripCurrency, isPaid, spendCredits, tripId, days, syncBudgetFromDays]);
 
   // Supports both database trips and localStorage demo trips
