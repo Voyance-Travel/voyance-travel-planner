@@ -680,6 +680,7 @@ function getArchetypeCategory(id: string): string {
     art_aficionado: 'CURATOR',
     luxury_luminary: 'CURATOR',
     eco_ethicist: 'CURATOR',
+    history_hunter: 'CURATOR',
     // TRANSFORMER
     gap_year_graduate: 'TRANSFORMER',
     midlife_explorer: 'TRANSFORMER',
