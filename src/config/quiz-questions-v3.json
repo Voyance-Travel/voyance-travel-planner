@@ -1702,7 +1702,7 @@
       }
     },
     "midlife_explorer": {
-      "name": "Midlife Explorer",
+      "name": "The Rediscovery Traveler",
       "category": "TRANSFORMER",
       "required": {
         "quality_intrinsic": { "min": 0.5 }
