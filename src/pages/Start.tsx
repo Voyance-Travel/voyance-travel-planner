@@ -2796,31 +2796,76 @@ export default function Start() {
                                 ? details.mustDoActivities.split(',').map((s: string) => s.trim()).filter(Boolean)
                                 : null;
 
-                              // Convert userConstraints → generationRules format the engine reads
-                              let generationRules: Array<Record<string, unknown>> | null = null;
-                              if (details.userConstraints?.length) {
-                                const rules: Array<Record<string, unknown>> = [];
-                                for (const c of details.userConstraints) {
-                                  if (c.type === 'full_day_event' && c.allDay && c.day) {
-                                    rules.push({
-                                      type: 'blocked_time',
-                                      days: [`day_${c.day}`],
-                                      from: '00:00',
-                                      to: '23:59',
-                                      reason: c.description,
-                                    });
-                                  } else if (c.type === 'time_block' && c.day && c.time) {
-                                    rules.push({
-                                      type: 'blocked_time',
-                                      days: [`day_${c.day}`],
-                                      from: c.time,
-                                      to: c.time,
-                                      reason: c.description,
-                                    });
-                                  }
-                                }
-                                generationRules = rules.length > 0 ? rules : null;
-                              }
+                               // Convert userConstraints → generationRules format the engine reads
+                               const addMinsToTime = (time: string, minutes: number): string => {
+                                 const [h, m] = time.split(':').map(Number);
+                                 const totalMins = h * 60 + m + minutes;
+                                 const newH = Math.floor(totalMins / 60) % 24;
+                                 const newM = totalMins % 60;
+                                 return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
+                               };
+
+                               let generationRules: Array<Record<string, unknown>> | null = null;
+                               if (details.userConstraints?.length) {
+                                 const rules: Array<Record<string, unknown>> = [];
+                                 for (const c of details.userConstraints) {
+                                   if (c.type === 'full_day_event' && c.allDay) {
+                                     if (c.day) {
+                                       rules.push({
+                                         type: 'blocked_time',
+                                         days: [`day_${c.day}`],
+                                         from: '00:00',
+                                         to: '23:59',
+                                         reason: c.description,
+                                       });
+                                     } else {
+                                       rules.push({
+                                         type: 'full_day_event',
+                                         reason: c.description,
+                                         note: 'User requested this as a full-day event but did not specify which day. The must-do scheduler should assign it.',
+                                       });
+                                     }
+                                   } else if (c.type === 'time_block') {
+                                     const duration = (c as any).duration || 120;
+                                     const endTime = c.time ? addMinsToTime(c.time, duration) : c.time;
+                                     if (c.day && c.time) {
+                                       rules.push({
+                                         type: 'blocked_time',
+                                         days: [`day_${c.day}`],
+                                         from: c.time,
+                                         to: endTime || c.time,
+                                         reason: c.description,
+                                       });
+                                     } else if (c.time) {
+                                       rules.push({
+                                         type: 'time_preference',
+                                         time: c.time,
+                                         duration,
+                                         reason: c.description,
+                                         note: 'User requested this at a specific time but did not specify which day.',
+                                       });
+                                     }
+                                   } else if (c.type === 'avoid') {
+                                     rules.push({
+                                       type: 'avoid',
+                                       reason: c.description,
+                                     });
+                                   } else if (c.type === 'preference') {
+                                     rules.push({
+                                       type: 'preference',
+                                       reason: c.description,
+                                     });
+                                   } else if (c.type === 'flight') {
+                                     rules.push({
+                                       type: 'flight_constraint',
+                                       day: c.day ? `day_${c.day}` : undefined,
+                                       time: c.time,
+                                       reason: c.description,
+                                     });
+                                   }
+                                 }
+                                 generationRules = rules.length > 0 ? rules : null;
+                               }
 
                               return {
                                 mustDoActivities: mustDo,
