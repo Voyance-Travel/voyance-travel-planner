@@ -8944,7 +8944,25 @@ If the purpose is a specific event, plan at least ONE full day around that event
           // Hotel and airport context for prompts
           const hotelNameDisplay = flightContext.hotelName || 'Selected Hotel';
           const hotelAddressDisplay = flightContext.hotelAddress || 'Hotel Address';
-          const arrivalAirportDisplay = flightContext.arrivalAirport || 'Airport';
+          // Enhanced airport name extraction with metadata fallback
+          let arrivalAirportDisplay = flightContext.arrivalAirport || '';
+          if (!arrivalAirportDisplay && metadata?.flightDetails) {
+            const flightStr = typeof metadata.flightDetails === 'string' ? metadata.flightDetails : '';
+            const airportMatch = flightStr.match(/\b(JFK|LaGuardia|LGA|EWR|Newark|LAX|SFO|ORD|ATL|DFW|MIA|BOS|SEA|DEN|PHX)\b/i);
+            if (airportMatch) {
+              const airportNames: Record<string, string> = {
+                'JFK': 'JFK Airport', 'LAGUARDIA': 'LaGuardia Airport (LGA)', 'LGA': 'LaGuardia Airport (LGA)',
+                'EWR': 'Newark Liberty Airport (EWR)', 'NEWARK': 'Newark Liberty Airport (EWR)',
+                'LAX': 'Los Angeles Airport (LAX)', 'SFO': 'San Francisco Airport (SFO)',
+                'ORD': "O'Hare Airport (ORD)", 'ATL': 'Hartsfield-Jackson Airport (ATL)',
+                'DFW': 'Dallas/Fort Worth Airport (DFW)', 'MIA': 'Miami Airport (MIA)',
+                'BOS': 'Boston Logan Airport (BOS)', 'SEA': 'Seattle-Tacoma Airport (SEA)',
+                'DEN': 'Denver Airport (DEN)', 'PHX': 'Phoenix Sky Harbor Airport (PHX)',
+              };
+              arrivalAirportDisplay = airportNames[airportMatch[1].toUpperCase()] || `${airportMatch[1]} Airport`;
+            }
+          }
+          arrivalAirportDisplay = arrivalAirportDisplay || 'Airport';
           
           console.log(`[Day1-Decision] Arrival at ${arrival24}: morning=${isMorningArrival}, afternoon=${isAfternoonArrival}, evening=${isEveningArrival}`);
           console.log(`[Day1-Decision] Timeline: customs=${customsClearance}, transfer=${transferStart}-${transferEnd}, checkin=${hotelCheckIn}, earliest activity=${earliestSightseeing}`);
