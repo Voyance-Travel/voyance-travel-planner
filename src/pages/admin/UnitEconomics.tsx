@@ -864,7 +864,7 @@ function ProjectionsTab({ data }: { data: UnitEconomicsData }) {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Revenue Mix Breakdown</CardTitle>
-          <CardDescription>At the "{mix.label}" mix — what are people purchasing?</CardDescription>
+          <CardDescription>At the "{mix.label}" mix: what are people purchasing?</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
