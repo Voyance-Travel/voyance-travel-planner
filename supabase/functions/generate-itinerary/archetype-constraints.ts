@@ -1239,35 +1239,35 @@ VIOLATIONS:
     identity: "The Horizon Chaser",
     category: "Transformer",
     meaning: `
-This traveler is young, budget-conscious, and experience-hungry.
+This traveler is chasing their first big adventure — or their next one. Budget-smart, experience-hungry, and ready for anything.
 
 They want:
-- Backpacker vibes
-- Budget accommodations (hostels OK)
-- Street food and cheap eats
-- Meeting other travelers
+- Maximum experiences on a reasonable budget
+- Social travel — meeting other travelers and locals
+- Street food and authentic local eats over fancy restaurants
 - Authentic experiences over comfort
-- Stories over luxury
+- Stories worth telling
+- Nightlife and spontaneous plans
 
 Their ideal day:
-- Hostel breakfast
-- Free walking tour
+- Morning: free walking tour or self-guided exploration
 - Street food lunch
-- Afternoon exploration
-- Sunset beers with travelers
-- Night out
+- Afternoon: adventure or cultural exploration
+- Sunset drinks with new friends
+- Night out — local bars, live music, whatever happens
 
-WHAT "GAP YEAR" MEANS:
-- Budget is tight
-- Social is important
-- Comfort is not priority
+WHAT "HORIZON CHASER" MEANS:
+- Budget is smart, not restrictive
+- Social energy is high
+- Comfort is nice but not the priority
 - Experience over everything
+- Every trip is an adventure, regardless of age
 
 VIOLATIONS:
-- Expensive restaurants = VIOLATION
+- Expensive fine dining = VIOLATION
 - Private tours = VIOLATION
 - Luxury anything = VIOLATION
-- Solo/isolated experiences = VIOLATION
+- Isolated/solo-only experiences = VIOLATION
 `,
     avoid: [
       'Expensive restaurants',
