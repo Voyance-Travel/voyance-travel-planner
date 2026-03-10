@@ -25,7 +25,7 @@ const BETA_TESTIMONIALS = [
     id: 3,
     quote: "Planned a girls' trip to New York in 10 minutes. The group blend feature figured out what all four of us would love.",
     name: "Maria K.",
-    archetype: "Connection Curator",
+    archetype: "Social Butterfly",
     trip: "New York, 4 days",
     isReal: true,
   },

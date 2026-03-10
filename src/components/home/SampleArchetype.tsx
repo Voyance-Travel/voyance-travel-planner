@@ -45,7 +45,7 @@ const FEATURED_ARCHETYPES = [
   },
   {
     id: 'social_butterfly',
-    name: 'Connection Curator',
+    name: 'Social Butterfly',
     tagline: 'You collect friends, not souvenirs',
     icon: Heart,
     category: 'CONNECTOR',

@@ -255,7 +255,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
   // ═══════════════════════════════════════
   {
     id: 'social_butterfly',
-    name: 'The Connection Curator',
+    name: 'The Social Butterfly',
     category: 'CONNECTOR',
     tagline: "Every stranger is a friend you haven't met.",
     primaryTraits: [

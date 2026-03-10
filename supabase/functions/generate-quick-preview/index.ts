@@ -92,7 +92,7 @@ const PREVIEW_ARCHETYPES = [
   { name: "Adventure Chaser", tagline: "Comfort zones are overrated.", style: "active exploration, outdoor adventures, thrill-seeking, off-the-beaten-path" },
   { name: "Foodie Voyager", tagline: "Tell me what you eat. I'll tell you where to go.", style: "culinary adventures, local food markets, cooking classes, hidden restaurants" },
   { name: "Wellness Wanderer", tagline: "Travel should leave you better than it found you.", style: "mindful travel, spa retreats, nature walks, healthy dining, restorative experiences" },
-  { name: "Connection Curator", tagline: "Strangers are just friends you haven't met yet.", style: "group activities, nightlife, social dining, community events, local meetups" },
+  { name: "Social Butterfly", tagline: "Strangers are just friends you haven't met yet.", style: "group activities, nightlife, social dining, community events, local meetups" },
 ];
 
 function getRandomArchetype() {
