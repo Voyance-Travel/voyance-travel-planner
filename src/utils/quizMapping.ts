@@ -745,7 +745,6 @@ function extractEmotionalDrivers(answers: Record<string, string | string[]>): st
     // Primary quiz values
     explorer: ['discovery', 'curiosity', 'growth'],
     escape_artist: ['freedom', 'peace', 'renewal'],
-    curated_luxe: ['comfort', 'excellence', 'indulgence'],
     story_seeker: ['connection', 'meaning', 'understanding'],
     // Extended archetypes
     cultural_anthropologist: ['discovery', 'authenticity', 'connection'],

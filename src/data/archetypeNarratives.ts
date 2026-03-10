@@ -413,31 +413,6 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
     perfectTripPreview: "You discover what others overlook.",
     emoji: "🧭"
   },
-  curated_luxe: {
-    id: 'curated_luxe',
-    name: 'Curated Luxe',
-    category: 'CURATOR',
-    hookLine: "You don't travel, you orchestrate experiences.",
-    coreDescription: "Excellence isn't negotiable. You've learned that the best things in life require curation, and your travels reflect that philosophy. Every detail is intentional.",
-    whatThisMeans: [
-      "You book months in advance for the perfect experience",
-      "Quality matters more than quantity",
-      "You know the difference between expensive and valuable",
-      "Every trip teaches you something refined"
-    ],
-    superpowers: [
-      "Spotting excellence in any setting",
-      "Creating seamless, memorable experiences",
-      "Appreciating craftsmanship in all forms"
-    ],
-    growthEdges: [
-      "Spontaneity has its own luxury",
-      "Some of the best meals cost nothing",
-      "Imperfection tells better stories"
-    ],
-    perfectTripPreview: "You seek excellence in every detail.",
-    emoji: "💎"
-  },
   community_builder: {
     id: 'community_builder',
     name: 'The Purpose Voyager',

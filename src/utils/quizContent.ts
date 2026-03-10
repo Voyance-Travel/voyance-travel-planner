@@ -14,10 +14,6 @@ export const travelerTypeLabels = {
     title: 'Escape Artist',
     description: 'You travel to disconnect, recharge, and find peace',
   },
-  curatedLuxe: {
-    title: 'Curated Luxe',
-    description: 'You appreciate refined experiences and premium accommodations',
-  },
   storySeeker: {
     title: 'Story Seeker',
     description: 'You collect memorable moments and cultural experiences',

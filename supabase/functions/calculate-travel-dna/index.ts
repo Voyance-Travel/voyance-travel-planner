@@ -1833,7 +1833,7 @@ function calculateRarity(primary: string, secondary: string | null): string {
   const commonCombos = [
     ['zen_seeker', 'slow_traveler'],
     ['cultural_anthropologist', 'culinary_cartographer'],
-    ['luxury_luminary', 'curated_luxe'],
+    ['luxury_luminary', 'status_seeker'],
     ['adrenaline_architect', 'wilderness_pioneer'],
   ];
   
