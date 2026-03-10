@@ -7030,6 +7030,10 @@ function FlightSyncWarning({ flightArrivalTime, day1FirstActivity, onSyncDay1, i
   const FLIGHT_BUFFER_MINS = 105; // 1h customs + 45m transit — same as cascadeTransportToItinerary
   const expectedEarliest = flightMins + FLIGHT_BUFFER_MINS;
 
+  // If the arrival activity starts within 5 minutes of flight arrival, times are aligned — no warning
+  const timesAreAligned = Math.abs(activityMins - flightMins) <= 5;
+  if (timesAreAligned) return null;
+
   // The warning should only fire if:
   // 1. First activity starts BEFORE the expected earliest (schedule is too early), OR
   // 2. First activity starts more than 3 hours AFTER the expected earliest (unreasonable gap)
