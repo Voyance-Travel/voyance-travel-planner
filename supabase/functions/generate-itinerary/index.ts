@@ -6728,7 +6728,18 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
               mustDoPrompt = `\n## User's Researched Venues (try to include if appropriate)\n${unscheduledItems.map(u => `- ${u.priority.title} (${u.priority.priority})`).join('\n')}\n`;
             }
           }
-          console.log(`[generate-day] Must-do activities parsed: ${mustDoAnalysis.length} items, ${dayItems.length} for day ${dayNumber}, ${mustDoEventItems.length} events`);
+          console.log(`[generate-day] Must-do activities parsed: ${mustDoAnalysis.length} items total`);
+          console.log(`[generate-day] Day ${dayNumber}: ${dayItems.length} assigned items, ${mustDoEventItems.length} event(s)`);
+          for (const di of dayItems) {
+            console.log(`[generate-day]   → "${di.priority.title}" (${di.priority.activityType}, preferredDay=${di.priority.preferredDay}, assigned=${di.assignedDay})`);
+          }
+          if (mustDoEventItems.length === 0 && dayItems.length === 0) {
+            const allScheduled = scheduled.scheduled;
+            console.log(`[generate-day] ⚠️ No items for Day ${dayNumber}. Full schedule:`);
+            for (const s of allScheduled) {
+              console.log(`[generate-day]   → "${s.priority.title}" assigned to Day ${s.assignedDay} (preferred=${s.priority.preferredDay})`);
+            }
+          }
           
           // Add global must-do context so this day knows about other days' committed activities
           const otherDayItems = scheduled.scheduled.filter(s => s.assignedDay !== dayNumber);

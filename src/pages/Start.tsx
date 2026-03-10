@@ -2852,7 +2852,10 @@ export default function Start() {
                                        });
                                      }
                                    } else if (c.type === 'time_block') {
-                                     const duration = (c as any).duration || 120;
+                                      const rawDuration = (c as any).duration;
+                                     const duration = (typeof rawDuration === 'number' && !isNaN(rawDuration) && rawDuration > 0)
+                                       ? rawDuration
+                                       : (typeof rawDuration === 'string' ? parseInt(rawDuration, 10) || 120 : 120);
                                       const normalizedTime = c.time ? normalizeTimeTo24h(c.time) : c.time;
                                       const endTime = normalizedTime ? addMinsToTime(normalizedTime, duration) : normalizedTime;
                                       if (c.day && c.time) {
