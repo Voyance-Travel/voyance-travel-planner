@@ -1783,6 +1783,24 @@ Also avoid:
 - "Experience" as noun unless it's an actual experience (cooking class = OK, "walking experience" = NO)
 - "Journey" "Discovery" "Exploration" as activity names
 - Marketing language: "Authentic", "Hidden Gem", "Local Secret"
+
+ALSO BANNED: promotional adjectives that make activity titles sound like ad copy:
+- "Elite" (e.g., "Elite Comedy Performance" → just "Comedy Show at [venue name]")
+- "Premium" (e.g., "Premium Dining" → "Dinner at [restaurant]")
+- "World-Class" / "World Class"
+- "Signature" (unless it's literally a signature dish name)
+- "Exclusive" / "VIP" (unless the activity genuinely is a VIP ticket)
+- "Unforgettable" / "Spectacular" / "Iconic"
+- "Immersive" (unless it's literally an immersive theater/art show)
+- "Ultimate" / "Quintessential"
+- "Artisan" / "Artisanal" (unless it's literally an artisan workshop)
+
+NAMING PRINCIPLE: Write titles like a knowledgeable friend would text them to you, not like a tourism brochure.
+
+GOOD: "Comedy show at Comedy Cellar", "Dinner at Carbone", "Walk across Brooklyn Bridge"
+BAD: "Elite Comedy Performance", "Signature Italian Dining Experience", "Iconic Bridge Crossing"
+
+If a venue has a real name, USE IT in the title. "Dinner at Joe's Pizza" beats "Authentic NYC Pizza Experience" every time.
 `;
 }
 
