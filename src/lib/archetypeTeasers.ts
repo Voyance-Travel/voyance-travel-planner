@@ -70,7 +70,7 @@ export const ARCHETYPE_TEASERS: Record<string, ArchetypeTeaser> = {
     ],
   },
   retreat_regular: {
-    name: "Retreat Regular",
+    name: "The Wellness Devotee",
     oneLiner: "Vacation should feel like vacation. Rest is the point.",
     typicalTrip: [
       "Packed schedule, no downtime",
