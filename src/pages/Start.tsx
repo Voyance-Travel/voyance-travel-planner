@@ -3015,6 +3015,30 @@ export default function Start() {
                           }
                         }
 
+                        // Insert linked guests as trip collaborators (mirrors form path)
+                        if (linkedGuests.length > 0) {
+                          const collabRows = linkedGuests
+                            .filter((g) => g.isVoyanceUser)
+                            .map((g) => ({
+                              trip_id: trip.id,
+                              user_id: g.id,
+                              permission: g.permission,
+                              invited_by: user.id,
+                              accepted_at: new Date().toISOString(),
+                              include_preferences: g.includePreferences,
+                            }));
+                          if (collabRows.length > 0) {
+                            const { error: collabError } = await supabase
+                              .from('trip_collaborators')
+                              .insert(collabRows);
+                            if (collabError) {
+                              console.error('[Start] Failed to insert collaborators (chat path):', collabError);
+                            } else {
+                              console.log(`[Start] Linked ${collabRows.length} guests to chat trip ${trip.id}`);
+                            }
+                          }
+                        }
+
                         navigate(`/trip/${trip.id}?generate=true`);
                       } catch (err) {
                         console.error('Error creating chat trip:', err);
