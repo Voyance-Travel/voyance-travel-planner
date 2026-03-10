@@ -4605,7 +4605,10 @@ function validateGeneratedDay(day: StrictDay, dayNumber: number, isFirstDay: boo
       
       // Transport/logistics adjacency is expected in real itineraries (e.g. rideshare -> venue)
       if (!currIsTransportLike && !prevIsTransportLike && conceptSimilarity(currConcept, prevConcept)) {
-        if (isSmartFinish) {
+        // Skip dedup for recurring events the user explicitly requested (e.g., "US Open both days")
+        if (isRecurringEvent(act, mustDoActivities)) {
+          // Allow — user wants this activity repeated
+        } else if (isSmartFinish) {
           // In Smart Finish, user anchors may cluster around neighborhoods — downgrade to warning
           warnings.push(`Activities ${i} and ${i + 1} are similar: "${prevAct.title}" followed by "${act.title}" - consider adding variety`);
         } else {
