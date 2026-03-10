@@ -15,6 +15,7 @@ import { useCredits } from './useCredits';
 import { CREDIT_COSTS } from '@/config/pricing';
 import { useOutOfCredits } from '@/contexts/OutOfCreditsContext';
 import { toast } from 'sonner';
+import { toFriendlyError } from '@/utils/friendlyErrors';
 
 export type UnlockDayStep = 'idle' | 'spending' | 'enriching' | 'saving' | 'complete' | 'error';
 
