@@ -371,7 +371,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
   },
   {
     id: 'collection_curator',
-    name: 'The Collection Curator',
+    name: 'The Passport Collector',
     category: 'ACHIEVER',
     tagline: 'Countries collected, stamps earned.',
     primaryTraits: [

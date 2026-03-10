@@ -640,7 +640,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   collection_curator: {
     id: 'collection_curator',
-    name: 'The Collection Curator',
+    name: 'The Passport Collector',
     category: 'ACHIEVER',
     hookLine: "Countries collected, stamps earned.",
     coreDescription: "You're on a mission to see the world, systematically. Whether it's every country, every continent, or every UNESCO site, you approach travel as a magnificent collection to complete.",

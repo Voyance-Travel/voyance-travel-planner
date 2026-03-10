@@ -364,7 +364,7 @@ Your trips will have edge. We'll find the experiences that require something fro
 
   collection_curator: {
     id: 'collection_curator',
-    name: 'The Collection Curator',
+    name: 'The Passport Collector',
     category: 'ACHIEVER',
     revealParagraph: `You have a thing. And it shapes how you see the world.
 
