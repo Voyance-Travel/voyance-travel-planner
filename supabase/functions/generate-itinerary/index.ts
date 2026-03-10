@@ -3,6 +3,38 @@ import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { trackCost, CostTracker } from "../_shared/cost-tracker.ts";
 
 // =============================================================================
+// EXTRACTED MODULES — Reduce bundle size for deploy
+// =============================================================================
+import {
+  sanitizeDateString,
+  sanitizeOptionFields,
+  sanitizeAITextField,
+  sanitizeGeneratedDay,
+  sanitizeDateFields,
+} from './sanitization.ts';
+
+import {
+  EXCHANGE_RATES_TO_USD,
+  convertToUSD,
+  normalizeCostToUSD,
+  deriveIntelligenceFields,
+  isRecurringEvent,
+} from './currency-utils.ts';
+
+import {
+  buildSkipListPrompt,
+  BUDGET_TRAIT_POLARITY,
+  COMFORT_TRAIT_POLARITY,
+  deriveBudgetIntent,
+  buildBudgetConstraintsBlock,
+  buildArchetypeConstraintsBlock as buildArchetypeConstraintsBlockLocal,
+  formatGenerationRules,
+  type BudgetIntent,
+  type BudgetTierLevel,
+  type SpendStyle,
+} from './budget-constraints.ts';
+
+// =============================================================================
 // NEW PERSONALIZATION MODULES (Phase 8 - Make Itineraries Impossible to be Generic)
 // =============================================================================
 import {
