@@ -653,7 +653,7 @@ VIOLATIONS:
   },
 
   status_seeker: {
-    identity: "The Status Seeker",
+    identity: "The VIP Voyager",
     category: "Achiever",
     meaning: `
 This traveler wants exclusive, impressive, shareable experiences.
