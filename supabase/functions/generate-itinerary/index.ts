@@ -6713,11 +6713,14 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
           );
           if (dayItems.length > 0) {
             // Build blocked time info for events
+            // Build blocked time info for events — explicitly instruct AI to CREATE the event card
             const blockedTimeLines = mustDoEventItems.map(ev => {
               const { blockedStart, blockedEnd } = getBlockedTimeRange(ev);
-              return `⏰ BLOCKED TIME for "${ev.priority.title}": ${blockedStart}–${blockedEnd}. Do NOT schedule ANY activities in this window.`;
+              return `⏰ "${ev.priority.title}" — BLOCKED TIME: ${blockedStart}–${blockedEnd}
+  YOU MUST CREATE AN ACTIVITY ENTRY for "${ev.priority.title}" with startTime: "${blockedStart}", endTime: "${blockedEnd}".
+  This MUST appear as a real activity card in the JSON output. Do NOT schedule any OTHER activities in this window.`;
             }).join('\n');
-            mustDoPrompt = `\n## 🚨 USER'S MUST-DO VENUES FOR DAY ${dayNumber} (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED these venues. You MUST include them:\n${dayItems.map(item => `- ${item.priority.title} (${item.priority.priority})${item.priority.activityType === 'all_day_event' ? ' [ALL-DAY EVENT — plan the ENTIRE day around this]' : item.priority.activityType === 'half_day_event' ? ' [HALF-DAY EVENT — dedicate morning or afternoon to this]' : ''}`).join('\n')}\n${blockedTimeLines ? '\n' + blockedTimeLines + '\n' : ''}\nRULES:\n- Include ALL listed venues by name in this day's itinerary\n- For ALL-DAY events, the entire day should revolve around this event\n- Any activity overlapping a BLOCKED TIME window is a HARD FAILURE\n- Only add AI recommendations to fill remaining slots OUTSIDE blocked windows\n`;
+            mustDoPrompt = `\n## 🚨 USER'S MUST-DO VENUES FOR DAY ${dayNumber} (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED these venues. You MUST include them:\n${dayItems.map(item => `- ${item.priority.title} (${item.priority.priority})${item.priority.activityType === 'all_day_event' ? ' [ALL-DAY EVENT — YOU MUST generate an activity card for this event]' : item.priority.activityType === 'half_day_event' ? ' [HALF-DAY EVENT — YOU MUST generate an activity card for this event]' : ''}`).join('\n')}\n${blockedTimeLines ? '\n' + blockedTimeLines + '\n' : ''}\nRULES:\n- EVERY must-do venue listed above MUST appear as its own activity entry in the JSON output\n- For ALL-DAY events: CREATE the event as an activity card, then do NOT schedule OTHER activities during its time window\n- For HALF-DAY events: CREATE the event as an activity card, then fill the OTHER half of the day\n- Any OTHER activity overlapping a BLOCKED TIME window is a HARD FAILURE\n- Only add AI recommendations to fill remaining slots OUTSIDE blocked windows\n`;
           } else {
             // No items specifically for this day, but include unschedulable ones as suggestions
             const unscheduledItems = scheduled.unschedulable || [];
