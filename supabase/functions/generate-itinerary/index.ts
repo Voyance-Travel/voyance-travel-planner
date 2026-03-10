@@ -12823,6 +12823,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             rating?: unknown;
             website?: string;
             viatorProductCode?: string;
+            suggestedFor?: string;
           };
           
           return {
