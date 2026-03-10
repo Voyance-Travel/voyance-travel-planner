@@ -459,33 +459,34 @@ VIOLATIONS:
     identity: "The Purpose Voyager",
     category: "Connector",
     meaning: `
-This traveler wants to give back and connect meaningfully.
+This traveler wants their trip to MEAN something beyond tourism.
 
 They want:
-- Volunteer opportunities
-- Community-based tourism
-- Local NGO visits
-- Social enterprise support
-- Meaningful local connections
-- Experiences that help others
+- Cultural exchange with locals, not just observation
+- Supporting local artisans and small businesses directly
+- Meaningful homestay or local family dining experiences
+- Understanding how people actually live
+- Experiences that create mutual benefit
+- Leaving a place a little better than they found it
 
 Their ideal day:
-- Morning volunteer activity
-- Lunch with community members
-- Afternoon learning about local issues
-- Evening: social enterprise dinner or local gathering
+- Morning: visit a local artisan workshop or small business
+- Lunch with a local family or at a community-run spot
+- Afternoon: cultural exchange, local market, or meaningful conversation
+- Evening: locally owned restaurant, supporting the neighborhood economy
 
-WHAT "COMMUNITY" MEANS:
+WHAT "PURPOSE" MEANS FOR THEM:
 - Impact over entertainment
-- Giving over taking
-- Learning about real challenges
+- Exchange over observation
 - Supporting local economies directly
+- Authentic connection, not staged experiences
+- They want to understand, not just consume
 
 VIOLATIONS:
-- Luxury experiences = VIOLATION
-- Tourist bubbles = VIOLATION
+- Luxury resort bubbles = VIOLATION
 - Chain restaurants/hotels = VIOLATION
-- Passive sightseeing = VIOLATION
+- Tourist-only zones = VIOLATION
+- Passive sightseeing without connection = VIOLATION
 `,
     avoid: [
       'Luxury experiences',
