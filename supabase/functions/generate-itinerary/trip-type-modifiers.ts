@@ -4448,6 +4448,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Food adventure - extreme food experiences, foraging, survival cooking.",
       art_aficionado: "Creative adventure - adventure photography, capturing the extreme, artistic thrills.",
+      history_hunter: "Historical adventure - archaeological expeditions, ancient trail treks, heritage exploration.",
       luxury_luminary: "Luxury adventure - heli-skiing, private guides, premium adventure experiences.",
       // TRANSFORMERS
       eco_ethicist: "Eco adventure - sustainable expeditions, conservation adventures, leave no trace.",
