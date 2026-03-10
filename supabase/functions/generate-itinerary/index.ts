@@ -6985,7 +6985,8 @@ REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity 
 2. "Transfer to ${eventName}"
    - startTime: "${addMinutesToHHMM(arrival24, 30)}", endTime: "${addMinutesToHHMM(arrival24, 90)}"
    - category: "transit"
-   - description: "Head directly to the event from the airport. Luggage can be stored at the venue or a nearby locker."
+   - description: "Head directly to the event from the airport."
+   - tips: "Bag storage: Most major venues and transit hubs have luggage storage services (like LuggageHero or Bounce). Store your bags before the event and pick them up on the way to the hotel."
 
 3. "${eventName}" (ALL-DAY EVENT)
    - This is the main activity. Schedule it for the appropriate duration after transfer.
