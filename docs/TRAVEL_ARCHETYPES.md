@@ -99,7 +99,7 @@ Based on extreme trait scores (values >7 or <-7):
 - **Backend Scoring**: Moderate social + high luxury/comfort scores
 - **Emotional Hook**: "Two tickets to everywhere that matters"
 
-#### 8. The Community Builder
+#### 8. The Purpose Voyager
 - **ID**: `community_builder`
 - **Rarity**: rare
 - **Primary Motivation**: Fostering local connections and giving back
