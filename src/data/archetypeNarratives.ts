@@ -765,7 +765,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   eco_ethicist: {
     id: 'eco_ethicist',
-    name: 'The Eco Ethicist',
+    name: 'The Mindful Voyager',
     category: 'CURATOR',
     hookLine: "Leave nothing but footprints.",
     coreDescription: "You travel with purpose and principles. Carbon footprints, local impact, and sustainable choices guide your decisions. You prove that responsible travel can be extraordinary.",

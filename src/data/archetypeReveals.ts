@@ -646,7 +646,7 @@ Your trips will reflect your discerning eye. Not luxury for its own sake, but qu
 
   eco_ethicist: {
     id: 'eco_ethicist',
-    name: 'The Eco-Ethicist',
+    name: 'The Mindful Voyager',
     category: 'TRANSFORMER',
     revealParagraph: `You can't enjoy a trip if you know it's doing harm.
 

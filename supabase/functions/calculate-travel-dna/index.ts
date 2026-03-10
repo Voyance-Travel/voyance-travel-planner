@@ -557,7 +557,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
   },
   {
     id: 'eco_ethicist',
-    name: 'The Eco Ethicist',
+    name: 'The Mindful Voyager',
     category: 'CURATOR',
     tagline: 'Leave nothing but footprints.',
     primaryTraits: [

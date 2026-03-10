@@ -1184,7 +1184,7 @@ VIOLATIONS:
 
 const TRANSFORMER_ARCHETYPES: Record<string, ArchetypeDefinition> = {
   eco_ethicist: {
-    identity: "The Eco Ethicist",
+    identity: "The Mindful Voyager",
     category: "Transformer",
     meaning: `
 This traveler prioritizes sustainability and ethics.
