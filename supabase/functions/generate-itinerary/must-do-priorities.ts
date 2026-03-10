@@ -284,7 +284,14 @@ export function parseMustDoInput(
     for (const sub of subItems) {
       const cleaned = sub.replace(/^\s*-\s*/, '').trim();
       if (!cleaned || cleaned.length < 2) continue;
-      items.push({ text: cleaned, preferredDay: currentDay });
+      // Extract inline "Day N" pattern from anywhere in the text
+      let inlineDay = currentDay;
+      const inlineDayMatch = cleaned.match(/\bday\s+(\d+)\b/i);
+      if (inlineDayMatch) {
+        inlineDay = Number(inlineDayMatch[1]);
+        console.log(`[MustDo] Inline day extraction: "${cleaned}" → Day ${inlineDay}`);
+      }
+      items.push({ text: cleaned, preferredDay: inlineDay });
     }
   }
 
