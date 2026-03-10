@@ -4397,6 +4397,7 @@ export type Database = {
           rating: Json | null
           sort_order: number
           start_time: string | null
+          suggested_for: string | null
           tags: string[] | null
           tips: string | null
           title: string
@@ -4427,6 +4428,7 @@ export type Database = {
           rating?: Json | null
           sort_order?: number
           start_time?: string | null
+          suggested_for?: string | null
           tags?: string[] | null
           tips?: string | null
           title: string
@@ -4457,6 +4459,7 @@ export type Database = {
           rating?: Json | null
           sort_order?: number
           start_time?: string | null
+          suggested_for?: string | null
           tags?: string[] | null
           tips?: string | null
           title?: string

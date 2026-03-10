@@ -1,0 +1,2 @@
+ALTER TABLE itinerary_activities ADD COLUMN IF NOT EXISTS suggested_for text;
+COMMENT ON COLUMN itinerary_activities.suggested_for IS 'Comma-separated user IDs of travelers whose DNA most influenced this activity';
