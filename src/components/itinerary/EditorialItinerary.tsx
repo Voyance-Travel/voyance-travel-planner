@@ -6071,7 +6071,10 @@ export function EditorialItinerary({
             {/* Group Budget Pool Display */}
             <GroupBudgetDisplay
               tripId={tripId}
-              onTopUp={() => setShowGroupUnlockModal(true)}
+              onTopUp={() => {
+                setShowShareModal(false);
+                setTimeout(() => setShowGroupUnlockModal(true), 600);
+              }}
             />
 
             {/* Guest Edit Mode Toggle - only for owner */}
