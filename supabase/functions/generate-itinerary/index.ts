@@ -10097,7 +10097,7 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
 
       if (mustDoActivities.trim()) {
         const forceAllMust = !!isSmartFinish || !!smartFinishRequested;
-        const mustDoAnalysis = parseMustDoInput(mustDoActivities, destination, forceAllMust);
+        const mustDoAnalysis = parseMustDoInput(mustDoActivities, destination, forceAllMust, preferences?.startDate || date?.split('T')[0], totalDays);
         if (mustDoAnalysis.length > 0) {
           const scheduled = scheduleMustDos(mustDoAnalysis, totalDays);
           // Only include items relevant to this day
