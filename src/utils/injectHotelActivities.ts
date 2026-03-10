@@ -30,13 +30,41 @@ interface HotelForInjection {
   coordinates?: { lat: number; lng: number };
 }
 
-function buildCheckInActivity(hotel: HotelForInjection): EditorialActivity {
+function buildCheckInActivity(hotel: HotelForInjection, dayActivities?: EditorialActivity[]): EditorialActivity {
   const photo = hotel.imageUrl || hotel.images?.[0];
+
+  // Determine check-in time: use hotel's check-in time, but if the day has an
+  // all-day event or activity running past the default, push check-in to after it ends
+  let checkInTime = hotel.checkInTime || '15:00';
+
+  if (dayActivities && dayActivities.length > 0) {
+    const checkInMinutes = timeToMinutes(checkInTime);
+
+    // Find the latest-ending non-transport, non-accommodation activity
+    let latestEnd = 0;
+    for (const act of dayActivities) {
+      const cat = (act.category || '').toLowerCase();
+      if (cat === 'transport' || cat === 'transportation' || cat === 'transit' || cat === 'accommodation') continue;
+      const startMin = timeToMinutes(act.startTime);
+      const durMin = act.durationMinutes || 120;
+      const endMin = startMin + durMin;
+      if (endMin > latestEnd) latestEnd = endMin;
+    }
+
+    // If the latest activity ends AFTER the default check-in time,
+    // push check-in to 30 min after (to allow for transit)
+    if (latestEnd > checkInMinutes) {
+      const lateHour = Math.floor((latestEnd + 30) / 60);
+      const lateMin = (latestEnd + 30) % 60;
+      checkInTime = `${String(lateHour).padStart(2, '0')}:${String(lateMin).padStart(2, '0')}`;
+    }
+  }
+
   return {
     id: checkinId(hotel.id),
     title: `Check-in at ${hotel.name}`,
     description: `Arrive and check in to your accommodation${hotel.neighborhood ? ` in ${hotel.neighborhood}` : ''}.`,
-    startTime: hotel.checkInTime || '15:00',
+    startTime: checkInTime,
     duration: '30 min',
     durationMinutes: 30,
     category: 'accommodation',
