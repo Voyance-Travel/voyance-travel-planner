@@ -151,7 +151,7 @@ Based on extreme trait scores (values >7 or <-7):
 - **Backend Scoring**: High restoration + wellness, low pace scores
 - **Emotional Hook**: "Breathe in experience, exhale expectation"
 
-#### 14. The Retreat Regular
+#### 14. The Wellness Devotee
 - **ID**: `retreat_regular`
 - **Rarity**: uncommon
 - **Primary Motivation**: Structured wellness and self-improvement
