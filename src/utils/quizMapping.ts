@@ -621,7 +621,7 @@ function getArchetypeDisplayName(id: string): string {
     // ACHIEVER category
     bucket_list_conqueror: 'The Bucket List Conqueror',
     adrenaline_architect: 'The Adrenaline Architect',
-    collection_curator: 'The Collection Curator',
+    collection_curator: 'The Passport Collector',
     status_seeker: 'The Luxe Achiever',
     // RESTORER category
     zen_seeker: 'The Zen Seeker',

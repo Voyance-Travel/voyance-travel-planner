@@ -23,7 +23,7 @@ const ARCHETYPES = [
   // ACHIEVER
   { id: 'bucket_list_conqueror', name: 'The Milestone Voyager', category: 'ACHIEVER', traits: ['must-see-attractions', 'iconic-experiences', 'checking-off', 'ambitious'] },
   { id: 'adrenaline_architect', name: 'The Adrenaline Architect', category: 'ACHIEVER', traits: ['extreme-sports', 'thrill-seeking', 'adventure', 'physical-challenges'] },
-  { id: 'collection_curator', name: 'The Collection Curator', category: 'ACHIEVER', traits: ['wine-regions', 'art-collecting', 'themed-trips', 'connoisseur'] },
+  { id: 'collection_curator', name: 'The Passport Collector', category: 'ACHIEVER', traits: ['wine-regions', 'art-collecting', 'themed-trips', 'connoisseur'] },
   { id: 'status_seeker', name: 'The Prestige Traveler', category: 'ACHIEVER', traits: ['exclusive-access', 'vip-experiences', 'instagram-worthy', 'prestigious'] },
   // RESTORER
   { id: 'zen_seeker', name: 'The Zen Seeker', category: 'RESTORER', traits: ['wellness', 'meditation', 'yoga', 'spiritual'] },

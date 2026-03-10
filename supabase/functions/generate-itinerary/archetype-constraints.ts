@@ -610,7 +610,7 @@ VIOLATIONS:
   },
 
   collection_curator: {
-    identity: "The Collection Curator",
+    identity: "The Passport Collector",
     category: "Achiever",
     meaning: `
 This traveler has specific interests they collect experiences in.
