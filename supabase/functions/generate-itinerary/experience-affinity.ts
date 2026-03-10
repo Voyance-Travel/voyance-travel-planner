@@ -489,6 +489,7 @@ export const PHYSICAL_INTENSITY: Record<string, PhysicalIntensity> = {
   healing_journeyer: { level: 'low', dailySteps: '5,000-8,000', walkingHours: '1-2', notes: 'Gentle only. No exertion. Rest is important.' },
   retirement_ranger: { level: 'low', dailySteps: '5,000-10,000', walkingHours: '1-2', notes: 'Accessible routes. Rest breaks. Seated options.' },
   sanctuary_seeker: { level: 'low', dailySteps: '5,000-8,000', walkingHours: '1-2', notes: 'Quiet, private. Not rushing anywhere.' },
+  escape_artist: { level: 'low', dailySteps: '4,000-8,000', walkingHours: '1-2', notes: 'Lounging is the activity. Walking only if it feels right.' },
   retreat_regular: { level: 'low', dailySteps: '5,000-10,000', walkingHours: '1-2', notes: 'Spa and wellness focus. Gentle movement only.' },
   flexible_wanderer: { level: 'low', dailySteps: '6,000-12,000', walkingHours: '2-3', notes: 'Wandering at their own pace. Can stop anytime.' }
 };

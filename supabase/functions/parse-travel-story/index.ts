@@ -30,6 +30,7 @@ const ARCHETYPES = [
   { id: 'retreat_regular', name: 'The Wellness Devotee', category: 'RESTORER', traits: ['spa-resorts', 'all-inclusive', 'pampering', 'relaxation'] },
   { id: 'beach_therapist', name: 'The Beach Therapist', category: 'RESTORER', traits: ['beach', 'ocean', 'sun', 'water-activities'] },
   { id: 'slow_traveler', name: 'The Slow Traveler', category: 'RESTORER', traits: ['unhurried', 'long-stays', 'local-rhythm', 'anti-tourist'] },
+  { id: 'escape_artist', name: 'The Escape Artist', category: 'RESTORER', traits: ['escape', 'unwind', 'no-plans', 'beach', 'depleted', 'recharge'] },
   // CURATOR
   { id: 'culinary_cartographer', name: 'The Culinary Cartographer', category: 'CURATOR', traits: ['food-focused', 'local-cuisine', 'cooking-classes', 'restaurants'] },
   { id: 'art_aficionado', name: 'The Art Aficionado', category: 'CURATOR', traits: ['museums', 'galleries', 'architecture', 'design'] },
