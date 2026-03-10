@@ -1,92 +1,78 @@
-## Journey Sequential Generation — Implementation Status
 
-### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-**Implemented:**
+## Fix: User Requirements Being Ignored in Just Tell Us Pipeline
 
-1. **`src/hooks/useGenerationGate.ts`**:
-   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
-   - Added journey detection: fetches all sibling legs when `journeyId` is present
-   - Sums credit costs across all journey legs for unified billing
-   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
-   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
-
-2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
-   - Added `journeyLegs` state for cost breakdown display
-   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
-   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
-   - Updated cost confirmation dialog:
-     - Shows "Journey Cost Breakdown" header for journeys
-     - Lists each leg with city, days, and cost
-     - Shows "Journey Total" instead of "Total"
-     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
-     - Disabled partial generation for journeys (must pay full upfront)
-     - "Confirm & Generate Journey" button text for journeys
-
-### Part 2: Auto-Chain Generation (TODO)
-
-When leg 1 completes generation, the backend should:
-1. Check for next queued leg in the journey
-2. Automatically trigger `generate-trip` for the next leg
-3. Continue until all legs are generated
-
-Files to modify:
-- `supabase/functions/generate-trip/index.ts` or similar edge function
-- Add post-generation hook to detect and chain to next journey leg
-
-### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
-
-**Implemented:**
-
-1. **`src/pages/TripDetail.tsx`**:
-   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
-   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
-   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
-   - Added distinct "queued" state UI:
-     - Clock icon with hourglass badge
-     - "{destination} is up next" heading
-     - Explanation text about waiting for previous leg
-     - "View previous city" button to navigate back to the generating leg
-   - Added `Clock` to lucide-react imports
+This is a 4-layer fix across 3 edge function files. Each layer addresses a different point where user requirements get dropped.
 
 ---
 
-## Preference Enforcement Activation ✅ COMPLETE
+### Layer 1: `findBestDay` skips Day 1/last day even when user explicitly requested it
 
-### Fix 1: Per-day preference checks now trigger retries ✅
-Moved MINIMUM REAL ACTIVITY COUNT and USER PREFERENCE VALIDATION blocks to after `validateGeneratedDay()` so they can push errors into `validation.errors`. Upgraded all `console.warn` calls to `validation.errors.push` + `validation.isValid = false`. Added budget preference validation ($75+ threshold). Activity keyword checks skip departure days.
+**File:** `supabase/functions/generate-itinerary/must-do-priorities.ts` — Line 472-475
 
-### Fix 2: Stage 2.6 personalization rejection enabled ✅
-Uncommented and enhanced the rejection block. Critical and major dietary violations are now actively enforced — dietary violations get patched with ⚠️ warnings in activity descriptions. Low personalization scores (<40) are logged.
+The guard unconditionally skips Day 1 and last day for activities >3 hours. Fix: respect `preferredDay`.
 
----
-
-## Itinerary Generation Quality Fixes ✅ COMPLETE
-
-### Bug 1: Arrival Sequence Inverted ✅
-Post-generation validator in `index.ts` detects when hotel check-in is ordered before airport arrival on Day 1. Extracts arrival/transfer/checkin activities, recalculates times based on flight arrival, and re-inserts in correct order.
-
-### Bug 2: User Preferences Ignored ✅
-- Strengthened preference injection in system prompt with explicit enforcement language (🚨 MUST BE HONORED)
-- Added post-generation validation logging that checks activities against keyword map for requested activities (skiing, surfing, etc.)
-- Warns when "light dinner" preference is violated by expensive dining ($50+)
-
-### Bug 3: Empty Days ✅
-Added minimum real activity count validation after generation. Filters out logistics (transport, accommodation, downtime) and warns when a day has fewer than 2 real activities (1 for departure day).
-
-### Bug 4: Nonsensical Inter-City Flights ✅
-Added `SAME_METRO_PAIRS` lookup in `buildTransitionDayPrompt` (prompt-library.ts). When origin and destination are in the same metro area (e.g., East Rutherford ↔ NYC), flights are suppressed from transport options and the prompt explicitly forbids them. Default mode switches to `rideshare`.
+**Change:** Replace the `continue` with a conditional that checks if the user explicitly requested that day:
+```ts
+if ((d === 1 || d === totalDays) && (priority.estimatedDuration || 120) > 180) {
+  if (!priority.preferredDay || priority.preferredDay !== d) {
+    continue;
+  }
+}
+```
 
 ---
 
-## Fix: Case-Sensitive Token Lookup ✅ COMPLETE
+### Layer 2: `parseMustDoInput` can't resolve day-of-week or multi-day references
 
-**Root cause:** `generate_share_token()` used base64 encoding producing mixed-case tokens. Mobile apps (iMessage, WhatsApp) can lowercase URLs, breaking the case-sensitive PostgreSQL lookup.
+**File:** `supabase/functions/generate-itinerary/must-do-priorities.ts`
 
-### Changes (single migration):
-1. **`generate_share_token(integer)`** — switched from base64 to hex encoding (lowercase-only: a-f, 0-9)
-2. **Case-insensitive index** — `idx_trip_invites_token_lower` on `LOWER(token)`
-3. **Backfill** — all existing tokens lowercased
-4. **`get_trip_invite_info()`** — `WHERE LOWER(token) = LOWER(p_token)` + failure logging + `replaced_at` check
-5. **`accept_trip_invite()`** — `WHERE LOWER(token) = LOWER(p_token) FOR UPDATE`
-6. **`replaced_at` column** — added to `trip_invites` for soft-delete support
+**2a.** Add `tripStartDate` and `totalDays` parameters to the function signature (line 195-199).
+
+**2b.** After building the `items` array (line 250), add two post-processing blocks:
+1. **Day-of-week resolution**: If `tripStartDate` is provided, scan each item for day names ("friday", "saturday", etc.) and compute the corresponding trip day number.
+2. **Multi-day expansion**: If an item contains "both days" / "every day" / "all N days", duplicate it into one entry per applicable trip day.
+
+**2c.** Update all callers in `generate-itinerary/index.ts` (lines ~8816, ~9357, ~10100, ~10212, ~12124) to pass `startDate` and `totalDays`.
+
+---
+
+### Layer 3: Chat AI prompt needs stronger temporal mapping instructions
+
+**File:** `supabase/functions/chat-trip-planner/index.ts`
+
+Add to the system prompt (after line 155, before `FAILURE TO EXTRACT`):
+
+- When user says "both days" or "every day", create SEPARATE `userConstraints` entries for each day with explicit `day` numbers.
+- When user references a weekday ("Friday night"), calculate which trip day number it maps to from the start date and set `day` accordingly.
+- Always set the `day` field when the day can be inferred.
+
+Also update the `mustDoActivities` field description (line 316) to instruct the AI to expand multi-day references into per-day entries (e.g., "US Open 9am-6pm Day 1, US Open 9am-6pm Day 2").
+
+---
+
+### Layer 4: Day 1 arrival uses generic "Airport" instead of actual airport name
+
+**File:** `supabase/functions/generate-itinerary/index.ts`
+
+**4a.** Add `arrivalAirport` to `FlightHotelContextResult` interface (line 2754-2768).
+
+**4b.** In `getFlightHotelContext`, extract `arrivalAirport` from `flightRaw` (already parsed at line 3012) and include it in the return object (line 3239-3253).
+
+**4c.** In the Day 1 constraint templates (lines ~10322, ~10353, ~10383), replace the hardcoded `"Arrival at Airport"` with `"Arrival at ${arrivalAirportDisplay}"` where `arrivalAirportDisplay` is derived from `flightContext.arrivalAirport` (e.g., "LaGuardia Airport (LGA)") falling back to "Airport".
+
+**4d.** In the Stage 2.55 split block (line 9180), replace `const airportN = 'Airport'` with the actual airport name from `flightHotelResult.arrivalAirport`.
+
+---
+
+### Summary
+
+| # | File | Change |
+|---|------|--------|
+| 1 | `must-do-priorities.ts` L472 | Respect `preferredDay` on Day 1/last day skip guard |
+| 2a | `must-do-priorities.ts` L195 | Add `tripStartDate`, `totalDays` params |
+| 2b | `must-do-priorities.ts` L250 | Day-of-week resolution + multi-day expansion |
+| 2c | `index.ts` (5 call sites) | Pass `startDate` and `totalDays` to `parseMustDoInput` |
+| 3 | `chat-trip-planner/index.ts` | Stronger temporal mapping in system prompt |
+| 4a-d | `index.ts` | Propagate actual airport name to Day 1 templates |
+
