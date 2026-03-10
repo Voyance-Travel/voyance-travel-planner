@@ -615,7 +615,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
   },
   {
     id: 'sabbatical_scholar',
-    name: 'The Sabbatical Scholar',
+    name: 'The Immersion Seeker',
     category: 'TRANSFORMER',
     tagline: 'Taking time off to find time on.',
     primaryTraits: [

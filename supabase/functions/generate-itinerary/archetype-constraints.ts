@@ -1330,7 +1330,7 @@ VIOLATIONS:
   },
 
   sabbatical_scholar: {
-    identity: "The Sabbatical Scholar",
+    identity: "The Immersion Seeker",
     category: "Transformer",
     meaning: `
 This traveler is using travel for intellectual growth.

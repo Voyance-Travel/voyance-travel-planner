@@ -736,7 +736,7 @@ Your trips will reflect your self-knowledge. We won't give you the same itinerar
 
   sabbatical_scholar: {
     id: 'sabbatical_scholar',
-    name: 'The Sabbatical Scholar',
+    name: 'The Immersion Seeker',
     category: 'TRANSFORMER',
     revealParagraph: `Travel, for you, is education by another name.
 

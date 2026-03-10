@@ -840,7 +840,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   sabbatical_scholar: {
     id: 'sabbatical_scholar',
-    name: 'The Sabbatical Scholar',
+    name: 'The Immersion Seeker',
     category: 'TRANSFORMER',
     hookLine: "Taking time off to find time on.",
     coreDescription: "You've carved out extended time to travel with purpose. Language immersion, creative projects, or deep rest: your sabbatical is an investment in your next chapter.",
