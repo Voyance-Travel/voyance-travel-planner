@@ -10322,7 +10322,7 @@ TRAVELER CONTEXT:
 - Consider their energy level when planning activities
 
 REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity entry, NEVER combine into one):
-1. "Arrival at Airport" 
+1. "Arrival at ${arrivalAirportDisplay}" 
    - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
    - category: "transport"
    - description: "Clear customs and collect luggage"
