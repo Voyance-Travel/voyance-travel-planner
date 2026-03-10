@@ -699,7 +699,7 @@ function getArchetypeTagline(id: string): string {
     cultural_anthropologist: "You don't just visit places, you become them.",
     urban_nomad: 'Cities speak to you in neon and noise.',
     wilderness_pioneer: 'WiFi is optional, wilderness is essential.',
-    digital_explorer: 'Your laptop is your passport extension.',
+    digital_explorer: 'WiFi, passport, laptop — anywhere is home.',
     explorer: 'The world is your playground.',
     // CONNECTOR
     social_butterfly: "Every stranger is a friend you haven't met.",
