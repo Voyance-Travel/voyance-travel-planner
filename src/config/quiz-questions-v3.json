@@ -1358,7 +1358,7 @@
       }
     },
     "digital_explorer": {
-      "name": "Digital Explorer",
+      "name": "The Untethered Traveler",
       "category": "EXPLORER",
       "required": {
         "photo_focus": { "min": 0.7 },
