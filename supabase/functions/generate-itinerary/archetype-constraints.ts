@@ -1283,7 +1283,7 @@ VIOLATIONS:
   },
 
   midlife_explorer: {
-    identity: "The Midlife Explorer",
+    identity: "The Rediscovery Traveler",
     category: "Transformer",
     meaning: `
 This traveler is rediscovering themselves through travel.

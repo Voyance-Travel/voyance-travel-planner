@@ -815,7 +815,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   midlife_explorer: {
     id: 'midlife_explorer',
-    name: 'The Unscripted Explorer',
+    name: 'The Rediscovery Traveler',
     category: 'TRANSFORMER',
     hookLine: "It's never too late to become who you were meant to be.",
     coreDescription: "You're rewriting your travel story. Life experience has taught you what matters, and now you're going after it. These trips aren't escapes. They're homecomings to your true self.",

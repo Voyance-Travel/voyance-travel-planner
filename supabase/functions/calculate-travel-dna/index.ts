@@ -599,7 +599,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
   },
   {
     id: 'midlife_explorer',
-    name: 'The Renaissance Voyager',
+    name: 'The Rediscovery Traveler',
     category: 'TRANSFORMER',
     tagline: "It's never too late to become who you were meant to be.",
     primaryTraits: [
