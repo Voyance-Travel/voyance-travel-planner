@@ -4488,6 +4488,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Ultimate food obsession - every meal researched, maximum food experiences, total immersion.",
       art_aficionado: "Artistic dining - beautiful presentation, design-forward restaurants, food as art.",
+      history_hunter: "Historical dining - ancient recipes, heritage restaurants, traditional taverns, eating history.",
       luxury_luminary: "Luxury gastronomy - tasting menus, rare ingredients, premium wine pairings, five-star dining.",
       // TRANSFORMERS
       eco_ethicist: "Sustainable foodie - farm-to-table, organic, zero-waste restaurants, ethical eating.",
