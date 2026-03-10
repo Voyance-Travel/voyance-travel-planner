@@ -725,7 +725,7 @@ function getArchetypeTagline(id: string): string {
     // TRANSFORMER
     gap_year_graduate: 'The next horizon is always calling.',
     midlife_explorer: "The best chapter hasn't been written yet.",
-    sabbatical_scholar: 'Taking time off to find time on.',
+    sabbatical_scholar: "Every city has a story — I'm here to find it.",
     healing_journeyer: 'Travel is the medicine for the soul.',
     retirement_ranger: 'Your next chapter deserves the whole world as its backdrop.',
     // CONNECTOR (additional)
