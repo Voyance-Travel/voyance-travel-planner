@@ -11,7 +11,7 @@ const NotFound = () => {
   const { notFound } = strangerCopy;
 
   useEffect(() => {
-    console.error("404 Error: User attempted to access non-existent route:", location.pathname);
+    console.warn("[404] Route not found:", location.pathname);
   }, [location.pathname]);
 
   return (

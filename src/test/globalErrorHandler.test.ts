@@ -18,8 +18,6 @@ class ErrorHandler {
     // Log error for debugging
     console.error('Unhandled Promise Rejection:', event.reason);
 
-    // Extract error message
-    let message = 'An unexpected error occurred. Please try again.';
     if (event.reason instanceof Error) {
       console.error('Error details:', event.reason.message, event.reason.stack);
     } else if (typeof event.reason === 'string') {
@@ -27,7 +25,7 @@ class ErrorHandler {
     }
 
     // Show user-friendly toast
-    this.toastError(message);
+    this.toastError('Something hiccupped. Try that again.');
 
     // Prevent default browser error handling
     event.preventDefault();
@@ -38,7 +36,7 @@ class ErrorHandler {
     console.error('Global Error:', event.error || event.message);
 
     // Show user-friendly toast
-    this.toastError('Something went wrong. Please refresh the page.');
+    this.toastError('Something hiccupped. A quick refresh should fix it.');
 
     // Prevent default
     event.preventDefault();
@@ -65,7 +63,7 @@ describe('GlobalErrorHandler', () => {
       handler.handleUnhandledRejection(mockEvent);
 
       expect(mockToast).toHaveBeenCalledWith(
-        'An unexpected error occurred. Please try again.'
+        'Something hiccupped. Try that again.'
       );
       expect(mockEvent.preventDefault).toHaveBeenCalled();
     });
@@ -79,7 +77,7 @@ describe('GlobalErrorHandler', () => {
       handler.handleUnhandledRejection(mockEvent);
 
       expect(mockToast).toHaveBeenCalledWith(
-        'An unexpected error occurred. Please try again.'
+        'Something hiccupped. Try that again.'
       );
     });
 
@@ -117,7 +115,7 @@ describe('GlobalErrorHandler', () => {
       handler.handleError(mockEvent);
 
       expect(mockToast).toHaveBeenCalledWith(
-        'Something went wrong. Please refresh the page.'
+        'Something hiccupped. A quick refresh should fix it.'
       );
     });
 
@@ -130,7 +128,7 @@ describe('GlobalErrorHandler', () => {
       handler.handleError(mockEvent);
 
       expect(mockToast).toHaveBeenCalledWith(
-        'Something went wrong. Please refresh the page.'
+        'Something hiccupped. A quick refresh should fix it.'
       );
     });
 
@@ -162,7 +160,7 @@ describe('Error Message Security', () => {
 
     // Should show generic message, not the actual error
     expect(mockToast).not.toHaveBeenCalledWith(expect.stringContaining('password'));
-    expect(mockToast).toHaveBeenCalledWith('An unexpected error occurred. Please try again.');
+    expect(mockToast).toHaveBeenCalledWith('Something hiccupped. Try that again.');
   });
 
   it('should not expose stack traces to users', () => {
@@ -197,7 +195,7 @@ describe('Error Handler Integration', () => {
     });
 
     // Should still show generic message
-    expect(mockToast).toHaveBeenCalledWith('An unexpected error occurred. Please try again.');
+    expect(mockToast).toHaveBeenCalledWith('Something hiccupped. Try that again.');
   });
 
   it('should handle network errors', () => {

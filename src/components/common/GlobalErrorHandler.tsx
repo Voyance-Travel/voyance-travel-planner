@@ -22,14 +22,13 @@ export function GlobalErrorHandler() {
         return;
       }
 
-      let message = 'An unexpected error occurred. Please try again.';
       if (event.reason instanceof Error) {
         console.error('Error details:', event.reason.message, event.reason.stack);
       } else if (typeof event.reason === 'string') {
         console.error('Error string:', event.reason);
       }
 
-      toast.error(message);
+      toast.error('Something hiccupped. Try that again.');
       event.preventDefault();
     };
 
@@ -42,7 +41,7 @@ export function GlobalErrorHandler() {
         return;
       }
 
-      toast.error('Something went wrong. Please refresh the page.');
+      toast.error('Something hiccupped. A quick refresh should fix it.');
       event.preventDefault();
     };
 
