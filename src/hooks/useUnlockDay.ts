@@ -99,7 +99,7 @@ export function useUnlockDay() {
         },
       });
 
-      if (spendError) throw new Error(spendError.message || 'Failed to spend credits');
+      if (spendError) throw new Error(toFriendlyError(spendError.message));
       if (spendData?.error === 'Insufficient credits') {
         showOutOfCredits({
           action: 'UNLOCK_DAY',
