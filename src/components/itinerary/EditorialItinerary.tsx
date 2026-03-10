@@ -1274,7 +1274,7 @@ export function EditorialItinerary({
   const [optionSelections, setOptionSelections] = useState<Record<string, string>>(
     () => (initialItineraryData?.optionSelections as Record<string, string>) || {}
   );
-  const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'payments' | 'details' | 'collab'>('itinerary');
+  const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'payments' | 'details' | 'needtoknow' | 'collab'>('itinerary');
   const [showTripOverview, setShowTripOverview] = useState(false);
 
   // Navigate to a section when parent requests it (e.g., from TripHealthPanel quick-fix buttons)
