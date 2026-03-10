@@ -401,6 +401,10 @@ function parseItem(item: string, destination: string): MustDoPriority | null {
     .replace(/\s+@\s+.*$/, '')
     .replace(/\s+at\s+\d{1,2}:\d{2}(\s*[AP]M)?/i, '')
     .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .replace(/\bday\s+\d+\b/gi, '')  // Strip "Day 1", "Day 2", etc.
+    .replace(/\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*(?:[-–—]|to)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)/gi, '')  // Strip "9am-5pm" time ranges
+    .replace(/\bfrom\s+(?:noon|morning|afternoon|evening)\b/gi, '')  // Strip "from noon" etc.
+    .replace(/\ball\s+day\b/gi, '')  // Strip "all day"
     .replace(/\s+/g, ' ')
     .trim();
 
