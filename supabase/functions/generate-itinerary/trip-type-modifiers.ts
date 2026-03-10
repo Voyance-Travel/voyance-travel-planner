@@ -4176,6 +4176,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       slow_traveler: "Slow honeymoon - long meals, no rushing, savoring every newlywed moment.",
       culinary_cartographer: "Food honeymoon - cooking classes together, restaurant exploration.",
       art_aficionado: "Art honeymoon - museums together, design hotels, cultural romance.",
+      history_hunter: "History honeymoon - ancient cities, heritage hotels, walking through centuries together.",
       luxury_luminary: "Luxury honeymoon - five-star everything, private experiences, premium.",
       eco_ethicist: "Eco honeymoon - sustainable resorts, nature, responsible romance.",
       gap_year_graduate: "Budget honeymoon - backpacker romance, meaningful over expensive.",
