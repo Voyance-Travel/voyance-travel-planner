@@ -9179,7 +9179,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
             const hotelA = flightHotelResult?.hotelAddress || '';
             const airportN = 'Airport';
             
-            console.log(`[Stage 2.55] Splitting combined arrival block: "${combined.title}" into 3 activities`);
+            console.log(`[Stage 2.55] Splitting combined arrival block: "${combined.title}" into 2 activities (arrival + check-in)`);
             
             const splitActivities = [
               {
@@ -9194,19 +9194,8 @@ If the purpose is a specific event, plan at least ONE full day around that event
               },
               {
                 ...combined,
-                id: `${combined.id}-transfer`,
-                title: `Airport Transfer to ${hotelN}`,
-                description: `Take a taxi or private transfer from ${airportN} to ${hotelN}`,
-                startTime: transferStart,
-                endTime: transferEnd,
-                category: 'transport',
-                type: 'transport',
-                location: { name: hotelN, address: hotelA },
-              },
-              {
-                ...combined,
                 id: `${combined.id}-checkin`,
-                title: 'Hotel Check-in',
+                title: 'Hotel Check-in & Refresh',
                 description: 'Check in, freshen up, and get oriented to the area',
                 startTime: checkInStart,
                 endTime: checkInEnd,
@@ -9218,7 +9207,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
             
             day1.activities.splice(combinedIdx, 1, ...splitActivities);
             aiResult.days[0] = day1;
-            console.log(`[Stage 2.55] ✓ Split into: Arrival (${combined.startTime}-${arrivalEnd}), Transfer (${transferStart}-${transferEnd}), Check-in (${checkInStart}-${checkInEnd})`);
+            console.log(`[Stage 2.55] ✓ Split into: Arrival (${combined.startTime}-${arrivalEnd}), Check-in (${checkInStart}-${checkInEnd})`);
           }
         }
       }

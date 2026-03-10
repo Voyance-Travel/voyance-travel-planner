@@ -1006,9 +1006,8 @@ export function buildArrivalDayPrompt(
     lines.push(`${'─'.repeat(40)}`);
     const seqLabels: Record<string, string> = {
       'airport_arrival': '1. Arrival at Airport (category: transport)',
-      'airport_transfer': '2. Airport Transfer to Hotel (category: transport)',
-      'hotel_check_in': '3. Hotel Check-in & Settle In (category: accommodation)',
-      'settle_in_rest': '4. Rest & Refresh (category: downtime)'
+      'hotel_check_in': '2. Hotel Check-in & Refresh (category: accommodation)',
+      'settle_in_rest': '3. Rest & Refresh (category: downtime)'
     };
     for (const step of requiredSequence) {
       lines.push(`   ${seqLabels[step] || step}`);
