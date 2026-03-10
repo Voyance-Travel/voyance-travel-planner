@@ -279,7 +279,7 @@ export function deriveForcedSlots(
   // ARCHETYPE-SPECIFIC & OCCASION-SPECIFIC SLOTS
   // ==========================================================================
   
-  // 1. STATUS SEEKER: VIP Experience (comfort >= 5 AND budget >= 3)
+  // 1. VIP VOYAGER: VIP Experience (comfort >= 5 AND budget >= 3)
   const isStatusSeeker = (traits.comfort ?? 0) >= 5 && (traits.budget ?? 0) >= 3;
   if (isStatusSeeker) {
     // Only require every other day to avoid over-saturation
