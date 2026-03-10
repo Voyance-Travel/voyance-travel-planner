@@ -427,6 +427,18 @@ function parseItem(item: string, destination: string): MustDoPriority | null {
     bestTime = matchedLandmark.bestTime;
   }
   
+  // Extract explicit time range from user text (e.g., "US Open 9am-5pm")
+  const explicitTimes = extractExplicitTimeRange(item);
+  if (explicitTimes) {
+    const [sh, sm] = explicitTimes.startTime.split(':').map(Number);
+    const [eh, em] = explicitTimes.endTime.split(':').map(Number);
+    const explicitDurationMins = (eh * 60 + em) - (sh * 60 + sm);
+    if (explicitDurationMins > 0) {
+      estimatedDuration = explicitDurationMins;
+    }
+    console.log(`[MustDo] Explicit time range: "${item}" → ${explicitTimes.startTime}–${explicitTimes.endTime} (${explicitDurationMins}min)`);
+  }
+
   return {
     id: `mustdo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     title: activityName,
@@ -437,6 +449,8 @@ function parseItem(item: string, destination: string): MustDoPriority | null {
     preferredTime: bestTime,
     estimatedDuration,
     requiresBooking,
+    explicitStartTime: explicitTimes?.startTime,
+    explicitEndTime: explicitTimes?.endTime,
     location: matchedLandmark?.neighborhood,
   };
 }
