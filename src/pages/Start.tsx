@@ -2895,10 +2895,10 @@ export default function Start() {
                                           reason: c.description,
                                         });
                                      } else if (c.time) {
-                                       rules.push({
-                                         type: 'time_preference',
-                                         time: c.time,
-                                         duration,
+                                        rules.push({
+                                          type: 'time_preference',
+                                          time: c.time,
+                                          duration: (c as any).duration || 120,
                                          reason: c.description,
                                          note: 'User requested this at a specific time but did not specify which day.',
                                        });
