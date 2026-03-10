@@ -732,6 +732,7 @@ function getArchetypeTagline(id: string): string {
     community_builder: 'Travel with purpose, connect with meaning.',
     // RESTORER (additional)
     sanctuary_seeker: 'You seek places that feel like a sacred refuge.',
+    flexible_wanderer: "Plans? Where we're going, we don't need plans.",
   };
   return taglines[id] || 'The world awaits your discovery.';
 }
