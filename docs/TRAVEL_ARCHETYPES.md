@@ -65,7 +65,7 @@ Based on extreme trait scores (values >7 or <-7):
 - **Backend Scoring**: High nature + adventure, low luxury scores
 - **Emotional Hook**: "WiFi is optional, wilderness is essential"
 
-#### 4. The Digital Explorer
+#### 4. The Untethered Traveler
 - **ID**: `digital_explorer`
 - **Rarity**: common
 - **Primary Motivation**: Blending remote work with global exploration
@@ -99,7 +99,7 @@ Based on extreme trait scores (values >7 or <-7):
 - **Backend Scoring**: Moderate social + high luxury/comfort scores
 - **Emotional Hook**: "Two tickets to everywhere that matters"
 
-#### 8. The Community Builder
+#### 8. The Purpose Voyager
 - **ID**: `community_builder`
 - **Rarity**: rare
 - **Primary Motivation**: Fostering local connections and giving back
@@ -109,7 +109,7 @@ Based on extreme trait scores (values >7 or <-7):
 
 ### ACHIEVERS
 
-#### 9. The Bucket List Conqueror
+#### 9. The Milestone Voyager
 - **ID**: `bucket_list_conqueror`
 - **Rarity**: common
 - **Primary Motivation**: Checking off iconic experiences
@@ -125,7 +125,7 @@ Based on extreme trait scores (values >7 or <-7):
 - **Backend Scoring**: Very high adventure + achievement scores
 - **Emotional Hook**: "Normal is just a setting on the washing machine"
 
-#### 11. The Collection Curator
+#### 11. The Passport Collector
 - **ID**: `collection_curator`
 - **Rarity**: rare
 - **Primary Motivation**: Systematically experiencing specific themes
@@ -133,7 +133,7 @@ Based on extreme trait scores (values >7 or <-7):
 - **Backend Scoring**: High structure + specific interest scores
 - **Emotional Hook**: "Depth over breadth, always"
 
-#### 12. The Status Seeker
+#### 12. The VIP Voyager
 - **ID**: `status_seeker`
 - **Rarity**: uncommon
 - **Primary Motivation**: Experiencing exclusive destinations
@@ -151,7 +151,7 @@ Based on extreme trait scores (values >7 or <-7):
 - **Backend Scoring**: High restoration + wellness, low pace scores
 - **Emotional Hook**: "Breathe in experience, exhale expectation"
 
-#### 14. The Retreat Regular
+#### 14. The Wellness Devotee
 - **ID**: `retreat_regular`
 - **Rarity**: uncommon
 - **Primary Motivation**: Structured wellness and self-improvement
@@ -201,7 +201,7 @@ Based on extreme trait scores (values >7 or <-7):
 - **Backend Scoring**: Maximum luxury + comfort scores
 - **Emotional Hook**: "Champagne wishes, caviar dreams, economy never"
 
-#### 20. The Eco Ethicist
+#### 20. The Mindful Voyager
 - **ID**: `eco_ethicist`
 - **Rarity**: uncommon
 - **Primary Motivation**: Sustainable and responsible travel
@@ -211,7 +211,7 @@ Based on extreme trait scores (values >7 or <-7):
 
 ### TRANSFORMERS
 
-#### 21. The Gap Year Graduate
+#### 21. The Horizon Chaser
 - **ID**: `gap_year_graduate`
 - **Rarity**: common
 - **Primary Motivation**: Self-discovery through extended travel
@@ -219,7 +219,7 @@ Based on extreme trait scores (values >7 or <-7):
 - **Backend Scoring**: High flexibility + discovery + low structure
 - **Emotional Hook**: "Finding yourself requires getting lost first"
 
-#### 22. The Midlife Explorer
+#### 22. The Rediscovery Traveler
 - **ID**: `midlife_explorer`
 - **Rarity**: uncommon
 - **Primary Motivation**: Rediscovering self through new horizons
@@ -227,7 +227,7 @@ Based on extreme trait scores (values >7 or <-7):
 - **Backend Scoring**: Mixed scores with transformation indicators
 - **Emotional Hook**: "Chapter two starts at departure gate"
 
-#### 23. The Sabbatical Scholar
+#### 23. The Immersion Seeker
 - **ID**: `sabbatical_scholar`
 - **Rarity**: rare
 - **Primary Motivation**: Deep learning and skill development
@@ -235,7 +235,7 @@ Based on extreme trait scores (values >7 or <-7):
 - **Backend Scoring**: High learning + cultural + low time constraints
 - **Emotional Hook**: "Every destination is a classroom"
 
-#### 24. The Healing Journeyer
+#### 24. The Restoration Seeker
 - **ID**: `healing_journeyer`
 - **Rarity**: uncommon
 - **Primary Motivation**: Travel as emotional healing
@@ -243,7 +243,7 @@ Based on extreme trait scores (values >7 or <-7):
 - **Backend Scoring**: High restoration + escape + wellness scores
 - **Emotional Hook**: "Miles traveled, healing multiplied"
 
-#### 25. The Retirement Ranger
+#### 25. The Boundless Explorer
 - **ID**: `retirement_ranger`
 - **Rarity**: common
 - **Primary Motivation**: Fulfilling lifetime dreams

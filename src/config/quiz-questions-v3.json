@@ -1358,7 +1358,7 @@
       }
     },
     "digital_explorer": {
-      "name": "Digital Explorer",
+      "name": "The Untethered Traveler",
       "category": "EXPLORER",
       "required": {
         "photo_focus": { "min": 0.7 },
@@ -1375,7 +1375,7 @@
       }
     },
     "flexible_wanderer": {
-      "name": "Flexible Wanderer",
+      "name": "The Wildcard",
       "category": "EXPLORER",
       "required": {
         "flexibility": { "min": 0.7 },
@@ -1443,7 +1443,7 @@
       }
     },
     "community_builder": {
-      "name": "Community Builder",
+      "name": "The Purpose Voyager",
       "category": "CONNECTOR",
       "required": {
         "ethics_focus": { "min": 0.6 },
@@ -1461,7 +1461,7 @@
       }
     },
     "bucket_list_conqueror": {
-      "name": "Bucket List Conqueror",
+      "name": "The Milestone Voyager",
       "category": "ACHIEVER",
       "required": {
         "bucket_list": { "min": 0.6 },
@@ -1499,7 +1499,7 @@
       }
     },
     "collection_curator": {
-      "name": "Collection Curator",
+      "name": "The Passport Collector",
       "category": "ACHIEVER",
       "required": {
         "niche_interest": { "min": 0.7 }
@@ -1515,7 +1515,7 @@
       }
     },
     "status_seeker": {
-      "name": "Status Seeker",
+      "name": "The VIP Voyager",
       "category": "ACHIEVER",
       "required": {
         "status_seeking": { "min": 0.7 },
@@ -1556,7 +1556,7 @@
       }
     },
     "retreat_regular": {
-      "name": "Retreat Regular",
+      "name": "The Wellness Devotee",
       "category": "RESTORER",
       "required": {
         "restoration_need": { "min": 0.7 },
@@ -1664,7 +1664,7 @@
       }
     },
     "eco_ethicist": {
-      "name": "Eco-Ethicist",
+      "name": "The Mindful Voyager",
       "category": "TRANSFORMER",
       "required": {
         "ethics_focus": { "min": 0.75 }
@@ -1680,7 +1680,7 @@
       }
     },
     "gap_year_graduate": {
-      "name": "Gap Year Graduate",
+      "name": "The Horizon Chaser",
       "category": "TRANSFORMER",
       "required": {
         "budget_tier": { "max": 0.35 },
@@ -1702,7 +1702,7 @@
       }
     },
     "midlife_explorer": {
-      "name": "Midlife Explorer",
+      "name": "The Rediscovery Traveler",
       "category": "TRANSFORMER",
       "required": {
         "quality_intrinsic": { "min": 0.5 }
@@ -1721,7 +1721,7 @@
       }
     },
     "sabbatical_scholar": {
-      "name": "Sabbatical Scholar",
+      "name": "The Immersion Seeker",
       "category": "TRANSFORMER",
       "required": {
         "learning_focus": { "min": 0.7 },
@@ -1740,7 +1740,7 @@
       }
     },
     "healing_journeyer": {
-      "name": "Healing Journeyer",
+      "name": "The Restoration Seeker",
       "category": "TRANSFORMER",
       "required": {
         "healing_focus": { "min": 0.7 }
@@ -1757,7 +1757,7 @@
       }
     },
     "retirement_ranger": {
-      "name": "Retirement Ranger",
+      "name": "The Boundless Explorer",
       "category": "TRANSFORMER",
       "required": {
         "bucket_list": { "min": 0.4 },

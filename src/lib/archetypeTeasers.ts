@@ -70,7 +70,7 @@ export const ARCHETYPE_TEASERS: Record<string, ArchetypeTeaser> = {
     ],
   },
   retreat_regular: {
-    name: "Retreat Regular",
+    name: "The Wellness Devotee",
     oneLiner: "Vacation should feel like vacation. Rest is the point.",
     typicalTrip: [
       "Packed schedule, no downtime",
@@ -86,7 +86,7 @@ export const ARCHETYPE_TEASERS: Record<string, ArchetypeTeaser> = {
     ],
   },
   flexible_wanderer: {
-    name: "Flexible Wanderer",
+    name: "The Wildcard",
     oneLiner: "Plans are suggestions. The best stuff isn't on the itinerary.",
     typicalTrip: [
       "Every hour accounted for",

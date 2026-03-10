@@ -2220,7 +2220,7 @@ MUST INCLUDE:
 ✓ At least one "do nothing" day
 
 PACING: Subtract 2 from normal pace score.
-Even a Bucket List Conqueror honeymooner needs rest.
+Even a Milestone Voyager honeymooner needs rest.
 
 NEVER:
 ✗ 7am departures
@@ -2605,7 +2605,7 @@ Examples:
 - Slow Traveler birthday: Long leisurely special lunch, no rush
 - Adrenaline Architect birthday: That adventure activity they've always wanted
 - Culinary Cartographer birthday: THE restaurant they've been dying to try
-- Flexible Wanderer birthday: Discovery of something unexpected
+- Wildcard birthday: Discovery of something unexpected
 - Social Butterfly birthday: Celebration with people, energy
 - Zen Seeker birthday: Meaningful, peaceful, possibly solo moment
 - Budget Backpacker birthday: Fun experience, not expensive dinner
@@ -2786,8 +2786,8 @@ OPTIONS:
 NOTE: Not all guys trips are party trips.
 Calibrate to archetype:
 - Zen Seeker guys = might skip nightlife
-- Retirement Ranger guys = early dinner, one nice bar
-- Gap Year Graduate guys = maximum nightlife
+- Boundless Explorer guys = early dinner, one nice bar
+- Horizon Chaser guys = maximum nightlife
 
 But generally, at least ONE evening option should be there.
 
@@ -3180,7 +3180,7 @@ export function buildWellnessPrompt(): string {
 Wellness is the PURPOSE of this trip.
 This is not "vacation with spa added." Wellness IS the agenda.
 
-This effectively makes them a Retreat Regular or Zen Seeker for this trip.
+This effectively makes them a Wellness Devotee or Zen Seeker for this trip.
 
 ═══════════════════════════════════════════════════════════════════════
 WELLNESS RETREAT STRUCTURE
@@ -3536,7 +3536,7 @@ DO NOT:
 - Skip the celebration element
 
 Adjust to archetype:
-- Bucket List Conqueror retirement = finally checking off that big item
+- Milestone Voyager retirement = finally checking off that big item
 - Slow Traveler retirement = ultimate slow travel, no clock
 - Cultural Anthropologist retirement = deep cultural immersion they never had time for
 `,
@@ -3576,7 +3576,7 @@ Include:
 - Age-appropriate nightlife if relevant
 
 Adjust to archetype:
-- Gap Year Graduate + graduation = backpacker adventure, social scenes
+- Horizon Chaser + graduation = backpacker adventure, social scenes
 - Adrenaline Architect + graduation = adventure activity they've earned
 - Social Butterfly + graduation = group celebration, nightlife
 `,
@@ -3713,7 +3713,7 @@ DO NOT:
 - Suggest strenuous activities unless requested
 - Forget the purpose is restoration
 
-This essentially makes them Retreat Regular for this trip, regardless of base archetype.
+This essentially makes them Wellness Devotee for this trip, regardless of base archetype.
 `,
     frequency: {
       wellnessActivity: 'daily',

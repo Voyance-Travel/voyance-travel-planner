@@ -72,7 +72,7 @@ Neon `users` table has 14 records (5 real users, 9 test users).
 **Real Users to Migrate:**
 | Email | Display Name | Travel DNA |
 |-------|--------------|------------|
-| ashtonlaurenn@gmail.com | Ashton Lightfoot | The Digital Explorer |
+| ashtonlaurenn@gmail.com | Ashton Lightfoot | The Untethered Traveler |
 | cameronblake08@gmail.com | Cameron Blake | restoration_seeker |
 | 1cameronblake@gmail.com | Cameron Blake | beauty_curator |
 | brchesky1@gmail.com | Robert Chesky | (incomplete) |

@@ -814,14 +814,14 @@ const ANSWER_DELTAS: Record<string, AnswerDelta> = {
   'cd3': { deltas: { pace: 3, planning: 3, authenticity: -2 }, label: 'Highlights collector' },     // Bucket list
   'cd4': { deltas: { adventure: 2 }, label: 'Not culture-focused' },                                // None
   
-  // Q18: Restoration mode - Separates Zen Seeker ↔ Beach Therapist ↔ Slow Traveler ↔ Retreat Regular
+  // Q18: Restoration mode - Separates Zen Seeker ↔ Beach Therapist ↔ Slow Traveler ↔ Wellness Devotee
   'rm1': { deltas: { pace: -6, social: -4, transformation: 5 }, label: 'Stillness seeker' },        // Zen/meditation
   'rm2': { deltas: { pace: -4, comfort: 3, social: -2 }, label: 'Ocean rhythm' },                   // Beach therapy
   'rm3': { deltas: { pace: -5, authenticity: 5, planning: -3 }, label: 'Slow settler' },            // Slow travel
   'rm4': { deltas: { planning: 4, transformation: 4, comfort: 2 }, label: 'Structured wellness' }, // Retreat
   'rm5': { deltas: { pace: 3, adventure: 2 }, label: 'Action over recharge' },                      // None
   
-  // Q19: Luxury driver - Separates Status Seeker ↔ Luxury Luminary
+  // Q19: Luxury driver - Separates VIP Voyager ↔ Luxury Luminary
   'ld1': { deltas: { comfort: 5, social: 3, budget: -6 }, label: 'Prestige seeker' },               // Status-driven
   'ld2': { deltas: { comfort: 6, planning: 3, budget: -5 }, label: 'Craft appreciator' },           // Quality-driven
   'ld3': { deltas: { budget: 4, authenticity: 2 }, label: 'Value prioritizer' },                    // Not luxury-focused

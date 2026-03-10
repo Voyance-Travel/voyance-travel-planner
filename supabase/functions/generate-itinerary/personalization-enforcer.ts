@@ -59,9 +59,9 @@ export type ForcedSlotType =
   | 'authentic_encounter'      // Authenticity trait
   | 'social_experience'        // Social trait (positive)
   | 'solo_retreat'             // Social trait (negative/introvert)
-  | 'vip_experience'           // Status Seeker: high comfort + budget
+  | 'vip_experience'           // VIP Voyager: high comfort + budget
   | 'couples_moment'           // Romantic Curator: romantic trip or archetype
-  | 'connectivity_spot'        // Digital Explorer: wifi-guaranteed venue
+  | 'connectivity_spot'        // Untethered Traveler: wifi-guaranteed venue
   | 'family_activity'          // Family Architect: kid-friendly activity
   | 'celebration_dinner'       // Birthday/Anniversary: special celebration dinner
   | 'celebration_experience'   // Birthday/Anniversary: memorable milestone experience
@@ -279,7 +279,7 @@ export function deriveForcedSlots(
   // ARCHETYPE-SPECIFIC & OCCASION-SPECIFIC SLOTS
   // ==========================================================================
   
-  // 1. STATUS SEEKER: VIP Experience (comfort >= 5 AND budget >= 3)
+  // 1. VIP VOYAGER: VIP Experience (comfort >= 5 AND budget >= 3)
   const isStatusSeeker = (traits.comfort ?? 0) >= 5 && (traits.budget ?? 0) >= 3;
   if (isStatusSeeker) {
     // Only require every other day to avoid over-saturation
@@ -312,7 +312,7 @@ export function deriveForcedSlots(
     });
   }
   
-  // 3. DIGITAL EXPLORER: Connectivity Spot (interests or archetype)
+  // 3. UNTETHERED TRAVELER: Connectivity Spot (interests or archetype)
   const isDigitalExplorer = interests.some(i =>
     ['digital', 'remote work', 'coworking', 'technology', 'wifi', 'laptop', 'work-friendly'].includes(i.toLowerCase())
   ) || context?.primaryArchetype === 'digital_explorer' || context?.secondaryArchetype === 'digital_explorer';

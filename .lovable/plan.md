@@ -1,99 +1,135 @@
+## Journey Sequential Generation — Implementation Status
 
+### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-## Display Name Sweep — Remaining Files
+**Implemented:**
 
-This is a find-and-replace sweep across ~8 files, changing old archetype display names to new ones while preserving all slugs/IDs.
+1. **`src/hooks/useGenerationGate.ts`**:
+   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
+   - Added journey detection: fetches all sibling legs when `journeyId` is present
+   - Sums credit costs across all journey legs for unified billing
+   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
+   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
 
-### Rename Map
+2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
+   - Added `journeyLegs` state for cost breakdown display
+   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
+   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
+   - Updated cost confirmation dialog:
+     - Shows "Journey Cost Breakdown" header for journeys
+     - Lists each leg with city, days, and cost
+     - Shows "Journey Total" instead of "Total"
+     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
+     - Disabled partial generation for journeys (must pay full upfront)
+     - "Confirm & Generate Journey" button text for journeys
 
-| Old Display Name | New Display Name |
-|---|---|
-| Digital Explorer | The Untethered Traveler |
-| Collection Curator | The Passport Collector |
-| Status Seeker | The VIP Voyager |
-| Flexible Wanderer | The Wildcard |
-| Retreat Regular | The Wellness Devotee |
-| Community Builder | The Purpose Voyager |
-| Eco Ethicist | The Mindful Voyager |
-| Gap Year Graduate | The Horizon Chaser |
-| Sabbatical Scholar | The Immersion Seeker |
-| Healing Journeyer | The Restoration Seeker |
-| Retirement Ranger | The Boundless Explorer |
-| Midlife Explorer | The Rediscovery Traveler |
-| Bucket List Conqueror | The Milestone Voyager |
+### Part 2: Auto-Chain Generation (TODO)
 
-### File-by-File Changes
+When leg 1 completes generation, the backend should:
+1. Check for next queued leg in the journey
+2. Automatically trigger `generate-trip` for the next leg
+3. Continue until all legs are generated
 
-**1. `supabase/functions/generate-itinerary/trip-type-modifiers.ts`**
-- Line ~2223: "Bucket List Conqueror" → "Milestone Voyager"
-- Line ~2608: "Flexible Wanderer" → "Wildcard"
-- Line ~2789: "Retirement Ranger" → "Boundless Explorer"
-- Line ~2790: "Gap Year Graduate" → "Horizon Chaser"
-- Line ~3183: "Retreat Regular" → "Wellness Devotee"
-- Line ~3539: "Bucket List Conqueror" → "Milestone Voyager"
-- Line ~3579: "Gap Year Graduate" → "Horizon Chaser"
-- Line ~3716: "Retreat Regular" → "Wellness Devotee"
+Files to modify:
+- `supabase/functions/generate-trip/index.ts` or similar edge function
+- Add post-generation hook to detect and chain to next journey leg
 
-**2. `supabase/functions/generate-itinerary/personalization-enforcer.ts`**
-- Line ~62: comment "Status Seeker" → "VIP Voyager"
-- Line ~64: comment "Digital Explorer" → "Untethered Traveler"
-- Line ~282: comment "STATUS SEEKER" → "VIP VOYAGER"
-- Line ~315: comment "DIGITAL EXPLORER" → "UNTETHERED TRAVELER"
+### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
 
-**3. `supabase/functions/generate-itinerary/archetype-constraints.ts`**
-- Line ~1698: "Retreat Regular" → "Wellness Devotee"
-- Line ~1775: "Flexible Wanderer" → "Wildcard" (in anti-gaming naming rules)
+**Implemented:**
 
-**4. `supabase/functions/parse-travel-story/index.ts`**
-- Line ~16: "The Flexible Wanderer" → "The Wildcard"
-(All other entries in this file are already updated)
+1. **`src/pages/TripDetail.tsx`**:
+   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
+   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
+   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
+   - Added distinct "queued" state UI:
+     - Clock icon with hourglass badge
+     - "{destination} is up next" heading
+     - Explanation text about waiting for previous leg
+     - "View previous city" button to navigate back to the generating leg
+   - Added `Clock` to lucide-react imports
 
-**5. `src/lib/archetypeTeasers.ts`**
-- Line ~73: name "Retreat Regular" → "The Wellness Devotee"
-- Line ~89: name "Flexible Wanderer" → "The Wildcard"
+---
 
-**6. `src/lib/strangerCopy.ts`**
-- Line ~78: name "Flexible Wanderer" → "The Wildcard"
+## Preference Enforcement Activation ✅ COMPLETE
 
-**7. `src/config/quiz-questions-v3.json`**
-12 name replacements in the archetype definitions section (~lines 1361-1760):
-- "Digital Explorer" → "The Untethered Traveler"
-- "Flexible Wanderer" → "The Wildcard"
-- "Community Builder" → "The Purpose Voyager"
-- "Bucket List Conqueror" → "The Milestone Voyager"
-- "Collection Curator" → "The Passport Collector"
-- "Status Seeker" → "The VIP Voyager"
-- "Retreat Regular" → "The Wellness Devotee"
-- "Gap Year Graduate" → "The Horizon Chaser"
-- "Midlife Explorer" → "The Rediscovery Traveler"
-- "Sabbatical Scholar" → "The Immersion Seeker"
-- "Healing Journeyer" → "The Restoration Seeker"
-- "Retirement Ranger" → "The Boundless Explorer"
+### Fix 1: Per-day preference checks now trigger retries ✅
+Moved MINIMUM REAL ACTIVITY COUNT and USER PREFERENCE VALIDATION blocks to after `validateGeneratedDay()` so they can push errors into `validation.errors`. Upgraded all `console.warn` calls to `validation.errors.push` + `validation.isValid = false`. Added budget preference validation ($75+ threshold). Activity keyword checks skip departure days.
 
-**8. `docs/TRAVEL_ARCHETYPES.md`**
-Update all display names in lines 68-252:
-- Line 68: "The Digital Explorer" → "The Untethered Traveler"
-- Line 102: "The Community Builder" → "The Purpose Voyager"
-- Line 112: "The Bucket List Conqueror" → "The Milestone Voyager"
-- Line 128: "The Collection Curator" → "The Passport Collector"
-- Line 136: "The Status Seeker" → "The VIP Voyager"
-- Line 154: "The Retreat Regular" → "The Wellness Devotee"
-- Line 204: "The Eco Ethicist" → "The Mindful Voyager"
-- Line 214: "The Gap Year Graduate" → "The Horizon Chaser"
-- Line 222: "The Midlife Explorer" → "The Rediscovery Traveler"
-- Line 230: "The Sabbatical Scholar" → "The Immersion Seeker"
-- Line 238: "The Healing Journeyer" → "The Restoration Seeker"
-- Line 246: "The Retirement Ranger" → "The Boundless Explorer"
+### Fix 2: Stage 2.6 personalization rejection enabled ✅
+Uncommented and enhanced the rejection block. Critical and major dietary violations are now actively enforced — dietary violations get patched with ⚠️ warnings in activity descriptions. Low personalization scores (<40) are logged.
 
-**9. `docs/NEON_TO_CLOUD_MIGRATION.md`**
-- Line ~75: "The Digital Explorer" → "The Untethered Traveler"
+---
 
-**10. `supabase/functions/calculate-travel-dna/index.ts`**
-- Line ~817: comment "Retreat Regular" → "Wellness Devotee"
-- Line ~824: comment "Status Seeker" → "VIP Voyager"
+## Itinerary Generation Quality Fixes ✅ COMPLETE
 
-### Not Changed
-- `src/components/home/MicroQuizComparison.tsx`: Already uses "Milestone Voyager" — no change needed.
-- `src/components/home/SampleArchetype.tsx`: Already uses "Milestone Voyager" — no change needed.
-- All slug/ID values (e.g., `digital_explorer`, `retreat_regular`) remain unchanged.
+### Bug 1: Arrival Sequence Inverted ✅
+Post-generation validator in `index.ts` detects when hotel check-in is ordered before airport arrival on Day 1. Extracts arrival/transfer/checkin activities, recalculates times based on flight arrival, and re-inserts in correct order.
 
+### Bug 2: User Preferences Ignored ✅
+- Strengthened preference injection in system prompt with explicit enforcement language (🚨 MUST BE HONORED)
+- Added post-generation validation logging that checks activities against keyword map for requested activities (skiing, surfing, etc.)
+- Warns when "light dinner" preference is violated by expensive dining ($50+)
+
+### Bug 3: Empty Days ✅
+Added minimum real activity count validation after generation. Filters out logistics (transport, accommodation, downtime) and warns when a day has fewer than 2 real activities (1 for departure day).
+
+### Bug 4: Nonsensical Inter-City Flights ✅
+Added `SAME_METRO_PAIRS` lookup in `buildTransitionDayPrompt` (prompt-library.ts). When origin and destination are in the same metro area (e.g., East Rutherford ↔ NYC), flights are suppressed from transport options and the prompt explicitly forbids them. Default mode switches to `rideshare`.
+
+---
+
+## Fix: Case-Sensitive Token Lookup ✅ COMPLETE
+
+**Root cause:** `generate_share_token()` used base64 encoding producing mixed-case tokens. Mobile apps (iMessage, WhatsApp) can lowercase URLs, breaking the case-sensitive PostgreSQL lookup.
+
+### Changes (single migration):
+1. **`generate_share_token(integer)`** — switched from base64 to hex encoding (lowercase-only: a-f, 0-9)
+2. **Case-insensitive index** — `idx_trip_invites_token_lower` on `LOWER(token)`
+3. **Backfill** — all existing tokens lowercased
+4. **`get_trip_invite_info()`** — `WHERE LOWER(token) = LOWER(p_token)` + failure logging + `replaced_at` check
+5. **`accept_trip_invite()`** — `WHERE LOWER(token) = LOWER(p_token) FOR UPDATE`
+6. **`replaced_at` column** — added to `trip_invites` for soft-delete support
+
+---
+
+## Fix: User Requirements Ignored in Just Tell Us Pipeline ✅ COMPLETE
+
+### Layer 1: `findBestDay` respects `preferredDay` on Day 1/last day ✅
+- Modified skip guard in `must-do-priorities.ts` L472 to allow long activities on Day 1/last day when user explicitly requested that day via `preferredDay`.
+
+### Layer 2: `parseMustDoInput` resolves day-of-week and multi-day references ✅
+- Added `tripStartDate` and `totalDays` parameters to function signature
+- Day-of-week resolution: maps "Friday", "Saturday" etc. to trip day numbers using start date
+- Multi-day expansion: "both days" / "every day" / "all N days" duplicated into per-day entries
+- Updated all 5 callers in `index.ts` to pass `startDate` and `totalDays`
+
+### Layer 3: Chat AI prompt strengthened for temporal mapping ✅
+- Added CRITICAL TEMPORAL MAPPING RULES to system prompt in `chat-trip-planner/index.ts`
+- Updated `mustDoActivities` field description to instruct AI to expand multi-day refs into per-day entries with explicit day numbers
+
+### Layer 4: Day 1 arrival uses actual airport name ✅
+- Added `arrivalAirport` to `FlightHotelContextResult` interface and return value
+- Stage 2.55 split block uses `flightHotelResult.arrivalAirport` instead of hardcoded `'Airport'`
+- All 3 Day 1 constraint templates (morning/afternoon/evening) use `arrivalAirportDisplay`
+
+---
+
+## Fix 12: Blocked Time Window Truncation ✅ COMPLETE
+
+**Root cause:** Chat planner outputs `time_block` constraints with start time but no `endTime`. `Start.tsx` defaults missing durations to 120 minutes, producing `09:00→11:00` instead of `09:00→17:00` for "US Open 9am to 5pm". The generator sees the short window and skips the event card.
+
+### Layer 1: Self-correction in generation engine ✅
+- `budget-constraints.ts` `formatGenerationRules`: parses `reason` text for explicit time ranges (e.g. "9am to 5pm") using regex
+- If parsed end time is later than stored `to` value, overrides it
+- Fixes ALL existing trips with truncated blocked windows
+
+### Layer 2: Chat planner schema extended ✅
+- Added `endTime` and `duration` fields to `userConstraints` schema in `chat-trip-planner/index.ts`
+- AI can now output structured time ranges (time="9:00 AM", endTime="5:00 PM")
+
+### Layer 3: Start.tsx time_block handler fixed ✅
+- Priority 1: Use explicit `endTime` from chat planner
+- Priority 2: Parse time range from constraint `description` text via regex
+- Priority 3: Fall back to duration math (existing behavior)
+- Eliminates the 120-minute default for events with known end times
