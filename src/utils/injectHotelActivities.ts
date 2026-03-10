@@ -190,12 +190,16 @@ export function injectHotelActivitiesIntoDays(
   let updated = stripExistingHotelActivities(days);
 
   // Step 2: Build and inject check-in on the correct day
+  // BUT skip if the day already has a late check-in (AI-generated for event days)
   const checkInDayIdx = findDayIndex(updated, hotel.checkInDate, true);
-  const checkInActivity = buildCheckInActivity(hotel);
-  updated = updated.map((day, idx) => {
-    if (idx !== checkInDayIdx) return day;
-    return { ...day, activities: insertChronologically(day.activities, checkInActivity) };
-  });
+  const dayHasLateCheckin = updated[checkInDayIdx]?.activities.some(a => isLateCheckin(a));
+  if (!dayHasLateCheckin) {
+    const checkInActivity = buildCheckInActivity(hotel);
+    updated = updated.map((day, idx) => {
+      if (idx !== checkInDayIdx) return day;
+      return { ...day, activities: insertChronologically(day.activities, checkInActivity) };
+    });
+  }
 
   // Step 3: Build and inject check-out on the correct day (only if different from check-in day)
   const checkOutDayIdx = findDayIndex(updated, hotel.checkOutDate, false);
