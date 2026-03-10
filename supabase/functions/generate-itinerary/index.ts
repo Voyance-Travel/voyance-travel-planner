@@ -8328,6 +8328,33 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
               });
             }
           }
+
+          // Semantic dedup: remove generated activities whose titles are similar to locked ones
+          const beforeSemanticDedup = normalizedActivities.length;
+          normalizedActivities = normalizedActivities.filter((genAct: any) => {
+            const genTitle = (genAct.title || '').toLowerCase();
+            for (const locked of lockedActivities) {
+              const lockedTitle = (locked.title || '').toLowerCase();
+              // Substring match
+              if (genTitle.includes(lockedTitle) || lockedTitle.includes(genTitle)) {
+                console.log(`[generate-day] Removing "${genAct.title}" — duplicate of locked "${locked.title}"`);
+                return false;
+              }
+              // Keyword match (50% threshold)
+              const keywords = lockedTitle.replace(/\b(the|a|an|at|in|on|for|and|or|to|of)\b/g, '').split(/\s+/).filter((w: string) => w.length > 2);
+              if (keywords.length > 0) {
+                const matchCount = keywords.filter((kw: string) => genTitle.includes(kw)).length;
+                if (matchCount >= Math.ceil(keywords.length * 0.5) && matchCount >= 1) {
+                  console.log(`[generate-day] Removing "${genAct.title}" — semantic duplicate of locked "${locked.title}"`);
+                  return false;
+                }
+              }
+            }
+            return true;
+          });
+          if (normalizedActivities.length < beforeSemanticDedup) {
+            console.log(`[generate-day] Semantic dedup removed ${beforeSemanticDedup - normalizedActivities.length} activities that duplicated locked ones`);
+          }
           
           // Insert locked activities back and sort by time
           normalizedActivities = [...normalizedActivities, ...lockedActivities];
