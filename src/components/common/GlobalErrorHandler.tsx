@@ -29,7 +29,7 @@ export function GlobalErrorHandler() {
         console.error('Error string:', event.reason);
       }
 
-      toast.error(message);
+      toast.error('Something hiccupped. Try that again.');
       event.preventDefault();
     };
 
