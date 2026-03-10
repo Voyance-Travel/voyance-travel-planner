@@ -10209,7 +10209,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
 
         // Defense-in-depth: parse additionalNotes for events that should be in the must-do pipeline
         if (!mustDoPrompt.trim()) {
-          const detectedFromNotes = parseMustDoInput(additionalNotes, destination, false);
+          const detectedFromNotes = parseMustDoInput(additionalNotes, destination, false, preferences?.startDate || date?.split('T')[0], totalDays);
           const eventItems = detectedFromNotes.filter(p => p.activityType === 'all_day_event' || p.activityType === 'half_day_event');
           if (eventItems.length > 0) {
             const scheduled = scheduleMustDos(eventItems, totalDays);
