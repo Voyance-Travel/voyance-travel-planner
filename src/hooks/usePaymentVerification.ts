@@ -6,6 +6,7 @@
 import { useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
+import { toFriendlyError } from '@/utils/friendlyErrors';
 import { verifyPayment } from '@/services/tripPaymentsAPI';
 
 interface UsePaymentVerificationOptions {
