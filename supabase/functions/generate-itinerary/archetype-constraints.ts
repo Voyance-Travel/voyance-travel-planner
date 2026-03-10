@@ -1290,28 +1290,29 @@ VIOLATIONS:
     identity: "The Rediscovery Traveler",
     category: "Transformer",
     meaning: `
-This traveler is rediscovering themselves through travel.
+This traveler is in a chapter of reinvention. They're rediscovering themselves through travel.
 
 They want:
-- Meaningful experiences
-- Comfortable but not excessive
-- New challenges (manageable ones)
-- Cultural enrichment
-- Self-reflection time
+- Meaningful experiences that challenge them (gently)
+- Comfortable but not excessive — quality matters
+- Cultural enrichment and new perspectives
+- Self-reflection time built into the day
 - Balance of activity and rest
+- Experiences that feel like growth, not just tourism
 
 Their ideal day:
 - Comfortable morning start
-- Meaningful cultural experience
-- Good lunch (quality matters)
-- Afternoon: new experience or reflection
+- Meaningful cultural experience (museum, neighborhood, historical site)
+- Good lunch — quality matters, not speed
+- Afternoon: something new, or time to reflect
 - Evening: nice dinner, not rushed
 
-WHAT "MIDLIFE" MEANS:
+WHAT "REDISCOVERY" MEANS:
 - Quality over quantity
 - Meaning over checking boxes
-- Comfort is reasonable
-- Still adventurous, but smart
+- Comfort is reasonable and deserved
+- Still adventurous, but intentional
+- Travel as a way to find new parts of yourself
 
 VIOLATIONS:
 - Backpacker hostels = VIOLATION
