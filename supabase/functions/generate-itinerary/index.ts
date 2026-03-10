@@ -8507,17 +8507,40 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             // Transit activities like "Subway to US Open" contain the event name but are NOT the event
             const transportCategories = ['transport', 'transportation', 'transit', 'transfer'];
             const transportTitlePatterns = /\b(transfer|transit|taxi|uber|subway|metro|bus|drive|ride|lyft|car service|shuttle|walk(?:ing)?)\s+(to|from|back)\b/i;
+            // Extract core keywords from the must-do title for semantic matching
+            // e.g., "Comedy Show" → ["comedy", "show"]
+            const coreKeywords = eventTitleLower
+              .replace(/\b(the|a|an|at|in|on|for|and|or|to|of|my|our)\b/g, '')
+              .split(/\s+/)
+              .filter(w => w.length > 2);
+
             const eventExists = generatedDay.activities.some((act: any) => {
               const actTitle = (act.title || '').toLowerCase();
               const actCategory = (act.category || '').toLowerCase();
-              const titleMatchesEvent = actTitle.includes(eventTitleLower) || eventTitleLower.includes(actTitle);
-              if (!titleMatchesEvent) return false;
+
               // Transport/transit activities do NOT count as the event itself
               if (transportCategories.includes(actCategory)) return false;
               if (transportTitlePatterns.test(act.title || '')) return false;
               // Empty or very short titles are false positives
               if (actTitle.length < 3) return false;
-              return true;
+
+              // Exact/substring match (original logic)
+              const titleMatchesEvent = actTitle.includes(eventTitleLower) || eventTitleLower.includes(actTitle);
+              if (titleMatchesEvent) return true;
+
+              // Semantic keyword match — if the AI generated a different title
+              // for the same activity (e.g., "Friday Night Stand-Up Comedy" vs "Comedy Show"),
+              // check if a majority of the must-do's core keywords appear in the AI title
+              if (coreKeywords.length > 0) {
+                const matchCount = coreKeywords.filter(kw => actTitle.includes(kw)).length;
+                const matchRatio = matchCount / coreKeywords.length;
+                if (matchRatio >= 0.5 && matchCount >= 1) {
+                  console.log(`[generate-day] Semantic match: must-do "${eventTitleLower}" ↔ AI activity "${actTitle}" (${matchCount}/${coreKeywords.length} keywords)`);
+                  return true;
+                }
+              }
+
+              return false;
             });
 
             if (!eventExists) {
