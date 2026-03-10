@@ -219,6 +219,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Prevent onAuthStateChange from triggering redundant loads while initializeAuth runs
   const isProcessingAuthRef = useRef(false);
+  // Queue for OAuth SIGNED_IN events that fire before initial load completes
+  const pendingOAuthSessionRef = useRef<any>(null);
   // Track current user ID to skip redundant SIGNED_IN events for the same user
   const currentUserIdRef = useRef<string | null>(null);
 
