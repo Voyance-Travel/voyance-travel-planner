@@ -10383,24 +10383,22 @@ REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity 
 1. "Arrival at Airport"
    - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
    - category: "transport"
-   - ⚠️ This MUST be its own activity block — do NOT merge with transfer or check-in
+   - ⚠️ This MUST be its own activity block — do NOT merge with check-in
 
-2. "Airport Transfer to Hotel"
-   - startTime: "${transferStart}", endTime: "${transferEnd}"
-   - category: "transport"
-   - location: { name: "${hotelNameDisplay}", address: "${hotelAddressDisplay}" }
-
-3. "Hotel Check-in"
+2. "Hotel Check-in"
    - startTime: "${hotelCheckIn}", endTime: "${settleInEnd}"
    - category: "accommodation"
+   - location: { name: "${hotelNameDisplay}", address: "${hotelAddressDisplay}" }
+
+Do NOT generate an "Airport Transfer to Hotel" activity — the transfer is handled by a separate UI widget.
 
 EVENING ARRIVAL GUIDELINES:
 - Day 1 should ONLY include:
-  * The 3 arrival activities above
+  * The 2 arrival activities above
   * OPTIONALLY: One dinner near the hotel (if time permits and traveler isn't exhausted)
 - The traveler needs rest after a long journey
 - NO intensive sightseeing on an evening arrival
-- Maximum 4 activities total including the required sequence
+- Maximum 3 activities total including the required sequence
 
 DO NOT plan activities before ${arrival24}.`;
           }
