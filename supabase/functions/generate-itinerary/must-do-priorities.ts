@@ -652,14 +652,23 @@ FAILURE TO INCLUDE ANY OF THESE IS A HARD FAILURE.
       const { blockedStart, blockedEnd } = getBlockedTimeRange(s);
       prompt += `\n**${s.priority.title}** → Day ${s.assignedDay}${venue}${dates}
 ⏰ BLOCKED TIME: ${blockedStart}–${blockedEnd} (${durationHours} hours)
-This time window is FULLY OCCUPIED. Do NOT schedule ANY activities between ${blockedStart} and ${blockedEnd}.
-Only plan:
+
+YOU MUST CREATE AN ACTIVITY ENTRY for "${s.priority.title}" with:
+- title: "${s.priority.title}"
+- startTime: "${blockedStart}"
+- endTime: "${blockedEnd}"
+- This MUST appear as a real activity card in the itinerary JSON output.
+
+Do NOT schedule any OTHER activities between ${blockedStart} and ${blockedEnd} — this time belongs to "${s.priority.title}".
+
+Day structure:
 - Breakfast before ${subtractMinutes(blockedStart, 30)}
 - Transit to venue ~${subtractMinutes(blockedStart, 30)}
-- THE EVENT from ${blockedStart} to ${blockedEnd}
-- Transit from venue ~${blockedEnd}
-- Dinner after ${addMinutes(blockedEnd, 30)}
-Any activity overlapping ${blockedStart}–${blockedEnd} is a HARD FAILURE.
+- "${s.priority.title}" from ${blockedStart} to ${blockedEnd} (MANDATORY ACTIVITY ENTRY)
+- Transit from venue after ${blockedEnd}
+- Dinner/evening activities after ${addMinutes(blockedEnd, 30)}
+
+Any OTHER activity overlapping ${blockedStart}–${blockedEnd} is a HARD FAILURE. But the event itself MUST be present.
 ${s.priority.requiresBooking ? '⚠️ TICKETS/BOOKING REQUIRED — mention this prominently\n' : ''}`;
     }
     prompt += '\n';
@@ -674,7 +683,7 @@ ${s.priority.requiresBooking ? '⚠️ TICKETS/BOOKING REQUIRED — mention this
         : s.priority.preferredTime === 'morning' ? 'morning (leave afternoon/evening free)' 
         : `${s.priority.preferredTime || 'assigned time'} block`;
       prompt += `- **${s.priority.title}** → Day ${s.assignedDay}, ${timeBlock} (~${durationHours}h)\n`;
-      prompt += `  ⏰ BLOCKED TIME: ${blockedStart}–${blockedEnd}. Do NOT schedule ANY other activities in this window.\n`;
+      prompt += `  ⏰ BLOCKED TIME: ${blockedStart}–${blockedEnd}. YOU MUST create an activity entry for "${s.priority.title}" in this window. Do NOT schedule any OTHER activities here.\n`;
       if (s.priority.requiresBooking) prompt += `  ⚠️ BOOKING REQUIRED\n`;
     }
     prompt += `→ Fill the OTHER half of these days with sightseeing/activities.\n\n`;
