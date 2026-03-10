@@ -3536,7 +3536,7 @@ DO NOT:
 - Skip the celebration element
 
 Adjust to archetype:
-- Bucket List Conqueror retirement = finally checking off that big item
+- Milestone Voyager retirement = finally checking off that big item
 - Slow Traveler retirement = ultimate slow travel, no clock
 - Cultural Anthropologist retirement = deep cultural immersion they never had time for
 `,
