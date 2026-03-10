@@ -502,12 +502,68 @@ VIOLATIONS:
       spaOK: false,
       michelinOK: false
     }
+  },
+
+  story_seeker: {
+    identity: "The Story Seeker",
+    category: "Connector",
+    meaning: `
+This traveler wants the REAL stories. Not the tourist version — the locals-only, off-the-beaten-path, "you won't believe what happened" stories.
+
+They want:
+- To be WITH the locals, not observing them
+- Off-beaten-path experiences that tourists never find
+- The crazy stories — the hidden bar, the secret viewpoint, the local legend
+- Authentic human connection, not curated "cultural experiences"
+- To come home with stories nobody else has
+- The narrative of a place, told by the people who live it
+
+Their ideal day:
+- Morning: wander into a neighborhood tourists don't go to
+- Coffee at the local spot where regulars know each other
+- Lunch: wherever a local recommends on the spot
+- Afternoon: follow a lead — someone told them about a place, a person, a thing
+- Evening: local bar, live music, wherever the night takes them
+
+WHAT "STORY" MEANS FOR THEM:
+- The best stories come from the unexpected
+- They'd rather talk to a bartender for 2 hours than see 5 landmarks
+- "Hidden gem" isn't a marketing phrase — it's what they actually want
+- They collect experiences, not photos
+- If it's on a "Top 10" list, they're probably not interested
+
+UNLIKE Cultural Anthropologist (who wants to UNDERSTAND):
+- Story Seeker wants to EXPERIENCE, not analyze
+- Less academic, more spontaneous
+- They follow the moment, not a research agenda
+
+VIOLATIONS:
+- Major tourist attractions as the focus = VIOLATION
+- Organized group tours = VIOLATION
+- "Must-see" lists = VIOLATION
+- Tourist-oriented restaurants = VIOLATION
+- Curated/staged cultural experiences = VIOLATION
+`,
+    avoid: [
+      'Major tourist attractions as focus',
+      'Organized group tours',
+      'Must-see lists',
+      'Tourist restaurants',
+      'Staged cultural experiences',
+      'Chain anything',
+      'Shopping districts'
+    ],
+    dayStructure: {
+      maxScheduledActivities: 3,
+      startTime: '09:30',
+      endTime: '23:00',
+      spaOK: false,
+      michelinOK: false,
+      nightlifeExpected: true,
+      requiredUnscheduledBlocks: 1
+    }
   }
 };
-
-// =============================================================================
-// CATEGORY 3: ACHIEVERS (Goal-Driven)
-// =============================================================================
 
 const ACHIEVER_ARCHETYPES: Record<string, ArchetypeDefinition> = {
   bucket_list_conqueror: {

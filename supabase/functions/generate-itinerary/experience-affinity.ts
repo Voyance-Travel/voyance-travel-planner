@@ -179,9 +179,12 @@ export const EXPERIENCE_AFFINITY: Record<string, ExperienceAffinity> = {
     never: ['luxury', 'tourist_bubbles', 'chains', 'passive_sightseeing', 'exploitative_tourism']
   },
 
-  // =========================================================================
-  // ACHIEVERS
-  // =========================================================================
+  story_seeker: {
+    high: ['neighborhood', 'street_life', 'local_bar', 'local_restaurant', 'street_food', 'food_market', 'cafe'],
+    medium: ['walking_tour', 'cultural_performance', 'historical_site', 'cooking_class', 'cocktail_bar'],
+    low: ['museum', 'landmark', 'wine_tasting', 'garden', 'park'],
+    never: ['shopping', 'resort_amenity', 'spa', 'luxury_dining', 'vip_experience']
+  },
 
   bucket_list_conqueror: {
     high: ['major_landmarks', 'iconic_sites', 'famous_viewpoints', 'must_see_attractions', 'photo_ops', 'world_wonders'],
@@ -359,6 +362,7 @@ export const TIME_PREFERENCES: Record<string, TimePreferences> = {
   family_architect: { startTime: '08:30', endTime: '19:00', peakEnergy: 'morning', notes: 'After kids wake. Early dinner. Home by bedtime.' },
   eco_ethicist: { startTime: '08:00', endTime: '21:00', peakEnergy: 'morning', notes: 'Early for nature, sustainable pacing.' },
   community_builder: { startTime: '08:30', endTime: '21:00', peakEnergy: 'morning', notes: 'Aligned with local community schedules.' },
+  story_seeker: { startTime: '09:30', endTime: '23:00', peakEnergy: 'evening', notes: 'Neighborhoods wake up late. Nightlife is where the stories are.' },
   retirement_ranger: { startTime: '09:00', endTime: '20:00', peakEnergy: 'morning', notes: 'Comfortable morning start. Early dinner preferred.' },
   retreat_regular: { startTime: '07:30', endTime: '21:00', peakEnergy: 'morning', notes: 'Morning wellness routine. Early, healthy dinner.' },
 
@@ -441,6 +445,7 @@ export const ENVIRONMENT_PREFERENCES: Record<string, EnvironmentPreferences> = {
   culinary_cartographer: { indoorOutdoor: 'balanced', urbanNature: 'urban_preferred', crowdTolerance: 'avoid_crowds', structureLevel: 'moderate' },
   collection_curator: { indoorOutdoor: 'balanced', urbanNature: 'balanced', crowdTolerance: 'avoid_crowds', structureLevel: 'moderate' },
   community_builder: { indoorOutdoor: 'balanced', urbanNature: 'balanced', crowdTolerance: 'crowds_ok', structureLevel: 'moderate' },
+  story_seeker: { indoorOutdoor: 'balanced', urbanNature: 'urban_preferred', crowdTolerance: 'crowds_ok', structureLevel: 'low_structure' },
   midlife_explorer: { indoorOutdoor: 'balanced', urbanNature: 'balanced', crowdTolerance: 'avoid_crowds', structureLevel: 'moderate' },
   retirement_ranger: { indoorOutdoor: 'balanced', urbanNature: 'balanced', crowdTolerance: 'avoid_crowds', structureLevel: 'moderate' },
   balanced_story_collector: { indoorOutdoor: 'balanced', urbanNature: 'balanced', crowdTolerance: 'crowds_ok', structureLevel: 'moderate' }
@@ -474,6 +479,7 @@ export const PHYSICAL_INTENSITY: Record<string, PhysicalIntensity> = {
   social_butterfly: { level: 'moderate', dailySteps: '10,000-15,000', walkingHours: '3-4', notes: 'Group activities, walking tours, bar hopping.' },
   eco_ethicist: { level: 'moderate', dailySteps: '12,000-16,000', walkingHours: '3-5', notes: 'Walking and biking preferred over transport.' },
   community_builder: { level: 'moderate', dailySteps: '10,000-14,000', walkingHours: '3-4', notes: 'Community visits, neighborhood walking.' },
+  story_seeker: { level: 'moderate', dailySteps: '10,000-16,000', walkingHours: '3-5', notes: 'Neighborhood wandering, bar hopping, following leads on foot.' },
   sabbatical_scholar: { level: 'moderate', dailySteps: '8,000-12,000', walkingHours: '2-3', notes: 'Library time, lectures, some walking.' },
   balanced_story_collector: { level: 'moderate', dailySteps: '10,000-14,000', walkingHours: '3-4', notes: 'Balanced mix of activity types.' },
   digital_explorer: { level: 'moderate', dailySteps: '8,000-12,000', walkingHours: '2-3', notes: 'Some walking for photo spots, but lots of sitting.' },
