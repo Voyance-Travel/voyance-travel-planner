@@ -90,3 +90,25 @@ Added `SAME_METRO_PAIRS` lookup in `buildTransitionDayPrompt` (prompt-library.ts
 4. **`get_trip_invite_info()`** — `WHERE LOWER(token) = LOWER(p_token)` + failure logging + `replaced_at` check
 5. **`accept_trip_invite()`** — `WHERE LOWER(token) = LOWER(p_token) FOR UPDATE`
 6. **`replaced_at` column** — added to `trip_invites` for soft-delete support
+
+---
+
+## Fix: User Requirements Ignored in Just Tell Us Pipeline ✅ COMPLETE
+
+### Layer 1: `findBestDay` respects `preferredDay` on Day 1/last day ✅
+- Modified skip guard in `must-do-priorities.ts` L472 to allow long activities on Day 1/last day when user explicitly requested that day via `preferredDay`.
+
+### Layer 2: `parseMustDoInput` resolves day-of-week and multi-day references ✅
+- Added `tripStartDate` and `totalDays` parameters to function signature
+- Day-of-week resolution: maps "Friday", "Saturday" etc. to trip day numbers using start date
+- Multi-day expansion: "both days" / "every day" / "all N days" duplicated into per-day entries
+- Updated all 5 callers in `index.ts` to pass `startDate` and `totalDays`
+
+### Layer 3: Chat AI prompt strengthened for temporal mapping ✅
+- Added CRITICAL TEMPORAL MAPPING RULES to system prompt in `chat-trip-planner/index.ts`
+- Updated `mustDoActivities` field description to instruct AI to expand multi-day refs into per-day entries with explicit day numbers
+
+### Layer 4: Day 1 arrival uses actual airport name ✅
+- Added `arrivalAirport` to `FlightHotelContextResult` interface and return value
+- Stage 2.55 split block uses `flightHotelResult.arrivalAirport` instead of hardcoded `'Airport'`
+- All 3 Day 1 constraint templates (morning/afternoon/evening) use `arrivalAirportDisplay`
