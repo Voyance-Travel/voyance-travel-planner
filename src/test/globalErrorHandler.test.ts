@@ -38,7 +38,7 @@ class ErrorHandler {
     console.error('Global Error:', event.error || event.message);
 
     // Show user-friendly toast
-    this.toastError('Something went wrong. Please refresh the page.');
+    this.toastError('Something hiccupped. A quick refresh should fix it.');
 
     // Prevent default
     event.preventDefault();
