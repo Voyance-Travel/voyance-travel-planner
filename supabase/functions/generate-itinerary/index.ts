@@ -8479,10 +8479,21 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             const { blockedStart, blockedEnd } = getBlockedTimeRange(eventItem);
             const eventTitleLower = eventItem.priority.title.toLowerCase();
 
-            // Check if an activity matching this event already exists
+            // Check if a NON-TRANSPORT activity matching this event already exists
+            // Transit activities like "Subway to US Open" contain the event name but are NOT the event
+            const transportCategories = ['transport', 'transportation', 'transit', 'transfer'];
+            const transportTitlePatterns = /\b(transfer|transit|taxi|uber|subway|metro|bus|drive|ride|lyft|car service|shuttle|walk(?:ing)?)\s+(to|from|back)\b/i;
             const eventExists = generatedDay.activities.some((act: any) => {
               const actTitle = (act.title || '').toLowerCase();
-              return actTitle.includes(eventTitleLower) || eventTitleLower.includes(actTitle);
+              const actCategory = (act.category || '').toLowerCase();
+              const titleMatchesEvent = actTitle.includes(eventTitleLower) || eventTitleLower.includes(actTitle);
+              if (!titleMatchesEvent) return false;
+              // Transport/transit activities do NOT count as the event itself
+              if (transportCategories.includes(actCategory)) return false;
+              if (transportTitlePatterns.test(act.title || '')) return false;
+              // Empty or very short titles are false positives
+              if (actTitle.length < 3) return false;
+              return true;
             });
 
             if (!eventExists) {
