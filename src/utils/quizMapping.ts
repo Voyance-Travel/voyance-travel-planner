@@ -724,6 +724,7 @@ function getArchetypeTagline(id: string): string {
     art_aficionado: 'Every gallery is a pilgrimage.',
     luxury_luminary: 'Champagne wishes, caviar dreams, economy never.',
     eco_ethicist: 'Travel gently, experience deeply.',
+    history_hunter: 'Every stone has a story — you just have to look.',
     // TRANSFORMER
     gap_year_graduate: 'The next horizon is always calling.',
     midlife_explorer: "The best chapter hasn't been written yet.",
