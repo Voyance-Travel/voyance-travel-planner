@@ -354,7 +354,15 @@ serve(async (req) => {
                           },
                           time: {
                             type: "string",
-                            description: "Specific time if mentioned (e.g., '7:30 PM', '3:00 PM')",
+                            description: "Start time if mentioned (e.g., '9:00 AM', '3:00 PM'). For time ranges like '9am to 5pm', this is the START time.",
+                          },
+                          endTime: {
+                            type: "string",
+                            description: "End time if the user specifies a range. For '9am to 5pm', time='9:00 AM' and endTime='5:00 PM'. For '9am-6pm', time='9:00 AM' and endTime='6:00 PM'. ALWAYS set this when a time range is mentioned.",
+                          },
+                          duration: {
+                            type: "number",
+                            description: "Duration in minutes if known and endTime is not set. For '9am to 5pm' prefer endTime over duration. Only use duration for cases like 'a 2-hour cooking class'.",
                           },
                           allDay: {
                             type: "boolean",

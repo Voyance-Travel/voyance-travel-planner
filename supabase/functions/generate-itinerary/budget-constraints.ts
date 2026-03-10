@@ -404,10 +404,29 @@ export function formatGenerationRules(rules: Array<{type: string; days?: string[
         const dayNames = (rule.days || []).map(d => dayMap[d] || d).join(', ');
         // Sanitize NaN times — skip malformed rules entirely
         const fromTime = String(rule.from || '');
-        const toTime = String(rule.to || '');
+        let toTime = String(rule.to || '');
         if (fromTime.includes('NaN') || toTime.includes('NaN') || !fromTime || !toTime) {
           console.warn(`[formatGenerationRules] Skipping malformed blocked_time rule: from="${fromTime}", to="${toTime}", reason="${rule.reason}"`);
           break;
+        }
+        // Self-correct truncated blocked windows from reason/description text
+        // e.g. reason="US Open tennis tournament from 9am to 5pm" but to="11:00" (wrong default)
+        const reasonText = rule.reason || rule.description || '';
+        const timeRangeMatch = reasonText.match(
+          /(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*(?:to|[-–—])\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i
+        );
+        if (timeRangeMatch) {
+          let endH = parseInt(timeRangeMatch[4], 10);
+          const endM = timeRangeMatch[5] ? parseInt(timeRangeMatch[5], 10) : 0;
+          const endMeridiem = timeRangeMatch[6].toLowerCase();
+          if (endMeridiem === 'pm' && endH < 12) endH += 12;
+          if (endMeridiem === 'am' && endH === 12) endH = 0;
+          const parsedEnd = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+          // Only override if parsed end is later than current to (fixes truncated defaults)
+          if (parsedEnd > toTime) {
+            console.log(`[formatGenerationRules] Correcting blocked_time to: "${toTime}" → "${parsedEnd}" (parsed from reason: "${reasonText}")`);
+            toTime = parsedEnd;
+          }
         }
         lines.push(`${num}. BLOCKED TIME: On ${dayNames}, do NOT schedule any activities between ${fromTime} and ${toTime}.${rule.reason ? ` Reason: ${rule.reason}.` : ''} Leave these hours completely free.`);
         break;
