@@ -709,7 +709,7 @@ function getArchetypeTagline(id: string): string {
     // ACHIEVER
     bucket_list_conqueror: 'Life is a checklist of wonders.',
     adrenaline_architect: 'Normal is just a setting on the washing machine.',
-    collection_curator: 'Countries collected, stamps earned.',
+    collection_curator: 'Every passport stamp tells a story.',
     status_seeker: "First class isn't a seat, it's a lifestyle.",
     // RESTORER
     zen_seeker: 'Breathe in experience, exhale expectation.',
