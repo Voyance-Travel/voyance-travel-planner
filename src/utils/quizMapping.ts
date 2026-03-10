@@ -729,7 +729,7 @@ function getArchetypeTagline(id: string): string {
     healing_journeyer: 'Travel is the medicine for the soul.',
     retirement_ranger: 'Your next chapter deserves the whole world as its backdrop.',
     // CONNECTOR (additional)
-    community_builder: 'You travel to connect, contribute, and belong.',
+    community_builder: 'Travel with purpose, connect with meaning.',
     // RESTORER (additional)
     sanctuary_seeker: 'You seek places that feel like a sacred refuge.',
   };
