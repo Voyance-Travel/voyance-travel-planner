@@ -6991,14 +6991,26 @@ REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity 
    - This is the main activity. Schedule it for the appropriate duration after transfer.
    - category: appropriate category for the event
 
-4. After the event ends, add:
-   - Transfer to hotel
-   - Hotel check-in (late check-in)
-   - Dinner (if time permits)
+4. "Transfer to ${flightContext.hotelName || 'Hotel'}"
+   - startTime: after the event ends (estimate based on event duration + 30 min)
+   - category: "transit"
+   - description: "Head to the hotel after the event"
 
-IMPORTANT: The traveler CHOSE to go directly to the event. Respect this choice.
-Do NOT add a hotel check-in before the event.
-Do NOT generate a separate "Airport Transfer to Hotel" activity before the event.
+5. "Hotel Check-in"
+   - startTime: 30 minutes after transfer starts
+   - category: "accommodation"
+   - description: "Late check-in after a full day at ${eventName}. Drop bags, freshen up."
+   - location: { name: "${flightContext.hotelName || 'Hotel'}", address: "${flightContext.hotelAddress || ''}" }
+   - tags: ["check-in", "late-checkin", "structural"]
+   - ⚠️ THIS IS REQUIRED. Do NOT skip this activity. The traveler MUST check in to their hotel.
+
+6. Dinner (if time permits — only add if check-in ends before 21:30)
+
+⚠️ IMPORTANT CONSTRAINTS:
+- The traveler CHOSE to go directly to the event. Respect this choice.
+- Do NOT add a hotel check-in BEFORE the event.
+- Do NOT generate a separate "Airport Transfer to Hotel" activity before the event.
+- Activities 4 and 5 (transfer + hotel check-in) are MANDATORY after the event. The traveler needs to get to their hotel.
 
 DO NOT plan activities before ${arrival24}. The day starts when the plane lands.`;
           } else if (isMorningArrival) {
