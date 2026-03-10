@@ -8578,6 +8578,21 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
               return false;
             });
 
+            // Also check if this must-do is already locked on the day — no need to backfill
+            const eventIsLocked = lockedActivities.some((locked: any) => {
+              const lockedTitle = (locked.title || '').toLowerCase();
+              if (lockedTitle.includes(eventTitleLower) || eventTitleLower.includes(lockedTitle)) return true;
+              if (coreKeywords.length > 0) {
+                const matchCount = coreKeywords.filter((kw: string) => lockedTitle.includes(kw)).length;
+                if (matchCount >= Math.ceil(coreKeywords.length * 0.5) && matchCount >= 1) return true;
+              }
+              return false;
+            });
+            if (eventIsLocked) {
+              console.log(`[generate-day] Skipping must-do backfill "${eventItem.priority.title}" — already locked on this day`);
+              continue;
+            }
+
             if (!eventExists) {
               console.log(`[generate-day] ⚠️ BACKFILL: Must-do event "${eventItem.priority.title}" missing from Day ${dayNumber} — injecting deterministic activity card`);
 
