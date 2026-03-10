@@ -8064,9 +8064,44 @@ If the purpose is a specific event, plan at least ONE full day around that event
 
       // Combine all context for maximum personalization
       // Order: USER CONSTRAINTS (highest priority) → FLIGHT DETAILS → ARCHETYPE CONSTRAINTS → INTEREST OVERRIDE → TRIP VIBE → TRIP TYPE → SKIP LIST → DIETARY ENFORCEMENT → raw prefs → enriched prefs → flight/hotel → LEARNINGS → RECENTLY USED → LOCAL EVENTS → HIDDEN GEMS → NEW PERSONALIZATION MODULES → GEOGRAPHIC COHERENCE → USER RESEARCH
-      // NOTE: generationHierarchy includes destination essentials, archetype behavioral rules, budget guardrails (Phase 2 Fix)
+      // PRIORITY ORDER: System defaults first, then user constraints LAST (most recent = highest priority for AI)
       // Phase 2 Fix: Removed unifiedDNAContext - all traveler data now comes from generationHierarchy via unified profile
-      const preferenceContext = userConstraintPrompt + '\n\n' + flightDetailsPrompt + '\n\n' + generationHierarchy + '\n\n' + interestOverridePrompt + '\n\n' + tripVibePrompt + '\n\n' + tripTypePrompt + '\n\n' + skipListPrompt + '\n\n' + dietaryEnforcementPrompt + '\n\n' + rawPreferenceContext + enrichedPreferenceContext + flightHotelResult.context + (context.flightIntelligencePrompt ? '\n\n' + context.flightIntelligencePrompt : '') + tripLearningsContext + recentlyUsedContext + localEventsContext + hiddenGemsContext + voyancePicksContext + coldStartContext + forcedSlotsPrompt + scheduleConstraintsPrompt + explainabilityPrompt + truthAnchorPrompt + groupReconciliationPrompt + groupBlendingPromptSection + geographicPrompt + userResearchPrompt + mustHavesPrompt + preBookedPrompt;
+      const preferenceContext =
+        // --- SYSTEM DEFAULTS (lowest priority — can be overridden by user) ---
+        generationHierarchy + '\n\n' +
+        interestOverridePrompt + '\n\n' +
+        tripVibePrompt + '\n\n' +
+        tripTypePrompt + '\n\n' +
+        skipListPrompt + '\n\n' +
+        dietaryEnforcementPrompt + '\n\n' +
+        rawPreferenceContext +
+        enrichedPreferenceContext +
+        tripLearningsContext +
+        recentlyUsedContext +
+        localEventsContext +
+        hiddenGemsContext +
+        voyancePicksContext +
+        coldStartContext +
+        forcedSlotsPrompt +
+        scheduleConstraintsPrompt +
+        explainabilityPrompt +
+        truthAnchorPrompt +
+        groupReconciliationPrompt +
+        groupBlendingPromptSection +
+        geographicPrompt +
+        // --- LOGISTICS (medium priority) ---
+        flightHotelResult.context +
+        (context.flightIntelligencePrompt ? '\n\n' + context.flightIntelligencePrompt : '') +
+        flightDetailsPrompt + '\n\n' +
+        // --- USER REQUIREMENTS (highest priority — OVERRIDE everything above) ---
+        '\n\n⚠️ FINAL AUTHORITY — USER REQUIREMENTS BELOW OVERRIDE ALL RULES ABOVE ⚠️\n' +
+        'If ANY rule above conflicts with a user requirement below, the user requirement WINS. ' +
+        'This includes pacing rules, activity counts, archetype density targets, and trip vibe suggestions. ' +
+        'The user\'s explicit requests are the single source of truth for this itinerary.\n\n' +
+        userConstraintPrompt + '\n\n' +
+        userResearchPrompt + '\n\n' +
+        mustHavesPrompt + '\n\n' +
+        preBookedPrompt;
 
       // STAGE 1.9999: Pre-fetch known venue hours from verified_venues cache
       try {
