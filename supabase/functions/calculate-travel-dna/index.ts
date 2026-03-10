@@ -236,7 +236,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
   },
   {
     id: 'digital_explorer',
-    name: 'The Digital Explorer',
+    name: 'The Untethered Traveler',
     category: 'EXPLORER',
     tagline: 'Your laptop is your passport extension.',
     primaryTraits: [
