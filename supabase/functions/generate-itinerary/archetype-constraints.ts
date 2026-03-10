@@ -1772,7 +1772,7 @@ export function buildNamingRules(): string {
 DO NOT name activities after the archetype. This is manipulation, not personalization.
 
 WRONG:
-- "Flexible Wanderer Boutique Hunt"
+- "Wildcard Boutique Hunt"
 - "Slow Traveler Coffee Moment"  
 - "Beach Therapist Sunset Session"
 - "Cultural Anthropologist Market Tour"

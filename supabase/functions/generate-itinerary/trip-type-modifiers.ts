@@ -3713,7 +3713,7 @@ DO NOT:
 - Suggest strenuous activities unless requested
 - Forget the purpose is restoration
 
-This essentially makes them Retreat Regular for this trip, regardless of base archetype.
+This essentially makes them Wellness Devotee for this trip, regardless of base archetype.
 `,
     frequency: {
       wellnessActivity: 'daily',

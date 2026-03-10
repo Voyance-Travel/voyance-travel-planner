@@ -86,7 +86,7 @@ export const ARCHETYPE_TEASERS: Record<string, ArchetypeTeaser> = {
     ],
   },
   flexible_wanderer: {
-    name: "Flexible Wanderer",
+    name: "The Wildcard",
     oneLiner: "Plans are suggestions. The best stuff isn't on the itinerary.",
     typicalTrip: [
       "Every hour accounted for",

@@ -312,7 +312,7 @@ export function deriveForcedSlots(
     });
   }
   
-  // 3. DIGITAL EXPLORER: Connectivity Spot (interests or archetype)
+  // 3. UNTETHERED TRAVELER: Connectivity Spot (interests or archetype)
   const isDigitalExplorer = interests.some(i =>
     ['digital', 'remote work', 'coworking', 'technology', 'wifi', 'laptop', 'work-friendly'].includes(i.toLowerCase())
   ) || context?.primaryArchetype === 'digital_explorer' || context?.secondaryArchetype === 'digital_explorer';

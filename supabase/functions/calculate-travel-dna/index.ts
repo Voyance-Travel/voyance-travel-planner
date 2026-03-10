@@ -821,7 +821,7 @@ const ANSWER_DELTAS: Record<string, AnswerDelta> = {
   'rm4': { deltas: { planning: 4, transformation: 4, comfort: 2 }, label: 'Structured wellness' }, // Retreat
   'rm5': { deltas: { pace: 3, adventure: 2 }, label: 'Action over recharge' },                      // None
   
-  // Q19: Luxury driver - Separates Status Seeker ↔ Luxury Luminary
+  // Q19: Luxury driver - Separates VIP Voyager ↔ Luxury Luminary
   'ld1': { deltas: { comfort: 5, social: 3, budget: -6 }, label: 'Prestige seeker' },               // Status-driven
   'ld2': { deltas: { comfort: 6, planning: 3, budget: -5 }, label: 'Craft appreciator' },           // Quality-driven
   'ld3': { deltas: { budget: 4, authenticity: 2 }, label: 'Value prioritizer' },                    // Not luxury-focused
