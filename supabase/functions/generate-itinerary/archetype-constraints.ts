@@ -189,42 +189,43 @@ VIOLATIONS:
     identity: "The Untethered Traveler",
     category: "Explorer",
     meaning: `
-This traveler blends technology, gaming culture, and modern experiences.
+This traveler lives the location-free lifestyle. They work remotely, travel constantly, and blend productivity with exploration.
 
 They want:
-- Tech districts and innovation hubs
-- Gaming cafés and arcades
-- Digital art experiences (teamLab, etc.)
-- Unique photo opportunities for social media
-- Modern architecture
-- Connectivity (reliable WiFi matters)
+- Neighborhoods with great WiFi and coworking-friendly cafés
+- Experiences they can fit around a flexible work schedule
+- Digital nomad hotspots and creative districts
+- Modern, design-forward spaces
+- Unique photo opportunities worth sharing
+- Late starts (night owl tendencies)
 
 Their ideal day:
-- Sleep in (night owl tendencies)
-- Afternoon at a tech/gaming experience
-- Instagram-worthy stops
-- Evening: gaming café, VR experience, or tech event
+- Late morning start, coffee at a café with WiFi
+- A few hours of work or creative time
+- Afternoon exploration — neighborhood walks, street art, modern architecture
+- Evening: rooftop bar, night market, or local scene
 - Late night exploration
 
-WHAT "DIGITAL" MEANS FOR THEM:
-- Modern over historical
+WHAT "UNTETHERED" MEANS FOR THEM:
+- Freedom from a fixed location
+- Work and travel are not separate
+- Modern over historical (unless it's cool)
+- Connected but independent
 - Experiences that photograph well
-- Tech-forward venues
-- Gaming culture is legitimate culture
 
 VIOLATIONS:
-- Ancient ruins focus = VIOLATION (unless unique angle)
-- Traditional museums = VIOLATION
+- Early morning group tours = VIOLATION
 - Areas with poor connectivity = VIOLATION
-- "Unplugged" experiences = VIOLATION
+- Rigid schedules = VIOLATION
+- "Unplugged" or digital detox experiences = VIOLATION
 `,
     avoid: [
-      'Traditional museums',
-      'History-focused tours',
+      'Early morning group tours',
       'Remote areas without WiFi',
-      'Early morning activities',
+      'Rigid time schedules',
       'Unplugged/digital detox experiences',
-      'Traditional fine dining'
+      'Traditional fine dining (too long)',
+      'Conventional tourist itineraries'
     ],
     dayStructure: {
       maxScheduledActivities: 4,
@@ -458,33 +459,34 @@ VIOLATIONS:
     identity: "The Purpose Voyager",
     category: "Connector",
     meaning: `
-This traveler wants to give back and connect meaningfully.
+This traveler wants their trip to MEAN something beyond tourism.
 
 They want:
-- Volunteer opportunities
-- Community-based tourism
-- Local NGO visits
-- Social enterprise support
-- Meaningful local connections
-- Experiences that help others
+- Cultural exchange with locals, not just observation
+- Supporting local artisans and small businesses directly
+- Meaningful homestay or local family dining experiences
+- Understanding how people actually live
+- Experiences that create mutual benefit
+- Leaving a place a little better than they found it
 
 Their ideal day:
-- Morning volunteer activity
-- Lunch with community members
-- Afternoon learning about local issues
-- Evening: social enterprise dinner or local gathering
+- Morning: visit a local artisan workshop or small business
+- Lunch with a local family or at a community-run spot
+- Afternoon: cultural exchange, local market, or meaningful conversation
+- Evening: locally owned restaurant, supporting the neighborhood economy
 
-WHAT "COMMUNITY" MEANS:
+WHAT "PURPOSE" MEANS FOR THEM:
 - Impact over entertainment
-- Giving over taking
-- Learning about real challenges
+- Exchange over observation
 - Supporting local economies directly
+- Authentic connection, not staged experiences
+- They want to understand, not just consume
 
 VIOLATIONS:
-- Luxury experiences = VIOLATION
-- Tourist bubbles = VIOLATION
+- Luxury resort bubbles = VIOLATION
 - Chain restaurants/hotels = VIOLATION
-- Passive sightseeing = VIOLATION
+- Tourist-only zones = VIOLATION
+- Passive sightseeing without connection = VIOLATION
 `,
     avoid: [
       'Luxury experiences',
@@ -613,31 +615,33 @@ VIOLATIONS:
     identity: "The Passport Collector",
     category: "Achiever",
     meaning: `
-This traveler has specific interests they collect experiences in.
+This traveler lives to be somewhere NEW. They collect destinations like stamps in a passport.
 
 They want:
-- Deep dives into their passion (art, architecture, wine, etc.)
-- Specialized tours and access
-- Expert guides
-- Behind-the-scenes experiences
-- Building knowledge in their area
+- New places, new experiences, new stamps
+- The thrill of arrival — touching down somewhere they've never been
+- A mix of iconic and unexpected moments
+- Flexibility — the vibe might change on the way there
+- Being able to say "I've been there, I've done that, I've lived that"
+- Travel as identity — this is who they are
 
 Their ideal day:
-- Focused on their collection interest
-- Multiple related experiences
-- Expert-led where possible
-- Deep over broad
+- Morning: something iconic for this destination
+- Lunch: whatever the locals recommend
+- Afternoon: explore what makes this place unique
+- Evening: experience the local scene
 
-WHAT "COLLECTION" MEANS:
-- One interest, explored deeply
-- Would rather see 3 great galleries than 10 sites
-- Quality of experience over variety
-- Building expertise, not checking boxes
+WHAT "COLLECTOR" MEANS FOR THEM:
+- It's about BEING somewhere new, not checking boxes
+- Every destination adds to who they are
+- They're always planning the next trip
+- The journey matters as much as the destination
+- They adapt to wherever they land
 
 VIOLATIONS:
-- Generic tourist itinerary = VIOLATION
-- Breadth over depth = VIOLATION
-- Ignoring their stated interests = VIOLATION
+- Generic tourist itinerary that could be anywhere = VIOLATION
+- Ignoring what makes this destination unique = VIOLATION
+- Overly rigid scheduling = VIOLATION
 `,
     avoid: [
       'Generic sightseeing',
@@ -1235,35 +1239,35 @@ VIOLATIONS:
     identity: "The Horizon Chaser",
     category: "Transformer",
     meaning: `
-This traveler is young, budget-conscious, and experience-hungry.
+This traveler is chasing their first big adventure — or their next one. Budget-smart, experience-hungry, and ready for anything.
 
 They want:
-- Backpacker vibes
-- Budget accommodations (hostels OK)
-- Street food and cheap eats
-- Meeting other travelers
+- Maximum experiences on a reasonable budget
+- Social travel — meeting other travelers and locals
+- Street food and authentic local eats over fancy restaurants
 - Authentic experiences over comfort
-- Stories over luxury
+- Stories worth telling
+- Nightlife and spontaneous plans
 
 Their ideal day:
-- Hostel breakfast
-- Free walking tour
+- Morning: free walking tour or self-guided exploration
 - Street food lunch
-- Afternoon exploration
-- Sunset beers with travelers
-- Night out
+- Afternoon: adventure or cultural exploration
+- Sunset drinks with new friends
+- Night out — local bars, live music, whatever happens
 
-WHAT "GAP YEAR" MEANS:
-- Budget is tight
-- Social is important
-- Comfort is not priority
+WHAT "HORIZON CHASER" MEANS:
+- Budget is smart, not restrictive
+- Social energy is high
+- Comfort is nice but not the priority
 - Experience over everything
+- Every trip is an adventure, regardless of age
 
 VIOLATIONS:
-- Expensive restaurants = VIOLATION
+- Expensive fine dining = VIOLATION
 - Private tours = VIOLATION
 - Luxury anything = VIOLATION
-- Solo/isolated experiences = VIOLATION
+- Isolated/solo-only experiences = VIOLATION
 `,
     avoid: [
       'Expensive restaurants',
