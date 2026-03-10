@@ -724,7 +724,7 @@ function getArchetypeTagline(id: string): string {
     eco_ethicist: 'Travel gently, experience deeply.',
     // TRANSFORMER
     gap_year_graduate: 'The next horizon is always calling.',
-    midlife_explorer: "It's never too late to become who you were meant to be.",
+    midlife_explorer: "The best chapter hasn't been written yet.",
     sabbatical_scholar: 'Taking time off to find time on.',
     healing_journeyer: 'Travel is the medicine for the soul.',
     retirement_ranger: 'Your next chapter deserves the whole world as its backdrop.',
