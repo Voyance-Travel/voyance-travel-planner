@@ -516,7 +516,7 @@ export default function GuideBuilder() {
   // ── Editor ──
   return (
     <MainLayout>
-      <Head title={`Build Guide — ${trip.destination} | Voyance`} />
+      <Head title={`Build Guide: ${trip.destination} | Voyance`} />
 
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
         {/* Header */}
