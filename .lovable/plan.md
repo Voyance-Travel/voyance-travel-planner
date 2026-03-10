@@ -1,114 +1,58 @@
-## Journey Sequential Generation — Implementation Status
 
-### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
+Goal: fix the missing Day 2 US Open card without reintroducing the broader itinerary regressions from Fix 11.
 
-**Implemented:**
+What I confirmed from the actual data
+- The PDFs for itinerary 7 and 8 show the same pattern on Day 2: transit into the tournament, a long empty tournament window, then transit back out.
+- The latest trip metadata has a contradiction:
+  - `mustDoActivities` correctly includes `US Open tennis 9am-5pm Day 2`
+  - `generationRules` for Day 2 incorrectly store `blocked_time` as `09:00 -> 11:00` with reason `US Open tennis tournament from 9am to 5pm.`
+- The saved Day 2 JSON contains the inbound transit and outbound transit, but no actual US Open activity card.
+- So this is not a UI/rendering issue. The generator is getting conflicting instructions and honoring the shorter blocked window.
 
-1. **`src/hooks/useGenerationGate.ts`**:
-   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
-   - Added journey detection: fetches all sibling legs when `journeyId` is present
-   - Sums credit costs across all journey legs for unified billing
-   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
-   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
+Why Day 1 and Day 3 still look okay
+- Day 1 has arrival pressure and Day 3 has departure pressure, so the model still tends to place the tennis block.
+- Day 2 is the only clean full day, so the bad `09:00–11:00` rule leaves a huge gap that the model fills with breakfast/evening structure and no event card.
 
-2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
-   - Added `journeyLegs` state for cost breakdown display
-   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
-   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
-   - Updated cost confirmation dialog:
-     - Shows "Journey Cost Breakdown" header for journeys
-     - Lists each leg with city, days, and cost
-     - Shows "Journey Total" instead of "Total"
-     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
-     - Disabled partial generation for journeys (must pay full upfront)
-     - "Confirm & Generate Journey" button text for journeys
+Plan
+1. Do not bring Fix 11 back as-is
+- Fix 11’s itinerary-shaping logic was too aggressive.
+- The hard-assignment / stripping / backfill changes should stay rolled back for now.
+- Only the safe cleanup pieces are worth keeping: NaN-time sanitization and safer duration coercion.
 
-### Part 2: Auto-Chain Generation (TODO)
+2. Make one surgical fix for existing trips
+- In `supabase/functions/generate-itinerary/budget-constraints.ts`, repair `blocked_time` when the stored rule is obviously truncated.
+- When a blocked-time rule’s `reason` or `description` contains an explicit range like `9am to 5pm`, parse that range and override the emitted prompt window.
+- That means the generator will see `09:00–17:00` for Day 2 even if the saved metadata still says `09:00–11:00`.
+- This fixes the current trip without touching the database or reintroducing Fix 11 behavior.
 
-When leg 1 completes generation, the backend should:
-1. Check for next queued leg in the journey
-2. Automatically trigger `generate-trip` for the next leg
-3. Continue until all legs are generated
+3. Prevent future bad metadata
+- In `supabase/functions/chat-trip-planner/index.ts`, extend `userConstraints` for `time_block` to support `endTime` and `duration`.
+- In `src/pages/Start.tsx`, when converting `time_block` into `generationRules`:
+  - prefer explicit `endTime`
+  - otherwise parse a time range from the constraint description
+  - only then fall back to duration/default math
+- This prevents future trips from saving the wrong `to` time in the first place.
 
-Files to modify:
-- `supabase/functions/generate-trip/index.ts` or similar edge function
-- Add post-generation hook to detect and chain to next journey leg
+4. Keep the must-do system simple for now
+- Do not add more scheduler logic.
+- Do not hard-assign days again.
+- Do not add synthetic backfill again yet.
+- First remove the conflicting short blocked window and let the model generate the tournament card naturally.
 
-### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
+Files to change
+- `supabase/functions/generate-itinerary/budget-constraints.ts`
+- `supabase/functions/chat-trip-planner/index.ts`
+- `src/pages/Start.tsx`
+- If needed, explicitly revert the remaining Fix 11 itinerary-shaping code still present in:
+  - `supabase/functions/generate-itinerary/must-do-priorities.ts`
+  - `supabase/functions/generate-itinerary/index.ts`
 
-**Implemented:**
+Validation plan
+- Regenerate the same trip after the prompt-window repair.
+- Confirm Day 2 now contains a real US Open activity between the inbound and outbound transit.
+- Confirm Day 1 and Day 3 stay close to itinerary 7 quality, rather than itinerary 8’s more degraded structure.
+- Confirm newly planned trips save correct blocked windows in metadata, not `09:00–11:00` when the text says `9am–5pm`.
 
-1. **`src/pages/TripDetail.tsx`**:
-   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
-   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
-   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
-   - Added distinct "queued" state UI:
-     - Clock icon with hourglass badge
-     - "{destination} is up next" heading
-     - Explanation text about waiting for previous leg
-     - "View previous city" button to navigate back to the generating leg
-   - Added `Clock` to lucide-react imports
-
----
-
-## Preference Enforcement Activation ✅ COMPLETE
-
-### Fix 1: Per-day preference checks now trigger retries ✅
-Moved MINIMUM REAL ACTIVITY COUNT and USER PREFERENCE VALIDATION blocks to after `validateGeneratedDay()` so they can push errors into `validation.errors`. Upgraded all `console.warn` calls to `validation.errors.push` + `validation.isValid = false`. Added budget preference validation ($75+ threshold). Activity keyword checks skip departure days.
-
-### Fix 2: Stage 2.6 personalization rejection enabled ✅
-Uncommented and enhanced the rejection block. Critical and major dietary violations are now actively enforced — dietary violations get patched with ⚠️ warnings in activity descriptions. Low personalization scores (<40) are logged.
-
----
-
-## Itinerary Generation Quality Fixes ✅ COMPLETE
-
-### Bug 1: Arrival Sequence Inverted ✅
-Post-generation validator in `index.ts` detects when hotel check-in is ordered before airport arrival on Day 1. Extracts arrival/transfer/checkin activities, recalculates times based on flight arrival, and re-inserts in correct order.
-
-### Bug 2: User Preferences Ignored ✅
-- Strengthened preference injection in system prompt with explicit enforcement language (🚨 MUST BE HONORED)
-- Added post-generation validation logging that checks activities against keyword map for requested activities (skiing, surfing, etc.)
-- Warns when "light dinner" preference is violated by expensive dining ($50+)
-
-### Bug 3: Empty Days ✅
-Added minimum real activity count validation after generation. Filters out logistics (transport, accommodation, downtime) and warns when a day has fewer than 2 real activities (1 for departure day).
-
-### Bug 4: Nonsensical Inter-City Flights ✅
-Added `SAME_METRO_PAIRS` lookup in `buildTransitionDayPrompt` (prompt-library.ts). When origin and destination are in the same metro area (e.g., East Rutherford ↔ NYC), flights are suppressed from transport options and the prompt explicitly forbids them. Default mode switches to `rideshare`.
-
----
-
-## Fix: Case-Sensitive Token Lookup ✅ COMPLETE
-
-**Root cause:** `generate_share_token()` used base64 encoding producing mixed-case tokens. Mobile apps (iMessage, WhatsApp) can lowercase URLs, breaking the case-sensitive PostgreSQL lookup.
-
-### Changes (single migration):
-1. **`generate_share_token(integer)`** — switched from base64 to hex encoding (lowercase-only: a-f, 0-9)
-2. **Case-insensitive index** — `idx_trip_invites_token_lower` on `LOWER(token)`
-3. **Backfill** — all existing tokens lowercased
-4. **`get_trip_invite_info()`** — `WHERE LOWER(token) = LOWER(p_token)` + failure logging + `replaced_at` check
-5. **`accept_trip_invite()`** — `WHERE LOWER(token) = LOWER(p_token) FOR UPDATE`
-6. **`replaced_at` column** — added to `trip_invites` for soft-delete support
-
----
-
-## Fix: User Requirements Ignored in Just Tell Us Pipeline ✅ COMPLETE
-
-### Layer 1: `findBestDay` respects `preferredDay` on Day 1/last day ✅
-- Modified skip guard in `must-do-priorities.ts` L472 to allow long activities on Day 1/last day when user explicitly requested that day via `preferredDay`.
-
-### Layer 2: `parseMustDoInput` resolves day-of-week and multi-day references ✅
-- Added `tripStartDate` and `totalDays` parameters to function signature
-- Day-of-week resolution: maps "Friday", "Saturday" etc. to trip day numbers using start date
-- Multi-day expansion: "both days" / "every day" / "all N days" duplicated into per-day entries
-- Updated all 5 callers in `index.ts` to pass `startDate` and `totalDays`
-
-### Layer 3: Chat AI prompt strengthened for temporal mapping ✅
-- Added CRITICAL TEMPORAL MAPPING RULES to system prompt in `chat-trip-planner/index.ts`
-- Updated `mustDoActivities` field description to instruct AI to expand multi-day refs into per-day entries with explicit day numbers
-
-### Layer 4: Day 1 arrival uses actual airport name ✅
-- Added `arrivalAirport` to `FlightHotelContextResult` interface and return value
-- Stage 2.55 split block uses `flightHotelResult.arrivalAirport` instead of hardcoded `'Airport'`
-- All 3 Day 1 constraint templates (morning/afternoon/evening) use `arrivalAirportDisplay`
+Recommendation
+- Treat this as a source-data conflict fix, not another must-do scheduling fix.
+- The narrowest safe move is: repair the blocked-time prompt first, test on the same trip, and only revisit scheduling if the event still fails to appear.
