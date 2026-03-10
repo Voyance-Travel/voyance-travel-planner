@@ -152,7 +152,7 @@ function OverviewTab({ data }: { data: UnitEconomicsData }) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <MetricCard
           label="Money In"
-          value={data.revenue.totalRevenue > 0 ? fmt$(data.revenue.totalRevenue) : '—'}
+          value={data.revenue.totalRevenue > 0 ? fmt$(data.revenue.totalRevenue) : '-'}
           sub={data.revenue.purchaseCount > 0
             ? `${data.revenue.purchaseCount} purchases from ${data.users.paidUsers} customers`
             : 'No purchases recorded yet'}
@@ -644,13 +644,13 @@ function ForecastTab({ data }: { data: UnitEconomicsData }) {
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted-foreground">
-        Projections based on current {daysOfData}-day data window. Clearly labeled as <strong>estimates</strong> — linear extrapolation from current trends.
+        Projections based on current {daysOfData}-day data window. Clearly labeled as <strong>estimates</strong>, linear extrapolation from current trends.
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <MetricCard
           label="Projected Monthly Revenue"
-          value={monthlyRevenue > 0 ? fmt$(monthlyRevenue) : '—'}
+          value={monthlyRevenue > 0 ? fmt$(monthlyRevenue) : '-'}
           sub={`At current rate of ${fmt$(dailyRevenue)}/day`}
           accent="green"
         />
@@ -864,7 +864,7 @@ function ProjectionsTab({ data }: { data: UnitEconomicsData }) {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Revenue Mix Breakdown</CardTitle>
-          <CardDescription>At the "{mix.label}" mix — what are people purchasing?</CardDescription>
+          <CardDescription>At the "{mix.label}" mix: what are people purchasing?</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -964,7 +964,7 @@ function CreditEconomicsTab({ data }: { data: UnitEconomicsData }) {
                         {row.freeCap !== '—' ? (
                           <Badge variant="secondary" className="text-[10px] px-1.5">{row.freeCap}</Badge>
                         ) : (
-                          <span className="text-muted-foreground">—</span>
+                          <span className="text-muted-foreground">-</span>
                         )}
                       </TableCell>
                       <TableCell className="text-right font-mono text-xs text-destructive">{fmt$(row.cost, 3)}</TableCell>

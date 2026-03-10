@@ -203,7 +203,7 @@ export default function TravelGuideBuilder() {
           </Button>
           <div className="flex-1">
             <h1 className="text-lg font-semibold">Build Your {trip.destination || ''} Travel Guide</h1>
-            <p className="text-sm text-muted-foreground">Everything's selected — uncheck what you don't want</p>
+            <p className="text-sm text-muted-foreground">Everything's selected. Uncheck what you don't want.</p>
           </div>
         </div>
       </div>
@@ -240,7 +240,7 @@ export default function TravelGuideBuilder() {
                 <div className="flex items-center gap-2">
                   {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                   <span className="font-medium">📅 Day {day.day_number}</span>
-                  {day.date && <span className="text-sm text-muted-foreground">— {day.date}</span>}
+                  {day.date && <span className="text-sm text-muted-foreground">· {day.date}</span>}
                   {day.title && <span className="text-sm text-muted-foreground">· {day.title}</span>}
                 </div>
                 <span className="text-xs text-muted-foreground">

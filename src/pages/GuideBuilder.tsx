@@ -411,7 +411,7 @@ export default function GuideBuilder() {
   if (justPublished || isPublished) {
     return (
       <MainLayout>
-        <Head title={`Guide — ${trip.destination} | Voyance`} />
+        <Head title={`Guide: ${trip.destination} | Voyance`} />
         <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => navigate(`/trip/${tripId}`)}>
@@ -490,7 +490,7 @@ export default function GuideBuilder() {
   if (showPreview) {
     return (
       <MainLayout>
-        <Head title={`Preview Guide — ${trip.destination} | Voyance`} />
+        <Head title={`Preview Guide: ${trip.destination} | Voyance`} />
         <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
           <div className="flex items-center justify-between">
             <Button variant="ghost" size="sm" className="gap-2" onClick={() => setShowPreview(false)}>
@@ -516,7 +516,7 @@ export default function GuideBuilder() {
   // ── Editor ──
   return (
     <MainLayout>
-      <Head title={`Build Guide — ${trip.destination} | Voyance`} />
+      <Head title={`Build Guide: ${trip.destination} | Voyance`} />
 
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
         {/* Header */}
@@ -652,7 +652,7 @@ export default function GuideBuilder() {
                         <p className="text-sm font-medium truncate">Day {day.dayNumber}: {day.title}</p>
                         <p className="text-xs text-muted-foreground">
                           {day.activities.length} activit{day.activities.length !== 1 ? 'ies' : 'y'}
-                          {day.theme ? ` — ${day.theme}` : ''}
+                          {day.theme ? ` · ${day.theme}` : ''}
                         </p>
                       </div>
                     </label>

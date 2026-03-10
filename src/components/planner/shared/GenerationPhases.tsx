@@ -279,7 +279,7 @@ export function GenerationPhases({
     return 'Almost there, adding final touches';
   };
 
-  const cityLabel = isMultiCity && currentCity ? ` — ${currentCity}` : '';
+  const cityLabel = isMultiCity && currentCity ? ` · ${currentCity}` : '';
   const headerText = allVisibleDaysDone
     ? 'Finalizing your itinerary…'
     : displayCompletedDays === 0

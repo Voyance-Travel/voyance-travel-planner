@@ -2825,7 +2825,7 @@ export function EditorialItinerary({
               const delay = BACKOFF_DELAYS[attempt] || 10000;
               console.warn(`[Regeneration] Day ${dayNum} attempt ${attempt + 1} failed, retrying in ${delay / 1000}s`);
               if (attempt >= 1) {
-                toast.info(`Day ${dayNum} is taking longer than usual — retrying automatically...`, { duration: 3000 });
+                toast.info(`Day ${dayNum} is taking longer than usual, retrying automatically...`, { duration: 3000 });
               }
               await new Promise(resolve => setTimeout(resolve, delay));
             }

@@ -373,7 +373,7 @@ Multi-city bookings with multiple flights will all be extracted."
 
             <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
               <p className="font-medium mb-1">💡 Tip: Copy the entire email</p>
-              <p>Our AI extracts <strong>all flight segments</strong> — multi-city, round-trip, and connections.</p>
+              <p>Our AI extracts <strong>all flight segments</strong> including multi-city, round-trip, and connections.</p>
             </div>
           </div>
         )}

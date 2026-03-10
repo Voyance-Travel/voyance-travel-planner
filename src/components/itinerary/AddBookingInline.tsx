@@ -1108,7 +1108,7 @@ export function AddHotelInline({
                   }))}
                 />
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Optional — syncs to your trip budget if enabled</p>
+              <p className="text-xs text-muted-foreground mt-1">Optional. Syncs to your trip budget if enabled.</p>
             </div>
           </div>
 

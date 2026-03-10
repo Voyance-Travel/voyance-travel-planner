@@ -67,7 +67,7 @@ export function GuidePromptBanner({ tripId, destination }: GuidePromptBannerProp
           <div className="flex-1 min-w-0">
             <h4 className="text-sm font-semibold">Continue Building Your Guide</h4>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {favCount} favorite{favCount !== 1 ? 's' : ''} selected — pick up where you left off.
+              {favCount} favorite{favCount !== 1 ? 's' : ''} selected. Pick up where you left off.
             </p>
             <Button
               size="sm"
@@ -95,7 +95,7 @@ export function GuidePromptBanner({ tripId, destination }: GuidePromptBannerProp
           <div className="flex-1 min-w-0">
             <h4 className="text-sm font-semibold">Build Your Travel Guide</h4>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {favCount} favorite{favCount !== 1 ? 's' : ''} selected — compile them into a shareable guide.
+              {favCount} favorite{favCount !== 1 ? 's' : ''} selected. Compile them into a shareable guide.
             </p>
             <Button
               size="sm"
