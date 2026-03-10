@@ -520,9 +520,11 @@ function findBestDay(
   let backupDay: number | undefined;
   
   for (let d = minDay; d <= maxDay; d++) {
-    // Skip first and last day for long activities (travel days)
+    // Skip first and last day for long activities (travel days) — BUT respect user's explicit day preference
     if ((d === 1 || d === totalDays) && (priority.estimatedDuration || 120) > 180) {
-      continue;
+      if (!priority.preferredDay || priority.preferredDay !== d) {
+        continue;
+      }
     }
     
     const dayLoad = dayAssignments.get(d) || [];
