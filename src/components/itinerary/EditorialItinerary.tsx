@@ -2253,11 +2253,8 @@ export function EditorialItinerary({
         }
       }
 
-      if (cascadeChanged) {
-        toast.success('Day 1 and final day synced to your marked flight legs');
-      } else {
-        toast.info('Flight tags saved. No itinerary time shift was needed.');
-      }
+      toast.info('Flight tags saved.');
+
     } catch (cascadeErr) {
       console.warn('Cascade after leg marking failed:', cascadeErr);
     } finally {
