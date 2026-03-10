@@ -152,6 +152,15 @@ When calling extract_trip_details, you MUST extract EVERY specific detail the us
    - "birthday is on day 3" → celebrationDay: 3
    - "anniversary dinner" → capture in mustDoActivities AND set celebrationDay if day is known
 
+CRITICAL TEMPORAL MAPPING RULES:
+- When the user says "both days" or "every day" for an event, create a SEPARATE full_day_event constraint for EACH day it applies to, with explicit day numbers in the "day" field.
+- When the user references a day of the week (e.g., "Friday night", "Saturday morning"), calculate which trip day number that corresponds to based on the start date, and set the "day" field accordingly.
+  Example: Trip starts Wednesday Aug 26. User says "comedy show Friday night" → day: 3 (Friday is 2 days after Wednesday).
+  Example: User says "US Open both days" on a 4-day trip → create constraints for day 1, day 2, day 3.
+- The "day" field in userConstraints is CRITICAL. Without it, the itinerary generator cannot schedule the activity on the right day.
+- ALWAYS set the "day" field when the user specifies or implies a day. Never leave it undefined if the day can be inferred.
+- For mustDoActivities: expand multi-day references into per-day entries. Instead of "US Open both days", write "US Open 9am-6pm Day 1, US Open 9am-6pm Day 2, US Open 9am-6pm Day 3".
+
 FAILURE TO EXTRACT = THE ITINERARY WON'T INCLUDE IT.
 The generation engine can only use what you extract. If you skip a field, the user's request is silently dropped.`;
 }
