@@ -3873,10 +3873,10 @@ export function EditorialItinerary({
         >
           <div className="flex gap-1 min-w-max" data-tour="tab-bar">
             {[
-              { id: 'itinerary', label: 'Itinerary', fullLabel: 'Itinerary', icon: <Calendar className="h-4 w-4" /> },
+              { id: 'itinerary', label: 'Day-to-Day', fullLabel: 'Day-to-Day', icon: <Calendar className="h-4 w-4" /> },
               { id: 'budget', label: 'Budget', fullLabel: 'Budget', icon: <Wallet className="h-4 w-4" /> },
-              { id: 'payments', label: 'Payments', fullLabel: 'Payments', icon: <CreditCard className="h-4 w-4" /> },
-              { id: 'details', label: 'Details', fullLabel: 'Flights & Hotels', icon: <Plane className="h-4 w-4" />, mobileOverflow: true },
+              { id: 'details', label: 'Details', fullLabel: 'Travel Details', icon: <Plane className="h-4 w-4" /> },
+              { id: 'needtoknow', label: 'Info', fullLabel: 'Need to Know', icon: <Shield className="h-4 w-4" />, mobileOverflow: true },
               ...(collaborators.length > 0 ? [{ id: 'collab', label: 'Group', fullLabel: 'Group Chat & Vote', icon: <MessageCircle className="h-4 w-4" /> }] : []),
             ].map((tab) => (
               <button
