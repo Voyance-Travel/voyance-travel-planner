@@ -1427,7 +1427,7 @@ VIOLATIONS:
   },
 
   retirement_ranger: {
-    identity: "The Retirement Ranger",
+    identity: "The Boundless Explorer",
     category: "Transformer",
     meaning: `
 This traveler has time and is enjoying it.
