@@ -490,7 +490,7 @@ export default function GuideBuilder() {
   if (showPreview) {
     return (
       <MainLayout>
-        <Head title={`Preview Guide — ${trip.destination} | Voyance`} />
+        <Head title={`Preview Guide: ${trip.destination} | Voyance`} />
         <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
           <div className="flex items-center justify-between">
             <Button variant="ghost" size="sm" className="gap-2" onClick={() => setShowPreview(false)}>
