@@ -814,7 +814,7 @@ const ANSWER_DELTAS: Record<string, AnswerDelta> = {
   'cd3': { deltas: { pace: 3, planning: 3, authenticity: -2 }, label: 'Highlights collector' },     // Bucket list
   'cd4': { deltas: { adventure: 2 }, label: 'Not culture-focused' },                                // None
   
-  // Q18: Restoration mode - Separates Zen Seeker ↔ Beach Therapist ↔ Slow Traveler ↔ Retreat Regular
+  // Q18: Restoration mode - Separates Zen Seeker ↔ Beach Therapist ↔ Slow Traveler ↔ Wellness Devotee
   'rm1': { deltas: { pace: -6, social: -4, transformation: 5 }, label: 'Stillness seeker' },        // Zen/meditation
   'rm2': { deltas: { pace: -4, comfort: 3, social: -2 }, label: 'Ocean rhythm' },                   // Beach therapy
   'rm3': { deltas: { pace: -5, authenticity: 5, planning: -3 }, label: 'Slow settler' },            // Slow travel
