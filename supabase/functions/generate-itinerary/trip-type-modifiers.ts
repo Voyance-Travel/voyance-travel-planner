@@ -1051,6 +1051,22 @@ export const soloSocialCalibration: Record<string, SoloSocialCalibration> = {
     ]
   },
 
+  history_hunter: {
+    socialLevel: 'low',
+    description: 'Solo history immersion - own pace, deep dives',
+    include: [
+      'Archaeological sites (hours alone)',
+      'Museums (no one rushing you)',
+      'Historical walks (self-guided)',
+      'Ancient quarters',
+      'Bookshops'
+    ],
+    avoid: [
+      'Group tours with surface-level content',
+      'Party scenes'
+    ]
+  },
+
   sabbatical_scholar: {
     socialLevel: 'low',
     description: 'Solo learning - libraries, courses, thinking',
