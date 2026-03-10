@@ -426,7 +426,7 @@ const ARCHETYPES_V2: ArchetypeV2[] = [
   },
   {
     id: 'retreat_regular',
-    name: 'The Retreat Regular',
+    name: 'The Wellness Devotee',
     category: 'RESTORER',
     tagline: "Wellness isn't a trend, it's a lifestyle.",
     primaryTraits: [

@@ -458,7 +458,7 @@ Your trips will honor that. Contemplative spaces, spiritual depth, room for sile
 
   retreat_regular: {
     id: 'retreat_regular',
-    name: 'The Retreat Regular',
+    name: 'The Wellness Devotee',
     category: 'RESTORER',
     revealParagraph: `You've learned that real rest requires structure.
 

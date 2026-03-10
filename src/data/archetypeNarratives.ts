@@ -690,7 +690,7 @@ export const ARCHETYPE_NARRATIVES: Record<string, ArchetypeNarrative> = {
   },
   retreat_regular: {
     id: 'retreat_regular',
-    name: 'The Retreat Regular',
+    name: 'The Wellness Devotee',
     category: 'RESTORER',
     hookLine: "Wellness isn't a trend, it's a lifestyle.",
     coreDescription: "You don't vacation, you retreat. Yoga camps, detox programs, silent retreats: travel is your commitment to becoming your best self. You return transformed, not just rested.",

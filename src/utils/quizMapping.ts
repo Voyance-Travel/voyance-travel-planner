@@ -625,7 +625,7 @@ function getArchetypeDisplayName(id: string): string {
     status_seeker: 'The VIP Voyager',
     // RESTORER category
     zen_seeker: 'The Zen Seeker',
-    retreat_regular: 'The Retreat Regular',
+    retreat_regular: 'The Wellness Devotee',
     beach_therapist: 'The Beach Therapist',
     slow_traveler: 'The Slow Traveler',
     escape_artist: 'The Escape Artist',
