@@ -543,8 +543,17 @@ function findBestDay(
     } else {
       const totalDuration = dayLoad.reduce((sum, p) => sum + (p.estimatedDuration || 120), 0);
       // Skip days that have all-day events — don't pile activities onto event days
+      // EXCEPTION: Evening activities (comedy shows, dinner events, etc.) can coexist
+      // with daytime all-day events since they don't overlap
       const hasAllDayEvent = dayLoad.some(p => p.activityType === 'all_day_event');
-      if (hasAllDayEvent && priority.activityType !== 'quick_stop') continue;
+      if (hasAllDayEvent && priority.activityType !== 'quick_stop') {
+        const isEveningActivity = priority.preferredTime === 'evening' ||
+          (priority.activityType === 'half_day_event' && priority.preferredTime === 'evening');
+        if (!isEveningActivity) {
+          continue;
+        }
+        // Evening activity on an all-day event day — allowed (e.g., comedy show after US Open)
+      }
       
       if (totalDuration < lowestLoad) {
         backupDay = bestDay;
