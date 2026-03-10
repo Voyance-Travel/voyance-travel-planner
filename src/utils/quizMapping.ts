@@ -637,7 +637,7 @@ function getArchetypeDisplayName(id: string): string {
     curated_luxe: 'Curated Luxe',
     // TRANSFORMER category
     gap_year_graduate: 'The Horizon Chaser',
-    midlife_explorer: 'The Unscripted Explorer',
+    midlife_explorer: 'The Rediscovery Traveler',
     sabbatical_scholar: 'The Immersion Seeker',
     healing_journeyer: 'The Restoration Seeker',
     retirement_ranger: 'The Boundless Explorer',

@@ -706,7 +706,7 @@ Your trips will maximize experience per dollar. We'll find the places where budg
 
   midlife_explorer: {
     id: 'midlife_explorer',
-    name: 'The Unscripted Explorer',
+    name: 'The Rediscovery Traveler',
     category: 'TRANSFORMER',
     revealParagraph: `You've reached the point where you know what you want, and you're done apologizing for it.
 
