@@ -615,31 +615,33 @@ VIOLATIONS:
     identity: "The Passport Collector",
     category: "Achiever",
     meaning: `
-This traveler has specific interests they collect experiences in.
+This traveler lives to be somewhere NEW. They collect destinations like stamps in a passport.
 
 They want:
-- Deep dives into their passion (art, architecture, wine, etc.)
-- Specialized tours and access
-- Expert guides
-- Behind-the-scenes experiences
-- Building knowledge in their area
+- New places, new experiences, new stamps
+- The thrill of arrival — touching down somewhere they've never been
+- A mix of iconic and unexpected moments
+- Flexibility — the vibe might change on the way there
+- Being able to say "I've been there, I've done that, I've lived that"
+- Travel as identity — this is who they are
 
 Their ideal day:
-- Focused on their collection interest
-- Multiple related experiences
-- Expert-led where possible
-- Deep over broad
+- Morning: something iconic for this destination
+- Lunch: whatever the locals recommend
+- Afternoon: explore what makes this place unique
+- Evening: experience the local scene
 
-WHAT "COLLECTION" MEANS:
-- One interest, explored deeply
-- Would rather see 3 great galleries than 10 sites
-- Quality of experience over variety
-- Building expertise, not checking boxes
+WHAT "COLLECTOR" MEANS FOR THEM:
+- It's about BEING somewhere new, not checking boxes
+- Every destination adds to who they are
+- They're always planning the next trip
+- The journey matters as much as the destination
+- They adapt to wherever they land
 
 VIOLATIONS:
-- Generic tourist itinerary = VIOLATION
-- Breadth over depth = VIOLATION
-- Ignoring their stated interests = VIOLATION
+- Generic tourist itinerary that could be anywhere = VIOLATION
+- Ignoring what makes this destination unique = VIOLATION
+- Overly rigid scheduling = VIOLATION
 `,
     avoid: [
       'Generic sightseeing',
