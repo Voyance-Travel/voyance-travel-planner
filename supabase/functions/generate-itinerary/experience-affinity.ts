@@ -380,6 +380,7 @@ export const TIME_PREFERENCES: Record<string, TimePreferences> = {
   healing_journeyer: { startTime: '10:00', endTime: '20:00', peakEnergy: 'afternoon', notes: 'Gentle start. No pressure. Early, quiet evenings.' },
   romantic_curator: { startTime: '10:00', endTime: '23:00', peakEnergy: 'evening', notes: 'Lazy mornings. Sunset and dinner focus.' },
   sanctuary_seeker: { startTime: '10:00', endTime: '20:00', peakEnergy: 'afternoon', notes: 'Quiet mornings. Peaceful evenings.' },
+  escape_artist: { startTime: '10:00', endTime: '21:00', peakEnergy: 'afternoon', notes: 'No alarm. No schedule. Whatever feels right.' },
 
   // Night owls (11am+ starts, late nights)
   digital_explorer: { startTime: '11:00', endTime: '02:00', peakEnergy: 'night', notes: 'Late riser. Gaming/nightlife late.' },
