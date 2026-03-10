@@ -4141,6 +4141,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Food anniversary - cooking class together, restaurant tour, wine tasting.",
       art_aficionado: "Art anniversary - museums together, design experiences, cultural romance.",
+      history_hunter: "History anniversary - ancient sites together, guided heritage walk, romantic old-town dinner.",
       luxury_luminary: "Luxury anniversary - five-star everything, private experiences, premium romance.",
       // TRANSFORMERS
       eco_ethicist: "Eco anniversary - sustainable resort, nature, responsible romance.",
