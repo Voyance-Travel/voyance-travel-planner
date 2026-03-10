@@ -4219,6 +4219,7 @@ export function getTripTypeInteraction(tripType: string, archetype: string): str
       // CURATORS
       culinary_cartographer: "Solo food journey - counter seating heaven (sushi bars, tapas counters), food tours, markets. Food people understand solo diners. Chef's table for one.",
       art_aficionado: "Solo art immersion - hours in front of one painting if you want. No one saying 'ready to go?' Museum heaven, gallery wandering, bookshops.",
+      history_hunter: "Solo history deep-dive - hours at one ruin if you want. No one rushing you past the plaque. Archaeological sites, old quarters, expert-led walks.",
       luxury_luminary: "Solo luxury indulgence - treat yourself to the best. Chef's counter, spa day, premium everything for one. Solo doesn't mean lesser experience.",
 
       // TRANSFORMERS
