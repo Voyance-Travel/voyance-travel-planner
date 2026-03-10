@@ -38,7 +38,7 @@ const ARCHETYPES = [
   { id: 'eco_ethicist', name: 'The Mindful Voyager', category: 'TRANSFORMER', traits: ['sustainable', 'eco-lodges', 'conservation', 'low-impact'] },
   { id: 'gap_year_graduate', name: 'The Horizon Chaser', category: 'TRANSFORMER', traits: ['backpacking', 'hostels', 'budget', 'youth'] },
   { id: 'midlife_explorer', name: 'The Renaissance Voyager', category: 'TRANSFORMER', traits: ['bucket-list', 'new-experiences', 'rediscovery', 'adventure-lite'] },
-  { id: 'sabbatical_scholar', name: 'The Sabbatical Scholar', category: 'TRANSFORMER', traits: ['learning', 'courses', 'deep-dive', 'extended-stays'] },
+  { id: 'sabbatical_scholar', name: 'The Immersion Seeker', category: 'TRANSFORMER', traits: ['learning', 'courses', 'deep-dive', 'extended-stays'] },
   { id: 'healing_journeyer', name: 'The Restoration Seeker', category: 'TRANSFORMER', traits: ['recovery', 'therapeutic', 'nature-healing', 'restorative'] },
   { id: 'balanced_story_collector', name: 'The Balanced Story Collector', category: 'EXPLORER', traits: ['variety', 'balanced', 'mix-of-everything', 'adaptable'] },
 ];

@@ -638,7 +638,7 @@ function getArchetypeDisplayName(id: string): string {
     // TRANSFORMER category
     gap_year_graduate: 'The Horizon Chaser',
     midlife_explorer: 'The Unscripted Explorer',
-    sabbatical_scholar: 'The Sabbatical Scholar',
+    sabbatical_scholar: 'The Immersion Seeker',
     healing_journeyer: 'The Healing Journeyer',
     retirement_ranger: 'The Boundless Explorer',
     // CONNECTOR (additional)
