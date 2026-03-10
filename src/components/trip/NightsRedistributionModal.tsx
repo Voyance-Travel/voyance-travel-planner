@@ -3,7 +3,7 @@
  * Shown when a user changes trip dates on a multi-city trip.
  * Lets them adjust how nights are split across cities.
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Minus, Plus, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
