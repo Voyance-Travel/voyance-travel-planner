@@ -10323,17 +10323,15 @@ REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity 
    - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
    - category: "transport"
    - description: "Clear customs and collect luggage"
-   - ⚠️ This MUST be its own activity block — do NOT merge with transfer or check-in
+   - ⚠️ This MUST be its own activity block — do NOT merge with check-in
 
-2. "Airport Transfer to Hotel"
-   - startTime: "${transferStart}", endTime: "${transferEnd}"
-   - category: "transport"
-   - location: { name: "${hotelNameDisplay}", address: "${hotelAddressDisplay}" }
-
-3. "Hotel Check-in & Refresh"
+2. "Hotel Check-in & Refresh"
    - startTime: "${hotelCheckIn}", endTime: "${settleInEnd}"
    - category: "accommodation"
    - description: "Check in, freshen up, and get oriented to the area"
+   - location: { name: "${hotelNameDisplay}", address: "${hotelAddressDisplay}" }
+
+Do NOT generate an "Airport Transfer to Hotel" activity — the transfer is handled by a separate UI widget.
 
 MORNING ARRIVAL GUIDELINES:
 - After checking in (${settleInEnd}), the traveler may want a light breakfast or brunch near the hotel
