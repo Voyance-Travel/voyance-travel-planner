@@ -133,7 +133,7 @@ Based on extreme trait scores (values >7 or <-7):
 - **Backend Scoring**: High structure + specific interest scores
 - **Emotional Hook**: "Depth over breadth, always"
 
-#### 12. The Status Seeker
+#### 12. The VIP Voyager
 - **ID**: `status_seeker`
 - **Rarity**: uncommon
 - **Primary Motivation**: Experiencing exclusive destinations
