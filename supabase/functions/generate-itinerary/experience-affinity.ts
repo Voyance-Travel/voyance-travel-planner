@@ -250,6 +250,13 @@ export const EXPERIENCE_AFFINITY: Record<string, ExperienceAffinity> = {
     never: ['crowds', 'group_tours', 'nightlife', 'social_activities', 'hostels', 'parties']
   },
 
+  escape_artist: {
+    high: ['beach', 'pool', 'resort_amenity', 'cafe', 'casual_dining', 'cocktail_bar', 'local_bar', 'viewpoint'],
+    medium: ['park', 'garden', 'water_activity', 'local_restaurant', 'street_food', 'neighborhood', 'spa'],
+    low: ['museum', 'landmark', 'walking_tour', 'cultural_performance', 'food_tour'],
+    never: ['adventure_activity', 'outdoor_sport', 'hiking']
+  },
+
   // =========================================================================
   // CURATORS
   // =========================================================================
