@@ -11054,22 +11054,38 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
-  } catch (error) {
-    console.error("[generate-itinerary] Error:", error);
+    } catch (error) {
+      console.error("[generate-itinerary] Error:", error);
 
-    // Best-effort: mark trip as failed so the frontend stops showing infinite spinner
-    try {
-      const failTripId = typeof params === 'object' && params?.tripId;
-      if (failTripId && typeof supabase !== 'undefined') {
-        await supabase.from('trips').update({ itinerary_status: 'failed' }).eq('id', failTripId);
-        console.log(`[generate-itinerary] Marked trip ${failTripId} as failed`);
+      // Best-effort: mark trip as failed so the frontend stops showing infinite spinner
+      const failTripId = (typeof params !== 'undefined' && params?.tripId) || earlyTripId;
+      if (failTripId) {
+        try {
+          const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+          const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+          const failSupa = createClient(supabaseUrl, supabaseKey);
+          await failSupa.from('trips').update({ itinerary_status: 'failed' }).eq('id', failTripId);
+          console.log(`[generate-itinerary] Marked trip ${failTripId} as failed`);
+        } catch (statusErr) {
+          console.error("[generate-itinerary] Failed to set itinerary_status=failed:", statusErr);
+        }
       }
-    } catch (statusErr) {
-      console.error("[generate-itinerary] Failed to set itinerary_status=failed:", statusErr);
-    }
 
+      return new Response(
+        JSON.stringify({ success: false, error: "Itinerary generation failed", code: "GENERATE_ERROR" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+  } catch (catastrophicError) {
+    // This catches errors that occur OUTSIDE the inner try/catch,
+    // such as during req.clone(), req.json(), or middleware failures
+    console.error("[generate-itinerary] CATASTROPHIC ERROR (outside main try/catch):", catastrophicError);
     return new Response(
-      JSON.stringify({ success: false, error: "Itinerary generation failed", code: "GENERATE_ERROR" }),
+      JSON.stringify({
+        success: false,
+        error: "Itinerary generation encountered an unexpected error",
+        code: "CATASTROPHIC_ERROR"
+      }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
