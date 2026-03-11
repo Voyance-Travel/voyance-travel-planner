@@ -27,6 +27,7 @@ import { applyDnaModifiers } from './dna-modifiers';
 import { fillFlightAndHotelSlots } from './constraint-filler';
 import { fillMustDoSlots, type MustDoInput } from './must-do-filler';
 import { fillPreBookedSlots } from './prebooked-filler';
+import { fillKeptActivities } from './keep-activities-filler';
 import { resolveConflicts } from './conflict-resolver';
 import { applyPacingOverride } from './pacing-override';
 
