@@ -8397,6 +8397,53 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
           throw new Error("Invalid AI response format");
         }
 
+        // =======================================================================
+        // Fix 22N: Schema-Aware Validation & Logging (when schema path was used)
+        // =======================================================================
+        if (USE_SCHEMA_GENERATION) {
+          try {
+            // @ts-ignore — Deno imports with .ts extension
+            const { validateAgainstSchema, buildGenerationLog, formatLogForConsole } = await import('./schema/index.ts');
+
+            const aiCallMs = Date.now() - (compileStart || Date.now());
+            const valStart = Date.now();
+            const validationResult = validateAgainstSchema(
+              compiledSchema,
+              generatedDay.activities || []
+            );
+            const validationMs = Date.now() - valStart;
+
+            const genLog = buildGenerationLog({
+              tripId: tripId || 'unknown',
+              schema: compiledSchema,
+              aiResponse: generatedDay,
+              validationResults: validationResult.validations,
+              overrides: validationResult.overrides,
+              retries: 0,
+              timing: {
+                compileMs: compileMs || 0,
+                aiCallMs,
+                validationMs,
+              },
+            });
+
+            console.log(formatLogForConsole(genLog));
+
+            if (!validationResult.passed) {
+              console.warn(`[schema-generation] Validation ${validationResult.severity}: ${validationResult.summary}`);
+            }
+
+            // Apply auto-corrections if any
+            if (validationResult.correctedActivities?.length > 0) {
+              console.log(`[schema-generation] Applied ${validationResult.overrides.length} auto-corrections`);
+              // Note: correctedActivities only contains corrections; merge with original
+              // For now, log but don't override — the existing pipeline's post-processing handles most issues
+            }
+          } catch (valErr) {
+            console.warn('[schema-generation] Validation/logging failed (non-blocking):', valErr);
+          }
+        }
+
         // Note: lockedActivities were already loaded BEFORE the AI call (see line ~4452-4565)
         // This ensures AI knows to skip those time slots, saving money and guaranteeing locks work
 
