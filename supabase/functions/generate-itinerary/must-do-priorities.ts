@@ -49,6 +49,8 @@ export interface MustDoPriority {
   explicitStartTime?: string;
   /** Explicit end time parsed from user text (e.g., "9am-5pm" → "17:00") */
   explicitEndTime?: string;
+  /** Whether this is a generic activity type (e.g., "dinner") vs a specific venue (e.g., "Gramercy Tavern") */
+  isGenericIntent?: boolean;
 }
 
 export interface ScheduledMustDo {
