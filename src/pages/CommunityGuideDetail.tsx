@@ -1,5 +1,5 @@
 /**
- * Community Guide Detail Page (by ID)
+ * Community Guide Detail Page — Blog-Style Layout
  * Public route — no auth required.
  * /community-guides/:guideId
  */
@@ -10,18 +10,15 @@ import { supabase } from '@/integrations/supabase/client';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
-import { BookOpen, MapPin, Calendar, ArrowLeft, ArrowRight, Clock, Loader2, Trash2 } from 'lucide-react';
+import { BookOpen, MapPin, Calendar, ArrowLeft, ArrowRight, Clock, Loader2, Trash2, Star, ThumbsUp, ThumbsDown, Minus, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import CreatorCard from '@/components/guides/CreatorCard';
 import ReportGuideModal from '@/components/guides/ReportGuideModal';
-import CommunityGuideActivityCard from '@/components/guides/CommunityGuideActivityCard';
 import CreatorContentSection from '@/components/guides/CreatorContentSection';
-import { fetchGuideContentLinks, type GuideContentLink } from '@/services/guideContentLinksAPI';
 
-// Lazy-load map to avoid SSR issues with leaflet
 const GuideTripMap = lazy(() => import('@/components/guides/GuideTripMap'));
 
 interface GuideData {
@@ -40,6 +37,25 @@ interface GuideData {
   user_id: string;
   status: string;
   trip_id: string;
+}
+
+interface Activity {
+  id?: string;
+  name?: string;
+  title?: string;
+  description?: string;
+  category?: string;
+  note?: string;
+  image_url?: string;
+  url?: string;
+  external_url?: string;
+  is_manual?: boolean;
+  location?: { lat?: number; lng?: number; name?: string; address?: string };
+  day_number?: number;
+  start_time?: string;
+  user_rating?: number | null;
+  recommended?: string | null;
+  photos?: { url: string; caption: string }[];
 }
 
 function useGuideById(guideId: string | undefined) {
@@ -75,30 +91,6 @@ function useTripDuration(tripId: string | undefined) {
   });
 }
 
-function useContentLinks(guideId: string | undefined) {
-  return useQuery({
-    queryKey: ['guide-content-links', guideId],
-    queryFn: () => fetchGuideContentLinks(guideId!),
-    enabled: !!guideId,
-  });
-}
-
-interface Activity {
-  id?: string;
-  name?: string;
-  title?: string;
-  description?: string;
-  category?: string;
-  note?: string;
-  image_url?: string;
-  url?: string;
-  external_url?: string;
-  is_manual?: boolean;
-  location?: { lat?: number; lng?: number; name?: string; address?: string };
-  day_number?: number;
-  start_time?: string;
-}
-
 function groupByDay(activities: Activity[]): Map<number, Activity[]> {
   const groups = new Map<number, Activity[]>();
   for (const a of activities) {
@@ -109,12 +101,42 @@ function groupByDay(activities: Activity[]): Map<number, Activity[]> {
   return new Map([...groups.entries()].sort((a, b) => a[0] - b[0]));
 }
 
+function StarDisplay({ rating }: { rating: number }) {
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((s) => (
+        <Star
+          key={s}
+          className={`h-3.5 w-3.5 ${s <= rating ? 'text-gold fill-current' : 'text-muted-foreground/20'}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function RecommendBadge({ value }: { value: string }) {
+  if (value === 'yes') return (
+    <Badge className="bg-sage text-sage-foreground border-0 gap-1 text-[10px]">
+      <ThumbsUp className="h-3 w-3" /> Recommended
+    </Badge>
+  );
+  if (value === 'no') return (
+    <Badge variant="destructive" className="gap-1 text-[10px]">
+      <ThumbsDown className="h-3 w-3" /> Not Recommended
+    </Badge>
+  );
+  return (
+    <Badge variant="secondary" className="gap-1 text-[10px]">
+      <Minus className="h-3 w-3" /> It's Okay
+    </Badge>
+  );
+}
+
 export default function CommunityGuideDetail() {
   const { guideId } = useParams<{ guideId: string }>();
   const navigate = useNavigate();
   const { data: guide, isLoading } = useGuideById(guideId);
   const { data: tripInfo } = useTripDuration(guide?.trip_id);
-  const { data: contentLinks = [] } = useContentLinks(guide?.id);
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -125,26 +147,28 @@ export default function CommunityGuideDetail() {
     });
   }, []);
 
-  // 404 if not found or unpublished
   const is404 = !isLoading && (!guide || guide.status !== 'published');
 
   const activities = useMemo(() => {
     return (guide?.content?.activities || []) as Activity[];
   }, [guide]);
 
-  const dayGroups = useMemo(() => groupByDay(activities), [activities]);
+  // Filter to only show activities with user content (experience, rating, photos, or recommendation)
+  const enrichedActivities = useMemo(() => {
+    return activities.filter(a =>
+      a.note || a.user_rating || a.recommended || (a.photos && a.photos.length > 0)
+    );
+  }, [activities]);
 
-  // Build a map of activity_id → content links for that activity
-  const activityContentMap = useMemo(() => {
-    const map = new Map<string, GuideContentLink[]>();
-    for (const link of contentLinks) {
-      if (link.activity_id) {
-        if (!map.has(link.activity_id)) map.set(link.activity_id, []);
-        map.get(link.activity_id)!.push(link);
-      }
-    }
-    return map;
-  }, [contentLinks]);
+  const customTips = useMemo(() => {
+    return activities.filter(a => a.is_manual);
+  }, [activities]);
+
+  const regularActivities = useMemo(() => {
+    return enrichedActivities.filter(a => !a.is_manual);
+  }, [enrichedActivities]);
+
+  const dayGroups = useMemo(() => groupByDay(regularActivities), [regularActivities]);
 
   if (isLoading) {
     return (
@@ -183,11 +207,11 @@ export default function CommunityGuideDetail() {
         ) + 1
       : null;
 
-  const durationLabel = durationDays
-    ? `${durationDays - 1} night${durationDays - 1 !== 1 ? 's' : ''} in ${guide!.destination || 'destination'}`
-    : null;
+  const heroImage = guide!.cover_image_url ||
+    activities.find(a => a.photos && a.photos.length > 0)?.photos?.[0]?.url ||
+    activities.find(a => a.image_url)?.image_url ||
+    undefined;
 
-  const ogImage = guide!.cover_image_url || undefined;
   const ogTitle = `${guide!.title} | Voyance Community Guide`;
   const ogDesc =
     guide!.description || `A community travel guide for ${guide!.destination || 'an amazing destination'}.`;
@@ -197,15 +221,15 @@ export default function CommunityGuideDetail() {
       <Head
         title={ogTitle}
         description={ogDesc}
-        ogImage={ogImage}
+        ogImage={heroImage}
       />
 
       {/* Hero */}
       <section className="relative">
         <div className="aspect-[21/9] sm:aspect-[3/1] w-full overflow-hidden bg-muted">
-          {guide!.cover_image_url ? (
+          {heroImage ? (
             <img
-              src={guide!.cover_image_url}
+              src={heroImage}
               alt={guide!.title}
               className="w-full h-full object-cover"
             />
@@ -228,10 +252,16 @@ export default function CommunityGuideDetail() {
                     {guide!.destination_country ? `, ${guide!.destination_country}` : ''}
                   </Badge>
                 )}
-                {durationLabel && (
+                {durationDays && (
                   <Badge variant="secondary" className="gap-1">
                     <Clock className="h-3 w-3" />
-                    {durationLabel}
+                    {durationDays} day{durationDays !== 1 ? 's' : ''}
+                  </Badge>
+                )}
+                {tripInfo?.start_date && (
+                  <Badge variant="secondary" className="gap-1">
+                    <Calendar className="h-3 w-3" />
+                    {format(new Date(tripInfo.start_date), 'MMM yyyy')}
                   </Badge>
                 )}
               </div>
@@ -239,8 +269,8 @@ export default function CommunityGuideDetail() {
                 {guide!.title}
               </h1>
               {guide!.description && (
-                <p className="mt-2 text-sm sm:text-base text-muted-foreground max-w-xl">
-                  {guide!.description}
+                <p className="mt-2 text-sm sm:text-base text-muted-foreground max-w-xl italic">
+                  "{guide!.description}"
                 </p>
               )}
             </motion.div>
@@ -279,34 +309,43 @@ export default function CommunityGuideDetail() {
           {/* Creator's Content */}
           <CreatorContentSection guideId={guide!.id} />
 
-          {/* Activities grouped by day */}
+          {/* Day-by-day sections — only activities with user content */}
           {dayGroups.size > 0 ? (
             [...dayGroups.entries()].map(([day, items]) => (
-              <div key={day} className="space-y-3">
+              <div key={day} className="space-y-4">
                 {day > 0 && (
-                  <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                    <Calendar className="h-3.5 w-3.5" />
+                  <h2 className="text-lg font-serif font-bold text-foreground flex items-center gap-2 pt-4 border-t border-border">
+                    <Calendar className="h-4 w-4 text-primary" />
                     Day {day}
                   </h2>
                 )}
                 {day === 0 && dayGroups.size > 1 && (
-                  <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                  <h2 className="text-lg font-serif font-bold text-foreground pt-4 border-t border-border">
                     General
                   </h2>
                 )}
+
                 {items.map((activity, i) => (
-                  <CommunityGuideActivityCard
-                    key={activity.id || `${day}-${i}`}
-                    activity={activity}
-                    index={i}
-                    contentLinks={activity.id ? activityContentMap.get(activity.id) : undefined}
-                  />
+                  <ActivityBlogCard key={activity.id || `${day}-${i}`} activity={activity} />
                 ))}
               </div>
             ))
-          ) : (
+          ) : enrichedActivities.length === 0 && customTips.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              <p className="text-sm">This guide doesn't have any activities yet.</p>
+              <p className="text-sm">This guide doesn't have any personal reviews yet.</p>
+            </div>
+          ) : null}
+
+          {/* Custom Tips Section */}
+          {customTips.length > 0 && (
+            <div className="space-y-4 pt-4 border-t border-border">
+              <h2 className="text-lg font-serif font-bold text-foreground flex items-center gap-2">
+                <Lightbulb className="h-4 w-4 text-gold" />
+                Custom Tips
+              </h2>
+              {customTips.map((tip, i) => (
+                <ActivityBlogCard key={tip.id || `tip-${i}`} activity={tip} />
+              ))}
             </div>
           )}
 
@@ -371,5 +410,83 @@ export default function CommunityGuideDetail() {
         </aside>
       </div>
     </MainLayout>
+  );
+}
+
+/** Blog-style activity card for the published view */
+function ActivityBlogCard({ activity }: { activity: Activity }) {
+  const name = activity.name || activity.title || 'Activity';
+  const photos = activity.photos || [];
+  const hasPhotos = photos.length > 0;
+  const experience = activity.note || '';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-xl border border-border bg-card p-5 space-y-3"
+    >
+      {/* Header with name, rating, recommend */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-serif font-semibold text-foreground">{name}</h3>
+          {activity.category && (
+            <span className="text-xs text-muted-foreground">{activity.category}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {activity.user_rating && <StarDisplay rating={activity.user_rating} />}
+          {activity.recommended && <RecommendBadge value={activity.recommended} />}
+        </div>
+      </div>
+
+      {/* Photo grid */}
+      {hasPhotos && (
+        <div className={`grid gap-2 ${photos.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+          {photos.slice(0, 4).map((photo, i) => (
+            <div
+              key={i}
+              className={`rounded-lg overflow-hidden bg-muted ${
+                photos.length === 1 ? 'aspect-video' : 'aspect-square'
+              }`}
+            >
+              <img
+                src={photo.url}
+                alt={photo.caption || `${name} photo ${i + 1}`}
+                className="w-full h-full object-cover"
+                loading="lazy"
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Fallback to existing image_url if no uploaded photos */}
+      {!hasPhotos && activity.image_url && (
+        <img
+          src={activity.image_url}
+          alt={name}
+          className="w-full rounded-lg object-cover aspect-video"
+          loading="lazy"
+        />
+      )}
+
+      {/* User experience text */}
+      {experience && (
+        <p className="text-sm text-foreground leading-relaxed whitespace-pre-line">
+          {experience}
+        </p>
+      )}
+
+      {/* Description (AI-generated) shown only if no user experience */}
+      {!experience && activity.description && (
+        <div className="pl-3 border-l-2 border-primary/20">
+          <p className="text-xs text-muted-foreground italic">
+            <span className="font-medium text-primary/60">Voyance Tip:</span>{' '}
+            {activity.description}
+          </p>
+        </div>
+      )}
+    </motion.div>
   );
 }
