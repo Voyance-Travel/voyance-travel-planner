@@ -171,6 +171,11 @@ export function compileDaySchema(input: CompilerInput): DaySchema {
     filledSlots = fillKeptActivities(filledSlots, input.keepActivities);
   }
 
+  // Step 5e: Enforce blocked windows — remove/shrink empty slots that overlap
+  if (input.generationRules?.blockedWindows && input.generationRules.blockedWindows.length > 0) {
+    filledSlots = applyBlockedWindows(filledSlots, input.generationRules.blockedWindows);
+  }
+
   const resolvedSlots = resolveConflicts(filledSlots, groupConfig);
 
   const schema: DaySchema = {
@@ -227,4 +232,59 @@ function determineDayType(input: CompilerInput): DayType {
 function parseHour(time: string): number {
   const [hours, minutes] = time.split(':').map(Number);
   return hours + (minutes || 0) / 60;
+}
+
+function applyBlockedWindows(
+  slots: DaySlot[],
+  blockedWindows: { start: string; end: string; reason: string }[]
+): DaySlot[] {
+  let result = slots;
+
+  for (const blocked of blockedWindows) {
+    const bStart = parseHour(blocked.start);
+    const bEnd = parseHour(blocked.end);
+
+    result = result.reduce<DaySlot[]>((acc, slot) => {
+      if (slot.status === 'filled' || !slot.timeWindow) {
+        acc.push(slot);
+        return acc;
+      }
+
+      const sStart = parseHour(slot.timeWindow.earliest);
+      const sEnd = parseHour(slot.timeWindow.latest);
+
+      if (sEnd <= bStart || sStart >= bEnd) {
+        acc.push(slot);
+        return acc;
+      }
+
+      if (sStart >= bStart && sEnd <= bEnd) {
+        return acc;
+      }
+
+      if (sStart < bStart) {
+        acc.push({
+          ...slot,
+          timeWindow: { ...slot.timeWindow, latest: toHHMM(bStart) },
+        });
+      }
+      if (sEnd > bEnd) {
+        acc.push({
+          ...slot,
+          slotId: slot.slotId + '_post',
+          timeWindow: { ...slot.timeWindow, earliest: toHHMM(bEnd) },
+        });
+      }
+
+      return acc;
+    }, []);
+  }
+
+  return result.map((slot, i) => ({ ...slot, position: i + 1 }));
+}
+
+function toHHMM(decimalHour: number): string {
+  const h = Math.floor(decimalHour);
+  const m = Math.round((decimalHour - h) * 60);
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }

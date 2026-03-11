@@ -8233,6 +8233,7 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
       console.log(`[generate-day] Experience guidance included: ${archetypeContext.promptBlocks.affinity.length > 0 ? 'YES' : 'NO'} (${archetypeContext.promptBlocks.affinity.length} chars)`);
       console.log(`[generate-day] Destination guidance included: ${archetypeContext.promptBlocks.destination.length > 0 ? 'YES' : 'NO'} (${archetypeContext.promptBlocks.destination.length} chars)`);
 
+      const aiCallStart = Date.now();
       try {
         let data: any = null;
         const maxAttempts = 5;
@@ -8420,7 +8421,7 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
             // @ts-ignore — Deno imports with .ts extension
             const { validateAgainstSchema, buildGenerationLog, formatLogForConsole } = await import('./schema/index.ts');
 
-            const aiCallMs = Date.now() - (compileStart || Date.now());
+            const aiCallMs = Date.now() - aiCallStart;
             const valStart = Date.now();
             const validationResult = validateAgainstSchema(
               compiledSchema,

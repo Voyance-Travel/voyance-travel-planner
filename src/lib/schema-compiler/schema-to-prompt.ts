@@ -65,6 +65,12 @@ export interface SerializerContext {
 
   /** Gap 8: Skip list — venues/activities from previous days. */
   skipList?: string;
+
+  // === Fix 22P: Fields passed by index.ts but previously undeclared ===
+  transportPreferences?: string;
+  voyancePicks?: string;
+  tripTypeContext?: string;
+  collaboratorAttribution?: string;
 }
 
 /**
