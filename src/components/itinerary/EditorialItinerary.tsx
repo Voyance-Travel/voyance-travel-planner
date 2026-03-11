@@ -1139,8 +1139,10 @@ export function EditorialItinerary({
   dateEditorCities,
   travelIntelCards,
   tripHealthPanel,
+  viewMode = 'edit',
 }: EditorialItineraryProps) {
   const queryClient = useQueryClient();
+  const isCleanPreview = viewMode === 'preview';
   const isActivelyGenerating = itineraryStatus === 'generating' || itineraryStatus === 'queued';
   const [rawDays, setRawDays] = useState<EditorialDay[]>(initialDays);
 
