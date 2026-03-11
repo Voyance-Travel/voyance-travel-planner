@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import SafeImage from '@/components/SafeImage';
 import { 
   MapPin, Clock, Lock, RefreshCw, Star, 
   ChevronDown, Sparkles, 
