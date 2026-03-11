@@ -1,135 +1,152 @@
-## Journey Sequential Generation — Implementation Status
 
-### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-**Implemented:**
+## Fix 17: Community Guides Redesign — Phase 1 Plan
 
-1. **`src/hooks/useGenerationGate.ts`**:
-   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
-   - Added journey detection: fetches all sibling legs when `journeyId` is present
-   - Sums credit costs across all journey legs for unified billing
-   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
-   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
-
-2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
-   - Added `journeyLegs` state for cost breakdown display
-   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
-   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
-   - Updated cost confirmation dialog:
-     - Shows "Journey Cost Breakdown" header for journeys
-     - Lists each leg with city, days, and cost
-     - Shows "Journey Total" instead of "Total"
-     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
-     - Disabled partial generation for journeys (must pay full upfront)
-     - "Confirm & Generate Journey" button text for journeys
-
-### Part 2: Auto-Chain Generation (TODO)
-
-When leg 1 completes generation, the backend should:
-1. Check for next queued leg in the journey
-2. Automatically trigger `generate-trip` for the next leg
-3. Continue until all legs are generated
-
-Files to modify:
-- `supabase/functions/generate-trip/index.ts` or similar edge function
-- Add post-generation hook to detect and chain to next journey leg
-
-### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
-
-**Implemented:**
-
-1. **`src/pages/TripDetail.tsx`**:
-   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
-   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
-   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
-   - Added distinct "queued" state UI:
-     - Clock icon with hourglass badge
-     - "{destination} is up next" heading
-     - Explanation text about waiting for previous leg
-     - "View previous city" button to navigate back to the generating leg
-   - Added `Clock` to lucide-react imports
+This is a large feature spanning database changes, storage setup, a new edge function, and significant UI rewrites across ~10 files. Here is the plan for Phase 1 (Parts 1-4 from the spec).
 
 ---
 
-## Preference Enforcement Activation ✅ COMPLETE
+### Database Migrations
 
-### Fix 1: Per-day preference checks now trigger retries ✅
-Moved MINIMUM REAL ACTIVITY COUNT and USER PREFERENCE VALIDATION blocks to after `validateGeneratedDay()` so they can push errors into `validation.errors`. Upgraded all `console.warn` calls to `validation.errors.push` + `validation.isValid = false`. Added budget preference validation ($75+ threshold). Activity keyword checks skip departure days.
+**Migration 1: New tables and columns**
 
-### Fix 2: Stage 2.6 personalization rejection enabled ✅
-Uncommented and enhanced the rejection block. Critical and major dietary violations are now actively enforced — dietary violations get patched with ⚠️ warnings in activity descriptions. Low personalization scores (<40) are logged.
+1. **Add columns to `guide_sections`** for the new editable activity card fields:
+   - `user_experience` (TEXT, nullable) — user's personal notes, max 2000 chars
+   - `user_rating` (INTEGER, nullable) — 1-5 stars
+   - `recommended` (TEXT, nullable) — 'yes' / 'no' / 'neutral'
+   - `photos` (JSONB, default '[]') — array of `{ url, caption }` objects (up to 4 per section)
 
----
+2. **Add `moderation_status` column to `community_guides`**:
+   - TEXT, default 'approved' (values: approved, flagged, removed)
 
-## Itinerary Generation Quality Fixes ✅ COMPLETE
+3. **Create `guide_activity_reviews` table** for future aggregation:
+   - `id`, `guide_id` (FK community_guides), `user_id` (FK auth.users), `activity_name`, `activity_category`, `destination_city`, `rating` (1-5), `recommended` (boolean), `experience_text`, `photo_count`, `created_at`
+   - Indexes on `destination_city` and `activity_name`
 
-### Bug 1: Arrival Sequence Inverted ✅
-Post-generation validator in `index.ts` detects when hotel check-in is ordered before airport arrival on Day 1. Extracts arrival/transfer/checkin activities, recalculates times based on flight arrival, and re-inserts in correct order.
-
-### Bug 2: User Preferences Ignored ✅
-- Strengthened preference injection in system prompt with explicit enforcement language (🚨 MUST BE HONORED)
-- Added post-generation validation logging that checks activities against keyword map for requested activities (skiing, surfing, etc.)
-- Warns when "light dinner" preference is violated by expensive dining ($50+)
-
-### Bug 3: Empty Days ✅
-Added minimum real activity count validation after generation. Filters out logistics (transport, accommodation, downtime) and warns when a day has fewer than 2 real activities (1 for departure day).
-
-### Bug 4: Nonsensical Inter-City Flights ✅
-Added `SAME_METRO_PAIRS` lookup in `buildTransitionDayPrompt` (prompt-library.ts). When origin and destination are in the same metro area (e.g., East Rutherford ↔ NYC), flights are suppressed from transport options and the prompt explicitly forbids them. Default mode switches to `rideshare`.
+4. **Create storage bucket `guide-photos`** (public) with RLS policies:
+   - Authenticated users can upload to their own path (`guide-photos/{user_id}/...`)
+   - Public read access for published guide photos
+   - Max 5MB file size enforced client-side
 
 ---
 
-## Fix: Case-Sensitive Token Lookup ✅ COMPLETE
+### Storage Setup
 
-**Root cause:** `generate_share_token()` used base64 encoding producing mixed-case tokens. Mobile apps (iMessage, WhatsApp) can lowercase URLs, breaking the case-sensitive PostgreSQL lookup.
-
-### Changes (single migration):
-1. **`generate_share_token(integer)`** — switched from base64 to hex encoding (lowercase-only: a-f, 0-9)
-2. **Case-insensitive index** — `idx_trip_invites_token_lower` on `LOWER(token)`
-3. **Backfill** — all existing tokens lowercased
-4. **`get_trip_invite_info()`** — `WHERE LOWER(token) = LOWER(p_token)` + failure logging + `replaced_at` check
-5. **`accept_trip_invite()`** — `WHERE LOWER(token) = LOWER(p_token) FOR UPDATE`
-6. **`replaced_at` column** — added to `trip_invites` for soft-delete support
+- Create `guide-photos` bucket via migration
+- RLS: authenticated INSERT for own path, public SELECT, owner DELETE
 
 ---
 
-## Fix: User Requirements Ignored in Just Tell Us Pipeline ✅ COMPLETE
+### Edge Function: `moderate-guide-content`
 
-### Layer 1: `findBestDay` respects `preferredDay` on Day 1/last day ✅
-- Modified skip guard in `must-do-priorities.ts` L472 to allow long activities on Day 1/last day when user explicitly requested that day via `preferredDay`.
+New edge function that receives all user-written text and returns `{ approved, warnings, blocked_reasons }`.
 
-### Layer 2: `parseMustDoInput` resolves day-of-week and multi-day references ✅
-- Added `tripStartDate` and `totalDays` parameters to function signature
-- Day-of-week resolution: maps "Friday", "Saturday" etc. to trip day numbers using start date
-- Multi-day expansion: "both days" / "every day" / "all N days" duplicated into per-day entries
-- Updated all 5 callers in `index.ts` to pass `startDate` and `totalDays`
-
-### Layer 3: Chat AI prompt strengthened for temporal mapping ✅
-- Added CRITICAL TEMPORAL MAPPING RULES to system prompt in `chat-trip-planner/index.ts`
-- Updated `mustDoActivities` field description to instruct AI to expand multi-day refs into per-day entries with explicit day numbers
-
-### Layer 4: Day 1 arrival uses actual airport name ✅
-- Added `arrivalAirport` to `FlightHotelContextResult` interface and return value
-- Stage 2.55 split block uses `flightHotelResult.arrivalAirport` instead of hardcoded `'Airport'`
-- All 3 Day 1 constraint templates (morning/afternoon/evening) use `arrivalAirportDisplay`
+- **Blocked patterns**: violence, explicit sexual content, hate speech, hard drugs
+- **Warning patterns**: phone numbers, emails, SSN-like numbers
+- Called before publish; if blocked, guide stays as draft with toast explaining why
+- If warnings only, show confirmation dialog letting user proceed
 
 ---
 
-## Fix 12: Blocked Time Window Truncation ✅ COMPLETE
+### UI Changes
 
-**Root cause:** Chat planner outputs `time_block` constraints with start time but no `endTime`. `Start.tsx` defaults missing durations to 120 minutes, producing `09:00→11:00` instead of `09:00→17:00` for "US Open 9am to 5pm". The generator sees the short window and skips the event card.
+**1. Redesign `GuideBuilder.tsx` (major rewrite)**
 
-### Layer 1: Self-correction in generation engine ✅
-- `budget-constraints.ts` `formatGenerationRules`: parses `reason` text for explicit time ranges (e.g. "9am to 5pm") using regex
-- If parsed end time is later than stored `to` value, overrides it
-- Fixes ALL existing trips with truncated blocked windows
+The current flow has three disconnected sections. Consolidate into one editable activity-based flow:
 
-### Layer 2: Chat planner schema extended ✅
-- Added `endTime` and `duration` fields to `userConstraints` schema in `chat-trip-planner/index.ts`
-- AI can now output structured time ranges (time="9:00 AM", endTime="5:00 PM")
+- **Remove** the separate "Guide Content" section that displays `allItems` from `guide_favorites` + `guide_manual_entries`. The "Add Days to Guide" bulk selection is the primary content source.
+- **Make `sections` the single source of truth** — when user adds days, each activity becomes an editable card with the new fields.
+- **Sections state** gains: `userExperience`, `userRating`, `recommended`, `photos[]`
 
-### Layer 3: Start.tsx time_block handler fixed ✅
-- Priority 1: Use explicit `endTime` from chat planner
-- Priority 2: Parse time range from constraint `description` text via regex
-- Priority 3: Fall back to duration math (existing behavior)
-- Eliminates the 120-minute default for events with known end times
+**2. New component: `EditableActivityCard.tsx`**
+
+Replace read-only section cards with rich editable cards containing:
+- Activity name + category badge + day number (read-only header)
+- AI Tip shown in muted italic (from `activitySnapshot.tips`)
+- "Your Experience" textarea (2000 char limit)
+- Star rating (1-5, clickable)
+- Photo upload grid (up to 4, with add/remove)
+- "Would you recommend?" toggle (Yes/No/It was okay)
+- Delete button
+
+**3. New component: `StarRating.tsx`**
+
+Simple 1-5 star rating component with click and hover states.
+
+**4. New component: `PhotoUploadGrid.tsx`**
+
+- "Add Photos" button + 2x2 thumbnail grid
+- Upload to `guide-photos/{user_id}/{guide_id}/{section_id}_{timestamp}.ext`
+- Accept jpg/png/webp, max 5MB, max 4 per card
+- Click thumbnail to view full or remove
+
+**5. Update `AddRecommendationModal.tsx` → "Add Custom Tip"**
+
+- Update categories to: Restaurant, Bar, Activity, Hidden Gem, Transport Tip, General Tip
+- Add rating (1-5 stars) and photos (up to 4) fields
+- Rename dialog title to "Add Custom Tip"
+- Result adds a section with `sectionType: 'custom_tip'`
+
+**6. Smart Tags**
+
+Replace free-text tag input with auto-suggested tags:
+- Auto-suggest destination city/country from trip data
+- Auto-suggest activity categories present in sections (dining, sightseeing, etc.)
+- Pull travel DNA type from user profile
+- Suggest trip type based on traveler count (solo/couples/group/family)
+- Display as tappable teal pills; already-added tags show with X to remove
+- Keep ability to type custom tags
+
+**7. Update save mutation**
+
+- Save `sections` to `guide_sections` table (upsert) with new fields
+- On publish: call `moderate-guide-content` edge function first
+- On publish with reviews: insert/upsert rows in `guide_activity_reviews` for aggregation
+- Set `moderation_status` based on moderation result
+
+**8. Redesign published guide view (`CommunityGuideDetail.tsx`)**
+
+Transform into a blog-style layout:
+- Hero image (first uploaded photo or destination cover)
+- Author info with Travel DNA badge
+- Date range and duration
+- Tags displayed as pills
+- Day-by-day sections showing only activities with user content (experience text, rating, photos, or recommendation)
+- Photo grids per activity
+- Star ratings and recommendation badges inline
+- "Custom Tips" section at bottom for non-itinerary recommendations
+- Share buttons (Copy Link)
+- Skip activities with no user engagement in published view
+
+---
+
+### Files Created
+- `src/components/guides/EditableActivityCard.tsx`
+- `src/components/guides/StarRating.tsx`
+- `src/components/guides/PhotoUploadGrid.tsx`
+- `src/components/guides/SmartTagSelector.tsx`
+- `supabase/functions/moderate-guide-content/index.ts`
+
+### Files Modified
+- `src/pages/GuideBuilder.tsx` — major rewrite of editor flow
+- `src/pages/CommunityGuideDetail.tsx` — blog-style published view
+- `src/components/guides/AddRecommendationModal.tsx` — rename + expand to "Add Custom Tip"
+- `src/components/guides/PublishConfirmModal.tsx` — add moderation check flow
+- `src/hooks/useCommunityGuide.ts` — update types for new fields
+
+### Files Potentially Removed
+- `src/components/guides/GuideActivityCard.tsx` — replaced by `EditableActivityCard`
+- `src/components/guides/GuidePreview.tsx` — preview merged into main flow or rebuilt
+
+---
+
+### Implementation Order
+
+Due to the size, this should be implemented in sub-steps:
+
+1. **Database migration** — new columns, table, storage bucket
+2. **Core UI components** — StarRating, PhotoUploadGrid, EditableActivityCard, SmartTagSelector
+3. **GuideBuilder rewrite** — integrate new components, update save logic
+4. **Moderation edge function** — create and integrate
+5. **Published view redesign** — CommunityGuideDetail blog layout
+
