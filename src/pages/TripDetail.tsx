@@ -2141,7 +2141,7 @@ export default function TripDetail() {
                       cityCount={tripCities.length > 1 ? tripCities.length : 1}
                       tripId={trip.id}
                     />
-                  </div>
+                   </div>}
 
                   {/* Desktop: TripHealthPanel now rendered inside EditorialItinerary's unified card */}
 
