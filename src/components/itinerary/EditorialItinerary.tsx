@@ -8429,6 +8429,7 @@ function ActivityRow({
   guestMustPropose,
   compact = false,
   isPastTrip = false,
+  isCleanPreview = false,
 }: ActivityRowProps) {
   const [showProposeReplacement, setShowProposeReplacement] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState(false);
