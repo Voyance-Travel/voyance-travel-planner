@@ -100,6 +100,12 @@ export default function GuideBuilder() {
   const [excludedActivities, setExcludedActivities] = useState<Set<string>>(new Set());
   const [sections, setSections] = useState<ActivitySectionData[]>([]);
   const [sectionsLoaded, setSectionsLoaded] = useState(false);
+  const [editorialContent, setEditorialContent] = useState<EditorialContent | null>(null);
+  const [editorialVersion, setEditorialVersion] = useState(0);
+  const [editorialGeneratedAt, setEditorialGeneratedAt] = useState<string | null>(null);
+  const [editorialPreviewOpen, setEditorialPreviewOpen] = useState(false);
+  const [editorialPublishing, setEditorialPublishing] = useState(false);
+  const [editorialRegenerating, setEditorialRegenerating] = useState(false);
 
   // Content links (only available after guide is saved)
   const { contentLinks, addLink, deleteLink, isAdding: isAddingLink, isDeleting: isDeletingLink } = useGuideContentLinks(existingGuide?.id);
