@@ -99,7 +99,8 @@ export default function TripPhotoGallery({ tripId, className, hideUpload = false
           </div>
         </div>
 
-        {/* Upload Button */}
+        {/* Upload Button — hidden in preview mode */}
+        {!hideUpload && (
         <div className="flex items-center gap-2">
           <input
             ref={fileInputRef}
@@ -122,6 +123,7 @@ export default function TripPhotoGallery({ tripId, className, hideUpload = false
             Add Photos
           </Button>
         </div>
+        )}
       </div>
 
       {/* Empty State */}
