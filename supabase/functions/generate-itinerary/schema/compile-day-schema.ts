@@ -118,6 +118,22 @@ export interface CompilerInput {
     address: string;
     checkInTime?: string;
   };
+
+  /** Gap 12: Activities to preserve during regeneration.
+   *  These are existing activities the user chose to keep.
+   *  They get pre-filled into schema slots as locked entries. */
+  keepActivities?: {
+    title: string;
+    startTime: string;
+    endTime: string;
+    category: string;
+    location?: string;
+    cost?: number;
+    bookingRequired?: boolean;
+    personalization?: string;
+    tips?: string;
+    suggestedFor?: string;
+  }[];
 }
 
 export function compileDaySchema(input: CompilerInput): DaySchema {
