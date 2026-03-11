@@ -20,6 +20,8 @@ export { getPatternGroupConfig } from './pattern-group-configs.ts';
 export { getPatternGroupForArchetype } from './archetype-group-mapping.ts';
 export { applyPacingOverride } from './pacing-override.ts';
 export type { PacingLevel } from './pacing-override.ts';
+export { fillKeptActivities } from './keep-activities-filler.ts';
+export type { KeptActivity } from './keep-activities-filler.ts';
 
 export type {
   DaySchema,

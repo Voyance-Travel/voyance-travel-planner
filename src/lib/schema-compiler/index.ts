@@ -21,3 +21,5 @@ export { fillPreBookedSlots } from './prebooked-filler';
 export type { PreBookedInput } from './prebooked-filler';
 export { applyPacingOverride } from './pacing-override';
 export type { PacingLevel } from './pacing-override';
+export { fillKeptActivities } from './keep-activities-filler';
+export type { KeptActivity } from './keep-activities-filler';

@@ -150,6 +150,11 @@ export function compileDaySchema(input: CompilerInput): DaySchema {
     filledSlots = fillPreBookedSlots(filledSlots, input.preBookedCommitments, input.hotel?.address);
   }
 
+  // Step 5d: Fill kept activities (from partial regeneration)
+  if (input.keepActivities && input.keepActivities.length > 0) {
+    filledSlots = fillKeptActivities(filledSlots, input.keepActivities);
+  }
+
   const resolvedSlots = resolveConflicts(filledSlots, groupConfig);
 
   const schema: DaySchema = {
