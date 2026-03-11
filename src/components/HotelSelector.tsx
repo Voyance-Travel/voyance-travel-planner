@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { MapPin, Star, Check, Info, Wifi, Coffee, Dumbbell, Waves } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import SafeImage from '@/components/SafeImage';
 import type { HotelOption } from '@/lib/trips';
 
 interface HotelSelectorProps {
