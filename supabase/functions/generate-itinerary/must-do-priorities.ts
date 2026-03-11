@@ -765,8 +765,9 @@ YOU MUST CREATE AN ACTIVITY ENTRY for "${s.priority.title}" with:
 Do NOT schedule any OTHER activities between ${blockedStart} and ${blockedEnd} — this time belongs to "${s.priority.title}".
 
 Day structure:
-- Breakfast before ${subtractMinutes(blockedStart, 30)}
-- Transit to venue ~${subtractMinutes(blockedStart, 30)}
+- Latest departure to venue: ${calculateLatestDeparture(blockedStart)} (NON-NEGOTIABLE)
+- Breakfast MUST end before ${calculateLatestDeparture(blockedStart)}
+- Transit to venue: ${subtractMinutes(blockedStart, 60)}–${blockedStart}
 - "${s.priority.title}" from ${blockedStart} to ${blockedEnd} (MANDATORY ACTIVITY ENTRY)
 - Transit from venue after ${blockedEnd}
 - Dinner/evening activities after ${addMinutes(blockedEnd, 30)}
