@@ -148,6 +148,10 @@ export default function TripDetail() {
     // If can_view_photos is true but NOT from first-trip, it means trip has been unlocked
     (entitlements?.can_view_photos && !entitlements?.is_first_trip) || false;
 
+  // Edit/Preview mode toggle — owners default to edit, non-owners forced to preview
+  const isOwner = !!(user?.id && trip?.user_id && user.id === trip.user_id);
+  const { mode: viewMode, setMode: setViewMode, isPreviewMode, canToggle: canToggleViewMode } = useTripViewMode({ isOwner });
+
   // Check if trip already has a learning submitted
   const { data: existingLearning } = useTripLearning(tripId || '');
 
