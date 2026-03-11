@@ -7588,8 +7588,10 @@ interface DayCardProps {
   onOptionSelect?: (groupKey: string, selectedId: string) => void;
   /** Compact card mode for Smart Finish / manual trips — matches regular itinerary layout */
   compactCards?: boolean;
-  /** Whether this is a past trip — shows guide bookmark button */
-  isPastTrip?: boolean;
+   /** Whether this is a past trip — shows guide bookmark button */
+   isPastTrip?: boolean;
+   /** Clean preview mode — hides all builder tools */
+   isCleanPreview?: boolean;
 }
 
 function DayCard({
