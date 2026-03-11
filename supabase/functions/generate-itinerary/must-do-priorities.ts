@@ -556,6 +556,7 @@ function parseItem(item: string, destination: string): MustDoPriority | null {
     explicitStartTime: explicitTimes?.startTime,
     explicitEndTime: explicitTimes?.endTime,
     location: matchedLandmark?.neighborhood,
+    isGenericIntent: isGenericActivityDescription(item),
   };
 }
 

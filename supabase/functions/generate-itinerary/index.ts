@@ -6770,9 +6770,24 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
             mustDoPrompt += 'Keep today\'s schedule compatible with the overall trip plan.\n';
           }
         } else {
-          // Raw text fallback
-          mustDoPrompt = `\n## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)\n\nThe traveler has researched these specific venues. Include as many as possible in the itinerary:\n"${mustDoActivities.trim()}"\n`;
-          console.log(`[generate-day] Must-do raw text injected (${mustDoActivities.length} chars)`);
+          // Raw text fallback — attempt generic/specific split for per-day generation
+          const { parseMustDoInput: parseMustDoDay, isGenericActivityDescription: isGenericDay } = await import('./must-do-priorities.ts');
+          const dayFallbackParsed = parseMustDoDay(mustDoActivities, destination, false);
+          const dayGeneric = dayFallbackParsed.filter(m => m.isGenericIntent);
+          const daySpecific = dayFallbackParsed.filter(m => !m.isGenericIntent);
+          
+          if (daySpecific.length > 0) {
+            mustDoPrompt = `\n## 🚨 USER'S SPECIFIC VENUES (MANDATORY)\nInclude these exactly as named:\n`;
+            for (const v of daySpecific) mustDoPrompt += `- "${v.activityName}"\n`;
+          }
+          if (dayGeneric.length > 0) {
+            mustDoPrompt += `\n## 🎯 ACTIVITY REQUESTS (suggest specific venues)\n`;
+            for (const g of dayGeneric) mustDoPrompt += `- ${g.activityName} — suggest a SPECIFIC venue name, not just "${g.activityName}"\n`;
+          }
+          if (daySpecific.length === 0 && dayGeneric.length === 0) {
+            mustDoPrompt = `\n## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)\n\nThe traveler has researched these specific venues. Include as many as possible:\n"${mustDoActivities.trim()}"\n`;
+          }
+          console.log(`[generate-day] Must-do fallback: ${daySpecific.length} specific + ${dayGeneric.length} generic (${mustDoActivities.length} chars)`);
         }
       }
 
