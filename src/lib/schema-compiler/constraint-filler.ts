@@ -198,8 +198,115 @@ export function fillFlightAndHotelSlots(
     filled = filled.map((slot, idx) => ({ ...slot, position: idx }));
   }
 
+  // Fill transition day slots (multi-city)
+  if (input.isTransitionDay && input.transitionFrom && input.transitionTo) {
+    filled = fillTransitionSlots(filled, input);
+  }
+
   return filled;
 }
+
+function fillTransitionSlots(filled: DaySlot[], input: CompilerInput): DaySlot[] {
+  // Fill the inter-city transport slot
+  filled = filled.map(slot => {
+    if (slot.slotType === 'transport' && slot.aiInstruction?.includes('Inter-city transit')) {
+      const mode = input.transitionMode || 'flight';
+      const modeLabel = mode === 'flight' ? 'Flight' : mode === 'train' ? 'Train' : mode === 'drive' ? 'Drive' : 'Ferry';
+      return {
+        ...slot,
+        status: 'filled' as const,
+        filledData: {
+          title: `${modeLabel} from ${input.transitionFrom} to ${input.transitionTo}`,
+          category: 'transport',
+          startTime: input.transitionDepartureTime || '12:00',
+          endTime: input.transitionArrivalTime || '15:00',
+          location: `${input.transitionFrom} → ${input.transitionTo}`,
+          cost: 0,
+          source: 'flight_data' as const,
+          notes: `Inter-city ${mode} transit.`,
+        },
+      };
+    }
+    return slot;
+  });
+
+  // Fill destination hotel check-in
+  if (input.destinationHotel) {
+    filled = filled.map(slot => {
+      if (slot.slotType === 'hotel_checkin') {
+        const checkInTime = input.destinationHotel!.checkInTime || '15:00';
+        return {
+          ...slot,
+          status: 'filled' as const,
+          filledData: {
+            title: `Check in at ${input.destinationHotel!.name}`,
+            category: 'hotel',
+            startTime: checkInTime,
+            endTime: addMinutes(checkInTime, 30),
+            location: input.destinationHotel!.address,
+            cost: 0,
+            source: 'hotel_data' as const,
+            notes: 'Check in at the new hotel.',
+          },
+        };
+      }
+      return slot;
+    });
+  }
+
+  // Update AI instructions to reference correct cities
+  filled = filled.map(slot => {
+    let updated = { ...slot };
+    if (updated.aiInstruction) {
+      updated = {
+        ...updated,
+        aiInstruction: updated.aiInstruction
+          .replace(/ORIGIN city/g, input.transitionFrom!)
+          .replace(/ORIGIN/g, input.transitionFrom!)
+          .replace(/DESTINATION city/g, input.transitionTo!)
+          .replace(/DESTINATION/g, input.transitionTo!),
+      };
+    }
+    if (updated.mealInstruction) {
+      updated = {
+        ...updated,
+        mealInstruction: updated.mealInstruction
+          .replace(/ORIGIN city/g, input.transitionFrom!)
+          .replace(/DESTINATION city/g, input.transitionTo!),
+      };
+    }
+    return updated;
+  });
+
+  // Remove morning activity if transit departs before noon
+  if (input.transitionDepartureTime) {
+    const departHour = parseInt(input.transitionDepartureTime.split(':')[0]);
+    if (departHour < 12) {
+      filled = filled.filter(slot => {
+        if (slot.slotType === 'activity' && slot.aiInstruction?.includes(input.transitionFrom!)) {
+          return false;
+        }
+        return true;
+      });
+    }
+  }
+
+  // Remove evening activity if transit arrives late
+  if (input.transitionArrivalTime) {
+    const arriveHour = parseInt(input.transitionArrivalTime.split(':')[0]);
+    if (arriveHour >= 20) {
+      filled = filled.filter(slot => {
+        if (slot.slotType === 'evening') return false;
+        if (slot.slotType === 'activity' && slot.aiInstruction?.includes(input.transitionTo!)) return false;
+        return true;
+      });
+    }
+  }
+
+  // Re-index
+  filled = filled.map((slot, idx) => ({ ...slot, position: idx }));
+
+  return filled;
 
 // --- Time utility functions ---
 
