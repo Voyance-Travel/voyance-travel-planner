@@ -2196,6 +2196,7 @@ export type Database = {
           destination_country: string | null
           id: string
           like_count: number | null
+          moderation_status: string | null
           published_at: string | null
           slug: string | null
           status: string
@@ -2215,6 +2216,7 @@ export type Database = {
           destination_country?: string | null
           id?: string
           like_count?: number | null
+          moderation_status?: string | null
           published_at?: string | null
           slug?: string | null
           status?: string
@@ -2234,6 +2236,7 @@ export type Database = {
           destination_country?: string | null
           id?: string
           like_count?: number | null
+          moderation_status?: string | null
           published_at?: string | null
           slug?: string | null
           status?: string
@@ -3903,6 +3906,56 @@ export type Database = {
         }
         Relationships: []
       }
+      guide_activity_reviews: {
+        Row: {
+          activity_category: string | null
+          activity_name: string
+          created_at: string | null
+          destination_city: string
+          experience_text: string | null
+          guide_id: string
+          id: string
+          photo_count: number | null
+          rating: number | null
+          recommended: boolean | null
+          user_id: string
+        }
+        Insert: {
+          activity_category?: string | null
+          activity_name: string
+          created_at?: string | null
+          destination_city: string
+          experience_text?: string | null
+          guide_id: string
+          id?: string
+          photo_count?: number | null
+          rating?: number | null
+          recommended?: boolean | null
+          user_id: string
+        }
+        Update: {
+          activity_category?: string | null
+          activity_name?: string
+          created_at?: string | null
+          destination_city?: string
+          experience_text?: string | null
+          guide_id?: string
+          id?: string
+          photo_count?: number | null
+          rating?: number | null
+          recommended?: boolean | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guide_activity_reviews_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "community_guides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guide_content_links: {
         Row: {
           activity_id: string | null
@@ -4132,10 +4185,14 @@ export type Database = {
           linked_activity_id: string | null
           linked_day_number: number | null
           photo_url: string | null
+          photos: Json | null
+          recommended: string | null
           section_type: string
           sort_order: number
           title: string
           updated_at: string | null
+          user_experience: string | null
+          user_rating: number | null
         }
         Insert: {
           activity_category?: string | null
@@ -4151,10 +4208,14 @@ export type Database = {
           linked_activity_id?: string | null
           linked_day_number?: number | null
           photo_url?: string | null
+          photos?: Json | null
+          recommended?: string | null
           section_type: string
           sort_order?: number
           title: string
           updated_at?: string | null
+          user_experience?: string | null
+          user_rating?: number | null
         }
         Update: {
           activity_category?: string | null
@@ -4170,10 +4231,14 @@ export type Database = {
           linked_activity_id?: string | null
           linked_day_number?: number | null
           photo_url?: string | null
+          photos?: Json | null
+          recommended?: string | null
           section_type?: string
           sort_order?: number
           title?: string
           updated_at?: string | null
+          user_experience?: string | null
+          user_rating?: number | null
         }
         Relationships: [
           {
