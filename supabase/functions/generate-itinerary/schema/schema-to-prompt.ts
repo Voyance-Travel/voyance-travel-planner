@@ -15,6 +15,7 @@ export interface SerializedPrompt {
 }
 
 export interface SerializerContext {
+  // === EXISTING FIELDS (from Fix 22C) ===
   archetypeDescription: string;
   archetypeAvoidList: string[];
   experiencePriorities: string[];
@@ -27,6 +28,26 @@ export interface SerializerContext {
   hiddenGemInstructions: string;
   isGroupTrip: boolean;
   allTravelerIds: string;
+
+  // === NEW FIELDS (Fix 22G — Gap Fixes) ===
+
+  /** Gap 1: Raw user constraints text to inject into the prompt. */
+  userConstraintsText?: string;
+
+  /** Gap 3: First-time vs returning visitor guidance. */
+  visitorGuidance?: string;
+
+  /** Gap 5: Trip purpose / additional notes. */
+  tripPurpose?: string;
+
+  /** Gap 6: Interest category weighting. */
+  interestWeighting?: string;
+
+  /** Gap 7: Must-haves checklist text. */
+  mustHavesText?: string;
+
+  /** Gap 8: Skip list — venues/activities from previous days. */
+  skipList?: string;
 }
 
 export function serializeSchemaToPrompt(
@@ -51,12 +72,14 @@ function buildSystemPrompt(
 ): string {
   const sections: string[] = [];
 
+  // Section 1: ROLE AND VOICE
   sections.push(`## ROLE AND VOICE
 
 You are Voyance's itinerary AI. You fill pre-structured day schemas with specific places, times, costs, and tips for ${schema.destination}.
 
 CRITICAL: You do NOT decide the day's structure — that is already defined in the schema below. Your job is to populate EMPTY slots with excellent, personalized recommendations. FILLED slots are LOCKED — do not modify them.`);
 
+  // Section 2: TRAVELER PROFILE
   sections.push(`## TRAVELER PROFILE
 
 Name: ${schema.travelers.map(t => t.name).join(' & ')}
@@ -67,17 +90,20 @@ AVOID: ${ctx.archetypeAvoidList.join(', ')}
 
 PRIORITIES: ${ctx.experiencePriorities.join(', ')}`);
 
+  // Section 3: DESTINATION KNOWLEDGE
   if (ctx.destinationContext) {
     sections.push(`## DESTINATION KNOWLEDGE
 
 ${ctx.destinationContext}`);
   }
 
+  // Section 4: BUDGET
   sections.push(`## BUDGET
 
 Tier: ${ctx.budgetTier}
 ${ctx.budgetConstraints}`);
 
+  // Section 5: SLOT FILLING RULES
   let slotRules = `## SLOT FILLING RULES
 
 1. FILLED slots are LOCKED. Do not modify their title, time, cost, or any data. Include them in your response EXACTLY as provided.
@@ -115,12 +141,64 @@ ${ctx.budgetConstraints}`);
 
   sections.push(slotRules);
 
+  // Section 6: ARCHETYPE-SPECIFIC INSTRUCTIONS
   if (config.specialInstructions.length > 0) {
     sections.push(`## ARCHETYPE-SPECIFIC INSTRUCTIONS
 
 ${config.specialInstructions.map(inst => `- ${inst}`).join('\n')}`);
   }
 
+  // === NEW SECTIONS (Fix 22G — Gap Fixes) ===
+
+  // Section 7: USER CONSTRAINTS (Gap 1)
+  if (ctx.userConstraintsText) {
+    sections.push(`## USER CONSTRAINTS
+
+The traveler specified the following constraints and preferences:
+
+${ctx.userConstraintsText}`);
+  }
+
+  // Section 8: VISITOR CONTEXT (Gap 3)
+  if (ctx.visitorGuidance) {
+    sections.push(`## VISITOR CONTEXT
+
+${ctx.visitorGuidance}`);
+  }
+
+  // Section 9: TRIP PURPOSE (Gap 5)
+  if (ctx.tripPurpose) {
+    sections.push(`## TRIP PURPOSE
+
+${ctx.tripPurpose}`);
+  }
+
+  // Section 10: INTEREST WEIGHTING (Gap 6)
+  if (ctx.interestWeighting) {
+    sections.push(`## INTEREST PREFERENCES
+
+${ctx.interestWeighting}`);
+  }
+
+  // Section 11: MUST-HAVES CHECKLIST (Gap 7)
+  if (ctx.mustHavesText) {
+    sections.push(`## TRIP MUST-HAVES
+
+The traveler wants to experience these things during their trip (not necessarily today — but work them in where they fit naturally):
+
+${ctx.mustHavesText}`);
+  }
+
+  // Section 12: SKIP LIST (Gap 8)
+  if (ctx.skipList) {
+    sections.push(`## DO NOT REPEAT
+
+The following activities and venues have already been scheduled on previous days. Do NOT suggest them again:
+
+${ctx.skipList}`);
+  }
+
+  // Surviving sections from the existing prompt
   if (ctx.bookingRules) {
     sections.push(`## BOOKING RULES
 
