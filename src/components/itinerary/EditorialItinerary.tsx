@@ -4350,63 +4350,67 @@ export function EditorialItinerary({
               )}
             </AnimatePresence>
 
-            {/* What We Skipped - Tourist traps avoided */}
-            <WhyWeSkippedSection
-              skippedItems={skippedItems}
-              destination={destination}
-            />
+             {/* Below sections hidden in clean preview */}
+             {!isCleanPreview && (
+               <>
+                 {/* What We Skipped - Tourist traps avoided */}
+                 <WhyWeSkippedSection
+                   skippedItems={skippedItems}
+                   destination={destination}
+                 />
 
-            {/* Accommodation Notes & Practical Tips from parsed trip input */}
-            {parsedMetadata && (
-              <ParsedTripNotesSection metadata={parsedMetadata} />
-            )}
+                 {/* Accommodation Notes & Practical Tips from parsed trip input */}
+                 {parsedMetadata && (
+                   <ParsedTripNotesSection metadata={parsedMetadata} />
+                 )}
 
-            {/* Skip List Violation Warning - Activities that match our skip list */}
-            {validationIssues.filter(i => i.type === 'skip_list').length > 0 && (
-              <div className="px-4 py-3 rounded-lg border border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="font-medium text-sm">
-                      Heads up: {validationIssues.filter(i => i.type === 'skip_list').length} activit{validationIssues.filter(i => i.type === 'skip_list').length === 1 ? 'y matches' : 'ies match'} our skip list
-                    </p>
-                    <p className="text-xs text-amber-600 dark:text-amber-400/80">
-                      These activities appear in "Why We Skipped These" but are still in your itinerary. 
-                      Consider swapping them for better alternatives.
-                    </p>
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {validationIssues.filter(i => i.type === 'skip_list').map((issue, idx) => (
-                        <Badge key={idx} variant="outline" className="text-xs border-amber-500/50 text-amber-700 dark:text-amber-400">
-                          Day {issue.dayNumber}: {issue.activityTitle.length > 30 ? issue.activityTitle.slice(0, 30) + '…' : issue.activityTitle}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+                 {/* Skip List Violation Warning */}
+                 {validationIssues.filter(i => i.type === 'skip_list').length > 0 && (
+                   <div className="px-4 py-3 rounded-lg border border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400">
+                     <div className="flex items-start gap-3">
+                       <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+                       <div className="space-y-1">
+                         <p className="font-medium text-sm">
+                           Heads up: {validationIssues.filter(i => i.type === 'skip_list').length} activit{validationIssues.filter(i => i.type === 'skip_list').length === 1 ? 'y matches' : 'ies match'} our skip list
+                         </p>
+                         <p className="text-xs text-amber-600 dark:text-amber-400/80">
+                           These activities appear in "Why We Skipped These" but are still in your itinerary. 
+                           Consider swapping them for better alternatives.
+                         </p>
+                         <div className="flex flex-wrap gap-1.5 mt-2">
+                           {validationIssues.filter(i => i.type === 'skip_list').map((issue, idx) => (
+                             <Badge key={idx} variant="outline" className="text-xs border-amber-500/50 text-amber-700 dark:text-amber-400">
+                               Day {issue.dayNumber}: {issue.activityTitle.length > 30 ? issue.activityTitle.slice(0, 30) + '…' : issue.activityTitle}
+                             </Badge>
+                           ))}
+                         </div>
+                       </div>
+                     </div>
+                   </div>
+                 )}
 
-            {/* Flight Sync Warning - Show if flight times don't match arrival day */}
-            {destinationArrivalLeg?.arrival?.time && (() => {
-              // Detect cross-day (overnight) flight
-              const outboundLeg = destinationArrivalLeg;
-              const isCrossDayFlight = outboundLeg?.departure?.date && outboundLeg?.arrival?.date
-                && outboundLeg.arrival.date.substring(0, 10) > outboundLeg.departure.date.substring(0, 10);
-              const arrivalDayIndex = isCrossDayFlight ? 1 : 0;
-              const arrivalDay = days[arrivalDayIndex];
-              
-              if (arrivalDay?.activities?.[0]) {
-                return (
-                  <FlightSyncWarning
-                    flightArrivalTime={destinationArrivalLeg.arrival.time}
-                    day1FirstActivity={arrivalDay.activities[0]}
-                    onSyncDay1={handleSyncFlightToDay}
-                    isRegenerating={regeneratingDay === arrivalDay?.dayNumber}
-                  />
-                );
-              }
-              return null;
-            })()}
+                 {/* Flight Sync Warning */}
+                 {destinationArrivalLeg?.arrival?.time && (() => {
+                   const outboundLeg = destinationArrivalLeg;
+                   const isCrossDayFlight = outboundLeg?.departure?.date && outboundLeg?.arrival?.date
+                     && outboundLeg.arrival.date.substring(0, 10) > outboundLeg.departure.date.substring(0, 10);
+                   const arrivalDayIndex = isCrossDayFlight ? 1 : 0;
+                   const arrivalDay = days[arrivalDayIndex];
+                   
+                   if (arrivalDay?.activities?.[0]) {
+                     return (
+                       <FlightSyncWarning
+                         flightArrivalTime={destinationArrivalLeg.arrival.time}
+                         day1FirstActivity={arrivalDay.activities[0]}
+                         onSyncDay1={handleSyncFlightToDay}
+                         isRegenerating={regeneratingDay === arrivalDay?.dayNumber}
+                       />
+                     );
+                   }
+                   return null;
+                 })()}
+               </>
+             )}
 
 
 
