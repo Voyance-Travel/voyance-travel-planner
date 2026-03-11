@@ -7974,9 +7974,44 @@ Generate activities following ALL constraints above.
 IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repeat.`;
 
       // ==========================================================================
+      // SCHEMA-DRIVEN GENERATION — FEATURE FLAG BRANCH (Fix 22C)
+      // ==========================================================================
+      // When USE_SCHEMA_GENERATION is true, the schema compiler builds the prompt
+      // instead of the freeform prompt sections above. Currently OFF (dead code).
+      //
+      // The schema compiler and serializer live in src/lib/schema-compiler/ and
+      // cannot be imported directly by edge functions. When this flag is activated
+      // (Fix 22D), mirror copies of the compiler will be placed in this directory.
+      //
+      // To activate: set USE_SCHEMA_GENERATION = true at the top of this file,
+      // copy schema-compiler modules here, and wire up the CompilerInput mapping.
+      // ==========================================================================
+      const USE_SCHEMA_GENERATION = false;
+
+      let finalSystemPrompt = systemPrompt;
+      let finalUserPrompt = userPrompt;
+
+      if (USE_SCHEMA_GENERATION) {
+        // NEW PATH — Schema-driven generation (DEAD CODE until flag is true)
+        // When activated, this block will:
+        //   1. Build a CompilerInput from existing variables:
+        //      - dayNumber, totalDays, resolvedDestination, date
+        //      - primaryArchetype, arrivalFlight, departureFlight, hotel, mustDos
+        //      - travelers array
+        //   2. Call compileDaySchema(compilerInput) to get a DaySchema
+        //   3. Call serializeSchemaToPrompt(schema, context) to get prompts
+        //   4. Assign to finalSystemPrompt / finalUserPrompt
+        //
+        // For now, this is a placeholder. The actual imports and wiring
+        // will be added in Fix 22D when the schema path is activated.
+        console.log('[schema-generation] Flag is ON but schema path not yet wired. Using existing prompts.');
+      }
+      // else: OLD PATH — use systemPrompt and userPrompt as-is (DEFAULT)
+
+      // ==========================================================================
       // Log Full Prompt Lengths before AI call
       // ==========================================================================
-      console.log(`[generate-day] System prompt: ${systemPrompt.length} chars, User prompt: ${userPrompt.length} chars`);
+      console.log(`[generate-day] System prompt: ${finalSystemPrompt.length} chars, User prompt: ${finalUserPrompt.length} chars`);
       console.log(`[generate-day] Experience guidance included: ${archetypeContext.promptBlocks.affinity.length > 0 ? 'YES' : 'NO'} (${archetypeContext.promptBlocks.affinity.length} chars)`);
       console.log(`[generate-day] Destination guidance included: ${archetypeContext.promptBlocks.destination.length > 0 ? 'YES' : 'NO'} (${archetypeContext.promptBlocks.destination.length} chars)`);
 
