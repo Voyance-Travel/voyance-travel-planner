@@ -387,7 +387,38 @@ export function parseMustDoInput(
     }
   }
 
+  // ── Compound activity splitting: "dinner and comedy show" → 2 items ──
+  const compoundExpanded: typeof expandedItems = [];
   for (const item of expandedItems) {
+    // Try structured conjunctions first ("and then", "followed by", etc.)
+    let didSplit = false;
+    if (COMPOUND_CONJUNCTIONS.test(item.text)) {
+      const parts = item.text.split(COMPOUND_CONJUNCTIONS).map(p => p.trim()).filter(Boolean);
+      if (parts.length > 1 && parts.every(p => isGenericActivityDescription(p))) {
+        console.log(`[MustDo] Splitting compound: "${item.text}" → ${parts.map(p => `"${p}"`).join(', ')}`);
+        for (const part of parts) {
+          compoundExpanded.push({ ...item, text: part });
+        }
+        didSplit = true;
+      }
+    }
+    // Try bare "and" only when both sides are generic
+    if (!didSplit && BARE_AND.test(item.text)) {
+      const parts = item.text.split(BARE_AND).map(p => p.trim()).filter(Boolean);
+      if (parts.length === 2 && parts.every(p => isGenericActivityDescription(p))) {
+        console.log(`[MustDo] Splitting compound (bare 'and'): "${item.text}" → ${parts.map(p => `"${p}"`).join(', ')}`);
+        for (const part of parts) {
+          compoundExpanded.push({ ...item, text: part });
+        }
+        didSplit = true;
+      }
+    }
+    if (!didSplit) {
+      compoundExpanded.push(item);
+    }
+  }
+
+  for (const item of compoundExpanded) {
     const priority = parseItem(item.text, destination);
     if (!priority) continue;
 
