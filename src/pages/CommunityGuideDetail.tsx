@@ -19,6 +19,8 @@ import { toast } from 'sonner';
 import CreatorCard from '@/components/guides/CreatorCard';
 import ReportGuideModal from '@/components/guides/ReportGuideModal';
 import CreatorContentSection from '@/components/guides/CreatorContentSection';
+import EditorialRenderer from '@/components/guides/EditorialRenderer';
+import type { EditorialContent } from '@/types/editorial';
 
 const GuideTripMap = lazy(() => import('@/components/guides/GuideTripMap'));
 
