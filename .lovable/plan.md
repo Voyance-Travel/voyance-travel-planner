@@ -133,3 +133,47 @@ Added `SAME_METRO_PAIRS` lookup in `buildTransitionDayPrompt` (prompt-library.ts
 - Priority 2: Parse time range from constraint `description` text via regex
 - Priority 3: Fall back to duration math (existing behavior)
 - Eliminates the 120-minute default for events with known end times
+
+---
+
+## Fix 16: Replace Lovable Favicon with Voyance Favicon ✅ COMPLETE
+
+- Deleted `public/favicon.ico` (Lovable heart logo)
+- Updated `index.html` favicon links with `?v=3` cache-buster, explicit sizes, and `image/x-icon` override pointing to PNG
+- Post-deploy: request Google re-crawl via Search Console
+
+---
+
+## Fix 17: Community Guides Redesign — Phase 1 ✅ COMPLETE
+
+### Database Changes
+- Added `user_experience`, `user_rating`, `recommended`, `photos` columns to `guide_sections`
+- Added `moderation_status` column to `community_guides`
+- Created `guide_activity_reviews` table with indexes and RLS
+- Created `guide-photos` storage bucket with public read + authenticated upload/delete RLS
+
+### New Components
+- **`StarRating.tsx`** — 1-5 star rating with hover/click states
+- **`PhotoUploadGrid.tsx`** — Upload up to 4 photos per activity to Supabase Storage, with thumbnail grid and remove
+- **`EditableActivityCard.tsx`** — Rich editable card with experience textarea (2000 chars), star rating, photo uploads, recommend toggle (Yes/No/It's okay)
+- **`SmartTagSelector.tsx`** — Auto-suggested tags from destination, activity categories, Travel DNA, and trip type + custom input
+
+### Edge Function
+- **`moderate-guide-content`** — Keyword-based content moderation returning `{ approved, warnings, blocked_reasons }`. Blocks violence/explicit/hate/drugs; warns on PII (phone, email, SSN).
+
+### GuideBuilder.tsx Rewrite
+- Merged "Guide Content" section into editable activity cards
+- Sections are the single source of truth (persisted to `guide_sections` table)
+- Removed separate `guide_favorites` / `guide_manual_entries` dependency for the editor flow
+- Smart tags replace free-text input
+- Save mutation persists sections with new fields + runs moderation before publish
+- Activity reviews aggregated to `guide_activity_reviews` on publish
+- "Add Custom Tip" button replaces separate recommendation modal
+
+### Published View Redesign (CommunityGuideDetail.tsx)
+- Blog-style layout with hero image (first user photo or destination cover)
+- Only shows activities with user content (experience, rating, photos, or recommendation)
+- Star ratings and recommendation badges inline
+- Photo grids per activity
+- "Custom Tips" section at bottom for non-itinerary recommendations
+- "Voyance Tip" callout for activities without user experience text
