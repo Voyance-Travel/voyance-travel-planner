@@ -8593,6 +8593,41 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
           
           console.log(`[generate-day] Merged ${lockedActivities.length} locked activities, final count: ${normalizedActivities.length}`);
         }
+
+        // =======================================================================
+        // STEP: POST-GENERATION GAP FILLER
+        // Detect gaps > 90 min and inject transport/hotel/dinner activities
+        // =======================================================================
+        try {
+          // @ts-ignore — Deno imports with .ts extension
+          const { detectAndFillGaps } = await import('./schema/gap-filler.ts');
+
+          // Map budgetTier to gap-filler's expected values
+          const rawBudget = context?.budgetTier || 'standard';
+          const gapBudgetTier = rawBudget === 'luxury' ? 'luxury' : rawBudget === 'budget' ? 'budget' : 'mid';
+
+          const { fillerActivities, gaps } = detectAndFillGaps(normalizedActivities, {
+            minGapMinutes: 90,
+            hotelName: flightContext?.hotelName || undefined,
+            hotelLocation: flightContext?.hotelAddress || undefined,
+            budgetTier: gapBudgetTier as 'budget' | 'mid' | 'luxury',
+            transportMinutes: 30,
+          });
+
+          if (fillerActivities.length > 0) {
+            console.log(`[gap-filler] Found ${gaps.length} gaps, inserting ${fillerActivities.length} filler activities`);
+            gaps.forEach(g => console.log(`  Gap: ${g.gapStartTime}-${g.gapEndTime} (${g.gapMinutes}min) between "${g.afterActivity}" and "${g.beforeActivity}"`));
+            normalizedActivities.push(...fillerActivities);
+            normalizedActivities.sort((a: { startTime?: string }, b: { startTime?: string }) => {
+              const aTime = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
+              const bTime = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
+              return aTime - bTime;
+            });
+          }
+        } catch (gapErr) {
+          console.warn(`[gap-filler] Non-critical error, skipping:`, gapErr);
+        }
+
         // =======================================================================
         // STEP: ENRICH NEW ACTIVITIES (ratings, photos, coordinates)
         // This ensures regenerated activities have the same rich data as initial generation
