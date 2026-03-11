@@ -803,9 +803,29 @@ ${s.priority.requiresBooking ? '⚠️ TICKETS/BOOKING REQUIRED — mention this
   if (mustLevel.length > 0) {
     prompt += `### 🔴 MUST HAVE (Non-negotiable)\n`;
     for (const s of mustLevel) {
-      prompt += `- **${s.priority.title}** → Day ${s.assignedDay}, ${s.priority.preferredTime || 'any time'}`;
-      if (s.priority.requiresBooking) prompt += ` ⚠️ BOOKING REQUIRED`;
-      prompt += `\n`;
+      const explicitStart = s.priority.explicitStartTime;
+      const explicitEnd = s.priority.explicitEndTime;
+      if (explicitStart) {
+        const latestDepart = calculateLatestDeparture(explicitStart);
+        const endDisplay = explicitEnd || (s.priority.estimatedDuration ? addMinutes(explicitStart, s.priority.estimatedDuration) : null);
+        prompt += `\n🚨 HARD TIME ANCHOR — DO NOT VIOLATE\n`;
+        prompt += `**${s.priority.title}** → Day ${s.assignedDay}\n`;
+        prompt += `- MUST arrive by: ${explicitStart} (NON-NEGOTIABLE — traveler has tickets/reservations)\n`;
+        prompt += `- Latest departure from hotel: ${latestDepart} (assumes ~60 min transfer + 15 min buffer)\n`;
+        prompt += `- All preceding activities MUST end by ${latestDepart}\n`;
+        if (endDisplay) {
+          prompt += `- startTime: "${explicitStart}", endTime: "${endDisplay}"\n`;
+          prompt += `- BLOCKED TIME: ${explicitStart}–${endDisplay} — no other activities in this window\n`;
+        } else {
+          prompt += `- startTime: "${explicitStart}"\n`;
+        }
+        if (s.priority.requiresBooking) prompt += `- ⚠️ TICKETS/BOOKING REQUIRED — mention this prominently\n`;
+        prompt += `\n`;
+      } else {
+        prompt += `- **${s.priority.title}** → Day ${s.assignedDay}, ${s.priority.preferredTime || 'any time'}`;
+        if (s.priority.requiresBooking) prompt += ` ⚠️ BOOKING REQUIRED`;
+        prompt += `\n`;
+      }
     }
     prompt += '\n';
   }
