@@ -583,6 +583,15 @@ export async function regenerateDay(
   }
   
   updatedDays.sort((a, b) => a.dayNumber - b.dayNumber);
+
+  // Safety: ensure we haven't lost any days during regeneration
+  const expectedDays = totalDays || existingItinerary.days.length;
+  if (updatedDays.length < expectedDays) {
+    console.error(
+      `[regenerateDay] Day count mismatch! Expected ${expectedDays} but have ${updatedDays.length}. Aborting save.`
+    );
+    throw new Error(`Day count mismatch: expected ${expectedDays}, got ${updatedDays.length}`);
+  }
   
   const updatedItinerary = { ...existingItinerary, days: updatedDays };
   await supabase
