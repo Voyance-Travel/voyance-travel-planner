@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import SafeImage from '@/components/SafeImage';
 // Local hero images for sample destinations
 import denverHero from '@/assets/destinations/denver-hero.jpg';
 import nolaHero from '@/assets/destinations/new-orleans-1.jpg';
