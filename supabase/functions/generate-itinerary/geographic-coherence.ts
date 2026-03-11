@@ -920,6 +920,8 @@ export default {
   detectBacktracking,
   validateDayGeography,
   reorderActivitiesOptimally,
+  enforceTemporalDependencies,
+  deduplicateTransports,
   buildGeographicPrompt,
   buildDayZonePrompt,
   logGeographicQAMetrics,

@@ -5931,7 +5931,8 @@ If the purpose is a specific event, plan at least ONE full day around that event
           coordinates: act.location?.coordinates,
           neighborhood: act.location?.address?.split(',')[0],
           isLocked: (act as any).isLocked || false,
-          category: act.category
+          category: act.category,
+          startTime: (act as any).startTime || act.timeSlot?.split('-')[0],
         }));
         
         // Determine day anchor
