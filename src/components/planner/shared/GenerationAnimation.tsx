@@ -53,19 +53,21 @@ export function GenerationAnimation({ progress = 0, className }: GenerationAnima
             </filter>
           </defs>
 
-          {/* Pulse rings */}
+          {/* Pulse rings — use scale transform instead of animating r to avoid SVG attribute warnings */}
           <motion.circle
             cx="100" cy="100" r="52"
             className="fill-none stroke-primary/15"
             strokeWidth="1"
-            animate={{ r: [52, 72], opacity: [0.4, 0] }}
+            style={{ transformOrigin: '100px 100px' }}
+            animate={{ scale: [1, 72 / 52], opacity: [0.4, 0] }}
             transition={{ duration: 2.5, repeat: Infinity, ease: 'easeOut' }}
           />
           <motion.circle
             cx="100" cy="100" r="52"
             className="fill-none stroke-primary/10"
             strokeWidth="1"
-            animate={{ r: [52, 80], opacity: [0.3, 0] }}
+            style={{ transformOrigin: '100px 100px' }}
+            animate={{ scale: [1, 80 / 52], opacity: [0.3, 0] }}
             transition={{ duration: 3, repeat: Infinity, ease: 'easeOut', delay: 0.8 }}
           />
 
@@ -73,7 +75,8 @@ export function GenerationAnimation({ progress = 0, className }: GenerationAnima
           <motion.circle
             cx="100" cy="100" r="48"
             className="fill-primary/5"
-            animate={{ r: [48, 52, 48], opacity: [0.06, 0.12, 0.06] }}
+            style={{ transformOrigin: '100px 100px' }}
+            animate={{ scale: [1, 52 / 48, 1], opacity: [0.06, 0.12, 0.06] }}
             transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
           />
 

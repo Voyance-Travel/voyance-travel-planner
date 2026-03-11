@@ -34,8 +34,8 @@ let _healthCheckInterval: ReturnType<typeof setInterval> | null = null;
 let _onStaleDetected: (() => void) | null = null;
 
 const HEALTH_CHECK_INTERVAL_MS = 1_000;
-const BRIEF_DISCONNECT_MS = 5_000;
-const MAX_RETRY_ATTEMPTS = 3;
+const BRIEF_DISCONNECT_MS = 30_000;
+const MAX_RETRY_ATTEMPTS = 10;
 const RECONNECT_BASE_DELAY_MS = 500;
 
 function isStaleState(state: string | undefined): boolean {
