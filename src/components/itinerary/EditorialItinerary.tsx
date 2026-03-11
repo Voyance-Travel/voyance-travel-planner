@@ -7879,22 +7879,24 @@ function DayCard({
                 </DropdownMenu>
               )}
             </div>
-            <Tooltip delayDuration={200}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={onToggle}
-                  className="h-7 w-7 sm:h-8 sm:w-8 shrink-0"
-                  aria-label={isExpanded ? 'Collapse Day' : 'Expand Day'}
-                >
-                  {isExpanded ? <ChevronUp className="h-3.5 sm:h-4 w-3.5 sm:w-4" /> : <ChevronDown className="h-3.5 sm:h-4 w-3.5 sm:w-4" />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <span className="text-xs font-medium">{isExpanded ? 'Collapse Day' : 'Expand Day'}</span>
-              </TooltipContent>
-            </Tooltip>
+             {!isCleanPreview && (
+             <Tooltip delayDuration={200}>
+               <TooltipTrigger asChild>
+                 <Button
+                   variant="ghost"
+                   size="icon"
+                   onClick={onToggle}
+                   className="h-7 w-7 sm:h-8 sm:w-8 shrink-0"
+                   aria-label={effectiveExpanded ? 'Collapse Day' : 'Expand Day'}
+                 >
+                   {effectiveExpanded ? <ChevronUp className="h-3.5 sm:h-4 w-3.5 sm:w-4" /> : <ChevronDown className="h-3.5 sm:h-4 w-3.5 sm:w-4" />}
+                 </Button>
+               </TooltipTrigger>
+               <TooltipContent side="bottom">
+                 <span className="text-xs font-medium">{effectiveExpanded ? 'Collapse Day' : 'Expand Day'}</span>
+               </TooltipContent>
+             </Tooltip>
+             )}
           </div>
         </div>
       </div>
