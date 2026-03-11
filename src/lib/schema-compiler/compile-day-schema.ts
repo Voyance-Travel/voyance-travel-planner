@@ -26,6 +26,7 @@ import { buildBaseSkeleton } from './day-skeletons';
 import { applyDnaModifiers } from './dna-modifiers';
 import { fillFlightAndHotelSlots } from './constraint-filler';
 import { fillMustDoSlots, type MustDoInput } from './must-do-filler';
+import { fillPreBookedSlots } from './prebooked-filler';
 import { resolveConflicts } from './conflict-resolver';
 import { applyPacingOverride } from './pacing-override';
 
@@ -165,6 +166,11 @@ export function compileDaySchema(input: CompilerInput): DaySchema {
       location: md.location,
     }));
     filledSlots = fillMustDoSlots(filledSlots, mustDoInputs, input.hotel?.address);
+  }
+
+  // Step 5c: Fill pre-booked commitments (reservations, shows, tours)
+  if (input.preBookedCommitments && input.preBookedCommitments.length > 0) {
+    filledSlots = fillPreBookedSlots(filledSlots, input.preBookedCommitments, input.hotel?.address);
   }
 
   // Step 6: Resolve conflicts

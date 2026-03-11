@@ -13,6 +13,8 @@ export { buildGenerationLog, formatLogForConsole } from './generation-logger.ts'
 export { normalizeTimeText, extractTimeRange, cleanActivityTitle, parseToHHMM } from './time-parser.ts';
 export { fillMustDoSlots } from './must-do-filler.ts';
 export type { MustDoInput } from './must-do-filler.ts';
+export { fillPreBookedSlots } from './prebooked-filler.ts';
+export type { PreBookedInput } from './prebooked-filler.ts';
 export { USE_SCHEMA_GENERATION, SCHEMA_GENERATION_CONFIG } from './feature-flags.ts';
 export { getPatternGroupConfig } from './pattern-group-configs.ts';
 export { getPatternGroupForArchetype } from './archetype-group-mapping.ts';

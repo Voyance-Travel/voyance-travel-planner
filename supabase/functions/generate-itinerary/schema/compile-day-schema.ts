@@ -20,6 +20,7 @@ import { buildBaseSkeleton } from './day-skeletons.ts';
 import { applyDnaModifiers } from './dna-modifiers.ts';
 import { fillFlightAndHotelSlots } from './constraint-filler.ts';
 import { fillMustDoSlots, type MustDoInput } from './must-do-filler.ts';
+import { fillPreBookedSlots } from './prebooked-filler.ts';
 import { resolveConflicts } from './conflict-resolver.ts';
 import { applyPacingOverride } from './pacing-override.ts';
 
@@ -125,6 +126,11 @@ export function compileDaySchema(input: CompilerInput): DaySchema {
       location: md.location,
     }));
     filledSlots = fillMustDoSlots(filledSlots, mustDoInputs, input.hotel?.address);
+  }
+
+  // Step 5c: Fill pre-booked commitments (reservations, shows, tours)
+  if (input.preBookedCommitments && input.preBookedCommitments.length > 0) {
+    filledSlots = fillPreBookedSlots(filledSlots, input.preBookedCommitments, input.hotel?.address);
   }
 
   const resolvedSlots = resolveConflicts(filledSlots, groupConfig);
