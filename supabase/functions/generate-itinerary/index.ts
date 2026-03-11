@@ -1527,7 +1527,24 @@ async function generateSingleDayWithRetry(
     '9. VARIETY PER DAY: Mix sightseeing, cultural sites, museums, outdoor activities, dining',
     '10. **ACTIVITY TITLE NAMING — CRITICAL**: The "title" field MUST be the venue or experience name ONLY. NEVER append the category, type, or a repeated word. Examples of WRONG titles: "Barton Springs Pool Pool", "Zilker Botanical Garden Garden", "Franklin Barbecue Barbecue", "Cosmic Coffee Coffee & Beer", "Record shopping shopping". CORRECT titles: "Barton Springs Pool", "Zilker Botanical Garden", "Franklin Barbecue", "Cosmic Coffee + Beer Garden". If the place name already contains the activity type (e.g., "Pool", "Garden", "Barbecue", "Coffee"), do NOT add it again.',
     '11. **DINING TITLE — CRITICAL**: For ALL dining/restaurant activities (category: "dining"), the "title" MUST be the restaurant or cafe name. NEVER use the neighborhood, district, or area as the title. Put the neighborhood in the "neighborhood" field instead. WRONG: { title: "Gaslamp Quarter", description: "Juniper & Ivy" }. WRONG: { title: "La Jolla", description: "The Taco Stand fish tacos" }. WRONG: { title: "Balboa Park", description: "The Prado restaurant" }. RIGHT: { title: "Juniper & Ivy", neighborhood: "Gaslamp Quarter" }. RIGHT: { title: "The Taco Stand", description: "fish tacos", neighborhood: "La Jolla" }. RIGHT: { title: "The Prado", neighborhood: "Balboa Park" }.',
-    isFirstDay ? '12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with "Hotel Check-in & Refresh" (category: accommodation) as the FIRST activity. Do NOT include an "Arrival at Airport", "Arrival and Baggage Claim", or "Airport Transfer to Hotel" activity — arrival logistics are handled by a separate UI component. Start the day with hotel check-in, then proceed to real activities.' : '',
+    isFirstDay ? (() => {
+      const routing = (context as any)._arrivalRouting;
+      if (routing?.strategy === 'venue-first') {
+        return `12. **DAY 1 ARRIVAL STRUCTURE — VENUE-FIRST ROUTING (CRITICAL)**:
+       The traveler's first must-do activity (${routing.firstMustDoName}) is only ~${routing.estimatedAirportToVenueMinutes} min from the airport, while the hotel is ~${routing.estimatedAirportToHotelMinutes} min away.
+       Day 1 MUST follow this sequence:
+       (a) "Hotel Check-in & Refresh" is SKIPPED at the start — do NOT go to hotel first
+       (b) First activity: "Transport to ${routing.firstMustDoName}" (~${routing.estimatedAirportToVenueMinutes} min by car, category: transport)
+       (c) "Bag Drop / Locker" at the venue (15 min, category: logistics) — if applicable
+       (d) "${routing.firstMustDoName}" (the must-do activity)
+       (e) AFTER the must-do ends: "Transport to Hotel" (category: transport)
+       (f) "Hotel Check-in & Freshen Up" (~45 min, category: accommodation)
+       (g) Evening activities (dinner, entertainment — each as SEPARATE activities)
+       DO NOT route to hotel first. DO NOT generate "Private Transfer to Midtown" or any hotel area transfer before the must-do.
+       DO NOT combine dinner and evening entertainment into one activity.`;
+      }
+      return `12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with "Hotel Check-in & Refresh" (category: accommodation) as the FIRST activity. Do NOT include an "Arrival at Airport", "Arrival and Baggage Claim", or "Airport Transfer to Hotel" activity — arrival logistics are handled by a separate UI component. Start the day with hotel check-in, then proceed to real activities.`;
+    })() : '',
     isLastDay && context.totalDays > 1 ? '12. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
   ].filter(Boolean).join('\n');
 
