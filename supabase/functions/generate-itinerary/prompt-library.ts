@@ -1465,7 +1465,8 @@ export function buildDayPrompt(
   hotel: HotelData,
   dna: TravelerDNA,
   tripContext: TripContext,
-  dayNumber: number
+  dayNumber: number,
+  arrivalRouting?: { strategy: 'hotel-first' | 'venue-first'; firstMustDoName?: string; estimatedAirportToVenueMinutes?: number; estimatedAirportToHotelMinutes?: number }
 ): { personaPrompt: string; dayConstraints: DayConstraints } {
   const isFirstDay = dayNumber === 1;
   const isLastDay = dayNumber === tripContext.totalDays;
@@ -1488,7 +1489,7 @@ export function buildDayPrompt(
   if (isDepartureTravelDay) {
     dayConstraints = buildOutboundTravelDayPrompt(flight, hotel, dna, tripContext);
   } else if (isFirstDay) {
-    dayConstraints = buildArrivalDayPrompt(flight, hotel, dna, tripContext);
+    dayConstraints = buildArrivalDayPrompt(flight, hotel, dna, tripContext, arrivalRouting);
   } else if (isLastDay) {
     dayConstraints = buildDepartureDayPrompt(flight, hotel, dna, tripContext, dayNumber);
   } else {
