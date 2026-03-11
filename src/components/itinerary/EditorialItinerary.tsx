@@ -419,6 +419,8 @@ export interface EditorialItineraryProps {
   isEditable?: boolean;
   /** Preview mode — shows venue names/times but gates details (address, photos, tips, actions) */
   isPreview?: boolean;
+  /** Clean preview mode — hides all builder tools for a reading experience */
+  viewMode?: 'edit' | 'preview';
   originCity?: string;
   /** Activity IDs to highlight (e.g., from chatbot suggestions) */
   highlightedActivityIds?: string[];
@@ -1137,8 +1139,10 @@ export function EditorialItinerary({
   dateEditorCities,
   travelIntelCards,
   tripHealthPanel,
+  viewMode = 'edit',
 }: EditorialItineraryProps) {
   const queryClient = useQueryClient();
+  const isCleanPreview = viewMode === 'preview';
   const isActivelyGenerating = itineraryStatus === 'generating' || itineraryStatus === 'queued';
   const [rawDays, setRawDays] = useState<EditorialDay[]>(initialDays);
 
@@ -3852,8 +3856,8 @@ export function EditorialItinerary({
       )}
 
 
-      {/* Navigation Tabs - Sticky on mobile, horizontally scrollable with fade indicator */}
-      <div className="sticky top-0 z-30 bg-background sm:relative sm:z-auto">
+       {/* Navigation Tabs - Hidden in clean preview mode */}
+       {!isCleanPreview && <div className="sticky top-0 z-30 bg-background sm:relative sm:z-auto">
         <div 
           className="border-b border-border overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0"
           ref={(el) => {
@@ -3922,9 +3926,9 @@ export function EditorialItinerary({
           className="absolute right-0 top-0 bottom-0 w-12 pointer-events-none bg-gradient-to-l from-background to-transparent transition-opacity duration-200 sm:hidden"
           style={{ opacity: 0 }}
         />
-      </div>
+       </div>}
 
-      {/* Tab Content */}
+       {/* In clean preview, force itinerary tab and skip AnimatePresence wrapper */}
       <AnimatePresence mode="wait">
         {activeTab === 'itinerary' && (
           <motion.div
@@ -3934,8 +3938,8 @@ export function EditorialItinerary({
             exit={{ opacity: 0 }}
             className="space-y-6"
           >
-            {/* Smart Finish Banner — DNA gap analysis for manual trips */}
-            {isManualMode && !isPastTrip && (
+             {/* Smart Finish Banner — DNA gap analysis for manual trips — hidden in clean preview */}
+             {!isCleanPreview && isManualMode && !isPastTrip && (
               <SmartFinishBanner
                 tripId={tripId}
                 isManualMode={isManualMode}
@@ -3947,8 +3951,8 @@ export function EditorialItinerary({
               />
             )}
 
-            {/* ── Unified Trip Command Center ── */}
-            <div data-tour="value-header" className="rounded-xl border border-border bg-card overflow-hidden">
+             {/* ── Unified Trip Command Center — hidden in clean preview ── */}
+             {!isCleanPreview && <div data-tour="value-header" className="rounded-xl border border-border bg-card overflow-hidden">
 
               {/* ROW 1: Trip Total + Currency Toggle + Meta */}
               <div className="px-4 sm:px-6 py-4 border-b border-border/50">
@@ -4323,7 +4327,7 @@ export function EditorialItinerary({
               )}
 
               {/* Need to Know is now a top-level tab — removed from command center to avoid duplication */}
-            </div>
+             </div>}
 
 
 
@@ -4346,63 +4350,67 @@ export function EditorialItinerary({
               )}
             </AnimatePresence>
 
-            {/* What We Skipped - Tourist traps avoided */}
-            <WhyWeSkippedSection
-              skippedItems={skippedItems}
-              destination={destination}
-            />
+             {/* Below sections hidden in clean preview */}
+             {!isCleanPreview && (
+               <>
+                 {/* What We Skipped - Tourist traps avoided */}
+                 <WhyWeSkippedSection
+                   skippedItems={skippedItems}
+                   destination={destination}
+                 />
 
-            {/* Accommodation Notes & Practical Tips from parsed trip input */}
-            {parsedMetadata && (
-              <ParsedTripNotesSection metadata={parsedMetadata} />
-            )}
+                 {/* Accommodation Notes & Practical Tips from parsed trip input */}
+                 {parsedMetadata && (
+                   <ParsedTripNotesSection metadata={parsedMetadata} />
+                 )}
 
-            {/* Skip List Violation Warning - Activities that match our skip list */}
-            {validationIssues.filter(i => i.type === 'skip_list').length > 0 && (
-              <div className="px-4 py-3 rounded-lg border border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="font-medium text-sm">
-                      Heads up: {validationIssues.filter(i => i.type === 'skip_list').length} activit{validationIssues.filter(i => i.type === 'skip_list').length === 1 ? 'y matches' : 'ies match'} our skip list
-                    </p>
-                    <p className="text-xs text-amber-600 dark:text-amber-400/80">
-                      These activities appear in "Why We Skipped These" but are still in your itinerary. 
-                      Consider swapping them for better alternatives.
-                    </p>
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {validationIssues.filter(i => i.type === 'skip_list').map((issue, idx) => (
-                        <Badge key={idx} variant="outline" className="text-xs border-amber-500/50 text-amber-700 dark:text-amber-400">
-                          Day {issue.dayNumber}: {issue.activityTitle.length > 30 ? issue.activityTitle.slice(0, 30) + '…' : issue.activityTitle}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+                 {/* Skip List Violation Warning */}
+                 {validationIssues.filter(i => i.type === 'skip_list').length > 0 && (
+                   <div className="px-4 py-3 rounded-lg border border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400">
+                     <div className="flex items-start gap-3">
+                       <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+                       <div className="space-y-1">
+                         <p className="font-medium text-sm">
+                           Heads up: {validationIssues.filter(i => i.type === 'skip_list').length} activit{validationIssues.filter(i => i.type === 'skip_list').length === 1 ? 'y matches' : 'ies match'} our skip list
+                         </p>
+                         <p className="text-xs text-amber-600 dark:text-amber-400/80">
+                           These activities appear in "Why We Skipped These" but are still in your itinerary. 
+                           Consider swapping them for better alternatives.
+                         </p>
+                         <div className="flex flex-wrap gap-1.5 mt-2">
+                           {validationIssues.filter(i => i.type === 'skip_list').map((issue, idx) => (
+                             <Badge key={idx} variant="outline" className="text-xs border-amber-500/50 text-amber-700 dark:text-amber-400">
+                               Day {issue.dayNumber}: {issue.activityTitle.length > 30 ? issue.activityTitle.slice(0, 30) + '…' : issue.activityTitle}
+                             </Badge>
+                           ))}
+                         </div>
+                       </div>
+                     </div>
+                   </div>
+                 )}
 
-            {/* Flight Sync Warning - Show if flight times don't match arrival day */}
-            {destinationArrivalLeg?.arrival?.time && (() => {
-              // Detect cross-day (overnight) flight
-              const outboundLeg = destinationArrivalLeg;
-              const isCrossDayFlight = outboundLeg?.departure?.date && outboundLeg?.arrival?.date
-                && outboundLeg.arrival.date.substring(0, 10) > outboundLeg.departure.date.substring(0, 10);
-              const arrivalDayIndex = isCrossDayFlight ? 1 : 0;
-              const arrivalDay = days[arrivalDayIndex];
-              
-              if (arrivalDay?.activities?.[0]) {
-                return (
-                  <FlightSyncWarning
-                    flightArrivalTime={destinationArrivalLeg.arrival.time}
-                    day1FirstActivity={arrivalDay.activities[0]}
-                    onSyncDay1={handleSyncFlightToDay}
-                    isRegenerating={regeneratingDay === arrivalDay?.dayNumber}
-                  />
-                );
-              }
-              return null;
-            })()}
+                 {/* Flight Sync Warning */}
+                 {destinationArrivalLeg?.arrival?.time && (() => {
+                   const outboundLeg = destinationArrivalLeg;
+                   const isCrossDayFlight = outboundLeg?.departure?.date && outboundLeg?.arrival?.date
+                     && outboundLeg.arrival.date.substring(0, 10) > outboundLeg.departure.date.substring(0, 10);
+                   const arrivalDayIndex = isCrossDayFlight ? 1 : 0;
+                   const arrivalDay = days[arrivalDayIndex];
+                   
+                   if (arrivalDay?.activities?.[0]) {
+                     return (
+                       <FlightSyncWarning
+                         flightArrivalTime={destinationArrivalLeg.arrival.time}
+                         day1FirstActivity={arrivalDay.activities[0]}
+                         onSyncDay1={handleSyncFlightToDay}
+                         isRegenerating={regeneratingDay === arrivalDay?.dayNumber}
+                       />
+                     );
+                   }
+                   return null;
+                 })()}
+               </>
+             )}
 
 
 
@@ -4424,30 +4432,32 @@ export function EditorialItinerary({
                       onDateChange={onDateChange}
                       days={days}
                       cities={dateEditorCities}
-                    />
-                  )}
-                </span>
-                <div className="flex items-center gap-1.5">
-                  {canUndoDay && (
-                    <DayUndoButton
-                      onClick={handleUndo}
-                      isLoading={isUndoing}
-                      showLabel
-                    />
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setVersionHistoryOpen(true)}
-                    className="gap-1.5 text-xs"
-                  >
-                    <HistoryIcon className="h-4 w-4" />
-                    <span className="hidden sm:inline">History</span>
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    Day {selectedDayIndex + 1} of {days.length}
-                  </span>
-                </div>
+                     />
+                   )}
+                 </span>
+                 {!isCleanPreview && (
+                 <div className="flex items-center gap-1.5">
+                   {canUndoDay && (
+                     <DayUndoButton
+                       onClick={handleUndo}
+                       isLoading={isUndoing}
+                       showLabel
+                     />
+                   )}
+                   <Button
+                     variant="ghost"
+                     size="sm"
+                     onClick={() => setVersionHistoryOpen(true)}
+                     className="gap-1.5 text-xs"
+                   >
+                     <HistoryIcon className="h-4 w-4" />
+                     <span className="hidden sm:inline">History</span>
+                   </Button>
+                   <span className="text-xs text-muted-foreground">
+                     Day {selectedDayIndex + 1} of {days.length}
+                   </span>
+                 </div>
+                 )}
               </div>
 
               <div className="flex items-center gap-2">
@@ -4590,8 +4600,8 @@ export function EditorialItinerary({
               </div>
             </div>
             
-            {/* Bulk Unlock Banner - show when 2+ days are locked AND not generating */}
-            {!isActivelyGenerating && (() => {
+             {/* Bulk Unlock Banner - hidden in clean preview */}
+             {!isCleanPreview && !isActivelyGenerating && (() => {
               const lockedDayCount = days.filter(d => !canViewPremiumContentForDay(entitlements, d.dayNumber)).length;
               const unlockedCount = days.length - lockedDayCount;
               if (lockedDayCount < 2) return null;
@@ -4938,8 +4948,9 @@ export function EditorialItinerary({
                           onOptionSelect={(groupKey, selectedId) => {
                             setOptionSelections(prev => ({ ...prev, [groupKey]: selectedId }));
                           }}
-                          compactCards={isManualMode || creationSource === 'smart_finish'}
-                          isPastTrip={isPastTrip}
+                           compactCards={isManualMode || creationSource === 'smart_finish'}
+                           isPastTrip={isPastTrip}
+                           isCleanPreview={isCleanPreview}
                           onRefreshDay={() => handleRefreshDay(selectedDayIndex)}
                           isRefreshingDay={refreshingDayNumber === selectedDay.dayNumber}
                           refreshResult={refreshResults[selectedDay.dayNumber] || null}
@@ -4954,8 +4965,8 @@ export function EditorialItinerary({
               </div>
             )}
             
-            {/* Credit Nudge - inline when credits insufficient (not for preview unlock) */}
-            {creditNudge && creditNudge.action !== 'UNLOCK_DAY' && (
+             {/* Credit Nudge — hidden in clean preview */}
+             {!isCleanPreview && creditNudge && creditNudge.action !== 'UNLOCK_DAY' && (
               <div className="mt-3">
                 <CreditNudge
                   action={creditNudge.action}
@@ -4965,8 +4976,8 @@ export function EditorialItinerary({
               </div>
             )}
 
-            {/* Unlock Banner - shown for preview itineraries (hidden in manual mode and during generation) */}
-            {effectiveIsPreview && !isActivelyGenerating && (
+             {/* Unlock Banner — hidden in clean preview */}
+             {!isCleanPreview && effectiveIsPreview && !isActivelyGenerating && (
               <div className="mt-4">
                 <UnlockBanner
                   tripId={tripId}
@@ -7578,8 +7589,10 @@ interface DayCardProps {
   onOptionSelect?: (groupKey: string, selectedId: string) => void;
   /** Compact card mode for Smart Finish / manual trips — matches regular itinerary layout */
   compactCards?: boolean;
-  /** Whether this is a past trip — shows guide bookmark button */
-  isPastTrip?: boolean;
+   /** Whether this is a past trip — shows guide bookmark button */
+   isPastTrip?: boolean;
+   /** Clean preview mode — hides all builder tools */
+   isCleanPreview?: boolean;
 }
 
 function DayCard({
@@ -7636,6 +7649,7 @@ function DayCard({
   onApplyRefreshChanges,
   compactCards = false,
   isPastTrip = false,
+  isCleanPreview = false,
 }: DayCardProps) {
   // Per-day preview: a day is preview only if the global flag is set AND the day itself is a preview
   // Fully generated days (e.g., first 2 free days) should NOT be gated even if other days are locked
@@ -7675,8 +7689,16 @@ function DayCard({
 
   // Library modal state removed - agent features disabled
 
+  // In clean preview: always expanded, simplified card style
+  const effectiveExpanded = isCleanPreview ? true : isExpanded;
+
   return (
-    <div className="border border-border bg-card overflow-hidden rounded-xl shadow-none sm:shadow-sm sm:hover:shadow-md transition-shadow" data-tour="day-header">
+    <div className={cn(
+      "overflow-hidden rounded-xl transition-shadow",
+      isCleanPreview
+        ? "border-0 shadow-none bg-transparent"
+        : "border border-border bg-card shadow-none sm:shadow-sm sm:hover:shadow-md"
+    )} data-tour="day-header">
       {/* Day Header - Editorial Style with Color Accent */}
       <div className={cn(
         "relative p-4 sm:p-6 transition-colors duration-500",
@@ -7738,17 +7760,19 @@ function DayCard({
                   Planned
                 </Badge>
               )}
-            <Tooltip delayDuration={200}>
-              <TooltipTrigger asChild>
-                <Badge variant="outline" className="text-xs sm:text-sm font-semibold border-primary/30 bg-primary/5 text-primary shrink-0 cursor-default">
-                  {totalCost > 0 ? `${formatCurrency(displayCost(totalCost), tripCurrency)}${travelers > 1 ? '/pp' : ''}` : 'Free'}
-                </Badge>
+             {!isCleanPreview && (
+             <Tooltip delayDuration={200}>
+               <TooltipTrigger asChild>
+                 <Badge variant="outline" className="text-xs sm:text-sm font-semibold border-primary/30 bg-primary/5 text-primary shrink-0 cursor-default">
+                   {totalCost > 0 ? `${formatCurrency(displayCost(totalCost), tripCurrency)}${travelers > 1 ? '/pp' : ''}` : 'Free'}
+                 </Badge>
               </TooltipTrigger>
               <TooltipContent side="bottom">
                 <span className="text-xs font-medium">Day Cost Estimate</span>
               </TooltipContent>
-            </Tooltip>
-            {day.weather && (
+             </Tooltip>
+             )}
+             {day.weather && (
               <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full bg-secondary/50 text-xs sm:text-sm shrink-0">
                 {weatherIcons[day.weather.condition?.toLowerCase() || 'sunny']}
                 {day.weather.high && <span className="font-medium">{day.weather.high}°</span>}
@@ -7781,7 +7805,7 @@ function DayCard({
             </Tooltip>
             </div>
             )}
-            {isEditable && (
+             {isEditable && !isCleanPreview && (
               <div className="hidden sm:flex items-center gap-1">
                 <Tooltip delayDuration={200}>
                   <TooltipTrigger asChild>
@@ -7823,7 +7847,7 @@ function DayCard({
             )}
             {/* Mobile: overflow menu for Routes/Lock/Regenerate */}
             <div className="sm:hidden flex items-center gap-1">
-              {(isEditable || !dayIsPreview) && (
+              {(isEditable || !dayIsPreview) && !isCleanPreview && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
@@ -7855,29 +7879,31 @@ function DayCard({
                 </DropdownMenu>
               )}
             </div>
-            <Tooltip delayDuration={200}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={onToggle}
-                  className="h-7 w-7 sm:h-8 sm:w-8 shrink-0"
-                  aria-label={isExpanded ? 'Collapse Day' : 'Expand Day'}
-                >
-                  {isExpanded ? <ChevronUp className="h-3.5 sm:h-4 w-3.5 sm:w-4" /> : <ChevronDown className="h-3.5 sm:h-4 w-3.5 sm:w-4" />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <span className="text-xs font-medium">{isExpanded ? 'Collapse Day' : 'Expand Day'}</span>
-              </TooltipContent>
-            </Tooltip>
+             {!isCleanPreview && (
+             <Tooltip delayDuration={200}>
+               <TooltipTrigger asChild>
+                 <Button
+                   variant="ghost"
+                   size="icon"
+                   onClick={onToggle}
+                   className="h-7 w-7 sm:h-8 sm:w-8 shrink-0"
+                   aria-label={effectiveExpanded ? 'Collapse Day' : 'Expand Day'}
+                 >
+                   {effectiveExpanded ? <ChevronUp className="h-3.5 sm:h-4 w-3.5 sm:w-4" /> : <ChevronDown className="h-3.5 sm:h-4 w-3.5 sm:w-4" />}
+                 </Button>
+               </TooltipTrigger>
+               <TooltipContent side="bottom">
+                 <span className="text-xs font-medium">{effectiveExpanded ? 'Collapse Day' : 'Expand Day'}</span>
+               </TooltipContent>
+             </Tooltip>
+             )}
           </div>
         </div>
       </div>
 
       {/* Activities */}
       <AnimatePresence>
-        {isExpanded && (
+         {effectiveExpanded && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
@@ -8155,7 +8181,7 @@ function DayCard({
                       />
                     </div>
                     {/* Compact transit gap indicator between activities */}
-                    {!isLastActivity && gapMinutes !== null && !dayIsPreview && (
+                    {!isLastActivity && gapMinutes !== null && !dayIsPreview && !isCleanPreview && (
                       <TransitGapIndicator
                         gapMinutes={gapMinutes}
                         transportation={activityToRender.transportation}
@@ -8166,7 +8192,7 @@ function DayCard({
                       />
                     )}
                     {/* Inline Add Activity button between activities */}
-                    {isEditable && !isLastActivity && (
+                    {isEditable && !isLastActivity && !isCleanPreview && (
                       <div className="flex justify-center py-1 opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity">
                         <button
                           onClick={() => onAddActivity(activityIndex)}

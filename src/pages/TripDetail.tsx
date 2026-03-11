@@ -41,6 +41,8 @@ import { computeUnlockedDayCount } from '@/lib/voyanceFlowController';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { TripDebriefModal } from '@/components/trip/TripDebriefModal';
 import { GuidePromptBanner } from '@/components/trip/GuidePromptBanner';
+import { useTripViewMode } from '@/hooks/useTripViewMode';
+import { TripViewModeToggle } from '@/components/trip/TripViewModeToggle';
 
 import type { SwapSuggestion } from '@/components/trip/SwapReviewDialog';
 import { VersionConflictDialog } from '@/components/trip/VersionConflictDialog';
@@ -145,6 +147,10 @@ export default function TripDetail() {
   const hasPremiumAccess = entitlements?.has_completed_purchase || entitlements?.trip_has_smart_finish || 
     // If can_view_photos is true but NOT from first-trip, it means trip has been unlocked
     (entitlements?.can_view_photos && !entitlements?.is_first_trip) || false;
+
+  // Edit/Preview mode toggle — owners default to edit, non-owners forced to preview
+  const isOwner = !!(user?.id && trip?.user_id && user.id === trip.user_id);
+  const { mode: viewMode, setMode: setViewMode, isPreviewMode, canToggle: canToggleViewMode } = useTripViewMode({ isOwner });
 
   // Check if trip already has a learning submitted
   const { data: existingLearning } = useTripLearning(tripId || '');
@@ -1590,7 +1596,7 @@ export default function TripDetail() {
             return (
               <div className="flex items-center gap-2 mb-4 sm:mb-6">
                 <h1 className="text-xl sm:text-2xl font-serif font-bold truncate">{trip.name}</h1>
-                {canToggleStatus ? (
+                {!isPreviewMode && canToggleStatus ? (
                   <button
                     onClick={handleStatusToggle}
                     className="inline-flex items-center gap-1 shrink-0 text-[10px] px-2 py-0.5 rounded-full border font-semibold transition-colors cursor-pointer hover:opacity-80"
@@ -1603,7 +1609,7 @@ export default function TripDetail() {
                     {trip.status === 'booked' ? <CheckCircle className="w-3 h-3" /> : <PenLine className="w-3 h-3" />}
                     {trip.status === 'booked' ? 'Confirmed' : 'Draft'}
                   </button>
-                ) : (
+                ) : !isPreviewMode ? (
                   <Badge 
                     variant={
                       isLiveTrip ? 'default' :
@@ -1615,6 +1621,12 @@ export default function TripDetail() {
                   >
                     {statusLabel}
                   </Badge>
+                ) : null}
+                {/* Edit/Preview Toggle — only for trip owners */}
+                {canToggleViewMode && (
+                  <div className="ml-auto shrink-0">
+                    <TripViewModeToggle mode={viewMode} onModeChange={setViewMode} />
+                  </div>
                 )}
               </div>
             );
@@ -2045,8 +2057,8 @@ export default function TripDetail() {
 
               return (
                 <>
-                  {/* Mobile: Collapsed Trip Overview wrapping Health + Travel Intel */}
-                  <div className="sm:hidden mb-4">
+                   {/* Mobile: Collapsed Trip Overview wrapping Health + Travel Intel — hidden in preview */}
+                   {!isPreviewMode && <div className="sm:hidden mb-4">
                     <MobileTripOverview
                       tripHealthPanel={
                         <ErrorBoundary>
@@ -2129,16 +2141,16 @@ export default function TripDetail() {
                       cityCount={tripCities.length > 1 ? tripCities.length : 1}
                       tripId={trip.id}
                     />
-                  </div>
+                   </div>}
 
                   {/* Desktop: TripHealthPanel now rendered inside EditorialItinerary's unified card */}
 
 
 
-                  {/* Guide Prompt Banner — only on past trips */}
-                  {isAfter(new Date(), parseLocalDate(effectiveEndDate)) && (
-                    <GuidePromptBanner tripId={trip.id} destination={trip.destination} />
-                  )}
+                   {/* Guide Prompt Banner — only on past trips, hidden in preview */}
+                   {!isPreviewMode && isAfter(new Date(), parseLocalDate(effectiveEndDate)) && (
+                     <GuidePromptBanner tripId={trip.id} destination={trip.destination} />
+                   )}
 
                   <ErrorBoundary>
                   <EditorialItinerary
@@ -2198,7 +2210,8 @@ export default function TripDetail() {
                   })()}
                   isEditable={true}
                   isPreview={!!(trip.itinerary_data as any)?.isPreview}
-                  creationSource={trip.creation_source}
+                   creationSource={trip.creation_source}
+                   viewMode={viewMode}
                   itineraryStatus={trip.itinerary_status}
                   journeyId={trip.journey_id}
                   journeyName={trip.journey_name}
@@ -2415,8 +2428,8 @@ export default function TripDetail() {
         </div>
       </section>
 
-      {/* Itinerary Assistant - Floating Chatbot */}
-      {hasItinerary && !(isManualMode && !trip.smart_finish_purchased) && hasPremiumAccess && (
+       {/* Itinerary Assistant - Floating Chatbot — hidden in preview mode */}
+       {!isPreviewMode && hasItinerary && !(isManualMode && !trip.smart_finish_purchased) && hasPremiumAccess && (
         <ErrorBoundary fallback={null}>
         <ItineraryAssistant
           tripId={trip.id}
