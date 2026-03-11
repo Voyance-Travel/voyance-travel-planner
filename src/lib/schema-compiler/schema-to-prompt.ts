@@ -23,6 +23,7 @@ export interface SerializedPrompt {
  * These are existing data points already available in the generation pipeline.
  */
 export interface SerializerContext {
+  // === EXISTING FIELDS (from Fix 22C) ===
   // Traveler profile data
   archetypeDescription: string;   // 2-3 sentence description of the archetype
   archetypeAvoidList: string[];   // things this archetype dislikes
@@ -44,6 +45,26 @@ export interface SerializerContext {
   // Group trip
   isGroupTrip: boolean;
   allTravelerIds: string;         // comma-separated IDs for suggestedFor
+
+  // === NEW FIELDS (Fix 22G — Gap Fixes) ===
+
+  /** Gap 1: Raw user constraints text to inject into the prompt. */
+  userConstraintsText?: string;
+
+  /** Gap 3: First-time vs returning visitor guidance. */
+  visitorGuidance?: string;
+
+  /** Gap 5: Trip purpose / additional notes. */
+  tripPurpose?: string;
+
+  /** Gap 6: Interest category weighting. */
+  interestWeighting?: string;
+
+  /** Gap 7: Must-haves checklist text. */
+  mustHavesText?: string;
+
+  /** Gap 8: Skip list — venues/activities from previous days. */
+  skipList?: string;
 }
 
 /**
@@ -66,7 +87,7 @@ export function serializeSchemaToPrompt(
 
 /**
  * Build the system prompt — role, traveler profile, destination, rules.
- * This REPLACES the existing ~17 system prompt sections with 6 focused sections.
+ * This REPLACES the existing ~17 system prompt sections with focused sections.
  */
 function buildSystemPrompt(
   schema: DaySchema,
@@ -149,6 +170,56 @@ ${ctx.budgetConstraints}`);
     sections.push(`## ARCHETYPE-SPECIFIC INSTRUCTIONS
 
 ${config.specialInstructions.map(inst => `- ${inst}`).join('\n')}`);
+  }
+
+  // === NEW SECTIONS (Fix 22G — Gap Fixes) ===
+
+  // Section 7: USER CONSTRAINTS (Gap 1)
+  if (ctx.userConstraintsText) {
+    sections.push(`## USER CONSTRAINTS
+
+The traveler specified the following constraints and preferences:
+
+${ctx.userConstraintsText}`);
+  }
+
+  // Section 8: VISITOR CONTEXT (Gap 3)
+  if (ctx.visitorGuidance) {
+    sections.push(`## VISITOR CONTEXT
+
+${ctx.visitorGuidance}`);
+  }
+
+  // Section 9: TRIP PURPOSE (Gap 5)
+  if (ctx.tripPurpose) {
+    sections.push(`## TRIP PURPOSE
+
+${ctx.tripPurpose}`);
+  }
+
+  // Section 10: INTEREST WEIGHTING (Gap 6)
+  if (ctx.interestWeighting) {
+    sections.push(`## INTEREST PREFERENCES
+
+${ctx.interestWeighting}`);
+  }
+
+  // Section 11: MUST-HAVES CHECKLIST (Gap 7)
+  if (ctx.mustHavesText) {
+    sections.push(`## TRIP MUST-HAVES
+
+The traveler wants to experience these things during their trip (not necessarily today — but work them in where they fit naturally):
+
+${ctx.mustHavesText}`);
+  }
+
+  // Section 12: SKIP LIST (Gap 8)
+  if (ctx.skipList) {
+    sections.push(`## DO NOT REPEAT
+
+The following activities and venues have already been scheduled on previous days. Do NOT suggest them again:
+
+${ctx.skipList}`);
   }
 
   // Surviving sections from the existing prompt

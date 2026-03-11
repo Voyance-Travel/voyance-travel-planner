@@ -14,7 +14,29 @@ export function fillFlightAndHotelSlots(
 ): DaySlot[] {
   let filled = [...slots];
 
-  if (input.arrivalFlight) {
+  // === Gap 10: Build synthetic arrival/departure from preferences when flight data missing ===
+  let effectiveArrival = input.arrivalFlight;
+  let effectiveDeparture = input.departureFlight;
+
+  if (!effectiveArrival && input.preferredArrivalTime && input.dayNumber === 1) {
+    effectiveArrival = {
+      arrivalTime: input.preferredArrivalTime,
+      airportName: 'Airport',
+      airportCode: '',
+    };
+  }
+
+  if (!effectiveDeparture && input.preferredDepartureTime && input.dayNumber === input.totalDays) {
+    effectiveDeparture = {
+      departureTime: input.preferredDepartureTime,
+      airportName: 'Airport',
+      airportCode: '',
+      isDomestic: true, // default to domestic buffer
+    };
+  }
+
+  // Fill arrival slot from flight data (real or synthetic)
+  if (effectiveArrival) {
     filled = filled.map(slot => {
       if (slot.slotType === 'arrival') {
         return {
@@ -23,9 +45,11 @@ export function fillFlightAndHotelSlots(
           filledData: {
             title: `Arrive in ${input.destination}`,
             category: 'arrival',
-            startTime: input.arrivalFlight!.arrivalTime,
-            endTime: addMinutes(input.arrivalFlight!.arrivalTime, 30),
-            location: `${input.arrivalFlight!.airportName} (${input.arrivalFlight!.airportCode})`,
+            startTime: effectiveArrival!.arrivalTime,
+            endTime: addMinutes(effectiveArrival!.arrivalTime, 30),
+            location: effectiveArrival!.airportCode
+              ? `${effectiveArrival!.airportName} (${effectiveArrival!.airportCode})`
+              : effectiveArrival!.airportName,
             cost: 0,
             source: 'flight_data' as const,
             notes: 'Deplane, collect baggage, and head to ground transport.',
@@ -35,13 +59,15 @@ export function fillFlightAndHotelSlots(
       return slot;
     });
 
-    const arrivalEndTime = addMinutes(input.arrivalFlight.arrivalTime, 30);
+    const arrivalEndTime = addMinutes(effectiveArrival.arrivalTime, 30);
     filled = filled.map((slot, idx) => {
       if (slot.slotType === 'transport' && idx <= 2) {
         return {
           ...slot,
           status: 'empty' as const,
-          aiInstruction: `Transport from ${input.arrivalFlight!.airportName} (${input.arrivalFlight!.airportCode}) to ${input.hotel?.name || 'the hotel'}. Estimated departure: ${arrivalEndTime}.`,
+          aiInstruction: effectiveArrival!.airportCode
+            ? `Transport from ${effectiveArrival!.airportName} (${effectiveArrival!.airportCode}) to ${input.hotel?.name || 'the hotel'}. Estimated departure: ${arrivalEndTime}.`
+            : `Transport from airport to ${input.hotel?.name || 'the hotel'}. Estimated departure: ${arrivalEndTime}.`,
           timeWindow: {
             earliest: arrivalEndTime,
             latest: addMinutes(arrivalEndTime, 30),
@@ -53,6 +79,7 @@ export function fillFlightAndHotelSlots(
     });
   }
 
+  // Fill hotel check-in slot
   if (input.hotel) {
     filled = filled.map(slot => {
       if (slot.slotType === 'hotel_checkin') {
@@ -76,6 +103,7 @@ export function fillFlightAndHotelSlots(
     });
   }
 
+  // Fill hotel checkout slot (departure day)
   if (input.hotel) {
     filled = filled.map(slot => {
       if (slot.slotType === 'hotel_checkout') {
@@ -99,9 +127,10 @@ export function fillFlightAndHotelSlots(
     });
   }
 
-  if (input.departureFlight) {
-    const bufferMinutes = input.departureFlight.isDomestic ? 90 : 120;
-    const departureTime = input.departureFlight.departureTime;
+  // Fill departure slot from flight data (real or synthetic)
+  if (effectiveDeparture) {
+    const bufferMinutes = effectiveDeparture.isDomestic ? 90 : 120;
+    const departureTime = effectiveDeparture.departureTime;
     const arriveAirportBy = subtractMinutes(departureTime, bufferMinutes);
     const transferDuration = 60;
     const leaveLastActivityBy = subtractMinutes(arriveAirportBy, transferDuration);
@@ -116,7 +145,9 @@ export function fillFlightAndHotelSlots(
             category: 'departure',
             startTime: arriveAirportBy,
             endTime: departureTime,
-            location: `${input.departureFlight!.airportName} (${input.departureFlight!.airportCode})`,
+            location: effectiveDeparture!.airportCode
+              ? `${effectiveDeparture!.airportName} (${effectiveDeparture!.airportCode})`
+              : effectiveDeparture!.airportName,
             cost: 0,
             source: 'flight_data' as const,
             notes: `Arrive at airport by ${arriveAirportBy} for ${bufferMinutes}-minute check-in/security buffer. Flight departs ${departureTime}.`,
@@ -131,7 +162,9 @@ export function fillFlightAndHotelSlots(
         return {
           ...slot,
           status: 'empty' as const,
-          aiInstruction: `Transport to ${input.departureFlight!.airportName} (${input.departureFlight!.airportCode}). MUST ARRIVE by ${arriveAirportBy}. Depart from last activity by ${leaveLastActivityBy} at the latest.`,
+          aiInstruction: effectiveDeparture!.airportCode
+            ? `Transport to ${effectiveDeparture!.airportName} (${effectiveDeparture!.airportCode}). MUST ARRIVE by ${arriveAirportBy}. Depart from last activity by ${leaveLastActivityBy} at the latest.`
+            : `Transport to airport. MUST ARRIVE by ${arriveAirportBy}. Depart from last activity by ${leaveLastActivityBy} at the latest.`,
           timeWindow: {
             earliest: subtractMinutes(leaveLastActivityBy, 15),
             latest: leaveLastActivityBy,
