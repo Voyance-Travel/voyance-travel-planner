@@ -114,18 +114,35 @@ export function parseToHHMM(timeStr: string): string | null {
  * Solves Fix 19 Bug 2: garbled activity titles.
  */
 export function cleanActivityTitle(rawTitle: string): string {
-  return rawTitle
-    // Remove "Noon/Midnight-time" patterns
-    .replace(/\b(?:noon|midnight|midday)\s*[-–—to]+\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b/gi, '')
-    // Remove "time-Noon/Midnight" patterns
-    .replace(/\b\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*[-–—to]+\s*(?:noon|midnight|midday)\b/gi, '')
-    // Remove "time-time" patterns (e.g., "9am-5pm", "9:00am-5:00pm")
-    .replace(/\b\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*[-–—to]+\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b/gi, '')
-    // Remove standalone time references (e.g., "at 9am", "9:00pm")
-    .replace(/\bat\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/gi, '')
-    // Clean up extra whitespace
-    .replace(/\s+/g, ' ')
-    .trim();
+  if (!rawTitle) return rawTitle;
+
+  let cleaned = rawTitle;
+
+  // Step 1: Remove full time range patterns WITH their surrounding prepositions
+  // "from 9am to 5pm", "from 9:00 AM until 4:30 PM", "9am-5pm", "9am - 5pm"
+  cleaned = cleaned.replace(/\b(?:from\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm))\s*(?:to|until|through|-|–|—)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm))\b/gi, '');
+
+  // Step 2: Remove noon/midnight range patterns with prepositions
+  cleaned = cleaned.replace(/\b(?:from\s+)?(?:noon|midnight|midday)\s*(?:to|until|through|-|–|—)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b/gi, '');
+  cleaned = cleaned.replace(/\b(?:from\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:to|until|through|-|–|—)\s*(?:noon|midnight|midday)\b/gi, '');
+
+  // Step 3: Remove standalone time references with prepositions
+  // "from 9am", "until 5pm", "starting at noon", "at 9:00 AM", "by 4:30 PM"
+  cleaned = cleaned.replace(/\b(?:from|until|till|to|through|starting\s+at|ending\s+at|at|by|before|after)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)|noon|midnight|midday)\b/gi, '');
+
+  // Step 4: Remove any remaining standalone time patterns
+  cleaned = cleaned.replace(/\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/gi, '');
+
+  // Step 5: Remove orphaned prepositions left behind (at end of string)
+  cleaned = cleaned.replace(/\b(?:from|until|till|through|starting|ending)\s*(?:from|until|till|through|starting|ending|\s)*$/gi, '');
+  // Mid-string orphaned prepositions
+  cleaned = cleaned.replace(/\s+(?:from|until|till|through)\s+(?:from|until|till|through|\s)*\s*/gi, ' ');
+
+  // Step 6: Clean up extra whitespace and trailing punctuation
+  cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
+  cleaned = cleaned.replace(/[,\-–—]\s*$/, '').trim();
+
+  return cleaned;
 }
 
 // --- Time arithmetic utilities ---
