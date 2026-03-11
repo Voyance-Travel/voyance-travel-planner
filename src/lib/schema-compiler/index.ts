@@ -25,3 +25,5 @@ export { fillKeptActivities } from './keep-activities-filler';
 export type { KeptActivity } from './keep-activities-filler';
 export { detectAndFillGaps } from './gap-filler';
 export type { GapFillerConfig, DetectedGap } from './gap-filler';
+export { validateDepartureTimeline, buildDepartureConstraints } from './departure-validator';
+export type { DepartureConstraints } from './departure-validator';

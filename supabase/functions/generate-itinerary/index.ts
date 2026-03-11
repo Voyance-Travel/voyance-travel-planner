@@ -8630,6 +8630,31 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
         }
 
         // =======================================================================
+        // STEP: DEPARTURE TIMELINE VALIDATION (last day only)
+        // Ensures boarding is before flight, removes post-cutoff activities
+        // =======================================================================
+        if (isLastDay && flightContext.returnDepartureTime24) {
+          try {
+            // @ts-ignore — Deno imports with .ts extension
+            const { validateDepartureTimeline } = await import('./schema/departure-validator.ts');
+            const departureFlightTime = flightContext.returnDepartureTime24;
+            // Re-derive airport transfer minutes (originally computed at ~7123)
+            const depTransferMins = destination ? await getAirportTransferMinutes(supabase, destination) : 60;
+            const { validated, warnings } = validateDepartureTimeline(
+              normalizedActivities,
+              departureFlightTime,
+              depTransferMins
+            );
+            if (warnings.length > 0) {
+              console.warn(`[departure-validator] Fixed ${warnings.length} issues:`, warnings);
+            }
+            normalizedActivities = validated;
+          } catch (depErr) {
+            console.warn(`[departure-validator] Non-critical error, skipping:`, depErr);
+          }
+        }
+
+        // =======================================================================
         // STEP: ENRICH NEW ACTIVITIES (ratings, photos, coordinates)
         // This ensures regenerated activities have the same rich data as initial generation
         // =======================================================================

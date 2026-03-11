@@ -24,6 +24,8 @@ export { fillKeptActivities } from './keep-activities-filler.ts';
 export type { KeptActivity } from './keep-activities-filler.ts';
 export { detectAndFillGaps } from './gap-filler.ts';
 export type { GapFillerConfig, DetectedGap } from './gap-filler.ts';
+export { validateDepartureTimeline, buildDepartureConstraints } from './departure-validator.ts';
+export type { DepartureConstraints } from './departure-validator.ts';
 
 export type {
   DaySchema,
