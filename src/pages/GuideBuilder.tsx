@@ -29,11 +29,14 @@ import EditableActivityCard, { type ActivitySectionData } from '@/components/gui
 import SmartTagSelector from '@/components/guides/SmartTagSelector';
 import AddContentLinkModal from '@/components/guides/AddContentLinkModal';
 import ContentLinkCard from '@/components/guides/ContentLinkCard';
+import EditorialStatusCard from '@/components/guides/EditorialStatusCard';
+import EditorialPreviewModal from '@/components/guides/EditorialPreviewModal';
 import { useGuideContentLinks } from '@/hooks/useGuideContentLinks';
 import {
   useTripForGuide,
   useExistingGuide,
 } from '@/hooks/useCommunityGuide';
+import type { EditorialContent } from '@/types/editorial';
 
 interface GuideFormState {
   title: string;
