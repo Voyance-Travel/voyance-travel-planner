@@ -1596,7 +1596,7 @@ export default function TripDetail() {
             return (
               <div className="flex items-center gap-2 mb-4 sm:mb-6">
                 <h1 className="text-xl sm:text-2xl font-serif font-bold truncate">{trip.name}</h1>
-                {canToggleStatus ? (
+                {!isPreviewMode && canToggleStatus ? (
                   <button
                     onClick={handleStatusToggle}
                     className="inline-flex items-center gap-1 shrink-0 text-[10px] px-2 py-0.5 rounded-full border font-semibold transition-colors cursor-pointer hover:opacity-80"
@@ -1609,7 +1609,7 @@ export default function TripDetail() {
                     {trip.status === 'booked' ? <CheckCircle className="w-3 h-3" /> : <PenLine className="w-3 h-3" />}
                     {trip.status === 'booked' ? 'Confirmed' : 'Draft'}
                   </button>
-                ) : (
+                ) : !isPreviewMode ? (
                   <Badge 
                     variant={
                       isLiveTrip ? 'default' :
@@ -1621,6 +1621,12 @@ export default function TripDetail() {
                   >
                     {statusLabel}
                   </Badge>
+                ) : null}
+                {/* Edit/Preview Toggle — only for trip owners */}
+                {canToggleViewMode && (
+                  <div className="ml-auto shrink-0">
+                    <TripViewModeToggle mode={viewMode} onModeChange={setViewMode} />
+                  </div>
                 )}
               </div>
             );
