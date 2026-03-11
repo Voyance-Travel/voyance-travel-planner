@@ -412,6 +412,11 @@ function parseItem(item: string, destination: string): MustDoPriority | null {
     .replace(/\s*\([^)]*\)\s*/g, ' ')
     .replace(/\bday\s+\d+\b/gi, '')  // Strip "Day 1", "Day 2", etc.
     .replace(/\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*(?:[-–—]|to)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)/gi, '')  // Strip "9am-5pm" time ranges
+    .replace(/\bnoon\s*(?:[-–—]|to)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)/gi, '')  // Strip "noon-4:30pm"
+    .replace(/\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*(?:[-–—]|to)\s*noon/gi, '')  // Strip "9am-noon"
+    .replace(/\bnoon\b/gi, '')
+    .replace(/\bmidnight\b/gi, '')
+    .replace(/\bmidday\b/gi, '')
     .replace(/\bfrom\s+(?:noon|morning|afternoon|evening)\b/gi, '')  // Strip "from noon" etc.
     .replace(/\ball\s+day\b/gi, '')  // Strip "all day"
     // Strip day-of-week names (scheduling metadata, not the activity name)
