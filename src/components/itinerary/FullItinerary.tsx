@@ -13,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import { formatEnumDisplay, formatWeatherCondition } from '@/utils/textFormatting';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { cleanSystemAnnotations } from '@/utils/textSanitizer';
 import type { 
   DayItinerary, TripSummary, DestinationInfo, 
   FlightInfo, FlightSegment, HotelInfo, ItineraryActivity, ActivityType, WeatherCondition 
