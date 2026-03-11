@@ -4,3 +4,5 @@
 
 export { compileDaySchema } from './compile-day-schema';
 export type { CompilerInput } from './compile-day-schema';
+export { serializeSchemaToPrompt } from './schema-to-prompt';
+export type { SerializedPrompt, SerializerContext } from './schema-to-prompt';
