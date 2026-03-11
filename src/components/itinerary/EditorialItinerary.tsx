@@ -3977,7 +3977,7 @@ export function EditorialItinerary({
                     </Tooltip>
                   )}
                 </div>
-                <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground flex-wrap">
+                <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground flex-wrap justify-center">
                   <span>{days.length} Days · {travelers} {travelers === 1 ? 'Guest' : 'Guests'}</span>
                   {creditData && (
                     <span className="flex items-center gap-1 text-primary font-medium">
