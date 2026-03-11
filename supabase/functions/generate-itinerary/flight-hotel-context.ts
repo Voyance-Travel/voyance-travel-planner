@@ -631,6 +631,16 @@ export async function getFlightHotelContext(
       console.log(`[FlightHotel] Raw hotel_selection value:`, JSON.stringify(hotelRaw));
     }
 
+    // Determine arrival routing decision
+    const arrivalAirportCode = (flightRaw?.arrivalAirport as string) || undefined;
+    const arrivalRouting = determineArrivalRouting(
+      arrivalAirportCode,
+      arrivalTime24,
+      mustDoData || null,
+      hotelAddress || (hotel?.neighborhood) || (hotel?.address)
+    );
+    console.log(`[FlightHotel] Arrival routing: ${arrivalRouting.strategy} — ${arrivalRouting.reason}`);
+
     return {
       context: sections.join('\n'),
       arrivalTime: arrivalTimeStr,
@@ -641,10 +651,11 @@ export async function getFlightHotelContext(
       latestLastActivityTime: latestLastActivity,
       hotelName,
       hotelAddress,
-      arrivalAirport: (flightRaw?.arrivalAirport as string) || undefined,
+      arrivalAirport: arrivalAirportCode,
       rawFlightSelection: trip.flight_selection,
       rawHotelSelection: trip.hotel_selection,
       rawFlightIntelligence: trip.flight_intelligence,
+      arrivalRouting,
     };
   } catch (e) {
     console.error('[FlightHotel] Error:', e);
