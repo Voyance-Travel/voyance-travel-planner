@@ -8038,17 +8038,29 @@ function DayCard({
                       </div>
                     )}
                     {/* Mobile: Card wrapper with timeline */}
-                    <div className="sm:hidden relative pl-7 pr-2 py-2">
-                      {/* Timeline line */}
-                      <div className={cn(
-                        "absolute left-3 top-0 bottom-0 w-0.5 bg-primary/15",
-                        activityIndex === 0 && "top-5",
-                        isLastActivity && "bottom-5"
-                      )} />
-                      {/* Timeline dot */}
-                      <div className="absolute left-[7px] top-5 w-3 h-3 rounded-full border-2 border-primary bg-background z-10 shadow-sm" />
+                    <div className={cn(
+                      "sm:hidden relative py-2",
+                      isCleanPreview ? "pl-4 pr-4" : "pl-7 pr-2"
+                    )}>
+                      {/* Timeline line — hidden in clean preview */}
+                      {!isCleanPreview && (
+                        <div className={cn(
+                          "absolute left-3 top-0 bottom-0 w-0.5 bg-primary/15",
+                          activityIndex === 0 && "top-5",
+                          isLastActivity && "bottom-5"
+                        )} />
+                      )}
+                      {/* Timeline dot — hidden in clean preview */}
+                      {!isCleanPreview && (
+                        <div className="absolute left-[7px] top-5 w-3 h-3 rounded-full border-2 border-primary bg-background z-10 shadow-sm" />
+                      )}
                       {/* Card */}
-                      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden mb-1">
+                      <div className={cn(
+                        "overflow-hidden",
+                        isCleanPreview
+                          ? "bg-transparent border-0 shadow-none mb-6"
+                          : "bg-card rounded-xl border border-border shadow-sm mb-1"
+                      )}>
                         <ActivityRow
                           activity={activityToRender}
                           destination={cleanDestination}
@@ -8088,6 +8100,7 @@ function DayCard({
                           aiLocked={aiLocked}
                           compact={compactCards}
                           isPastTrip={isPastTrip}
+                          isCleanPreview={isCleanPreview}
                         />
                       </div>
                     </div>
