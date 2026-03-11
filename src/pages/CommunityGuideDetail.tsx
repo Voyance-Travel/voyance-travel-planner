@@ -161,6 +161,7 @@ export default function CommunityGuideDetail() {
   const navigate = useNavigate();
   const { data: guide, isLoading } = useGuideById(guideId);
   const { data: tripInfo } = useTripDuration(guide?.trip_id);
+  const { data: authorInfo } = useAuthorInfo(guide?.user_id);
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
