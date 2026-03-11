@@ -23,3 +23,5 @@ export { applyPacingOverride } from './pacing-override';
 export type { PacingLevel } from './pacing-override';
 export { fillKeptActivities } from './keep-activities-filler';
 export type { KeptActivity } from './keep-activities-filler';
+export { detectAndFillGaps } from './gap-filler';
+export type { GapFillerConfig, DetectedGap } from './gap-filler';

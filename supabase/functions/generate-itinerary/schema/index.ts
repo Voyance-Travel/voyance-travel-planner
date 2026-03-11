@@ -22,6 +22,8 @@ export { applyPacingOverride } from './pacing-override.ts';
 export type { PacingLevel } from './pacing-override.ts';
 export { fillKeptActivities } from './keep-activities-filler.ts';
 export type { KeptActivity } from './keep-activities-filler.ts';
+export { detectAndFillGaps } from './gap-filler.ts';
+export type { GapFillerConfig, DetectedGap } from './gap-filler.ts';
 
 export type {
   DaySchema,
