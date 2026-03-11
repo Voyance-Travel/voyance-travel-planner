@@ -3951,8 +3951,8 @@ export function EditorialItinerary({
               />
             )}
 
-            {/* ── Unified Trip Command Center ── */}
-            <div data-tour="value-header" className="rounded-xl border border-border bg-card overflow-hidden">
+             {/* ── Unified Trip Command Center — hidden in clean preview ── */}
+             {!isCleanPreview && <div data-tour="value-header" className="rounded-xl border border-border bg-card overflow-hidden">
 
               {/* ROW 1: Trip Total + Currency Toggle + Meta */}
               <div className="px-4 sm:px-6 py-4 border-b border-border/50">
