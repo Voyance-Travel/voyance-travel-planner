@@ -5,6 +5,7 @@
  */
 import { lazy, Suspense, useMemo, useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+import SafeImage from '@/components/SafeImage';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import MainLayout from '@/components/layout/MainLayout';
@@ -228,7 +229,7 @@ export default function CommunityGuideDetail() {
       <section className="relative">
         <div className="aspect-[21/9] sm:aspect-[3/1] w-full overflow-hidden bg-muted">
           {heroImage ? (
-            <img
+            <SafeImage
               src={heroImage}
               alt={guide!.title}
               className="w-full h-full object-cover"
@@ -450,7 +451,7 @@ function ActivityBlogCard({ activity }: { activity: Activity }) {
                 photos.length === 1 ? 'aspect-video' : 'aspect-square'
               }`}
             >
-              <img
+              <SafeImage
                 src={photo.url}
                 alt={photo.caption || `${name} photo ${i + 1}`}
                 className="w-full h-full object-cover"
@@ -463,7 +464,7 @@ function ActivityBlogCard({ activity }: { activity: Activity }) {
 
       {/* Fallback to existing image_url if no uploaded photos */}
       {!hasPhotos && activity.image_url && (
-        <img
+        <SafeImage
           src={activity.image_url}
           alt={name}
           className="w-full rounded-lg object-cover aspect-video"

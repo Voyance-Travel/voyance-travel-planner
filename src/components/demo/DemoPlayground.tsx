@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import SafeImage from '@/components/SafeImage';
 import { 
   MapPin, Clock, Lock, RefreshCw, Star, 
   ChevronDown, Sparkles, 
@@ -316,7 +317,7 @@ export function DemoPlayground() {
                       : "opacity-60 hover:opacity-100"
                   )}
                 >
-                  <img src={dest.image} alt={dest.name} className="absolute inset-0 w-full h-full object-cover" />
+                  <SafeImage src={dest.image} alt={dest.name} className="absolute inset-0 w-full h-full object-cover" fallbackCategory="sightseeing" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
                   <div className="absolute inset-x-0 bottom-0 p-2 text-white text-left">
                     <p className="font-medium text-sm leading-tight">{dest.name}</p>
@@ -328,7 +329,7 @@ export function DemoPlayground() {
             {/* Trip overview */}
             <Card className="mb-4 overflow-hidden border-border/50">
               <div className="relative h-24">
-                <img src={selectedDest.image} alt={itinerary.destination} className="w-full h-full object-cover" />
+                <SafeImage src={selectedDest.image} alt={itinerary.destination} className="w-full h-full object-cover" fallbackCategory="sightseeing" />
                 <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/30" />
                 <div className="absolute inset-0 p-4 flex flex-col justify-end">
                   <div className="flex items-center gap-2 mb-1">
@@ -819,7 +820,7 @@ function ActivityRow({
       {/* Thumbnail */}
       {!isTransport && thumbnail && (
         <div className="w-14 h-14 shrink-0 m-2 rounded-md overflow-hidden bg-muted">
-          <img src={thumbnail} alt="" className="w-full h-full object-cover" loading="lazy" />
+          <SafeImage src={thumbnail} alt="" className="w-full h-full object-cover" loading="lazy" />
         </div>
       )}
 

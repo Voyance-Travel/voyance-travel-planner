@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { Sparkles, ArrowRight, MapPin, Calendar, Users } from 'lucide-react';
+import SafeImage from '@/components/SafeImage';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
@@ -128,7 +129,7 @@ function DestinationCard({ image, name, days }: { image: string; name: string; d
   return (
     <div className="w-44 bg-card rounded-xl overflow-hidden shadow-xl border border-border/50">
       <div className="h-24 relative">
-        <img src={image} alt={name} className="w-full h-full object-cover" />
+        <SafeImage src={image} alt={name} className="w-full h-full object-cover" fallbackCategory="sightseeing" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
         <div className="absolute bottom-2 left-3 text-white">
           <p className="font-medium text-sm">{name}</p>

@@ -1,4 +1,5 @@
 import { MapPin, Calendar, BookOpen, ExternalLink } from 'lucide-react';
+import SafeImage from '@/components/SafeImage';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
@@ -54,7 +55,7 @@ export default function GuidePreview({ title, description, destination, destinat
                 className="flex gap-3 p-3 rounded-xl border border-border bg-card"
               >
                 {item.image_url && (
-                  <img src={item.image_url} alt={item.name} className="w-14 h-14 rounded-lg object-cover shrink-0" />
+                  <SafeImage src={item.image_url} alt={item.name} className="w-14 h-14 rounded-lg object-cover shrink-0" fallbackCategory={item.category} />
                 )}
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-start justify-between gap-2">

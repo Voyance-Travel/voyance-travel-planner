@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { Clock, MapPin, DollarSign, Lock, LockOpen, ExternalLink, Target, Landmark, UtensilsCrossed, Building2, Plane, Bus, Coffee, Moon, Leaf, Mountain, Palette, Heart, ShoppingBag, CheckCircle2 } from 'lucide-react';
+import SafeImage from '@/components/SafeImage';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { getActivityIconName, getActivityColor, formatDuration } from '@/utils/plannerUtils';
@@ -179,10 +180,11 @@ const TripActivityCard: React.FC<TripActivityCardProps> = ({
         {/* Image */}
         {activity.imageUrl && (
           <div className="hidden sm:block w-20 h-20 rounded-lg overflow-hidden flex-shrink-0">
-            <img
+            <SafeImage
               src={activity.imageUrl}
               alt={activity.name}
               className="w-full h-full object-cover"
+              fallbackCategory={activity.category || activity.type}
             />
           </div>
         )}

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import SafeImage from '@/components/SafeImage';
 // Local hero images for sample destinations
 import denverHero from '@/assets/destinations/denver-hero.jpg';
 import nolaHero from '@/assets/destinations/new-orleans-1.jpg';
@@ -418,10 +419,11 @@ export default function SampleItinerary() {
               >
                 {itineraryData.hotelInfo.images[0] && (
                   <div className="relative overflow-hidden">
-                    <img
+                    <SafeImage
                       src={itineraryData.hotelInfo.images[0]}
                       alt={itineraryData.hotelInfo.name}
                       className="w-full h-40 object-cover group-hover:scale-105 transition-transform duration-300"
+                      fallbackCategory="accommodation"
                     />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
                   </div>
@@ -595,7 +597,7 @@ function ActivityRow({ activity, isLast }: ActivityRowProps) {
       {/* Photo Column (if available) */}
       {showPhoto && (
         <div className="w-24 h-24 shrink-0 border-r border-border">
-          <img
+          <SafeImage
             src={activity.photos![0]}
             alt={activity.title}
             className="w-full h-full object-cover"

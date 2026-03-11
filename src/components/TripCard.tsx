@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Calendar, Users, MapPin, ArrowRight } from 'lucide-react';
+import SafeImage from '@/components/SafeImage';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { Trip } from '@/lib/trips';
@@ -38,7 +39,7 @@ export function TripCard({ trip, index = 0 }: TripCardProps) {
     >
       {/* Image */}
       <div className="relative h-40 overflow-hidden">
-        <img 
+        <SafeImage 
           src={destination.imageUrl} 
           alt={destination.city}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
