@@ -7991,19 +7991,110 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       let finalUserPrompt = userPrompt;
 
       if (USE_SCHEMA_GENERATION) {
-        // NEW PATH — Schema-driven generation (DEAD CODE until flag is true)
-        // When activated, this block will:
-        //   1. Build a CompilerInput from existing variables:
-        //      - dayNumber, totalDays, resolvedDestination, date
-        //      - primaryArchetype, arrivalFlight, departureFlight, hotel, mustDos
-        //      - travelers array
-        //   2. Call compileDaySchema(compilerInput) to get a DaySchema
-        //   3. Call serializeSchemaToPrompt(schema, context) to get prompts
-        //   4. Assign to finalSystemPrompt / finalUserPrompt
-        //
-        // For now, this is a placeholder. The actual imports and wiring
-        // will be added in Fix 22D when the schema path is activated.
-        console.log('[schema-generation] Flag is ON but schema path not yet wired. Using existing prompts.');
+        // NEW PATH — Schema-driven generation (Fix 22G wiring)
+        try {
+          // @ts-ignore — Deno imports with .ts extension
+          const { compileDaySchema, serializeSchemaToPrompt } = await import('./schema/index.ts');
+
+          // Build CompilerInput from existing variables in scope
+          const compilerInput = {
+            dayNumber,
+            totalDays,
+            destination: resolvedDestination,
+            date,
+            archetypeName: primaryArchetype,
+            // Flight data (if available)
+            arrivalFlight: flightContext.arrivalTime ? {
+              arrivalTime: flightContext.arrivalTime,
+              airportName: flightContext.arrivalAirport || 'Airport',
+              airportCode: flightContext.arrivalAirportCode || '',
+            } : undefined,
+            departureFlight: flightContext.departureTime ? {
+              departureTime: flightContext.departureTime,
+              airportName: flightContext.departureAirport || 'Airport',
+              airportCode: flightContext.departureAirportCode || '',
+              isDomestic: !!flightContext.isDomestic,
+            } : undefined,
+            // Hotel data
+            hotel: flightContext.hotelName ? {
+              name: flightContext.hotelName,
+              address: flightContext.hotelAddress || '',
+              checkInTime: flightContext.checkInTime,
+              checkOutTime: flightContext.checkOutTime,
+            } : undefined,
+            travelers: [{ id: userId || 'primary', name: 'Traveler' }],
+            // New fields (Fix 22G)
+            userConstraints: metadata?.userConstraints
+              ? JSON.stringify(metadata.userConstraints)
+              : undefined,
+            generationRules: genRules?.length > 0 ? {
+              otherRules: genRules.map((r: any) => `${r.type}: ${r.description || r.reason || r.text || JSON.stringify(r)}`),
+            } : undefined,
+            additionalNotes: additionalNotes || undefined,
+            interestCategories: interestCategories?.length > 0 ? interestCategories : undefined,
+            mustHaves: metadata?.mustHaves
+              ? (metadata.mustHaves as Array<{label: string; notes?: string}>).map(
+                  (mh: any) => mh.notes ? `${mh.label} (${mh.notes})` : mh.label
+                )
+              : undefined,
+            isFirstTimeVisitor: effectiveIsFirstTimeVisitor,
+            previousDayActivities: previousDayActivities?.length > 0
+              ? previousDayActivities.map((title: string) => ({ title, category: 'unknown' }))
+              : undefined,
+            preferredArrivalTime: preferences?.arrivalTime || undefined,
+            preferredDepartureTime: preferences?.departureTime || undefined,
+            pacingOverride: effectivePacing as 'relaxed' | 'balanced' | 'packed' | undefined,
+          };
+
+          const compiledSchema = compileDaySchema(compilerInput);
+
+          // Build SerializerContext from existing prompt variables
+          const serializerContext = {
+            archetypeDescription: archetypeContext?.promptBlocks?.persona || `Archetype: ${primaryArchetype}`,
+            archetypeAvoidList: archetypeContext?.definition?.avoidList || profile.avoidList || [],
+            experiencePriorities: archetypeContext?.promptBlocks?.affinity
+              ? [archetypeContext.promptBlocks.affinity]
+              : [],
+            destinationContext: archetypeContext?.promptBlocks?.destination || '',
+            budgetTier: effectiveBudgetTier,
+            budgetConstraints: actualDailyBudgetPerPerson != null
+              ? `Hard cap: ~$${actualDailyBudgetPerPerson}/day per person`
+              : '',
+            bookingRules: '',
+            tipInstructions: '',
+            personalizationInstructions: '',
+            hiddenGemInstructions: '',
+            isGroupTrip: !!collaboratorAttributionPrompt,
+            allTravelerIds: userId || '',
+            // New fields (Fix 22G)
+            userConstraintsText: metadata?.userConstraints
+              ? JSON.stringify(metadata.userConstraints, null, 2)
+              : undefined,
+            visitorGuidance: effectiveIsFirstTimeVisitor
+              ? 'This is the traveler\'s FIRST TIME visiting this destination. Prioritize iconic landmarks, famous attractions, and must-see sights that define the city. Include popular spots even if they\'re touristy — first-timers want the classics.'
+              : 'The traveler has VISITED this destination before. Skip the obvious tourist spots. Focus on hidden gems, local favorites, off-the-beaten-path experiences, and neighborhoods most tourists miss.',
+            tripPurpose: additionalNotes?.trim() || undefined,
+            interestWeighting: interestCategories?.length > 0
+              ? `The traveler is especially interested in: ${interestCategories.join(', ')}. Weight activity selection toward these categories when possible.`
+              : undefined,
+            mustHavesText: metadata?.mustHaves
+              ? (metadata.mustHaves as Array<{label: string; notes?: string}>)
+                  .map((item: any, i: number) => `${i + 1}. ${item.label}${item.notes ? ` — ${item.notes}` : ''}`)
+                  .join('\n')
+              : undefined,
+            skipList: previousDayActivities?.length > 0
+              ? previousDayActivities.map((title: string) => `- ${title}`).join('\n')
+              : undefined,
+          };
+
+          const serialized = serializeSchemaToPrompt(compiledSchema, serializerContext);
+          finalSystemPrompt = serialized.systemPrompt;
+          finalUserPrompt = serialized.userPrompt;
+          console.log(`[schema-generation] Schema path active. System: ${finalSystemPrompt.length} chars, User: ${finalUserPrompt.length} chars`);
+        } catch (schemaErr) {
+          console.error('[schema-generation] Schema compilation failed, falling back to existing prompts:', schemaErr);
+          // Fall through — finalSystemPrompt/finalUserPrompt retain old values
+        }
       }
       // else: OLD PATH — use systemPrompt and userPrompt as-is (DEFAULT)
 
