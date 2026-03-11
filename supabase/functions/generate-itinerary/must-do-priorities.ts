@@ -786,8 +786,10 @@ ${s.priority.requiresBooking ? '⚠️ TICKETS/BOOKING REQUIRED — mention this
       const timeBlock = s.priority.preferredTime === 'evening' ? 'evening (leave afternoon free for sightseeing)' 
         : s.priority.preferredTime === 'morning' ? 'morning (leave afternoon/evening free)' 
         : `${s.priority.preferredTime || 'assigned time'} block`;
+      const latestDepart = calculateLatestDeparture(blockedStart);
       prompt += `- **${s.priority.title}** → Day ${s.assignedDay}, ${timeBlock} (~${durationHours}h)\n`;
       prompt += `  ⏰ BLOCKED TIME: ${blockedStart}–${blockedEnd}. YOU MUST create an activity entry for "${s.priority.title}" in this window. Do NOT schedule any OTHER activities here.\n`;
+      prompt += `  🚨 Latest departure to venue: ${latestDepart} (NON-NEGOTIABLE). All preceding activities MUST end by ${latestDepart}.\n`;
       if (s.priority.requiresBooking) prompt += `  ⚠️ BOOKING REQUIRED\n`;
     }
     prompt += `→ Fill the OTHER half of these days with sightseeing/activities.\n\n`;
