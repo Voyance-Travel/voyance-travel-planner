@@ -1504,7 +1504,8 @@ async function generateSingleDayWithRetry(
       hotelData,
       context.travelerDNA,
       tripCtx,
-      dayNumber
+      dayNumber,
+      (context as any)._arrivalRouting
     );
     
     dnaPromptSection = personaPrompt;
