@@ -4576,6 +4576,8 @@ serve(async (req) => {
       context.travelerDNA = promptTravelerDNA;
       context.flightData = promptFlightData;
       context.hotelData = promptHotelData;
+      // Store arrival routing decision for Day 1 constraint generation
+      (context as any)._arrivalRouting = flightHotelResult.arrivalRouting;
       
       // ─── Cross-day flight detection ───
       // If the outbound flight arrives on a date AFTER the trip start_date,
