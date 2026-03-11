@@ -1,0 +1,216 @@
+// ============================================================
+// EDGE FUNCTION COPY — Source of truth is in src/
+// This file is a copy of src/lib/schema-compiler/schema-to-prompt.ts with import paths
+// adjusted for the Deno edge function environment.
+// If you modify this file, also update the src/ version.
+// ============================================================
+
+import type { DaySchema, DaySlot, PatternGroupConfig } from './types.ts';
+import { getPatternGroupConfig } from './pattern-group-configs.ts';
+
+export interface SerializedPrompt {
+  systemPrompt: string;
+  userPrompt: string;
+  estimatedTokens: number;
+}
+
+export interface SerializerContext {
+  archetypeDescription: string;
+  archetypeAvoidList: string[];
+  experiencePriorities: string[];
+  destinationContext: string;
+  budgetTier: string;
+  budgetConstraints: string;
+  bookingRules: string;
+  tipInstructions: string;
+  personalizationInstructions: string;
+  hiddenGemInstructions: string;
+  isGroupTrip: boolean;
+  allTravelerIds: string;
+}
+
+export function serializeSchemaToPrompt(
+  schema: DaySchema,
+  context: SerializerContext
+): SerializedPrompt {
+  const config = getPatternGroupConfig(schema.patternGroup);
+  const systemPrompt = buildSystemPrompt(schema, config, context);
+  const userPrompt = buildUserPrompt(schema);
+
+  return {
+    systemPrompt,
+    userPrompt,
+    estimatedTokens: systemPrompt.length + userPrompt.length,
+  };
+}
+
+function buildSystemPrompt(
+  schema: DaySchema,
+  config: PatternGroupConfig,
+  ctx: SerializerContext
+): string {
+  const sections: string[] = [];
+
+  sections.push(`## ROLE AND VOICE
+
+You are Voyance's itinerary AI. You fill pre-structured day schemas with specific places, times, costs, and tips for ${schema.destination}.
+
+CRITICAL: You do NOT decide the day's structure — that is already defined in the schema below. Your job is to populate EMPTY slots with excellent, personalized recommendations. FILLED slots are LOCKED — do not modify them.`);
+
+  sections.push(`## TRAVELER PROFILE
+
+Name: ${schema.travelers.map(t => t.name).join(' & ')}
+DNA Type: ${schema.archetypeName} (${config.displayName})
+${ctx.archetypeDescription}
+
+AVOID: ${ctx.archetypeAvoidList.join(', ')}
+
+PRIORITIES: ${ctx.experiencePriorities.join(', ')}`);
+
+  if (ctx.destinationContext) {
+    sections.push(`## DESTINATION KNOWLEDGE
+
+${ctx.destinationContext}`);
+  }
+
+  sections.push(`## BUDGET
+
+Tier: ${ctx.budgetTier}
+${ctx.budgetConstraints}`);
+
+  let slotRules = `## SLOT FILLING RULES
+
+1. FILLED slots are LOCKED. Do not modify their title, time, cost, or any data. Include them in your response EXACTLY as provided.
+
+2. EMPTY slots are yours to fill. Follow the time window, duration range, and instruction for each slot.
+
+3. Every slot MUST have ALL of these fields:
+   - id (generate a unique string)
+   - title (specific place name, not generic)
+   - startTime (HH:MM format, within the slot's time window)
+   - endTime (HH:MM format, duration within the slot's range)
+   - category (one of: dining, sightseeing, entertainment, nightlife, relaxation, shopping, transport, hotel, arrival, departure, free_time)
+   - location (full address or specific location name)
+   - cost (number, per person, in USD)
+   - bookingRequired (boolean)
+   - personalization (1-2 sentences explaining why this fits the traveler)
+   - tips (1-2 practical tips for this specific activity)
+   - crowdLevel (low, moderate, high)
+   - isHiddenGem (boolean)
+   - hasTimingHack (boolean)
+
+4. Meals: ${config.mealInstruction} Duration: ${config.mealDuration.min}-${config.mealDuration.max} minutes.
+
+5. No two consecutive activities should be in the same category.
+
+6. Activities should be geographically logical — don't zigzag across the city.
+
+7. Minimum ${config.bufferMinutes} minutes between the end of one activity and the start of the next (travel + transition time).`;
+
+  if (ctx.isGroupTrip) {
+    slotRules += `
+
+8. REQUIRED — suggestedFor: "${ctx.allTravelerIds}" on EVERY activity. This is a group trip. EVERY slot must include suggestedFor. No exceptions.`;
+  }
+
+  sections.push(slotRules);
+
+  if (config.specialInstructions.length > 0) {
+    sections.push(`## ARCHETYPE-SPECIFIC INSTRUCTIONS
+
+${config.specialInstructions.map(inst => `- ${inst}`).join('\n')}`);
+  }
+
+  if (ctx.bookingRules) {
+    sections.push(`## BOOKING RULES
+
+${ctx.bookingRules}`);
+  }
+  if (ctx.tipInstructions) {
+    sections.push(`## TIP WRITING
+
+${ctx.tipInstructions}`);
+  }
+  if (ctx.personalizationInstructions) {
+    sections.push(`## PERSONALIZATION
+
+${ctx.personalizationInstructions}`);
+  }
+  if (ctx.hiddenGemInstructions) {
+    sections.push(`## HIDDEN GEM IDENTIFICATION
+
+${ctx.hiddenGemInstructions}`);
+  }
+
+  return sections.join('\n\n---\n\n');
+}
+
+function buildUserPrompt(schema: DaySchema): string {
+  const lines: string[] = [];
+
+  lines.push(`Fill this schema for Day ${schema.dayNumber} in ${schema.destination} on ${schema.date}.`);
+  lines.push('');
+  lines.push('SCHEMA:');
+  lines.push('');
+
+  for (const slot of schema.slots) {
+    lines.push(serializeSlot(slot));
+    lines.push('---');
+  }
+
+  lines.push('');
+  lines.push(`Return a JSON array of ALL ${schema.slots.length} slots (both filled and empty-now-filled) in order, using the create_day_itinerary tool.`);
+  lines.push('');
+  lines.push('IMPORTANT: Return EXACTLY the same number of activities as there are slots. Do not add extra activities. Do not skip slots.');
+
+  return lines.join('\n');
+}
+
+function serializeSlot(slot: DaySlot): string {
+  const lines: string[] = [];
+
+  const typeLabel = slot.mealType
+    ? `${slot.slotType.toUpperCase()}: ${slot.mealType.toUpperCase()}`
+    : slot.slotType.toUpperCase();
+
+  lines.push(`SLOT ${slot.position}: [${typeLabel}] — ${slot.status.toUpperCase()}`);
+
+  if (slot.status === 'filled' && slot.filledData) {
+    lines.push('  LOCKED — DO NOT MODIFY');
+    lines.push(`  Title: ${slot.filledData.title}`);
+    lines.push(`  Time: ${slot.filledData.startTime} - ${slot.filledData.endTime}`);
+    lines.push(`  Category: ${slot.filledData.category}`);
+    if (slot.filledData.location) {
+      lines.push(`  Location: ${slot.filledData.location}`);
+    }
+    if (slot.filledData.cost !== undefined) {
+      lines.push(`  Cost: $${slot.filledData.cost}`);
+    }
+    if (slot.filledData.source === 'must_do') {
+      lines.push('  ⚠ This is the traveler\'s must-do activity. Preserve exactly.');
+    }
+    if (slot.filledData.notes) {
+      lines.push(`  Notes: ${slot.filledData.notes}`);
+    }
+  } else {
+    lines.push('  FILL THIS SLOT');
+    lines.push(`  Type: ${typeLabel}`);
+    if (slot.timeWindow) {
+      lines.push(`  Time window: ${slot.timeWindow.earliest} - ${slot.timeWindow.latest}`);
+      lines.push(`  Duration: ${slot.timeWindow.duration.min}-${slot.timeWindow.duration.max} minutes`);
+    }
+    if (slot.required) {
+      lines.push('  Required: YES — this slot must be filled');
+    } else {
+      lines.push('  Required: OPTIONAL — fill if the day has room');
+    }
+    if (slot.aiInstruction) {
+      lines.push(`  Instruction: ${slot.aiInstruction}`);
+    }
+    if (slot.mealInstruction) {
+      lines.push(`  Meal guidance: ${slot.mealInstruction}`);
+    }
+  }
+
+  return lines.join('\n');
+}
