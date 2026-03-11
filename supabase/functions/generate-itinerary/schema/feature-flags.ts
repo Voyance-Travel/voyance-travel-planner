@@ -5,7 +5,7 @@
 // If you modify this file, also update the src/ version.
 // ============================================================
 
-export const USE_SCHEMA_GENERATION = false;
+export const USE_SCHEMA_GENERATION = true;
 
 export const SCHEMA_GENERATION_CONFIG = {
   logSchemas: false,
