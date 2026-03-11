@@ -10552,8 +10552,9 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
         totalDays,
       });
 
-      // Retry loop with exponential backoff for intermittent 403 errors
-      const maxRetries = 3;
+      // Retry loop with exponential backoff
+      const maxRetries = 5;
+      let initialChainSuccess = false;
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           const response = await fetch(generateUrl, {
@@ -10564,14 +10565,36 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
             },
             body: initialChainBody,
           });
-          if (response.ok || response.status < 500) break;
-          console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} failed: ${response.status}`);
+          if (response.ok) {
+            initialChainSuccess = true;
+            console.log(`[generate-trip] Initial chain to day ${effectiveStartDay} succeeded on attempt ${attempt}`);
+            break;
+          }
+          const errBody = await response.text().catch(() => '(no body)');
+          console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} failed: HTTP ${response.status} — ${errBody.slice(0, 200)}`);
         } catch (err) {
           console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} error:`, err);
         }
         if (attempt < maxRetries) {
-          await new Promise(r => setTimeout(r, 2000 * attempt));
+          await new Promise(r => setTimeout(r, 3000 * attempt));
         }
+      }
+
+      if (!initialChainSuccess) {
+        console.error(`[generate-trip] All ${maxRetries} initial chain attempts failed — marking trip as failed`);
+        await supabase.from('trips').update({
+          itinerary_status: 'failed',
+          metadata: {
+            ...existingMeta,
+            generation_error: 'Failed to start day generation after all retries',
+            generation_failed_at: new Date().toISOString(),
+            chain_broken_at_day: 0,
+          },
+        }).eq('id', tripId);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Failed to start generation', code: 'CHAIN_START_FAILED' }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       // Return immediately — generation continues server-side via self-chaining
@@ -10990,8 +11013,8 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
           totalDays,
         });
 
-        // Retry loop with exponential backoff for intermittent 403 errors
-        const maxRetries = 3;
+        // Retry loop with exponential backoff
+        const maxRetries = 5;
         let chainSuccess = false;
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           try {
@@ -11003,16 +11026,21 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
               },
               body: chainBody,
             });
-            if (response.ok || response.status < 500) {
+            if (response.ok) {
+              // Only 2xx means the next day was actually accepted
               chainSuccess = true;
+              console.log(`[generate-trip-day] Chain to day ${dayNumber + 1} succeeded on attempt ${attempt}`);
               break;
             }
-            console.error(`[generate-trip-day] Chain attempt ${attempt}/${maxRetries} failed: ${response.status}`);
+            // Log the actual status and body for debugging
+            const errBody = await response.text().catch(() => '(no body)');
+            console.error(`[generate-trip-day] Chain attempt ${attempt}/${maxRetries} failed: HTTP ${response.status} — ${errBody.slice(0, 200)}`);
           } catch (err) {
             console.error(`[generate-trip-day] Chain attempt ${attempt}/${maxRetries} error:`, err);
           }
           if (attempt < maxRetries) {
-            await new Promise(r => setTimeout(r, 2000 * attempt));
+            // Exponential backoff: 3s, 6s, 9s, 12s
+            await new Promise(r => setTimeout(r, 3000 * attempt));
           }
         }
         if (!chainSuccess) {
@@ -11039,6 +11067,33 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
             }).eq('id', tripId);
           } catch (metaErr) {
             console.error('[generate-trip-day] Failed to update chain failure metadata:', metaErr);
+          }
+
+          // SELF-HEAL ATTEMPT: Wait briefly and try one final time with a fresh fetch
+          console.log(`[generate-trip-day] Attempting self-heal for day ${dayNumber + 1} after 10s cooldown...`);
+          await new Promise(r => setTimeout(r, 10000));
+          try {
+            const healResp = await fetch(generateUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${serviceKey}`,
+              },
+              body: chainBody,
+            });
+            if (healResp.ok) {
+              console.log(`[generate-trip-day] Self-heal succeeded for day ${dayNumber + 1}`);
+              // Clear the chain_broken metadata since we recovered
+              const { data: healTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
+              const healMeta = (healTrip?.metadata as Record<string, unknown>) || {};
+              delete (healMeta as any).chain_broken_at_day;
+              delete (healMeta as any).chain_error;
+              await supabase.from('trips').update({ metadata: healMeta }).eq('id', tripId);
+            } else {
+              console.error(`[generate-trip-day] Self-heal also failed: HTTP ${healResp.status}`);
+            }
+          } catch (healErr) {
+            console.error(`[generate-trip-day] Self-heal error:`, healErr);
           }
         }
 
