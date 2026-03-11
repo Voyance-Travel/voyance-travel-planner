@@ -716,6 +716,10 @@ function addMinutes(time: string, mins: number): string {
   return minsToHHMM(Math.min(parseHHMM(time) + mins, 23 * 60 + 59));
 }
 
+function calculateLatestDeparture(startTime: string, transferMins: number = 60, bufferMins: number = 15): string {
+  return subtractMinutes(startTime, transferMins + bufferMins);
+}
+
 // =============================================================================
 // PROMPT BUILDER
 // =============================================================================
