@@ -12,7 +12,7 @@
  *
  * DO NOT SET THIS TO TRUE until the schema path has been manually verified.
  */
-export const USE_SCHEMA_GENERATION = false;
+export const USE_SCHEMA_GENERATION = true;
 
 // Additional schema generation config
 export const SCHEMA_GENERATION_CONFIG = {
