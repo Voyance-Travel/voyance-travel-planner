@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 import type { EditorialDay, EditorialActivity } from '@/components/itinerary/EditorialItinerary';
+import { cleanSystemAnnotations } from '@/utils/textSanitizer';
 
 /**
  * Trip PDF Generator for Travel Agents
