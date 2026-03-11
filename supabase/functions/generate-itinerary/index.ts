@@ -8120,9 +8120,9 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
               : undefined,
           };
 
-          const compileStart = Date.now();
-          const compiledSchema = compileDaySchema(compilerInput);
-          const compileMs = Date.now() - compileStart;
+          compileStart = Date.now();
+          compiledSchema = compileDaySchema(compilerInput);
+          compileMs = Date.now() - compileStart;
 
           // Build SerializerContext from existing prompt variables
           // Fix 22M: Enrich with rich prompt sections from the existing pipeline
