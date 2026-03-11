@@ -180,10 +180,11 @@ const TripActivityCard: React.FC<TripActivityCardProps> = ({
         {/* Image */}
         {activity.imageUrl && (
           <div className="hidden sm:block w-20 h-20 rounded-lg overflow-hidden flex-shrink-0">
-            <img
+            <SafeImage
               src={activity.imageUrl}
               alt={activity.name}
               className="w-full h-full object-cover"
+              fallbackCategory={activity.category || activity.type}
             />
           </div>
         )}

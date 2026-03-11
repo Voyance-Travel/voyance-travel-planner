@@ -464,7 +464,7 @@ function ActivityBlogCard({ activity }: { activity: Activity }) {
 
       {/* Fallback to existing image_url if no uploaded photos */}
       {!hasPhotos && activity.image_url && (
-        <img
+        <SafeImage
           src={activity.image_url}
           alt={name}
           className="w-full rounded-lg object-cover aspect-video"

@@ -39,7 +39,7 @@ export function TripCard({ trip, index = 0 }: TripCardProps) {
     >
       {/* Image */}
       <div className="relative h-40 overflow-hidden">
-        <img 
+        <SafeImage 
           src={destination.imageUrl} 
           alt={destination.city}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"

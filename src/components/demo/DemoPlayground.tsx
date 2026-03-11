@@ -820,7 +820,7 @@ function ActivityRow({
       {/* Thumbnail */}
       {!isTransport && thumbnail && (
         <div className="w-14 h-14 shrink-0 m-2 rounded-md overflow-hidden bg-muted">
-          <img src={thumbnail} alt="" className="w-full h-full object-cover" loading="lazy" />
+          <SafeImage src={thumbnail} alt="" className="w-full h-full object-cover" loading="lazy" />
         </div>
       )}
 

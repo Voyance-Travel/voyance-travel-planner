@@ -597,7 +597,7 @@ function ActivityRow({ activity, isLast }: ActivityRowProps) {
       {/* Photo Column (if available) */}
       {showPhoto && (
         <div className="w-24 h-24 shrink-0 border-r border-border">
-          <img
+          <SafeImage
             src={activity.photos![0]}
             alt={activity.title}
             className="w-full h-full object-cover"

@@ -45,10 +45,11 @@ export function HotelSelector({ hotels, selectedHotel, onSelect }: HotelSelector
 
             {/* Image */}
             <div className="relative h-40 overflow-hidden">
-              <img 
+              <SafeImage 
                 src={hotel.imageUrl} 
                 alt={hotel.name}
                 className="w-full h-full object-cover"
+                fallbackCategory="accommodation"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
               <div className="absolute bottom-3 left-3 right-3">

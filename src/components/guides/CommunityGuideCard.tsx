@@ -36,7 +36,7 @@ export default function CommunityGuideCard({ guide, index = 0 }: Props) {
         {/* Cover image */}
         <div className="aspect-[16/10] overflow-hidden relative bg-muted">
           {guide.cover_image_url ? (
-            <img
+            <SafeImage
               src={guide.cover_image_url}
               alt={guide.title}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
