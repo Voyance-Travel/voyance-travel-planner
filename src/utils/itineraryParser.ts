@@ -511,6 +511,12 @@ export function parseItineraryDays(
   rawData: unknown,
   tripStartDate?: string
 ): ParsedDay[] {
+  // Handle corrupted format where itinerary_data is a raw array
+  if (Array.isArray(rawData)) {
+    console.warn('[itineraryParser] itinerary_data is a raw array — treating as days');
+    return parseItineraryDays({ days: rawData }, tripStartDate);
+  }
+
   // Validate top-level structure
   if (!rawData || typeof rawData !== 'object') {
     if (rawData !== null && rawData !== undefined) {
