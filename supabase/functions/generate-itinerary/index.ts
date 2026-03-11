@@ -7997,6 +7997,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           const { compileDaySchema, serializeSchemaToPrompt } = await import('./schema/index.ts');
 
           // Build CompilerInput from existing variables in scope
+          // Fix 22L: Wire ALL data flows including mustDos, preBooked, multi-city, keepActivities
           const compilerInput = {
             dayNumber,
             totalDays,
@@ -8023,7 +8024,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
               checkOutTime: flightContext.checkOutTime,
             } : undefined,
             travelers: [{ id: userId || 'primary', name: 'Traveler' }],
-            // New fields (Fix 22G)
+            // Fix 22G fields
             userConstraints: metadata?.userConstraints
               ? JSON.stringify(metadata.userConstraints)
               : undefined,
@@ -8044,11 +8045,84 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             preferredArrivalTime: preferences?.arrivalTime || undefined,
             preferredDepartureTime: preferences?.departureTime || undefined,
             pacingOverride: effectivePacing as 'relaxed' | 'balanced' | 'packed' | undefined,
+
+            // === Fix 22L: Must-Do Activities ===
+            // Re-derive must-do items for this day from the already-parsed mustDoActivities text
+            mustDos: (() => {
+              if (!mustDoActivities?.trim()) return undefined;
+              try {
+                const forceAll = !!isSmartFinish || !!smartFinishRequested;
+                const analysis = parseMustDoInput(mustDoActivities, destination, forceAll, preferences?.startDate || date?.split('T')[0], totalDays);
+                if (analysis.length === 0) return undefined;
+                const sched = scheduleMustDos(analysis, totalDays);
+                const dayItems = sched.scheduled.filter((s: any) => s.assignedDay === dayNumber);
+                if (dayItems.length === 0) return undefined;
+                return dayItems.map((item: any) => ({
+                  title: item.priority.activityName || item.priority.title,
+                  startTime: item.priority.explicitStartTime || undefined,
+                  endTime: item.priority.explicitEndTime || undefined,
+                  location: item.priority.venueName || item.priority.location || undefined,
+                }));
+              } catch (e) {
+                console.warn('[schema-generation] Must-do parsing for compiler failed:', e);
+                return undefined;
+              }
+            })(),
+
+            // === Fix 22L: Pre-Booked Commitments ===
+            preBookedCommitments: (() => {
+              const preBookedRaw = (metadata?.preBookedCommitments as any[]) || [];
+              if (preBookedRaw.length === 0) return undefined;
+              // Filter to commitments relevant to this day by date
+              const dayDate = date?.split('T')[0] || '';
+              return preBookedRaw
+                .filter((c: any) => {
+                  if (!c.date && !c.startDate) return true; // no date = applies to all days
+                  const cDate = (c.date || c.startDate || '').split('T')[0];
+                  return cDate === dayDate;
+                })
+                .map((c: any) => ({
+                  title: c.title || c.name || 'Commitment',
+                  startTime: c.startTime || c.start_time || '09:00',
+                  endTime: c.endTime || c.end_time || '10:00',
+                  location: c.location || c.venue || undefined,
+                  category: c.category || 'event',
+                  cost: c.cost || c.price || undefined,
+                }));
+            })(),
+
+            // === Fix 22L: Multi-City / Transition Day ===
+            isMultiCity: resolvedIsMultiCity || undefined,
+            isTransitionDay: resolvedIsTransitionDay || undefined,
+            transitionFrom: resolvedIsTransitionDay ? resolvedTransitionFrom : undefined,
+            transitionTo: resolvedIsTransitionDay ? resolvedTransitionTo : undefined,
+            transitionMode: resolvedIsTransitionDay ? (resolvedTransportMode as 'flight' | 'train' | 'drive' | 'ferry' | undefined) : undefined,
+            transitionDepartureTime: resolvedIsTransitionDay && resolvedTransportDetails?.departureTime
+              ? resolvedTransportDetails.departureTime : undefined,
+            transitionArrivalTime: resolvedIsTransitionDay && resolvedTransportDetails?.arrivalTime
+              ? resolvedTransportDetails.arrivalTime : undefined,
+
+            // === Fix 22L: Keep Activities (Regeneration) ===
+            keepActivities: lockedActivities.length > 0
+              ? lockedActivities.map((a: any) => ({
+                  title: a.title || a.name || 'Activity',
+                  startTime: a.startTime || '09:00',
+                  endTime: a.endTime || '10:00',
+                  category: a.category || 'activity',
+                  location: a.location?.address || a.location?.name || undefined,
+                  cost: a.cost?.amount || undefined,
+                  bookingRequired: a.bookingRequired || undefined,
+                  tips: a.tips || undefined,
+                }))
+              : undefined,
           };
 
+          const compileStart = Date.now();
           const compiledSchema = compileDaySchema(compilerInput);
+          const compileMs = Date.now() - compileStart;
 
           // Build SerializerContext from existing prompt variables
+          // Fix 22M: Enrich with rich prompt sections from the existing pipeline
           const serializerContext = {
             archetypeDescription: archetypeContext?.promptBlocks?.persona || `Archetype: ${primaryArchetype}`,
             archetypeAvoidList: archetypeContext?.definition?.avoidList || profile.avoidList || [],
@@ -8060,13 +8134,34 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             budgetConstraints: actualDailyBudgetPerPerson != null
               ? `Hard cap: ~$${actualDailyBudgetPerPerson}/day per person`
               : '',
-            bookingRules: '',
-            tipInstructions: '',
-            personalizationInstructions: '',
-            hiddenGemInstructions: '',
+            // Fix 22M: Wire rich prompt sections instead of empty strings
+            bookingRules: `When to mark bookingRequired: true:
+- Restaurants with limited seating (fine dining, omakase, tasting menus)
+- Popular attractions with timed-entry tickets
+- Tours, shows, and experiences that sell out
+- Any activity where walk-ins are unreliable
+Conservative default: if unsure, mark bookingRequired: true with a note.`,
+            tipInstructions: `Every "tips" field must be:
+- 30+ characters, specific and actionable
+- Include insider knowledge (best entrance, skip-the-line tricks, photo spots)
+- For lunch/dinner: include 1 alternative restaurant with name and price
+- For last activity: include next morning preview
+- Reference specific timing, booking, or crowd tips
+- Never generic ("enjoy the experience" = REJECTED)`,
+            personalizationInstructions: `For each activity, include a "personalization" object with:
+- "whyThisFits": 1-2 sentences referencing specific traveler traits/preferences
+- Reference the archetype's values, not just the archetype name
+- Connect the activity to the traveler's interests, pace, or budget preferences`,
+            hiddenGemInstructions: `Hidden gem criteria:
+- NOT in top 10 TripAdvisor/Google results for the city
+- Known primarily to locals or repeat visitors
+- At least 1-2 per day must be isHiddenGem: true
+- A famous landmark is NEVER a hidden gem
+- Street food stalls, neighborhood bars, local markets, artisan workshops qualify
+- Mark hasTimingHack: true on 2-3 activities per day where the time slot gives an advantage`,
             isGroupTrip: !!collaboratorAttributionPrompt,
             allTravelerIds: userId || '',
-            // New fields (Fix 22G)
+            // Fix 22G fields
             userConstraintsText: metadata?.userConstraints
               ? JSON.stringify(metadata.userConstraints, null, 2)
               : undefined,
@@ -8085,12 +8180,30 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             skipList: previousDayActivities?.length > 0
               ? previousDayActivities.map((title: string) => `- ${title}`).join('\n')
               : undefined,
+            // Fix 22M: Additional rich context from existing pipeline
+            transportPreferences: transportPreferencePrompt || undefined,
+            voyancePicks: voyancePicksPrompt || undefined,
+            tripTypeContext: tripTypePrompt || undefined,
+            collaboratorAttribution: collaboratorAttributionPrompt || undefined,
           };
 
           const serialized = serializeSchemaToPrompt(compiledSchema, serializerContext);
           finalSystemPrompt = serialized.systemPrompt;
           finalUserPrompt = serialized.userPrompt;
-          console.log(`[schema-generation] Schema path active. System: ${finalSystemPrompt.length} chars, User: ${finalUserPrompt.length} chars`);
+
+          // Fix 22M: Append rich prompt sections that aren't part of the schema serializer yet
+          // These are injected directly since they're free-form prompt text from the existing pipeline
+          const richSections: string[] = [];
+          if (transportPreferencePrompt) richSections.push(transportPreferencePrompt);
+          if (voyancePicksPrompt) richSections.push(voyancePicksPrompt);
+          if (collaboratorAttributionPrompt) richSections.push(collaboratorAttributionPrompt);
+          if (lockedActivities.length > 0) richSections.push(lockedSlotsInstruction);
+          if (richSections.length > 0) {
+            finalSystemPrompt += '\n\n' + richSections.join('\n\n');
+          }
+
+          console.log(`[schema-generation] Schema path active. Compile: ${compileMs}ms, System: ${finalSystemPrompt.length} chars, User: ${finalUserPrompt.length} chars`);
+          console.log(`[schema-generation] compilerInput wiring: mustDos=${compilerInput.mustDos?.length || 0}, preBooked=${compilerInput.preBookedCommitments?.length || 0}, isTransition=${!!compilerInput.isTransitionDay}, keepActivities=${compilerInput.keepActivities?.length || 0}`);
         } catch (schemaErr) {
           console.error('[schema-generation] Schema compilation failed, falling back to existing prompts:', schemaErr);
           // Fall through — finalSystemPrompt/finalUserPrompt retain old values
