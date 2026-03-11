@@ -317,7 +317,7 @@ export function DemoPlayground() {
                       : "opacity-60 hover:opacity-100"
                   )}
                 >
-                  <img src={dest.image} alt={dest.name} className="absolute inset-0 w-full h-full object-cover" />
+                  <SafeImage src={dest.image} alt={dest.name} className="absolute inset-0 w-full h-full object-cover" fallbackCategory="sightseeing" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
                   <div className="absolute inset-x-0 bottom-0 p-2 text-white text-left">
                     <p className="font-medium text-sm leading-tight">{dest.name}</p>
