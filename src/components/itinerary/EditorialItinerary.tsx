@@ -3926,9 +3926,9 @@ export function EditorialItinerary({
           className="absolute right-0 top-0 bottom-0 w-12 pointer-events-none bg-gradient-to-l from-background to-transparent transition-opacity duration-200 sm:hidden"
           style={{ opacity: 0 }}
         />
-      </div>
+       </div>}
 
-      {/* Tab Content */}
+       {/* In clean preview, force itinerary tab and skip AnimatePresence wrapper */}
       <AnimatePresence mode="wait">
         {activeTab === 'itinerary' && (
           <motion.div
