@@ -96,6 +96,25 @@ function useTripDuration(tripId: string | undefined) {
   });
 }
 
+function useAuthorInfo(userId: string | undefined) {
+  return useQuery({
+    queryKey: ['guide-author-info', userId],
+    queryFn: async () => {
+      if (!userId) return null;
+      const [profileRes, dnaRes] = await Promise.all([
+        supabase.from('profiles').select('display_name, avatar_url, handle').eq('id', userId).maybeSingle(),
+        supabase.from('travel_dna_profiles').select('primary_archetype_name').eq('user_id', userId).maybeSingle(),
+      ]);
+      return {
+        name: profileRes.data?.display_name || profileRes.data?.handle || 'Traveler',
+        avatarUrl: profileRes.data?.avatar_url || null,
+        dnaType: dnaRes.data?.primary_archetype_name || null,
+      };
+    },
+    enabled: !!userId,
+  });
+}
+
 function groupByDay(activities: Activity[]): Map<number, Activity[]> {
   const groups = new Map<number, Activity[]>();
   for (const a of activities) {
