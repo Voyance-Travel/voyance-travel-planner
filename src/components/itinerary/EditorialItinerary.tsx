@@ -4432,30 +4432,32 @@ export function EditorialItinerary({
                       onDateChange={onDateChange}
                       days={days}
                       cities={dateEditorCities}
-                    />
-                  )}
-                </span>
-                <div className="flex items-center gap-1.5">
-                  {canUndoDay && (
-                    <DayUndoButton
-                      onClick={handleUndo}
-                      isLoading={isUndoing}
-                      showLabel
-                    />
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setVersionHistoryOpen(true)}
-                    className="gap-1.5 text-xs"
-                  >
-                    <HistoryIcon className="h-4 w-4" />
-                    <span className="hidden sm:inline">History</span>
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    Day {selectedDayIndex + 1} of {days.length}
-                  </span>
-                </div>
+                     />
+                   )}
+                 </span>
+                 {!isCleanPreview && (
+                 <div className="flex items-center gap-1.5">
+                   {canUndoDay && (
+                     <DayUndoButton
+                       onClick={handleUndo}
+                       isLoading={isUndoing}
+                       showLabel
+                     />
+                   )}
+                   <Button
+                     variant="ghost"
+                     size="sm"
+                     onClick={() => setVersionHistoryOpen(true)}
+                     className="gap-1.5 text-xs"
+                   >
+                     <HistoryIcon className="h-4 w-4" />
+                     <span className="hidden sm:inline">History</span>
+                   </Button>
+                   <span className="text-xs text-muted-foreground">
+                     Day {selectedDayIndex + 1} of {days.length}
+                   </span>
+                 </div>
+                 )}
               </div>
 
               <div className="flex items-center gap-2">
