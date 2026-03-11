@@ -34,6 +34,7 @@ import { resolveConflicts } from './conflict-resolver';
  * BEFORE the compiler runs.
  */
 export interface CompilerInput {
+  // === EXISTING FIELDS (from Fix 22B) ===
   dayNumber: number;
   totalDays: number;
   destination: string;
@@ -75,6 +76,51 @@ export interface CompilerInput {
 
   // Group trip travelers
   travelers: TravelerRef[];
+
+  // === NEW FIELDS (Fix 22G — Gap Fixes) ===
+
+  /** Gap 1: User constraints from the "Just Tell Us" chat planner. */
+  userConstraints?: string;
+
+  /** Gap 1: Generation rules — blocked time windows, hotel changes, guest changes. */
+  generationRules?: {
+    blockedWindows?: { start: string; end: string; reason: string }[];
+    hotelChanges?: string[];
+    guestChanges?: string[];
+    otherRules?: string[];
+  };
+
+  /** Gap 5: Additional notes / trip purpose. */
+  additionalNotes?: string;
+
+  /** Gap 6: Interest categories the user selected. */
+  interestCategories?: string[];
+
+  /** Gap 7: Must-haves checklist — things the user wants across the whole trip. */
+  mustHaves?: string[];
+
+  /** Gap 3: Is this the traveler's first time visiting this destination? */
+  isFirstTimeVisitor?: boolean;
+
+  /** Gap 8: Activities from previous days to avoid duplicates. */
+  previousDayActivities?: { title: string; category: string; location?: string }[];
+
+  /** Gap 10: Fallback times from preferences when no flight record exists. */
+  preferredArrivalTime?: string;   // "HH:MM" — used if arrivalFlight is missing
+  preferredDepartureTime?: string; // "HH:MM" — used if departureFlight is missing
+
+  /** Gap 4: Pre-booked commitments (shows, reservations, tours with fixed times). */
+  preBookedCommitments?: {
+    title: string;
+    startTime: string;
+    endTime: string;
+    location?: string;
+    category?: string;
+    cost?: number;
+  }[];
+
+  /** User-selected pacing override (handled in Fix 22H). */
+  pacingOverride?: 'relaxed' | 'balanced' | 'packed';
 }
 
 /**
@@ -145,17 +191,24 @@ export function compileDaySchema(input: CompilerInput): DaySchema {
  * Step 1: Determine what type of day this is.
  */
 function determineDayType(input: CompilerInput): DayType {
-  // Last day with a departure flight = departure day
-  if (input.dayNumber === input.totalDays && input.departureFlight) {
-    return 'departure';
+  // Last day with a departure flight or preferred departure time = departure day
+  if (input.dayNumber === input.totalDays) {
+    if (input.departureFlight || input.preferredDepartureTime) {
+      return 'departure';
+    }
   }
 
-  // First day with an arrival flight = arrival day (subtype based on time)
-  if (input.dayNumber === 1 && input.arrivalFlight) {
-    const arrivalHour = parseHour(input.arrivalFlight.arrivalTime);
-    if (arrivalHour < 11) return 'morning_arrival';
-    if (arrivalHour < 16) return 'midday_arrival';
-    return 'latenight_arrival';
+  // First day with arrival data = arrival day (subtype based on time)
+  if (input.dayNumber === 1) {
+    const arrivalTime = input.arrivalFlight?.arrivalTime || input.preferredArrivalTime;
+    if (arrivalTime) {
+      const arrivalHour = parseHour(arrivalTime);
+      if (arrivalHour < 11) return 'morning_arrival';
+      if (arrivalHour < 16) return 'midday_arrival';
+      return 'latenight_arrival';
+    }
+    // No arrival data at all — default to midday arrival (safest default)
+    return 'midday_arrival';
   }
 
   // Everything else = standard day
