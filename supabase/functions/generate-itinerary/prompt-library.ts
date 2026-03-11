@@ -961,9 +961,22 @@ export function buildArrivalDayPrompt(
   // Build constraint text
   const lines: string[] = [];
   lines.push(`${'='.repeat(60)}`);
-  lines.push(`📅 DAY 1 CONSTRAINTS - ARRIVAL DAY`);
+  lines.push(`📅 DAY 1 CONSTRAINTS - ARRIVAL DAY${arrivalRouting?.strategy === 'venue-first' ? ' (VENUE-FIRST ROUTING)' : ''}`);
   lines.push(`${'='.repeat(60)}`);
   lines.push('');
+
+  // Venue-first routing banner
+  if (arrivalRouting?.strategy === 'venue-first' && arrivalRouting.firstMustDoName) {
+    lines.push(`🚨 VENUE-FIRST ROUTING ACTIVE`);
+    lines.push(`${'─'.repeat(40)}`);
+    lines.push(`   ${arrivalRouting.firstMustDoName} is ~${arrivalRouting.estimatedAirportToVenueMinutes} min from airport`);
+    lines.push(`   Hotel is ~${arrivalRouting.estimatedAirportToHotelMinutes} min from airport`);
+    lines.push(`   → Go DIRECTLY to ${arrivalRouting.firstMustDoName} from airport`);
+    lines.push(`   → Store luggage at venue lockers/bag check`);
+    lines.push(`   → Hotel check-in happens AFTER the must-do activity`);
+    lines.push(`   → DO NOT route to hotel before the must-do`);
+    lines.push('');
+  }
   
   // Flight status
   if (flight.hasOutboundFlight) {
