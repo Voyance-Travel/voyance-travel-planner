@@ -5422,12 +5422,52 @@ ${'='.repeat(60)}
         if (mustDoAnalysis.length > 0) {
           const scheduled = scheduleMustDos(mustDoAnalysis, context.totalDays);
           userResearchPrompt = scheduled.promptSection;
+          
+          // Partition into specific venues vs generic activity intents
+          const genericIntents = mustDoAnalysis.filter(m => m.isGenericIntent);
+          const specificVenues = mustDoAnalysis.filter(m => !m.isGenericIntent);
+          
+          if (genericIntents.length > 0) {
+            userResearchPrompt += `\n## 🎯 USER'S ACTIVITY REQUESTS (AI must suggest specific venues)\nThe traveler wants these types of activities. YOU must suggest specific restaurants, bars, venues, etc. based on the traveler's profile, budget tier, and location.\n\n`;
+            for (const intent of genericIntents) {
+              userResearchPrompt += `- ${intent.activityName}`;
+              if (intent.preferredTime && intent.preferredTime !== 'any') userResearchPrompt += ` (preferred time: ${intent.preferredTime})`;
+              if (intent.preferredDay) userResearchPrompt += ` (Day ${intent.preferredDay})`;
+              userResearchPrompt += ` — Suggest a SPECIFIC venue name, address, cost estimate, and description. Do NOT just echo "${intent.activityName}" as the activity title.\n`;
+            }
+            console.log(`[Stage 1.999] ✓ ${genericIntents.length} generic activity intents detected — AI will suggest specific venues`);
+          }
+          
           const eventCount = mustDoAnalysis.filter(m => m.activityType === 'all_day_event' || m.activityType === 'half_day_event').length;
-          console.log(`[Stage 1.999] ✓ User research notes parsed: ${mustDoAnalysis.length} items (forceAllMust=${forceAllMust}), ${scheduled.scheduled.length} scheduled, ${eventCount} classified as events`);
+          console.log(`[Stage 1.999] ✓ User research notes parsed: ${mustDoAnalysis.length} items (forceAllMust=${forceAllMust}), ${scheduled.scheduled.length} scheduled, ${eventCount} classified as events, ${specificVenues.length} specific, ${genericIntents.length} generic`);
         } else {
-          // Raw text fallback — inject as-is with MANDATORY + ENRICHMENT language
-          userResearchPrompt = `\n## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED and CHOSEN these specific venues. You MUST include ALL of them in the itinerary. These are NON-NEGOTIABLE. Do NOT substitute your own recommendations for these.\n\n"${context.mustDoActivities.trim()}"\n\nRULES:\n- EVERY venue/restaurant listed above MUST appear by name in the final itinerary\n- Only add AI recommendations to fill REMAINING empty meal/activity slots\n- If a user-specified venue conflicts with another, keep the user's venue and move the other\n- Respect any "skip" or "avoid" requests\n- If the user mentions a FULL-DAY EVENT (e.g., "whole day at the U.S. Open"), do NOT plan other activities around it. That day has ONE purpose.\n- If the user mentions FLIGHT DETAILS, account for arrival/departure times on first/last days\n- If the user mentions SPECIFIC TIMES (e.g., "dinner at 7:30"), those times are LOCKED\n- User preferences like "authentic sushi" or "no tourist traps" apply to ALL venue selections\n\n## 🧭 SMART FINISH ENRICHMENT — ADD VALUE\nThe user's list is a STARTING POINT. You MUST add significant value:\n- Add exact street addresses, opening hours, booking URLs for every venue\n- Add transit directions between activities (walk/metro/taxi with duration & cost)\n- Fill ALL meal gaps (breakfast, lunch, dinner, coffee stops)\n- Add 2-4 DNA-matched activities per day between user venues\n- Add insider tips for each user-specified venue\n- Flag any activity that doesn't match the traveler's DNA with a "dnaFlag" field\n`;
-          console.log(`[Stage 1.999] ✓ User research notes injected as raw text with MANDATORY enforcement (${context.mustDoActivities.length} chars)`);
+          // Raw text fallback — attempt parsing for generic/specific split
+          const { parseMustDoInput: parseMustDoFallback, isGenericActivityDescription: isGenericFallback } = await import('./must-do-priorities.ts');
+          const fallbackParsed = parseMustDoFallback(context.mustDoActivities, context.destination, false, context.startDate, context.totalDays);
+          const fallbackGeneric = fallbackParsed.filter(m => m.isGenericIntent);
+          const fallbackSpecific = fallbackParsed.filter(m => !m.isGenericIntent);
+          
+          if (fallbackSpecific.length > 0) {
+            userResearchPrompt = `\n## 🚨 USER'S SPECIFIC VENUES (MANDATORY — include exactly as named)\n\nThe traveler has PERSONALLY RESEARCHED and CHOSEN these specific venues. You MUST include ALL of them in the itinerary. These are NON-NEGOTIABLE.\n\n`;
+            for (const venue of fallbackSpecific) {
+              userResearchPrompt += `- "${venue.activityName}"${venue.preferredDay ? ` (Day ${venue.preferredDay})` : ''}\n`;
+            }
+          }
+          if (fallbackGeneric.length > 0) {
+            userResearchPrompt += `\n## 🎯 USER'S ACTIVITY REQUESTS (AI must suggest specific venues)\nThe traveler wants these types of activities. YOU must suggest specific restaurants, bars, venues, etc.\n\n`;
+            for (const intent of fallbackGeneric) {
+              userResearchPrompt += `- ${intent.activityName}`;
+              if (intent.preferredTime && intent.preferredTime !== 'any') userResearchPrompt += ` (preferred time: ${intent.preferredTime})`;
+              if (intent.preferredDay) userResearchPrompt += ` (Day ${intent.preferredDay})`;
+              userResearchPrompt += ` — Suggest a SPECIFIC venue name, address, cost estimate. Do NOT echo "${intent.activityName}" as the title.\n`;
+            }
+          }
+          if (fallbackSpecific.length === 0 && fallbackGeneric.length === 0) {
+            // True raw fallback
+            userResearchPrompt = `\n## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED and CHOSEN these specific venues. You MUST include ALL of them in the itinerary.\n\n"${context.mustDoActivities.trim()}"\n`;
+          }
+          userResearchPrompt += `\n## 🧭 SMART FINISH ENRICHMENT — ADD VALUE\nThe user's list is a STARTING POINT. You MUST add significant value:\n- Add exact street addresses, opening hours, booking URLs for every venue\n- Add transit directions between activities (walk/metro/taxi with duration & cost)\n- Fill ALL meal gaps (breakfast, lunch, dinner, coffee stops)\n- Add 2-4 DNA-matched activities per day between user venues\n- Add insider tips for each user-specified venue\n`;
+          console.log(`[Stage 1.999] ✓ User research notes: fallback parse found ${fallbackSpecific.length} specific + ${fallbackGeneric.length} generic (${context.mustDoActivities.length} chars)`);
         }
       }
       
