@@ -34,6 +34,7 @@ export interface ActivityWithLocation {
   isLocked?: boolean;
   timeSlot?: string; // e.g., "09:00-11:00"
   category?: string;
+  startTime?: string; // HH:MM format for temporal ordering
 }
 
 export interface DayAnchor {
