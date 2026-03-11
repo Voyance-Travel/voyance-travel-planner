@@ -1049,6 +1049,7 @@ export async function submitQuizComplete(
         .update({ 
           quiz_completed: true,
           travel_dna: travelDnaJson as unknown as Json,
+          pattern_group: getPatternGroupForArchetype(dna.primary_archetype_name || ''),
           // travel_dna_overrides: preserved (not touched)
         })
         .eq('id', userId);
