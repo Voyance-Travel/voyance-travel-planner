@@ -64,7 +64,7 @@ export function useSavedGuide(guideId: string | undefined) {
 
   const toggleSave = useCallback(() => {
     if (!userId) {
-      toast('Sign in to save guides', { description: 'Create an account to bookmark your favorite guides.' });
+      toast.info('Sign in to save guides');
       return;
     }
     saveMutation.mutate();
