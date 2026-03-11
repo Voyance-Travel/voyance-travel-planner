@@ -21,6 +21,7 @@ import { applyDnaModifiers } from './dna-modifiers.ts';
 import { fillFlightAndHotelSlots } from './constraint-filler.ts';
 import { fillMustDoSlots, type MustDoInput } from './must-do-filler.ts';
 import { resolveConflicts } from './conflict-resolver.ts';
+import { applyPacingOverride } from './pacing-override.ts';
 
 export interface CompilerInput {
   // === EXISTING FIELDS (from Fix 22B) ===
@@ -107,7 +108,14 @@ export function compileDaySchema(input: CompilerInput): DaySchema {
   const patternGroup = input.patternGroup || getPatternGroupForArchetype(input.archetypeName);
   const groupConfig = getPatternGroupConfig(patternGroup);
   const modifiedSlots = applyDnaModifiers(baseSlots, groupConfig, dayType);
-  let filledSlots = fillFlightAndHotelSlots(modifiedSlots, input);
+
+  // Step 4b: Apply user pacing override (if different from DNA default)
+  let pacedSlots = modifiedSlots;
+  if (input.pacingOverride) {
+    pacedSlots = applyPacingOverride(modifiedSlots, input.pacingOverride, groupConfig);
+  }
+
+  let filledSlots = fillFlightAndHotelSlots(pacedSlots, input);
 
   if (input.mustDos && input.mustDos.length > 0) {
     const mustDoInputs: MustDoInput[] = input.mustDos.map(md => ({

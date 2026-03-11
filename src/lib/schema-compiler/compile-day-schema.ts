@@ -27,6 +27,7 @@ import { applyDnaModifiers } from './dna-modifiers';
 import { fillFlightAndHotelSlots } from './constraint-filler';
 import { fillMustDoSlots, type MustDoInput } from './must-do-filler';
 import { resolveConflicts } from './conflict-resolver';
+import { applyPacingOverride } from './pacing-override';
 
 /**
  * Input data needed to compile a day schema.
@@ -146,8 +147,14 @@ export function compileDaySchema(input: CompilerInput): DaySchema {
   // Step 4: Apply DNA modifiers to the skeleton
   const modifiedSlots = applyDnaModifiers(baseSlots, groupConfig, dayType);
 
+  // Step 4b: Apply user pacing override (if different from DNA default)
+  let pacedSlots = modifiedSlots;
+  if (input.pacingOverride) {
+    pacedSlots = applyPacingOverride(modifiedSlots, input.pacingOverride, groupConfig);
+  }
+
   // Step 5: Fill known constraints (flights, hotel)
-  let filledSlots = fillFlightAndHotelSlots(modifiedSlots, input);
+  let filledSlots = fillFlightAndHotelSlots(pacedSlots, input);
 
   // Step 5b: Fill must-do activities with reverse scheduling
   if (input.mustDos && input.mustDos.length > 0) {

@@ -17,3 +17,5 @@ export {
 } from './time-parser';
 export { fillMustDoSlots } from './must-do-filler';
 export type { MustDoInput } from './must-do-filler';
+export { applyPacingOverride } from './pacing-override';
+export type { PacingLevel } from './pacing-override';

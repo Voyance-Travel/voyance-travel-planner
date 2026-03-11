@@ -16,6 +16,8 @@ export type { MustDoInput } from './must-do-filler.ts';
 export { USE_SCHEMA_GENERATION, SCHEMA_GENERATION_CONFIG } from './feature-flags.ts';
 export { getPatternGroupConfig } from './pattern-group-configs.ts';
 export { getPatternGroupForArchetype } from './archetype-group-mapping.ts';
+export { applyPacingOverride } from './pacing-override.ts';
+export type { PacingLevel } from './pacing-override.ts';
 
 export type {
   DaySchema,
