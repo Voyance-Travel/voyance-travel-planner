@@ -22,9 +22,11 @@ import { format } from 'date-fns';
 interface TripPhotoGalleryProps {
   tripId: string;
   className?: string;
+  /** Hide upload controls (used in preview mode) */
+  hideUpload?: boolean;
 }
 
-export default function TripPhotoGallery({ tripId, className }: TripPhotoGalleryProps) {
+export default function TripPhotoGallery({ tripId, className, hideUpload = false }: TripPhotoGalleryProps) {
   const { photos, isLoading, uploadPhoto, deletePhoto, toggleFavorite, setCoverPhoto } = useTripPhotos(tripId);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<TripPhoto | null>(null);
