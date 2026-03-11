@@ -8181,7 +8181,7 @@ function DayCard({
                       />
                     </div>
                     {/* Compact transit gap indicator between activities */}
-                    {!isLastActivity && gapMinutes !== null && !dayIsPreview && (
+                    {!isLastActivity && gapMinutes !== null && !dayIsPreview && !isCleanPreview && (
                       <TransitGapIndicator
                         gapMinutes={gapMinutes}
                         transportation={activityToRender.transportation}
