@@ -9,3 +9,11 @@ export type { SerializedPrompt, SerializerContext } from './schema-to-prompt';
 export { validateAgainstSchema } from './schema-validator';
 export type { ValidationResult, AiActivity } from './schema-validator';
 export { buildGenerationLog, formatLogForConsole } from './generation-logger';
+export {
+  normalizeTimeText,
+  extractTimeRange,
+  cleanActivityTitle,
+  parseToHHMM,
+} from './time-parser';
+export { fillMustDoSlots } from './must-do-filler';
+export type { MustDoInput } from './must-do-filler';
