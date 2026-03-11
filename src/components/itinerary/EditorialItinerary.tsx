@@ -8177,7 +8177,8 @@ function DayCard({
               />
             </div>
 
-            {/* Day Footer */}
+            {/* Day Footer — hidden in clean preview */}
+            {!isCleanPreview && (
             <div className="px-6 py-4 bg-gradient-to-r from-secondary/30 via-secondary/20 to-secondary/30 border-t border-border">
               {dayIsPreview ? (
                 /* Preview Per-Day Unlock CTA */
