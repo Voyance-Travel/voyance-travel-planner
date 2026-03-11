@@ -8,6 +8,7 @@
 import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
+import { cleanSystemAnnotations } from '@/utils/textSanitizer';
 
 export interface ConsumerTripPdfData {
   tripName?: string;
