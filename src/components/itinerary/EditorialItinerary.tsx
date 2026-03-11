@@ -8145,6 +8145,7 @@ function DayCard({
                         aiLocked={aiLocked}
                         compact={compactCards}
                         isPastTrip={isPastTrip}
+                        isCleanPreview={isCleanPreview}
                       />
                     </div>
                     {/* Compact transit gap indicator between activities */}
