@@ -6,3 +6,6 @@ export { compileDaySchema } from './compile-day-schema';
 export type { CompilerInput } from './compile-day-schema';
 export { serializeSchemaToPrompt } from './schema-to-prompt';
 export type { SerializedPrompt, SerializerContext } from './schema-to-prompt';
+export { validateAgainstSchema } from './schema-validator';
+export type { ValidationResult, AiActivity } from './schema-validator';
+export { buildGenerationLog, formatLogForConsole } from './generation-logger';
