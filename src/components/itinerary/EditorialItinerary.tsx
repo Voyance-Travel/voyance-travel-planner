@@ -7847,7 +7847,7 @@ function DayCard({
             )}
             {/* Mobile: overflow menu for Routes/Lock/Regenerate */}
             <div className="sm:hidden flex items-center gap-1">
-              {(isEditable || !dayIsPreview) && (
+              {(isEditable || !dayIsPreview) && !isCleanPreview && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
