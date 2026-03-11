@@ -41,6 +41,8 @@ import { computeUnlockedDayCount } from '@/lib/voyanceFlowController';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { TripDebriefModal } from '@/components/trip/TripDebriefModal';
 import { GuidePromptBanner } from '@/components/trip/GuidePromptBanner';
+import { useTripViewMode } from '@/hooks/useTripViewMode';
+import { TripViewModeToggle } from '@/components/trip/TripViewModeToggle';
 
 import type { SwapSuggestion } from '@/components/trip/SwapReviewDialog';
 import { VersionConflictDialog } from '@/components/trip/VersionConflictDialog';
