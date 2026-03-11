@@ -84,7 +84,7 @@ export function useGenerationPoller({
   // Track whether we already fired onStalled / attempted auto-resume
   const stalledFiredRef = useRef(false);
   const autoResumeCountRef = useRef(0);
-  const MAX_AUTO_RESUME_ATTEMPTS = 3;
+  const MAX_AUTO_RESUME_ATTEMPTS = 5;
   // Guard: only fire onReady once per generation cycle
   const onReadyCalledRef = useRef(false);
   // High-water mark: completedDays should never decrease during a generation cycle
