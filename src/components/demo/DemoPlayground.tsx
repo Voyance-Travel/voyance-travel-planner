@@ -329,7 +329,7 @@ export function DemoPlayground() {
             {/* Trip overview */}
             <Card className="mb-4 overflow-hidden border-border/50">
               <div className="relative h-24">
-                <img src={selectedDest.image} alt={itinerary.destination} className="w-full h-full object-cover" />
+                <SafeImage src={selectedDest.image} alt={itinerary.destination} className="w-full h-full object-cover" fallbackCategory="sightseeing" />
                 <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/30" />
                 <div className="absolute inset-0 p-4 flex flex-col justify-end">
                   <div className="flex items-center gap-2 mb-1">
