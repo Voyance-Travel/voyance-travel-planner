@@ -25,6 +25,7 @@ import { getPatternGroupForArchetype } from '@/config/archetype-group-mapping';
 import { buildBaseSkeleton } from './day-skeletons';
 import { applyDnaModifiers } from './dna-modifiers';
 import { fillFlightAndHotelSlots } from './constraint-filler';
+import { fillMustDoSlots, type MustDoInput } from './must-do-filler';
 import { resolveConflicts } from './conflict-resolver';
 
 /**
@@ -100,8 +101,18 @@ export function compileDaySchema(input: CompilerInput): DaySchema {
   const modifiedSlots = applyDnaModifiers(baseSlots, groupConfig, dayType);
 
   // Step 5: Fill known constraints (flights, hotel)
-  // Note: Must-do pre-filling is basic here — full logic is in Fix 22E
-  const filledSlots = fillFlightAndHotelSlots(modifiedSlots, input);
+  let filledSlots = fillFlightAndHotelSlots(modifiedSlots, input);
+
+  // Step 5b: Fill must-do activities with reverse scheduling
+  if (input.mustDos && input.mustDos.length > 0) {
+    const mustDoInputs: MustDoInput[] = input.mustDos.map(md => ({
+      rawTitle: md.title,
+      startTime: md.startTime,
+      endTime: md.endTime,
+      location: md.location,
+    }));
+    filledSlots = fillMustDoSlots(filledSlots, mustDoInputs, input.hotel?.address);
+  }
 
   // Step 6: Resolve conflicts
   const resolvedSlots = resolveConflicts(filledSlots, groupConfig);
