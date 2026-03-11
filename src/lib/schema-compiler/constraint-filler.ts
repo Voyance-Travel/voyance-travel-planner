@@ -307,6 +307,7 @@ function fillTransitionSlots(filled: DaySlot[], input: CompilerInput): DaySlot[]
   filled = filled.map((slot, idx) => ({ ...slot, position: idx }));
 
   return filled;
+}
 
 // --- Time utility functions ---
 
