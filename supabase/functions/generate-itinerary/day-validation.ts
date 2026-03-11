@@ -280,16 +280,10 @@ export function validateGeneratedDay(
   }
 
   if (isFirstDay) {
-    const hasArrival = day.activities?.some(a =>
-      (a.title || '').toLowerCase().includes('arrival') ||
-      ((a.category === 'transport') && (a.title || '').toLowerCase().includes('airport'))
-    );
-    const hasTransfer = day.activities?.some(a => (a.title || '').toLowerCase().includes('transfer'));
+    // Arrival and transfer are handled by the Arrival Game Plan UI — only validate check-in
     const hasCheckin = day.activities?.some(a =>
       (a.title || '').toLowerCase().includes('check-in') || (a.title || '').toLowerCase().includes('checkin')
     );
-    if (!hasArrival) warnings.push('Day 1 should start with airport arrival');
-    if (!hasTransfer) warnings.push('Day 1 should include airport-to-hotel transfer');
     if (!hasCheckin) warnings.push('Day 1 should include hotel check-in');
   }
 

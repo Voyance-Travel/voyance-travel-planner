@@ -1527,7 +1527,7 @@ async function generateSingleDayWithRetry(
     '9. VARIETY PER DAY: Mix sightseeing, cultural sites, museums, outdoor activities, dining',
     '10. **ACTIVITY TITLE NAMING — CRITICAL**: The "title" field MUST be the venue or experience name ONLY. NEVER append the category, type, or a repeated word. Examples of WRONG titles: "Barton Springs Pool Pool", "Zilker Botanical Garden Garden", "Franklin Barbecue Barbecue", "Cosmic Coffee Coffee & Beer", "Record shopping shopping". CORRECT titles: "Barton Springs Pool", "Zilker Botanical Garden", "Franklin Barbecue", "Cosmic Coffee + Beer Garden". If the place name already contains the activity type (e.g., "Pool", "Garden", "Barbecue", "Coffee"), do NOT add it again.',
     '11. **DINING TITLE — CRITICAL**: For ALL dining/restaurant activities (category: "dining"), the "title" MUST be the restaurant or cafe name. NEVER use the neighborhood, district, or area as the title. Put the neighborhood in the "neighborhood" field instead. WRONG: { title: "Gaslamp Quarter", description: "Juniper & Ivy" }. WRONG: { title: "La Jolla", description: "The Taco Stand fish tacos" }. WRONG: { title: "Balboa Park", description: "The Prado restaurant" }. RIGHT: { title: "Juniper & Ivy", neighborhood: "Gaslamp Quarter" }. RIGHT: { title: "The Taco Stand", description: "fish tacos", neighborhood: "La Jolla" }. RIGHT: { title: "The Prado", neighborhood: "Balboa Park" }.',
-    isFirstDay ? '12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with TWO SEPARATE activity blocks (NEVER combine them into one): (a) "Arrival at Airport" (category: transport), (b) "Hotel Check-in & Refresh" (category: accommodation). Each MUST be its own entry with its own startTime/endTime. Do NOT include an "Airport Transfer to Hotel" activity — the transfer is already handled by a separate UI component. Allow sufficient time between airport arrival and hotel check-in for customs, baggage, and transit.' : '',
+    isFirstDay ? '12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with "Hotel Check-in & Refresh" (category: accommodation) as the FIRST activity. Do NOT include an "Arrival at Airport", "Arrival and Baggage Claim", or "Airport Transfer to Hotel" activity — arrival logistics are handled by a separate UI component. Start the day with hotel check-in, then proceed to real activities.' : '',
     isLastDay && context.totalDays > 1 ? '12. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
   ].filter(Boolean).join('\n');
 
@@ -2551,80 +2551,24 @@ Generate activities for this day following ALL constraints above.`;
       }
 
       // ==========================================================================
-      // ARRIVAL DAY SEQUENCE FIX: Ensure airport → transfer → hotel check-in order
+      // ARRIVAL DAY: Strip arrival/baggage/transfer activities — handled by Arrival Game Plan UI
       // ==========================================================================
-      if (isFirstDay && generatedDay.activities.length > 1) {
-        const arrivalKeywords = ['arrival at airport', 'arrive at airport', 'airport arrival', 'land at', 'arrive in'];
-        const transferKeywords = ['airport transfer', 'transfer to hotel', 'rideshare to', 'taxi to hotel', 'shuttle to', 'uber to', 'lyft to'];
-        const checkinKeywords = ['check-in', 'check in', 'checkin'];
-
-        const arrivalIdx = generatedDay.activities.findIndex((a: any) => {
+      if (isFirstDay && generatedDay.activities.length > 0) {
+        const beforeCount = generatedDay.activities.length;
+        generatedDay.activities = generatedDay.activities.filter((a: any) => {
           const t = (a.title || '').toLowerCase();
-          return arrivalKeywords.some(kw => t.includes(kw)) ||
+          const isArrivalActivity =
+            (t.includes('arrival at') && (t.includes('airport') || t.includes('baggage'))) ||
+            t.includes('baggage claim') ||
+            t.includes('airport arrival') ||
+            t.includes('arrive at airport') ||
+            t.includes('land at') ||
             (a.category === 'transport' && t.includes('airport') && !t.includes('transfer'));
+          return !isArrivalActivity;
         });
-        const transferIdx = generatedDay.activities.findIndex((a: any) => {
-          const t = (a.title || '').toLowerCase();
-          return transferKeywords.some(kw => t.includes(kw)) ||
-            (a.category === 'transport' && t.includes('transfer') && t.includes('hotel'));
-        });
-        const checkinIdx = generatedDay.activities.findIndex((a: any) => {
-          const t = (a.title || '').toLowerCase();
-          return checkinKeywords.some(kw => t.includes(kw)) || 
-            (a.category === 'accommodation' && (t.includes('hotel') || t.includes('settle')));
-        });
-
-        // If check-in comes before arrival or transfer, reorder
-        if (checkinIdx >= 0 && arrivalIdx >= 0 && checkinIdx < arrivalIdx) {
-          console.log(`[Stage 2] FIXING: Hotel check-in (idx ${checkinIdx}) before airport arrival (idx ${arrivalIdx}) — reordering`);
-
-          // Collect the arrival-sequence activities
-          const seqItems: Array<{ act: any; type: string }> = [];
-          if (arrivalIdx >= 0) seqItems.push({ act: generatedDay.activities[arrivalIdx], type: 'arrival' });
-          if (transferIdx >= 0) seqItems.push({ act: generatedDay.activities[transferIdx], type: 'transfer' });
-          if (checkinIdx >= 0) seqItems.push({ act: generatedDay.activities[checkinIdx], type: 'checkin' });
-
-          // Remove them (reverse order to preserve indices)
-          const indicesToRemove = [arrivalIdx, transferIdx, checkinIdx].filter(i => i >= 0).sort((a, b) => b - a);
-          for (const idx of indicesToRemove) {
-            generatedDay.activities.splice(idx, 1);
-          }
-
-          // Parse flight arrival time, default 9:00 AM
-          let flightArrivalMins = 540;
-          try {
-            // Try to extract from flightHotelContext
-            const arrivalMatch = flightHotelContext.match(/(?:arrives?|arrival|landing)[^\d]*(\d{1,2}):(\d{2})/i);
-            if (arrivalMatch) {
-              flightArrivalMins = parseInt(arrivalMatch[1]) * 60 + parseInt(arrivalMatch[2]);
-            }
-          } catch { /* use default */ }
-
-          const formatTimeMins = (mins: number) => {
-            const h = Math.floor(mins / 60);
-            const m = mins % 60;
-            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-          };
-
-          // Assign sequential times
-          const orderMap: Record<string, number> = { arrival: 0, transfer: 1, checkin: 2 };
-          const timings: Record<string, { start: number; duration: number }> = {
-            arrival: { start: flightArrivalMins, duration: 30 },
-            transfer: { start: flightArrivalMins + 30, duration: 60 },
-            checkin: { start: flightArrivalMins + 90, duration: 30 },
-          };
-
-          for (const item of seqItems) {
-            const t = timings[item.type];
-            if (t) {
-              item.act.startTime = formatTimeMins(t.start);
-              item.act.endTime = formatTimeMins(t.start + t.duration);
-            }
-          }
-
-          // Sort by order and prepend
-          seqItems.sort((a, b) => (orderMap[a.type] || 0) - (orderMap[b.type] || 0));
-          generatedDay.activities = [...seqItems.map(s => s.act), ...generatedDay.activities];
+        const removed = beforeCount - generatedDay.activities.length;
+        if (removed > 0) {
+          console.log(`[Stage 2] Day 1: Stripped ${removed} arrival/baggage activities (handled by Arrival Game Plan UI)`);
         }
       }
 
@@ -5776,46 +5720,28 @@ If the purpose is a specific event, plan at least ONE full day around that event
           if (combinedIdx !== -1) {
             const combined = day1.activities[combinedIdx];
             const startMin = parseTimeToMinutes(combined.startTime) || 0;
-            const arrivalEnd = minutesToHHMM(startMin + 30);
-            const transferStart = minutesToHHMM(startMin + 45);
-            const transferDuration = 45; // default transfer duration
-            const transferEnd = minutesToHHMM(startMin + 45 + transferDuration);
-            const checkInStart = minutesToHHMM(startMin + 45 + transferDuration + 15);
-            const checkInEnd = minutesToHHMM(startMin + 45 + transferDuration + 45);
+            const checkInStart = minutesToHHMM(startMin);
+            const checkInEnd = minutesToHHMM(startMin + 30);
             
             const hotelN = flightHotelResult?.hotelName || 'Hotel';
             const hotelA = flightHotelResult?.hotelAddress || '';
-            const airportN = flightHotelResult?.arrivalAirport || 'Airport';
             
-            console.log(`[Stage 2.55] Splitting combined arrival block: "${combined.title}" into 2 activities (arrival + check-in)`);
+            console.log(`[Stage 2.55] Replacing combined arrival block: "${combined.title}" with Hotel Check-in only (arrival handled by UI)`);
             
-            const splitActivities = [
-              {
-                ...combined,
-                title: `Arrival at ${airportN}`,
-                description: 'Clear customs/immigration and collect luggage',
-                startTime: combined.startTime,
-                endTime: arrivalEnd,
-                category: 'transport',
-                type: 'transport',
-                location: { name: airportN },
-              },
-              {
-                ...combined,
-                id: `${combined.id}-checkin`,
-                title: 'Hotel Check-in & Refresh',
-                description: 'Check in, freshen up, and get oriented to the area',
-                startTime: checkInStart,
-                endTime: checkInEnd,
-                category: 'accommodation',
-                type: 'accommodation',
-                location: { name: hotelN, address: hotelA },
-              },
-            ];
+            const checkinActivity = {
+              ...combined,
+              title: 'Hotel Check-in & Refresh',
+              description: 'Check in, freshen up, and get oriented to the area',
+              startTime: checkInStart,
+              endTime: checkInEnd,
+              category: 'accommodation',
+              type: 'accommodation',
+              location: { name: hotelN, address: hotelA },
+            };
             
-            day1.activities.splice(combinedIdx, 1, ...splitActivities);
+            day1.activities.splice(combinedIdx, 1, checkinActivity);
             aiResult.days[0] = day1;
-            console.log(`[Stage 2.55] ✓ Split into: Arrival (${combined.startTime}-${arrivalEnd}), Check-in (${checkInStart}-${checkInEnd})`);
+            console.log(`[Stage 2.55] ✓ Replaced with: Check-in (${checkInStart}-${checkInEnd})`);
           }
         }
       }

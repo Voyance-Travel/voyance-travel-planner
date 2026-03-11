@@ -940,9 +940,7 @@ export function buildArrivalDayPrompt(
   // Build required sequence based on what data we have
   const requiredSequence: string[] = [];
   
-  if (flight.hasOutboundFlight) {
-    requiredSequence.push('airport_arrival');
-  }
+  // airport_arrival removed — handled by Arrival Game Plan UI component
   
   if (hotel.hasHotel) {
     requiredSequence.push('hotel_check_in');
@@ -1005,9 +1003,8 @@ export function buildArrivalDayPrompt(
     lines.push(`📋 REQUIRED SEQUENCE (in order)`);
     lines.push(`${'─'.repeat(40)}`);
     const seqLabels: Record<string, string> = {
-      'airport_arrival': '1. Arrival at Airport (category: transport)',
-      'hotel_check_in': '2. Hotel Check-in & Refresh (category: accommodation)',
-      'settle_in_rest': '3. Rest & Refresh (category: downtime)'
+      'hotel_check_in': '1. Hotel Check-in & Refresh (category: accommodation)',
+      'settle_in_rest': '2. Rest & Refresh (category: downtime)'
     };
     for (const step of requiredSequence) {
       lines.push(`   ${seqLabels[step] || step}`);
