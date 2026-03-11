@@ -4975,8 +4975,8 @@ export function EditorialItinerary({
               </div>
             )}
 
-            {/* Unlock Banner - shown for preview itineraries (hidden in manual mode and during generation) */}
-            {effectiveIsPreview && !isActivelyGenerating && (
+             {/* Unlock Banner — hidden in clean preview */}
+             {!isCleanPreview && effectiveIsPreview && !isActivelyGenerating && (
               <div className="mt-4">
                 <UnlockBanner
                   tripId={tripId}
