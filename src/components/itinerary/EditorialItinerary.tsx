@@ -4964,8 +4964,8 @@ export function EditorialItinerary({
               </div>
             )}
             
-            {/* Credit Nudge - inline when credits insufficient (not for preview unlock) */}
-            {creditNudge && creditNudge.action !== 'UNLOCK_DAY' && (
+             {/* Credit Nudge — hidden in clean preview */}
+             {!isCleanPreview && creditNudge && creditNudge.action !== 'UNLOCK_DAY' && (
               <div className="mt-3">
                 <CreditNudge
                   action={creditNudge.action}
