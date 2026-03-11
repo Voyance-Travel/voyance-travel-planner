@@ -175,6 +175,11 @@ export function compileDaySchema(input: CompilerInput): DaySchema {
 }
 
 function determineDayType(input: CompilerInput): DayType {
+  // Check for transition day FIRST (takes priority)
+  if (input.isTransitionDay) {
+    return 'transition';
+  }
+
   // Last day with a departure flight or preferred departure time = departure day
   if (input.dayNumber === input.totalDays) {
     if (input.departureFlight || input.preferredDepartureTime) {
@@ -191,7 +196,6 @@ function determineDayType(input: CompilerInput): DayType {
       if (arrivalHour < 16) return 'midday_arrival';
       return 'latenight_arrival';
     }
-    // No arrival data at all — default to midday arrival (safest default)
     return 'midday_arrival';
   }
 
