@@ -2210,7 +2210,8 @@ export default function TripDetail() {
                   })()}
                   isEditable={true}
                   isPreview={!!(trip.itinerary_data as any)?.isPreview}
-                  creationSource={trip.creation_source}
+                   creationSource={trip.creation_source}
+                   viewMode={viewMode}
                   itineraryStatus={trip.itinerary_status}
                   journeyId={trip.journey_id}
                   journeyName={trip.journey_name}
