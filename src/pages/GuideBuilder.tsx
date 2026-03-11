@@ -275,6 +275,16 @@ export default function GuideBuilder() {
         tags: (existingGuide.tags as string[]) || [],
         tagInput: '',
       });
+      // Load editorial state
+      // @ts-ignore - editorial columns may not be in generated types
+      if (existingGuide.editorial_content && (existingGuide.editorial_version ?? 0) > 0) {
+        // @ts-ignore
+        setEditorialContent(existingGuide.editorial_content as EditorialContent);
+        // @ts-ignore
+        setEditorialVersion(existingGuide.editorial_version || 0);
+        // @ts-ignore
+        setEditorialGeneratedAt(existingGuide.editorial_generated_at || null);
+      }
     } else if (trip && !form.title) {
       const defaultTitle = `${trip.destination} Travel Guide`;
       setForm(prev => ({ ...prev, title: defaultTitle.slice(0, 100) }));
