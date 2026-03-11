@@ -1327,7 +1327,10 @@ export async function recalculateDNAFromPreferences(
       
       await supabase
         .from('profiles')
-        .update({ travel_dna: travelDnaJson as unknown as Json })
+        .update({ 
+          travel_dna: travelDnaJson as unknown as Json,
+          pattern_group: getPatternGroupForArchetype(dna.primary_archetype_name || ''),
+        })
         .eq('id', userId);
     } catch (profileErr) {
       console.error('Error updating profile travel_dna:', profileErr);
