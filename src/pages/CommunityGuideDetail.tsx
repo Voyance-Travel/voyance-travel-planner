@@ -195,6 +195,20 @@ export default function CommunityGuideDetail() {
 
   const dayGroups = useMemo(() => groupByDay(regularActivities), [regularActivities]);
 
+  // Build guide photos map for editorial (activity name lowercase → photo URLs)
+  const guidePhotos = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const a of activities) {
+      const name = (a.name || a.title || '').toLowerCase();
+      if (!name) continue;
+      const urls: string[] = [];
+      if (a.photos) urls.push(...a.photos.map(p => p.url));
+      if (urls.length === 0 && a.image_url) urls.push(a.image_url);
+      if (urls.length > 0) map.set(name, urls);
+    }
+    return map;
+  }, [activities]);
+
   if (isLoading) {
     return (
       <MainLayout>
@@ -243,20 +257,6 @@ export default function CommunityGuideDetail() {
 
   // Check for editorial content
   const hasEditorial = !!(guide!.editorial_content && (guide!.editorial_version ?? 0) > 0);
-
-  // Build guide photos map for editorial (activity name lowercase → photo URLs)
-  const guidePhotos = useMemo(() => {
-    const map = new Map<string, string[]>();
-    for (const a of activities) {
-      const name = (a.name || a.title || '').toLowerCase();
-      if (!name) continue;
-      const urls: string[] = [];
-      if (a.photos) urls.push(...a.photos.map(p => p.url));
-      if (urls.length === 0 && a.image_url) urls.push(a.image_url);
-      if (urls.length > 0) map.set(name, urls);
-    }
-    return map;
-  }, [activities]);
 
   // Editorial view
   if (hasEditorial) {
