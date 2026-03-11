@@ -978,7 +978,7 @@ export default function GuideBuilder() {
         open={editorialPreviewOpen}
         onOpenChange={setEditorialPreviewOpen}
         editorial={editorialContent}
-        authorName={user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'Traveler'}
+        authorName={user?.name || user?.email?.split('@')[0] || 'Traveler'}
         dnaType={travelDna?.primary_archetype_name}
         authorUserId={user?.id || ''}
         tripStartDate={trip?.start_date}
