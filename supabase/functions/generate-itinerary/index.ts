@@ -4118,11 +4118,23 @@ async function verifyTripAccess(
 // =============================================================================
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
-
+  // Global safety net — guarantees CORS headers even on catastrophic errors
   try {
+    if (req.method === 'OPTIONS') {
+      return new Response(null, { headers: corsHeaders });
+    }
+
+    // Extract tripId early for error recovery — peek at the body without consuming it
+    let earlyTripId: string | null = null;
+    try {
+      const peekReq = req.clone();
+      const peekBody = await peekReq.json();
+      earlyTripId = peekBody?.tripId || null;
+    } catch {
+      // Body might not be JSON — that's fine
+    }
+
+    try {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
     if (!LOVABLE_API_KEY) {
