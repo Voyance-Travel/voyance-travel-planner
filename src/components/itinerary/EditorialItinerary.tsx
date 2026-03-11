@@ -4948,8 +4948,9 @@ export function EditorialItinerary({
                           onOptionSelect={(groupKey, selectedId) => {
                             setOptionSelections(prev => ({ ...prev, [groupKey]: selectedId }));
                           }}
-                          compactCards={isManualMode || creationSource === 'smart_finish'}
-                          isPastTrip={isPastTrip}
+                           compactCards={isManualMode || creationSource === 'smart_finish'}
+                           isPastTrip={isPastTrip}
+                           isCleanPreview={isCleanPreview}
                           onRefreshDay={() => handleRefreshDay(selectedDayIndex)}
                           isRefreshingDay={refreshingDayNumber === selectedDay.dayNumber}
                           refreshResult={refreshResults[selectedDay.dayNumber] || null}
