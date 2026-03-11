@@ -177,3 +177,12 @@ Added `SAME_METRO_PAIRS` lookup in `buildTransitionDayPrompt` (prompt-library.ts
 - Photo grids per activity
 - "Custom Tips" section at bottom for non-itinerary recommendations
 - "Voyance Tip" callout for activities without user experience text
+
+---
+
+## Fix 23I: Must-Do Intent Parsing — Split Compound Activities ✅ COMPLETE
+
+### Changes
+1. **`must-do-priorities.ts`** — Added `COMPOUND_CONJUNCTIONS`, `GENERIC_ACTIVITY_KEYWORDS`, `isGenericActivityDescription()` helper. Compound splitting in `parseMustDoInput()` splits "dinner and comedy show" into two items when both sides are generic. Added `isGenericIntent` field to `MustDoPriority` interface, set in `parseItem()`.
+2. **`index.ts`** (Stage 1.999) — Partitions must-dos into specific venues vs generic intents. Generic intents get "AI must suggest specific venues" prompt language instead of "MANDATORY — include exactly as named". Raw text fallback also attempts parsing for generic/specific split.
+3. **`index.ts`** (per-day generation ~line 6732) — Same generic/specific split for per-day raw text fallback.
