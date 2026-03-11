@@ -40,6 +40,8 @@ import heroImage from '@/assets/howitworks-hero.jpg';
 import quizImage from '@/assets/howitworks-quiz.jpg';
 import planImage from '@/assets/howitworks-plan.jpg';
 import itineraryImage from '@/assets/howitworks-itinerary.jpg';
+import liveTripImage from '@/assets/howitworks-livetrip.jpg';
+import communityImage from '@/assets/howitworks-community.jpg';
 
 const promises = [
   { text: 'No credit card to explore', icon: Shield },
