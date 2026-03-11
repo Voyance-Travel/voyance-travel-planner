@@ -1,11 +1,11 @@
 /**
- * Guide Builder Page
- * Compiles guide_favorites + manual entries into a community_guide.
+ * Guide Builder Page — Redesigned
+ * Editable activity cards with experience, rating, photos, recommend toggle.
  * Protected route — requires auth.
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import MainLayout from '@/components/layout/MainLayout';
@@ -20,31 +20,20 @@ import { motion } from 'framer-motion';
 import {
   BookOpen, ArrowLeft, Trash2, Save, Globe, Loader2, MapPin,
   Copy, ExternalLink, EyeOff, PartyPopper, Plus, Eye, Calendar, Clock, Link2,
-  CheckSquare, XSquare,
+  CheckSquare, XSquare, Lightbulb,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import PublishConfirmModal from '@/components/guides/PublishConfirmModal';
-import GuideActivityCard from '@/components/guides/GuideActivityCard';
-import AddRecommendationModal from '@/components/guides/AddRecommendationModal';
+import EditableActivityCard, { type ActivitySectionData } from '@/components/guides/EditableActivityCard';
+import SmartTagSelector from '@/components/guides/SmartTagSelector';
 import AddContentLinkModal from '@/components/guides/AddContentLinkModal';
 import ContentLinkCard from '@/components/guides/ContentLinkCard';
-import GuidePreview from '@/components/guides/GuidePreview';
 import { useGuideContentLinks } from '@/hooks/useGuideContentLinks';
 import {
-  useGuideFavorites,
-  useManualEntries,
   useTripForGuide,
   useExistingGuide,
-  mergeGuideItems,
-  groupByDay,
 } from '@/hooks/useCommunityGuide';
-import {
-  deleteGuideFavorite,
-  deleteManualEntry,
-  updateFavoriteNote,
-  createManualEntry,
-} from '@/services/communityGuidesAPI';
 
 interface GuideFormState {
   title: string;
@@ -60,9 +49,39 @@ export default function GuideBuilder() {
   const queryClient = useQueryClient();
 
   const { data: trip, isLoading: tripLoading } = useTripForGuide(tripId);
-  const { data: favorites = [], isLoading: favsLoading } = useGuideFavorites(tripId);
-  const { data: manualEntries = [], isLoading: manualsLoading } = useManualEntries(tripId);
   const { data: existingGuide, isLoading: guideLoading } = useExistingGuide(tripId);
+
+  // Fetch travel DNA for smart tags
+  const { data: travelDna } = useQuery({
+    queryKey: ['travel-dna-guide', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const { data } = await supabase
+        .from('travel_dna_profiles')
+        .select('primary_archetype_name')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!user?.id,
+  });
+
+  // Fetch existing sections from DB if guide exists
+  const { data: existingSections } = useQuery({
+    queryKey: ['guide-sections-edit', existingGuide?.id],
+    queryFn: async () => {
+      if (!existingGuide?.id) return [];
+      // @ts-ignore - new columns not in generated types yet
+      const { data, error } = await supabase
+        .from('guide_sections')
+        .select('*')
+        .eq('guide_id', existingGuide.id)
+        .order('sort_order', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!existingGuide?.id,
+  });
 
   const [form, setForm] = useState<GuideFormState>({
     title: '',
@@ -73,15 +92,11 @@ export default function GuideBuilder() {
 
   const [publishModalOpen, setPublishModalOpen] = useState(false);
   const [justPublished, setJustPublished] = useState(false);
-  const [addRecModalOpen, setAddRecModalOpen] = useState(false);
-  const [addRecDayNumber, setAddRecDayNumber] = useState(1);
   const [addContentLinkOpen, setAddContentLinkOpen] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
-  const [editNoteValue, setEditNoteValue] = useState('');
   const [selectedDays, setSelectedDays] = useState<Set<number>>(new Set());
   const [excludedActivities, setExcludedActivities] = useState<Set<string>>(new Set());
-  const [sections, setSections] = useState<any[]>([]);
+  const [sections, setSections] = useState<ActivitySectionData[]>([]);
+  const [sectionsLoaded, setSectionsLoaded] = useState(false);
 
   // Content links (only available after guide is saved)
   const { contentLinks, addLink, deleteLink, isAdding: isAddingLink, isDeleting: isDeletingLink } = useGuideContentLinks(existingGuide?.id);
@@ -91,11 +106,9 @@ export default function GuideBuilder() {
     ? `${window.location.origin}/community-guides/${existingGuide.id}`
     : '';
 
-  // Merge favorites + manual entries
-  const allItems = mergeGuideItems(favorites, manualEntries);
-  const dayGroups = groupByDay(allItems);
-  const itemCount = allItems.length;
-  const canPublish = form.title.trim().length > 0 && itemCount >= 3;
+  // Count sections with content for publish check
+  const sectionCount = sections.filter(s => s.sectionType !== 'day_overview').length;
+  const canPublish = form.title.trim().length > 0 && sectionCount >= 3;
 
   // Trip duration
   const durationDays = trip?.start_date && trip?.end_date
@@ -126,6 +139,11 @@ export default function GuideBuilder() {
     d.activities.map((a: any) => ({ id: a.id, name: `Day ${d.dayNumber}: ${a.name}` }))
   );
 
+  // Activity categories for smart tags
+  const activityCategories = tripDays.flatMap((d: any) =>
+    d.activities.map((a: any) => a.category).filter(Boolean)
+  );
+
   // Auto-select all days on load
   useEffect(() => {
     if (tripDays.length > 0 && selectedDays.size === 0) {
@@ -133,25 +151,68 @@ export default function GuideBuilder() {
     }
   }, [tripDays.length]);
 
+  // Load existing sections from DB
+  useEffect(() => {
+    if (existingSections && existingSections.length > 0 && !sectionsLoaded) {
+      const loaded: ActivitySectionData[] = existingSections.map((s: any) => ({
+        id: s.id,
+        sectionType: s.section_type as any,
+        title: s.title || '',
+        body: s.body || '',
+        linkedDayNumber: s.linked_day_number || 0,
+        linkedActivityId: s.linked_activity_id || undefined,
+        activitySnapshot: s.activity_tips ? {
+          tips: s.activity_tips,
+          category: s.activity_category,
+        } : undefined,
+        photoUrl: s.photo_url || undefined,
+        sortOrder: s.sort_order || 0,
+        userExperience: s.user_experience || '',
+        userRating: s.user_rating || null,
+        recommended: s.recommended || null,
+        photos: s.photos || [],
+      }));
+      setSections(loaded);
+      setSectionsLoaded(true);
+    }
+  }, [existingSections, sectionsLoaded]);
+
   // Bulk add selected content to guide sections
   const addSelectedContentToGuide = () => {
-    const newSections: any[] = [];
+    const newSections: ActivitySectionData[] = [];
 
     Array.from(selectedDays).sort((a, b) => a - b).forEach((dayNum) => {
       const day = tripDays.find((d: any) => d.dayNumber === dayNum);
       if (!day) return;
 
-      newSections.push({
-        id: crypto.randomUUID(),
-        sectionType: 'day_overview',
-        title: day.title,
-        body: day.theme || '',
-        linkedDayNumber: dayNum,
-        sortOrder: newSections.length,
-      });
+      // Check if day overview already exists
+      const existsDayOverview = sections.some(
+        s => s.sectionType === 'day_overview' && s.linkedDayNumber === dayNum
+      );
+
+      if (!existsDayOverview) {
+        newSections.push({
+          id: crypto.randomUUID(),
+          sectionType: 'day_overview',
+          title: day.title,
+          body: day.theme || '',
+          linkedDayNumber: dayNum,
+          sortOrder: sections.length + newSections.length,
+          userExperience: '',
+          userRating: null,
+          recommended: null,
+          photos: [],
+        });
+      }
 
       day.activities.forEach((activity: any) => {
         if (excludedActivities.has(activity.id)) return;
+
+        // Check if activity already added
+        const existsActivity = sections.some(
+          s => s.linkedActivityId === activity.id
+        );
+        if (existsActivity) return;
 
         newSections.push({
           id: crypto.randomUUID(),
@@ -162,13 +223,39 @@ export default function GuideBuilder() {
           linkedActivityId: activity.id,
           activitySnapshot: activity,
           photoUrl: activity.photos?.[0] || undefined,
-          sortOrder: newSections.length,
+          sortOrder: sections.length + newSections.length,
+          userExperience: '',
+          userRating: null,
+          recommended: null,
+          photos: [],
         });
       });
     });
 
+    if (newSections.length === 0) {
+      toast.info('All selected activities are already in the guide');
+      return;
+    }
+
     setSections(prev => [...prev, ...newSections]);
     toast.success(`Added ${newSections.length} sections from ${selectedDays.size} day${selectedDays.size !== 1 ? 's' : ''}`);
+  };
+
+  // Add custom tip
+  const addCustomTip = () => {
+    const newSection: ActivitySectionData = {
+      id: crypto.randomUUID(),
+      sectionType: 'custom_tip',
+      title: '',
+      body: '',
+      linkedDayNumber: 0,
+      sortOrder: sections.length,
+      userExperience: '',
+      userRating: null,
+      recommended: null,
+      photos: [],
+    };
+    setSections(prev => [...prev, newSection]);
   };
 
   useEffect(() => {
@@ -185,33 +272,53 @@ export default function GuideBuilder() {
     }
   }, [existingGuide, trip]);
 
+  // Update a section
+  const updateSection = useCallback((updated: ActivitySectionData) => {
+    setSections(prev => prev.map(s => s.id === updated.id ? updated : s));
+  }, []);
+
+  // Delete a section
+  const deleteSection = useCallback((id: string) => {
+    setSections(prev => prev.filter(s => s.id !== id));
+  }, []);
+
   // Save / publish mutation
   const saveMutation = useMutation({
     mutationFn: async (publish: boolean) => {
       if (!tripId || !user) throw new Error('Missing trip or user');
 
-      // Content moderation before publishing
       let finalPublish = publish;
       let finalStatus: string = publish ? 'published' : 'draft';
+      let moderationStatus = 'approved';
 
       if (publish) {
-        const allText = [
+        // Run moderation check
+        const allTexts = [
           form.title,
           form.description,
-          ...sections.map((s: any) => `${s.title || ''} ${s.body || ''}`),
-          ...allItems.map(item => `${item.name || ''} ${item.description || ''} ${item.note || ''}`),
-        ].join(' ');
+          ...sections.map(s => `${s.title || ''} ${s.userExperience || ''} ${s.body || ''}`),
+        ].filter(Boolean);
 
-        const flaggedPatterns = [
-          /\b(hate|kill|murder|terrorist|bomb)\b/i,
-          /\b(porn|xxx|nsfw|nude)\b/i,
-          /\b(scam|phishing|malware)\b/i,
-        ];
+        try {
+          const { data: modResult, error: modError } = await supabase.functions.invoke(
+            'moderate-guide-content',
+            { body: { texts: allTexts } }
+          );
 
-        if (flaggedPatterns.some(p => p.test(allText))) {
-          toast.error('Your guide contains content that needs review. Saved as draft.');
-          finalPublish = false;
-          finalStatus = 'flagged';
+          if (!modError && modResult) {
+            if (!modResult.approved) {
+              toast.error('Your guide contains content that needs review. Saved as draft.');
+              finalPublish = false;
+              finalStatus = 'draft';
+              moderationStatus = 'flagged';
+            } else if (modResult.warnings?.length > 0) {
+              // Warnings — allow but notify
+              modResult.warnings.forEach((w: string) => toast.warning(w, { duration: 6000 }));
+            }
+          }
+        } catch {
+          // If moderation fails, proceed anyway
+          console.warn('Moderation check failed, proceeding');
         }
       }
 
@@ -221,19 +328,23 @@ export default function GuideBuilder() {
         .replace(/^-|-$/g, '')
         .slice(0, 80) + '-' + tripId.slice(0, 8);
 
+      // Build content from sections (for backward compatibility with published view)
       const content = {
-        activities: allItems.map(item => ({
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          category: item.category,
-          image_url: item.image_url,
-          note: item.note,
-          external_url: item.external_url,
-          is_manual: item.type === 'manual',
-          day_number: item.day_number,
-          start_time: item.start_time,
-        })),
+        activities: sections
+          .filter(s => s.sectionType !== 'day_overview')
+          .map(s => ({
+            id: s.linkedActivityId || s.id,
+            name: s.title,
+            description: s.body || s.activitySnapshot?.tips || null,
+            category: s.activitySnapshot?.category || null,
+            image_url: s.photoUrl || (s.photos[0]?.url) || null,
+            note: s.userExperience || null,
+            user_rating: s.userRating,
+            recommended: s.recommended,
+            photos: s.photos,
+            is_manual: s.sectionType === 'custom_tip',
+            day_number: s.linkedDayNumber,
+          })),
       };
 
       const payload = {
@@ -247,22 +358,84 @@ export default function GuideBuilder() {
         content,
         slug,
         status: finalStatus,
+        moderation_status: moderationStatus,
+        cover_image_url: sections.find(s => s.photos.length > 0)?.photos[0]?.url || existingGuide?.cover_image_url || null,
         published_at: finalPublish ? new Date().toISOString() : (existingGuide?.published_at || null),
         updated_at: new Date().toISOString(),
       };
 
+      let guideId: string;
+
       if (existingGuide) {
+        // @ts-ignore - moderation_status not in generated types yet
         const { error } = await supabase.from('community_guides').update(payload).eq('id', existingGuide.id);
         if (error) throw error;
+        guideId = existingGuide.id;
       } else {
-        const { error } = await supabase.from('community_guides').insert(payload);
+        // @ts-ignore - moderation_status not in generated types yet
+        const { data, error } = await supabase.from('community_guides').insert(payload).select('id').single();
         if (error) throw error;
+        guideId = data.id;
       }
+
+      // Save sections to guide_sections table
+      // Delete existing sections and re-insert
+      await supabase.from('guide_sections').delete().eq('guide_id', guideId);
+
+      if (sections.length > 0) {
+        const sectionRows = sections.map((s, idx) => ({
+          guide_id: guideId,
+          section_type: s.sectionType,
+          title: s.title,
+          body: s.body || null,
+          linked_day_number: s.linkedDayNumber || null,
+          linked_activity_id: s.linkedActivityId || null,
+          activity_category: s.activitySnapshot?.category || null,
+          activity_tips: s.activitySnapshot?.tips || null,
+          photo_url: s.photoUrl || null,
+          sort_order: idx,
+          user_experience: s.userExperience || null,
+          user_rating: s.userRating || null,
+          recommended: s.recommended || null,
+          photos: s.photos.length > 0 ? s.photos : [],
+        }));
+
+        // @ts-ignore - new columns
+        const { error: sectError } = await supabase.from('guide_sections').insert(sectionRows);
+        if (sectError) throw sectError;
+      }
+
+      // If publishing, upsert activity reviews for aggregation
+      if (finalPublish && trip?.destination) {
+        const reviews = sections
+          .filter(s => s.sectionType !== 'day_overview' && (s.userRating || s.userExperience || s.recommended))
+          .map(s => ({
+            guide_id: guideId,
+            user_id: user.id,
+            activity_name: s.title,
+            activity_category: s.activitySnapshot?.category || null,
+            destination_city: trip.destination!,
+            rating: s.userRating || null,
+            recommended: s.recommended === 'yes' ? true : s.recommended === 'no' ? false : null,
+            experience_text: s.userExperience || null,
+            photo_count: s.photos.length,
+          }));
+
+        if (reviews.length > 0) {
+          // Delete existing reviews for this guide, then insert
+          // @ts-ignore
+          await supabase.from('guide_activity_reviews').delete().eq('guide_id', guideId);
+          // @ts-ignore
+          await supabase.from('guide_activity_reviews').insert(reviews);
+        }
+      }
+
       return finalPublish;
     },
     onSuccess: (didPublish) => {
       queryClient.invalidateQueries({ queryKey: ['community-guide-trip', tripId] });
       queryClient.invalidateQueries({ queryKey: ['community-guides-published'] });
+      queryClient.invalidateQueries({ queryKey: ['guide-sections-edit'] });
       if (didPublish) {
         setPublishModalOpen(false);
         setJustPublished(true);
@@ -291,7 +464,6 @@ export default function GuideBuilder() {
     onError: () => toast.error('Failed to unpublish'),
   });
 
-  // Delete guide mutation
   const deleteMutation = useMutation({
     mutationFn: async () => {
       if (!existingGuide) throw new Error('No guide to delete');
@@ -308,79 +480,12 @@ export default function GuideBuilder() {
     onError: () => toast.error('Failed to delete guide'),
   });
 
-  // Delete item
-  const handleDelete = useCallback(async (id: string, type: 'favorite' | 'manual') => {
-    try {
-      if (type === 'favorite') {
-        await deleteGuideFavorite(id);
-        queryClient.invalidateQueries({ queryKey: ['guide-favorites-full', tripId] });
-      } else {
-        await deleteManualEntry(id);
-        queryClient.invalidateQueries({ queryKey: ['guide-manual-entries', tripId] });
-      }
-      toast.success('Removed from guide');
-    } catch {
-      toast.error('Failed to remove item');
-    }
-  }, [tripId, queryClient]);
-
-  // Edit note inline
-  const handleStartEditNote = (id: string, currentNote: string | null) => {
-    setEditingNoteId(id);
-    setEditNoteValue(currentNote || '');
-  };
-
-  const handleSaveNote = useCallback(async () => {
-    if (!editingNoteId) return;
-    try {
-      await updateFavoriteNote(editingNoteId, editNoteValue.trim() || null);
-      queryClient.invalidateQueries({ queryKey: ['guide-favorites-full', tripId] });
-      setEditingNoteId(null);
-      toast.success('Note updated');
-    } catch {
-      toast.error('Failed to update note');
-    }
-  }, [editingNoteId, editNoteValue, tripId, queryClient]);
-
-  // Add manual entry
-  const addRecMutation = useMutation({
-    mutationFn: async (entry: {
-      name: string; category: string; description: string; external_url: string; day_number: number;
-    }) => {
-      if (!tripId || !user) throw new Error('Missing data');
-      return createManualEntry({
-        trip_id: tripId,
-        user_id: user.id,
-        name: entry.name,
-        category: entry.category,
-        description: entry.description || null,
-        external_url: entry.external_url || null,
-        day_number: entry.day_number,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['guide-manual-entries', tripId] });
-      setAddRecModalOpen(false);
-      toast.success('Recommendation added!');
-    },
-    onError: () => toast.error('Failed to add recommendation'),
-  });
-
-  // Tags
-  const addTag = () => {
-    const tag = form.tagInput.trim();
-    if (tag && !form.tags.includes(tag) && form.tags.length < 8) {
-      setForm(prev => ({ ...prev, tags: [...prev.tags, tag], tagInput: '' }));
-    }
-  };
-  const removeTag = (tag: string) => setForm(prev => ({ ...prev, tags: prev.tags.filter(t => t !== tag) }));
-
   const copyUrl = () => {
     navigator.clipboard.writeText(guideUrl);
     toast.success('Link copied!');
   };
 
-  const isLoading = tripLoading || favsLoading || manualsLoading || guideLoading;
+  const isLoading = tripLoading || guideLoading;
 
   if (isLoading) {
     return (
@@ -469,45 +574,18 @@ export default function GuideBuilder() {
               Unpublish
             </Button>
           </div>
-            <Button
-              variant="ghost"
-              className="gap-2 text-destructive hover:text-destructive"
-              disabled={deleteMutation.isPending}
-              onClick={() => {
-                if (!confirm('Delete this guide permanently? This cannot be undone.')) return;
-                deleteMutation.mutate();
-              }}
-            >
-              {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-              Delete
-            </Button>
-          </div>
-      </MainLayout>
-    );
-  }
-
-  // ── Preview mode ──
-  if (showPreview) {
-    return (
-      <MainLayout>
-        <Head title={`Preview Guide: ${trip.destination} | Voyance`} />
-        <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
-          <div className="flex items-center justify-between">
-            <Button variant="ghost" size="sm" className="gap-2" onClick={() => setShowPreview(false)}>
-              <ArrowLeft className="h-4 w-4" /> Back to Editor
-            </Button>
-            <Badge variant="secondary" className="gap-1">
-              <Eye className="h-3 w-3" /> Preview
-            </Badge>
-          </div>
-          <GuidePreview
-            title={form.title}
-            description={form.description}
-            destination={trip.destination}
-            destinationCountry={trip.destination_country}
-            tags={form.tags}
-            dayGroups={dayGroups}
-          />
+          <Button
+            variant="ghost"
+            className="gap-2 text-destructive hover:text-destructive"
+            disabled={deleteMutation.isPending}
+            onClick={() => {
+              if (!confirm('Delete this guide permanently? This cannot be undone.')) return;
+              deleteMutation.mutate();
+            }}
+          >
+            {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            Delete
+          </Button>
         </div>
       </MainLayout>
     );
@@ -576,29 +654,18 @@ export default function GuideBuilder() {
             <p className="text-xs text-muted-foreground text-right">{form.description.length}/1000</p>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Tags</label>
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {form.tags.map(tag => (
-                <Badge key={tag} variant="secondary" className="gap-1 text-xs">
-                  {tag}
-                  <button onClick={() => removeTag(tag)} className="hover:text-destructive">
-                    <Trash2 className="h-2.5 w-2.5" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Input
-                value={form.tagInput}
-                onChange={e => setForm(prev => ({ ...prev, tagInput: e.target.value }))}
-                onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                placeholder="Add a tag…"
-                className="text-xs h-8 flex-1"
-              />
-              <Button size="sm" variant="outline" onClick={addTag} className="h-8 text-xs">Add</Button>
-            </div>
-          </div>
+          {/* Smart Tags */}
+          <SmartTagSelector
+            tags={form.tags}
+            tagInput={form.tagInput}
+            onTagsChange={(tags) => setForm(prev => ({ ...prev, tags }))}
+            onTagInputChange={(val) => setForm(prev => ({ ...prev, tagInput: val }))}
+            destination={trip.destination}
+            destinationCountry={trip.destination_country}
+            activityCategories={activityCategories}
+            travelDnaType={travelDna?.primary_archetype_name}
+            travelerCount={trip.travelers as number | null}
+          />
         </div>
 
         {/* Bulk Content Selection from Trip Itinerary */}
@@ -702,121 +769,73 @@ export default function GuideBuilder() {
           </Card>
         )}
 
-        {/* Sections added from bulk selection */}
+        {/* Editable Activity Sections */}
         {sections.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold">
-                Guide Sections ({sections.length})
+                Guide Sections ({sectionCount} activit{sectionCount !== 1 ? 'ies' : 'y'})
               </h2>
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-7 text-xs text-destructive hover:text-destructive gap-1"
-                onClick={() => setSections([])}
+                onClick={() => {
+                  if (!confirm('Clear all sections?')) return;
+                  setSections([]);
+                }}
               >
                 <Trash2 className="h-3 w-3" /> Clear All
               </Button>
             </div>
-            {sections.map((section: any) => (
-              <div key={section.id} className="flex items-start gap-3 p-3 rounded-lg border border-border bg-card">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
-                      {section.sectionType === 'day_overview' ? 'Day' : 'Activity'}
-                    </Badge>
-                    {section.linkedDayNumber && (
-                      <span className="text-[10px] text-muted-foreground">Day {section.linkedDayNumber}</span>
-                    )}
-                  </div>
-                  <p className="text-sm font-medium mt-1 truncate">{section.title}</p>
-                  {section.body && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{section.body}</p>}
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-                  onClick={() => setSections(prev => prev.filter(s => s.id !== section.id))}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            ))}
+
+            <div className="space-y-3">
+              {sections.map((section, i) => (
+                <EditableActivityCard
+                  key={section.id}
+                  section={section}
+                  index={i}
+                  onChange={updateSection}
+                  onDelete={deleteSection}
+                  userId={user?.id || ''}
+                  guideId={existingGuide?.id || 'draft'}
+                />
+              ))}
+            </div>
+
+            {/* Add Custom Tip button */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full gap-1.5"
+              onClick={addCustomTip}
+            >
+              <Lightbulb className="h-3.5 w-3.5" />
+              Add Custom Tip
+            </Button>
           </div>
         )}
 
-        {/* Content grouped by day */}
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold">
-              Guide Content ({itemCount} item{itemCount !== 1 ? 's' : ''})
-            </h2>
+        {sections.length === 0 && (
+          <div className="text-center py-10 border border-dashed border-border rounded-xl">
+            <BookOpen className="h-8 w-8 text-muted-foreground/30 mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">No sections yet</p>
+            <p className="text-xs text-muted-foreground/70 mt-1">
+              Select days above to add activities, or add custom tips.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-4 gap-1.5"
+              onClick={addCustomTip}
+            >
+              <Lightbulb className="h-3.5 w-3.5" />
+              Add Custom Tip
+            </Button>
           </div>
+        )}
 
-          {itemCount === 0 ? (
-            <div className="text-center py-10 border border-dashed border-border rounded-xl">
-              <BookOpen className="h-8 w-8 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">No items yet</p>
-              <p className="text-xs text-muted-foreground/70 mt-1">
-                Bookmark activities from your trip or add personal recommendations.
-              </p>
-              <div className="flex gap-2 justify-center mt-4">
-                <Button variant="outline" size="sm" onClick={() => navigate(`/trip/${tripId}`)}>
-                  Back to Trip
-                </Button>
-                <Button size="sm" onClick={() => { setAddRecDayNumber(1); setAddRecModalOpen(true); }} className="gap-1.5">
-                  <Plus className="h-3.5 w-3.5" /> Add Recommendation
-                </Button>
-              </div>
-            </div>
-          ) : (
-            [...dayGroups.entries()].map(([day, items]) => (
-              <div key={day} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                    <Calendar className="h-3.5 w-3.5" />
-                    {day > 0 ? `Day ${day}` : 'General'}
-                  </h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs gap-1 text-muted-foreground"
-                    onClick={() => { setAddRecDayNumber(day || 1); setAddRecModalOpen(true); }}
-                  >
-                    <Plus className="h-3 w-3" /> Add Rec
-                  </Button>
-                </div>
-
-                {items.map((item, i) => (
-                  editingNoteId === item.id && item.type === 'favorite' ? (
-                    <div key={item.id} className="flex gap-2 p-3 rounded-xl border border-primary/30 bg-card">
-                      <Input
-                        value={editNoteValue}
-                        onChange={e => setEditNoteValue(e.target.value)}
-                        placeholder="Add your note…"
-                        className="text-xs flex-1"
-                        autoFocus
-                        onKeyDown={e => e.key === 'Enter' && handleSaveNote()}
-                      />
-                      <Button size="sm" onClick={handleSaveNote}>Save</Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditingNoteId(null)}>Cancel</Button>
-                    </div>
-                  ) : (
-                    <GuideActivityCard
-                      key={item.id}
-                      item={item}
-                      index={i}
-                      onDelete={handleDelete}
-                      onEditNote={item.type === 'favorite' ? handleStartEditNote : undefined}
-                    />
-                  )
-                ))}
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* ── My Content (content links) ── */}
+        {/* ── Content Links ── */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
@@ -825,7 +844,7 @@ export default function GuideBuilder() {
                 Link Your Content
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Connect your YouTube videos, Instagram posts, and more to this guide
+                Connect your YouTube videos, Instagram posts, and more
               </p>
             </div>
             <Button
@@ -886,14 +905,6 @@ export default function GuideBuilder() {
             Save Draft
           </Button>
           <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => setShowPreview(true)}
-            disabled={itemCount === 0}
-          >
-            <Eye className="h-4 w-4" /> Preview
-          </Button>
-          <Button
             className="gap-2 flex-1 min-w-[140px]"
             disabled={saveMutation.isPending || !canPublish}
             onClick={() => setPublishModalOpen(true)}
@@ -902,9 +913,9 @@ export default function GuideBuilder() {
           </Button>
         </div>
 
-        {!canPublish && itemCount > 0 && itemCount < 3 && (
+        {!canPublish && sectionCount > 0 && sectionCount < 3 && (
           <p className="text-xs text-muted-foreground text-center">
-            You need at least 3 items to publish. Currently: {itemCount}.
+            You need at least 3 activities to publish. Currently: {sectionCount}.
           </p>
         )}
       </div>
@@ -915,15 +926,7 @@ export default function GuideBuilder() {
         onConfirm={() => saveMutation.mutate(true)}
         isPending={saveMutation.isPending}
         title={form.title}
-        itemCount={itemCount}
-      />
-
-      <AddRecommendationModal
-        open={addRecModalOpen}
-        onOpenChange={setAddRecModalOpen}
-        onSubmit={entry => addRecMutation.mutate(entry)}
-        isPending={addRecMutation.isPending}
-        defaultDayNumber={addRecDayNumber}
+        itemCount={sectionCount}
       />
 
       <AddContentLinkModal
@@ -938,8 +941,8 @@ export default function GuideBuilder() {
           }
         }}
         isPending={isAddingLink}
-        dayNumbers={itineraryDayNumbers.length > 0 ? itineraryDayNumbers : [...dayGroups.keys()].filter(d => d > 0).sort()}
-        activities={itineraryActivities.length > 0 ? itineraryActivities : allItems.filter(i => i.id).map(i => ({ id: i.id, name: i.name }))}
+        dayNumbers={itineraryDayNumbers.length > 0 ? itineraryDayNumbers : []}
+        activities={itineraryActivities.length > 0 ? itineraryActivities : []}
       />
     </MainLayout>
   );
