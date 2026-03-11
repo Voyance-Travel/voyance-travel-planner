@@ -8005,6 +8005,9 @@ function DayCard({
                   const travelMeta = (activityToRender as any).__travelMeta;
 
                   if (isTravelSummary && travelMeta) {
+                    // Hide travel summary cards in clean preview
+                    if (isCleanPreview) return null;
+
                     const TransportIcon = travelMeta.transportName?.toLowerCase() === 'flight' ? Plane
                       : travelMeta.transportName?.toLowerCase() === 'train' ? Train
                       : travelMeta.transportName?.toLowerCase() === 'bus' ? Bus
@@ -8014,56 +8017,7 @@ function DayCard({
                     return (
                       <div className="px-2 sm:px-0 py-2">
                         <div className="rounded-xl border-2 border-dashed border-primary/20 bg-primary/[0.03] overflow-hidden relative group/travel">
-                          <div className="flex items-center gap-3 px-4 py-3">
-                            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10 shrink-0">
-                              <TransportIcon className="w-4.5 h-4.5 text-primary" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-foreground">
-                                {travelMeta.from} → {travelMeta.to}
-                              </p>
-                              <p className="text-xs text-muted-foreground truncate">
-                                {[
-                                  travelMeta.transportName,
-                                  travelMeta.carrier,
-                                  travelMeta.flightNum,
-                                  travelMeta.depTime && travelMeta.arrTime
-                                    ? `${travelMeta.depTime} – ${travelMeta.arrTime}`
-                                    : travelMeta.depTime ? `Departs ${travelMeta.depTime}`
-                                    : travelMeta.arrTime ? `Arrives ${travelMeta.arrTime}` : '',
-                                  travelMeta.dur,
-                                ].filter(Boolean).join(' · ')}
-                              </p>
-                            </div>
-                            {travelMeta.price != null && (
-                              <span className="text-xs font-medium text-muted-foreground shrink-0">
-                                {travelMeta.currency === 'USD' ? '$' : travelMeta.currency}{travelMeta.price}
-                              </span>
-                            )}
-                            {/* Action menu for travel summary */}
-                            {isEditable && (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <button className="min-w-[36px] min-h-[36px] flex items-center justify-center text-foreground/60 hover:text-foreground hover:bg-muted rounded-full transition-colors sm:opacity-0 sm:group-hover/travel:opacity-100 shrink-0 touch-manipulation">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-36">
-                                  <DropdownMenuItem onClick={() => onActivityRemove(dayIndex, activityToRender.id)} className="text-destructive text-xs cursor-pointer gap-2">
-                                    <Trash2 className="h-3 w-3" />
-                                    Remove
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
-                          </div>
-                          {/* Expandable details */}
-                          {(travelMeta.seatInfo || travelMeta.bookingRef) && (
-                            <div className="px-4 pb-3 pt-0 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground border-t border-primary/10 mt-0 pt-2">
-                              {travelMeta.seatInfo && <span>Seat: {travelMeta.seatInfo}</span>}
-                              {travelMeta.bookingRef && <span>Ref: {travelMeta.bookingRef}</span>}
-                            </div>
-                          )}
+...
                         </div>
                       </div>
                     );
