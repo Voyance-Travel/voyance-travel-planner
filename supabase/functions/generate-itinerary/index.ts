@@ -5720,46 +5720,28 @@ If the purpose is a specific event, plan at least ONE full day around that event
           if (combinedIdx !== -1) {
             const combined = day1.activities[combinedIdx];
             const startMin = parseTimeToMinutes(combined.startTime) || 0;
-            const arrivalEnd = minutesToHHMM(startMin + 30);
-            const transferStart = minutesToHHMM(startMin + 45);
-            const transferDuration = 45; // default transfer duration
-            const transferEnd = minutesToHHMM(startMin + 45 + transferDuration);
-            const checkInStart = minutesToHHMM(startMin + 45 + transferDuration + 15);
-            const checkInEnd = minutesToHHMM(startMin + 45 + transferDuration + 45);
+            const checkInStart = minutesToHHMM(startMin);
+            const checkInEnd = minutesToHHMM(startMin + 30);
             
             const hotelN = flightHotelResult?.hotelName || 'Hotel';
             const hotelA = flightHotelResult?.hotelAddress || '';
-            const airportN = flightHotelResult?.arrivalAirport || 'Airport';
             
-            console.log(`[Stage 2.55] Splitting combined arrival block: "${combined.title}" into 2 activities (arrival + check-in)`);
+            console.log(`[Stage 2.55] Replacing combined arrival block: "${combined.title}" with Hotel Check-in only (arrival handled by UI)`);
             
-            const splitActivities = [
-              {
-                ...combined,
-                title: `Arrival at ${airportN}`,
-                description: 'Clear customs/immigration and collect luggage',
-                startTime: combined.startTime,
-                endTime: arrivalEnd,
-                category: 'transport',
-                type: 'transport',
-                location: { name: airportN },
-              },
-              {
-                ...combined,
-                id: `${combined.id}-checkin`,
-                title: 'Hotel Check-in & Refresh',
-                description: 'Check in, freshen up, and get oriented to the area',
-                startTime: checkInStart,
-                endTime: checkInEnd,
-                category: 'accommodation',
-                type: 'accommodation',
-                location: { name: hotelN, address: hotelA },
-              },
-            ];
+            const checkinActivity = {
+              ...combined,
+              title: 'Hotel Check-in & Refresh',
+              description: 'Check in, freshen up, and get oriented to the area',
+              startTime: checkInStart,
+              endTime: checkInEnd,
+              category: 'accommodation',
+              type: 'accommodation',
+              location: { name: hotelN, address: hotelA },
+            };
             
-            day1.activities.splice(combinedIdx, 1, ...splitActivities);
+            day1.activities.splice(combinedIdx, 1, checkinActivity);
             aiResult.days[0] = day1;
-            console.log(`[Stage 2.55] ✓ Split into: Arrival (${combined.startTime}-${arrivalEnd}), Check-in (${checkInStart}-${checkInEnd})`);
+            console.log(`[Stage 2.55] ✓ Replaced with: Check-in (${checkInStart}-${checkInEnd})`);
           }
         }
       }
