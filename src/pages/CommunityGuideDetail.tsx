@@ -451,7 +451,7 @@ function ActivityBlogCard({ activity }: { activity: Activity }) {
                 photos.length === 1 ? 'aspect-video' : 'aspect-square'
               }`}
             >
-              <img
+              <SafeImage
                 src={photo.url}
                 alt={photo.caption || `${name} photo ${i + 1}`}
                 className="w-full h-full object-cover"
