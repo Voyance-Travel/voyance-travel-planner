@@ -21,6 +21,7 @@ import { applyDnaModifiers } from './dna-modifiers.ts';
 import { fillFlightAndHotelSlots } from './constraint-filler.ts';
 import { fillMustDoSlots, type MustDoInput } from './must-do-filler.ts';
 import { fillPreBookedSlots } from './prebooked-filler.ts';
+import { fillKeptActivities } from './keep-activities-filler.ts';
 import { resolveConflicts } from './conflict-resolver.ts';
 import { applyPacingOverride } from './pacing-override.ts';
 
