@@ -8655,6 +8655,82 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
         }
 
         // =======================================================================
+        // STEP: BUFFER ENFORCEMENT BETWEEN ACTIVITIES (Fix 23F)
+        // Ensures minimum transition time between consecutive activities
+        // =======================================================================
+        try {
+          const TRANSPORT_CATS = ['transport', 'transit', 'transfer', 'taxi', 'commute'];
+
+          const isTransportAct = (act: any) => {
+            const cat = (act.category || '').toLowerCase();
+            const title = (act.title || '').toLowerCase();
+            return TRANSPORT_CATS.some(t => cat.includes(t) || title.includes(t));
+          };
+
+          const sameLocationCheck = (a: any, b: any) => {
+            if (!a.location || !b.location) return false;
+            const locA = (typeof a.location === 'string' ? a.location : a.location?.name || '').toLowerCase();
+            const locB = (typeof b.location === 'string' ? b.location : b.location?.name || '').toLowerCase();
+            if (!locA || !locB) return false;
+            return locA === locB || locA.includes(locB) || locB.includes(locA);
+          };
+
+          const bufferMins = 15; // minimum buffer between activities
+          const sorted = [...normalizedActivities].sort((a: any, b: any) => {
+            const aM = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
+            const bM = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
+            return aM - bM;
+          });
+
+          let bufferFixes = 0;
+          for (let i = 0; i < sorted.length - 1; i++) {
+            const current = sorted[i];
+            const next = sorted[i + 1];
+
+            if (isTransportAct(current) || isTransportAct(next)) continue;
+            if (sameLocationCheck(current, next)) continue;
+
+            const currentEndMins = parseTimeToMinutes(current.endTime || current.startTime || '00:00');
+            const nextStartMins = parseTimeToMinutes(next.startTime || '00:00');
+            if (currentEndMins === null || nextStartMins === null) continue;
+
+            const gap = nextStartMins - currentEndMins;
+            if (gap >= bufferMins) continue;
+
+            const isNextLocked = next.isLocked || next.isMustDo;
+            const isCurrentLocked = current.isLocked || current.isMustDo;
+
+            if (isNextLocked && !isCurrentLocked) {
+              // Shorten current to create buffer
+              const newEndMins = nextStartMins - bufferMins;
+              const currentStartMins = parseTimeToMinutes(current.startTime || '00:00') ?? 0;
+              if (newEndMins > currentStartMins + 15) {
+                current.endTime = minutesToTime(newEndMins);
+                current.duration = `${newEndMins - currentStartMins} minutes`;
+                bufferFixes++;
+              }
+            } else if (!isNextLocked) {
+              // Shift next forward
+              const newStart = currentEndMins + bufferMins;
+              const oldEnd = parseTimeToMinutes(next.endTime || '00:00');
+              const dur = oldEnd !== null ? oldEnd - nextStartMins : 0;
+              next.startTime = minutesToTime(newStart);
+              if (next.endTime && dur > 0) {
+                next.endTime = minutesToTime(newStart + dur);
+              }
+              bufferFixes++;
+            }
+          }
+
+          if (bufferFixes > 0) {
+            console.log(`[buffer-enforcement] Fixed ${bufferFixes} activities with insufficient buffer time`);
+          }
+          normalizedActivities = sorted;
+        } catch (bufferErr) {
+          console.warn(`[buffer-enforcement] Non-critical error, skipping:`, bufferErr);
+        }
+
+        // =======================================================================
         // STEP: ENRICH NEW ACTIVITIES (ratings, photos, coordinates)
         // This ensures regenerated activities have the same rich data as initial generation
         // =======================================================================
