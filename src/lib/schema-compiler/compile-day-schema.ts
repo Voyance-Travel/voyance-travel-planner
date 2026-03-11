@@ -123,6 +123,22 @@ export interface CompilerInput {
 
   /** User-selected pacing override (handled in Fix 22H). */
   pacingOverride?: 'relaxed' | 'balanced' | 'packed';
+
+  /** Gap 9: Multi-city trip data */
+  isMultiCity?: boolean;
+  isTransitionDay?: boolean;
+  transitionFrom?: string;
+  transitionTo?: string;
+  transitionMode?: 'flight' | 'train' | 'drive' | 'ferry';
+  transitionDepartureTime?: string;
+  transitionArrivalTime?: string;
+
+  /** Hotel in the new city (for transition days) */
+  destinationHotel?: {
+    name: string;
+    address: string;
+    checkInTime?: string;
+  };
 }
 
 /**
