@@ -7989,6 +7989,9 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
       let finalSystemPrompt = systemPrompt;
       let finalUserPrompt = userPrompt;
+      let compiledSchema: any = null;
+      let compileStart: number = 0;
+      let compileMs: number = 0;
 
       if (USE_SCHEMA_GENERATION) {
         // NEW PATH — Schema-driven generation (Fix 22G wiring)
