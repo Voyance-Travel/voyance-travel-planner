@@ -3938,8 +3938,8 @@ export function EditorialItinerary({
             exit={{ opacity: 0 }}
             className="space-y-6"
           >
-            {/* Smart Finish Banner — DNA gap analysis for manual trips */}
-            {isManualMode && !isPastTrip && (
+             {/* Smart Finish Banner — DNA gap analysis for manual trips — hidden in clean preview */}
+             {!isCleanPreview && isManualMode && !isPastTrip && (
               <SmartFinishBanner
                 tripId={tripId}
                 isManualMode={isManualMode}
