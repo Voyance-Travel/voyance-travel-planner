@@ -227,8 +227,13 @@ function buildUserPrompt(schema: DaySchema): string {
   const lines: string[] = [];
 
   lines.push(`Fill this schema for Day ${schema.dayNumber} in ${schema.destination} on ${schema.date}.`);
+
+  if (schema.dayType === 'transition') {
+    lines.push('');
+    lines.push('NOTE: This is a TRANSITION DAY between two cities. The morning takes place in the origin city and the evening takes place in the destination city. Recommendations must be geographically appropriate for each part of the day.');
+  }
+
   lines.push('');
-  lines.push('SCHEMA:');
   lines.push('');
 
   for (const slot of schema.slots) {

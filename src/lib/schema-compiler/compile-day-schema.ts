@@ -123,6 +123,22 @@ export interface CompilerInput {
 
   /** User-selected pacing override (handled in Fix 22H). */
   pacingOverride?: 'relaxed' | 'balanced' | 'packed';
+
+  /** Gap 9: Multi-city trip data */
+  isMultiCity?: boolean;
+  isTransitionDay?: boolean;
+  transitionFrom?: string;
+  transitionTo?: string;
+  transitionMode?: 'flight' | 'train' | 'drive' | 'ferry';
+  transitionDepartureTime?: string;
+  transitionArrivalTime?: string;
+
+  /** Hotel in the new city (for transition days) */
+  destinationHotel?: {
+    name: string;
+    address: string;
+    checkInTime?: string;
+  };
 }
 
 /**
@@ -204,6 +220,11 @@ export function compileDaySchema(input: CompilerInput): DaySchema {
  * Step 1: Determine what type of day this is.
  */
 function determineDayType(input: CompilerInput): DayType {
+  // Check for transition day FIRST (takes priority)
+  if (input.isTransitionDay) {
+    return 'transition';
+  }
+
   // Last day with a departure flight or preferred departure time = departure day
   if (input.dayNumber === input.totalDays) {
     if (input.departureFlight || input.preferredDepartureTime) {
@@ -220,11 +241,9 @@ function determineDayType(input: CompilerInput): DayType {
       if (arrivalHour < 16) return 'midday_arrival';
       return 'latenight_arrival';
     }
-    // No arrival data at all — default to midday arrival (safest default)
     return 'midday_arrival';
   }
 
-  // Everything else = standard day
   return 'standard';
 }
 

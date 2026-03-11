@@ -19,6 +19,8 @@ export function buildBaseSkeleton(dayType: DayType): DaySlot[] {
       return buildStandardDaySkeleton();
     case 'departure':
       return buildDepartureDaySkeleton();
+    case 'transition':
+      return buildTransitionDaySkeleton();
     default:
       return buildStandardDaySkeleton();
   }
@@ -106,5 +108,69 @@ function buildDepartureDaySkeleton(): DaySlot[] {
     makeSlot(4, d, { slotType: 'meal', mealType: 'lunch', required: false, timeWindow: { earliest: '11:30', latest: '14:00', duration: { min: 45, max: 75 } }, aiInstruction: 'Find a lunch spot if there is time before heading to the airport.' }),
     makeSlot(5, d, { slotType: 'transport', status: 'empty', required: true, aiInstruction: 'Transport from last activity to airport' }),
     makeSlot(6, d, { slotType: 'departure', status: 'empty', required: true }),
+  ];
+}
+
+function buildTransitionDaySkeleton(): DaySlot[] {
+  const d = 'transition';
+  return [
+    makeSlot(0, d, {
+      slotType: 'meal',
+      mealType: 'breakfast',
+      required: true,
+      timeWindow: { earliest: '07:00', latest: '10:00', duration: { min: 30, max: 60 } },
+      aiInstruction: 'Find a breakfast spot in the ORIGIN city before departure.',
+    }),
+    makeSlot(1, d, {
+      slotType: 'hotel_checkout',
+      status: 'empty',
+      required: true,
+    }),
+    makeSlot(2, d, {
+      slotType: 'activity',
+      required: false,
+      aiInstruction: 'Find a quick morning activity in the ORIGIN city, if time allows before transit departure.',
+    }),
+    makeSlot(3, d, {
+      slotType: 'transport',
+      status: 'empty',
+      required: true,
+      aiInstruction: 'Transport from hotel/activity to transit hub in ORIGIN city.',
+    }),
+    makeSlot(4, d, {
+      slotType: 'transport',
+      status: 'empty',
+      required: true,
+      aiInstruction: 'Inter-city transit. This is the main travel segment between cities.',
+    }),
+    makeSlot(5, d, {
+      slotType: 'transport',
+      status: 'empty',
+      required: true,
+      aiInstruction: 'Transport from transit hub to hotel in DESTINATION city.',
+    }),
+    makeSlot(6, d, {
+      slotType: 'hotel_checkin',
+      status: 'empty',
+      required: true,
+    }),
+    makeSlot(7, d, {
+      slotType: 'activity',
+      required: false,
+      aiInstruction: 'Find an afternoon/evening activity in the DESTINATION city near the hotel.',
+    }),
+    makeSlot(8, d, {
+      slotType: 'meal',
+      mealType: 'dinner',
+      required: true,
+      timeWindow: { earliest: '18:30', latest: '21:00', duration: { min: 45, max: 75 } },
+      aiInstruction: 'Find a dinner spot in the DESTINATION city. The traveler just arrived — a neighborhood restaurant near the hotel works well.',
+    }),
+    makeSlot(9, d, {
+      slotType: 'evening',
+      required: false,
+      timeWindow: { earliest: '20:00', latest: '23:00', duration: { min: 60, max: 120 } },
+      aiInstruction: 'Optional evening activity in the DESTINATION city. Keep it easy — it was a travel day.',
+    }),
   ];
 }

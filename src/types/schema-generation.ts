@@ -19,7 +19,8 @@ export type DayType =
   | 'midday_arrival'
   | 'latenight_arrival'
   | 'standard'
-  | 'departure';
+  | 'departure'
+  | 'transition';
 
 export type PatternGroup = 'packed' | 'social' | 'balanced' | 'indulgent' | 'gentle';
 
