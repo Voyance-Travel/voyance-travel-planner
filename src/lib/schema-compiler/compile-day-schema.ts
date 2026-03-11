@@ -27,6 +27,7 @@ import { applyDnaModifiers } from './dna-modifiers';
 import { fillFlightAndHotelSlots } from './constraint-filler';
 import { fillMustDoSlots, type MustDoInput } from './must-do-filler';
 import { fillPreBookedSlots } from './prebooked-filler';
+import { fillKeptActivities } from './keep-activities-filler';
 import { resolveConflicts } from './conflict-resolver';
 import { applyPacingOverride } from './pacing-override';
 
@@ -139,6 +140,22 @@ export interface CompilerInput {
     address: string;
     checkInTime?: string;
   };
+
+  /** Gap 12: Activities to preserve during regeneration.
+   *  These are existing activities the user chose to keep.
+   *  They get pre-filled into schema slots as locked entries. */
+  keepActivities?: {
+    title: string;
+    startTime: string;
+    endTime: string;
+    category: string;
+    location?: string;
+    cost?: number;
+    bookingRequired?: boolean;
+    personalization?: string;
+    tips?: string;
+    suggestedFor?: string;
+  }[];
 }
 
 /**
@@ -187,6 +204,11 @@ export function compileDaySchema(input: CompilerInput): DaySchema {
   // Step 5c: Fill pre-booked commitments (reservations, shows, tours)
   if (input.preBookedCommitments && input.preBookedCommitments.length > 0) {
     filledSlots = fillPreBookedSlots(filledSlots, input.preBookedCommitments, input.hotel?.address);
+  }
+
+  // Step 5d: Fill kept activities (from partial regeneration)
+  if (input.keepActivities && input.keepActivities.length > 0) {
+    filledSlots = fillKeptActivities(filledSlots, input.keepActivities);
   }
 
   // Step 6: Resolve conflicts
