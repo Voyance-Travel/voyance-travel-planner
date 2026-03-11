@@ -20,7 +20,11 @@ import CreatorCard from '@/components/guides/CreatorCard';
 import ReportGuideModal from '@/components/guides/ReportGuideModal';
 import CreatorContentSection from '@/components/guides/CreatorContentSection';
 import EditorialRenderer from '@/components/guides/EditorialRenderer';
+import EditorialShareSection from '@/components/guides/EditorialShareSection';
+import MobileStickyShareBar from '@/components/guides/MobileStickyShareBar';
+import EditorialArticleSchema from '@/components/guides/EditorialArticleSchema';
 import type { EditorialContent } from '@/types/editorial';
+import { getAppUrl } from '@/utils/getAppUrl';
 
 const GuideTripMap = lazy(() => import('@/components/guides/GuideTripMap'));
 
@@ -261,9 +265,25 @@ export default function CommunityGuideDetail() {
   // Editorial view
   if (hasEditorial) {
     const editorial = guide!.editorial_content as unknown as EditorialContent;
+    const editorialOgTitle = editorial.title;
+    const editorialOgDesc = editorial.lede;
+    const guideUrl = `${getAppUrl()}/community-guides/${guide!.id}`;
+
     return (
       <MainLayout>
-        <Head title={ogTitle} description={ogDesc} ogImage={heroImage} />
+        <Head
+          title={`${editorial.title} | Voyance`}
+          description={editorialOgDesc}
+          ogImage={heroImage}
+        />
+        <EditorialArticleSchema
+          title={editorialOgTitle}
+          description={editorialOgDesc}
+          imageUrl={heroImage}
+          authorName={authorInfo?.name || 'Traveler'}
+          datePublished={guide!.published_at}
+          guideUrl={guideUrl}
+        />
         <EditorialRenderer
           editorial={editorial}
           authorName={authorInfo?.name || 'Traveler'}
@@ -277,13 +297,19 @@ export default function CommunityGuideDetail() {
           guidePhotos={guidePhotos}
         />
 
-        {/* Share / Report / Delete section */}
-        <div className="max-w-3xl mx-auto px-4 pb-12 space-y-4">
-          <div className="flex justify-center gap-4">
+        {/* Share + Save + Report + Delete */}
+        <div className="max-w-3xl mx-auto px-4 pb-16 md:pb-12">
+          <EditorialShareSection
+            guideId={guide!.id}
+            editorialTitle={editorial.title}
+          />
+
+          <div className="mt-6 flex justify-center gap-4">
             <ReportGuideModal guideId={guide!.id} />
           </div>
+
           {currentUserId && guide!.user_id === currentUserId && (
-            <div className="flex justify-center">
+            <div className="flex justify-center mt-4">
               <Button
                 variant="destructive"
                 size="sm"
@@ -310,6 +336,12 @@ export default function CommunityGuideDetail() {
             </div>
           )}
         </div>
+
+        {/* Mobile sticky share bar */}
+        <MobileStickyShareBar
+          guideId={guide!.id}
+          editorialTitle={editorial.title}
+        />
       </MainLayout>
     );
   }

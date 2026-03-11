@@ -577,3 +577,11 @@ html.a11y-no-color-only [data-state="checked"] {
   0%, 100% { box-shadow: 0 1px 4px hsla(var(--primary) / 0.04); }
   50% { box-shadow: 0 2px 16px hsla(var(--primary) / 0.12); }
 }
+
+/* Print styles for editorial guides */
+@media print {
+  nav, footer, .share-section, .sticky-mobile-bar { display: none !important; }
+  .editorial-column { max-width: 100% !important; }
+  img { break-inside: avoid; }
+  blockquote { break-inside: avoid; }
+}

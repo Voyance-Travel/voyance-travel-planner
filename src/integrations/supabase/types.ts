@@ -5339,6 +5339,35 @@ export type Database = {
         }
         Relationships: []
       }
+      saved_guides: {
+        Row: {
+          created_at: string
+          guide_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          guide_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          guide_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_guides_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "community_guides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       saved_items: {
         Row: {
           created_at: string
