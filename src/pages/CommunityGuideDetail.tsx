@@ -241,6 +241,81 @@ export default function CommunityGuideDetail() {
   const ogDesc =
     guide!.description || `A community travel guide for ${guide!.destination || 'an amazing destination'}.`;
 
+  // Check for editorial content
+  const hasEditorial = !!(guide!.editorial_content && (guide!.editorial_version ?? 0) > 0);
+
+  // Build guide photos map for editorial (activity name lowercase → photo URLs)
+  const guidePhotos = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const a of activities) {
+      const name = (a.name || a.title || '').toLowerCase();
+      if (!name) continue;
+      const urls: string[] = [];
+      if (a.photos) urls.push(...a.photos.map(p => p.url));
+      if (urls.length === 0 && a.image_url) urls.push(a.image_url);
+      if (urls.length > 0) map.set(name, urls);
+    }
+    return map;
+  }, [activities]);
+
+  // Editorial view
+  if (hasEditorial) {
+    const editorial = guide!.editorial_content as unknown as EditorialContent;
+    return (
+      <MainLayout>
+        <Head title={ogTitle} description={ogDesc} ogImage={heroImage} />
+        <EditorialRenderer
+          editorial={editorial}
+          authorName={authorInfo?.name || 'Traveler'}
+          dnaType={authorInfo?.dnaType}
+          authorAvatarUrl={authorInfo?.avatarUrl}
+          authorUserId={guide!.user_id}
+          tripStartDate={tripInfo?.start_date}
+          tripEndDate={tripInfo?.end_date}
+          durationDays={durationDays}
+          coverImageUrl={heroImage}
+          guidePhotos={guidePhotos}
+        />
+
+        {/* Share / Report / Delete section */}
+        <div className="max-w-3xl mx-auto px-4 pb-12 space-y-4">
+          <div className="flex justify-center gap-4">
+            <ReportGuideModal guideId={guide!.id} />
+          </div>
+          {currentUserId && guide!.user_id === currentUserId && (
+            <div className="flex justify-center">
+              <Button
+                variant="destructive"
+                size="sm"
+                className="gap-2"
+                disabled={deleting}
+                onClick={async () => {
+                  if (!confirm('Delete this guide? This cannot be undone.')) return;
+                  setDeleting(true);
+                  try {
+                    await supabase.from('guide_sections').delete().eq('guide_id', guide!.id);
+                    const { error } = await supabase.from('community_guides').delete().eq('id', guide!.id);
+                    if (error) throw error;
+                    toast.success('Guide deleted');
+                    navigate('/guides?tab=community');
+                  } catch {
+                    toast.error('Failed to delete guide');
+                    setDeleting(false);
+                  }
+                }}
+              >
+                {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                Delete Guide
+              </Button>
+            </div>
+          )}
+        </div>
+      </MainLayout>
+    );
+  }
+
+  // Card-based view (existing)
+
   return (
     <MainLayout>
       <Head
