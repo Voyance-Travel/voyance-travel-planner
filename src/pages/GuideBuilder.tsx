@@ -912,6 +912,20 @@ export default function GuideBuilder() {
           )}
         </div>
 
+        {/* Editorial Status Card */}
+        <EditorialStatusCard
+          sections={sections}
+          guideId={existingGuide?.id}
+          editorialVersion={editorialVersion}
+          editorialGeneratedAt={editorialGeneratedAt}
+          onEditorialGenerated={(editorial, version) => {
+            setEditorialContent(editorial);
+            setEditorialVersion(version);
+            setEditorialGeneratedAt(new Date().toISOString());
+            setEditorialPreviewOpen(true);
+          }}
+        />
+
         {/* Actions */}
         <div className="flex flex-wrap gap-3 pt-4 border-t border-border">
           <Button
@@ -924,13 +938,25 @@ export default function GuideBuilder() {
             Save Draft
           </Button>
           <Button
+            variant="secondary"
             className="gap-2 flex-1 min-w-[140px]"
             disabled={saveMutation.isPending || !canPublish}
             onClick={() => setPublishModalOpen(true)}
           >
-            <Globe className="h-4 w-4" /> Publish Guide
+            <Globe className="h-4 w-4" /> Publish as Card Guide
           </Button>
         </div>
+
+        {/* Preview editorial button (if editorial exists) */}
+        {editorialContent && (
+          <Button
+            variant="outline"
+            className="gap-2 w-full"
+            onClick={() => setEditorialPreviewOpen(true)}
+          >
+            <Eye className="h-4 w-4" /> Preview Editorial
+          </Button>
+        )}
 
         {!canPublish && sectionCount > 0 && sectionCount < 3 && (
           <p className="text-xs text-muted-foreground text-center">
@@ -946,6 +972,52 @@ export default function GuideBuilder() {
         isPending={saveMutation.isPending}
         title={form.title}
         itemCount={sectionCount}
+      />
+
+      <EditorialPreviewModal
+        open={editorialPreviewOpen}
+        onOpenChange={setEditorialPreviewOpen}
+        editorial={editorialContent}
+        authorName={user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'Traveler'}
+        dnaType={travelDna?.primary_archetype_name}
+        authorUserId={user?.id || ''}
+        tripStartDate={trip?.start_date}
+        tripEndDate={trip?.end_date}
+        durationDays={durationDays}
+        coverImageUrl={sections.find(s => s.photos.length > 0)?.photos[0]?.url || existingGuide?.cover_image_url}
+        isPublishing={editorialPublishing}
+        isRegenerating={editorialRegenerating}
+        onPublish={async () => {
+          setEditorialPublishing(true);
+          try {
+            await saveMutation.mutateAsync(true);
+            setEditorialPreviewOpen(false);
+            navigate(`/community-guides/${existingGuide?.id}`);
+          } catch {
+            // error handled by mutation
+          } finally {
+            setEditorialPublishing(false);
+          }
+        }}
+        onRegenerate={async () => {
+          if (!existingGuide?.id) return;
+          setEditorialRegenerating(true);
+          try {
+            const { data, error } = await supabase.functions.invoke('generate-guide-editorial', {
+              body: { guideId: existingGuide.id },
+            });
+            if (error) throw error;
+            if (data?.error) throw new Error(data.error);
+            setEditorialContent(data.editorial as EditorialContent);
+            setEditorialVersion(data.version);
+            setEditorialGeneratedAt(new Date().toISOString());
+            toast.success('Editorial regenerated!');
+          } catch (err: any) {
+            toast.error(err?.message || 'Failed to regenerate editorial');
+          } finally {
+            setEditorialRegenerating(false);
+          }
+        }}
       />
 
       <AddContentLinkModal
