@@ -195,13 +195,22 @@ const KNOWN_LANDMARKS: Record<string, {
 // =============================================================================
 // EXPLICIT TIME EXTRACTION
 // =============================================================================
+/**
+ * Normalize natural language time words to numeric equivalents for regex parsing.
+ */
+function normalizeTimeText(text: string): string {
+  return text
+    .replace(/\bnoon\b/gi, '12:00pm')
+    .replace(/\bmidday\b/gi, '12:00pm')
+    .replace(/\bmidnight\b/gi, '12:00am');
+}
 
 /**
- * Extract explicit time range from user text like "9am-5pm", "9:00 AM to 5:00 PM", "12pm–4pm"
+ * Extract explicit time range from user text like "9am-5pm", "9:00 AM to 5:00 PM", "12pm–4pm", "Noon-4:30pm"
  * Returns null if no explicit time range found.
  */
 function extractExplicitTimeRange(text: string): { startTime: string; endTime: string } | null {
-  const lower = text.toLowerCase();
+  const lower = normalizeTimeText(text).toLowerCase();
 
   // Match patterns: "9am-5pm", "9:00am-5:00pm", "9 am - 5 pm", "9:00 AM to 5:00 PM", "12pm–4pm"
   const timeRangePattern = /(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*(?:[-–—]|to)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i;
@@ -403,6 +412,11 @@ function parseItem(item: string, destination: string): MustDoPriority | null {
     .replace(/\s*\([^)]*\)\s*/g, ' ')
     .replace(/\bday\s+\d+\b/gi, '')  // Strip "Day 1", "Day 2", etc.
     .replace(/\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*(?:[-–—]|to)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)/gi, '')  // Strip "9am-5pm" time ranges
+    .replace(/\bnoon\s*(?:[-–—]|to)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)/gi, '')  // Strip "noon-4:30pm"
+    .replace(/\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*(?:[-–—]|to)\s*noon/gi, '')  // Strip "9am-noon"
+    .replace(/\bnoon\b/gi, '')
+    .replace(/\bmidnight\b/gi, '')
+    .replace(/\bmidday\b/gi, '')
     .replace(/\bfrom\s+(?:noon|morning|afternoon|evening)\b/gi, '')  // Strip "from noon" etc.
     .replace(/\ball\s+day\b/gi, '')  // Strip "all day"
     // Strip day-of-week names (scheduling metadata, not the activity name)
