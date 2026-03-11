@@ -524,7 +524,7 @@ export default function HowItWorks() {
               Take the Feature Tour
             </Button>
             <p className="text-sm text-muted-foreground mt-3">
-              7 interactive steps showing how we build your perfect trip
+              9 interactive steps showing how we build your perfect trip
             </p>
           </div>
         </section>

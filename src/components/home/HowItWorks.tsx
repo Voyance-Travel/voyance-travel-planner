@@ -4,6 +4,8 @@ import { handleImageError } from '@/utils/imageFallback';
 import step1Image from '@/assets/howitworks-quiz.jpg';
 import step2Image from '@/assets/howitworks-step2.jpg';
 import step3Image from '@/assets/howitworks-step3.jpg';
+import liveTripImage from '@/assets/howitworks-livetrip.jpg';
+import communityImage from '@/assets/howitworks-community.jpg';
 
 const STEPS = [
   {
@@ -20,6 +22,16 @@ const STEPS = [
     title: "We build the ideal trip.",
     description: "Flights, stays, and activities pre-selected to match your vibe and budget.",
     image: step3Image
+  },
+  {
+    title: "Live your trip.",
+    description: "Your itinerary becomes a day-by-day travel companion with real-time directions, tips, and on-the-fly changes.",
+    image: liveTripImage
+  },
+  {
+    title: "Share your story.",
+    description: "Turn your experience into a community guide with photos, ratings, and tips for fellow travelers.",
+    image: communityImage
   },
   {
     title: "You book and go.",
