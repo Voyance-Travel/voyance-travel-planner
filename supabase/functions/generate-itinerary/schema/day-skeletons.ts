@@ -19,6 +19,8 @@ export function buildBaseSkeleton(dayType: DayType): DaySlot[] {
       return buildStandardDaySkeleton();
     case 'departure':
       return buildDepartureDaySkeleton();
+    case 'transition':
+      return buildTransitionDaySkeleton();
     default:
       return buildStandardDaySkeleton();
   }
