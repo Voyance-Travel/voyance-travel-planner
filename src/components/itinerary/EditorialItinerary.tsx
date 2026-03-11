@@ -7770,8 +7770,9 @@ function DayCard({
               <TooltipContent side="bottom">
                 <span className="text-xs font-medium">Day Cost Estimate</span>
               </TooltipContent>
-            </Tooltip>
-            {day.weather && (
+             </Tooltip>
+             )}
+             {day.weather && (
               <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full bg-secondary/50 text-xs sm:text-sm shrink-0">
                 {weatherIcons[day.weather.condition?.toLowerCase() || 'sunny']}
                 {day.weather.high && <span className="font-medium">{day.weather.high}°</span>}
