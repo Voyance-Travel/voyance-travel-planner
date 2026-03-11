@@ -8005,6 +8005,9 @@ function DayCard({
                   const travelMeta = (activityToRender as any).__travelMeta;
 
                   if (isTravelSummary && travelMeta) {
+                    // Hide travel summary cards in clean preview
+                    if (isCleanPreview) return null;
+
                     const TransportIcon = travelMeta.transportName?.toLowerCase() === 'flight' ? Plane
                       : travelMeta.transportName?.toLowerCase() === 'train' ? Train
                       : travelMeta.transportName?.toLowerCase() === 'bus' ? Bus
@@ -8014,56 +8017,7 @@ function DayCard({
                     return (
                       <div className="px-2 sm:px-0 py-2">
                         <div className="rounded-xl border-2 border-dashed border-primary/20 bg-primary/[0.03] overflow-hidden relative group/travel">
-                          <div className="flex items-center gap-3 px-4 py-3">
-                            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10 shrink-0">
-                              <TransportIcon className="w-4.5 h-4.5 text-primary" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-foreground">
-                                {travelMeta.from} → {travelMeta.to}
-                              </p>
-                              <p className="text-xs text-muted-foreground truncate">
-                                {[
-                                  travelMeta.transportName,
-                                  travelMeta.carrier,
-                                  travelMeta.flightNum,
-                                  travelMeta.depTime && travelMeta.arrTime
-                                    ? `${travelMeta.depTime} – ${travelMeta.arrTime}`
-                                    : travelMeta.depTime ? `Departs ${travelMeta.depTime}`
-                                    : travelMeta.arrTime ? `Arrives ${travelMeta.arrTime}` : '',
-                                  travelMeta.dur,
-                                ].filter(Boolean).join(' · ')}
-                              </p>
-                            </div>
-                            {travelMeta.price != null && (
-                              <span className="text-xs font-medium text-muted-foreground shrink-0">
-                                {travelMeta.currency === 'USD' ? '$' : travelMeta.currency}{travelMeta.price}
-                              </span>
-                            )}
-                            {/* Action menu for travel summary */}
-                            {isEditable && (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <button className="min-w-[36px] min-h-[36px] flex items-center justify-center text-foreground/60 hover:text-foreground hover:bg-muted rounded-full transition-colors sm:opacity-0 sm:group-hover/travel:opacity-100 shrink-0 touch-manipulation">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-36">
-                                  <DropdownMenuItem onClick={() => onActivityRemove(dayIndex, activityToRender.id)} className="text-destructive text-xs cursor-pointer gap-2">
-                                    <Trash2 className="h-3 w-3" />
-                                    Remove
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
-                          </div>
-                          {/* Expandable details */}
-                          {(travelMeta.seatInfo || travelMeta.bookingRef) && (
-                            <div className="px-4 pb-3 pt-0 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground border-t border-primary/10 mt-0 pt-2">
-                              {travelMeta.seatInfo && <span>Seat: {travelMeta.seatInfo}</span>}
-                              {travelMeta.bookingRef && <span>Ref: {travelMeta.bookingRef}</span>}
-                            </div>
-                          )}
+...
                         </div>
                       </div>
                     );
@@ -8084,17 +8038,29 @@ function DayCard({
                       </div>
                     )}
                     {/* Mobile: Card wrapper with timeline */}
-                    <div className="sm:hidden relative pl-7 pr-2 py-2">
-                      {/* Timeline line */}
-                      <div className={cn(
-                        "absolute left-3 top-0 bottom-0 w-0.5 bg-primary/15",
-                        activityIndex === 0 && "top-5",
-                        isLastActivity && "bottom-5"
-                      )} />
-                      {/* Timeline dot */}
-                      <div className="absolute left-[7px] top-5 w-3 h-3 rounded-full border-2 border-primary bg-background z-10 shadow-sm" />
+                    <div className={cn(
+                      "sm:hidden relative py-2",
+                      isCleanPreview ? "pl-4 pr-4" : "pl-7 pr-2"
+                    )}>
+                      {/* Timeline line — hidden in clean preview */}
+                      {!isCleanPreview && (
+                        <div className={cn(
+                          "absolute left-3 top-0 bottom-0 w-0.5 bg-primary/15",
+                          activityIndex === 0 && "top-5",
+                          isLastActivity && "bottom-5"
+                        )} />
+                      )}
+                      {/* Timeline dot — hidden in clean preview */}
+                      {!isCleanPreview && (
+                        <div className="absolute left-[7px] top-5 w-3 h-3 rounded-full border-2 border-primary bg-background z-10 shadow-sm" />
+                      )}
                       {/* Card */}
-                      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden mb-1">
+                      <div className={cn(
+                        "overflow-hidden",
+                        isCleanPreview
+                          ? "bg-transparent border-0 shadow-none mb-6"
+                          : "bg-card rounded-xl border border-border shadow-sm mb-1"
+                      )}>
                         <ActivityRow
                           activity={activityToRender}
                           destination={cleanDestination}
@@ -8134,6 +8100,7 @@ function DayCard({
                           aiLocked={aiLocked}
                           compact={compactCards}
                           isPastTrip={isPastTrip}
+                          isCleanPreview={isCleanPreview}
                         />
                       </div>
                     </div>
@@ -8178,6 +8145,7 @@ function DayCard({
                         aiLocked={aiLocked}
                         compact={compactCards}
                         isPastTrip={isPastTrip}
+                        isCleanPreview={isCleanPreview}
                       />
                     </div>
                     {/* Compact transit gap indicator between activities */}
@@ -8209,7 +8177,8 @@ function DayCard({
               />
             </div>
 
-            {/* Day Footer */}
+            {/* Day Footer — hidden in clean preview */}
+            {!isCleanPreview && (
             <div className="px-6 py-4 bg-gradient-to-r from-secondary/30 via-secondary/20 to-secondary/30 border-t border-border">
               {dayIsPreview ? (
                 /* Preview Per-Day Unlock CTA */
@@ -8328,6 +8297,7 @@ function DayCard({
                 />
               )}
             </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -8386,6 +8356,8 @@ interface ActivityRowProps {
   compact?: boolean;
   /** Whether this is a past trip — shows guide bookmark button */
   isPastTrip?: boolean;
+  /** Clean preview mode — magazine-style reading card */
+  isCleanPreview?: boolean;
 }
 
 function ActivityRow({
@@ -8427,6 +8399,7 @@ function ActivityRow({
   guestMustPropose,
   compact = false,
   isPastTrip = false,
+  isCleanPreview = false,
 }: ActivityRowProps) {
   const [showProposeReplacement, setShowProposeReplacement] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState(false);
@@ -8568,6 +8541,88 @@ function ActivityRow({
   const thumbnailUrl = fetchedImageUrl;
   const [thumbnailError, setThumbnailError] = useState(false);
   // Library modal state removed - agent features disabled
+
+  // ── Clean Preview Mode — magazine-style reading card ────────────────
+  if (isCleanPreview) {
+    // Transport activities are completely hidden in preview
+    if (isTransport) return null;
+    // Downtime items hidden too
+    if (isDowntime) return null;
+
+    const timeDisplay = (() => {
+      const start = formatTime(time);
+      const end = activity.endTime ? formatTime(activity.endTime) : null;
+      if (start && end) return `${start} – ${end}`;
+      if (start) return start;
+      return null;
+    })();
+
+    const locationText = activity.location?.name || activity.location?.address;
+
+    return (
+      <div className="py-2">
+        {/* Time */}
+        {timeDisplay && (
+          <p className="text-sm font-medium text-primary mb-3">{timeDisplay}</p>
+        )}
+
+        {/* Image — full width, large */}
+        {showThumbnail && thumbnailUrl && !thumbnailError && (
+          <div className="w-full h-[200px] rounded-xl overflow-hidden bg-muted/30 mb-4">
+            <img
+              src={thumbnailUrl}
+              alt={activityTitle}
+              className="w-full h-full object-cover"
+              loading="lazy"
+              onError={(e) => {
+                const fallback = getActivityFallbackImage(activityType, activityTitle);
+                if (e.currentTarget.src !== fallback) {
+                  e.currentTarget.src = fallback;
+                } else {
+                  setThumbnailError(true);
+                }
+              }}
+            />
+          </div>
+        )}
+
+        {/* Title */}
+        <h4 className="font-serif text-xl font-semibold text-foreground leading-snug">
+          {venueNameForDining || activityTitle}
+        </h4>
+        {venueNameForDining && venueNameForDining !== activityTitle && (
+          <p className="text-sm text-muted-foreground mt-0.5 italic">{activityTitle}</p>
+        )}
+
+        {/* Description */}
+        {activity.description && (
+          <p className="text-base text-muted-foreground leading-relaxed mt-2">
+            {activity.description}
+          </p>
+        )}
+
+        {/* Location */}
+        {locationText && (
+          <div className="flex items-center gap-1.5 mt-3 text-sm text-muted-foreground/70">
+            <MapPin className="h-3.5 w-3.5 text-primary/40 shrink-0" />
+            <span>{locationText}</span>
+          </div>
+        )}
+
+        {/* Voyance Tip — always expanded */}
+        {activity.tips && !isCheckIn && (
+          <div className="mt-4 pt-3 border-t border-border/30">
+            <p className="text-xs font-medium text-primary uppercase tracking-wider mb-1.5">
+              Voyance Tip
+            </p>
+            <p className="text-sm text-muted-foreground italic leading-relaxed">
+              {activity.tips}
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // ── Compact transport row ─────────────────────────────────────────
   // Transport activities (walk, taxi, metro, etc.) are rendered as a

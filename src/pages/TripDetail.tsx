@@ -2421,7 +2421,7 @@ export default function TripDetail() {
           {/* Trip Photo Gallery */}
           <div className="mt-12">
             <ErrorBoundary>
-            <TripPhotoGallery tripId={trip.id} />
+            <TripPhotoGallery tripId={trip.id} hideUpload={isPreviewMode} />
             </ErrorBoundary>
           </div>
 

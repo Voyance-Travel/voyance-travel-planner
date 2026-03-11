@@ -22,9 +22,11 @@ import { format } from 'date-fns';
 interface TripPhotoGalleryProps {
   tripId: string;
   className?: string;
+  /** Hide upload controls (used in preview mode) */
+  hideUpload?: boolean;
 }
 
-export default function TripPhotoGallery({ tripId, className }: TripPhotoGalleryProps) {
+export default function TripPhotoGallery({ tripId, className, hideUpload = false }: TripPhotoGalleryProps) {
   const { photos, isLoading, uploadPhoto, deletePhoto, toggleFavorite, setCoverPhoto } = useTripPhotos(tripId);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<TripPhoto | null>(null);
@@ -97,7 +99,8 @@ export default function TripPhotoGallery({ tripId, className }: TripPhotoGallery
           </div>
         </div>
 
-        {/* Upload Button */}
+        {/* Upload Button — hidden in preview mode */}
+        {!hideUpload && (
         <div className="flex items-center gap-2">
           <input
             ref={fileInputRef}
@@ -120,10 +123,11 @@ export default function TripPhotoGallery({ tripId, className }: TripPhotoGallery
             Add Photos
           </Button>
         </div>
+        )}
       </div>
 
       {/* Empty State */}
-      {photos.length === 0 && (
+      {photos.length === 0 && !hideUpload && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
