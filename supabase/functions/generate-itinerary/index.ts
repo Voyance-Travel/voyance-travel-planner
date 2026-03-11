@@ -7974,19 +7974,18 @@ Generate activities following ALL constraints above.
 IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repeat.`;
 
       // ==========================================================================
-      // SCHEMA-DRIVEN GENERATION — FEATURE FLAG BRANCH (Fix 22C)
+      // SCHEMA-DRIVEN GENERATION — FEATURE FLAG BRANCH (Fix 22C/22F)
       // ==========================================================================
       // When USE_SCHEMA_GENERATION is true, the schema compiler builds the prompt
-      // instead of the freeform prompt sections above. Currently OFF (dead code).
+      // instead of the freeform prompt sections above. Currently OFF.
       //
-      // The schema compiler and serializer live in src/lib/schema-compiler/ and
-      // cannot be imported directly by edge functions. When this flag is activated
-      // (Fix 22D), mirror copies of the compiler will be placed in this directory.
+      // The schema compiler modules are co-located in ./schema/ with Deno-compatible
+      // relative imports. Source of truth remains in src/lib/schema-compiler/.
       //
-      // To activate: set USE_SCHEMA_GENERATION = true at the top of this file,
-      // copy schema-compiler modules here, and wire up the CompilerInput mapping.
+      // To activate: set USE_SCHEMA_GENERATION = true in schema/feature-flags.ts
       // ==========================================================================
-      const USE_SCHEMA_GENERATION = false;
+      // @ts-ignore — Deno imports with .ts extension
+      const { USE_SCHEMA_GENERATION } = await import('./schema/index.ts');
 
       let finalSystemPrompt = systemPrompt;
       let finalUserPrompt = userPrompt;
