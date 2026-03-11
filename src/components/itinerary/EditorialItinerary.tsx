@@ -4600,8 +4600,8 @@ export function EditorialItinerary({
               </div>
             </div>
             
-            {/* Bulk Unlock Banner - show when 2+ days are locked AND not generating */}
-            {!isActivelyGenerating && (() => {
+             {/* Bulk Unlock Banner - hidden in clean preview */}
+             {!isCleanPreview && !isActivelyGenerating && (() => {
               const lockedDayCount = days.filter(d => !canViewPremiumContentForDay(entitlements, d.dayNumber)).length;
               const unlockedCount = days.length - lockedDayCount;
               if (lockedDayCount < 2) return null;
