@@ -8,7 +8,7 @@
 export const USE_SCHEMA_GENERATION = true;
 
 export const SCHEMA_GENERATION_CONFIG = {
-  logSchemas: false,
+  logSchemas: true,
   shadowMode: false,
   defaultTransferMinutes: 45,
   mustDoBufferMinutes: 15,

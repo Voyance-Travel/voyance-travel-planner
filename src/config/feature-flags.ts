@@ -17,7 +17,7 @@ export const USE_SCHEMA_GENERATION = true;
 // Additional schema generation config
 export const SCHEMA_GENERATION_CONFIG = {
   /** Log compiled schemas to console for debugging (even when flag is off) */
-  logSchemas: false,
+  logSchemas: true,
 
   /** Run schema compiler in shadow mode: compile the schema and log it,
    *  but still use the old prompt path for actual generation.
