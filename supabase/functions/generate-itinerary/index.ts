@@ -2551,80 +2551,24 @@ Generate activities for this day following ALL constraints above.`;
       }
 
       // ==========================================================================
-      // ARRIVAL DAY SEQUENCE FIX: Ensure airport → transfer → hotel check-in order
+      // ARRIVAL DAY: Strip arrival/baggage/transfer activities — handled by Arrival Game Plan UI
       // ==========================================================================
-      if (isFirstDay && generatedDay.activities.length > 1) {
-        const arrivalKeywords = ['arrival at airport', 'arrive at airport', 'airport arrival', 'land at', 'arrive in'];
-        const transferKeywords = ['airport transfer', 'transfer to hotel', 'rideshare to', 'taxi to hotel', 'shuttle to', 'uber to', 'lyft to'];
-        const checkinKeywords = ['check-in', 'check in', 'checkin'];
-
-        const arrivalIdx = generatedDay.activities.findIndex((a: any) => {
+      if (isFirstDay && generatedDay.activities.length > 0) {
+        const beforeCount = generatedDay.activities.length;
+        generatedDay.activities = generatedDay.activities.filter((a: any) => {
           const t = (a.title || '').toLowerCase();
-          return arrivalKeywords.some(kw => t.includes(kw)) ||
+          const isArrivalActivity =
+            (t.includes('arrival at') && (t.includes('airport') || t.includes('baggage'))) ||
+            t.includes('baggage claim') ||
+            t.includes('airport arrival') ||
+            t.includes('arrive at airport') ||
+            t.includes('land at') ||
             (a.category === 'transport' && t.includes('airport') && !t.includes('transfer'));
+          return !isArrivalActivity;
         });
-        const transferIdx = generatedDay.activities.findIndex((a: any) => {
-          const t = (a.title || '').toLowerCase();
-          return transferKeywords.some(kw => t.includes(kw)) ||
-            (a.category === 'transport' && t.includes('transfer') && t.includes('hotel'));
-        });
-        const checkinIdx = generatedDay.activities.findIndex((a: any) => {
-          const t = (a.title || '').toLowerCase();
-          return checkinKeywords.some(kw => t.includes(kw)) || 
-            (a.category === 'accommodation' && (t.includes('hotel') || t.includes('settle')));
-        });
-
-        // If check-in comes before arrival or transfer, reorder
-        if (checkinIdx >= 0 && arrivalIdx >= 0 && checkinIdx < arrivalIdx) {
-          console.log(`[Stage 2] FIXING: Hotel check-in (idx ${checkinIdx}) before airport arrival (idx ${arrivalIdx}) — reordering`);
-
-          // Collect the arrival-sequence activities
-          const seqItems: Array<{ act: any; type: string }> = [];
-          if (arrivalIdx >= 0) seqItems.push({ act: generatedDay.activities[arrivalIdx], type: 'arrival' });
-          if (transferIdx >= 0) seqItems.push({ act: generatedDay.activities[transferIdx], type: 'transfer' });
-          if (checkinIdx >= 0) seqItems.push({ act: generatedDay.activities[checkinIdx], type: 'checkin' });
-
-          // Remove them (reverse order to preserve indices)
-          const indicesToRemove = [arrivalIdx, transferIdx, checkinIdx].filter(i => i >= 0).sort((a, b) => b - a);
-          for (const idx of indicesToRemove) {
-            generatedDay.activities.splice(idx, 1);
-          }
-
-          // Parse flight arrival time, default 9:00 AM
-          let flightArrivalMins = 540;
-          try {
-            // Try to extract from flightHotelContext
-            const arrivalMatch = flightHotelContext.match(/(?:arrives?|arrival|landing)[^\d]*(\d{1,2}):(\d{2})/i);
-            if (arrivalMatch) {
-              flightArrivalMins = parseInt(arrivalMatch[1]) * 60 + parseInt(arrivalMatch[2]);
-            }
-          } catch { /* use default */ }
-
-          const formatTimeMins = (mins: number) => {
-            const h = Math.floor(mins / 60);
-            const m = mins % 60;
-            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-          };
-
-          // Assign sequential times
-          const orderMap: Record<string, number> = { arrival: 0, transfer: 1, checkin: 2 };
-          const timings: Record<string, { start: number; duration: number }> = {
-            arrival: { start: flightArrivalMins, duration: 30 },
-            transfer: { start: flightArrivalMins + 30, duration: 60 },
-            checkin: { start: flightArrivalMins + 90, duration: 30 },
-          };
-
-          for (const item of seqItems) {
-            const t = timings[item.type];
-            if (t) {
-              item.act.startTime = formatTimeMins(t.start);
-              item.act.endTime = formatTimeMins(t.start + t.duration);
-            }
-          }
-
-          // Sort by order and prepend
-          seqItems.sort((a, b) => (orderMap[a.type] || 0) - (orderMap[b.type] || 0));
-          generatedDay.activities = [...seqItems.map(s => s.act), ...generatedDay.activities];
+        const removed = beforeCount - generatedDay.activities.length;
+        if (removed > 0) {
+          console.log(`[Stage 2] Day 1: Stripped ${removed} arrival/baggage activities (handled by Arrival Game Plan UI)`);
         }
       }
 
