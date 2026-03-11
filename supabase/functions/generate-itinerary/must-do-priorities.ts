@@ -237,6 +237,38 @@ function extractExplicitTimeRange(text: string): { startTime: string; endTime: s
 }
 
 // =============================================================================
+// COMPOUND ACTIVITY SPLITTING — "dinner and comedy show" → 2 items
+// =============================================================================
+
+const COMPOUND_CONJUNCTIONS = /\b(?:and\s+then|then|followed\s+by|after\s+that)\b/i;
+const BARE_AND = /\band\b/i;
+
+const GENERIC_ACTIVITY_KEYWORDS = [
+  'dinner', 'lunch', 'breakfast', 'brunch', 'meal', 'nice dinner', 'light dinner',
+  'comedy', 'comedy show', 'stand-up', 'standup', 'improv',
+  'rooftop', 'rooftop bar', 'drinks', 'cocktails', 'bar', 'pub crawl',
+  'show', 'broadway', 'theater', 'theatre', 'musical', 'concert',
+  'museum', 'gallery', 'exhibit', 'exhibition',
+  'shopping', 'spa', 'massage', 'yoga', 'wellness',
+  'nightclub', 'club', 'dancing', 'jazz', 'jazz club', 'live music',
+  'coffee', 'dessert', 'ice cream', 'pastry', 'bakery',
+  'sightseeing', 'walking tour', 'food tour', 'boat tour', 'bike tour',
+  'hike', 'hiking', 'beach', 'pool', 'swim',
+];
+
+export function isGenericActivityDescription(text: string): boolean {
+  const lower = text.toLowerCase().trim();
+  // It's generic if it matches a known activity keyword
+  if (GENERIC_ACTIVITY_KEYWORDS.some(k => lower === k || lower === `a ${k}` || lower === `some ${k}`)) return true;
+  // Also generic if it contains a keyword and starts with an article / qualifier
+  if (/^(?:a\s+|some\s+|maybe\s+|nice\s+|good\s+|great\s+|late\s*night\s+)/i.test(lower)) {
+    return GENERIC_ACTIVITY_KEYWORDS.some(k => lower.includes(k));
+  }
+  // Check for bare keyword match (e.g., "comedy show" inside "comedy show on friday")
+  return GENERIC_ACTIVITY_KEYWORDS.some(k => lower === k);
+}
+
+// =============================================================================
 // PARSING USER INPUT
 // =============================================================================
 
