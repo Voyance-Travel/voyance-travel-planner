@@ -8192,7 +8192,7 @@ function DayCard({
                       />
                     )}
                     {/* Inline Add Activity button between activities */}
-                    {isEditable && !isLastActivity && (
+                    {isEditable && !isLastActivity && !isCleanPreview && (
                       <div className="flex justify-center py-1 opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity">
                         <button
                           onClick={() => onAddActivity(activityIndex)}
