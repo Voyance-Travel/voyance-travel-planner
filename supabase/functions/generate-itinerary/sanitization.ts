@@ -1,6 +1,6 @@
 /**
  * Sanitization utilities for AI-generated itinerary content.
- * Strips CJK artifacts, schema-leak fragments, and garbled text.
+ * Strips CJK artifacts, schema-leak fragments, system annotations, and garbled text.
  */
 
 // =============================================================================
