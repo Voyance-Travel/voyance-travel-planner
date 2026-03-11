@@ -387,7 +387,7 @@ export default function HowItWorks() {
             <Button asChild size="lg" variant="outline" className="gap-2">
               <Link to={ROUTES.ARCHETYPES}>
                 <Sparkles className="h-4 w-4" />
-                Explore all 27 types
+                Explore all 29 types
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>

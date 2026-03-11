@@ -542,7 +542,7 @@ export default function About() {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {[
-                    { feature: 'Travel DNA Quiz (27 unique types)', status: 'live' },
+                    { feature: 'Travel DNA Quiz (29 unique types)', status: 'live' },
                     { feature: 'AI-generated personalized itineraries', status: 'live' },
                     { feature: 'Real-time activity swapping', status: 'live' },
                     { feature: 'Multi-source review aggregation', status: 'live' },
