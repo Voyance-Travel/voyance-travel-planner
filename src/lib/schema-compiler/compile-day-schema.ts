@@ -211,6 +211,11 @@ export function compileDaySchema(input: CompilerInput): DaySchema {
     filledSlots = fillKeptActivities(filledSlots, input.keepActivities);
   }
 
+  // Step 5e: Enforce blocked windows — remove/shrink empty slots that overlap
+  if (input.generationRules?.blockedWindows && input.generationRules.blockedWindows.length > 0) {
+    filledSlots = applyBlockedWindows(filledSlots, input.generationRules.blockedWindows);
+  }
+
   // Step 6: Resolve conflicts
   const resolvedSlots = resolveConflicts(filledSlots, groupConfig);
 
