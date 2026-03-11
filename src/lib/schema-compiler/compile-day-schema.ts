@@ -320,8 +320,6 @@ function applyBlockedWindows(
 
       // Partial overlap — shrink the time window
       if (sStart < bStart) {
-        // Keep the portion before the blocked window
-        const shrunkEnd = Math.floor(bStart) + ':' + String(Math.round((bStart % 1) * 60)).padStart(2, '0');
         acc.push({
           ...slot,
           timeWindow: { ...slot.timeWindow, latest: toHHMM(bStart) },
