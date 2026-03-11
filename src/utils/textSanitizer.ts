@@ -1,6 +1,6 @@
 /**
- * Text sanitizer - removes em dashes, garbled text, and non-Latin script
- * from user-facing text content.
+ * Text sanitizer - removes em dashes, garbled text, non-Latin script,
+ * and internal system annotations from user-facing text content.
  */
 
 // Regex to detect non-Latin script blocks (Chinese, Japanese, Korean, Arabic, Cyrillic, Thai)
@@ -12,6 +12,44 @@ const GARBLED_PATTERN = /(?:[bcdfghjklmnpqrstvwxz]{5,}|[A-Z][a-z]{0,2}[A-Z][a-z]
 // Regex to detect leaked JSON schema field names in text values
 // e.g. "宣,duration:4,practicalTips;|" or ",theme:" or ",title: -" artifacts
 const SCHEMA_LEAK_RE = /[,;|]*\s*(?:title|name|duration|practicalTips|accommodationNotes|tripVibe|tripPriorities|theme|dayNumber|activities|unparsed|dates|travelers|tripType|startTime|endTime|category|description|location|tags|bookingRequired|transportation|cost|estimatedCost|metadata|narrative|highlights|city|country|isTransitionDay)\s*[:;|]\s*[^,;|]*/gi;
+
+// =============================================================================
+// SYSTEM ANNOTATION PATTERNS — internal AI constraint text that must NEVER
+// appear in customer-facing output (titles, descriptions, PDF exports).
+// =============================================================================
+const SYSTEM_ANNOTATION_PATTERNS: RegExp[] = [
+  /user[- ]specified must[- ]do activity\.?\s*/gi,
+  /DO NOT modify\.?\s*/gi,
+  /must[- ]do activity\.?\s*/gi,
+  /user'?s?\s+scheduled\s+event\s+for\s+this\s+day\.?\s*/gi,
+  /tickets?\/advance\s+booking\s+required\.?\s*/gi,
+  /MUST END before \d{1,2}:\d{2}\s*[-–—]\s*must[- ]do activity requires departure by this time\.?\s*/gi,
+  /this is your dedicated\s+.+?\s+day\.?\s*/gi,
+  /\[LOCKED\]\s*/gi,
+  /\[MUST[- ]DO\]\s*/gi,
+  /\[USER[- ]CONSTRAINT\]\s*/gi,
+  /\[SYSTEM\]\s*/gi,
+  /- user's scheduled event.*?(?:\.|$)/gi,
+  /Arrive early to get settled and enjoy the full experience\.?\s*/gi,
+];
+
+/**
+ * Strip internal system annotations from customer-facing text.
+ * Use this on activity descriptions and titles before rendering or PDF export.
+ */
+export function cleanSystemAnnotations(text: string | undefined | null): string {
+  if (!text) return '';
+  let cleaned = text;
+  for (const pattern of SYSTEM_ANNOTATION_PATTERNS) {
+    // Reset lastIndex for global regexes
+    pattern.lastIndex = 0;
+    cleaned = cleaned.replace(pattern, '');
+  }
+  return cleaned
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^[.,;:\-–—\s]+|[.,;:\-–—\s]+$/g, '')
+    .trim();
+}
 
 /**
  * Replace em dashes (—) with standard dashes ( - ) in any text.
@@ -37,6 +75,12 @@ export function sanitizeAIOutput(text: string | undefined | null): string {
   
   // Remove leaked schema field names (e.g. ",duration:4,practicalTips;|")
   cleaned = cleaned.replace(SCHEMA_LEAK_RE, '');
+  
+  // Strip system annotation patterns
+  for (const pattern of SYSTEM_ANNOTATION_PATTERNS) {
+    pattern.lastIndex = 0;
+    cleaned = cleaned.replace(pattern, '');
+  }
   
   // Clean up artifacts: double spaces, trailing fragments, leading/trailing punctuation
   cleaned = cleaned

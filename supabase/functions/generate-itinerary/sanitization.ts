@@ -59,11 +59,36 @@ export function sanitizeOptionFields(obj: any): any {
 const CJK_ARTIFACTS = /[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF\u0E00-\u0E7F]+/g;
 const TEXT_SCHEMA_LEAK = /[,;|]*\s*(?:title|name|duration|practicalTips|accommodationNotes|tripVibe|tripPriorities|theme|dayNumber|activities|unparsed|dates|travelers|tripType|startTime|endTime|category|description|location|tags|bookingRequired|transportation|cost|estimatedCost|metadata|narrative|highlights|city|country|isTransitionDay)\s*[:;|]\s*[^,;|]*/gi;
 
+// System instruction patterns that should NEVER appear in customer-facing text
+const SYSTEM_ANNOTATION_PATTERNS: RegExp[] = [
+  /user[- ]specified must[- ]do activity\.?\s*/gi,
+  /DO NOT modify\.?\s*/gi,
+  /must[- ]do activity\.?\s*/gi,
+  /user'?s?\s+scheduled\s+event\s+for\s+this\s+day\.?\s*/gi,
+  /tickets?\/advance\s+booking\s+required\.?\s*/gi,
+  /MUST END before \d{1,2}:\d{2}\s*[-–—]\s*must[- ]do activity requires departure by this time\.?\s*/gi,
+  /this is your dedicated\s+.+?\s+day\.?\s*/gi,
+  /\[LOCKED\]\s*/gi,
+  /\[MUST[- ]DO\]\s*/gi,
+  /\[USER[- ]CONSTRAINT\]\s*/gi,
+  /\[SYSTEM\]\s*/gi,
+  /- user's scheduled event.*?(?:\.|$)/gi,
+  /Arrive early to get settled and enjoy the full experience\.?\s*/gi,
+];
+
 export function sanitizeAITextField(text: string | undefined | null): string {
   if (!text || typeof text !== 'string') return '';
-  return text
+  let cleaned = text
     .replace(CJK_ARTIFACTS, '')
-    .replace(TEXT_SCHEMA_LEAK, '')
+    .replace(TEXT_SCHEMA_LEAK, '');
+
+  // Strip system annotation patterns
+  for (const pattern of SYSTEM_ANNOTATION_PATTERNS) {
+    pattern.lastIndex = 0;
+    cleaned = cleaned.replace(pattern, '');
+  }
+
+  return cleaned
     .replace(/—/g, ' - ')
     .replace(/–/g, '-')
     .replace(/\s{2,}/g, ' ')
