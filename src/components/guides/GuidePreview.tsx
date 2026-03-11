@@ -1,4 +1,5 @@
 import { MapPin, Calendar, BookOpen, ExternalLink } from 'lucide-react';
+import SafeImage from '@/components/SafeImage';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
