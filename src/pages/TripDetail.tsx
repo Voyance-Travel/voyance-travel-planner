@@ -2147,10 +2147,10 @@ export default function TripDetail() {
 
 
 
-                  {/* Guide Prompt Banner — only on past trips */}
-                  {isAfter(new Date(), parseLocalDate(effectiveEndDate)) && (
-                    <GuidePromptBanner tripId={trip.id} destination={trip.destination} />
-                  )}
+                   {/* Guide Prompt Banner — only on past trips, hidden in preview */}
+                   {!isPreviewMode && isAfter(new Date(), parseLocalDate(effectiveEndDate)) && (
+                     <GuidePromptBanner tripId={trip.id} destination={trip.destination} />
+                   )}
 
                   <ErrorBoundary>
                   <EditorialItinerary
