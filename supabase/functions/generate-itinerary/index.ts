@@ -4477,7 +4477,31 @@ serve(async (req) => {
       // FLIGHT & HOTEL CONTEXT - Use booked flight/hotel in itinerary planning
       // =======================================================================
       console.log("[Stage 1.4] Fetching flight and hotel context...");
-      let flightHotelResult = await getFlightHotelContext(supabase, tripId);
+      // Extract first Day 1 must-do for arrival routing decision
+      const firstMustDoForRouting = (() => {
+        const mustDoRaw = context.mustDoActivities;
+        if (!mustDoRaw) return null;
+        try {
+          const forceAllMust = !!context.isSmartFinish || !!context.smartFinishRequested;
+          const parsed = parseMustDoInput(mustDoRaw, context.destination, forceAllMust, context.startDate, context.totalDays);
+          // Find first must-do assigned to Day 1 (or no day assignment = defaults to Day 1)
+          const day1MustDo = parsed.find(m => 
+            (m.preferredDay === 1 || !m.preferredDay) && m.priority === 'must'
+          );
+          if (day1MustDo) {
+            return {
+              name: day1MustDo.activityName,
+              startTime: day1MustDo.explicitStartTime || undefined,
+              location: day1MustDo.venueName || day1MustDo.location || undefined,
+            };
+          }
+        } catch (e) {
+          console.warn('[Stage 1.4] Failed to parse must-do for routing:', e);
+        }
+        return null;
+      })();
+      
+      let flightHotelResult = await getFlightHotelContext(supabase, tripId, firstMustDoForRouting);
       
       // IMPORTANT: Use tripData.arrivalTime/departureTime as fallback when DB doesn't have flight data
       // This handles the case where user entered times in ItineraryContextForm but hasn't saved flight_selection
