@@ -12,6 +12,7 @@ import { ActivityFeedbackModal } from './ActivityFeedbackModal';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 import { useActivityFeedback, type FeedbackRating } from '@/services/activityFeedbackAPI';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { cleanSystemAnnotations } from '@/utils/textSanitizer';
 
 type ActivityStatus = 'upcoming' | 'current' | 'completed' | 'skipped';
 
