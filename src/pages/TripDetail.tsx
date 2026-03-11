@@ -2428,8 +2428,8 @@ export default function TripDetail() {
         </div>
       </section>
 
-      {/* Itinerary Assistant - Floating Chatbot */}
-      {hasItinerary && !(isManualMode && !trip.smart_finish_purchased) && hasPremiumAccess && (
+       {/* Itinerary Assistant - Floating Chatbot — hidden in preview mode */}
+       {!isPreviewMode && hasItinerary && !(isManualMode && !trip.smart_finish_purchased) && hasPremiumAccess && (
         <ErrorBoundary fallback={null}>
         <ItineraryAssistant
           tripId={trip.id}
