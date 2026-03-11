@@ -8,6 +8,15 @@
 // Types
 // =============================================================================
 
+export interface ArrivalRoutingDecision {
+  strategy: 'hotel-first' | 'venue-first';
+  reason: string;
+  firstMustDoName?: string;
+  firstMustDoStartTime?: string;
+  estimatedAirportToVenueMinutes?: number;
+  estimatedAirportToHotelMinutes?: number;
+}
+
 export interface FlightHotelContextResult {
   context: string;
   arrivalTime?: string;
@@ -22,6 +31,7 @@ export interface FlightHotelContextResult {
   rawFlightSelection?: unknown;
   rawHotelSelection?: unknown;
   rawFlightIntelligence?: unknown;
+  arrivalRouting?: ArrivalRoutingDecision;
 }
 
 export interface AirportTransferFare {
