@@ -1011,9 +1011,16 @@ export function buildArrivalDayPrompt(
   if (requiredSequence.length > 0) {
     lines.push(`📋 REQUIRED SEQUENCE (in order)`);
     lines.push(`${'─'.repeat(40)}`);
+    const venueName = arrivalRouting?.firstMustDoName || 'Must-Do Venue';
     const seqLabels: Record<string, string> = {
-      'hotel_check_in': '1. Hotel Check-in & Refresh (category: accommodation)',
-      'settle_in_rest': '2. Rest & Refresh (category: downtime)'
+      'hotel_check_in': arrivalRouting?.strategy === 'venue-first'
+        ? `${requiredSequence.indexOf('hotel_check_in') + 1}. Hotel Check-in & Freshen Up (category: accommodation) — AFTER the must-do activity`
+        : '1. Hotel Check-in & Refresh (category: accommodation)',
+      'settle_in_rest': '2. Rest & Refresh (category: downtime)',
+      'transport_to_venue': `1. Transport to ${venueName} (~${arrivalRouting?.estimatedAirportToVenueMinutes || 15} min, category: transport)`,
+      'venue_bag_drop': `2. Bag Drop / Locker at ${venueName} (15 min, category: logistics)`,
+      'must_do_activity': `3. ${venueName} — the must-do activity`,
+      'transport_to_hotel': `4. Transport to Hotel (category: transport)`,
     };
     for (const step of requiredSequence) {
       lines.push(`   ${seqLabels[step] || step}`);
