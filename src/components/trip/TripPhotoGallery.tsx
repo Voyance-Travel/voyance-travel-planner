@@ -127,7 +127,7 @@ export default function TripPhotoGallery({ tripId, className, hideUpload = false
       </div>
 
       {/* Empty State */}
-      {photos.length === 0 && (
+      {photos.length === 0 && !hideUpload && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
