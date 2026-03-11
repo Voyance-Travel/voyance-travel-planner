@@ -229,7 +229,7 @@ export default function CommunityGuideDetail() {
       <section className="relative">
         <div className="aspect-[21/9] sm:aspect-[3/1] w-full overflow-hidden bg-muted">
           {heroImage ? (
-            <img
+            <SafeImage
               src={heroImage}
               alt={guide!.title}
               className="w-full h-full object-cover"
