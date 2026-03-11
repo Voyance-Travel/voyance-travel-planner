@@ -34,6 +34,7 @@ export interface ActivityWithLocation {
   isLocked?: boolean;
   timeSlot?: string; // e.g., "09:00-11:00"
   category?: string;
+  startTime?: string; // HH:MM format for temporal ordering
 }
 
 export interface DayAnchor {
@@ -634,29 +635,145 @@ export function validateDayGeography(
 // ACTIVITY REORDERING
 // =============================================================================
 
+/** Parse HH:MM to minutes since midnight */
+function parseTimeToMin(time: string | undefined): number | null {
+  if (!time) return null;
+  const m = time.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  return parseInt(m[1]) * 60 + parseInt(m[2]);
+}
+
+const ARRIVAL_KEYWORDS = ['arrival', 'land', 'arrive', 'touchdown'];
+const DEPARTURE_KEYWORDS = ['departure', 'boarding', 'check-in at airport', 'flight out'];
+const TRANSPORT_KEYWORDS = ['transport', 'transfer', 'car to', 'taxi to', 'uber to', 'train to', 'private car'];
+
+function isArrival(title: string): boolean {
+  const t = title.toLowerCase();
+  return ARRIVAL_KEYWORDS.some(k => t.includes(k));
+}
+
+function isDeparture(title: string): boolean {
+  const t = title.toLowerCase();
+  return DEPARTURE_KEYWORDS.some(k => t.includes(k));
+}
+
+function isTransport(act: ActivityWithLocation): boolean {
+  const t = (act.title || '').toLowerCase();
+  const c = (act.category || '').toLowerCase();
+  return c === 'transport' || c === 'transit' || TRANSPORT_KEYWORDS.some(k => t.includes(k));
+}
+
 /**
- * Reorder activities using nearest neighbor algorithm
+ * Enforce temporal dependency rules:
+ * 1. Arrivals must come before any transport from that location
+ * 2. Departures must be last
+ * 3. Remove transports scheduled before the first arrival
+ */
+export function enforceTemporalDependencies(activities: ActivityWithLocation[]): ActivityWithLocation[] {
+  const arrivals: ActivityWithLocation[] = [];
+  const departures: ActivityWithLocation[] = [];
+  const transports: ActivityWithLocation[] = [];
+  const regular: ActivityWithLocation[] = [];
+
+  for (const act of activities) {
+    const title = act.title || '';
+    if (isArrival(title)) {
+      arrivals.push(act);
+    } else if (isDeparture(title)) {
+      departures.push(act);
+    } else if (isTransport(act)) {
+      transports.push(act);
+    } else {
+      regular.push(act);
+    }
+  }
+
+  // Sort each group by startTime
+  const byTime = (a: ActivityWithLocation, b: ActivityWithLocation) =>
+    (parseTimeToMin(a.startTime) ?? 0) - (parseTimeToMin(b.startTime) ?? 0);
+
+  arrivals.sort(byTime);
+  transports.sort(byTime);
+  regular.sort(byTime);
+  departures.sort(byTime);
+
+  // Deduplicate: remove transports scheduled before earliest arrival
+  const earliestArrival = arrivals.length > 0 ? (parseTimeToMin(arrivals[0].startTime) ?? Infinity) : -1;
+  const validTransports = earliestArrival > 0
+    ? transports.filter(t => (parseTimeToMin(t.startTime) ?? 0) >= earliestArrival)
+    : transports;
+
+  // Split transports into outbound (before noon) and return (noon+)
+  const MIDDAY = 12 * 60;
+  const outbound = validTransports.filter(t => (parseTimeToMin(t.startTime) ?? 0) < MIDDAY);
+  const returnTransports = validTransports.filter(t => (parseTimeToMin(t.startTime) ?? 0) >= MIDDAY);
+
+  return [
+    ...arrivals,
+    ...outbound,
+    ...regular,
+    ...returnTransports,
+    ...departures,
+  ];
+}
+
+/**
+ * Remove transport activities that are scheduled before the first arrival.
+ * E.g. "Transport to Midtown" at 8:00 AM when "Arrival at LGA" is at 8:15 AM.
+ */
+export function deduplicateTransports(activities: ActivityWithLocation[]): ActivityWithLocation[] {
+  const arrivalActs = activities.filter(a => isArrival(a.title || ''));
+  if (arrivalActs.length === 0) return activities;
+
+  const firstArrivalTime = parseTimeToMin(arrivalActs[0].startTime) ?? Infinity;
+
+  return activities.filter(a => {
+    if (!isTransport(a)) return true;
+    const t = parseTimeToMin(a.startTime) ?? 0;
+    return t >= firstArrivalTime;
+  });
+}
+
+/**
+ * Reorder activities using nearest neighbor algorithm,
+ * with temporal dependency enforcement for arrivals/departures/transports.
  */
 export function reorderActivitiesOptimally(
   activities: ActivityWithLocation[],
   anchor: DayAnchor | null
 ): ActivityWithLocation[] {
   if (activities.length <= 2 || !anchor) return activities;
-  
-  const timeLocked = activities.filter(a => a.isLocked);
-  const flexible = activities.filter(a => !a.isLocked && a.coordinates);
-  const noCoords = activities.filter(a => !a.isLocked && !a.coordinates);
-  
-  if (flexible.length <= 1) return activities;
-  
+
+  // Step 1: Deduplicate impossible transports (before arrival)
+  const deduped = deduplicateTransports(activities);
+
+  // Step 2: Separate pinned vs flexible
+  const arrivals = deduped.filter(a => isArrival(a.title || ''));
+  const departures = deduped.filter(a => isDeparture(a.title || ''));
+  const timeLocked = deduped.filter(a => a.isLocked && !isArrival(a.title || '') && !isDeparture(a.title || ''));
+
+  // Truly flexible: not arrival, not departure, not locked
+  const flexible = deduped.filter(a =>
+    !a.isLocked && !isArrival(a.title || '') && !isDeparture(a.title || '') && a.coordinates
+  );
+  const noCoords = deduped.filter(a =>
+    !a.isLocked && !isArrival(a.title || '') && !isDeparture(a.title || '') && !a.coordinates
+  );
+
+  if (flexible.length <= 1) {
+    // Even with few flexible items, enforce arrival/departure ordering
+    return enforceTemporalDependencies(deduped);
+  }
+
+  // Step 3: Nearest-neighbor sort on flexible activities only
   const ordered: ActivityWithLocation[] = [];
   const remaining = [...flexible];
   let current = anchor.coordinates;
-  
+
   while (remaining.length > 0) {
     let nearestIdx = 0;
     let nearestDist = Infinity;
-    
+
     for (let i = 0; i < remaining.length; i++) {
       if (!remaining[i].coordinates) continue;
       const dist = haversineDistance(
@@ -668,13 +785,15 @@ export function reorderActivitiesOptimally(
         nearestIdx = i;
       }
     }
-    
+
     const next = remaining.splice(nearestIdx, 1)[0];
     ordered.push(next);
     if (next.coordinates) current = next.coordinates;
   }
-  
-  return [...timeLocked, ...ordered, ...noCoords];
+
+  // Step 4: Assemble with correct ordering
+  // arrivals → locked → geo-ordered flexible → no-coords → departures
+  return [...arrivals, ...timeLocked, ...ordered, ...noCoords, ...departures];
 }
 
 // =============================================================================
@@ -801,6 +920,8 @@ export default {
   detectBacktracking,
   validateDayGeography,
   reorderActivitiesOptimally,
+  enforceTemporalDependencies,
+  deduplicateTransports,
   buildGeographicPrompt,
   buildDayZonePrompt,
   logGeographicQAMetrics,
