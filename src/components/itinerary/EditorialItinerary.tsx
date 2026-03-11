@@ -8297,6 +8297,7 @@ function DayCard({
                 />
               )}
             </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
