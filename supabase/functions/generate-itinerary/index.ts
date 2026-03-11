@@ -8105,6 +8105,18 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             transitionArrivalTime: resolvedIsTransitionDay && resolvedTransportDetails?.arrivalTime
               ? resolvedTransportDetails.arrivalTime : undefined,
 
+            // === Fix 22O: Wire destinationHotel for transition days ===
+            destinationHotel: (() => {
+              if (!resolvedIsTransitionDay) return undefined;
+              const schemaDayCity = context.multiCityDayMap?.[dayNumber - 1];
+              if (!schemaDayCity?.hotelName) return undefined;
+              return {
+                name: schemaDayCity.hotelName,
+                address: schemaDayCity.hotelAddress || '',
+                checkInTime: undefined, // default 15:00 handled by constraint filler
+              };
+            })(),
+
             // === Fix 22L: Keep Activities (Regeneration) ===
             keepActivities: lockedActivities.length > 0
               ? lockedActivities.map((a: any) => ({
