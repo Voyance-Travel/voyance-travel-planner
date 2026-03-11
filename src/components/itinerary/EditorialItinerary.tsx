@@ -8572,6 +8572,88 @@ function ActivityRow({
   const [thumbnailError, setThumbnailError] = useState(false);
   // Library modal state removed - agent features disabled
 
+  // ── Clean Preview Mode — magazine-style reading card ────────────────
+  if (isCleanPreview) {
+    // Transport activities are completely hidden in preview
+    if (isTransport) return null;
+    // Downtime items hidden too
+    if (isDowntime) return null;
+
+    const timeDisplay = (() => {
+      const start = formatTime(time);
+      const end = activity.endTime ? formatTime(activity.endTime) : null;
+      if (start && end) return `${start} – ${end}`;
+      if (start) return start;
+      return null;
+    })();
+
+    const locationText = activity.location?.name || activity.location?.address;
+
+    return (
+      <div className="py-2">
+        {/* Time */}
+        {timeDisplay && (
+          <p className="text-sm font-medium text-primary mb-3">{timeDisplay}</p>
+        )}
+
+        {/* Image — full width, large */}
+        {showThumbnail && thumbnailUrl && !thumbnailError && (
+          <div className="w-full h-[200px] rounded-xl overflow-hidden bg-muted/30 mb-4">
+            <img
+              src={thumbnailUrl}
+              alt={activityTitle}
+              className="w-full h-full object-cover"
+              loading="lazy"
+              onError={(e) => {
+                const fallback = getActivityFallbackImage(activityType, activityTitle);
+                if (e.currentTarget.src !== fallback) {
+                  e.currentTarget.src = fallback;
+                } else {
+                  setThumbnailError(true);
+                }
+              }}
+            />
+          </div>
+        )}
+
+        {/* Title */}
+        <h4 className="font-serif text-xl font-semibold text-foreground leading-snug">
+          {venueNameForDining || activityTitle}
+        </h4>
+        {venueNameForDining && venueNameForDining !== activityTitle && (
+          <p className="text-sm text-muted-foreground mt-0.5 italic">{activityTitle}</p>
+        )}
+
+        {/* Description */}
+        {activity.description && (
+          <p className="text-base text-muted-foreground leading-relaxed mt-2">
+            {activity.description}
+          </p>
+        )}
+
+        {/* Location */}
+        {locationText && (
+          <div className="flex items-center gap-1.5 mt-3 text-sm text-muted-foreground/70">
+            <MapPin className="h-3.5 w-3.5 text-primary/40 shrink-0" />
+            <span>{locationText}</span>
+          </div>
+        )}
+
+        {/* Voyance Tip — always expanded */}
+        {activity.tips && !isCheckIn && (
+          <div className="mt-4 pt-3 border-t border-border/30">
+            <p className="text-xs font-medium text-primary uppercase tracking-wider mb-1.5">
+              Voyance Tip
+            </p>
+            <p className="text-sm text-muted-foreground italic leading-relaxed">
+              {activity.tips}
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // ── Compact transport row ─────────────────────────────────────────
   // Transport activities (walk, taxi, metro, etc.) are rendered as a
   // slim inline indicator instead of a full-size activity card.
