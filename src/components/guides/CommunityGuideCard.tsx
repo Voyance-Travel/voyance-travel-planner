@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { MapPin, Heart, Eye, ArrowRight, BookOpen, User } from 'lucide-react';
+import SafeImage from '@/components/SafeImage';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import type { CommunityGuideListItem } from '@/hooks/useCommunityGuidesList';
