@@ -436,12 +436,10 @@ export async function generateItinerary(
         if (!existsInMemory) {
           days.push({
             dayNumber: savedDay.day_number,
-            date: savedDay.date,
-            title: savedDay.title || `Day ${savedDay.day_number}`,
+            date: savedDay.date ?? undefined,
             theme: savedDay.theme || '',
-            description: savedDay.description || '',
             activities: (savedDay as any).activities || [],
-          });
+          } as ItineraryDay);
         }
       }
       days.sort((a: any, b: any) => (a.dayNumber || 0) - (b.dayNumber || 0));
