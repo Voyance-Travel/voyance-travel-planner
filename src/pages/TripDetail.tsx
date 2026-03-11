@@ -2057,8 +2057,8 @@ export default function TripDetail() {
 
               return (
                 <>
-                  {/* Mobile: Collapsed Trip Overview wrapping Health + Travel Intel */}
-                  <div className="sm:hidden mb-4">
+                   {/* Mobile: Collapsed Trip Overview wrapping Health + Travel Intel — hidden in preview */}
+                   {!isPreviewMode && <div className="sm:hidden mb-4">
                     <MobileTripOverview
                       tripHealthPanel={
                         <ErrorBoundary>
