@@ -7805,7 +7805,7 @@ function DayCard({
             </Tooltip>
             </div>
             )}
-            {isEditable && (
+             {isEditable && !isCleanPreview && (
               <div className="hidden sm:flex items-center gap-1">
                 <Tooltip delayDuration={200}>
                   <TooltipTrigger asChild>
