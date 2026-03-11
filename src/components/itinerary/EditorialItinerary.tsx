@@ -8386,6 +8386,8 @@ interface ActivityRowProps {
   compact?: boolean;
   /** Whether this is a past trip — shows guide bookmark button */
   isPastTrip?: boolean;
+  /** Clean preview mode — magazine-style reading card */
+  isCleanPreview?: boolean;
 }
 
 function ActivityRow({
