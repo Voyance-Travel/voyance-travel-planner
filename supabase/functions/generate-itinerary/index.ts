@@ -8033,8 +8033,8 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             body: JSON.stringify({
               model,
               messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: userPrompt }
+                { role: "system", content: finalSystemPrompt },
+                { role: "user", content: finalUserPrompt }
               ],
               tools: [{
                 type: "function",
