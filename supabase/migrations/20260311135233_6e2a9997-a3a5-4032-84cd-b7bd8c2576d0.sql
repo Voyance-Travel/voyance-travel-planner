@@ -1,0 +1,4 @@
+ALTER TABLE public.community_guides
+  ADD COLUMN IF NOT EXISTS editorial_content JSONB DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS editorial_version INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS editorial_generated_at TIMESTAMPTZ DEFAULT NULL;

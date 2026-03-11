@@ -2194,6 +2194,9 @@ export type Database = {
           description: string | null
           destination: string | null
           destination_country: string | null
+          editorial_content: Json | null
+          editorial_generated_at: string | null
+          editorial_version: number | null
           id: string
           like_count: number | null
           moderation_status: string | null
@@ -2214,6 +2217,9 @@ export type Database = {
           description?: string | null
           destination?: string | null
           destination_country?: string | null
+          editorial_content?: Json | null
+          editorial_generated_at?: string | null
+          editorial_version?: number | null
           id?: string
           like_count?: number | null
           moderation_status?: string | null
@@ -2234,6 +2240,9 @@ export type Database = {
           description?: string | null
           destination?: string | null
           destination_country?: string | null
+          editorial_content?: Json | null
+          editorial_generated_at?: string | null
+          editorial_version?: number | null
           id?: string
           like_count?: number | null
           moderation_status?: string | null
