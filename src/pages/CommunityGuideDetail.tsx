@@ -40,6 +40,8 @@ interface GuideData {
   user_id: string;
   status: string;
   trip_id: string;
+  editorial_content: Record<string, any> | null;
+  editorial_version: number | null;
 }
 
 interface Activity {
