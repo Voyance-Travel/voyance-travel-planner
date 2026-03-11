@@ -3952,7 +3952,7 @@ export function EditorialItinerary({
 
               {/* ROW 1: Trip Total + Currency Toggle + Meta */}
               <div className="px-4 sm:px-6 py-4 border-b border-border/50">
-                <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center justify-center gap-3 flex-wrap">
                   <div className="flex items-center gap-3">
                     <span className="text-sm text-muted-foreground">Trip Total</span>
                     <span className="text-2xl font-bold text-foreground">{formatCurrency(displayCost(totalCost), tripCurrency)}</span>
