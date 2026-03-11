@@ -20,7 +20,11 @@ import CreatorCard from '@/components/guides/CreatorCard';
 import ReportGuideModal from '@/components/guides/ReportGuideModal';
 import CreatorContentSection from '@/components/guides/CreatorContentSection';
 import EditorialRenderer from '@/components/guides/EditorialRenderer';
+import EditorialShareSection from '@/components/guides/EditorialShareSection';
+import MobileStickyShareBar from '@/components/guides/MobileStickyShareBar';
+import EditorialArticleSchema from '@/components/guides/EditorialArticleSchema';
 import type { EditorialContent } from '@/types/editorial';
+import { getAppUrl } from '@/utils/getAppUrl';
 
 const GuideTripMap = lazy(() => import('@/components/guides/GuideTripMap'));
 

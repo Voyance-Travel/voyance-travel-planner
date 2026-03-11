@@ -67,7 +67,7 @@ export function useSavedGuide(guideId: string | undefined) {
       toast.info('Sign in to save guides');
       return;
     }
-    saveMutation.mutate();
+    saveMutation.mutate(undefined);
   }, [userId, saveMutation]);
 
   return { isSaved, toggleSave, isLoggedIn: !!userId };
