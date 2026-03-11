@@ -415,6 +415,40 @@ export async function generateItinerary(
     }
   }
   
+  // Day count validation + recovery from itinerary_days table
+  console.log(`[ItineraryAPI] Generated ${days.length} days for trip ${tripId} (expected: ${totalDays})`);
+  
+  if (days.length < totalDays) {
+    console.error(
+      `[ItineraryAPI] DAY COUNT SHORTAGE: Only generated ${days.length}/${totalDays} days. Attempting recovery from itinerary_days table.`
+    );
+    
+    const { data: savedDays } = await supabase
+      .from('itinerary_days')
+      .select('*')
+      .eq('trip_id', tripId)
+      .order('day_number', { ascending: true });
+    
+    if (savedDays && savedDays.length > days.length) {
+      console.log(`[ItineraryAPI] Recovered ${savedDays.length} days from itinerary_days table (had ${days.length} in memory)`);
+      for (const savedDay of savedDays) {
+        const existsInMemory = days.find((d: any) => d.dayNumber === savedDay.day_number);
+        if (!existsInMemory) {
+          days.push({
+            dayNumber: savedDay.day_number,
+            date: savedDay.date,
+            title: savedDay.title || `Day ${savedDay.day_number}`,
+            theme: savedDay.theme || '',
+            description: savedDay.description || '',
+            activities: (savedDay as any).activities || [],
+          });
+        }
+      }
+      days.sort((a: any, b: any) => (a.dayNumber || 0) - (b.dayNumber || 0));
+      console.log(`[ItineraryAPI] After recovery: ${days.length} days`);
+    }
+  }
+  
   // Build complete itinerary
   const tripName = isMultiCity && tripCities.length > 0
     ? tripCities.map(c => c.city_name).join(' → ')
