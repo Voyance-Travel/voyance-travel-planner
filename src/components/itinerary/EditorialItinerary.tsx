@@ -4327,7 +4327,7 @@ export function EditorialItinerary({
               )}
 
               {/* Need to Know is now a top-level tab — removed from command center to avoid duplication */}
-            </div>
+             </div>}
 
 
 
