@@ -168,6 +168,11 @@ export function compileDaySchema(input: CompilerInput): DaySchema {
     filledSlots = fillMustDoSlots(filledSlots, mustDoInputs, input.hotel?.address);
   }
 
+  // Step 5c: Fill pre-booked commitments (reservations, shows, tours)
+  if (input.preBookedCommitments && input.preBookedCommitments.length > 0) {
+    filledSlots = fillPreBookedSlots(filledSlots, input.preBookedCommitments, input.hotel?.address);
+  }
+
   // Step 6: Resolve conflicts
   const resolvedSlots = resolveConflicts(filledSlots, groupConfig);
 
