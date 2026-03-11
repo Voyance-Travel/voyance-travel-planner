@@ -282,3 +282,71 @@ function parseHour(time: string): number {
   const [hours, minutes] = time.split(':').map(Number);
   return hours + (minutes || 0) / 60;
 }
+
+/**
+ * Step 5e: Remove or shrink empty slots that overlap with blocked time windows.
+ * Filled/locked slots are never touched.
+ */
+function applyBlockedWindows(
+  slots: DaySlot[],
+  blockedWindows: { start: string; end: string; reason: string }[]
+): DaySlot[] {
+  let result = slots;
+
+  for (const blocked of blockedWindows) {
+    const bStart = parseHour(blocked.start);
+    const bEnd = parseHour(blocked.end);
+
+    result = result.reduce<DaySlot[]>((acc, slot) => {
+      // Never touch filled slots
+      if (slot.status === 'filled' || !slot.timeWindow) {
+        acc.push(slot);
+        return acc;
+      }
+
+      const sStart = parseHour(slot.timeWindow.earliest);
+      const sEnd = parseHour(slot.timeWindow.latest);
+
+      // No overlap → keep as-is
+      if (sEnd <= bStart || sStart >= bEnd) {
+        acc.push(slot);
+        return acc;
+      }
+
+      // Full overlap → remove the slot
+      if (sStart >= bStart && sEnd <= bEnd) {
+        return acc;
+      }
+
+      // Partial overlap — shrink the time window
+      if (sStart < bStart) {
+        // Keep the portion before the blocked window
+        const shrunkEnd = Math.floor(bStart) + ':' + String(Math.round((bStart % 1) * 60)).padStart(2, '0');
+        acc.push({
+          ...slot,
+          timeWindow: { ...slot.timeWindow, latest: toHHMM(bStart) },
+        });
+      }
+      if (sEnd > bEnd) {
+        // Keep the portion after the blocked window
+        acc.push({
+          ...slot,
+          slotId: slot.slotId + '_post',
+          timeWindow: { ...slot.timeWindow, earliest: toHHMM(bEnd) },
+        });
+      }
+
+      return acc;
+    }, []);
+  }
+
+  // Re-index positions
+  return result.map((slot, i) => ({ ...slot, position: i + 1 }));
+}
+
+/** Convert decimal hour back to "HH:MM" string. */
+function toHHMM(decimalHour: number): string {
+  const h = Math.floor(decimalHour);
+  const m = Math.round((decimalHour - h) * 60);
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}

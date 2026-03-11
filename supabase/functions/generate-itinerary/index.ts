@@ -8421,7 +8421,7 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
             // @ts-ignore — Deno imports with .ts extension
             const { validateAgainstSchema, buildGenerationLog, formatLogForConsole } = await import('./schema/index.ts');
 
-            const aiCallMs = Date.now() - (compileStart || Date.now());
+            const aiCallMs = Date.now() - aiCallStart;
             const valStart = Date.now();
             const validationResult = validateAgainstSchema(
               compiledSchema,
