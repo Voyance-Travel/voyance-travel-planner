@@ -10552,8 +10552,9 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
         totalDays,
       });
 
-      // Retry loop with exponential backoff for intermittent 403 errors
-      const maxRetries = 3;
+      // Retry loop with exponential backoff
+      const maxRetries = 5;
+      let initialChainSuccess = false;
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           const response = await fetch(generateUrl, {
@@ -10564,14 +10565,36 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
             },
             body: initialChainBody,
           });
-          if (response.ok || response.status < 500) break;
-          console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} failed: ${response.status}`);
+          if (response.ok) {
+            initialChainSuccess = true;
+            console.log(`[generate-trip] Initial chain to day ${effectiveStartDay} succeeded on attempt ${attempt}`);
+            break;
+          }
+          const errBody = await response.text().catch(() => '(no body)');
+          console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} failed: HTTP ${response.status} — ${errBody.slice(0, 200)}`);
         } catch (err) {
           console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} error:`, err);
         }
         if (attempt < maxRetries) {
-          await new Promise(r => setTimeout(r, 2000 * attempt));
+          await new Promise(r => setTimeout(r, 3000 * attempt));
         }
+      }
+
+      if (!initialChainSuccess) {
+        console.error(`[generate-trip] All ${maxRetries} initial chain attempts failed — marking trip as failed`);
+        await supabase.from('trips').update({
+          itinerary_status: 'failed',
+          metadata: {
+            ...existingMeta,
+            generation_error: 'Failed to start day generation after all retries',
+            generation_failed_at: new Date().toISOString(),
+            chain_broken_at_day: 0,
+          },
+        }).eq('id', tripId);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Failed to start generation', code: 'CHAIN_START_FAILED' }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       // Return immediately — generation continues server-side via self-chaining
