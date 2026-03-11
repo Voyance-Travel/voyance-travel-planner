@@ -19,7 +19,7 @@ export const companyInfo = {
 
 export const keyStats = [
   { label: 'Destinations Worldwide', value: 'Any City' },
-  { label: 'Travel DNA Archetypes', value: '27' },
+  { label: 'Travel DNA Archetypes', value: '29' },
   { label: 'Personalization Signals', value: '50+' },
   { label: 'Curated City Guides', value: '27' },
 ];

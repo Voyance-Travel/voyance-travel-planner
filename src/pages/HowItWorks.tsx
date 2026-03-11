@@ -367,7 +367,7 @@ export default function HowItWorks() {
               Travel DNA
             </div>
             <h2 className="text-3xl md:text-4xl font-serif font-bold text-foreground mb-4">
-              27 traveler types
+              29 traveler types
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Every trip is shaped by who you are. Discover your type and see how 
@@ -387,7 +387,7 @@ export default function HowItWorks() {
             <Button asChild size="lg" variant="outline" className="gap-2">
               <Link to={ROUTES.ARCHETYPES}>
                 <Sparkles className="h-4 w-4" />
-                Explore all 27 types
+                Explore all 29 types
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
