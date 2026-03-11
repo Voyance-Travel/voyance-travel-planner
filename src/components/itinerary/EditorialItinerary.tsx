@@ -419,6 +419,8 @@ export interface EditorialItineraryProps {
   isEditable?: boolean;
   /** Preview mode — shows venue names/times but gates details (address, photos, tips, actions) */
   isPreview?: boolean;
+  /** Clean preview mode — hides all builder tools for a reading experience */
+  viewMode?: 'edit' | 'preview';
   originCity?: string;
   /** Activity IDs to highlight (e.g., from chatbot suggestions) */
   highlightedActivityIds?: string[];
