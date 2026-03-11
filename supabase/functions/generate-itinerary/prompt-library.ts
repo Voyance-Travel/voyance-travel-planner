@@ -940,9 +940,7 @@ export function buildArrivalDayPrompt(
   // Build required sequence based on what data we have
   const requiredSequence: string[] = [];
   
-  if (flight.hasOutboundFlight) {
-    requiredSequence.push('airport_arrival');
-  }
+  // airport_arrival removed — handled by Arrival Game Plan UI component
   
   if (hotel.hasHotel) {
     requiredSequence.push('hotel_check_in');
