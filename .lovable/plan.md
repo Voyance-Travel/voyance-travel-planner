@@ -1,179 +1,148 @@
-## Journey Sequential Generation — Implementation Status
 
-### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-**Implemented:**
+## Fix 21: Edit/Preview Mode Toggle for Trip Page
 
-1. **`src/hooks/useGenerationGate.ts`**:
-   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
-   - Added journey detection: fetches all sibling legs when `journeyId` is present
-   - Sums credit costs across all journey legs for unified billing
-   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
-   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
+### Overview
+Add an Edit/Preview toggle to the trip page. Edit mode = current view (everything). Preview mode = clean, magazine-style reading view with all builder tools hidden. No features removed — Preview simply hides editing controls.
 
-2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
-   - Added `journeyLegs` state for cost breakdown display
-   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
-   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
-   - Updated cost confirmation dialog:
-     - Shows "Journey Cost Breakdown" header for journeys
-     - Lists each leg with city, days, and cost
-     - Shows "Journey Total" instead of "Total"
-     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
-     - Disabled partial generation for journeys (must pay full upfront)
-     - "Confirm & Generate Journey" button text for journeys
+### Scope Assessment
+This is a **large** change touching the two most complex files in the app:
+- `TripDetail.tsx` (2635 lines) — top-level trip page
+- `EditorialItinerary.tsx` (9400 lines) — the main itinerary component with DayCard and ActivityRow sub-components
 
-### Part 2: Auto-Chain Generation (TODO)
-
-When leg 1 completes generation, the backend should:
-1. Check for next queued leg in the journey
-2. Automatically trigger `generate-trip` for the next leg
-3. Continue until all legs are generated
-
-Files to modify:
-- `supabase/functions/generate-trip/index.ts` or similar edge function
-- Add post-generation hook to detect and chain to next journey leg
-
-### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
-
-**Implemented:**
-
-1. **`src/pages/TripDetail.tsx`**:
-   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
-   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
-   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
-   - Added distinct "queued" state UI:
-     - Clock icon with hourglass badge
-     - "{destination} is up next" heading
-     - Explanation text about waiting for previous leg
-     - "View previous city" button to navigate back to the generating leg
-   - Added `Clock` to lucide-react imports
+Given the size, we'll implement this **incrementally across multiple messages** to avoid errors:
+1. **Part A**: Mode context, toggle UI, TripDetail-level conditional rendering
+2. **Part B**: EditorialItinerary + DayCard preview mode rendering
+3. **Part C**: ActivityRow preview card redesign + route map integration
+4. **Part D**: Polish — transitions, mobile, URL state, print
 
 ---
 
-## Preference Enforcement Activation ✅ COMPLETE
+### Part A: Mode Context & TripDetail Integration
 
-### Fix 1: Per-day preference checks now trigger retries ✅
-Moved MINIMUM REAL ACTIVITY COUNT and USER PREFERENCE VALIDATION blocks to after `validateGeneratedDay()` so they can push errors into `validation.errors`. Upgraded all `console.warn` calls to `validation.errors.push` + `validation.isValid = false`. Added budget preference validation ($75+ threshold). Activity keyword checks skip departure days.
+**New file: `src/hooks/useTripViewMode.ts`**
+- Custom hook wrapping `useSearchParams` to read/write `?mode=edit|preview`
+- Returns `{ mode, setMode, isPreview, isEditMode }`
+- Defaults: trip owner → `edit`, non-owner/shared view → `preview`
+- Uses `history.replaceState` via `setSearchParams(..., { replace: true })` to avoid navigation history pollution
 
-### Fix 2: Stage 2.6 personalization rejection enabled ✅
-Uncommented and enhanced the rejection block. Critical and major dietary violations are now actively enforced — dietary violations get patched with ⚠️ warnings in activity descriptions. Low personalization scores (<40) are logged.
+**New file: `src/components/trip/TripViewModeToggle.tsx`**
+- Segmented control: "Edit" | "Preview"
+- Active segment: `bg-teal-700 text-white`, inactive: `bg-white text-gray-600 border`
+- Pill shape: `rounded-full`, 200ms transition
+- Only shown to trip owner (or collaborators with edit access)
+- Non-owners locked to preview — toggle hidden entirely
 
----
+**`TripDetail.tsx` changes:**
+- Import `useTripViewMode` and `TripViewModeToggle`
+- Derive `isOwner` from `user?.id === trip.user_id`
+- Non-owners: force preview mode, hide toggle
+- Pass `viewMode` to `EditorialItinerary` as new prop `viewMode: 'edit' | 'preview'`
+- When `isPreview`:
+  - Hide: Draft badge, MobileTripOverview, GuidePromptBanner, TripDebriefModal trigger
+  - Hide: TripPhotoGallery's upload button (keep gallery visible)
+  - Hide: ItineraryAssistant floating chatbot
+  - Keep: Hero image, trip title (without draft badge), day selector, toggle
+- Shared links (`/trip/{id}` from Share button): append `?mode=preview` — recipients land in clean view
 
-## Itinerary Generation Quality Fixes ✅ COMPLETE
+### Part B: EditorialItinerary Preview Mode
 
-### Bug 1: Arrival Sequence Inverted ✅
-Post-generation validator in `index.ts` detects when hotel check-in is ordered before airport arrival on Day 1. Extracts arrival/transfer/checkin activities, recalculates times based on flight arrival, and re-inserts in correct order.
+**`EditorialItinerary.tsx` changes:**
+- New prop: `viewMode?: 'edit' | 'preview'` (default `'edit'`)
+- Derive `isCleanPreview = viewMode === 'preview'` (distinct from existing `isPreview` which means "locked/paywall preview")
+- When `isCleanPreview`:
+  - **Hide the entire "Trip Command Center" card** (ROW 1-5: Trip Total, action buttons, Voyance Intelligence, Trip Completion, Travel Intel) — replace with just the toggle
+  - **Hide tab bar** — only show itinerary content (no Budget, Details, Need to Know, Group tabs)
+  - **Hide**: SmartFinishBanner, WhyWeSkippedSection, ParsedTripNotesSection, skip list warnings, FlightSyncWarning, BulkUnlockBanner, UnlockBanner, CreditNudge
+  - **Hide**: Undo button, History button, date editor pencil
+  - **Keep**: Day navigation bar (day picker), day selector arrows
+  - **Keep**: TripViewModeToggle (rendered at top of the itinerary area)
+  - Pass `isCleanPreview` down to `DayCard`
 
-### Bug 2: User Preferences Ignored ✅
-- Strengthened preference injection in system prompt with explicit enforcement language (🚨 MUST BE HONORED)
-- Added post-generation validation logging that checks activities against keyword map for requested activities (skiing, surfing, etc.)
-- Warns when "light dinner" preference is violated by expensive dining ($50+)
+**`DayCard` changes when `isCleanPreview`:**
+- **Hide**: Cost badge, lock/unlock button, regenerate button, collapse/expand chevron, overflow menu
+- **Keep**: Day number + title with teal accent bar, weather badge, "Show Routes" button (for map)
+- Day is **always expanded** in preview — no collapse behavior
+- **Hide**: Day footer entirely (Add, Discover, Import, Refresh, Day Total)
+- **Hide**: TransitGapIndicator between activities
+- **Hide**: Inline "Add activity" insertion points
+- **Hide**: Transport comparison cards on transition days
 
-### Bug 3: Empty Days ✅
-Added minimum real activity count validation after generation. Filters out logistics (transport, accommodation, downtime) and warns when a day has fewer than 2 real activities (1 for departure day).
+### Part C: ActivityRow Preview Card Redesign
 
-### Bug 4: Nonsensical Inter-City Flights ✅
-Added `SAME_METRO_PAIRS` lookup in `buildTransitionDayPrompt` (prompt-library.ts). When origin and destination are in the same metro area (e.g., East Rutherford ↔ NYC), flights are suppressed from transport options and the prompt explicitly forbids them. Default mode switches to `rideshare`.
+**`ActivityRow` changes when `isCleanPreview`:**
+- Render a **completely different card layout** — not the edit card with things removed, but a clean reading card:
 
----
+```
+┌───────────────────────────────────────────┐
+│  9:45 AM - 6:00 PM           (teal text)  │
+│                                           │
+│  [Image — full card width, 200px height]  │
+│                                           │
+│  US Open Tennis Tournament    (Playfair)  │
+│  A full day of world-class tennis...      │
+│                                           │
+│  📍 Flushing Meadows, Flushing, NY        │
+│                                           │
+│  VOYANCE TIP                              │
+│  Visit the Heineken Silver Shop...        │
+└───────────────────────────────────────────┘
+```
 
-## Fix: Case-Sensitive Token Lookup ✅ COMPLETE
+- Time: `text-sm font-medium text-teal-700`
+- Image: full card width, `rounded-t-xl`, `h-[200px]`, `object-cover`, no edit overlay. Uses existing `useActivityImage` hook.
+- Title: `font-serif text-xl font-semibold text-gray-900`
+- Description: `text-base text-gray-700 leading-relaxed`
+- Location: `text-sm text-gray-500` with subtle `MapPin` icon (Lucide, not emoji)
+- Tip: Always expanded. Label "VOYANCE TIP" in `text-xs font-medium text-teal-600 uppercase tracking-wider`. Body in `text-sm text-gray-600 italic`.
+- **Hidden**: Category badge, star rating, price, booking buttons, lock icon, 3-dot menu, drag handle, image edit pencil, vendor booking links, reservation badges
 
-**Root cause:** `generate_share_token()` used base64 encoding producing mixed-case tokens. Mobile apps (iMessage, WhatsApp) can lowercase URLs, breaking the case-sensitive PostgreSQL lookup.
+**Card styling in preview:**
+- `border-0 shadow-none bg-transparent` — content floats on page
+- Separated by `mb-8` whitespace (generous breathing room)
+- Images get `rounded-xl` as the primary visual anchor
 
-### Changes (single migration):
-1. **`generate_share_token(integer)`** — switched from base64 to hex encoding (lowercase-only: a-f, 0-9)
-2. **Case-insensitive index** — `idx_trip_invites_token_lower` on `LOWER(token)`
-3. **Backfill** — all existing tokens lowercased
-4. **`get_trip_invite_info()`** — `WHERE LOWER(token) = LOWER(p_token)` + failure logging + `replaced_at` check
-5. **`accept_trip_invite()`** — `WHERE LOWER(token) = LOWER(p_token) FOR UPDATE`
-6. **`replaced_at` column** — added to `trip_invites` for soft-delete support
+**Transport items**: Completely hidden in preview. No transport line items, no connectors. Activities flow directly with whitespace.
 
----
+### Part D: Route Map, Transitions, Mobile, URL
 
-## Fix: User Requirements Ignored in Just Tell Us Pipeline ✅ COMPLETE
+**Route Map (simplified v1):**
+- The existing `DayRouteMap` component already renders a Leaflet map when "Show Routes" is clicked
+- In preview mode: "Show Routes" remains available and works as-is
+- Future enhancement: side-by-side layout on desktop. For now, the existing stacked map is sufficient.
+- No new map integration needed for v1.
 
-### Layer 1: `findBestDay` respects `preferredDay` on Day 1/last day ✅
-- Modified skip guard in `must-do-priorities.ts` L472 to allow long activities on Day 1/last day when user explicitly requested that day via `preferredDay`.
+**Transitions:**
+- When toggling: use `opacity` transitions (200ms) on the elements being shown/hidden
+- Scroll position preserved — no jump to top
+- Day selector stays fixed — user stays on whichever day they were viewing
 
-### Layer 2: `parseMustDoInput` resolves day-of-week and multi-day references ✅
-- Added `tripStartDate` and `totalDays` parameters to function signature
-- Day-of-week resolution: maps "Friday", "Saturday" etc. to trip day numbers using start date
-- Multi-day expansion: "both days" / "every day" / "all N days" duplicated into per-day entries
-- Updated all 5 callers in `index.ts` to pass `startDate` and `totalDays`
+**URL State:**
+- `?mode=preview` / `?mode=edit` via `useSearchParams`
+- Toggle updates URL without full reload via `{ replace: true }`
+- Share button appends `?mode=preview` to shared links
 
-### Layer 3: Chat AI prompt strengthened for temporal mapping ✅
-- Added CRITICAL TEMPORAL MAPPING RULES to system prompt in `chat-trip-planner/index.ts`
-- Updated `mustDoActivities` field description to instruct AI to expand multi-day refs into per-day entries with explicit day numbers
+**Mobile:**
+- Toggle full-width on mobile: `w-full sm:w-auto`
+- Preview cards go full-width with minimal padding
+- Timeline dots/lines hidden in preview mode on mobile (cleaner reading)
 
-### Layer 4: Day 1 arrival uses actual airport name ✅
-- Added `arrivalAirport` to `FlightHotelContextResult` interface and return value
-- Stage 2.55 split block uses `flightHotelResult.arrivalAirport` instead of hardcoded `'Airport'`
-- All 3 Day 1 constraint templates (morning/afternoon/evening) use `arrivalAirportDisplay`
+**Non-owner behavior:**
+- Non-owners (shared view, no edit access): locked to preview, toggle hidden
+- Collaborators with edit permission: see toggle, can switch
+- Non-members in preview: subtle "Plan your own trip →" CTA at bottom
 
----
+### Files Changed
 
-## Fix 12: Blocked Time Window Truncation ✅ COMPLETE
+| File | Action |
+|------|--------|
+| `src/hooks/useTripViewMode.ts` | **Create** — mode hook |
+| `src/components/trip/TripViewModeToggle.tsx` | **Create** — segmented toggle |
+| `src/pages/TripDetail.tsx` | **Edit** — integrate toggle, conditional rendering |
+| `src/components/itinerary/EditorialItinerary.tsx` | **Edit** — hide command center/tabs/tools in preview |
+| `src/components/itinerary/EditorialItinerary.tsx` (DayCard) | **Edit** — simplified day header, always expanded |
+| `src/components/itinerary/EditorialItinerary.tsx` (ActivityRow) | **Edit** — clean preview card variant |
 
-**Root cause:** Chat planner outputs `time_block` constraints with start time but no `endTime`. `Start.tsx` defaults missing durations to 120 minutes, producing `09:00→11:00` instead of `09:00→17:00` for "US Open 9am to 5pm". The generator sees the short window and skips the event card.
+### No Database Changes
+This is a UI-only feature. No schema modifications needed.
 
-### Layer 1: Self-correction in generation engine ✅
-- `budget-constraints.ts` `formatGenerationRules`: parses `reason` text for explicit time ranges (e.g. "9am to 5pm") using regex
-- If parsed end time is later than stored `to` value, overrides it
-- Fixes ALL existing trips with truncated blocked windows
-
-### Layer 2: Chat planner schema extended ✅
-- Added `endTime` and `duration` fields to `userConstraints` schema in `chat-trip-planner/index.ts`
-- AI can now output structured time ranges (time="9:00 AM", endTime="5:00 PM")
-
-### Layer 3: Start.tsx time_block handler fixed ✅
-- Priority 1: Use explicit `endTime` from chat planner
-- Priority 2: Parse time range from constraint `description` text via regex
-- Priority 3: Fall back to duration math (existing behavior)
-- Eliminates the 120-minute default for events with known end times
-
----
-
-## Fix 16: Replace Lovable Favicon with Voyance Favicon ✅ COMPLETE
-
-- Deleted `public/favicon.ico` (Lovable heart logo)
-- Updated `index.html` favicon links with `?v=3` cache-buster, explicit sizes, and `image/x-icon` override pointing to PNG
-- Post-deploy: request Google re-crawl via Search Console
-
----
-
-## Fix 17: Community Guides Redesign — Phase 1 ✅ COMPLETE
-
-### Database Changes
-- Added `user_experience`, `user_rating`, `recommended`, `photos` columns to `guide_sections`
-- Added `moderation_status` column to `community_guides`
-- Created `guide_activity_reviews` table with indexes and RLS
-- Created `guide-photos` storage bucket with public read + authenticated upload/delete RLS
-
-### New Components
-- **`StarRating.tsx`** — 1-5 star rating with hover/click states
-- **`PhotoUploadGrid.tsx`** — Upload up to 4 photos per activity to Supabase Storage, with thumbnail grid and remove
-- **`EditableActivityCard.tsx`** — Rich editable card with experience textarea (2000 chars), star rating, photo uploads, recommend toggle (Yes/No/It's okay)
-- **`SmartTagSelector.tsx`** — Auto-suggested tags from destination, activity categories, Travel DNA, and trip type + custom input
-
-### Edge Function
-- **`moderate-guide-content`** — Keyword-based content moderation returning `{ approved, warnings, blocked_reasons }`. Blocks violence/explicit/hate/drugs; warns on PII (phone, email, SSN).
-
-### GuideBuilder.tsx Rewrite
-- Merged "Guide Content" section into editable activity cards
-- Sections are the single source of truth (persisted to `guide_sections` table)
-- Removed separate `guide_favorites` / `guide_manual_entries` dependency for the editor flow
-- Smart tags replace free-text input
-- Save mutation persists sections with new fields + runs moderation before publish
-- Activity reviews aggregated to `guide_activity_reviews` on publish
-- "Add Custom Tip" button replaces separate recommendation modal
-
-### Published View Redesign (CommunityGuideDetail.tsx)
-- Blog-style layout with hero image (first user photo or destination cover)
-- Only shows activities with user content (experience, rating, photos, or recommendation)
-- Star ratings and recommendation badges inline
-- Photo grids per activity
-- "Custom Tips" section at bottom for non-itinerary recommendations
-- "Voyance Tip" callout for activities without user experience text
