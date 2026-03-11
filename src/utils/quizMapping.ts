@@ -6,6 +6,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { getTypeRarity } from '@/config/typeRarity';
+import { getPatternGroupForArchetype } from '@/config/archetype-group-mapping';
 import type { Json } from '@/integrations/supabase/types';
 
 // ============================================================================
