@@ -352,6 +352,90 @@ export default function HowItWorks() {
               />
             </div>
           </motion.div>
+
+          {/* Chapter 4 - Live Your Trip */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 items-center mt-16 md:mt-32 mb-16 md:mb-32"
+          >
+            <div className="relative md:order-1 order-2">
+              <div className="absolute -inset-2 md:-inset-4 bg-gradient-to-br from-accent/20 to-primary/20 rounded-2xl md:rounded-3xl blur-xl md:blur-2xl" />
+              <img 
+                src={liveTripImage}
+                alt="Using Voyance as a live travel companion"
+                className="relative rounded-xl md:rounded-2xl shadow-xl md:shadow-2xl w-full aspect-square md:aspect-[4/3] object-cover"
+              />
+            </div>
+            <div className="md:order-2 order-1">
+              <span className="text-4xl md:text-8xl font-serif font-bold text-primary/10">04</span>
+              <h2 className="text-xl md:text-4xl font-serif font-bold text-foreground -mt-4 md:-mt-8 mb-3 md:mb-6">
+                Live your trip
+              </h2>
+              <p className="text-sm md:text-lg text-muted-foreground leading-relaxed mb-3 md:mb-6">
+                Your itinerary becomes a day-by-day travel companion. Get real-time directions, 
+                activity details, and local tips as you go. Want to swap an activity or change 
+                your pace? Your consultant adapts with you.
+              </p>
+              <div className="mt-4 md:mt-8 grid grid-cols-3 gap-2 md:gap-4 text-center">
+                <div className="p-2 md:p-4 bg-muted/50 rounded-lg md:rounded-xl">
+                  <p className="text-lg md:text-2xl font-bold text-primary">Real-time</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">guidance</p>
+                </div>
+                <div className="p-2 md:p-4 bg-muted/50 rounded-lg md:rounded-xl">
+                  <p className="text-lg md:text-2xl font-bold text-primary">On-the-fly</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">changes</p>
+                </div>
+                <div className="p-2 md:p-4 bg-muted/50 rounded-lg md:rounded-xl">
+                  <p className="text-lg md:text-2xl font-bold text-primary">Day-by-day</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">companion</p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Chapter 5 - Share Your Story */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 items-center"
+          >
+            <div>
+              <span className="text-4xl md:text-8xl font-serif font-bold text-primary/10">05</span>
+              <h2 className="text-xl md:text-4xl font-serif font-bold text-foreground -mt-4 md:-mt-8 mb-3 md:mb-6">
+                Share your story
+              </h2>
+              <p className="text-sm md:text-lg text-muted-foreground leading-relaxed mb-3 md:mb-6">
+                After your trip, turn your experience into a community guide. Rate activities, 
+                share your photos and tips, and help fellow travelers discover what you loved. 
+                Browse guides from travelers like you for your next adventure.
+              </p>
+              <div className="mt-4 md:mt-8 grid grid-cols-3 gap-2 md:gap-4 text-center">
+                <div className="p-2 md:p-4 bg-muted/50 rounded-lg md:rounded-xl">
+                  <p className="text-lg md:text-2xl font-bold text-primary">Community</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">guides</p>
+                </div>
+                <div className="p-2 md:p-4 bg-muted/50 rounded-lg md:rounded-xl">
+                  <p className="text-lg md:text-2xl font-bold text-primary">Photo</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">journals</p>
+                </div>
+                <div className="p-2 md:p-4 bg-muted/50 rounded-lg md:rounded-xl">
+                  <p className="text-lg md:text-2xl font-bold text-primary">Real</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">traveler reviews</p>
+                </div>
+              </div>
+            </div>
+            <div className="relative">
+              <div className="absolute -inset-2 md:-inset-4 bg-gradient-to-br from-primary/20 to-accent/20 rounded-2xl md:rounded-3xl blur-xl md:blur-2xl" />
+              <img 
+                src={communityImage}
+                alt="Sharing your travel story as a community guide"
+                className="relative rounded-xl md:rounded-2xl shadow-xl md:shadow-2xl w-full aspect-square md:aspect-[4/3] object-cover"
+              />
+            </div>
+          </motion.div>
         </div>
       </section>
 
