@@ -1614,7 +1614,7 @@ export default function TripDetail() {
         />
       )}
 
-      <section className="pb-16 pt-8 sm:pt-10 relative z-10">
+      <section className="pb-16 pt-8 sm:pt-10 relative z-10 overflow-x-hidden">
         <div className="max-w-4xl mx-auto px-4">
           {(() => {
             const isPastTrip = isAfter(new Date(), parseLocalDate(effectiveEndDate));
