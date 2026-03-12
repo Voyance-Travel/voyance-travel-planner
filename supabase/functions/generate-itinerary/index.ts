@@ -8382,6 +8382,7 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
                       title: { type: "string", description: "Day title like 'Arrival Day' or 'Historic Exploration'" },
                       activities: {
                         type: "array",
+                        minItems: 3,
                         items: {
                           type: "object",
                           properties: {
@@ -8397,14 +8398,50 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
                               type: "object",
                               properties: {
                                 name: { type: "string" },
-                                address: { type: "string" }
-                              }
+                                address: { type: "string" },
+                                coordinates: {
+                                  type: "object",
+                                  properties: { lat: { type: "number" }, lng: { type: "number" } },
+                                  required: ["lat", "lng"]
+                                }
+                              },
+                              required: ["name", "address"]
                             },
                             estimatedCost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" }, basis: { type: "string", enum: ["per_person", "flat", "per_room"], description: "per_person = price per traveler, flat = total price for the group/vehicle, per_room = per room per night" } } },
-                            cost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" }, basis: { type: "string", enum: ["per_person", "flat", "per_room"] } } },
+                            cost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" }, basis: { type: "string", enum: ["per_person", "flat", "per_room"] } }, required: ["amount", "currency"] },
                             bookingRequired: { type: "boolean" },
+                            tags: { type: "array", items: { type: "string" }, minItems: 5, description: "5+ keyword tags for filtering/search (e.g. outdoor, romantic, family-friendly, historic, waterfront)" },
+                            transportation: {
+                              type: "object",
+                              description: "How to get here from the previous activity. COST RULES: walk/walking → estimatedCost.amount MUST be 0. metro/subway → 1-5. bus → 1-4. taxi/uber/rideshare → use realistic local rates.",
+                              properties: {
+                                method: { type: "string" },
+                                duration: { type: "string" },
+                                estimatedCost: {
+                                  type: "object",
+                                  properties: { amount: { type: "number" }, currency: { type: "string" } }
+                                },
+                                instructions: { type: "string" }
+                              }
+                            },
+                            contextualTips: {
+                              type: "array",
+                              items: {
+                                type: "object",
+                                properties: {
+                                  type: { type: "string", enum: ["timing", "booking", "money_saving", "transit", "cultural", "safety", "hidden_gem", "weather", "general"] },
+                                  text: { type: "string" }
+                                },
+                                required: ["type", "text"]
+                              },
+                              description: "1-4 typed contextual tips"
+                            },
+                            rating: {
+                              type: "object",
+                              properties: { value: { type: "number" }, totalReviews: { type: "number" } }
+                            },
+                            website: { type: "string" },
                             tips: { type: "string", description: "Insider tip for this activity (must be specific, actionable, 30+ chars)" },
-                            coordinates: { type: "object", properties: { lat: { type: "number" }, lng: { type: "number" } } },
                             type: { type: "string" },
                             suggestedFor: { type: "string", description: "User ID of the traveler whose preferences most influenced this activity (group trips)" },
                             isHiddenGem: { type: "boolean", description: "true if this is a hidden gem discovered through deep research. NOT for mainstream tourist attractions." },
@@ -8423,11 +8460,57 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
                               required: ["tags", "whyThisFits", "confidence"]
                             }
                           },
-                          required: ["title", "category", "startTime", "endTime", "location", "personalization", "tips", "crowdLevel", "isHiddenGem", "hasTimingHack"]
+                          required: ["title", "category", "startTime", "endTime", "location", "cost", "tags", "personalization", "tips", "crowdLevel", "isHiddenGem", "hasTimingHack"]
                         }
                       },
                       accommodationNotes: { type: "array", items: { type: "string" }, description: "2-3 accommodation tips for this destination" },
                       practicalTips: { type: "array", items: { type: "string" }, description: "3-4 practical travel tips for this destination" },
+                      transportComparison: {
+                        type: "array",
+                        description: "Transport options for transition days between cities. Required when isTransitionDay is true.",
+                        items: {
+                          type: "object",
+                          properties: {
+                            id: { type: "string" },
+                            mode: { type: "string", enum: ["train", "flight", "bus", "car", "ferry"] },
+                            operator: { type: "string" },
+                            inTransitDuration: { type: "string" },
+                            doorToDoorDuration: { type: "string" },
+                            cost: {
+                              type: "object",
+                              properties: {
+                                perPerson: { type: "number" },
+                                total: { type: "number" },
+                                currency: { type: "string" },
+                                includesTransfers: { type: "boolean" }
+                              },
+                              required: ["perPerson", "total", "currency"]
+                            },
+                            departure: {
+                              type: "object",
+                              properties: {
+                                point: { type: "string" },
+                                neighborhood: { type: "string" }
+                              }
+                            },
+                            arrival: {
+                              type: "object",
+                              properties: {
+                                point: { type: "string" },
+                                neighborhood: { type: "string" }
+                              }
+                            },
+                            pros: { type: "array", items: { type: "string" } },
+                            cons: { type: "array", items: { type: "string" } },
+                            bookingTip: { type: "string" },
+                            scenicOpportunities: { type: "array", items: { type: "string" } },
+                            isRecommended: { type: "boolean" },
+                            recommendationReason: { type: "string" }
+                          },
+                          required: ["id", "mode", "operator", "inTransitDuration", "doorToDoorDuration", "cost", "departure", "arrival", "pros", "cons", "isRecommended"]
+                        }
+                      },
+                      selectedTransportId: { type: "string", description: "ID of the recommended transport option" },
                       narrative: { type: "object", properties: { theme: { type: "string" }, highlights: { type: "array", items: { type: "string" } } } }
                     },
                     required: ["dayNumber", "date", "theme", "activities"]
