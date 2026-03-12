@@ -590,7 +590,13 @@ ${itineraryDescription}
 
     for (const toolCall of toolCalls) {
       const fnName = toolCall.function?.name;
-      const args = JSON.parse(toolCall.function?.arguments || "{}");
+      let args: Record<string, any> = {};
+      try {
+        args = JSON.parse(toolCall.function?.arguments || "{}");
+      } catch (parseErr) {
+        console.error(`[itinerary-chat] Failed to parse tool arguments for ${fnName}:`, parseErr);
+        continue;
+      }
 
       if (fnName === "capture_preference") {
         capturedPreferences.push({
