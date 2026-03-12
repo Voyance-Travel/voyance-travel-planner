@@ -3959,6 +3959,9 @@ async function finalSaveItinerary(
 
     console.log('[Stage 6] Final save successful');
 
+    // Trigger next journey leg if applicable
+    await triggerNextJourneyLeg(supabase, tripId);
+
     // =========================================================================
     // PHASE 4: Write activity_costs rows — single source of truth for all totals
     // =========================================================================
