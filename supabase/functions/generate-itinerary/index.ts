@@ -5735,8 +5735,10 @@ If the purpose is a specific event, plan at least ONE full day around that event
             const checkInStart = minutesToHHMM(startMin);
             const checkInEnd = minutesToHHMM(startMin + 30);
             
-            const hotelN = flightHotelResult?.hotelName || 'Hotel';
-            const hotelA = flightHotelResult?.hotelAddress || '';
+            // Prefer multi-city hotel data, fall back to single-city flightHotelResult
+            const day1City = context.multiCityDayMap?.[0];
+            const hotelN = day1City?.hotelName || flightHotelResult?.hotelName || 'Hotel';
+            const hotelA = day1City?.hotelAddress || flightHotelResult?.hotelAddress || '';
             
             console.log(`[Stage 2.55] Replacing combined arrival block: "${combined.title}" with Hotel Check-in only (arrival handled by UI)`);
             
