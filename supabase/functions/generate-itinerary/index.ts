@@ -1360,6 +1360,8 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
               hotelName,
               hotelAddress,
               hotelNeighborhood,
+              hotelCheckIn,
+              hotelCheckOut,
               isFirstDayInCity: n === 0,
               isLastDayInCity: n === nights - 1,
             });
