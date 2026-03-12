@@ -8818,7 +8818,7 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
         // Overwrite AI-hallucinated hotel addresses with actual booking data
         // =======================================================================
         {
-          const schemaDayCityHotel = multiCityDayMap?.[dayNumber - 1];
+          const schemaDayCityHotel = context.multiCityDayMap?.[dayNumber - 1];
           const actualHotelName = schemaDayCityHotel?.hotelName || flightContext?.hotelName;
           const actualHotelAddress = schemaDayCityHotel?.hotelAddress || flightContext?.hotelAddress;
           if (actualHotelName || actualHotelAddress) {
