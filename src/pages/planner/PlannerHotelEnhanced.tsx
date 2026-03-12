@@ -609,8 +609,7 @@ export default function PlannerHotelEnhanced() {
 
   const handleManualHotelSubmit = async (data: { hotel?: ManualHotelData }) => {
     if (data.hotel) {
-      // Store manual hotel as a special selection
-      setHotel({
+      const manualHotel = {
         id: 'manual',
         name: data.hotel.name || 'Manual Entry',
         location: data.hotel.neighborhood || destination,
@@ -622,7 +621,20 @@ export default function PlannerHotelEnhanced() {
         amenities: [],
         checkIn: data.hotel.checkInTime,
         checkOut: data.hotel.checkOutTime,
-      });
+      };
+
+      // Store in context for summary/booking
+      setHotel(manualHotel);
+
+      // Multi-city: also persist to trip_cities
+      if (isMultiCity && multiCityCityId) {
+        try {
+          await updateCityHotel(multiCityCityId, manualHotel as Record<string, unknown>, 0);
+        } catch (err) {
+          console.warn('[PlannerHotel] Failed to save manual hotel to trip_cities:', err);
+        }
+      }
+
       toast.success('Hotel details saved');
     }
     
