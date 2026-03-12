@@ -5832,7 +5832,12 @@ export function EditorialItinerary({
       <AddActivityModal
         isOpen={!!addActivityModal}
         onClose={() => setAddActivityModal(null)}
-        onAdd={(activity) => addActivityModal && handleAddActivity(addActivityModal.dayIndex, activity)}
+        onAdd={(activity) => {
+          if (addActivityModal) {
+            handleAddActivity(addActivityModal.dayIndex, activity);
+            setAddActivityModal(null);
+          }
+        }}
         currency={tripCurrency}
         destination={destination}
         prevActivity={(() => {
