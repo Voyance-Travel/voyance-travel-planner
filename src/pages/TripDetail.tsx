@@ -120,6 +120,7 @@ export default function TripDetail() {
   const [showDebriefModal, setShowDebriefModal] = useState(false);
   const [liveTripViewMode, setLiveTripViewMode] = useState<'active' | 'edit'>('active');
   const [hasCollaborators, setHasCollaborators] = useState(false);
+  const [activeDayNumber, setActiveDayNumber] = useState<number>(1);
   const [conflictState, setConflictState] = useState<{
     open: boolean;
     localData: Record<string, unknown> | null;
