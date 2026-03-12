@@ -9063,7 +9063,7 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
           const { detectAndFillGaps } = await import('./schema/gap-filler.ts');
 
           // Map budgetTier to gap-filler's expected values
-          const rawBudget = context?.budgetTier || 'standard';
+          const rawBudget = effectiveBudgetTier || 'standard';
           const gapBudgetTier = rawBudget === 'luxury' ? 'luxury' : rawBudget === 'budget' ? 'budget' : 'mid';
 
           const { fillerActivities, gaps } = detectAndFillGaps(normalizedActivities, {
