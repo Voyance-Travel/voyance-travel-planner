@@ -6412,67 +6412,74 @@ If the purpose is a specific event, plan at least ONE full day around that event
         console.log(`[generate-day] ✓ Using authenticated userId: ${userId} (no tripId to verify)`);
       }
 
+        // (Fix 23L: misplaced sort removed — moved to post-buffer-enforcement step)
+
         // =======================================================================
-        // STEP: FINAL CHRONOLOGICAL SORT + TRANSPORT→VENUE LOGICAL ORDER (Fix 23L)
+        // STEP: MEAL DEDUPLICATION — Safety net for duplicate dining (Fix 23L)
         // =======================================================================
         try {
-          // Step A: Sort by startTime
-          normalizedActivities.sort((a: any, b: any) => {
-            const aM = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
-            const bM = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
-            return aM - bM;
-          });
+          const isDiningActivity = (act: any) => {
+            const cat = (act.category || '').toLowerCase();
+            const title = (act.title || '').toLowerCase();
+            if (cat === 'dining' || cat === 'restaurant' || cat === 'food') return true;
+            if (/\b(dinner|lunch|breakfast|brunch|bistro|steakhouse|trattoria|restaurant|café|eatery)\b/i.test(title)) return true;
+            return false;
+          };
 
-          // Step B: Detect transport→venue pairs where venue starts BEFORE its transport
-          const TRANSPORT_PATTERNS = /^(transport|transfer|taxi|uber|ride|drive|car|shuttle|lirr|metro|subway|bus)\s+(to|from)/i;
-          let reorderFixes = 0;
+          const mealWindows = [
+            { name: 'breakfast', min: 0, max: 660, filled: false },
+            { name: 'lunch', min: 660, max: 960, filled: false },
+            { name: 'dinner', min: 960, max: 1440, filled: false },
+          ];
+
+          const toRemove = new Set<number>();
 
           for (let i = 0; i < normalizedActivities.length; i++) {
             const act = normalizedActivities[i];
-            const isTransport = TRANSPORT_PATTERNS.test(act.title || '') ||
-              (act.category || '').toLowerCase() === 'transport';
-            if (!isTransport) continue;
+            if (!isDiningActivity(act)) continue;
+            if (act.isLocked || act.isMustDo || act.source === 'must_do') continue;
 
-            const title = (act.title || '').toLowerCase();
-            const toMatch = title.match(/(?:to|towards?)\s+(.+)/i);
-            if (!toMatch) continue;
-            const transportDest = toMatch[1].trim();
+            const mins = parseTimeToMinutes(act.startTime || '12:00') ?? 720;
+            const window = mealWindows.find(w => mins >= w.min && mins < w.max);
+            if (!window) continue;
 
-            for (let j = 0; j < i; j++) {
-              const venue = normalizedActivities[j];
-              const venueTitle = (venue.title || '').toLowerCase();
-              const venueLoc = typeof venue.location === 'string'
-                ? venue.location.toLowerCase()
-                : (venue.location?.name || '').toLowerCase();
-
-              if (!venueTitle.includes(transportDest) && !venueLoc.includes(transportDest)) continue;
-
-              const transportEnd = parseTimeToMinutes(act.endTime || act.startTime || '00:00');
-              if (transportEnd !== null) {
-                const venueDuration = (parseTimeToMinutes(venue.endTime || '00:00') ?? 0) -
-                  (parseTimeToMinutes(venue.startTime || '00:00') ?? 0);
-                venue.startTime = act.endTime || act.startTime;
-                if (venueDuration > 0) {
-                  venue.endTime = minutesToTime(transportEnd + Math.max(venueDuration, 60));
-                }
-                reorderFixes++;
-                console.log(`[chronological-fix] Moved "${venue.title}" to start after "${act.title}" (${venue.startTime})`);
-              }
-              break;
+            if (window.filled) {
+              console.log(`[meal-dedup] Removing duplicate ${window.name}: "${act.title}" at ${act.startTime}`);
+              toRemove.add(i);
+            } else {
+              window.filled = true;
             }
           }
 
-          if (reorderFixes > 0) {
-            normalizedActivities.sort((a: any, b: any) => {
-              const aM = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
-              const bM = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
-              return aM - bM;
-            });
-            console.log(`[chronological-fix] Fixed ${reorderFixes} transport→venue ordering issues`);
+          // Back-to-back dining check
+          for (let i = 1; i < normalizedActivities.length; i++) {
+            if (toRemove.has(i) || toRemove.has(i - 1)) continue;
+            const prev = normalizedActivities[i - 1];
+            const curr = normalizedActivities[i];
+            if (isDiningActivity(prev) && isDiningActivity(curr)) {
+              if (!curr.isLocked && !curr.isMustDo && curr.source !== 'must_do') {
+                console.log(`[meal-dedup] Removing back-to-back dining: "${curr.title}" after "${prev.title}"`);
+                toRemove.add(i);
+              }
+            }
           }
-        } catch (chronErr) {
-          console.warn(`[chronological-fix] Non-critical error, skipping:`, chronErr);
+
+          if (toRemove.size > 0) {
+            normalizedActivities = normalizedActivities.filter((_: any, i: number) => !toRemove.has(i));
+            console.log(`[meal-dedup] Removed ${toRemove.size} excess dining activities`);
+          }
+        } catch (mealErr) {
+          console.warn('[meal-dedup] Non-critical error, skipping:', mealErr);
         }
+
+        // =======================================================================
+        // STEP: FINAL CHRONOLOGICAL SORT (Fix 23L)
+        // =======================================================================
+        normalizedActivities.sort((a: any, b: any) => {
+          const aM = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
+          const bM = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
+          return aM - bM;
+        });
 
 
       // =======================================================================

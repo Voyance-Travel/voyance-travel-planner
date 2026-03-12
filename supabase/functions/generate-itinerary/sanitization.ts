@@ -83,6 +83,12 @@ const SYSTEM_ANNOTATION_PATTERNS: RegExp[] = [
   /requires? departure by this time.*?\.?\s*/gi,
   /this is your dedicated\s+.+?\s+(?:day|activity|event)\.?\s*/gi,
   /^&\s+/i,
+  // Fix 23L: broader patterns for new prompt tags and AI parroting
+  /this is (?:your|the traveler'?s?) (?:dedicated|special|main).*?(?:day|experience)\.?\s*/gi,
+  /fill this slot.*?\.?\s*/gi,
+  /find (?:a|an) (?:morning|afternoon|evening|late) (?:activity|spot|restaurant)\.?\s*/gi,
+  /\[CONFIRMED\]\s*/gi,
+  /\[SUGGESTED\]\s*/gi,
 ];
 
 export function sanitizeAITextField(text: string | undefined | null): string {
