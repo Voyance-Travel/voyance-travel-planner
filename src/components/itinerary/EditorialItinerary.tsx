@@ -3289,6 +3289,56 @@ export function EditorialItinerary({
     toast.success(`Moved to Day ${toDayIndex + 1}`);
   }, [syncBudgetFromDays]);
 
+  // Copy/duplicate activity to a different day
+  const handleCopyToDay = useCallback((fromDayIndex: number, activityId: string, toDayIndex: number) => {
+    if (fromDayIndex === toDayIndex) return;
+
+    setDays(prev => {
+      const activity = prev[fromDayIndex]?.activities.find(a => a.id === activityId);
+      if (!activity) return prev;
+
+      const copiedActivity: EditorialActivity = {
+        ...activity,
+        id: `${activity.id}-copy-${Date.now()}`,
+        isLocked: false,
+      };
+
+      const parseTimeToMinutes = (time?: string): number => {
+        if (!time) return Infinity;
+        const match = time.match(/^(\d{1,2}):(\d{2})/);
+        if (!match) return Infinity;
+        let hours = parseInt(match[1], 10);
+        const minutes = parseInt(match[2], 10);
+        const ampm = time.match(/(AM|PM)/i);
+        if (ampm) {
+          const period = ampm[1].toUpperCase();
+          if (period === 'PM' && hours !== 12) hours += 12;
+          if (period === 'AM' && hours === 12) hours = 0;
+        }
+        return hours * 60 + minutes;
+      };
+
+      const activityTime = parseTimeToMinutes(copiedActivity.startTime || copiedActivity.time);
+
+      return prev.map((day, idx) => {
+        if (idx !== toDayIndex) return day;
+        const newActivities = [...day.activities];
+        let insertIndex = newActivities.length;
+        for (let i = 0; i < newActivities.length; i++) {
+          const existingTime = parseTimeToMinutes(newActivities[i].startTime || newActivities[i].time);
+          if (activityTime < existingTime) {
+            insertIndex = i;
+            break;
+          }
+        }
+        newActivities.splice(insertIndex, 0, copiedActivity);
+        return { ...day, activities: newActivities };
+      });
+    });
+    setHasChanges(true);
+    toast.success(`Copied to Day ${toDayIndex + 1}`);
+  }, []);
+
   const handleActivityRemove = useCallback(async (dayIndex: number, activityId: string) => {
     // Save version snapshot before delete for undo
     if (tripId) {
