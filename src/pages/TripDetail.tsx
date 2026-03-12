@@ -2474,6 +2474,7 @@ export default function TripDetail() {
           destination={trip.destination}
           startDate={trip.start_date}
           endDate={effectiveEndDate}
+          currentDayNumber={activeDayNumber}
           isLocalTrip={trip.user_id === 'local'}
           days={parseAssistantDays(trip.itinerary_data, trip.start_date)}
           accommodationInfo={(() => {
