@@ -574,7 +574,13 @@ ${itineraryDescription}
     
     const choice = data.choices?.[0];
     const toolCalls = choice?.message?.tool_calls || [];
-    const textContent = choice?.message?.content || "";
+    let textContent = choice?.message?.content || "";
+    // If the AI returned JSON as its text content (happens when tool calls fail),
+    // replace it with a user-friendly message
+    if (textContent.trim().startsWith('{') || textContent.trim().startsWith('[')) {
+      console.warn('[itinerary-chat] AI returned JSON as text content — sanitizing');
+      textContent = "I'm working on updating your itinerary. Let me try that again.";
+    }
 
     const actions: Array<{
       type: string;
