@@ -4025,7 +4025,7 @@ export function EditorialItinerary({
 
 
        {/* Navigation Tabs - Hidden in clean preview mode */}
-       {!isCleanPreview && <div className="sticky top-0 z-30 bg-background sm:relative sm:z-auto">
+       {!isCleanPreview && <div className="sticky top-0 z-30 bg-background sm:relative sm:z-auto overflow-x-hidden">
         <div 
           className="border-b border-border overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0"
           ref={(el) => {
