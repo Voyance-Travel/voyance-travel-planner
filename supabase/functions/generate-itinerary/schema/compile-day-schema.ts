@@ -178,6 +178,9 @@ export function compileDaySchema(input: CompilerInput): DaySchema {
 
   const resolvedSlots = resolveConflicts(filledSlots, groupConfig);
 
+  // Sort slots chronologically by actual time
+  const sortedSlots = sortSlotsByTime(resolvedSlots);
+
   const schema: DaySchema = {
     dayNumber: input.dayNumber,
     dayType,
@@ -185,7 +188,7 @@ export function compileDaySchema(input: CompilerInput): DaySchema {
     archetypeName: input.archetypeName,
     destination: input.destination,
     date: input.date,
-    slots: resolvedSlots,
+    slots: sortedSlots,
     constraints: {
       dayStartTime: groupConfig.dayStartTime,
       dayEndTime: groupConfig.dayEndTime,
