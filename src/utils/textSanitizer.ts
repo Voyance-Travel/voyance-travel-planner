@@ -31,6 +31,15 @@ const SYSTEM_ANNOTATION_PATTERNS: RegExp[] = [
   /\[SYSTEM\]\s*/gi,
   /- user's scheduled event.*?(?:\.|$)/gi,
   /Arrive early to get settled and enjoy the full experience\.?\s*/gi,
+  // Broader patterns for AI prompt echoes (Fix 23M)
+  /&?\s*this is the traveler'?s?\s+(?:must-do|preserve|prebooked).*?\.?\s*/gi,
+  /preserve (?:exactly|the title|the time|as given).*?\.?\s*/gi,
+  /\[SYSTEM[- ]INSTRUCTION\].*?\.?\s*/gi,
+  /MUST END before \d{1,2}:\d{2}.*?(?:\.|$)/gi,
+  /must[- ]do activity requires? departure.*?(?:\.|$)/gi,
+  /requires? departure by this time.*?\.?\s*/gi,
+  /this is your dedicated\s+.+?\s+(?:day|activity|event)\.?\s*/gi,
+  /^&\s+/i,
 ];
 
 /**

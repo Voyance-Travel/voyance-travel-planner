@@ -60,6 +60,7 @@ export interface DaySlot {
   mealInstruction?: string;
   filledData?: SlotFilledData;
   aiInstruction?: string;
+  departureConstraint?: string;
 }
 
 export interface SlotTimeWindow {
