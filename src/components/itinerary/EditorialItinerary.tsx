@@ -4162,7 +4162,7 @@ export function EditorialItinerary({
               </div>
 
               {/* ROW 2: Action Buttons */}
-              <div className="px-4 sm:px-6 py-3 border-b border-border/50" data-tour="trip-actions">
+              <div className="px-4 sm:px-6 py-3 border-b border-border/50 overflow-hidden" data-tour="trip-actions">
                 <div className="flex items-center justify-center gap-3 flex-wrap">
                   <Button variant="outline" size="sm" onClick={() => setShowShareModal(true)} className="gap-2">
                     <Share2 className="h-4 w-4" />

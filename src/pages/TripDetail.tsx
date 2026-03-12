@@ -1631,7 +1631,7 @@ export default function TripDetail() {
             };
 
             return (
-              <div className="flex items-center gap-2 mb-4 sm:mb-6">
+              <div className="flex items-center gap-2 mb-4 sm:mb-6 min-w-0">
                 <h1 className="text-xl sm:text-2xl font-serif font-bold truncate">{trip.name}</h1>
                 {!isPreviewMode && canToggleStatus ? (
                   <button
