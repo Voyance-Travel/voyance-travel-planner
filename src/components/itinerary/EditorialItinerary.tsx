@@ -5031,6 +5031,7 @@ export function EditorialItinerary({
                           onActivityMove={handleActivityMove}
                           onActivityReorder={(reordered) => handleActivityReorder(selectedDayIndex, reordered)}
                           onMoveToDay={handleMoveToDay}
+                          onCopyToDay={handleCopyToDay}
                           onActivityRemove={handleActivityRemove}
                           onDayLock={handleDayLock}
                           onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
