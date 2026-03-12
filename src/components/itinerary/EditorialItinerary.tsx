@@ -9348,6 +9348,27 @@ function ActivityRow({
                           </DropdownMenuSub>
                         </>
                       )}
+                      {totalDays > 1 && onCopyToDay && (
+                        <>
+                          <DropdownMenuSub>
+                            <DropdownMenuSubTrigger className="gap-2">
+                              <Copy className="h-4 w-4" />
+                              Copy to day
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent className="bg-background border shadow-lg">
+                              {Array.from({ length: totalDays }, (_, i) => i).filter(i => i !== dayIndex).map(targetDay => (
+                                <DropdownMenuItem
+                                  key={targetDay}
+                                  onClick={() => onCopyToDay(dayIndex, activity.id, targetDay)}
+                                  className="cursor-pointer"
+                                >
+                                  Day {targetDay + 1}
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuSubContent>
+                          </DropdownMenuSub>
+                        </>
+                      )}
                       {!aiLocked && collaboratorColorMap && collaboratorColorMap.size > 0 && (
                       <>
                       <DropdownMenuSeparator />
