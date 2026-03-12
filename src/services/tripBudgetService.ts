@@ -438,7 +438,7 @@ export async function syncItineraryToBudget(
       id: string;
       title: string;
       category: string;
-      cost?: { amount: number; currency: string };
+      cost?: { amount?: number; total?: number; perPerson?: number; currency?: string } | number;
     }>;
   }>
 ): Promise<boolean> {
@@ -459,7 +459,10 @@ export async function syncItineraryToBudget(
   
   for (const day of days) {
     for (const activity of day.activities) {
-      const costAmount = activity.cost?.amount || (activity.cost as any)?.total || (activity.cost as any)?.perPerson || 0;
+      const rawCost = activity.cost;
+      const costAmount = typeof rawCost === 'number'
+        ? rawCost
+        : (rawCost?.amount || rawCost?.total || rawCost?.perPerson || 0);
       if (costAmount > 0) {
         // Skip non-payable activities (free time, downtime, transfers)
         const titleLower = (activity.title || '').toLowerCase();
@@ -483,7 +486,7 @@ export async function syncItineraryToBudget(
           category: budgetCategory,
           entry_type: 'planned',
           amount_cents: Math.round(costAmount * 100), // Convert to cents
-          currency: activity.cost.currency || 'USD',
+          currency: (typeof rawCost === 'object' && rawCost?.currency) ? rawCost.currency : 'USD',
           description: activity.title,
           day_number: day.dayNumber,
           activity_id: activity.id,
