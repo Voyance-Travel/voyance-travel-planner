@@ -8442,6 +8442,7 @@ interface ActivityRowProps {
   swapCapInfo?: { isFree: boolean; usedCount: number; freeRemaining: number; cap: number; creditCost: number; isLoading: boolean };
   onMove: (dayIndex: number, activityId: string, direction: 'up' | 'down') => void;
   onMoveToDay?: (fromDayIndex: number, activityId: string, toDayIndex: number) => void;
+  onCopyToDay?: (fromDayIndex: number, activityId: string, toDayIndex: number) => void;
   onRemove: (dayIndex: number, activityId: string) => void;
   onTimeEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
   onEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
