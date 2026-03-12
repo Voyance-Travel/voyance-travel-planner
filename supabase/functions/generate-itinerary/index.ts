@@ -10481,6 +10481,9 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
         console.log(`[generate-trip-day] ✅ Trip ${tripId} generation complete: ${totalDays} days`);
 
+        // Trigger next journey leg if applicable
+        await triggerNextJourneyLeg(supabase, tripId);
+
         return new Response(
           JSON.stringify({ status: 'complete', dayNumber, totalDays }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
