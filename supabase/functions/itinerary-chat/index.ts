@@ -127,7 +127,19 @@ Each action has a credit cost. Before suggesting changes, briefly mention what y
 - NEVER suggest activities in a different city just because they are popular or well-known.
 
 ## CONTEXT
-You have the current itinerary structure. Match references like "Day 2" or "the museum" to the provided activities.`;
+You have the current itinerary structure. Match references like "Day 2" or "the museum" to the provided activities.
+
+## CRITICAL TIME ORDERING RULES FOR DAY REWRITES
+When using rewrite_day, your instructions MUST respect these timing rules:
+- Breakfast/brunch: 7:00 AM – 10:30 AM. NEVER schedule breakfast after 11:00 AM.
+- Morning activities: 9:00 AM – 12:00 PM.
+- Lunch: 11:30 AM – 1:30 PM.
+- Afternoon activities: 1:00 PM – 5:00 PM.
+- Happy hour/aperitif: 4:30 PM – 6:30 PM.
+- Dinner: 6:00 PM – 9:30 PM. NEVER schedule dinner before 5:00 PM.
+- Evening activities/nightlife: 7:00 PM – 11:00 PM.
+- Nightcap/late night: 9:00 PM – midnight. NEVER schedule a nightcap before 8:00 PM.
+- ALL activities MUST be in strict chronological order by startTime.`;
 
 const BLOCKED_PATTERNS = [
   /how (was|is) (this|the) (site|app|website) (built|made|created)/i,
