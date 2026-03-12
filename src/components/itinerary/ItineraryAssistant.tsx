@@ -115,6 +115,7 @@ export function ItineraryAssistant({
     destination,
     startDate,
     endDate,
+    currentDayNumber,
     days: currentDays.map(d => ({
       dayNumber: d.dayNumber,
       date: d.date,
