@@ -3959,6 +3959,9 @@ async function finalSaveItinerary(
 
     console.log('[Stage 6] Final save successful');
 
+    // Trigger next journey leg if applicable
+    await triggerNextJourneyLeg(supabase, tripId);
+
     // =========================================================================
     // PHASE 4: Write activity_costs rows — single source of truth for all totals
     // =========================================================================
@@ -6329,6 +6332,68 @@ If the purpose is a specific event, plan at least ONE full day around that event
       } else {
         console.log(`[generate-day] ✓ Using authenticated userId: ${userId} (no tripId to verify)`);
       }
+
+
+// =============================================================================
+// JOURNEY NEXT-LEG AUTO-TRIGGER
+// After a leg finishes generating, check if there's a queued next leg and kick it off.
+// =============================================================================
+async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<void> {
+  try {
+    // Fetch this trip's journey info
+    const { data: currentTrip } = await supabase
+      .from('trips')
+      .select('journey_id, journey_order')
+      .eq('id', tripId)
+      .single();
+
+    if (!currentTrip?.journey_id || !currentTrip?.journey_order) {
+      return; // Not a journey leg
+    }
+
+    const nextOrder = currentTrip.journey_order + 1;
+
+    // Find the next queued leg
+    const { data: nextLeg } = await supabase
+      .from('trips')
+      .select('id, itinerary_status')
+      .eq('journey_id', currentTrip.journey_id)
+      .eq('journey_order', nextOrder)
+      .single();
+
+    if (!nextLeg || nextLeg.itinerary_status !== 'queued') {
+      console.log(`[triggerNextJourneyLeg] No queued next leg for journey ${currentTrip.journey_id} order ${nextOrder}`);
+      return;
+    }
+
+    console.log(`[triggerNextJourneyLeg] Triggering generation for next leg ${nextLeg.id} (order ${nextOrder})`);
+
+    // Mark it as generating
+    await supabase
+      .from('trips')
+      .update({ itinerary_status: 'generating', updated_at: new Date().toISOString() })
+      .eq('id', nextLeg.id);
+
+    // Invoke generate-itinerary for the next leg
+    const generateUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-itinerary`;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    fetch(generateUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({ tripId: nextLeg.id }),
+    }).then(res => {
+      console.log(`[triggerNextJourneyLeg] Next leg ${nextLeg.id} invoke status: ${res.status}`);
+    }).catch(err => {
+      console.error(`[triggerNextJourneyLeg] Failed to invoke next leg ${nextLeg.id}:`, err);
+    });
+  } catch (err) {
+    console.error('[triggerNextJourneyLeg] Error:', err);
+  }
+}
 
 
       // =======================================================================
@@ -9105,6 +9170,9 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         );
       }
 
+      // Trigger next journey leg if applicable
+      await triggerNextJourneyLeg(supabase, tripId);
+
       return new Response(
         JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -10412,6 +10480,9 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         }).eq('id', tripId);
 
         console.log(`[generate-trip-day] ✅ Trip ${tripId} generation complete: ${totalDays} days`);
+
+        // Trigger next journey leg if applicable
+        await triggerNextJourneyLeg(supabase, tripId);
 
         return new Response(
           JSON.stringify({ status: 'complete', dayNumber, totalDays }),

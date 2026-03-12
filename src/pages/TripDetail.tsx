@@ -561,8 +561,40 @@ export default function TripDetail() {
   // Auto-trigger generation when ?generate=true is in URL
   // Poll for queued → generating transition (journey legs)
   useEffect(() => {
-    if (!isQueuedJourneyLeg || !trip?.id) return;
+    if (!isQueuedJourneyLeg || !trip?.id || !trip?.journey_id) return;
 
+    let cancelled = false;
+
+    // On first load, check if the previous leg is already done — if so, kick off generation immediately
+    const checkPreviousLeg = async () => {
+      const prevOrder = (trip.journey_order || 1) - 1;
+      if (prevOrder < 1) return;
+
+      const { data: prevLeg } = await supabase
+        .from('trips')
+        .select('itinerary_status')
+        .eq('journey_id', trip.journey_id!)
+        .eq('journey_order', prevOrder)
+        .single();
+
+      if (prevLeg && (prevLeg.itinerary_status === 'ready' || (prevLeg.itinerary_status as string) === 'complete') && !cancelled) {
+        console.log(`[TripDetail] Previous leg (order ${prevOrder}) is ready — triggering generation for ${trip.id}`);
+        // Kick off generation for this leg
+        try {
+          await supabase.from('trips').update({ itinerary_status: 'generating' }).eq('id', trip.id);
+          await supabase.functions.invoke('generate-itinerary', { body: { tripId: trip.id } });
+          queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
+          handleShowGenerator(true);
+        } catch (err) {
+          console.error('[TripDetail] Failed to trigger queued leg generation:', err);
+        }
+        return;
+      }
+    };
+
+    checkPreviousLeg();
+
+    // Continue polling for status changes as fallback
     const interval = setInterval(async () => {
       const { data } = await supabase
         .from('trips')
@@ -582,8 +614,12 @@ export default function TripDetail() {
       }
     }, 5000); // Poll every 5 seconds
 
-    return () => clearInterval(interval);
-  }, [isQueuedJourneyLeg, trip?.id, queryClient]);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [isQueuedJourneyLeg, trip?.id, trip?.journey_id, trip?.journey_order, queryClient]);
+
 
   useEffect(() => {
     if (
