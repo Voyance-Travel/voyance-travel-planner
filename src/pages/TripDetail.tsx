@@ -66,6 +66,7 @@ import { normalizeLegacyHotelSelection, type HotelBooking } from '@/utils/hotelV
 import { parseEditorialDays, parseAssistantDays } from '@/utils/itineraryParser';
 import { normalizeFlightSelection } from '@/utils/normalizeFlightSelection';
 import { injectHotelActivitiesIntoDays, injectMultiHotelActivities } from '@/utils/injectHotelActivities';
+import { injectFlightActivitiesIntoDays } from '@/utils/injectFlightActivities';
 import { cn } from '@/lib/utils';
 import { JourneyBreadcrumb } from '@/components/trips/JourneyBreadcrumb';
 import { JourneyUpNext } from '@/components/trips/JourneyUpNext';
