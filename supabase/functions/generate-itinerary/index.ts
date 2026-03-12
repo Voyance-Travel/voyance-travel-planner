@@ -8005,6 +8005,18 @@ NEVER suggest a more expensive alternative when the user asks for cheaper. This 
   }
   return '';
 })()}
+
+CRITICAL TIME ORDERING & MEAL TIMING RULES:
+- ALL activities MUST be in strict chronological order by startTime.
+- Breakfast/brunch: 7:00 AM – 10:00 AM. NEVER schedule breakfast after 11:00 AM.
+- Morning activities: 9:00 AM – 12:00 PM.
+- Lunch: 11:30 AM – 1:30 PM.
+- Afternoon activities: 1:00 PM – 5:00 PM.
+- Dinner: 6:00 PM – 9:00 PM. NEVER schedule dinner before 5:00 PM.
+- Evening activities/nightlife: 7:00 PM – 11:00 PM.
+- Nightcap/late night: 9:00 PM – midnight. NEVER schedule a nightcap before 8:00 PM.
+- Activities must flow logically: morning → midday → afternoon → evening → night.
+
 ${preferenceContext}
 ${tripIntentsContext}
 ${mustDoPrompt}
