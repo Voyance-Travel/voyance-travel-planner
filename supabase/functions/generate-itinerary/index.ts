@@ -1333,10 +1333,14 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
           const nights = city.nights || city.days_total || 1;
           
           // Extract per-city hotel info
-          const cityHotel = city.hotel_selection as Record<string, unknown> | null;
+          // hotel_selection can be an array [{name:...}] or a plain object {name:...}
+          const rawHotel = city.hotel_selection as any;
+          const cityHotel = Array.isArray(rawHotel) && rawHotel.length > 0 ? rawHotel[0] : rawHotel;
           const hotelName = cityHotel?.name as string | undefined;
           const hotelAddress = cityHotel?.address as string | undefined;
           const hotelNeighborhood = (cityHotel?.neighborhood as string) || hotelAddress;
+          const hotelCheckIn = (cityHotel?.checkIn || cityHotel?.checkInTime || cityHotel?.check_in) as string | undefined;
+          const hotelCheckOut = (cityHotel?.checkOut || cityHotel?.checkOutTime || cityHotel?.check_out) as string | undefined;
           
           for (let n = 0; n < nights; n++) {
             const isTransition = n === 0 && i > 0;
