@@ -8281,9 +8281,9 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           // Build multi-city context
           let schemaMultiCityContext = '';
           if (resolvedIsMultiCity) {
-            const dayCity = multiCityDayMap?.[dayNumber - 1];
+            const dayCity = context.multiCityDayMap?.[dayNumber - 1];
             if (dayCity) {
-              const cityFirstTime = firstTimePerCity?.[resolvedDestination] ?? effectiveIsFirstTimeVisitor;
+              const cityFirstTime = context.firstTimePerCity?.[resolvedDestination] ?? effectiveIsFirstTimeVisitor;
               const visitorLabel = cityFirstTime ? 'FIRST-TIME visitor' : 'RETURNING visitor';
               schemaMultiCityContext = `🌍 This day is in **${resolvedDestination}${resolvedCountry ? `, ${resolvedCountry}` : ''}**. ALL activities MUST be located in ${resolvedDestination}.\n👤 VISITOR STATUS: Traveler is a ${visitorLabel}.${cityFirstTime ? ' Include iconic landmarks and must-see attractions.' : ' Skip tourist staples — focus on hidden gems and local favorites.'}`;
               if (dayCity.hotelName) {
