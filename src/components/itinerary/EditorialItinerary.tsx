@@ -1130,6 +1130,7 @@ export function EditorialItinerary({
   onUnlockComplete,
   parsedMetadata,
   onDaysChange,
+  onActiveDayChange,
   navigateToSection,
   initialItineraryData,
   itineraryStatus,
