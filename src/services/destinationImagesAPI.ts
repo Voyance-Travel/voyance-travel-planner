@@ -105,7 +105,9 @@ const CURATED_ONLY_DESTINATIONS = new Set([
   // African destinations with curated images
   'inhambane', 'mozambique', 'cairo', 'nairobi', 'johannesburg',
   // Small US towns (use generic scenic fallback rather than wrong API results)
-  'thurmont', 'weymouth', 'weymouth township'
+  'thurmont', 'weymouth', 'weymouth township',
+  // Recently added curated cities
+  'casablanca', 'istanbul', 'prague', 'budapest', 'zurich', 'munich', 'edinburgh', 'dublin',
 ]);
 
 function isCuratedOnlyDestination(destination?: string): boolean {

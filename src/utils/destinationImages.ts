@@ -427,6 +427,48 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1595125990323-885cec5217ff?w=1200',
     'https://images.unsplash.com/photo-1544413164-5f1b361f5bfa?w=1200',
   ],
+
+  // Recently added curated cities
+  'casablanca': [
+    'https://images.unsplash.com/photo-1569383746724-6f1b882b8f46?w=1200', // Hassan II Mosque
+    'https://images.unsplash.com/photo-1577147443647-81856d5152af?w=1200', // Casablanca medina
+    'https://images.unsplash.com/photo-1560699036-04b76804ade6?w=1200', // Casablanca cityscape
+  ],
+  'istanbul': [
+    'https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?w=1200', // Istanbul skyline
+    'https://images.unsplash.com/photo-1541432901042-2d8bd64b4a9b?w=1200', // Blue Mosque
+    'https://images.unsplash.com/photo-1527838832700-5059252407fa?w=1200', // Bosphorus
+  ],
+  'prague': [
+    'https://images.unsplash.com/photo-1519677100203-a0e668c92439?w=1200', // Prague Old Town
+    'https://images.unsplash.com/photo-1541849546-216549ae216d?w=1200', // Charles Bridge
+    'https://images.unsplash.com/photo-1562624475-96c2bc08fab9?w=1200', // Prague Castle
+  ],
+  'budapest': [
+    'https://images.unsplash.com/photo-1549923746-c502d488b3ea?w=1200', // Budapest Parliament
+    'https://images.unsplash.com/photo-1551867633-194f125bddfa?w=1200', // Chain Bridge
+    'https://images.unsplash.com/photo-1565426873118-a17ed65d74b9?w=1200', // Budapest thermal baths
+  ],
+  'zurich': [
+    'https://images.unsplash.com/photo-1515488764276-beab7607c1e6?w=1200', // Zurich lake
+    'https://images.unsplash.com/photo-1620735692151-26a7e0748f53?w=1200', // Zurich Old Town
+    'https://images.unsplash.com/photo-1504218727796-db522606b16f?w=1200', // Swiss cityscape
+  ],
+  'munich': [
+    'https://images.unsplash.com/photo-1595867818082-083862f3d630?w=1200', // Marienplatz
+    'https://images.unsplash.com/photo-1577462281852-62e593399e89?w=1200', // Munich architecture
+    'https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=1200', // Munich cityscape
+  ],
+  'edinburgh': [
+    'https://images.unsplash.com/photo-1506377585622-bedcbb027afc?w=1200', // Edinburgh Castle
+    'https://images.unsplash.com/photo-1549893072-4bc678117f45?w=1200', // Royal Mile
+    'https://images.unsplash.com/photo-1588974269162-4c0e1b3e2b0a?w=1200', // Edinburgh skyline
+  ],
+  'dublin': [
+    'https://images.unsplash.com/photo-1549918864-48ac978761a4?w=1200', // Ha'penny Bridge
+    'https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?w=1200', // Temple Bar
+    'https://images.unsplash.com/photo-1548808247-cf0eab34b0e3?w=1200', // Dublin cityscape
+  ],
 };
 
 

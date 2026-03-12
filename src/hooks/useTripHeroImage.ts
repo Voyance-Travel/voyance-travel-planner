@@ -4,8 +4,9 @@
  * Priority chain:
  * 1. Trip metadata hero_image (seeded/user-uploaded)
  * 2. Curated destination images (fast, local)
- * 3. API fetch via destination-images edge function (Google Places, etc.)
- * 4. Gradient fallback (deterministic, always works)
+ * 3. DB curated images (admin-managed via curated_images table)
+ * 4. API fetch via destination-images edge function (Google Places, etc.)
+ * 5. Gradient fallback (deterministic, always works)
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -16,6 +17,7 @@ import {
   generateDestinationGradient
 } from '@/utils/destinationImages';
 import { getHeroImageByName } from '@/services/destinationImagesAPI';
+import { supabase } from '@/integrations/supabase/client';
 
 interface UseTripHeroImageOptions {
   destination: string;
@@ -26,13 +28,37 @@ interface UseTripHeroImageOptions {
 interface UseTripHeroImageResult {
   imageUrl: string;
   isLoading: boolean;
-  source: 'seeded' | 'curated' | 'api' | 'gradient';
+  source: 'seeded' | 'curated' | 'db_curated' | 'api' | 'gradient';
   onError: (e: React.SyntheticEvent<HTMLImageElement>) => void;
   /** 
    * Handler to validate image dimensions after load
    * Detects blank/tiny images that load successfully but contain no content
    */
   onLoad: (e: React.SyntheticEvent<HTMLImageElement>) => void;
+}
+
+/**
+ * Fetch hero image URL from the curated_images DB table (admin-managed).
+ */
+async function getDbCuratedUrl(destination: string): Promise<string | null> {
+  try {
+    const normalizedKey = destination.toLowerCase().trim().replace(/[^a-z0-9\s]/g, '').slice(0, 100);
+    const { data, error } = await supabase
+      .from('curated_images')
+      .select('image_url')
+      .eq('entity_type', 'destination')
+      .eq('entity_key', normalizedKey)
+      .eq('is_blacklisted', false)
+      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+      .order('vote_score', { ascending: false, nullsFirst: false })
+      .order('quality_score', { ascending: false, nullsFirst: false })
+      .limit(1);
+
+    if (error || !data || data.length === 0) return null;
+    return (data[0] as any).image_url || null;
+  } catch {
+    return null;
+  }
 }
 
 export function useTripHeroImage({
@@ -43,6 +69,9 @@ export function useTripHeroImage({
   const [seededFailed, setSeededFailed] = useState(false);
   const [curatedIndex, setCuratedIndex] = useState(0);
   const [curatedFailed, setCuratedFailed] = useState(false);
+  const [dbCuratedUrl, setDbCuratedUrl] = useState<string | null>(null);
+  const [dbCuratedFetched, setDbCuratedFetched] = useState(false);
+  const [dbCuratedFailed, setDbCuratedFailed] = useState(false);
   const [apiImageUrl, setApiImageUrl] = useState<string | null>(null);
   const [apiFetched, setApiFetched] = useState(false);
   const [apiFailed, setApiFailed] = useState(false);
@@ -51,15 +80,38 @@ export function useTripHeroImage({
   const curatedImages = getCuratedImages(destination);
   const hasCurated = hasCuratedImages(destination);
 
-  // Fetch from API if curated images aren't available
+  // Fetch DB curated image if hardcoded curated not available
   useEffect(() => {
-    // Only fetch if:
-    // 1. No seeded hero (or it failed)
-    // 2. No curated images available
-    // 3. Haven't already fetched
     const shouldFetch = 
       (!seededHeroUrl || seededFailed) && 
       !hasCurated && 
+      !dbCuratedFetched;
+
+    if (!shouldFetch) return;
+
+    let cancelled = false;
+
+    getDbCuratedUrl(destination)
+      .then((url) => {
+        if (cancelled) return;
+        setDbCuratedFetched(true);
+        if (url) {
+          setDbCuratedUrl(url);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setDbCuratedFetched(true);
+      });
+
+    return () => { cancelled = true; };
+  }, [destination, seededHeroUrl, seededFailed, hasCurated, dbCuratedFetched]);
+
+  // Fetch from API if DB curated images aren't available either
+  useEffect(() => {
+    const shouldFetch = 
+      (!seededHeroUrl || seededFailed) && 
+      !hasCurated && 
+      dbCuratedFetched && !dbCuratedUrl &&
       !apiFetched;
 
     if (!shouldFetch) return;
@@ -89,7 +141,7 @@ export function useTripHeroImage({
     return () => {
       cancelled = true;
     };
-  }, [destination, seededHeroUrl, seededFailed, hasCurated, apiFetched]);
+  }, [destination, seededHeroUrl, seededFailed, hasCurated, dbCuratedFetched, dbCuratedUrl, apiFetched]);
 
   // Determine current image URL based on fallback chain
   const getImageUrl = (): { url: string; source: UseTripHeroImageResult['source'] } => {
@@ -103,12 +155,17 @@ export function useTripHeroImage({
       return { url: curatedImages[curatedIndex], source: 'curated' };
     }
 
-    // 3. API fetched image
+    // 3. DB curated image (admin-managed)
+    if (dbCuratedUrl && !dbCuratedFailed) {
+      return { url: dbCuratedUrl, source: 'db_curated' };
+    }
+
+    // 4. API fetched image
     if (apiImageUrl && !apiFailed) {
       return { url: apiImageUrl, source: 'api' };
     }
 
-    // 4. Gradient fallback
+    // 5. Gradient fallback
     return { 
       url: generateDestinationGradient(tripId || destination), 
       source: 'gradient' 
@@ -129,9 +186,14 @@ export function useTripHeroImage({
       if (curatedIndex < curatedImages.length - 1) {
         setCuratedIndex(prev => prev + 1);
       } else {
-        // All curated images failed
         setCuratedFailed(true);
       }
+      return;
+    }
+
+    // Handle DB curated image failure
+    if (dbCuratedUrl && !dbCuratedFailed) {
+      setDbCuratedFailed(true);
       return;
     }
 
@@ -147,6 +209,8 @@ export function useTripHeroImage({
     curatedFailed, 
     curatedIndex, 
     curatedImages.length,
+    dbCuratedUrl,
+    dbCuratedFailed,
     apiImageUrl,
     apiFailed,
   ]);
@@ -155,7 +219,6 @@ export function useTripHeroImage({
     handleFallback();
 
     // All sources failed - gradient fallback is always safe
-    // Prevent infinite loop by setting a data-url placeholder
     const img = e.currentTarget;
     if (!img.src.startsWith('data:')) {
       img.src = generateDestinationGradient(tripId || destination);
@@ -165,17 +228,13 @@ export function useTripHeroImage({
   /**
    * Validate image dimensions after load
    * Detects blank/tiny images that return HTTP 200 but contain no useful content
-   * (e.g., expired TripAdvisor CDN URLs)
    */
   const onLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
     
-    // Check for blank/tiny images (expired CDN responses)
     if (img.naturalWidth < 10 || img.naturalHeight < 10) {
       console.warn('[useTripHeroImage] Loaded but blank/tiny, triggering fallback:', imageUrl);
       handleFallback();
-      
-      // Force a re-render by setting a gradient fallback
       img.src = generateDestinationGradient(tripId || destination);
     }
   }, [imageUrl, handleFallback, tripId, destination]);
