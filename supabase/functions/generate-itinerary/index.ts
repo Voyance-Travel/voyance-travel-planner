@@ -9118,79 +9118,104 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
         }
 
         // =======================================================================
-        // STEP: BUFFER ENFORCEMENT BETWEEN ACTIVITIES (Fix 23F)
-        // Ensures minimum transition time between consecutive activities
+        // GAP 8: TRANSIT-TIME ENFORCEMENT (replaces static 15-min buffer)
+        // Uses each activity's transportation.duration field + venue-type buffers
+        // Ported from old path lines 2379-2466
         // =======================================================================
         try {
-          const TRANSPORT_CATS = ['transport', 'transit', 'transfer', 'taxi', 'commute'];
-
-          const isTransportAct = (act: any) => {
-            const cat = (act.category || '').toLowerCase();
-            const title = (act.title || '').toLowerCase();
-            return TRANSPORT_CATS.some(t => cat.includes(t) || title.includes(t));
-          };
-
-          const sameLocationCheck = (a: any, b: any) => {
-            if (!a.location || !b.location) return false;
-            const locA = (typeof a.location === 'string' ? a.location : a.location?.name || '').toLowerCase();
-            const locB = (typeof b.location === 'string' ? b.location : b.location?.name || '').toLowerCase();
-            if (!locA || !locB) return false;
-            return locA === locB || locA.includes(locB) || locB.includes(locA);
-          };
-
-          const bufferMins = 15; // minimum buffer between activities
-          const sorted = [...normalizedActivities].sort((a: any, b: any) => {
-            const aM = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
-            const bM = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
-            return aM - bM;
+          // Sort by start time first
+          normalizedActivities.sort((a: any, b: any) => {
+            const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+            const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+            return ta - tb;
           });
 
-          let bufferFixes = 0;
-          for (let i = 0; i < sorted.length - 1; i++) {
-            const current = sorted[i];
-            const next = sorted[i + 1];
+          let shifted = false;
+          for (let i = 0; i < normalizedActivities.length - 1; i++) {
+            const current = normalizedActivities[i] as any;
+            const next = normalizedActivities[i + 1] as any;
 
-            if (isTransportAct(current) || isTransportAct(next)) continue;
-            if (sameLocationCheck(current, next)) continue;
-
-            const currentEndMins = parseTimeToMinutes(current.endTime || current.startTime || '00:00');
-            const nextStartMins = parseTimeToMinutes(next.startTime || '00:00');
+            const currentEndMins = parseTimeToMinutes(current.endTime || '');
+            const nextStartMins = parseTimeToMinutes(next.startTime || '');
             if (currentEndMins === null || nextStartMins === null) continue;
 
-            const gap = nextStartMins - currentEndMins;
-            if (gap >= bufferMins) continue;
-
+            // Skip if next is locked/must-do and current is not — preserve locked times
             const isNextLocked = next.isLocked || next.isMustDo;
             const isCurrentLocked = current.isLocked || current.isMustDo;
 
-            if (isNextLocked && !isCurrentLocked) {
-              // Shorten current to create buffer
-              const newEndMins = nextStartMins - bufferMins;
-              const currentStartMins = parseTimeToMinutes(current.startTime || '00:00') ?? 0;
-              if (newEndMins > currentStartMins + 15) {
-                current.endTime = minutesToTime(newEndMins);
-                current.duration = `${newEndMins - currentStartMins} minutes`;
-                bufferFixes++;
+            // Determine if current activity IS a transport/transit activity
+            const currentIsTransport = ['transport', 'transportation', 'transit'].includes(
+              (current.category || '').toLowerCase()
+            ) || /\b(stroll|walk|taxi|uber|metro|bus|train|cab|ride|transfer)\b/i.test(current.title || '');
+
+            // Parse the NEXT activity's transportation.duration (e.g., "25 min", "1h 30m")
+            let requiredTransitMins = 0;
+            const transitDur = next.transportation?.duration;
+            if (transitDur && typeof transitDur === 'string') {
+              const hMatch = transitDur.match(/(\d+)\s*h/i);
+              const mMatch = transitDur.match(/(\d+)\s*m/i);
+              if (hMatch) requiredTransitMins += parseInt(hMatch[1], 10) * 60;
+              if (mMatch) requiredTransitMins += parseInt(mMatch[1], 10);
+            }
+            // Also check distanceKm as fallback
+            if (requiredTransitMins === 0 && next.transportation?.distanceKm) {
+              const dist = next.transportation.distanceKm;
+              if (dist <= 1) requiredTransitMins = 10;
+              else if (dist <= 5) requiredTransitMins = 20;
+              else if (dist <= 15) requiredTransitMins = 35;
+              else requiredTransitMins = 45;
+            }
+
+            // When current IS a transport activity, apply venue-type arrival buffers
+            if (currentIsTransport) {
+              const nextCat = (next.category || '').toLowerCase();
+              const nextTitle = (next.title || '').toLowerCase();
+              let arrivalBuffer = 10;
+              if (nextCat === 'accommodation' || /hotel|check.?in/i.test(nextTitle)) {
+                arrivalBuffer = 15;
+              } else if (nextCat === 'dining' || /restaurant|cafe|lunch|dinner|breakfast|brunch/i.test(nextTitle)) {
+                arrivalBuffer = 10;
+              } else if (/museum|gallery|palace|castle|cathedral/i.test(nextTitle)) {
+                arrivalBuffer = 10;
               }
-            } else if (!isNextLocked) {
-              // Shift next forward
-              const newStart = currentEndMins + bufferMins;
-              const oldEnd = parseTimeToMinutes(next.endTime || '00:00');
-              const dur = oldEnd !== null ? oldEnd - nextStartMins : 0;
-              next.startTime = minutesToTime(newStart);
-              if (next.endTime && dur > 0) {
-                next.endTime = minutesToTime(newStart + dur);
+              requiredTransitMins = Math.max(requiredTransitMins, arrivalBuffer);
+            }
+
+            // Absolute minimum: 10 min (even for adjacent venues)
+            if (requiredTransitMins < 10) requiredTransitMins = 10;
+
+            const actualGap = nextStartMins - currentEndMins;
+            if (actualGap < requiredTransitMins) {
+              // Respect locked activities
+              if (isNextLocked && !isCurrentLocked) {
+                // Shorten current to create buffer
+                const newEndMins = nextStartMins - requiredTransitMins;
+                const currentStartMins = parseTimeToMinutes(current.startTime || '00:00') ?? 0;
+                if (newEndMins > currentStartMins + 15) {
+                  current.endTime = minutesToHHMM(newEndMins);
+                  current.duration = `${newEndMins - currentStartMins} minutes`;
+                  shifted = true;
+                }
+              } else if (!isNextLocked) {
+                // Shift next and all subsequent activities forward
+                const deficit = requiredTransitMins - actualGap;
+                for (let j = i + 1; j < normalizedActivities.length; j++) {
+                  const act = normalizedActivities[j] as any;
+                  if (act.isLocked || act.isMustDo) continue; // Don't shift locked
+                  const s = parseTimeToMinutes(act.startTime || '');
+                  const e = parseTimeToMinutes(act.endTime || '');
+                  if (s !== null) act.startTime = minutesToHHMM(s + deficit);
+                  if (e !== null) act.endTime = minutesToHHMM(e + deficit);
+                }
+                shifted = true;
               }
-              bufferFixes++;
             }
           }
-
-          if (bufferFixes > 0) {
-            console.log(`[buffer-enforcement] Fixed ${bufferFixes} activities with insufficient buffer time`);
+          if (shifted) {
+            console.log(`[transit-enforcement] Adjusted activity times to respect transportation durations`);
           }
-          normalizedActivities = sorted;
-        } catch (bufferErr) {
-          console.warn(`[buffer-enforcement] Non-critical error, skipping:`, bufferErr);
+        } catch (transitErr) {
+          console.warn(`[transit-enforcement] Non-critical error, skipping:`, transitErr);
         }
 
         // =======================================================================
