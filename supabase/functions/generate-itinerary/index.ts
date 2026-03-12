@@ -8814,9 +8814,8 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
         // Overwrite AI-hallucinated hotel addresses with actual booking data
         // =======================================================================
         {
-          const schemaDayCityHotel = context.multiCityDayMap?.[dayNumber - 1];
-          const actualHotelName = schemaDayCityHotel?.hotelName || flightContext?.hotelName;
-          const actualHotelAddress = schemaDayCityHotel?.hotelAddress || flightContext?.hotelAddress;
+          const actualHotelName = flightContext?.hotelName;
+          const actualHotelAddress = flightContext?.hotelAddress;
           if (actualHotelName || actualHotelAddress) {
             const hotelKeywords = ['hotel', 'check-in', 'check in', 'checkout', 'check-out', 'check out', 'freshen up', 'rest & recharge', 'rest and recharge', 'return to', 'settle in', 'wind down', "dad's", "mom's", "parent", "home base", 'airbnb', 'vacation rental'];
             for (const act of normalizedActivities) {
