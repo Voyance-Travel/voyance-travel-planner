@@ -13,6 +13,8 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBudgetAlerts } from '@/hooks/useBudgetAlerts';
+import { getTripCities } from '@/services/tripCitiesService';
+import { updateCityHotel } from '@/services/tripCitiesService';
 
 import {
   useHotelSearch,
