@@ -1238,7 +1238,7 @@ export function EditorialItinerary({
       // Also ensure flight/hotel committed costs are in the budget ledger
       import('@/services/budgetLedgerSync').then(({ syncFlightToLedger, syncHotelToLedger }) => {
         if (flightSelection) {
-          syncFlightToLedger(tripId, flightSelection)
+          syncFlightToLedger(tripId, flightSelection as any)
             .catch(err => console.error('[EditorialItinerary] Flight ledger sync failed:', err));
         }
         if (hotelSelection) {
