@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
 import { toFriendlyError } from '@/utils/friendlyErrors';
+import { enrichAttraction, lookupActivityUrl } from '@/services/enrichmentService';
 import { useCredits } from '@/hooks/useCredits';
 import { CREDIT_COSTS, formatCredits } from '@/config/pricing';
 import { CreditNudge } from './CreditNudge';
