@@ -500,6 +500,7 @@ ${profiles.map(p => `- ${p.name} (${p.isOwner ? 'Trip Owner' : 'Companion'}, arc
 Trip to ${itineraryContext.destination}
 Dates: ${itineraryContext.startDate} to ${itineraryContext.endDate}
 Total days: ${(itineraryContext.days || []).length}
+${itineraryContext.currentDayNumber ? `\n⚠️ THE USER IS CURRENTLY VIEWING: Day ${itineraryContext.currentDayNumber}. When they say "this day", "today", or don't specify a day number, they mean Day ${itineraryContext.currentDayNumber}.` : ''}
 ${tripType ? `Trip occasion: ${tripType}` : ''}${accommodationNote}
 
 ${itineraryDescription}
