@@ -121,6 +121,9 @@ export async function prefetchDestinationImages(destination: string): Promise<vo
           pre.src = img.url;
         });
 
+        // Also seed the curated_images DB table so future trips use DB cache
+        seedCuratedToDb(cleanDestination, curatedUrls);
+
         console.log('[ImagePrefetch] Cached curated images for:', destination);
         return;
       }
