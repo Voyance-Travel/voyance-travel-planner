@@ -832,8 +832,8 @@ async function cacheImage(
 
     const normalizedKey = entityKey.toLowerCase().trim().replace(/[^a-z0-9\s]/g, '').slice(0, 100);
 
-    // Cache images for 90 days (Google Places photos are relatively stable)
-    const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+    // Cache images for 60 days then refresh
+    const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
 
     await supabase.from("curated_images").upsert({
       entity_type: entityType,

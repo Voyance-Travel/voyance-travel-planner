@@ -2,7 +2,7 @@
  * Destination Images API Service
  * 
  * Uses Cloud edge function with Google Places Photos fallback.
- * Priority: Database → Google Places → Gradient fallback
+ * Priority: DB cache → Hardcoded curated → Edge function → Gradient fallback
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -12,6 +12,77 @@ import {
   hasCuratedImages,
 } from '@/utils/destinationImages';
 import { normalizeUnsplashUrl } from '@/utils/unsplash';
+
+// ============================================================================
+// DB CACHE HELPERS
+// ============================================================================
+
+const CACHE_TTL_DAYS = 60;
+
+/**
+ * Check curated_images table for cached destination images.
+ * Returns URLs if found and not expired, otherwise null.
+ */
+async function getDbCachedImages(
+  destination: string,
+  limit: number
+): Promise<DestinationImage[] | null> {
+  try {
+    const normalizedKey = destination.toLowerCase().trim().replace(/[^a-z0-9\s]/g, '').slice(0, 100);
+    const { data, error } = await supabase
+      .from('curated_images')
+      .select('*')
+      .eq('entity_type', 'destination')
+      .eq('entity_key', normalizedKey)
+      .eq('is_blacklisted', false)
+      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+      .order('vote_score', { ascending: false, nullsFirst: false })
+      .order('quality_score', { ascending: false, nullsFirst: false })
+      .order('updated_at', { ascending: false })
+      .limit(limit);
+
+    if (error || !data || data.length === 0) return null;
+
+    return data.map((row: any, i: number) => ({
+      id: `db-cached-${i}`,
+      url: normalizeImageUrl(row.image_url),
+      alt: row.alt_text || `${destination} photo ${i + 1}`,
+      type: 'hero' as const,
+      source: 'database' as const,
+    })).filter((img: DestinationImage) => !!img.url);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fire-and-forget: seed curated_images table from hardcoded curated URLs.
+ * Uses upsert so it's safe to call multiple times.
+ */
+function seedDbFromCurated(destination: string, urls: string[]): void {
+  const normalizedKey = destination.toLowerCase().trim().replace(/[^a-z0-9\s]/g, '').slice(0, 100);
+  const expiresAt = new Date(Date.now() + CACHE_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+  // Fire-and-forget — don't await, don't block UI
+  Promise.all(
+    urls.map((url, i) =>
+      supabase.from('curated_images').upsert(
+        {
+          entity_type: 'destination',
+          entity_key: normalizedKey,
+          destination: destination,
+          source: 'curated_local',
+          image_url: url,
+          alt_text: `${destination} photo ${i + 1}`,
+          quality_score: 0.9,
+          expires_at: expiresAt,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'entity_type,entity_key,destination' }
+      )
+    )
+  ).catch(() => { /* best-effort seeding */ });
+}
 
 // Bump to invalidate stale client-side caches after URL stabilization changes.
 const IMAGE_QUERY_VERSION = 'img_v4_stable_city_urls';
@@ -111,30 +182,46 @@ function normalizeImageUrl(url?: string | null): string {
 
 /**
  * Get destination images with fallback chain:
- * Database → Google Places → Gradient
+ * DB cache → Hardcoded curated (+ seed DB) → Edge function → Gradient
  */
 export async function getDestinationImages(
   params: GetImagesParams = {}
 ): Promise<DestinationImage[]> {
   const normalizedDestination = normalizeDestinationQuery(params.destination);
 
-  // For hero/gallery, ALWAYS prefer curated images if available (any destination)
-  // This ensures reliable, high-quality images without unpredictable API results
+  // For hero/gallery requests, check DB cache first, then hardcoded curated
   if (
     normalizedDestination &&
-    (params.imageType === 'hero' || params.imageType === 'gallery' || params.imageType === 'all') &&
-    hasCuratedImages(normalizedDestination)
+    (params.imageType === 'hero' || params.imageType === 'gallery' || params.imageType === 'all')
   ) {
     const type = (params.imageType === 'gallery' ? 'gallery' : 'hero') as DestinationImage['type'];
     const limit = params.limit ?? (params.imageType === 'gallery' ? 6 : 1);
-    const urls = getCuratedDestinationImages(normalizedDestination, limit);
-    return urls.map((url, i) => ({
-      id: `curated-local-${type}-${i}`,
-      url: normalizeImageUrl(url),
-      alt: `${normalizedDestination} photo ${i + 1}`,
-      type,
-      source: 'database',
-    }));
+
+    // TIER 1: Check curated_images DB table (fast, indexed query)
+    const dbImages = await getDbCachedImages(normalizedDestination, limit);
+    if (dbImages && dbImages.length > 0) {
+      console.log('[Images] DB cache hit for:', normalizedDestination, dbImages.length, 'images');
+      return dbImages;
+    }
+
+    // TIER 2: Fall back to hardcoded curated images + seed DB for next time
+    if (hasCuratedImages(normalizedDestination)) {
+      const urls = getCuratedDestinationImages(normalizedDestination, limit);
+      // Fire-and-forget: seed the DB so next request hits TIER 1
+      seedDbFromCurated(normalizedDestination, urls);
+      return urls.map((url, i) => ({
+        id: `curated-local-${type}-${i}`,
+        url: normalizeImageUrl(url),
+        alt: `${normalizedDestination} photo ${i + 1}`,
+        type,
+        source: 'database' as const,
+      }));
+    }
+
+    // TIER 2b: For curated-only destinations with no hardcoded images, don't call API
+    if (isCuratedOnlyDestination(normalizedDestination)) {
+      return [];
+    }
   }
 
   // Call backend function via POST body for reliability (no querystring invoke)

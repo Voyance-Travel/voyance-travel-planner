@@ -3,7 +3,8 @@
  * Preloads destination images before they're needed to avoid loading delays.
  *
  * Note: We persist cache to localStorage so moving between slides/pages doesn't
- * trigger redundant image fetches.
+ * trigger redundant image fetches. Also seeds the curated_images DB table
+ * so repeated trips to the same destination use DB cache instead of hardcoded.
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -33,6 +34,35 @@ const BANNED_IMAGE_URLS = new Set<string>([
 
 function filterBanned(urls: string[]): string[] {
   return urls.filter((u) => !!u && !BANNED_IMAGE_URLS.has(u));
+}
+
+const CACHE_TTL_DAYS = 60;
+
+/**
+ * Fire-and-forget: seed curated_images DB table from hardcoded curated URLs.
+ */
+function seedCuratedToDb(destination: string, urls: string[]): void {
+  const normalizedKey = destination.toLowerCase().trim().replace(/[^a-z0-9\s]/g, '').slice(0, 100);
+  const expiresAt = new Date(Date.now() + CACHE_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+  Promise.all(
+    urls.map((url, i) =>
+      supabase.from('curated_images').upsert(
+        {
+          entity_type: 'destination',
+          entity_key: normalizedKey,
+          destination,
+          source: 'curated_local',
+          image_url: url,
+          alt_text: `${destination} photo ${i + 1}`,
+          quality_score: 0.9,
+          expires_at: expiresAt,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'entity_type,entity_key,destination' }
+      )
+    )
+  ).catch(() => { /* best-effort */ });
 }
 
 function normalizeDestination(destination: string): string {
@@ -119,6 +149,9 @@ export async function prefetchDestinationImages(destination: string): Promise<vo
           pre.decoding = 'async';
           pre.src = img.url;
         });
+
+        // Also seed the curated_images DB table so future trips use DB cache
+        seedCuratedToDb(cleanDestination, curatedUrls);
 
         console.log('[ImagePrefetch] Cached curated images for:', destination);
         return;
