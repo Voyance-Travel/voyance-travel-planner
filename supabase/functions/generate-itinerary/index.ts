@@ -8221,11 +8221,11 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             // === Fix 22O: Wire destinationHotel for transition days ===
             destinationHotel: (() => {
               if (!resolvedIsTransitionDay) return undefined;
-              const schemaDayCity = context.multiCityDayMap?.[dayNumber - 1];
-              if (!schemaDayCity?.hotelName) return undefined;
+              const transitionHotelName = flightContext?.hotelName;
+              if (!transitionHotelName) return undefined;
               return {
-                name: schemaDayCity.hotelName,
-                address: schemaDayCity.hotelAddress || '',
+                name: transitionHotelName,
+                address: flightContext?.hotelAddress || '',
                 checkInTime: undefined, // default 15:00 handled by constraint filler
               };
             })(),
