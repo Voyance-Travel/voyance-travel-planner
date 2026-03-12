@@ -218,6 +218,39 @@ export default function PlannerHotelEnhanced() {
     }
   }, [searchParams, plannerState.tripId, plannerState.basics.destination, loadTrip]);
 
+  // Detect multi-city: check if trip_cities exist for this trip
+  useEffect(() => {
+    const tripId = searchParams.get('tripId') || plannerState.tripId;
+    if (!tripId) return;
+
+    getTripCities(tripId).then(cities => {
+      if (cities.length > 1) {
+        setIsMultiCity(true);
+        if (!cityIdFromUrl) {
+          const matchingCity = cities.find(c =>
+            c.city_name?.toLowerCase() === destination.toLowerCase()
+          );
+          if (matchingCity) setMultiCityCityId(matchingCity.id);
+        }
+        const targetCityId = cityIdFromUrl || cities.find(c =>
+          c.city_name?.toLowerCase() === destination.toLowerCase()
+        )?.id;
+        if (targetCityId) {
+          const city = cities.find(c => c.id === targetCityId);
+          if (city?.hotel_selection) {
+            const hotelRaw = city.hotel_selection as any;
+            const hotelData = Array.isArray(hotelRaw) && hotelRaw.length > 0 ? hotelRaw[0] : hotelRaw;
+            if (hotelData?.name) {
+              setHotel(hotelData);
+              setSelectedHotelId(hotelData.id || null);
+            }
+          }
+        }
+      }
+    }).catch(err => console.warn('[PlannerHotel] Failed to check trip_cities:', err));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plannerState.tripId, destination]);
+
   useEffect(() => {
     if (!plannerState.basics.destination || plannerState.basics.destination !== destination) {
       setBasics({ destination, startDate, endDate, travelers, originCity: origin });
