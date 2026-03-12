@@ -8813,6 +8813,47 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
           return normalized;
         });
 
+        // =======================================================================
+        // GAP 2: HOTEL ADDRESS CORRECTION (ported from old path lines 2341-2368)
+        // Overwrite AI-hallucinated hotel addresses with actual booking data
+        // =======================================================================
+        {
+          const actualHotelName = dayCity?.hotelName || flightContext?.hotelName;
+          const actualHotelAddress = dayCity?.hotelAddress || flightContext?.hotelAddress;
+          if (actualHotelName || actualHotelAddress) {
+            const hotelKeywords = ['hotel', 'check-in', 'check in', 'checkout', 'check-out', 'check out', 'freshen up', 'rest & recharge', 'rest and recharge', 'return to', 'settle in', 'wind down', "dad's", "mom's", "parent", "home base", 'airbnb', 'vacation rental'];
+            for (const act of normalizedActivities) {
+              const cat = ((act as any).category || '').toLowerCase();
+              const title = ((act as any).title || '').toLowerCase();
+              const isAccommodationActivity = cat === 'accommodation' || cat === 'relaxation' ||
+                hotelKeywords.some((kw: string) => title.includes(kw));
+              
+              if (isAccommodationActivity && (cat === 'accommodation' || cat === 'relaxation' || title.includes('hotel') || title.includes('home') || title.includes('airbnb') || title.includes('return') || title.includes('check'))) {
+                if (actualHotelName && (act as any).location && typeof (act as any).location === 'object') {
+                  (act as any).location.name = actualHotelName;
+                }
+                if (actualHotelAddress && (act as any).location && typeof (act as any).location === 'object') {
+                  (act as any).location.address = actualHotelAddress;
+                }
+                if (!(act as any).location && (actualHotelName || actualHotelAddress)) {
+                  (act as any).location = {
+                    name: actualHotelName || 'Accommodation',
+                    address: actualHotelAddress || '',
+                  };
+                }
+              }
+            }
+          }
+        }
+
+        // Force 24-hour HH:MM time format (some AI outputs include AM/PM)
+        for (const act of normalizedActivities) {
+          const parsedStart = parseTimeToMinutes((act as any).startTime || '');
+          if (parsedStart !== null) (act as any).startTime = minutesToHHMM(parsedStart);
+          const parsedEnd = parseTimeToMinutes((act as any).endTime || '');
+          if (parsedEnd !== null) (act as any).endTime = minutesToHHMM(parsedEnd);
+        }
+
         // CRITICAL: Filter out activities that occur BEFORE arrival time on Day 1
         // This is a safety net in case the AI ignores the prompt constraints
         if (isFirstDay && flightContext.arrivalTime24) {
