@@ -72,6 +72,7 @@ export function ItineraryAssistant({
   destination,
   startDate,
   endDate,
+  currentDayNumber,
   days,
   isLocalTrip = false,
   onItineraryUpdate,
