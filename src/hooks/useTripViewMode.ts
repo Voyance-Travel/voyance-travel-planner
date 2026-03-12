@@ -17,7 +17,7 @@ export function useTripViewMode({ isOwner }: UseTripViewModeOptions) {
   // FIX 22A: Preview mode intentionally disabled while schema-driven generation
   // is being built in isolation. To re-enable, remove the early return below
   // and uncomment the original logic.
-  const PREVIEW_MODE_ENABLED = false;
+  const PREVIEW_MODE_ENABLED = true;
 
   const [searchParams, setSearchParams] = useSearchParams();
 
