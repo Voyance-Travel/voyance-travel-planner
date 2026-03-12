@@ -8561,11 +8561,32 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
               console.warn(`[schema-generation] Validation ${validationResult.severity}: ${validationResult.summary}`);
             }
 
-            // Apply auto-corrections if any
-            if (validationResult.correctedActivities?.length > 0) {
-              console.log(`[schema-generation] Applied ${validationResult.overrides.length} auto-corrections`);
-              // Note: correctedActivities only contains corrections; merge with original
-              // For now, log but don't override — the existing pipeline's post-processing handles most issues
+            // Apply auto-corrections (locked slot integrity, time overwrites, group attribution)
+            if (validationResult.overrides.length > 0 && validationResult.correctedActivities?.length > 0) {
+              console.log(`[schema-generation] Applying ${validationResult.overrides.length} auto-corrections to ${validationResult.correctedActivities.length} activities`);
+              for (const corrected of validationResult.correctedActivities) {
+                const matchIdx = generatedDay.activities.findIndex((a: any) =>
+                  (a.title === corrected.title || a.startTime === corrected.startTime) &&
+                  a.title !== undefined
+                );
+                if (matchIdx !== -1) {
+                  for (const override of validationResult.overrides) {
+                    if (override.field === 'title' && corrected.title) {
+                      generatedDay.activities[matchIdx].title = corrected.title;
+                    }
+                    if (override.field === 'time') {
+                      generatedDay.activities[matchIdx].startTime = corrected.startTime;
+                      generatedDay.activities[matchIdx].endTime = corrected.endTime;
+                    }
+                    if (override.field === 'cost' && corrected.cost !== undefined) {
+                      generatedDay.activities[matchIdx].cost = corrected.cost;
+                    }
+                    if (override.field === 'suggestedFor' && corrected.suggestedFor) {
+                      generatedDay.activities[matchIdx].suggestedFor = corrected.suggestedFor;
+                    }
+                  }
+                }
+              }
             }
           } catch (valErr) {
             console.warn('[schema-generation] Validation/logging failed (non-blocking):', valErr);
