@@ -2730,7 +2730,7 @@ Generate activities for this day following ALL constraints above.`;
       const smartFinishBlocksReturn = context.isSmartFinish && hasHardErrors;
       if (validation.isValid || (isLastAttempt && !smartFinishBlocksReturn)) {
         // POST-VALIDATION: Strip any duplicate activities that slipped through
-        const { day: dedupedDay, removed: removedDupes } = deduplicateActivities(generatedDay);
+        const { day: dedupedDay, removed: removedDupes } = deduplicateActivities(generatedDay, mustDoActivities || []);
         if (removedDupes.length > 0) {
           console.warn(`[Stage 2] Day ${dayNumber}: Removed ${removedDupes.length} duplicate(s): ${removedDupes.join(', ')}`);
           generatedDay = dedupedDay;

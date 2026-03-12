@@ -361,6 +361,12 @@ export function deduplicateActivities(day: StrictDayMinimal, mustDoActivities: s
       continue;
     }
 
+    // Skip dedup for user-requested recurring activities (e.g. "US Open both days", "beach twice")
+    if (mustDoActivities.length > 0 && isRecurringEvent(act, mustDoActivities)) {
+      kept.push(act);
+      continue;
+    }
+
     const concept = extractConcept(act.title || '');
     const locationKey = normalizeText(act.location?.name || '') + '|' + normalizeText(act.location?.address || '');
     const normalTitle = normalizeText(act.title || '');
